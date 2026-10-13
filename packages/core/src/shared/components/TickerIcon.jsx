@@ -76,15 +76,24 @@ export function TickerIcon({ chainId, tick, size = 28 }) {
         display: 'block',
     };
     const nativeIconUrl = descriptor ? brandingLib.chainIconLargeUrl(descriptor.id) : null;
+    const nativeIconSmallUrl = descriptor ? brandingLib.chainIconSmallUrl(descriptor.id) : null;
+    const nativeIconSrcSet = nativeIconUrl && nativeIconSmallUrl && nativeIconUrl !== nativeIconSmallUrl
+        ? `${nativeIconSmallUrl} 144w, ${nativeIconUrl} 500w`
+        : undefined;
     const chainPipUrl = descriptor ? brandingLib.chainIconSmallUrl(descriptor.id) : null;
     return (
         <span role="img" aria-label={accessibleName} style={wrapStyle}>
             {isNative && nativeIconUrl ? (
                 <img
                     src={nativeIconUrl}
+                    srcSet={nativeIconSrcSet}
+                    sizes={nativeIconSrcSet ? `${size}px` : undefined}
+                    width={size}
+                    height={size}
                     alt=""
                     aria-hidden="true"
                     style={imgStyle}
+                    decoding="async"
                     onError={(e) => { e.currentTarget.style.display = 'none'; }}
                 />
             ) : (
@@ -95,10 +104,13 @@ export function TickerIcon({ chainId, tick, size = 28 }) {
             {!isNative && chainPipUrl ? (
                 <img
                     src={chainPipUrl}
+                    width={pipSize}
+                    height={pipSize}
                     alt=""
                     aria-hidden="true"
                     title={descriptor?.displayName}
                     style={pipStyle}
+                    decoding="async"
                 />
             ) : null}
         </span>

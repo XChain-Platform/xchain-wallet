@@ -22,6 +22,7 @@ vi.mock('../../../packages/core/src/shared/hooks/useTokenInfo.js', () => ({
 }));
 
 import { CollectiblesView } from '../../../packages/core/src/shared/components/CollectiblesView.jsx';
+import { TickerIcon } from '../../../packages/core/src/shared/components/TickerIcon.jsx';
 
 const LONG_NAME = 'A collectible name with oneuninterruptedwordthatcannotfitonasinglecard';
 const ART_URL = 'https://assets.example/collectible.png';
@@ -58,6 +59,13 @@ describe('CollectiblesView cards', () => {
         const open = screen.getByRole('button', { name: `Open ${LONG_NAME} details` });
         const pin = screen.getByRole('button', { name: 'Pin LONGART' });
         const hide = screen.getByRole('button', { name: 'Hide LONGART' });
+        const artwork = document.querySelector(`img[src="${ART_URL}"]`);
+        expect(artwork).toHaveAttribute('width', '192');
+        expect(artwork).toHaveAttribute('height', '192');
+        const chainOverlay = [...document.querySelectorAll('img')]
+            .find((image) => image !== artwork);
+        expect(chainOverlay).toHaveAttribute('width', '20');
+        expect(chainOverlay).toHaveAttribute('height', '20');
         expect(open.querySelector('button')).toBeNull();
         expect(pin.tagName).toBe('BUTTON');
         expect(hide.tagName).toBe('BUTTON');
@@ -106,5 +114,18 @@ describe('CollectiblesView cards', () => {
         expect(css).toMatch(/overflow-wrap: break-word/);
         expect(css).toMatch(/word-break: normal/);
         expect(css).not.toMatch(/-webkit-line-clamp/);
+    });
+
+    it('offers a smaller decode candidate for native ticker icons', () => {
+        const { container } = render(
+            <TickerIcon chainId="bitcoin-mainnet" tick="BTC" size={32} />,
+        );
+
+        const icon = container.querySelector('img');
+        expect(icon).toHaveAttribute('width', '32');
+        expect(icon).toHaveAttribute('height', '32');
+        expect(icon).toHaveAttribute('sizes', '32px');
+        expect(icon.getAttribute('srcset')).toMatch(/bitcoin-mainnet-icon-20\.png.*144w/);
+        expect(icon.getAttribute('srcset')).toMatch(/bitcoin-mainnet-500\.png.*500w/);
     });
 });

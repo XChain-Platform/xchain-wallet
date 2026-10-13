@@ -200,6 +200,8 @@ function CollectibleCard({ row, demo, pinned, hidden, onSelect, onTogglePin, onT
                     {showImage ? (
                         <img
                             src={effectiveImageUrl}
+                            width={192}
+                            height={192}
                             alt=""
                             aria-hidden="true"
                             className={styles.thumbImg}
@@ -212,6 +214,8 @@ function CollectibleCard({ row, demo, pinned, hidden, onSelect, onTogglePin, onT
                     {chainIconUrl ? (
                         <img
                             src={chainIconUrl}
+                            width={20}
+                            height={20}
                             alt=""
                             aria-hidden="true"
                             title={row.chainDisplayName}
