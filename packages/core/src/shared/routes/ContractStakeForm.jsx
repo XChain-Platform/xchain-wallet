@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { isDemoWallet, synthesizeDemoContractMeta } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -792,33 +792,20 @@ export function ContractStakeForm({
                 </StatusMessage>
             )}
 
-            <fieldset className={styles.radioGroup}>
-                <legend style={{ fontWeight: 'bold' }}>Action</legend>
-                <label className={styles.radioOption}>
-                    <input
-                        type="radio"
-                        name="contract-stake-mode"
-                        checked={mode === 'stake'}
-                        onChange={() => { setMode('stake'); setAmount(''); }}
-                    /> Stake
-                </label>
-                <label className={styles.radioOption}>
-                    <input
-                        type="radio"
-                        name="contract-stake-mode"
-                        checked={mode === 'unstake'}
-                        onChange={() => { setMode('unstake'); setAmount(''); }}
-                    /> Unstake
-                </label>
-                <label className={styles.radioOption}>
-                    <input
-                        type="radio"
-                        name="contract-stake-mode"
-                        checked={mode === 'delegate'}
-                        onChange={() => setMode('delegate')}
-                    /> Delegate (rotate key)
-                </label>
-            </fieldset>
+            <RadioGroup
+                legend="Action"
+                name="contract-stake-mode"
+                value={mode}
+                onChange={(value) => {
+                    setMode(value);
+                    if (value !== 'delegate') setAmount('');
+                }}
+                options={[
+                    { value: 'stake', label: 'Stake' },
+                    { value: 'unstake', label: 'Unstake' },
+                    { value: 'delegate', label: 'Delegate (rotate key)' },
+                ]}
+            />
 
             <TokenField
                 label="Token"

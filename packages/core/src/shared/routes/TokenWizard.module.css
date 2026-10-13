@@ -257,13 +257,6 @@
     margin-bottom: var(--xc-space-1);
 }
 
-.lockFlagHint {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    margin: 0 0 0 calc(var(--xc-space-2) + 1em);
-    line-height: 1.4;
-}
-
 .listRow {
     display: flex;
     flex-wrap: wrap;

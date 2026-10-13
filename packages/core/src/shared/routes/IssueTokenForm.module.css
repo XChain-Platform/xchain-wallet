@@ -164,12 +164,6 @@
     border-bottom: none;
 }
 
-.lockFlagHint {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    margin: 0 0 0 calc(1rem + var(--xc-space-2));
-}
-
 .hint {
     font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
@@ -483,25 +477,3 @@
     font-weight: normal;
 }
 
-.radioGroup {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--xc-space-2) var(--xc-space-4);
-    min-width: 0;
-    margin: 0 0 var(--xc-space-3);
-    padding: 0;
-    border: 0;
-}
-
-.radioGroup > legend {
-    width: 100%;
-    margin-bottom: var(--xc-space-1);
-}
-
-@media not all and (min-width: 400px) {
-    .radioGroup {
-        align-items: flex-start;
-        flex-direction: column;
-        gap: var(--xc-space-2);
-    }
-}

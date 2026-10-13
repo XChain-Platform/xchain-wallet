@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, FormSection, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, Checkbox, FeeSelector, FormPage, FormSection, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -977,19 +977,15 @@ export function SweepForm({
             <FormSection title="What to sweep">
             {CATEGORY_META.map((c) => (
                 <div key={c.key}>
-                    <label className={styles.checkRow}>
-                        <input
-                            type="checkbox"
-                            checked={flags[c.key]}
-                            onChange={(e) => {
-                                setFlags((f) => ({ ...f, [c.key]: e.target.checked }));
-                                clearFormError();
-                            }}
-                        />
-                        {' '}{c.label}
-                        {preview ? ` (${categoryCount(preview, c.key)})` : ''}
-                    </label>
-                    <p className={styles.hint}>{c.hint}</p>
+                    <Checkbox
+                        label={`${c.label}${preview ? ` (${categoryCount(preview, c.key)})` : ''}`}
+                        description={c.hint}
+                        checked={flags[c.key]}
+                        onChange={(e) => {
+                            setFlags((f) => ({ ...f, [c.key]: e.target.checked }));
+                            clearFormError();
+                        }}
+                    />
                     {flags[c.key] ? <CategoryPreview preview={preview} categoryKey={c.key} /> : null}
                 </div>
             ))}
@@ -1079,19 +1075,20 @@ export function SweepForm({
                         </p>
                     ) : null}
                     {gateMissingTicks.length > 0 ? (
-                        <label className={styles.checkRow}>
-                            <input
-                                type="checkbox"
-                                checked={ackMissingKeys}
-                                onChange={(e) => {
-                                    setAckMissingKeys(e.target.checked);
-                                    clearFormError();
-                                }}
-                            />
-                            {' '}Sweep anyway - I understand gated content for{' '}
-                            {gateMissingTicks.join(', ')} may become permanently
-                            unopenable in the new wallet.
-                        </label>
+                        <Checkbox
+                            label={(
+                                <>
+                                    Sweep anyway - I understand gated content for{' '}
+                                    {gateMissingTicks.join(', ')} may become permanently
+                                    unopenable in the new wallet.
+                                </>
+                            )}
+                            checked={ackMissingKeys}
+                            onChange={(e) => {
+                                setAckMissingKeys(e.target.checked);
+                                clearFormError();
+                            }}
+                        />
                     ) : null}
                 </FormSection>
             ) : null}

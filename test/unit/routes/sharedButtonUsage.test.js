@@ -72,6 +72,14 @@ const choicePrimitiveRoutes = {
     LinkForm: ['RadioGroup'],
     SleepForm: ['RadioGroup'],
 };
+const tokenControlRoutes = [
+    ['IssueTokenForm', { Switch: 2 }],
+    ['TokenAdminForm', { Checkbox: 3 }],
+    ['TokenWizard', { Checkbox: 1, Switch: 2 }],
+    ['SweepForm', { Checkbox: 2 }],
+    ['StakeForm', { RadioGroup: 1 }],
+    ['ContractStakeForm', { RadioGroup: 1 }],
+];
 
 describe('shared route button usage', () => {
     it.each(migratedRoutes)('%s uses the shared Button component', (routeName) => {
@@ -190,6 +198,21 @@ describe('shared route button usage', () => {
         expect(source).toMatch(/import\s+\{[^}]*\bListRow\b[^}]*\}\s+from\s+'@xchain-wallet\/core\/ui'/s);
         expect(source).toMatch(/<ListRow\b/);
         expect(source).not.toMatch(/<button\b/);
+    });
+
+    it.each(tokenControlRoutes)('%s uses the matching kit choice controls', (routeName, controls) => {
+        const source = readFileSync(
+            resolve(process.cwd(), `packages/core/src/shared/routes/${routeName}.jsx`),
+            'utf8',
+        );
+
+        for (const [control, count] of Object.entries(controls)) {
+            expect(source).toMatch(
+                new RegExp(`import\\s+\\{[^}]*\\b${control}\\b[^}]*\\}\\s+from\\s+'@xchain-wallet/core/ui'`, 's'),
+            );
+            expect(source.match(new RegExp(`<${control}\\b`, 'g')) || []).toHaveLength(count);
+        }
+        expect(source).not.toMatch(/<input\b/);
     });
 
     it('limits native controls in the adopted routes to documented semantic exceptions', () => {
