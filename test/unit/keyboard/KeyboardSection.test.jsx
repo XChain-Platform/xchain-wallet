@@ -15,8 +15,14 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, fireEvent, cleanup, screen, waitFor, act } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { KeyboardSection } from '../../../packages/core/src/shared/components/settings/KeyboardSection.jsx';
+import { DisplaySection } from '../../../packages/core/src/shared/components/settings/DisplaySection.jsx';
+import { updateSettings } from '../../../packages/core/src/flows/settings.js';
+import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    localStorage.clear();
+});
 
 function makeMessaging(initialBindings = {}) {
     let settings = { keyboard: { bindings: { ...initialBindings } } };
@@ -88,6 +94,11 @@ describe('KeyboardSection', () => {
         const lockRow = await waitFor(() => screen.getByText('Lock wallet').closest('div'));
         const reset = screen.getByRole('button', { name: 'Reset' });
         fireEvent.click(reset);
+        expect(messaging.updateSettings).not.toHaveBeenCalled();
+        expect(screen.getByRole('dialog', { name: 'Reset shortcut?' })).toHaveTextContent(
+            'Restore "Lock wallet" to its built-in binding?',
+        );
+        fireEvent.click(screen.getByRole('button', { name: 'Reset shortcut' }));
         await waitFor(() => expect(messaging.updateSettings).toHaveBeenCalledWith({
             keyboard: { bindings: {} },
         }));
@@ -107,9 +118,81 @@ describe('KeyboardSection', () => {
     it('resets every override in one persisted update', async () => {
         const messaging = await setup({ lock: 'mod+j', settings: 'mod+.' });
         fireEvent.click(screen.getByRole('button', { name: 'Reset all shortcuts' }));
+        expect(messaging.updateSettings).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: 'Reset shortcuts' }));
         await waitFor(() => expect(messaging.updateSettings).toHaveBeenCalledWith({
             keyboard: { bindings: {} },
         }));
         expect(await screen.findByText('All shortcuts reset to defaults.')).toBeTruthy();
+    });
+});
+
+describe('Settings reset boundaries', () => {
+    it('replaces reset maps while leaving wallets, contacts, and other settings untouched', async () => {
+        let stored = {
+            ...createDefaultSettings(),
+            theme: 'dark',
+            keyboard: { bindings: { lock: 'mod+j', settings: 'mod+.' } },
+            pinnedTokensByWallet: {
+                'wallet-a': ['bitcoin-mainnet:BTC'],
+                'wallet-b': ['litecoin-mainnet:LTC'],
+            },
+        };
+        const vault = {
+            settings: {
+                get: vi.fn(async () => stored),
+                put: vi.fn(async (next) => { stored = next; }),
+            },
+            wallets: { get: vi.fn(), put: vi.fn(), delete: vi.fn() },
+            contacts: { get: vi.fn(), put: vi.fn(), delete: vi.fn() },
+        };
+
+        await updateSettings(vault, { keyboard: { bindings: { settings: 'mod+.' } } });
+        await updateSettings(vault, { pinnedTokensByWallet: {} });
+
+        expect(stored.keyboard.bindings).toEqual({ settings: 'mod+.' });
+        expect(stored.pinnedTokensByWallet).toEqual({});
+        expect(stored.theme).toBe('dark');
+        expect(vault.wallets.get).not.toHaveBeenCalled();
+        expect(vault.wallets.put).not.toHaveBeenCalled();
+        expect(vault.wallets.delete).not.toHaveBeenCalled();
+        expect(vault.contacts.get).not.toHaveBeenCalled();
+        expect(vault.contacts.put).not.toHaveBeenCalled();
+        expect(vault.contacts.delete).not.toHaveBeenCalled();
+    });
+
+    it('confirms before clearing only saved list-filter storage', async () => {
+        localStorage.setItem('xc:chainFilter:history', '["bitcoin-mainnet"]');
+        localStorage.setItem('unrelated', 'keep');
+        const settings = {
+            privacy: { hideSmallBalances: false },
+            pinnedTokens: [],
+            watchedTokens: [],
+            hiddenTokens: [],
+            pinnedTokensByWallet: {},
+            showPinAffordance: false,
+            showHideAffordance: false,
+            smallBalanceThreshold: 'dust',
+            numberFormat: 'full',
+        };
+        const messaging = {
+            getSettings: vi.fn(async () => settings),
+            updateSettings: vi.fn(async () => settings),
+            getTokenInfo: vi.fn(),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <DisplaySection />
+            </MessagingProvider>,
+        );
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Reset list preferences' }));
+        expect(localStorage.getItem('xc:chainFilter:history')).not.toBeNull();
+        expect(screen.getByRole('dialog', { name: 'Reset list preferences?' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Reset preferences' }));
+
+        await waitFor(() => expect(localStorage.getItem('xc:chainFilter:history')).toBeNull());
+        expect(localStorage.getItem('unrelated')).toBe('keep');
+        expect(messaging.updateSettings).not.toHaveBeenCalled();
     });
 });

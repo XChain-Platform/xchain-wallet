@@ -241,13 +241,20 @@ export function DisplaySection() {
     // layer is localStorage, not vault settings (ephemeral UI prefs
     // that shouldn't survive a from-seed restore).
     const resetChainFilters = useCallback(() => {
-        const count = clearAllChainFilters();
-        setResetMessage(
-            count === 0
-                ? 'No saved list filters to reset.'
-                : `Reset ${count} saved list filter${count === 1 ? '' : 's'}. New filters apply on next visit.`,
-        );
-    }, []);
+        confirmDialog.confirm({
+            title: 'Reset list preferences?',
+            message: 'Every saved balance and history chain filter will return to "show all."',
+            confirmLabel: 'Reset preferences',
+        }).then((confirmed) => {
+            if (!confirmed) return;
+            const count = clearAllChainFilters();
+            setResetMessage(
+                count === 0
+                    ? 'No saved list filters to reset.'
+                    : `Reset ${count} saved list filter${count === 1 ? '' : 's'}. New filters apply on next visit.`,
+            );
+        });
+    }, [confirmDialog]);
 
     if (loading) return <Status text="Loading…" />;
     if (error) return <SettingsLoadError error={error} />;

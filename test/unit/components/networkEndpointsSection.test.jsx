@@ -221,6 +221,11 @@ describe('NetworkEndpointsSection', () => {
         };
         render(<NetworkEndpointsSection />);
         fireEvent.click(within(ltcRegtestBlock()).getByText('Reset to default'));
+        expect(updateSpy).not.toHaveBeenCalled();
+        expect(screen.getByRole('dialog', { name: 'Reset network endpoints?' })).toHaveTextContent(
+            'Restore Litecoin · regtest explorer, encoder, and hub URLs to their defaults?',
+        );
+        fireEvent.click(screen.getByRole('button', { name: 'Reset endpoints' }));
 
         await waitFor(() => expect(updateSpy).toHaveBeenCalledWith({
             sdkEndpoints: {

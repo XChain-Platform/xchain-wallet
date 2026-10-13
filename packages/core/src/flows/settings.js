@@ -16,12 +16,14 @@
 // Patch model: deep merge.
 //   - Top-level scalars (theme, autolockMinutes, language, etc.) are
 //     replaced when the patch carries them.
-//   - Nested plain objects (privacy, notifications, grace, ads) merge
-//     one level deep; caller can flip a single sub-flag without
-//     restating the rest.
+//   - Nested plain objects (privacy, notifications, grace, ads) merge;
+//     caller can flip a single sub-flag without restating the rest.
 //   - Chain-keyed records (sdkEndpoints, fees, ads.perChain) merge by
 //     chainId; caller updating one chain's endpoint keeps the other
 //     chains untouched.
+//   - An empty object replaces the object at that path, which lets reset
+//     actions clear maps. Keyboard bindings are also replaced as one map
+//     so removing one override does not leave its persisted key behind.
 //   - Arrays / primitives / null in the patch always replace.
 //
 // Validation runs on the merged record before persistence; an invalid
@@ -81,14 +83,15 @@ function isPlainObject(v) {
     return proto === Object.prototype || proto === null;
 }
 
-function deepMerge(base, patch) {
+function deepMerge(base, patch, path = '') {
     if (!isPlainObject(patch)) return patch;
     if (!isPlainObject(base)) return { ...patch };
+    if (Object.keys(patch).length === 0 || path === 'keyboard.bindings') return { ...patch };
     const out = { ...base };
     for (const [k, v] of Object.entries(patch)) {
         if (v === undefined) continue;
         if (isPlainObject(v) && isPlainObject(base[k])) {
-            out[k] = deepMerge(base[k], v);
+            out[k] = deepMerge(base[k], v, path ? `${path}.${k}` : k);
         } else {
             out[k] = v;
         }
