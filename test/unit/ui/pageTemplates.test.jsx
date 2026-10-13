@@ -17,6 +17,8 @@
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { parse } from '@babel/parser';
+import postcss from 'postcss';
 import { createRef } from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
@@ -40,6 +42,56 @@ function uiDir() {
     return join(dir, 'packages', 'core', 'src', 'ui');
 }
 const css = (name) => readFileSync(join(uiDir(), name), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+const coreSrcDir = () => join(uiDir(), '..');
+
+function filesBelow(dir, suffix) {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) return filesBelow(path, suffix);
+        return entry.name.endsWith(suffix) ? [path] : [];
+    });
+}
+
+function routeTemplateRoots() {
+    const routesDir = join(coreSrcDir(), 'shared', 'routes');
+    const roots = new Map();
+
+    for (const jsxPath of filesBelow(routesDir, '.jsx')) {
+        const tree = parse(readFileSync(jsxPath, 'utf8'), { sourceType: 'module', plugins: ['jsx'] });
+        const styleImports = new Map();
+        for (const statement of tree.program.body) {
+            if (statement.type !== 'ImportDeclaration' || !statement.source.value.endsWith('.module.css')) continue;
+            const local = statement.specifiers.find((specifier) => specifier.type === 'ImportDefaultSpecifier')?.local.name;
+            if (local) styleImports.set(local, join(dirname(jsxPath), statement.source.value));
+        }
+
+        const visit = (node) => {
+            if (!node || typeof node !== 'object') return;
+            if (node.type === 'JSXOpeningElement'
+                && node.name.type === 'JSXIdentifier'
+                && ['Screen', 'ListPage', 'FormPage'].includes(node.name.name)
+            ) {
+                const className = node.attributes.find((attribute) => attribute.type === 'JSXAttribute'
+                    && attribute.name.name === 'className')?.value?.expression;
+                if (className?.type === 'MemberExpression'
+                    && className.object.type === 'Identifier'
+                    && className.property.type === 'Identifier'
+                    && styleImports.has(className.object.name)
+                ) {
+                    const cssPath = styleImports.get(className.object.name);
+                    if (!roots.has(cssPath)) roots.set(cssPath, new Set());
+                    roots.get(cssPath).add(className.property.name);
+                }
+            }
+            for (const value of Object.values(node)) {
+                if (Array.isArray(value)) value.forEach(visit);
+                else if (value && typeof value === 'object') visit(value);
+            }
+        };
+        visit(tree.program);
+    }
+    return roots;
+}
 
 // The body of the first `@media <query> { ... }` block, braces balanced.
 function mediaBlock(text, query) {
@@ -246,7 +298,7 @@ describe('FormPage.module.css: the narrow / wide rule', () => {
 
     it('puts a plain form in one centred 560px card when wide', () => {
         expect(ruleBody(wide, '.form')).toMatch(/max-width:\s*560px/);
-        expect(ruleBody(wide, '.form')).toMatch(/margin:[^;]*auto/);
+        expect(ruleBody(wide, '.form')).toMatch(/margin:\s*0 auto/);
         const card = ruleBody(wide, '.form:not(.sectioned)');
         expect(card).toMatch(/background:\s*var\(--xc-surface-raised\)/);
         expect(card).toMatch(/border:\s*1px solid var\(--xc-border\)/);
@@ -344,18 +396,87 @@ describe('<ListPage>', () => {
     });
 });
 
-describe('ListPage.module.css: readable list width', () => {
+describe('ListPage.module.css: fluid list width', () => {
     const text = css('ListPage.module.css');
 
-    it('fills narrow panes and caps wide panes at a centred readable measure', () => {
+    it('fills the Screen content box without adding page geometry', () => {
         expect(ruleBody(text, '.page')).toMatch(/width:\s*100%/);
-        expect(ruleBody(text, '.page')).toMatch(/max-width:\s*48rem/);
-        expect(ruleBody(text, '.page')).toMatch(/margin-inline:\s*auto/);
+        expect(ruleBody(text, '.page')).not.toMatch(/max-width|margin(?:-inline)?\s*:/);
         expect(text).not.toMatch(/@media|@container/);
     });
 
     it('lets the toolbar wrap', () => {
         expect(ruleBody(text, '.toolbar')).toMatch(/flex-wrap:\s*wrap/);
+    });
+});
+
+describe('page gutter ownership', () => {
+    const screenPath = join(uiDir(), 'Screen.module.css');
+    const screenText = readFileSync(screenPath, 'utf8');
+    const screenRoot = postcss.parse(screenText);
+
+    it('keeps page gutter use in Screen and tier values in the shell', () => {
+        const users = filesBelow(coreSrcDir(), '.module.css')
+            .filter((file) => readFileSync(file, 'utf8').includes('var(--xc-page-gutter)'));
+        expect(users).toEqual([screenPath]);
+
+        const tokens = css('tokens.css');
+        expect(tokens).toMatch(/--xc-page-gutter:\s*var\(--xc-space-3\)/);
+        expect(tokens).toMatch(/--xc-page-top:\s*var\(--xc-space-3\)/);
+
+        const shell = readFileSync(join(coreSrcDir(), 'shared', 'components', 'LeftNav.module.css'), 'utf8');
+        expect(shell).toMatch(/data-xc-tier='rail'[^}]*--xc-page-gutter:\s*var\(--xc-space-4\)[^}]*--xc-page-top:\s*var\(--xc-space-4\)/s);
+        expect(shell).toMatch(/data-xc-tier='full'[^}]*--xc-page-gutter:\s*var\(--xc-space-6\)[^}]*--xc-page-top:\s*var\(--xc-space-4\)/s);
+        expect(shell).toMatch(/@media \(orientation: landscape\) and \(max-height: 480px\)[\s\S]*--xc-page-top:\s*var\(--xc-space-2\)/);
+    });
+
+    it('keeps scrolling and page padding on Screen body', () => {
+        const body = screenRoot.nodes.find((node) => node.type === 'rule' && node.selector === '.body');
+        const declarations = Object.fromEntries(body.nodes
+            .filter((node) => node.type === 'decl')
+            .map((node) => [node.prop, node.value]));
+        expect(declarations.padding).toBe('var(--xc-page-top) var(--xc-page-gutter)');
+        expect(declarations['scrollbar-gutter']).toBe('stable');
+        expect(declarations).not.toHaveProperty('scrollbar-width');
+        expect(declarations).not.toHaveProperty('scrollbar-color');
+    });
+
+    it('keeps route template root classes free of page geometry', () => {
+        const faults = [];
+        const roots = routeTemplateRoots();
+        expect([...roots.values()].reduce((count, names) => count + names.size, 0)).toBeGreaterThan(3);
+
+        for (const [file, classNames] of roots) {
+            const stylesheet = postcss.parse(readFileSync(file, 'utf8'));
+            stylesheet.walkRules((rule) => {
+                if (rule.parent.type !== 'root') return;
+                for (const className of classNames) {
+                    const escaped = className.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const directRoot = new RegExp(`^\\.${escaped}(?:\\.${escaped})*(?::[\\w-]+(?:\\([^)]*\\))?)*$`);
+                    if (!rule.selectors?.some((selector) => directRoot.test(selector.trim()))) continue;
+                    rule.walkDecls(/^(?:padding(?:-.+)?|margin(?:-.+)?|max-width)$/, (decl) => {
+                        faults.push(`${file}:${decl.source.start.line} .${className} sets ${decl.prop}`);
+                    });
+                }
+            });
+        }
+
+        expect(faults).toEqual([]);
+    });
+
+    it('guards every relational selector for Chrome 102', () => {
+        const faults = [];
+        for (const file of filesBelow(coreSrcDir(), '.module.css')) {
+            postcss.parse(readFileSync(file, 'utf8')).walkRules((rule) => {
+                if (!rule.selector.includes(':has(')) return;
+                let parent = rule.parent;
+                while (parent && !(parent.type === 'atrule'
+                    && parent.name === 'supports'
+                    && parent.params.includes('selector(:has('))) parent = parent.parent;
+                if (!parent) faults.push(file);
+            });
+        }
+        expect(faults).toEqual([]);
     });
 });
 

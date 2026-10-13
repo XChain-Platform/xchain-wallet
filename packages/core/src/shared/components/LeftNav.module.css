@@ -353,6 +353,16 @@
     flex: 0 0 64px;
 }
 
+.layout[data-xc-tier='rail'] {
+    --xc-page-gutter: var(--xc-space-4);
+    --xc-page-top: var(--xc-space-4);
+}
+
+.layout[data-xc-tier='full'] {
+    --xc-page-gutter: var(--xc-space-6);
+    --xc-page-top: var(--xc-space-4);
+}
+
 /* The brand wordmark and the wallet switcher have no icon-only form.
    Both stay reachable from the app header at this width. */
 .layout[data-xc-tier='rail'] .brand,
@@ -396,4 +406,10 @@
 
 .layout[data-xc-tier='rail'] .divider {
     margin-inline: var(--xc-space-2);
+}
+
+@media (orientation: landscape) and (max-height: 480px) {
+    .layout[data-xc-tier] {
+        --xc-page-top: var(--xc-space-2);
+    }
 }

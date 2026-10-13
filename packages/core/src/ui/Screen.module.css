@@ -34,7 +34,8 @@
 
 .header {
     flex: 0 0 auto;
-    padding: var(--xc-space-3) var(--xc-space-4);
+    padding-block: var(--xc-space-3);
+    padding-inline: var(--xc-page-gutter);
     border-bottom: 1px solid var(--xc-border);
     background: var(--xc-surface-raised);
 }
@@ -42,7 +43,7 @@
 .body {
     flex: 1 1 auto;
     min-height: 0;
-    padding: var(--xc-space-2);
+    padding: var(--xc-page-top) var(--xc-page-gutter);
     overflow-y: auto;
     overflow-x: hidden;
     scroll-padding-block: var(--xc-space-3);
@@ -78,23 +79,16 @@
     }
 }
 
-/* A route whose body is a bare <form> (Send, Bind controller) gets the
-   same 560px column the card-wrapped action forms use, instead of
-   stretching its fields across the pane. */
-.full > .body > form {
-    max-width: 560px;
-    margin-inline: auto;
-}
-
 /* Keep the screen's last row clear of the iOS home indicator. Whichever of
    body and footer ends the screen pays the bottom inset, unless a bottom tab
    bar below already pays it (LeftNav.module.css sets the variable to 0). */
 .body:last-child {
-    padding-bottom: calc(var(--xc-space-2) + var(--xc-screen-safe-bottom, env(safe-area-inset-bottom, 0px)));
+    padding-bottom: calc(var(--xc-page-top) + var(--xc-screen-safe-bottom, env(safe-area-inset-bottom, 0px)));
 }
 .footer {
     flex: 0 0 auto;
-    padding: var(--xc-space-3) var(--xc-space-4);
+    padding-block: var(--xc-space-3);
+    padding-inline: var(--xc-page-gutter);
     border-top: 1px solid var(--xc-border);
     background: var(--xc-surface-raised);
     padding-bottom: calc(var(--xc-space-3) + var(--xc-screen-safe-bottom, env(safe-area-inset-bottom, 0px)));
@@ -109,15 +103,9 @@
 @media (orientation: landscape) and (max-height: 480px) {
     .header,
     .footer {
-        padding: var(--xc-space-1) var(--xc-space-3);
-    }
-
-    .body {
-        padding: var(--xc-space-1) var(--xc-space-2);
-    }
-
-    .body:last-child {
-        padding-bottom: calc(var(--xc-space-1) + var(--xc-screen-safe-bottom, env(safe-area-inset-bottom, 0px)));
+        /* A padding: var(--xc-space-1) var(--xc-space-3); shorthand would
+           replace the tier gutter, so short screens change only the block axis. */
+        padding-block: var(--xc-space-1);
     }
 
     .footer {

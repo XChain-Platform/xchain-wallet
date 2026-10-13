@@ -4,12 +4,6 @@
     align-items: start;
 }
 
-/* The doubled class outranks ListPage's 48rem readable cap, so the metric
- * cards can use a wide desktop pane. */
-.dashboard.dashboard {
-    max-width: 72rem;
-}
-
 .dashboard > :not(section) {
     grid-column: 1 / -1;
 }
