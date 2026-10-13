@@ -117,7 +117,7 @@ describe('§5.5 PsbtSignForm routes through the PSBT confirm variant', () => {
         });
 
         expect(utils.queryByLabelText(/Password/i)).toBeNull();
-        expect(utils.container.textContent).toContain('Watcher mode creates unsigned transactions');
+        expect(utils.container.textContent).toContain('This watch-only wallet cannot sign transactions.');
         expect(findButton(utils, /Sign transaction/i)).toBeUndefined();
         expect(calls.some((c) => c.method === 'signPsbtUserInitiated')).toBe(false);
     });
@@ -247,7 +247,7 @@ describe('§5.5 SignMessageForm routes through the message confirm variant', () 
         });
 
         expect(utils.queryByLabelText(/Password/i)).toBeNull();
-        expect(utils.container.textContent).toContain('Watcher mode does not sign messages');
+        expect(utils.container.textContent).toContain('This watch-only wallet cannot sign messages.');
         expect(findButton(utils, /Sign message/i)).toBeUndefined();
         expect(calls.some((c) => c.method === 'signMessageRequest')).toBe(false);
     });
@@ -283,6 +283,11 @@ describe('§5.5 SignMessageForm routes through the message confirm variant', () 
     });
 
     it('signs the message with the password typed on the confirm page', async () => {
+        const writeText = vi.fn().mockResolvedValue(undefined);
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: { writeText },
+        });
         const { utils, calls } = await drive('proof of control');
         await domAct(async () => {
             typeIn(utils, 'Password', 'hunter2');
@@ -297,6 +302,11 @@ describe('§5.5 SignMessageForm routes through the message confirm variant', () 
         expect(submit.args).toMatchObject({ message: 'proof of control', password: 'hunter2' });
         // Terminal: the signature is rendered back on the form surface.
         expect(utils.container.textContent).toContain('sig-abc');
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: 'Copy signature' }));
+            await drainMicrotasks();
+        });
+        expect(writeText).toHaveBeenCalledWith('sig-abc');
     });
 
     it('Reject signs nothing and returns to the form with the draft intact', async () => {
