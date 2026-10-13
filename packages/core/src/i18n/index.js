@@ -226,7 +226,11 @@ export function onLocaleChange(fn) {
  */
 export function t(key, vars) {
     const dict = DICTIONARIES[currentLocale] ?? DICTIONARIES.en;
-    const raw = dict[key] ?? DICTIONARIES.en[key] ?? key;
+    const localized = dict[key];
+    const raw = localized ?? DICTIONARIES.en[key] ?? key;
+    // English fallback copy follows English ICU rules. This matters for
+    // languages where values such as 21 select a singular plural category.
+    const formatLocale = localized == null ? 'en' : currentLocale;
     // Every lookup goes through format(), vars or not. An `if (!vars)
     // return raw` shortcut here made t(k) and t(k, {}) two different
     // functions for an ICU plural/select key: the vars-less call handed
@@ -235,7 +239,7 @@ export function t(key, vars) {
     // missing args object and already fast-paths a template with no `{`,
     // so the equivalence holds by construction rather than by a second
     // brace check here that could drift from the one in format().
-    return format(raw, vars, currentLocale);
+    return format(raw, vars, formatLocale);
 }
 
 // --- formatjs message formatting -------------------------------------
@@ -250,6 +254,7 @@ export function t(key, vars) {
 // keeps the dictionary key, `getLocale()` and `getDirection()` on the
 // original string while the formatting boundary sees a tag Intl accepts.
 const FORMAT_LOCALE_CACHE = new Map();
+const FORMAT_LOCALE_CACHE_MAX = 100;
 
 /** True when `Intl` accepts `code` as a structurally valid tag. */
 function isUsableTag(code) {
@@ -290,6 +295,9 @@ function resolveFormatLocale(code) {
         console.warn(
             `i18n: locale "${key}" is not a tag Intl accepts; formatting as "${resolved}"`,
         );
+    }
+    if (FORMAT_LOCALE_CACHE.size >= FORMAT_LOCALE_CACHE_MAX) {
+        FORMAT_LOCALE_CACHE.delete(FORMAT_LOCALE_CACHE.keys().next().value);
     }
     FORMAT_LOCALE_CACHE.set(key, resolved);
     return resolved;

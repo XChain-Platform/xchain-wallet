@@ -14,6 +14,7 @@ import { IntlMessageFormat } from 'intl-messageformat';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+    getFormatLocale,
     getLocale,
     onLocaleChange,
     registerLocale,
@@ -243,6 +244,37 @@ describe('translations', () => {
 
         expect(t('common.back')).toBe('Retour');
         expect(t('scan.title')).toBe('Scan');
+    });
+
+    it('formats localized plurals with their source dictionary rules', async () => {
+        registerLocale('ru', {
+            'test.addressCount': [
+                '{count, plural, one {# address} few {# addresses-few}',
+                'many {# addresses-many} other {# addresses-other}}',
+            ].join(' '),
+        });
+        await setLocale('ru');
+
+        expect(t('test.addressCount', { count: 2 })).toBe('2 addresses-few');
+        expect(t('history.recipients.saved', { count: 21, name: 'Ada' }))
+            .toBe('Saved 21 addresses as a single contact "Ada".');
+    });
+
+    it('bounds cached locale resolutions', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const anchor = 'unit cache anchor';
+
+        expect(getFormatLocale(anchor)).toBe('en');
+        expect(getFormatLocale(anchor)).toBe('en');
+        expect(warn).toHaveBeenCalledTimes(1);
+
+        for (let i = 0; i <= 100; i += 1) {
+            expect(getFormatLocale(`unit cache filler ${i}`)).toBe('en');
+        }
+        expect(getFormatLocale(anchor)).toBe('en');
+        expect(warn).toHaveBeenCalledTimes(103);
+
+        warn.mockRestore();
     });
 
     it('stamps root language metadata when the selected locale is already active', async () => {
