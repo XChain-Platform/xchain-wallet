@@ -330,7 +330,7 @@ describe('docs sibling guard @regression', { timeout: GIT_FIXTURE_TIMEOUT }, () 
         // running the real suite here would cost minutes; it fails loudly if
         // someone drops either half of the wiring.
         const runner = readFileSync(join(WS_ROOT, 'test', 'smoke', '_run-smokes.js'), 'utf8');
-        const announce = runner.indexOf('noteDocsTreeState()');
+        const announce = runner.indexOf('noteDocsTreeState({ root: docs.root })');
         const flag = runner.indexOf("process.env.XCHAIN_DOCS_TREE_NOTED = '1'");
         const spawn = runner.indexOf('spawnSync(process.execPath');
         expect(announce).toBeGreaterThan(-1);
