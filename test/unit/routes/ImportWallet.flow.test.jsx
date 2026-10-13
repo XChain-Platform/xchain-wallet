@@ -9,6 +9,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
+import { en } from '../../../packages/core/src/i18n/locales/en/index.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ImportWallet } from '../../../packages/core/src/shared/routes/ImportWallet.jsx';
 
@@ -137,7 +138,7 @@ describe('wallet import flow', () => {
             fireEvent.click(screen.getByRole('tab', { name: 'Private key' }));
             fireEvent.change(screen.getByLabelText('WIF private key'), { target: { value: WIF } });
             fireEvent.click(screen.getByLabelText(
-                "I understand this key isn't recoverable from a recovery phrase.",
+                en['importWallet.wif.ack'],
             ));
         } else {
             fireEvent.change(screen.getByLabelText('Recovery phrase'), { target: { value: PHRASE } });

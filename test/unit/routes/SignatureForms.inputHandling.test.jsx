@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 
+import { en } from '../../../packages/core/src/i18n/locales/en/index.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { SignMessageForm } from '../../../packages/core/src/shared/routes/SignMessageForm.jsx';
 import {
@@ -114,7 +115,7 @@ describe('signature verification inputs and results', () => {
             signature: 'c2lnbmF0dXJl',
         }));
         expect(screen.getByRole('status').textContent)
-            .toBe('Valid signature. Signature matches this message and address.');
+            .toBe(en['verifySignature.valid']);
     });
 
     it('rejects malformed base64 before calling the verifier', async () => {
@@ -127,7 +128,7 @@ describe('signature verification inputs and results', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Verify signature' }));
 
         expect(screen.getByRole('status').textContent)
-            .toBe('Malformed signature. Enter a base64-encoded signature.');
+            .toBe(en['verifySignature.malformed']);
         expect(verifyMessageRequest).not.toHaveBeenCalled();
     });
 
@@ -142,7 +143,7 @@ describe('signature verification inputs and results', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Verify signature' }));
 
         await waitFor(() => expect(screen.getByRole('status').textContent)
-            .toBe("Invalid signature. Signature doesn't match this message and address."));
+            .toBe(en['verifySignature.invalid']));
     });
 
     it('normalizes valid base64 without accepting arbitrary text', () => {

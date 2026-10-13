@@ -14,6 +14,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { userEvent } from '../../helpers/userEvent.js';
 import { expectNoSeriousAxeViolations } from '../../a11y/helpers/axe.js';
+import { en } from '../../../packages/core/src/i18n/locales/en/index.js';
 
 let messaging = {};
 const alertsCss = readFileSync(
@@ -86,7 +87,7 @@ describe('AlertsRoute empty state', () => {
         mount(props);
 
         expect(screen.getByRole('heading', { name: 'No alerts' })).toBeTruthy();
-        expect(screen.getByText("You're all caught up.")).toBeTruthy();
+        expect(screen.getByText(en['alerts.empty.body'])).toBeTruthy();
         expect(screen.queryByRole('list')).toBeNull();
     });
 
@@ -198,7 +199,7 @@ describe('AlertsRoute alert list', () => {
         expect(screen.getByRole('button', { name: 'Clear alerts' })).toHaveFocus();
         await user.keyboard('{Enter}');
 
-        const clearedState = screen.getByLabelText("No alerts. You're all caught up.");
+        const clearedState = screen.getByLabelText(en['alerts.empty']);
         await waitFor(() => expect(clearedState).toHaveFocus());
         expect(screen.queryByRole('list')).toBeNull();
     });
@@ -255,7 +256,7 @@ describe('AlertsRoute alert list', () => {
 
         expect(screen.queryByRole('list')).toBeNull();
         expect(screen.getByRole('heading', { name: 'No alerts' })).toBeTruthy();
-        expect(screen.getByText("You're all caught up.")).toBeTruthy();
+        expect(screen.getByText(en['alerts.empty.body'])).toBeTruthy();
         expect(screen.queryByText(/unread$/)).toBeNull();
 
         first.unmount();

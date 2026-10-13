@@ -6,6 +6,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
+import { en } from '../../../packages/core/src/i18n/locales/en/index.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { CreatePollForm } from '../../../packages/core/src/shared/routes/CreatePollForm.jsx';
 import { DelegateVoteForm } from '../../../packages/core/src/shared/routes/DelegateVoteForm.jsx';
@@ -268,7 +269,7 @@ describe('governance route audit', () => {
             walletId: 'wallet-1', onOpenPoll() {}, onCreate() {}, onDelegate() {}, onBack() {},
         });
         expect(await screen.findByText('No polls yet')).toBeTruthy();
-        expect(screen.getByText('Polls created on this chain appear here.')).toBeTruthy();
+        expect(screen.getByText(en['governance.empty.body'])).toBeTruthy();
     });
 
     it('renders a long poll-list card and its actions at 320px', async () => {

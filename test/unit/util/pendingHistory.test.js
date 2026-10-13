@@ -11,6 +11,7 @@
 // Unit tests for the M2.1 pending-history merge.
 
 import { describe, it, expect } from 'vitest';
+import { en } from '../../../packages/core/src/i18n/locales/en/index.js';
 import {
     compareMergedEntries,
     directionFor,
@@ -293,7 +294,7 @@ describe('a merged pending entry satisfies the contracts History already has', (
         expect(isEntryReplaceable(merged, { descriptor }).ok).toBe(true);
         expect(isEntryReplaceable(fromMempool(), { descriptor })).toEqual({
             ok: false,
-            reason: 'This transaction did not allow fee replacement.',
+            reason: en['flows.rbf.notAllowed'],
         });
     });
 
