@@ -32,10 +32,12 @@ import {
 import { coinToFiat } from '../../flows/priceLookup.js';
 import { useFiatRate } from '../hooks/useFiatRate.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { formatFiat } from '../components/BalanceList.jsx';
 import { submitFailureMessage, submitFailureDetails } from '../utils/submitFailureMessage.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const MAX_MESSAGE_LENGTH = 1_048_576;
 
 // User-facing native ticker for a chain, used to label the network-fee
 // estimate on the review screen.
@@ -255,14 +257,14 @@ export function ComposeMessage({
     }, [toAddress, chainId]);
 
     useEffect(() => {
-        if (!destChainId || !toAddress.trim()) {
+        const addr = toAddress.trim();
+        if (!destChainId || !addr || !isValidAddressAnyNetwork(addr)) {
             setPubkeyState('idle');
             if (!fixedEncryption) setSendUnencrypted(false);
             return undefined;
         }
         let cancelled = false;
         setPubkeyState('checking');
-        const addr = toAddress.trim();
         const handle = setTimeout(() => {
             messaging.getRecipientPubkey({ chainId: destChainId, address: addr })
                 .then((pubkey) => {
@@ -368,20 +370,21 @@ export function ComposeMessage({
 
     // Fiat value of a fee amount, paid on the delivery network. Passed to the
     // FeeSelector so each tier's readout shows its cost in a colored bubble next
-    // to the time estimate. Tiny sub-cent fees collapse to "< $0.01".
+    // to the time estimate. Tiny values use the selected currency's sub-cent form.
     // Oracle-primary with CoinGecko fallback (§45); the
     // fallback is gated on the privacy.priceDataEnabled setting.
     const { settings } = useSettings();
+    const fiatCurrency = settings?.fiatCurrency || 'USD';
     const fiatRate = useFiatRate({
         chainCoin: chainRegistry.get(chainId)?.coin,
-        fiatCurrency: 'USD',
+        fiatCurrency,
         allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
     });
     const fiatForFee = useMemo(() => (coinAmount) => {
         const v = coinToFiat(coinAmount, fiatRate);
         if (v == null || !Number.isFinite(v) || v <= 0) return null;
-        return v < 0.01 ? '< $0.01' : `$${v.toFixed(2)}`;
-    }, [fiatRate]);
+        return formatFiat(v, fiatRate?.fiatCurrency || fiatCurrency);
+    }, [fiatRate, fiatCurrency]);
 
     // Catch random text before review. A message can be delivered on any chain
     // regardless of the recipient's chain, so the address is validated only as a
@@ -392,6 +395,10 @@ export function ComposeMessage({
         [toAddress],
     );
     const addressError = addressInvalid ? 'Enter a valid address' : undefined;
+    const messageLength = message.length;
+    const messageLengthError = messageLength > MAX_MESSAGE_LENGTH
+        ? `Message is ${messageLength.toLocaleString()} characters; the network accepts at most ${MAX_MESSAGE_LENGTH.toLocaleString()}.`
+        : undefined;
 
     // The selected encryption, as a single dropdown value. 'plaintext' maps to
     // the unencrypted (v3) send; 'ecies'/'ecdh' are the encrypted methods.
@@ -520,6 +527,7 @@ export function ComposeMessage({
             setSubmitError('Write a message to send.');
             return;
         }
+        if (messageLengthError) return;
         if (addressInvalid) return;
         // Plain text needs no recipient key, so it never waits on (or is blocked
         // by) the pubkey lookup; encrypted sends require a resolved key.
@@ -538,6 +546,7 @@ export function ComposeMessage({
         event.preventDefault();
         if (stage === 'submitting') return;
         if (!fromAddress || !chainId || !toAddress.trim() || !message.trim()) return;
+        if (messageLengthError) return;
         if (addressInvalid) return;
         if (!sendUnencrypted && pubkeyState === 'missing') return;
         if (!hw && !signerReady && password.length === 0) return;
@@ -741,7 +750,7 @@ export function ComposeMessage({
                 label="Review message"
                 onSubmit={handleSubmit}
                 status={hw && submitError ? (
-                    <p role="alert" style={{ margin: '0.25rem 0 0', color: 'var(--xc-danger)', fontSize: '0.75rem' }}>
+                    <p role="alert" style={{ margin: '0.25rem 0 0', color: 'var(--xc-danger-fg)', fontSize: '0.75rem' }}>
                         {submitError}
                     </p>
                 ) : null}
@@ -884,7 +893,7 @@ export function ComposeMessage({
                     variant="primary"
                     icon={<Icon.SendIcon />}
                     loading={actionConfirm.composing}
-                    disabled={actionConfirm.composing}
+                    disabled={actionConfirm.composing || Boolean(messageLengthError)}
                 >
                     {actionConfirm.composing ? 'Preparing review…' : 'Send message'}
                 </Button>
@@ -897,6 +906,8 @@ export function ComposeMessage({
                 value={toAddress}
                 onChange={(e) => {
                     setToAddress(e.target.value);
+                    setHandshakeSent(false);
+                    setHandshakeError(null);
                     if (submitError) setSubmitError(null);
                 }}
                 onIconClick={() => setContactsPickerOpen(true)}
@@ -914,6 +925,10 @@ export function ComposeMessage({
                 }}
                 rows={4}
                 placeholder="Write your message…"
+                hint={messageLengthError
+                    ? undefined
+                    : `${messageLength.toLocaleString()} / ${MAX_MESSAGE_LENGTH.toLocaleString()} characters.`}
+                error={messageLengthError}
                 style={{ minHeight: '4rem' }}
             />
 
@@ -975,7 +990,7 @@ export function ComposeMessage({
                             {handshakeError ? (
                                 <p
                                     role="alert"
-                                    style={{ margin: '0.5rem 0 0', color: 'var(--xc-danger)', fontSize: '0.8rem' }}
+                                    style={{ margin: '0.5rem 0 0', color: 'var(--xc-danger-fg)', fontSize: '0.8rem' }}
                                 >
                                     {handshakeError}
                                 </p>

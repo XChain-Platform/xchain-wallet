@@ -22,6 +22,10 @@ import { setShellCapabilities } from '@xchain-wallet/core/shared/shellCapabiliti
 import '@xchain-wallet/core/ui/tokens.css';
 import { App } from './App.jsx';
 import { DesktopUpdateBanner } from './DesktopUpdateBanner.jsx';
+import { installShellErrorCapture } from './errorCapture.js';
+
+// Register the crash hook before anything else can throw.
+installShellErrorCapture();
 
 // §9.7 / G007: hot-swap the renderer realm's chain registry with the
 // hub batch main verified at boot. The renderer CSP pins connect-src

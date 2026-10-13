@@ -40,7 +40,7 @@
 //     cache is silently disabled; the user re-enters their password
 //     every launch rather than having the key written insecurely.
 
-import { app, BrowserWindow, Menu, ipcMain, safeStorage, session, shell, Notification } from 'electron';
+import { app, BrowserWindow, Menu, ipcMain, safeStorage, screen, session, shell, Notification } from 'electron';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -72,6 +72,15 @@ import {
 import { attachSignerBridgeListener } from './signerBridgeListener.js';
 import { attachUpdater } from './updater.js';
 import { applyTorRouting } from './torRouting.js';
+import { stateChangeForMessage } from './multiWindowState.js';
+import {
+    DEFAULT_WINDOW_BOUNDS,
+    FileWindowBoundsStore,
+    cascadeWindowBounds,
+    normalizeWindowBounds,
+    restoreWindowBounds,
+    windowBoundsPathFor,
+} from './windowBounds.js';
 import {
     DESKTOP_ABOUT_PANEL_OPTIONS,
     DESKTOP_PRODUCT_NAME,
@@ -116,6 +125,9 @@ function isTrustedSender(event) {
 // detached, otherwise the most-recently-created one (pickDeepLinkTarget).
 const windows = /** @type {Set<BrowserWindow>} */ (new Set());
 let runtime = /** @type {ReturnType<typeof createRuntime> | null} */ (null);
+let windowBoundsStore = /** @type {FileWindowBoundsStore | null} */ (null);
+let rememberedWindowBounds = /** @type {{ x?: number, y?: number, width: number, height: number } | null} */ (null);
+let windowBoundsSaveTimer = /** @type {ReturnType<typeof setTimeout> | null} */ (null);
 
 // The latest deep link no renderer has claimed yet (see forwardDeepLink).
 const deepLinkSlot = createDeepLinkSlot();
@@ -270,8 +282,9 @@ function liveWindows() {
     return [...windows].filter((w) => !w.isDestroyed());
 }
 
-function broadcastToWindows(channel, payload) {
+function broadcastToWindows(channel, payload, excludedContents = null) {
     for (const w of liveWindows()) {
+        if (w.webContents === excludedContents) continue;
         w.webContents.send(channel, payload);
     }
 }
@@ -400,10 +413,14 @@ function buildRuntime() {
 function createWindow(opts = {}) {
     // A live window hands idle tracking back to its renderer's timer.
     stopWindowlessIdleLock();
+    const displays = screen.getAllDisplays();
+    const savedBounds = liveWindows().length > 0
+        ? cascadeWindowBounds(rememberedWindowBounds, displays)
+        : restoreWindowBounds(rememberedWindowBounds, displays);
     const win = new BrowserWindow({
         title: DESKTOP_WINDOW_TITLE,
-        width: 420,
-        height: 720,
+        ...DEFAULT_WINDOW_BOUNDS,
+        ...savedBounds,
         minWidth: 360,
         minHeight: 600,
         webPreferences: {
@@ -429,11 +446,38 @@ function createWindow(opts = {}) {
     win.once('ready-to-show', () => {
         if (!win.isDestroyed()) win.show();
     });
+    win.on('move', () => { rememberWindowBounds(win); });
+    win.on('resize', () => { rememberWindowBounds(win); });
+    win.on('close', () => {
+        rememberWindowBounds(win);
+        void flushWindowBounds();
+    });
     win.on('closed', () => { windows.delete(win); });
 
     windows.add(win);
     if (opts.initialView || opts.initialContext) detachedWindows.add(win);
     return win;
+}
+
+function rememberWindowBounds(win) {
+    if (!win || win.isDestroyed()) return;
+    const bounds = normalizeWindowBounds(win.getNormalBounds());
+    if (!bounds) return;
+    rememberedWindowBounds = bounds;
+    if (windowBoundsSaveTimer) clearTimeout(windowBoundsSaveTimer);
+    windowBoundsSaveTimer = setTimeout(() => { void flushWindowBounds(); }, 250);
+    windowBoundsSaveTimer.unref?.();
+}
+
+async function flushWindowBounds() {
+    if (windowBoundsSaveTimer) clearTimeout(windowBoundsSaveTimer);
+    windowBoundsSaveTimer = null;
+    if (!windowBoundsStore || !rememberedWindowBounds) return;
+    try {
+        await windowBoundsStore.save(rememberedWindowBounds);
+    } catch (err) {
+        console.error('[xchain] could not save desktop window bounds:', err);
+    }
 }
 
 /**
@@ -655,6 +699,8 @@ if (!deepLinkCtx.gotLock) {
 }
 
 app.whenReady().then(async () => {
+    windowBoundsStore = new FileWindowBoundsStore(windowBoundsPathFor(app.getPath('userData')));
+    rememberedWindowBounds = await windowBoundsStore.load();
     runtime = buildRuntime();
     app.setAboutPanelOptions(DESKTOP_ABOUT_PANEL_OPTIONS);
 
@@ -768,7 +814,10 @@ app.whenReady().then(async () => {
                 error: { name: 'Error', message: 'desktop: runtime not initialized' },
             };
         }
-        return handleIpcMessage(runtime, message);
+        const response = await handleIpcMessage(runtime, message);
+        const change = stateChangeForMessage(message, response);
+        if (change) broadcastToWindows('xchain:state-changed', change, event.sender);
+        return response;
     });
 
     // §24.6 / Cluster Y FOLLOWUP 4: detach a pending tx (or any
@@ -812,7 +861,10 @@ app.whenReady().then(async () => {
         }
         try {
             const result = await wipeRuntimeStores(runtime);
-            if (result.ok) return { ok: true, cleared: result.cleared };
+            if (result.ok) {
+                broadcastToWindows('xchain:state-changed', { kind: 'session' }, event.sender);
+                return { ok: true, cleared: result.cleared };
+            }
             return {
                 ok: false,
                 cleared: result.cleared,
@@ -877,5 +929,6 @@ app.on('before-quit', () => {
     // reallocation. The session-backend ciphertext stays on disk; the
     // next launch reuses it via the keychain.
     stopWindowlessIdleLock();
+    void flushWindowBounds();
     if (runtime) tearDownHost(runtime);
 });

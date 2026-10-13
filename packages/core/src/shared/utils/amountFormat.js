@@ -194,6 +194,35 @@ export function decimalFromBaseUnits(value, decimals = 8) {
     }
 }
 
+/**
+ * Explain when a token amount carries more decimal places than the token supports.
+ * Syntax and positivity stay with the calling form so this helper can be added
+ * without changing the action parameters that form signs.
+ */
+export function tokenAmountPrecisionError(value, {
+    divisibility = null,
+    tick = '',
+    noun = 'Amount',
+} = {}) {
+    if (divisibility === null || divisibility === undefined) return null;
+    const places = Number(divisibility);
+    if (!Number.isInteger(places) || places < 0) return null;
+    const raw = String(value ?? '').trim();
+    const match = /^(?:\d+)(?:\.(\d*))?$|^\.(\d+)$/.exec(raw);
+    if (!match) return null;
+    const suppliedPlaces = (match[1] ?? match[2] ?? '').length;
+    if (places === 0 && raw.includes('.')) {
+        const tickText = String(tick || '').trim();
+        const unit = tickText ? tickText.toUpperCase() : 'this token';
+        return `${noun} must be a whole number because ${unit} is indivisible.`;
+    }
+    if (suppliedPlaces <= places) return null;
+
+    const tickText = String(tick || '').trim();
+    const unit = tickText ? tickText.toUpperCase() : 'this token';
+    return `${noun} can have at most ${places} decimal place${places === 1 ? '' : 's'} for ${unit}.`;
+}
+
 /** Round a decimal half up while retaining the requested trailing places. */
 export function roundDecimalString(value, precision = 2) {
     const parsed = parseDecimal(value);

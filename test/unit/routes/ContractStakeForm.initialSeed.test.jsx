@@ -175,6 +175,31 @@ describe('ContractStakeForm unstake availability', () => {
     });
 });
 
+describe('ContractStakeForm stake amount validation', () => {
+    it('blocks a stake larger than the source token balance', async () => {
+        mountForm({ initialMode: 'stake' }, {
+            getWalletBalances: vi.fn().mockResolvedValue({
+                [CHAIN]: [{
+                    address: ACTIVE_ADDRESS,
+                    balances: {
+                        native: { tick: 'BTC', quantity: '1', divisibility: 8 },
+                        tokens: [{ tick: 'XCHAIN', quantity: '5', divisibility: 0 }],
+                    },
+                }],
+            }),
+        });
+
+        expect(await screen.findByText('5 XCHAIN available')).toBeInTheDocument();
+        fireEvent.change(await screen.findByLabelText('Amount (XCHAIN)'), { target: { value: '6' } });
+        fireEvent.change(screen.getByLabelText('Signing public key'), {
+            target: { value: 'a'.repeat(64) },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Stake' }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('Amount exceeds the 5 XCHAIN available.');
+    });
+});
+
 describe('ContractStakeForm exact partial unstake', () => {
     it('keeps a one-atomic-unit-smaller unstake partial', async () => {
         const signingPubkey = 'a'.repeat(64);

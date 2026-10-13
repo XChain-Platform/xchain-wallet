@@ -68,6 +68,18 @@ function mount(element, messaging) {
 afterEach(() => cleanup());
 
 describe('ObligationsView: the Payments-due card shows the debt in coins', () => {
+    it('shows a scan failure instead of claiming there are no payments due', async () => {
+        const messaging = makeMessaging([]);
+        messaging.getCoinpayObligationsForAddress.mockRejectedValue(new Error('Explorer unavailable'));
+        mount(
+            React.createElement(ObligationsView, { walletId: WALLET_ID, onPay: vi.fn(), onBack: vi.fn() }),
+            messaging,
+        );
+
+        await screen.findByText('Explorer unavailable');
+        expect(screen.queryByText('No payments due')).toBeNull();
+    });
+
     it('[REGRESSION] renders "10 DOGE" for coin_amount "10", not 0.0000001', async () => {
         mount(
             React.createElement(ObligationsView, { walletId: WALLET_ID, onPay: vi.fn(), onBack: vi.fn() }),

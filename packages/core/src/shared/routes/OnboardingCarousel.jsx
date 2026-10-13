@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Button, Icon, useReducedMotion } from '@xchain-wallet/core/ui';
 import styles from './OnboardingCarousel.module.css';
 
@@ -59,7 +59,8 @@ export function OnboardingCarousel({
     // override. The stacked-frames fallback and the auto-advance timer below
     // are both JS decisions, so they have to ask rather than leave it to CSS.
     const reducedMotion = useReducedMotion();
-    const liveRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+    const tabRefs = useRef(/** @type {Array<HTMLButtonElement | null>} */ ([]));
+    const idPrefix = useId();
 
     const count = Array.isArray(frames) ? frames.length : 0;
     const atLast = index >= count - 1;
@@ -93,6 +94,23 @@ export function OnboardingCarousel({
         if (typeof onDone === 'function') onDone(true);
     }
 
+    function handleTabKeyDown(event, current) {
+        let next = null;
+        if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+            next = (current + 1) % count;
+        } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+            next = (current - 1 + count) % count;
+        } else if (event.key === 'Home') {
+            next = 0;
+        } else if (event.key === 'End') {
+            next = count - 1;
+        }
+        if (next === null) return;
+        event.preventDefault();
+        goTo(next);
+        tabRefs.current[next]?.focus();
+    }
+
     // --- Reduced motion: stack every frame, no stepping, no auto-advance.
     if (reducedMotion) {
         return (
@@ -120,7 +138,6 @@ export function OnboardingCarousel({
     }
 
     // --- Default: one frame at a time with dots + prev/next + skip.
-    const frame = frames[index];
     return (
         <div
             className={isFull ? styles.rootFull : styles.rootPopup}
@@ -134,34 +151,46 @@ export function OnboardingCarousel({
             </div>
 
             <div
-                ref={liveRef}
                 className={styles.frameViewport}
                 aria-live="polite"
                 aria-atomic="true"
             >
-                {/* `key` on the frame retriggers the entrance animation per step. */}
-                <section key={frame.id || index} className={styles.frame}>
-                    {frame.icon ? <div className={styles.frameIcon}>{frame.icon}</div> : null}
-                    <h2 className={styles.frameTitle}>{frame.title}</h2>
-                    <p className={styles.frameBody}>{frame.body}</p>
-                </section>
+                {frames.map((item, i) => (
+                    <section
+                        key={`${item.id || i}-${i === index ? 'active' : 'inactive'}`}
+                        id={`${idPrefix}-panel-${i}`}
+                        role="tabpanel"
+                        aria-labelledby={`${idPrefix}-tab-${i}`}
+                        hidden={i !== index}
+                        className={styles.frame}
+                    >
+                        {item.icon ? <div className={styles.frameIcon}>{item.icon}</div> : null}
+                        <h2 className={styles.frameTitle}>{item.title}</h2>
+                        <p className={styles.frameBody}>{item.body}</p>
+                    </section>
+                ))}
             </div>
 
             <div
                 className={styles.dots}
                 role="tablist"
-                aria-label={`Step ${index + 1} of ${count}`}
+                aria-label="Onboarding steps"
             >
                 {frames.map((f, i) => (
                     <button
                         key={f.id || i}
+                        ref={(node) => { tabRefs.current[i] = node; }}
+                        id={`${idPrefix}-tab-${i}`}
                         type="button"
                         role="tab"
                         aria-selected={i === index}
                         aria-current={i === index ? 'step' : undefined}
-                        aria-label={`Go to step ${i + 1} of ${count}`}
+                        aria-controls={`${idPrefix}-panel-${i}`}
+                        aria-label={`Step ${i + 1} of ${count}: ${f.title}`}
+                        tabIndex={i === index ? 0 : -1}
                         className={i === index ? styles.dotActive : styles.dot}
                         onClick={() => goTo(i)}
+                        onKeyDown={(event) => handleTabKeyDown(event, i)}
                     />
                 ))}
             </div>

@@ -13,6 +13,10 @@
 // close() zeros it, so a flow or save that throws must not skip the close.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import {
+    startLabelSyncRestoreTask,
+    waitForLabelSyncRestoreTask,
+} from '../../../packages/extension/src/background/labelSyncRestoreTasks.js';
 
 const flowBehaviour = {};
 /** @type {{ vault: any, key: Uint8Array, closes: number }[]} */
@@ -134,4 +138,49 @@ describe('pre-host onboarding closes its Vault on every exit', () => {
             expect(deps.metaBackend.save).toHaveBeenCalledTimes(1);
         });
     }
+});
+
+describe('pre-host mnemonic import hands label restore to the unlocked host', () => {
+    it('returns before restore finishes and keeps the result available', async () => {
+        let finishRestore;
+        const restore = vi.fn(() => new Promise((resolve) => {
+            finishRestore = resolve;
+        }));
+        const deps = makeDeps({
+            onUnlocked: vi.fn(async () => {}),
+            startLabelSyncRestore: ({ walletId }) => startLabelSyncRestoreTask({
+                walletId,
+                run: restore,
+            }),
+        });
+
+        const imported = await handleWalletImport({ password: 'pw', mnemonic: 'abandon about' }, deps);
+        expect(imported.labelSyncToken).toEqual(expect.any(String));
+        expect(deps.onUnlocked).toHaveBeenCalledTimes(1);
+
+        let resultSettled = false;
+        const resultPromise = waitForLabelSyncRestoreTask(imported.labelSyncToken).then((value) => {
+            resultSettled = true;
+            return value;
+        });
+        await Promise.resolve();
+        expect(resultSettled).toBe(false);
+
+        const applied = { restored: true, contactsUpdated: 1 };
+        finishRestore(applied);
+        await expect(resultPromise).resolves.toEqual(applied);
+    });
+
+    it('does not turn a background restore failure into an import failure', async () => {
+        const deps = makeDeps({
+            onUnlocked: vi.fn(async () => {}),
+            startLabelSyncRestore: ({ walletId }) => startLabelSyncRestoreTask({
+                walletId,
+                run: async () => { throw new Error('restore failed'); },
+            }),
+        });
+
+        const imported = await handleWalletImport({ password: 'pw', mnemonic: 'abandon about' }, deps);
+        await expect(waitForLabelSyncRestoreTask(imported.labelSyncToken)).resolves.toBeNull();
+    });
 });

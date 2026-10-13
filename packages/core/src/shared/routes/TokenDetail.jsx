@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Button, ChainBadge, EmptyState, Icon, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, ChainBadge, CopyButton, EmptyState, Icon, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -28,15 +28,16 @@ import { PriceAlertForm } from '../components/PriceAlertForm.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { usePortfolioChartVisible } from '../hooks/usePortfolioChartVisible.js';
-import { coinFromChainId } from '../components/BalanceList.jsx';
+import { coinFromChainId, formatFiat } from '../components/BalanceList.jsx';
 import { BridgeOriginTick } from './BridgeOriginBadge.jsx';
 import { parseBridgedTick, bridgeDisplayTick, coinDisplay } from './BridgeTick.js';
 import {
-    compareDecimalStrings,
     decimalFromBaseUnits,
+    formatWithThousands,
     multiplyDecimalStrings,
 } from '../utils/amountFormat.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
+import { extractHolderRows } from '../utils/holderRows.js';
 import styles from './TokenDetail.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -65,7 +66,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {'native' | 'token' | 'subtoken' | string} [props.kind]
  * @param {string} [props.displayName]               human-readable name (defaults to ticker)
  * @param {number} [props.divisibility]
- * @param {number | null} [props.fiatRate]           USD per token if known
+ * @param {number | null} [props.fiatRate]           selected fiat currency per token if known
  * @param {string} [props.quantity]                  atomic-unit balance string
  * @param {() => void} props.onBack
  * @param {() => void} [props.onSend]                navigate to Send route
@@ -120,7 +121,10 @@ export function TokenDetail({
     // flag the UI uses to hide the stats strip + chart with no calls
     // having fired. Skipped for non-native (XCP tokens don't have a
     // CoinGecko entry).
-    const nativePrice = useNativePrice(isNative ? chainId : null, { includeSparkline: true });
+    const nativePrice = useNativePrice(isNative ? chainId : null, {
+        includeSparkline: true,
+        fiatCurrency,
+    });
 
     const supplyHistory = useSupplyHistory({ messaging, chainId, tick, skip: isNative });
 
@@ -142,21 +146,19 @@ export function TokenDetail({
     const [gatedLoading, setGatedLoading] = useState(false);
 
     useEffect(() => {
-        if (!holdersOpen || holders !== null || isNative) return undefined;
+        if (!holdersOpen || isNative) return undefined;
         if (typeof messaging.getHoldersForToken !== 'function') {
             setHoldersError('Holders lookup is not available in this build.');
             return undefined;
         }
         let cancelled = false;
+        setHolders(null);
         setHoldersLoading(true);
         setHoldersError(null);
         messaging.getHoldersForToken({ chainId, tick: tick })
             .then((resp) => {
                 if (cancelled) return;
-                const list = Array.isArray(resp) ? resp
-                    : Array.isArray(resp?.data) ? resp.data
-                    : Array.isArray(resp?.rows) ? resp.rows
-                    : [];
+                const list = extractHolderRows(resp);
                 setHolders(list);
                 setHoldersFetchedAt(Date.now());
             })
@@ -166,10 +168,10 @@ export function TokenDetail({
             })
             .finally(() => { if (!cancelled) setHoldersLoading(false); });
         return () => { cancelled = true; };
-    }, [holdersOpen, holders, isNative, tick, chainId, messaging]);
+    }, [holdersOpen, isNative, tick, chainId, messaging]);
 
     useEffect(() => {
-        if (!holdersOpen || gatedGroups !== null || isNative) return undefined;
+        if (!holdersOpen || isNative) return undefined;
         if (typeof messaging.listGatedContent !== 'function') {
             // Older host build without gated-content support; skip silently
             // (no error UI), since pre-feature tokens have no gated entries.
@@ -177,6 +179,7 @@ export function TokenDetail({
             return undefined;
         }
         let cancelled = false;
+        setGatedGroups(null);
         setGatedLoading(true);
         setGatedError(null);
         messaging.listGatedContent({ chainId, tick })
@@ -190,7 +193,7 @@ export function TokenDetail({
             })
             .finally(() => { if (!cancelled) setGatedLoading(false); });
         return () => { cancelled = true; };
-    }, [holdersOpen, gatedGroups, isNative, tick, chainId, messaging]);
+    }, [holdersOpen, isNative, tick, chainId, messaging]);
 
     const fiat = useMemo(() => {
         if (typeof fiatRate !== 'number' || !isFinite(fiatRate)) return null;
@@ -226,14 +229,17 @@ export function TokenDetail({
             // A bridged copy is titled by its bare name; the rooted wire form
             // and the origin chain are both on the Details panel below, so the
             // page never hides which asset this really is.
-            title={displayName || bridgeDisplayTick(tick, coinFromChainId(chainId)).label}
+            title={(
+                <span className={styles.headerTitle}>
+                    {displayName || bridgeDisplayTick(tick, coinFromChainId(chainId)).label}
+                </span>
+            )}
             titleIcon={headerIconUrl ? (
-                <img
+                <AssetArtwork
                     src={headerIconUrl}
-                    alt=""
-                    aria-hidden="true"
                     className={styles.headerIcon}
-                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    fallbackClassName={styles.headerIconFallback}
+                    fallbackText={tick}
                 />
             ) : null}
         />
@@ -348,12 +354,11 @@ export function TokenDetail({
                 <section className={styles.balanceHero} aria-label={`${displayName || tick} balance`}>
                     {headerIconUrl ? (
                         <div className={styles.balanceHeroIconWrap}>
-                            <img
+                            <AssetArtwork
                                 src={headerIconUrl}
-                                alt=""
-                                aria-hidden="true"
                                 className={styles.balanceHeroIcon}
-                                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                fallbackClassName={styles.balanceHeroIconFallback}
+                                fallbackText={tick}
                             />
                             {!isNative && chainId ? (
                                 <img
@@ -480,62 +485,67 @@ export function TokenDetail({
                 {/* Quick actions: Send / Receive / Swap / Buy, matching
                     Home's 4-up grid. */}
                 <div className={styles.quickActions} role="group" aria-label="Quick actions">
-                    <button type="button" className={styles.quickAction} onClick={onSend} disabled={!onSend}>
-                        <span className={styles.quickActionIcon} aria-hidden="true"><Icon.SendIcon /></span>
-                        <span>Send</span>
-                    </button>
-                    <button type="button" className={styles.quickAction} onClick={onReceive} disabled={!onReceive}>
-                        <span className={styles.quickActionIcon} aria-hidden="true"><Icon.ReceiveIcon /></span>
-                        <span>Receive</span>
-                    </button>
+                    {typeof onSend === 'function' ? (
+                        <button type="button" className={styles.quickAction} onClick={onSend}>
+                            <span className={styles.quickActionIcon} aria-hidden="true"><Icon.SendIcon /></span>
+                            <span>Send</span>
+                        </button>
+                    ) : null}
+                    {typeof onReceive === 'function' ? (
+                        <button type="button" className={styles.quickAction} onClick={onReceive}>
+                            <span className={styles.quickActionIcon} aria-hidden="true"><Icon.ReceiveIcon /></span>
+                            <span>Receive</span>
+                        </button>
+                    ) : null}
                     {/* Absent, not greyed, when the shell wires no handler: a
                         build can have compiled the DEX surface out,
                         and there is then no market for this token to open. */}
-                    {onBuy ? (
+                    {typeof onBuy === 'function' ? (
                         <button type="button" className={styles.quickAction} onClick={onBuy}>
                             <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MarketIcon /></span>
                             <span>Markets</span>
                         </button>
                     ) : null}
-                    {onBuy && !isNative && safeBigInt(quantity) > 0n ? (
+                    {typeof onBuy === 'function' && !isNative && safeBigInt(quantity) > 0n ? (
                         <button type="button" className={styles.quickAction} onClick={onBuy}>
                             <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MarketIcon /></span>
                             <span>Sell on DEX</span>
                         </button>
                     ) : null}
-                    <div className={styles.quickActionMoreWrap} ref={moreWrapRef}>
-                        <button
-                            type="button"
-                            className={styles.quickAction}
-                            onClick={() => setMoreOpen((o) => !o)}
-                            aria-haspopup="menu"
-                            aria-expanded={moreOpen}
-                            disabled={moreOptions.length === 0}
-                        >
-                            <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MoreIcon /></span>
-                            <span>More</span>
-                        </button>
-                        {moreOpen && moreOptions.length > 0 ? (
-                            <div className={styles.quickActionMoreMenu} role="menu">
-                                {moreOptions.map((opt) => (
-                                    <button
-                                        key={opt.id}
-                                        type="button"
-                                        role="menuitem"
-                                        className={styles.quickActionMoreItem}
-                                        onClick={opt.onClick}
-                                    >
-                                        {opt.icon ? (
-                                            <span className={styles.quickActionMoreItemIcon} aria-hidden="true">
-                                                {opt.icon}
-                                            </span>
-                                        ) : null}
-                                        <span>{opt.label}</span>
-                                    </button>
-                                ))}
-                            </div>
-                        ) : null}
-                    </div>
+                    {moreOptions.length > 0 ? (
+                        <div className={styles.quickActionMoreWrap} ref={moreWrapRef}>
+                            <button
+                                type="button"
+                                className={styles.quickAction}
+                                onClick={() => setMoreOpen((o) => !o)}
+                                aria-haspopup="menu"
+                                aria-expanded={moreOpen}
+                            >
+                                <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MoreIcon /></span>
+                                <span>More</span>
+                            </button>
+                            {moreOpen ? (
+                                <div className={styles.quickActionMoreMenu} role="menu">
+                                    {moreOptions.map((opt) => (
+                                        <button
+                                            key={opt.id}
+                                            type="button"
+                                            role="menuitem"
+                                            className={styles.quickActionMoreItem}
+                                            onClick={opt.onClick}
+                                        >
+                                            {opt.icon ? (
+                                                <span className={styles.quickActionMoreItemIcon} aria-hidden="true">
+                                                    {opt.icon}
+                                                </span>
+                                            ) : null}
+                                            <span>{opt.label}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            ) : null}
+                        </div>
+                    ) : null}
                 </div>
 
                 {/* Tabs: matches HomeTabs visual rhythm. Native coins
@@ -678,7 +688,7 @@ function SupplyChart({ points, divisibility, tick }) {
     const latest = formatAmount(String(Math.round(points[points.length - 1].supply)), divisibility);
     return (
         <section aria-label="Supply over time">
-            <h3 className={styles.sectionTitle}>Supply over time</h3>
+            <h2 className={styles.sectionTitle}>Supply over time</h2>
             <svg
                 className={styles.supplyChart}
                 viewBox={`0 0 ${W} ${H}`}
@@ -771,8 +781,8 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
             hint = 'Loading market data…';
         } else if (nativePrice.entry) {
             const e = nativePrice.entry;
-            if (e.priceFiat != null) priceCell = formatFiat(e.priceFiat);
-            if (e.marketCapFiat != null) marketCapCell = formatCompactFiat(e.marketCapFiat);
+            if (e.priceFiat != null) priceCell = formatFiat(e.priceFiat, fiatCurrency);
+            if (e.marketCapFiat != null) marketCapCell = formatCompactFiat(e.marketCapFiat, fiatCurrency);
             if (e.change24hPct != null) {
                 pct24h = formatPct(e.change24hPct);
                 pctTone24h = pctTone(e.change24hPct);
@@ -867,8 +877,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
             sparkline = synth.sparkline;
         }
     } else if (typeof fiatRate === 'number' && isFinite(fiatRate) && fiatRate > 0) {
-        priceCell = formatFiat(fiatRate);
-        void fiatCurrency;
+        priceCell = formatFiat(fiatRate, fiatCurrency);
         if (isDemo) {
             const synth = synthesizeTokenChart(`${chainId}|${tick}|fiat|${range.id}`, fiatRate, range.points);
             if (synth.change24hPct != null) {
@@ -889,11 +898,27 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
                 <StatCell label="24h" value={pct24h} tone={pctTone24h} />
             </section>
             {sparkline ? (
-                <div className={styles.chart} aria-label="7-day price chart">
+                <div className={styles.chart} aria-label={`${range.label} price chart`}>
                     <Sparkline series={sparkline} height={40} />
                 </div>
             ) : !hint ? (
                 <EmptyState title={NO_PRICE_HISTORY} titleAs="p" />
+            ) : null}
+            {sparkline && isDemo ? (
+                <div className={portfolioChartStyles.ranges} role="tablist" aria-label="Chart range">
+                    {CHART_RANGES.map((r) => (
+                        <button
+                            key={r.id}
+                            type="button"
+                            role="tab"
+                            aria-selected={r.id === rangeId ? 'true' : 'false'}
+                            className={`${portfolioChartStyles.range} ${r.id === rangeId ? portfolioChartStyles.rangeActive : ''}`}
+                            onClick={() => setRangeId(r.id)}
+                        >
+                            {r.label}
+                        </button>
+                    ))}
+                </div>
             ) : null}
             {hint ? <p className={styles.muted}>{hint}</p> : null}
         </>
@@ -977,8 +1002,13 @@ function DetailsPanel({
                     {!isNative && assetInfo?.creator ? (
                         <tr className={styles.metaRow}>
                             <th scope="row">Creator</th>
-                            <td className={styles.creatorCell} title={assetInfo.creator}>
-                                {shorten(assetInfo.creator)}
+                            <td>
+                                <span className={styles.copyableValue}>
+                                    <span className={styles.creatorCell} title={assetInfo.creator}>
+                                        {shorten(assetInfo.creator)}
+                                    </span>
+                                    <CopyButton value={assetInfo.creator} ariaLabel="Copy creator address" />
+                                </span>
                             </td>
                         </tr>
                     ) : null}
@@ -1051,7 +1081,7 @@ function InfoPanel({ isNative, assetInfo, hasDescription }) {
         <div className={`${styles.infoCard} ${styles.aboutCard}`}>
             {hasDescription ? (
                 <div className={styles.metaBlock}>
-                    <h4 className={styles.metaBlockTitle}>About</h4>
+                    <h2 className={styles.metaBlockTitle}>About</h2>
                     <p className={styles.descriptionBody}>{assetInfo.description}</p>
                 </div>
             ) : null}
@@ -1060,7 +1090,7 @@ function InfoPanel({ isNative, assetInfo, hasDescription }) {
             {hasContacts ? <ContactsBlock contacts={assetInfo.contacts} /> : null}
             {hasLinks ? (
                 <div className={styles.metaBlock}>
-                    <h4 className={styles.metaBlockTitle}>Links</h4>
+                    <h2 className={styles.metaBlockTitle}>Links</h2>
                     <LinksAndFiles assetInfo={assetInfo} />
                 </div>
             ) : null}
@@ -1073,7 +1103,7 @@ function InfoPanel({ isNative, assetInfo, hasDescription }) {
 function DnsBlock({ dns }) {
     return (
         <div className={styles.metaBlock}>
-            <h4 className={styles.metaBlockTitle}>DNS</h4>
+            <h2 className={styles.metaBlockTitle}>DNS</h2>
             <table className={styles.metaTable}>
                 <tbody>
                     {dns.map((r, i) => (
@@ -1273,7 +1303,7 @@ function MediaSubpanel({ kind, images, audio, video, files }) {
 function OwnerBlock({ owner }) {
     return (
         <div className={styles.metaBlock}>
-            <h4 className={styles.metaBlockTitle}>Owner</h4>
+            <h2 className={styles.metaBlockTitle}>Owner</h2>
             <table className={styles.metaTable}>
                 <tbody>
                     {owner.name ? (
@@ -1311,7 +1341,7 @@ const CONTACT_LABELS = {
 function ContactsBlock({ contacts }) {
     return (
         <div className={styles.metaBlock}>
-            <h4 className={styles.metaBlockTitle}>Contact</h4>
+            <h2 className={styles.metaBlockTitle}>Contact</h2>
             <table className={styles.metaTable}>
                 <tbody>
                     {contacts.map((c, i) => {
@@ -1347,7 +1377,7 @@ const CATEGORY_LABELS = { main: 'Category', sub: 'Subcategory', other: 'Other' }
 function CategoriesBlock({ categories }) {
     return (
         <div className={styles.metaBlock}>
-            <h4 className={styles.metaBlockTitle}>Categories</h4>
+            <h2 className={styles.metaBlockTitle}>Categories</h2>
             <table className={styles.metaTable}>
                 <tbody>
                     {categories.map((c, i) => (
@@ -1365,14 +1395,24 @@ function CategoriesBlock({ categories }) {
 function PgpsigBlock({ pgpsig }) {
     return (
         <div className={styles.metaBlock}>
-            <h4 className={styles.metaBlockTitle}>PGP signature</h4>
+            <h2 className={styles.metaBlockTitle}>PGP signature</h2>
             <pre className={styles.pgpsigBlock}>{pgpsig}</pre>
         </div>
     );
 }
 
 function ImageHero({ img }) {
-    const anchor = (
+    const [failedImageUrl, setFailedImageUrl] = useState(null);
+    const failed = failedImageUrl === img.url;
+    const media = failed ? (
+        <div
+            className={styles.heroImageFallback}
+            role="img"
+            aria-label={`${img.name || 'Token media'} unavailable`}
+        >
+            Image unavailable
+        </div>
+    ) : (
         <a
             href={img.url}
             target="_blank"
@@ -1384,12 +1424,7 @@ function ImageHero({ img }) {
                 src={img.url}
                 alt={img.name || ''}
                 className={styles.heroImage}
-                onError={(e) => {
-                    const card = e.currentTarget.closest(`.${styles.galleryMediaCard}`);
-                    const a = e.currentTarget.closest('a');
-                    if (card) card.style.display = 'none';
-                    else if (a) a.style.display = 'none';
-                }}
+                onError={() => setFailedImageUrl(img.url)}
             />
         </a>
     );
@@ -1397,11 +1432,31 @@ function ImageHero({ img }) {
         return (
             <div className={styles.galleryMediaCard}>
                 <div className={styles.galleryMediaCaption}>{img.name}</div>
-                {anchor}
+                {media}
             </div>
         );
     }
-    return anchor;
+    return media;
+}
+
+function AssetArtwork({ src, className, fallbackClassName, fallbackText }) {
+    const [failedImageUrl, setFailedImageUrl] = useState(null);
+    if (failedImageUrl === src) {
+        return (
+            <span className={fallbackClassName} aria-hidden="true">
+                {String(fallbackText || '?').slice(0, 2)}
+            </span>
+        );
+    }
+    return (
+        <img
+            src={src}
+            alt=""
+            aria-hidden="true"
+            className={className}
+            onError={() => setFailedImageUrl(src)}
+        />
+    );
 }
 
 
@@ -1896,7 +1951,7 @@ function GatedGroupCard({
 
     return (
         <div className={styles.metaBlock}>
-            <h4 className={styles.metaBlockTitle}>{heading}</h4>
+            <h2 className={styles.metaBlockTitle}>{heading}</h2>
             {description ? (
                 <p className={styles.descriptionBody}>{description}</p>
             ) : null}
@@ -2060,9 +2115,11 @@ function UnlockedFileLink({ name, type, onOpen }) {
 function HoldersPanel({ holders, holdersLoading, holdersError, holdersFetchedAt, divisibility }) {
     if (holdersLoading) return <p className={styles.muted}>Loading holders…</p>;
     if (holdersError) return <StatusMessage variant="error" className={styles.error}>{holdersError}</StatusMessage>;
-    if (!holders || holders.length === 0) return null;
+    if (!holders || holders.length === 0) {
+        return <EmptyState title="No holders yet." body="Mint or distribute supply to populate this list." titleAs="p" />;
+    }
     return (
-        <>
+        <section className={styles.infoCard} aria-label="Holders">
             {holdersFetchedAt ? (
                 <div className={styles.holdersStaleness}>
                     <StalenessLabel lastSyncedAt={holdersFetchedAt} warnAfterMs={10 * 60_000} />
@@ -2071,16 +2128,26 @@ function HoldersPanel({ holders, holdersLoading, holdersError, holdersFetchedAt,
             <ol className={styles.holdersList}>
                 {holders.slice(0, 25).map((h, i) => (
                     <li key={`${h.address || ''}:${i}`} className={styles.holdersRow}>
-                        <span className={styles.holdersAddr}>
-                            {shorten(h.address || h.ADDRESS || 'unknown')}
+                        <span className={styles.holdersAddrWrap}>
+                            <span className={styles.holdersAddr} title={h.address || h.ADDRESS || undefined}>
+                                {shorten(h.address || h.ADDRESS || 'unknown')}
+                            </span>
+                            {(h.address || h.ADDRESS) ? (
+                                <CopyButton
+                                    value={h.address || h.ADDRESS}
+                                    ariaLabel={`Copy holder address ${i + 1}`}
+                                />
+                            ) : null}
                         </span>
                         <span className={styles.holdersQty}>
-                            {formatAmount(String(h.quantity ?? h.QUANTITY ?? '0'), divisibility)}
+                            {h.quantity != null || h.QUANTITY != null
+                                ? formatAmount(String(h.quantity ?? h.QUANTITY), divisibility)
+                                : formatWithThousands(String(h.amount ?? h.AMOUNT ?? '0'))}
                         </span>
                     </li>
                 ))}
             </ol>
-        </>
+        </section>
     );
 }
 
@@ -2096,14 +2163,14 @@ function StatCell({ label, value, tone }) {
     );
 }
 
-function formatCompactFiat(usd) {
-    if (usd === null || usd === undefined || !isFinite(usd)) return 'N/A';
-    const abs = Math.abs(usd);
-    if (abs >= 1e12) return `$${(usd / 1e12).toFixed(2)}T`;
-    if (abs >= 1e9) return `$${(usd / 1e9).toFixed(2)}B`;
-    if (abs >= 1e6) return `$${(usd / 1e6).toFixed(2)}M`;
-    if (abs >= 1e3) return `$${(usd / 1e3).toFixed(2)}K`;
-    return formatFiat(usd);
+function formatCompactFiat(value, currency) {
+    if (value === null || value === undefined || !isFinite(value)) return 'N/A';
+    const abs = Math.abs(value);
+    if (abs >= 1e12) return `${formatFiat(value / 1e12, currency)}T`;
+    if (abs >= 1e9) return `${formatFiat(value / 1e9, currency)}B`;
+    if (abs >= 1e6) return `${formatFiat(value / 1e6, currency)}M`;
+    if (abs >= 1e3) return `${formatFiat(value / 1e3, currency)}K`;
+    return formatFiat(value, currency);
 }
 
 function formatPct(pct) {
@@ -2172,22 +2239,8 @@ function fiatValue(quantityStr, divisibility, fiatRate) {
     return multiplyDecimalStrings(amount, String(fiatRate));
 }
 
-function formatFiat(usd) {
-    if (usd === null || usd === undefined) return 'N/A';
-    if (compareDecimalStrings(usd, '0') === 0) return '$0.00';
-    if (compareDecimalStrings(usd, '0') === 1 && compareDecimalStrings(usd, '0.01') === -1) {
-        return '<$0.01';
-    }
-    return new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: 'USD',
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    }).format(String(usd));
-}
-
 // Returns just the symbol-prefixed numeric portion of a fiat value in
-// the wallet's preferred currency ("$8,642.00", "¥1,200"). The ISO
+// the wallet's preferred currency ("€8,642.00", "¥1,200"). The ISO
 // currency code is rendered separately as a styled suffix span by the
 // caller so it can be sized down relative to the amount. Uses
 // Intl.NumberFormat so currencies with non-USD symbols / decimal

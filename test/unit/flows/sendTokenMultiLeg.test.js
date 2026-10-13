@@ -186,6 +186,22 @@ describe('buildSendPsbt with legs (watcher parity)', () => {
         expect(res.psbtHex).toBe('70736274ff');
     });
 
+    it('honours watcher coin-control inputs and change', async () => {
+        const utxos = [{ txid: '11'.repeat(32), vout: 0, value: 1000, scriptPubKey: '0014aa' }];
+        const { encoder, opts: o } = watcherOpts({
+            to: A,
+            tick: 'PEPE',
+            amount: '1',
+            change: 'bcrt1qwalletchange',
+            utxos,
+        });
+        await buildSendPsbt(o);
+        expect(encoder.createTx.mock.calls[0][0]).toMatchObject({
+            change: 'bcrt1qwalletchange',
+            utxos,
+        });
+    });
+
     it('makes the same native refusal as sendToken, so the two paths cannot disagree', async () => {
         const { encoder, opts: o } = watcherOpts({
             tick: 'BTC',
