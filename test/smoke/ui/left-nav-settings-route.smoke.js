@@ -53,7 +53,7 @@ assert.ok(/settings:\s*\[\s*'settings',\s*'connected-sites'\s*\]/.test(navSrc),
 // --- 3. Settings footer button gets aria-current ------------------------
 
 assert.ok(
-    /onOpenSettings\s*\?[\s\S]*?isActive\('settings',\s*currentView\)[\s\S]*?aria-current=\{isActive\('settings',\s*currentView\) \? 'page' : undefined\}/.test(navSrc),
+    /onOpenSettings\s*\?[\s\S]*?activeItem === 'settings'[\s\S]*?aria-current=\{activeItem === 'settings' \? 'page' : undefined\}/.test(navSrc),
     'LeftNav Settings button receives aria-current="page" when on the settings route',
 );
 

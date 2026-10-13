@@ -142,8 +142,8 @@ const leftNavSrc = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'LeftNav.jsx'),
     'utf8',
 );
-assert.ok(/scan: \['scan'\]/.test(leftNavSrc),
-    'LeftNav VIEW_GROUPS knows about the scan view');
+assert.ok(/scan:\s*\[[^\]]*'scan'[^\]]*'sign-psbt'[^\]]*\]/.test(leftNavSrc),
+    'LeftNav scan group covers the scanner and its PSBT drilldown');
 assert.ok(
     /\{ id: 'scan', label: 'Scan', Icon: Icon\.ScanIcon \}/.test(leftNavSrc),
     'LeftNav primary list renders a Scan row with ScanIcon',

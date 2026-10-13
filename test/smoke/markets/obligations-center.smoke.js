@@ -57,7 +57,8 @@ assert.match(status, /secondsLeft <= 0\) return \{ state: 'expired'/, 'T=0 is ex
 
 // ---- Nav wiring --------------------------------------------------------
 const leftNav = read('packages', 'core', 'src', 'shared', 'components', 'LeftNav.jsx');
-assert.match(leftNav, /obligations: \['obligations'\]/, 'LeftNav view group');
+assert.match(leftNav, /obligations: \['obligations', 'coinpay'\]/,
+    'LeftNav view group covers the queue and payment drilldown');
 assert.match(leftNav, /id: 'obligations', label: 'Payments due', Icon: Icon\.ClockIcon/, 'LeftNav item');
 // Secondary rows must render badge pills (the obligations item lives there).
 const secondaryBlock = leftNav.slice(leftNav.indexOf('{secondary.map'));
