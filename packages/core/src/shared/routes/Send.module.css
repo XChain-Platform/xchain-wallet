@@ -109,10 +109,10 @@
 
 .detailsList {
     display: grid;
-    grid-template-columns: auto 1fr;
-    gap: var(--xc-space-1) var(--xc-space-3);
+    grid-template-columns: var(--xc-table-label-column) minmax(0, 1fr);
+    gap: 0;
     margin: var(--xc-space-2) 0 0;
-    padding: var(--xc-space-3);
+    padding: var(--xc-space-1);
     background: var(--xc-bg-muted);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-md);
@@ -120,9 +120,10 @@
 
 .advancedReviewList {
     display: grid;
-    grid-template-columns: auto 1fr;
-    gap: var(--xc-space-2) var(--xc-space-4);
+    grid-template-columns: var(--xc-table-label-column) minmax(0, 1fr);
+    gap: 0;
     margin: 0 0 var(--xc-space-3);
+    padding: var(--xc-space-1);
 }
 
 .detailsLabel {
@@ -133,6 +134,7 @@
     letter-spacing: 0.04em;
     margin: 0;
     align-self: center;
+    padding: var(--xc-table-cell-padding-block) var(--xc-table-cell-padding-inline);
 }
 
 .detailsValue {
@@ -140,6 +142,34 @@
     color: var(--xc-text);
     margin: 0;
     word-break: break-word;
+    padding: var(--xc-table-cell-padding-block) var(--xc-table-cell-padding-inline);
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+}
+
+.detailsLabel ~ .detailsLabel,
+.detailsValue ~ .detailsValue {
+    border-top: var(--xc-table-row-divider);
+}
+
+@media not all and (min-width: 400px) {
+    .detailsList,
+    .advancedReviewList {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .detailsLabel {
+        padding-bottom: 0;
+    }
+
+    .detailsValue {
+        padding-top: var(--xc-space-1);
+        text-align: start;
+    }
+
+    .detailsValue ~ .detailsValue {
+        border-top: 0;
+    }
 }
 
 .warnings {

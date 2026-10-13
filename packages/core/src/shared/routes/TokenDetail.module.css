@@ -489,19 +489,19 @@
 
 .metaRow th,
 .metaRow td {
-    padding: var(--xc-space-2) 0;
+    padding: var(--xc-table-cell-padding-block) var(--xc-table-cell-padding-inline);
     vertical-align: top;
     line-height: 1.4;
 }
 
 .metaRow + .metaRow th,
 .metaRow + .metaRow td {
-    border-top: 1px solid var(--xc-border);
+    border-top: var(--xc-table-row-divider);
 }
 
 .metaRow th {
     text-align: start;
-    width: 40%;
+    width: var(--xc-table-label-width);
     font-weight: 500;
     color: var(--xc-text-muted);
     text-transform: uppercase;
@@ -513,6 +513,33 @@
     text-align: end;
     color: var(--xc-text);
     word-break: break-word;
+    font-variant-numeric: tabular-nums;
+}
+
+.detailList > li + li {
+    border-top: var(--xc-table-row-divider);
+}
+
+@media not all and (min-width: 400px) {
+    .metaRow th,
+    .metaRow td {
+        display: block;
+        width: 100%;
+        box-sizing: border-box;
+        text-align: start;
+    }
+
+    .metaRow th {
+        padding-bottom: 0;
+    }
+
+    .metaRow td {
+        padding-top: var(--xc-space-1);
+    }
+
+    .metaRow + .metaRow td {
+        border-top: 0;
+    }
 }
 
 .supplyState {

@@ -31,13 +31,13 @@
 
 .headerCell,
 .cell {
-    padding: 0.2rem 0.25rem;
+    box-sizing: border-box;
+    padding: var(--xc-table-cell-padding-block) var(--xc-table-cell-padding-inline);
     text-align: start;
     overflow-wrap: anywhere;
 }
 
 .headerCell {
-    padding-top: 0;
     color: var(--xc-text-muted);
     font-size: var(--xc-text-xs, 0.75rem);
     font-weight: 600;
@@ -46,6 +46,14 @@
 .numeric {
     text-align: end;
     font-variant-numeric: tabular-nums;
+}
+
+.table tbody tr {
+    border-bottom: var(--xc-table-row-divider);
+}
+
+.table tbody tr:last-child {
+    border-bottom: 0;
 }
 
 .mono {
@@ -93,16 +101,11 @@
 
     .table tr {
         padding: 0.25rem 0;
-        border-bottom: 1px solid var(--xc-border);
-    }
-
-    .table tr:last-child {
-        border-bottom: 0;
     }
 
     .table .cell {
         display: grid;
-        grid-template-columns: minmax(6.5rem, 0.8fr) minmax(0, 1fr);
+        grid-template-columns: var(--xc-table-label-column) minmax(0, 1fr);
         gap: var(--xc-space-2, 0.5rem);
         align-items: baseline;
         text-align: end;
@@ -118,5 +121,17 @@
 
     .table .cellButton {
         justify-self: end;
+    }
+}
+
+@media not all and (min-width: 400px) {
+    .table .cell {
+        grid-template-columns: minmax(0, 1fr);
+        gap: var(--xc-space-1);
+        text-align: start;
+    }
+
+    .table .cellButton {
+        justify-self: start;
     }
 }
