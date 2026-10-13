@@ -56,13 +56,14 @@ describe('large text layout styles', () => {
         expect(rule(networkButton, '.networkSelectLabel')).toMatch(/text-overflow:\s*ellipsis/);
     });
 
-    it('truncates button labels and lets balance rows wrap without icon shrinkage', () => {
+    it('truncates button labels and balance names without icon shrinkage', () => {
         const button = readCore('ui', 'Button.module.css');
         const balances = readCore('shared', 'components', 'BalanceList.module.css');
 
         expect(rule(button, '.btn')).toMatch(/max-width:\s*100%/);
         expect(rule(button, '.label')).toMatch(/text-overflow:\s*ellipsis/);
-        expect(rule(balances, '.name')).toMatch(/overflow-wrap:\s*anywhere/);
+        expect(rule(balances, '.name')).toMatch(/text-overflow:\s*ellipsis/);
+        expect(rule(balances, '.name')).toMatch(/min-width:\s*0/);
         expect(rule(balances, '.iconWrap')).toMatch(/flex:\s*0 0 auto/);
         expect(balances).not.toMatch(/font-size:\s*\d*\.?\d+px/);
     });
