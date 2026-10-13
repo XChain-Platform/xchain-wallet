@@ -91,7 +91,9 @@ async function loadDispensersAt(messaging, chainId, dest, sentTick, isNativePaym
 // or failure, so each check degrades to "unknown" instead of throwing.
 function tryCall(messaging, name, req) {
     if (typeof messaging?.[name] !== 'function') return Promise.resolve(null);
-    return Promise.resolve(messaging[name](req)).catch(() => null);
+    return Promise.resolve()
+        .then(() => messaging[name](req))
+        .catch(() => null);
 }
 
 async function assessDispenser(messaging, chainId, row) {
