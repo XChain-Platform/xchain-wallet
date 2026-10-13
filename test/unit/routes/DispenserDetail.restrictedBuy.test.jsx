@@ -276,30 +276,40 @@ describe('restricted dispenser, buyer view (D-148)', () => {
     });
 
     it('refreshes membership before opening the signing review', async () => {
-        let reads = 0;
-        const getListByActionIndex = vi.fn().mockImplementation(() => {
-            reads += 1;
-            return Promise.resolve(list(reads === 1 ? [BUYER, OWNER] : [OWNER]));
-        });
+        let buyerAllowed = true;
+        const getListByActionIndex = vi.fn().mockImplementation(() => Promise.resolve(
+            list(buyerAllowed ? [BUYER, OWNER] : [OWNER]),
+        ));
         const messaging = mount(ALLOW_GATED, { getListByActionIndex });
-        await waitFor(() => expect(buyButton()).toBeEnabled());
+        await waitFor(() => {
+            expect(getListByActionIndex).toHaveBeenCalled();
+            expect(buyButton()).toBeEnabled();
+        });
+        const readsBeforeClick = getListByActionIndex.mock.calls.length;
+        buyerAllowed = false;
         fireEvent.click(buyButton());
+        await waitFor(() => {
+            expect(getListByActionIndex.mock.calls.length).toBeGreaterThan(readsBeforeClick);
+        });
         await expectSelectedPayerRefused();
         expect(screen.queryByTestId('confirm-approve')).not.toBeInTheDocument();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
     it('refreshes membership again before signing', async () => {
-        let reads = 0;
-        const getListByActionIndex = vi.fn().mockImplementation(() => {
-            reads += 1;
-            return Promise.resolve(list(reads < 3 ? [BUYER, OWNER] : [OWNER]));
-        });
+        let buyerAllowed = true;
+        const getListByActionIndex = vi.fn().mockImplementation(() => Promise.resolve(
+            list(buyerAllowed ? [BUYER, OWNER] : [OWNER]),
+        ));
         const messaging = mount(ALLOW_GATED, { getListByActionIndex });
-        await waitFor(() => expect(buyButton()).toBeEnabled());
+        await waitFor(() => {
+            expect(getListByActionIndex).toHaveBeenCalled();
+            expect(buyButton()).toBeEnabled();
+        });
         fireEvent.click(buyButton());
         const password = await screen.findByLabelText(/Password/i);
         fireEvent.change(password, { target: { value: 'secret' } });
+        buyerAllowed = false;
         fireEvent.click(screen.getByTestId('confirm-approve'));
         expect(await screen.findByText(/refused by a current access list/i)).toBeInTheDocument();
         expect(messaging.sendToken).not.toHaveBeenCalled();

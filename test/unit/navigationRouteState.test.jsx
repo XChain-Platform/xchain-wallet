@@ -20,6 +20,10 @@ import { __clearTokenInfoCache } from '../../packages/core/src/shared/hooks/useT
 import { PageHeader } from '../../packages/core/src/ui/PageHeader.jsx';
 import { resetBackStackForTests } from '../../packages/core/src/ui/backStack.js';
 
+vi.mock('../../packages/core/src/shared/components/MarketChart.jsx', () => ({
+    MarketChart: () => null,
+}));
+
 const WALLET = 'route-wallet';
 const MARKET = { chainId: 'bitcoin-mainnet', tick1: 'XCHAIN', tick2: 'BTC' };
 const savedResizeObserver = globalThis.ResizeObserver;
