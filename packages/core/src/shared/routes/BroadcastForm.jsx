@@ -37,7 +37,7 @@ import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
-import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
+import { MAX_MEMO_LENGTH, memoLengthError, utf8ByteLength } from '../utils/memoLimit.js';
 import { parseRawTx } from '../../signers/verifySignedTx.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
@@ -66,7 +66,7 @@ const MEMO_PART_SEPARATOR = ' - ';
 // letting the compose call fail with the protocol's field names.
 const RESERVED_DELIMITERS = /[|;]/;
 
-// BROADCAST MESSAGE uses the same 250-character ceiling as MEMO, but the
+// BROADCAST MESSAGE uses the same 250-byte ceiling as MEMO, but the
 // indexer validates it under its own field-specific setting.
 const MAX_BROADCAST_MESSAGE_LENGTH = 250;
 const DECIMAL_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/;
@@ -538,10 +538,10 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
         return p;
     }, [feedName, text, value, feedFee, includeTimestamp]);
 
-    const messageLength = String(actionParams.MESSAGE || '').length;
-    const memoLength = String(actionParams.MEMO || '').length;
-    const messageLengthError = messageLength > MAX_BROADCAST_MESSAGE_LENGTH
-        ? `Message is ${messageLength} characters; the network accepts at most ${MAX_BROADCAST_MESSAGE_LENGTH}.`
+    const messageBytes = utf8ByteLength(actionParams.MESSAGE);
+    const memoBytes = utf8ByteLength(actionParams.MEMO);
+    const messageLengthError = messageBytes > MAX_BROADCAST_MESSAGE_LENGTH
+        ? `Message is ${messageBytes} bytes; the network accepts at most ${MAX_BROADCAST_MESSAGE_LENGTH} bytes.`
         : null;
     const broadcastMemoLengthError = memoLengthError(actionParams.MEMO || '');
     const broadcastLengthError = messageLengthError || broadcastMemoLengthError;
@@ -1012,7 +1012,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
 
             <Input
                 label="Feed name (optional)"
-                hint={`${feedName.trim().length} / ${MAX_BROADCAST_MESSAGE_LENGTH} characters. Stable label for an oracle or feed.`}
+                hint={`${utf8ByteLength(feedName.trim())} / ${MAX_BROADCAST_MESSAGE_LENGTH} bytes. Stable label for an oracle or feed.`}
                 error={feedName.trim() ? messageLengthError || undefined : undefined}
                 value={feedName}
                 onChange={(e) => setFeedName(e.target.value)}
@@ -1024,8 +1024,8 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
             <Input
                 label="Message"
                 hint={feedName.trim()
-                    ? `${memoLength} / ${MAX_MEMO_LENGTH} on-chain memo characters.`
-                    : `${messageLength} / ${MAX_BROADCAST_MESSAGE_LENGTH} characters.`}
+                    ? `${memoBytes} / ${MAX_MEMO_LENGTH} on-chain memo bytes.`
+                    : `${messageBytes} / ${MAX_BROADCAST_MESSAGE_LENGTH} bytes.`}
                 error={(feedName.trim() ? broadcastMemoLengthError : messageLengthError) || undefined}
                 value={text}
                 onChange={(e) => setText(e.target.value)}
