@@ -24,6 +24,12 @@ const REPORT = (xchainFee) => ({
     quote: { valid: true, status: 'valid', xchainFee, blockIndex: 100 },
 });
 
+const NATIVE_FEE_FINDING = {
+    code: 'NATIVE_FEE_FORFEIT',
+    severity: 'warning',
+    message: 'Any attached native-coin fee output is forfeited.',
+};
+
 function base(overrides = {}) {
     return {
         phase: 'ready',
@@ -71,6 +77,34 @@ describe('confirm screen protocol-fee disclosure', () => {
         expect(screen.getByTestId('confirm-native-protocol-fee')).toHaveTextContent(
             'Protocol fee: 0.00002 BTC (≈ $2.00 USD)',
         );
+    });
+
+    it('hides the native-fee advisory when ISSUE has no coin fee output', () => {
+        render(<ConfirmActionModal {...base({
+            report: {
+                ...REPORT('0.50000000'),
+                verdict: 'warn',
+                findings: [NATIVE_FEE_FINDING],
+            },
+        })} />);
+
+        expect(screen.queryByTestId('preflight-warning-NATIVE_FEE_FORFEIT')).toBeNull();
+        expect(screen.getByTestId('preflight-chip')).toHaveTextContent('Looks good');
+    });
+
+    it('shows one forfeiture disclosure when ISSUE carries a native fee output', () => {
+        render(<ConfirmActionModal {...base({
+            composed: { psbt: 'x', protocolFeeSats: 2000, quote: { requiredFeeSats: 2000 } },
+            nativeTicker: 'BTC',
+            report: {
+                ...REPORT(null),
+                verdict: 'warn',
+                findings: [NATIVE_FEE_FINDING],
+            },
+        })} />);
+
+        expect(screen.getAllByText(/not refunded if the action is rejected/)).toHaveLength(1);
+        expect(screen.queryByTestId('preflight-warning-NATIVE_FEE_FORFEIT')).toBeNull();
     });
 
     it('shows nothing while the report is still streaming in', () => {

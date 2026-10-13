@@ -87,6 +87,27 @@ afterEach(() => {
 });
 
 describe('form drafts across auto-lock', () => {
+    it('does not offer a default-only Send record as an unfinished payment', async () => {
+        localStorage.setItem(`xc:formdraft:send:${WALLET_ID}`, JSON.stringify({
+            savedAt: Date.now(),
+            values: {
+                chainId: CHAIN_ID,
+                toAddress: '',
+                tick: 'BTC',
+                amount: '',
+                memo: '',
+            },
+        }));
+
+        mountForm('send', createMessaging());
+
+        expect(await screen.findByLabelText(/^To$/)).toBeInTheDocument();
+        expect(screen.queryByText(/Your unfinished payment was saved as a draft/)).toBeNull();
+        await waitFor(() => {
+            expect(localStorage.getItem(`xc:formdraft:send:${WALLET_ID}`)).toBeNull();
+        });
+    });
+
     it.each([
         {
             kind: 'send',

@@ -97,6 +97,22 @@ function formatReviewDecoded(decoded) {
     return { ...decoded, summary, details };
 }
 
+function reportWithoutUnverifiedNativeFeeWarning(report) {
+    if (!Array.isArray(report?.findings)) return report;
+    const findings = report.findings.filter((finding) => (
+        finding?.code !== 'NATIVE_FEE_FORFEIT'
+    ));
+    if (findings.length === report.findings.length) return report;
+    const hasVisibleConcern = findings.some((finding) => (
+        finding?.severity === 'warning' || finding?.severity === 'error'
+    )) || report.restricted || (report.unverified?.length > 0);
+    return {
+        ...report,
+        findings,
+        verdict: report.verdict === 'warn' && !hasVisibleConcern ? 'pass' : report.verdict,
+    };
+}
+
 function escapeRegExp(value) {
     return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -274,6 +290,11 @@ export function ConfirmActionModal({
         && !protocolFee
         && !protocolFeeKnownFree
         && !paysProtocolFeeNatively;
+    // The SDK advisory is action-based and does not know whether these bytes
+    // contain a native-coin fee output. The exact fee row above is the one
+    // reliable disclosure: it renders once when an output is present and is
+    // absent when the fee uses XCHAIN or the action is free.
+    const displayedReport = reportWithoutUnverifiedNativeFeeWarning(report);
     // A Mode B dispenser's oracle usage fee: a coin output in these bytes that
     // neither fee line covers. Action variant only, for the reason above.
     const oracleFee = variant === 'action'
@@ -487,7 +508,7 @@ export function ConfirmActionModal({
 
                     {(variant === 'action' || variant === 'psbt') && !preflightNotApplicable ? (
                         <PreflightPanel
-                            report={report}
+                            report={displayedReport}
                             loading={reportLoading}
                             acknowledged={acknowledged}
                             onAcknowledge={onAcknowledge}
