@@ -1009,6 +1009,8 @@ export const en = {
     'extension.connect.permission.chains': 'Use only the networks you select below',
     'extension.connect.permission.signing':
         'Ask separately before signing any message or transaction',
+    'extension.connect.permission.remember':
+        'Remember a later signing approval only if you choose. Revoke it anytime in Connected sites.',
     'extension.connect.chains': 'Networks',
     'extension.connect.chains.requestedHint':
         'Choose from the networks this site requested. You can change this later.',

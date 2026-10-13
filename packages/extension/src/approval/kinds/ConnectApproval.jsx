@@ -233,6 +233,7 @@ export function ConnectApproval({ id, payload, onReject }) {
                         <li>{t('extension.connect.permission.accounts')}</li>
                         <li>{t('extension.connect.permission.chains')}</li>
                         <li>{t('extension.connect.permission.signing')}</li>
+                        <li>{t('extension.connect.permission.remember')}</li>
                     </ul>
                 </section>
 
