@@ -15,7 +15,11 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { useOracleFeeds } from '../hooks/useOracleFeeds.js';
-import { dispenserRateLabel } from '../utils/dispenserPricing.js';
+import {
+    dispenserFillPriceLabel,
+    formatDecimal,
+    isOpenDispenserSelling,
+} from '../utils/dispenserPricing.js';
 import { actionRowIdentity, explorerPage, uniqueRows } from '../utils/pagedRows.js';
 import styles from './ActionsMenu.module.css';
 
@@ -126,7 +130,10 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
         Promise.all(targetChains.map((cid) =>
             Promise.resolve().then(() => fetchOne(cid))
                 .then((resp) => {
-                    const rawRows = extractRows(resp);
+                    const rawRows = extractRows(resp).filter((row) => isOpenDispenserSelling(
+                        row,
+                        searchMode === 'token' ? q : '',
+                    ));
                     const page = explorerPage(resp, rawRows, 1, RESULTS_PAGE_SIZE);
                     return {
                         cid,
@@ -191,8 +198,12 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                 opts: { page: nextPage, limit: RESULTS_PAGE_SIZE },
             }))).then((resp) => {
             if (requestId !== searchRequestId.current) return;
-            const pageRows = extractRows(resp);
-            const page = explorerPage(resp, pageRows, nextPage, RESULTS_PAGE_SIZE);
+            const rawRows = extractRows(resp);
+            const page = explorerPage(resp, rawRows, nextPage, RESULTS_PAGE_SIZE);
+            const pageRows = rawRows.filter((row) => isOpenDispenserSelling(
+                row,
+                lastSearchMode === 'token' ? lastQueried : '',
+            ));
             setRowsByChain((current) => {
                 const prior = current[cid];
                 if (!prior) return current;
@@ -414,7 +425,8 @@ function ResultsPane({ rowsByChain, searching, onOpenDispenser, oracleFeedsFor, 
 }
 
 function ResultRow({ row, oracleFeeds, onSelect }) {
-    const rate = dispenserRateLabel(row, oracleFeeds);
+    const give = `${formatDecimal(row.give_amount)} ${row.give_tick || '?'}`;
+    const price = dispenserFillPriceLabel(row, oracleFeeds);
     const status = String(flowsLib.dispenserLiveState(row).status || '-');
     return (
         <button
@@ -423,7 +435,10 @@ function ResultRow({ row, oracleFeeds, onSelect }) {
             onClick={onSelect}
         >
             <span className={styles.entryLabel}>
-                {row.give_tick || '?'} @ <AddressText address={row.address || row.source || '?'} /> · {rate}
+                {row.give_tick || '?'} @ <AddressText address={row.address || row.source || '?'} />
+            </span>
+            <span className={styles.entryDescription}>
+                Gives {give} per fill · Price per fill: {price}
             </span>
             <span className={styles.entryDescription}>
                 #{row.action_index ?? '?'} · status {status}

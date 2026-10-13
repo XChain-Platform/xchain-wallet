@@ -154,6 +154,12 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
             from: { address: BUYER },
         });
         expect(screen.getByTestId('confirm-source')).toHaveTextContent(BUYER.slice(0, 6));
+        expect(screen.getByText('Review purchase')).toBeInTheDocument();
+        const review = screen.getByTestId('buy-review-summary');
+        expect(review).toHaveTextContent('Price per fill2.00000000 DOGE');
+        expect(review).toHaveTextContent('Fills3');
+        expect(review).toHaveTextContent('You pay6 DOGE');
+        expect(review).toHaveTextContent('You receive300 DOGESWAP');
         fireEvent.change(await screen.findByLabelText(/Password/i), { target: { value: 'pw' } });
         const approve = screen.getByTestId('confirm-approve');
         await waitFor(() => expect(approve).toBeEnabled());
@@ -259,6 +265,37 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
         fireEvent.change(await screen.findByLabelText(/Fills/i), { target: { value: '6' } });
         await waitFor(async () => expect(await buyButton()).toBeDisabled());
         expect(await screen.findByTestId('preflight-chip')).toHaveTextContent(/Will likely fail/);
+    });
+
+    it('shows per-fill terms and validates whole, available fills before review', async () => {
+        mount({ ...COIN_PAID, escrow_remaining: '200' });
+        await screen.findByText(/10 DOGE available/);
+        const totals = screen.getByTestId('buy-totals');
+        expect(totals).toHaveTextContent('Price per fill2.00000000 DOGE');
+        expect(totals).toHaveTextContent('Give per fill100 DOGESWAP');
+        expect(totals).toHaveTextContent('You pay2 DOGE');
+        expect(totals).toHaveTextContent('You receive100 DOGESWAP');
+
+        fireEvent.change(screen.getByLabelText(/Fills/i), { target: { value: '1.5' } });
+        expect(screen.getByRole('alert')).toHaveTextContent(/whole number of fills/i);
+        expect(screen.getByRole('button', { name: /^Buy fills$/ })).toBeDisabled();
+
+        fireEvent.change(screen.getByLabelText(/Fills/i), { target: { value: '3' } });
+        expect(screen.getByRole('alert')).toHaveTextContent(/Only 2 complete fills remain/);
+        expect(await buyButton()).toBeDisabled();
+    });
+
+    it.each([
+        ['closed', { current_status: 'cancelled', escrow_remaining: '1000' }],
+        ['empty', { current_status: 'open', escrow_remaining: '0' }],
+    ])('does not offer payment controls for a %s dispenser', async (_name, state) => {
+        mount({ ...COIN_PAID, ...state });
+        await screen.findByText(state.current_status, { selector: 'dd' });
+        expect(noBuyButton()).toBeNull();
+        expect(screen.queryByText('Pay to buy')).toBeNull();
+        if (state.escrow_remaining === '0') {
+            expect(screen.getByText(/no complete fills left to buy/i)).toBeInTheDocument();
+        }
     });
 
     it('keeps the list warning on a restricted dispenser next to the Buy control', async () => {
