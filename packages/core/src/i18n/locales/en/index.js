@@ -160,7 +160,7 @@ export const en = {
     'send.useMax': 'Use Max',
     'send.fromAddress': 'From address',
     'send.draft.restore': 'Restore',
-    'send.draft.unfinished': 'You have an unfinished Send draft.',
+    'send.draft.unfinished': 'Your unfinished Send draft was saved. Restore it to continue. Nothing was submitted.',
     'send.draft.discardLabel': 'Discard saved draft',
     'send.draft.discard': 'Discard',
     'send.source.choose': 'Choose source address',

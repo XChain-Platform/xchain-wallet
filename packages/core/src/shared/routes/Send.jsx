@@ -442,7 +442,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         ? Number(settings.privacy.formDraftTtlMs)
         : undefined;
     const draft = useFormDraft({ view: 'send', walletId, ttlMs: formDraftTtlMs });
-    const [draftPending, setDraftPending] = useState(() => draft.hasDraft());
+    // A stored draft waits for an explicit Restore. A fresh form starts
+    // saving immediately so an auto-lock unmount cannot erase typed values.
+    const [draftPending, setDraftPending] = useState(() => !draft.hasDraft());
     useEffect(() => {
         if (stage !== 'form' || !draftPending) return;
         draft.save({ chainId, toAddress, tick, amount, memo });
@@ -459,7 +461,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
     }, [draft]);
     const dismissDraft = useCallback(() => {
         draft.clear();
-        setDraftPending(false);
+        setDraftPending(true);
     }, [draft]);
     const hasRealInput = useMemo(() => (
         [toAddress, amount, memo, fiatAmount, password]
