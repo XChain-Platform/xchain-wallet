@@ -48,10 +48,15 @@ export const REGISTRY_DEFAULT_URL = 'https://hub.xchain.io/api/v1/chain-registry
 export function verifyChainRegistry(body, opts = {}) {
     const pinned = (opts.pinnedPubkeyHex ?? REGISTRY_PINNED_PUBKEY_HEX).toLowerCase();
     if (!body || typeof body !== 'object') return { ok: false, reason: 'empty response' };
+    if (body.schema_version !== 1)
+        return { ok: false, reason: 'unsupported registry schema version' };
     if (!Array.isArray(body.descriptors) || body.descriptors.length === 0)
         return { ok: false, reason: 'no descriptors in response' };
-    if (typeof body.generatedAt !== 'string' || !body.generatedAt)
-        return { ok: false, reason: 'missing generatedAt' };
+    if (typeof body.generatedAt !== 'string'
+        || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(body.generatedAt)
+        || !Number.isFinite(Date.parse(body.generatedAt))) {
+        return { ok: false, reason: 'missing or malformed generatedAt' };
+    }
     // Unsigned responses are rejected outright: a standalone hub serves the
     // registry unsigned, but a pinning client must never accept that.
     if (typeof body.signature !== 'string' || !/^[0-9a-fA-F]{128}$/.test(body.signature))
@@ -109,6 +114,14 @@ export async function syncChainRegistryFromHub(opts) {
         const res = validateChainDescriptor(d);
         if (!res.ok)
             return { ok: false, reason: 'invalid descriptor "' + (d?.id ?? '?') + '": ' + res.errors.join('; ') };
+    }
+
+    const descriptorIds = new Set();
+    for (const d of body.descriptors) {
+        if (descriptorIds.has(d.id)) {
+            return { ok: false, reason: 'duplicate descriptor id "' + d.id + '"' };
+        }
+        descriptorIds.add(d.id);
     }
 
     const summary = registry.applyRemoteDescriptors(body.descriptors);
