@@ -9,11 +9,10 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { EmptyState, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, branding as brandingLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { DispenserBadge } from '../components/DispenserBadge.jsx';
-import { EmptyStateNudge } from '../components/EmptyStateNudge.jsx';
 import { tickerColor } from '../components/BalanceList.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import styles from './IssueTokenForm.module.css';
@@ -204,156 +203,163 @@ export function MarketsList({
 
     return (
         <Screen variant={variant} header={header}>
-            <button
-                type="button"
-                className={receiveStyles.assetCard}
-                onClick={onChangeAsset}
-                aria-label={selectedAsset
-                    ? `Change asset (currently ${assetName})`
-                    : 'Select coin or token'}
-            >
-                <span className={receiveStyles.assetIconWrap}>
-                    {assetImageUrl ? (
-                        <img
-                            src={assetImageUrl}
-                            alt=""
-                            aria-hidden="true"
-                            className={receiveStyles.assetIcon}
-                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                        />
-                    ) : (
-                        <span
-                            className={receiveStyles.assetIconFallback}
-                            style={{ background: tickerColor(selectorTickUpper || 'BTC') }}
-                            aria-hidden="true"
+            <ListPage
+                toolbar={(
+                    <div style={{ width: '100%' }}>
+                        <button
+                            type="button"
+                            className={receiveStyles.assetCard}
+                            onClick={onChangeAsset}
+                            aria-label={selectedAsset
+                                ? `Change asset (currently ${assetName})`
+                                : 'Select coin or token'}
                         >
-                            {assetLetter}
-                        </span>
-                    )}
-                    {isTokenSelection && selectorDescriptor ? (() => {
-                        const chainPipUrl = brandingLib.chainIconSmallUrl(selectorDescriptor.id);
-                        return chainPipUrl ? (
-                            <img
-                                src={chainPipUrl}
-                                alt=""
-                                aria-hidden="true"
-                                title={selectorDescriptor.displayName}
-                                className={receiveStyles.assetChainOverlay}
-                            />
-                        ) : null;
-                    })() : null}
-                </span>
-                <span className={receiveStyles.assetText}>
-                    <span className={receiveStyles.assetName}>{assetName}</span>
-                    {assetSub ? (
-                        <span className={receiveStyles.assetSub}>{assetSub}</span>
-                    ) : null}
-                </span>
-                <span className={receiveStyles.assetChevron} aria-hidden="true">›</span>
-            </button>
+                            <span className={receiveStyles.assetIconWrap}>
+                                {assetImageUrl ? (
+                                    <img
+                                        src={assetImageUrl}
+                                        alt=""
+                                        aria-hidden="true"
+                                        className={receiveStyles.assetIcon}
+                                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                    />
+                                ) : (
+                                    <span
+                                        className={receiveStyles.assetIconFallback}
+                                        style={{ background: tickerColor(selectorTickUpper || 'BTC') }}
+                                        aria-hidden="true"
+                                    >
+                                        {assetLetter}
+                                    </span>
+                                )}
+                                {isTokenSelection && selectorDescriptor ? (() => {
+                                    const chainPipUrl = brandingLib.chainIconSmallUrl(selectorDescriptor.id);
+                                    return chainPipUrl ? (
+                                        <img
+                                            src={chainPipUrl}
+                                            alt=""
+                                            aria-hidden="true"
+                                            title={selectorDescriptor.displayName}
+                                            className={receiveStyles.assetChainOverlay}
+                                        />
+                                    ) : null;
+                                })() : null}
+                            </span>
+                            <span className={receiveStyles.assetText}>
+                                <span className={receiveStyles.assetName}>{assetName}</span>
+                                {assetSub ? (
+                                    <span className={receiveStyles.assetSub}>{assetSub}</span>
+                                ) : null}
+                            </span>
+                            <span className={receiveStyles.assetChevron} aria-hidden="true">›</span>
+                        </button>
 
-            {selectedAsset ? (
-                <div style={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    alignItems: 'center',
-                    gap: 'var(--xc-space-2)',
-                    marginBottom: 'var(--xc-space-3)',
-                }}>
-                    <input
-                        type="search"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        placeholder="Search"
-                        aria-label="Search markets"
-                        style={{
-                            flex: '1 1 140px',
-                            minWidth: 0,
-                            padding: 'var(--xc-space-2) var(--xc-space-3)',
-                            border: '1px solid var(--xc-border)',
-                            borderRadius: 999,
-                            background: 'var(--xc-bg-muted)',
-                            color: 'var(--xc-text)',
-                            font: 'inherit',
-                            fontSize: 'var(--xc-text-sm)',
-                            outline: 'none',
-                        }}
-                    />
-                    <div
-                        className={receivePickerStyles.kindSegments}
-                        role="tablist"
-                        aria-label="Markets view"
-                        style={{ flexShrink: 0 }}
-                    >
-                        {[
-                            { id: 'all',       label: 'All' },
-                            { id: 'popular',   label: 'Popular' },
-                            { id: 'watchlist', label: 'Watchlist' },
-                        ].map((opt) => {
-                            const active = tab === opt.id;
-                            return (
-                                <button
-                                    key={opt.id}
-                                    type="button"
-                                    role="tab"
-                                    aria-selected={active}
-                                    className={`${receivePickerStyles.kindSegment} ${active ? receivePickerStyles.kindSegmentActive : ''}`}
-                                    onClick={() => setTab(opt.id)}
+                        {selectedAsset ? (
+                            <div style={{
+                                display: 'flex',
+                                flexWrap: 'wrap',
+                                alignItems: 'center',
+                                gap: 'var(--xc-space-2)',
+                                marginBottom: 'var(--xc-space-3)',
+                            }}>
+                                <input
+                                    type="search"
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    placeholder="Search"
+                                    aria-label="Search markets"
+                                    style={{
+                                        flex: '1 1 140px',
+                                        minWidth: 0,
+                                        padding: 'var(--xc-space-2) var(--xc-space-3)',
+                                        border: '1px solid var(--xc-border)',
+                                        borderRadius: 999,
+                                        background: 'var(--xc-bg-muted)',
+                                        color: 'var(--xc-text)',
+                                        font: 'inherit',
+                                        fontSize: 'var(--xc-text-sm)',
+                                        outline: 'none',
+                                    }}
+                                />
+                                <div
+                                    className={receivePickerStyles.kindSegments}
+                                    role="tablist"
+                                    aria-label="Markets view"
+                                    style={{ flexShrink: 0 }}
                                 >
-                                    {opt.label}
-                                </button>
-                            );
-                        })}
+                                    {[
+                                        { id: 'all',       label: 'All' },
+                                        { id: 'popular',   label: 'Popular' },
+                                        { id: 'watchlist', label: 'Watchlist' },
+                                    ].map((opt) => {
+                                        const active = tab === opt.id;
+                                        return (
+                                            <button
+                                                key={opt.id}
+                                                type="button"
+                                                role="tab"
+                                                aria-selected={active}
+                                                className={`${receivePickerStyles.kindSegment} ${active ? receivePickerStyles.kindSegmentActive : ''}`}
+                                                onClick={() => setTab(opt.id)}
+                                            >
+                                                {opt.label}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        ) : null}
                     </div>
-                </div>
-            ) : null}
+                )}
+            >
 
-            {loadError ? (
-                <StatusMessage variant="error" className={styles.hint}>{loadError}</StatusMessage>
-            ) : null}
+                {loadError ? (
+                    <StatusMessage variant="error" className={styles.hint}>{loadError}</StatusMessage>
+                ) : null}
 
-            {!selectedAsset ? (
-                <EmptyStateNudge
-                    title="Pick a coin or token"
-                    body="Choose what you want to look at markets for."
-                />
-            ) : loading ? (
-                <p className={styles.hint}>Loading markets…</p>
-            ) : displayMarkets.length === 0 ? (
-                <EmptyStateNudge
-                    title={search.trim()
-                        ? 'No matches'
-                        : tab === 'watchlist'
-                            ? 'Watchlist is empty'
-                            : `No markets for ${selectedAsset.tick}`}
-                    body={search.trim()
-                        ? `Nothing matches "${search.trim()}". Clear the search to see everything.`
-                        : tab === 'watchlist'
-                            ? `Tap ☆ on any market to add it to your watchlist for ${selectedAsset.tick}.`
-                            : 'No pairs found involving this asset on its chain.'}
-                />
-            ) : (
-                <div className={receiveStyles.assetCard} style={{ display: 'block', padding: 0, marginBottom: 'var(--xc-space-3)' }}>
-                    <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                        {displayMarkets.map((m, idx) => (
-                            <MarketRow
-                                key={`${m.tick1}::${m.tick2}`}
-                                chainId={selectedAsset.chainId}
-                                selectedTick={selectedAsset.tick}
-                                tick1={m.tick1}
-                                tick2={m.tick2}
-                                lastPrice={m.lastPrice}
-                                change24h={m.change24h}
-                                depth={m.depth}
-                                starred={watchlistKeySet.has(`${selectedAsset.chainId}::${m.tick1}::${m.tick2}`)}
-                                onOpen={() => onOpenMarket(selectedAsset.chainId, m.tick1, m.tick2)}
-                                onToggleStar={() => toggleStar(selectedAsset.chainId, m.tick1, m.tick2)}
-                                first={idx === 0}
-                            />
-                        ))}
-                    </ul>
-                </div>
-            )}
+                {!selectedAsset ? (
+                    <EmptyState
+                        title="Pick a coin or token"
+                        body="Choose what you want to look at markets for."
+                    />
+                ) : loading ? (
+                    <p className={styles.hint}>Loading markets…</p>
+                ) : displayMarkets.length === 0 ? (
+                    <EmptyState
+                        title={search.trim()
+                            ? 'No matches'
+                            : tab === 'watchlist'
+                                ? 'Watchlist is empty'
+                                : `No markets for ${selectedAsset.tick}`}
+                        body={search.trim()
+                            ? `Nothing matches "${search.trim()}". Clear the search to see everything.`
+                            : tab === 'watchlist'
+                                ? `Tap ☆ on any market to add it to your watchlist for ${selectedAsset.tick}.`
+                                : 'No pairs found involving this asset on its chain.'}
+                    />
+                ) : (
+                    <div className={receiveStyles.assetCard} style={{ display: 'block', padding: 0, marginBottom: 'var(--xc-space-3)' }}>
+                        <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                            {displayMarkets.map((m, idx) => (
+                                <MarketRow
+                                    key={`${m.tick1}::${m.tick2}`}
+                                    chainId={selectedAsset.chainId}
+                                    selectedTick={selectedAsset.tick}
+                                    tick1={m.tick1}
+                                    tick2={m.tick2}
+                                    lastPrice={m.lastPrice}
+                                    change24h={m.change24h}
+                                    depth={m.depth}
+                                    starred={watchlistKeySet.has(`${selectedAsset.chainId}::${m.tick1}::${m.tick2}`)}
+                                    onOpen={() => onOpenMarket(selectedAsset.chainId, m.tick1, m.tick2)}
+                                    onToggleStar={() => toggleStar(selectedAsset.chainId, m.tick1, m.tick2)}
+                                    first={idx === 0}
+                                />
+                            ))}
+                        </ul>
+                    </div>
+                )}
+            </ListPage>
         </Screen>
     );
 }
