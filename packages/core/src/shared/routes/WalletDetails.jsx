@@ -32,7 +32,7 @@ export { isVaultEmpty } from '../utils/demoGraduation.js';
  * @param {object} props
  * @param {string} props.walletId
  * @param {() => void} props.onBack
- * @param {() => void} [props.onRename]              navigates to RenameWalletForm scoped to this wallet
+ * @param {(wallet: any) => void} [props.onRename]   navigates to RenameWalletForm scoped to this wallet
  * @param {() => void} [props.onMigrateToBip39]      shown only when format === 'counterwallet-legacy'; navigates to the §40.13 migration wizard scoped to this wallet
  * @param {() => void} [props.onExited]              fires after a successful demo wipe so the host can refresh App state
  */
@@ -104,7 +104,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
     }, [walletId, messaging]);
 
     const header = (
-        <PageHeader onBack={onBack} title="Wallet details" />
+        <PageHeader onBack={onBack} backDisabled={exitBusy} title="Wallet details" />
     );
 
     if (error) {
@@ -176,6 +176,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
                             variant="primary"
                             block
                             onClick={onMigrateToBip39}
+                            disabled={exitBusy}
                             icon={<Icon.MigrateIcon />}
                         >
                             Upgrade recovery phrase
@@ -188,7 +189,8 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
                             type="button"
                             variant="primary"
                             block
-                            onClick={onRename}
+                            onClick={() => onRename(wallet)}
+                            disabled={exitBusy}
                             icon={<Icon.PencilIcon />}
                         >
                             Rename wallet
