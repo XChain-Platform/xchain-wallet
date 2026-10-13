@@ -221,11 +221,15 @@ export class GovernancePollWatcher {
             if (!openIds.has(id)) { seen.delete(id); changed = true; }
         }
 
-        // Which open polls are news?
-        const fresh = open.filter((p) => !seen.has(String(p.action_index)));
-        for (const p of fresh) {
+        // Only announce polls that fit in the seen set. An untracked overflow
+        // poll would otherwise look fresh and notify again on every cycle.
+        const fresh = [];
+        for (const p of open) {
+            const id = String(p.action_index);
+            if (seen.has(id)) continue;
             if (seen.size >= SEEN_CAP_PER_CHAIN) break;
-            seen.add(String(p.action_index));
+            seen.add(id);
+            fresh.push(p);
             changed = true;
         }
         this._seen.set(chainId, seen);
