@@ -35,6 +35,7 @@ export const DEFAULT_ACTIVE_CHAIN_IDS = registry.DEFAULT_ONBOARDING_CHAIN_IDS;
  * @property {import('../storage/ChromeMetaBackend.js').ChromeMetaBackend} metaBackend
  * @property {import('@xchain-wallet/core').registry.ChainRegistry} chainRegistry
  * @property {import('@xchain-wallet/core').sdk.SDKRegistry} sdkRegistry
+ * @property {import('@xchain-wallet/core').signers.SignerPool} [signerPool]
  * @property {() => Promise<void> | void} [onUnlocked]
  */
 
@@ -75,9 +76,23 @@ export async function handleWalletCreateWithMnemonic(request, deps) {
                 strengthBits,
                 bip39Passphrase,
                 kdfParams,
+                // The wallet seal shares the vault key because the password
+                // and KDF params are identical for a fresh create.
+                masterKey,
             });
             await vault.save();
             mnemonic = result.mnemonic;
+            if (deps.signerPool) {
+                await deps.signerPool.populate({
+                    vault,
+                    password,
+                    bip39Passphrase,
+                    chainRegistry: deps.chainRegistry,
+                    sdkRegistry: deps.sdkRegistry,
+                    masterKey,
+                    masterKeyKdfParams: kdfParams,
+                });
+            }
         } finally {
             // Vault kept its own copy of the key; close zeros that copy.
             vault.close();

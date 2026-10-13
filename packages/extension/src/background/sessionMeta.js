@@ -55,6 +55,7 @@ import { serializeError } from './MessageHost.js';
  * @typedef {PreHostBackends & {
  *   chainRegistry?: import('@xchain-wallet/core').registry.ChainRegistry,
  *   sdkRegistry?: import('@xchain-wallet/core').sdk.SDKRegistry,
+ *   signerPool?: import('@xchain-wallet/core').signers.SignerPool,
  *   onUnlocked?: () => Promise<void> | void,
  *   onLocked?: (result: { secretsCleared: boolean }) => Promise<void> | void,
  * }} PreHostDispatchDeps
@@ -64,6 +65,7 @@ import { serializeError } from './MessageHost.js';
  * @property {(result: { secretsCleared: boolean }) => Promise<void> | void} [onLocked]   receives whether both secret clears succeeded, so a shell can keep its auto-lock retry record when they did not
  * @property {import('@xchain-wallet/core').registry.ChainRegistry} [chainRegistry]
  * @property {import('@xchain-wallet/core').sdk.SDKRegistry} [sdkRegistry]
+ * @property {import('@xchain-wallet/core').signers.SignerPool | (() => import('@xchain-wallet/core').signers.SignerPool)} [signerPool]
  */
 
 /** Types the pre-host listener owns. `ChromeRuntimeAdapter` ignores these. */
@@ -200,6 +202,7 @@ export async function dispatchPreHost(type, request, deps) {
                 metaBackend: deps.metaBackend,
                 chainRegistry: deps.chainRegistry,
                 sdkRegistry: deps.sdkRegistry,
+                signerPool: deps.signerPool,
                 onUnlocked: deps.onUnlocked,
             });
         case 'wallet.importBackup.fresh':
