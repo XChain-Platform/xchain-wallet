@@ -77,6 +77,36 @@ function contrast(first, second) {
 
 const themes = { light, dark };
 const backgrounds = ['--xc-bg', '--xc-bg-muted', '--xc-surface', '--xc-surface-raised'];
+const normalTextMinimum = 4.5;
+const largeTextAndUiMinimum = 3;
+const surfaceText = [
+    '--xc-text',
+    '--xc-text-muted',
+    '--xc-accent-text',
+    '--xc-danger-fg',
+    '--xc-warning',
+    '--xc-success',
+];
+const filledTextPairs = [
+    ['--xc-on-accent', '--xc-accent-primary'],
+    ['--xc-on-accent', '--xc-accent-primary-hover'],
+    ['--xc-on-danger', '--xc-danger'],
+    ['--xc-on-success', '--xc-success-fill'],
+    ['--xc-text-inverted', '--xc-success'],
+];
+const tintedTextPairs = [
+    ['--xc-danger-text', '--xc-danger-bg'],
+    ['--xc-info-text', '--xc-info-bg'],
+    ['--xc-warning-text', '--xc-warning-bg'],
+    ['--xc-success', '--xc-success-bg'],
+];
+const uiColors = [
+    '--xc-accent-primary',
+    '--xc-danger',
+    '--xc-info',
+    '--xc-warning',
+    '--xc-success',
+];
 
 function expectPair(tokens, foreground, background, minimum) {
     const ratio = contrast(resolveToken(tokens, foreground), resolveToken(tokens, background));
@@ -84,35 +114,44 @@ function expectPair(tokens, foreground, background, minimum) {
 }
 
 describe('theme token contrast', () => {
-    it.each(Object.entries(themes))('%s theme keeps primary and muted text at 4.5:1 on every surface', (_, tokens) => {
-        for (const foreground of ['--xc-text', '--xc-text-muted']) {
-            for (const background of backgrounds) expectPair(tokens, foreground, background, 4.5);
+    it.each(Object.entries(themes))('%s theme keeps normal text at 4.5:1 on every surface', (_, tokens) => {
+        for (const foreground of surfaceText) {
+            for (const background of backgrounds) {
+                expectPair(tokens, foreground, background, normalTextMinimum);
+            }
         }
     });
 
-    it.each(Object.entries(themes))('%s theme keeps borders and composited focus rings at 3:1', (_, tokens) => {
+    it.each(Object.entries(themes))('%s theme keeps UI colors and composited focus rings at 3:1', (_, tokens) => {
         for (const backgroundName of backgrounds) {
-            for (const border of ['--xc-border', '--xc-border-strong']) {
-                expectPair(tokens, border, backgroundName, 3);
+            for (const uiColor of ['--xc-border', '--xc-border-strong', ...uiColors]) {
+                expectPair(tokens, uiColor, backgroundName, largeTextAndUiMinimum);
             }
             const background = resolveToken(tokens, backgroundName);
             const ring = composite(resolveToken(tokens, '--xc-focus-ring'), background);
-            expect(contrast(ring, background), `focus ring on ${backgroundName}`).toBeGreaterThanOrEqual(3);
+            expect(contrast(ring, background), `focus ring on ${backgroundName}`)
+                .toBeGreaterThanOrEqual(largeTextAndUiMinimum);
         }
     });
 
-    it.each(Object.entries(themes))('%s theme keeps semantic text and filled-control labels at 4.5:1', (_, tokens) => {
-        for (const foreground of ['--xc-accent-text', '--xc-danger-fg', '--xc-warning', '--xc-success']) {
-            for (const background of ['--xc-bg', '--xc-surface', '--xc-surface-raised']) {
-                expectPair(tokens, foreground, background, 4.5);
-            }
+    it.each(Object.entries(themes))('%s theme keeps text on solid fills at 4.5:1', (_, tokens) => {
+        for (const [foreground, background] of filledTextPairs) {
+            expectPair(tokens, foreground, background, normalTextMinimum);
         }
-        for (const [foreground, background] of [
-            ['--xc-on-accent', '--xc-accent-primary'],
-            ['--xc-on-danger', '--xc-danger'],
-            ['--xc-on-success', '--xc-success'],
-        ]) {
-            expectPair(tokens, foreground, background, 4.5);
+    });
+
+    it.each(Object.entries(themes))('%s theme keeps badge and status text at 4.5:1 on tinted fills over every surface', (_, tokens) => {
+        for (const [foregroundName, fillName] of tintedTextPairs) {
+            const foreground = resolveToken(tokens, foregroundName);
+            const fill = resolveToken(tokens, fillName);
+            for (const surfaceName of backgrounds) {
+                const surface = resolveToken(tokens, surfaceName);
+                const background = composite(fill, surface);
+                expect(
+                    contrast(foreground, background),
+                    `${foregroundName} on ${fillName} over ${surfaceName}`,
+                ).toBeGreaterThanOrEqual(normalTextMinimum);
+            }
         }
     });
 
@@ -126,17 +165,19 @@ describe('theme token contrast', () => {
         for (const [foreground, background] of [
             ['--xc-on-accent', '--xc-accent-primary'],
             ['--xc-on-danger', '--xc-danger'],
-            ['--xc-on-success', '--xc-success'],
+            ['--xc-on-success', '--xc-success-fill'],
             ['--xc-text', '--xc-surface'],
         ]) {
             const disabledForeground = saturate(resolveToken(tokens, foreground), saturation);
             const disabledBackground = saturate(resolveToken(tokens, background), saturation);
-            expect(contrast(disabledForeground, disabledBackground), `${foreground} on ${background}`).toBeGreaterThanOrEqual(4.5);
+            expect(contrast(disabledForeground, disabledBackground), `${foreground} on ${background}`)
+                .toBeGreaterThanOrEqual(normalTextMinimum);
         }
 
         const disabledBorder = saturate(resolveToken(tokens, '--xc-border-strong'), saturation);
         const disabledSurface = saturate(resolveToken(tokens, '--xc-surface'), saturation);
-        expect(contrast(disabledBorder, disabledSurface), '--xc-border-strong on --xc-surface').toBeGreaterThanOrEqual(3);
+        expect(contrast(disabledBorder, disabledSurface), '--xc-border-strong on --xc-surface')
+            .toBeGreaterThanOrEqual(largeTextAndUiMinimum);
     });
 
     it('uses the disabled-state tokens instead of component opacity', () => {
