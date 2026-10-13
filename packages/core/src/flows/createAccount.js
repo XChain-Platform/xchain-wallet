@@ -102,7 +102,6 @@ export async function createAccount({
         name: accountName,
         index: nextIndex,
     });
-    await vault.accounts.put(account);
 
     // When the host gives us a pre-unlocked signer (from SignerPool),
     // reuse it and DO NOT lock it (the pool owns its lifecycle). When
@@ -150,8 +149,18 @@ export async function createAccount({
                 label: initialAddressLabel ?? `${tickerForCoin(descriptor.coin)} Address #1`,
                 signerId: signer.id,
             });
-            await vault.addresses.put(record);
             addresses.push({ chainId, address: record });
+        }
+
+        try {
+            await vault.accounts.put(account);
+            for (const { address } of addresses) await vault.addresses.put(address);
+        } catch (error) {
+            for (const { address } of addresses) {
+                try { await vault.addresses.delete(address.id); } catch { /* Preserve the write error. */ }
+            }
+            try { await vault.accounts.delete(account.id); } catch { /* Preserve the write error. */ }
+            throw error;
         }
         return { account, addresses };
     } finally {

@@ -132,16 +132,13 @@ export async function persistHdWallet({
             throw new Error(`persistHdWallet: wallet "${walletRecord.id}" already exists; refusing to overwrite its stored secret`);
         }
 
-        // 4. Build & persist the first Account. `validateAccount` checks
-        //    only that walletId is a non-empty string, no foreign-key
-        //    lookup against the vault, so this is safe before the wallet
-        //    itself is stored.
+        // 4. Build the first Account. Persistence waits until the wallet
+        //    and every initial address are ready.
         account = createAccount({
             walletId: walletRecord.id,
             name: accountName,
             index: 0,
         });
-        await vault.accounts.put(account);
 
         // 5. Unlock the in-memory wallet record via the shared primitive
         //    so address derivation uses the exact same path as a
@@ -173,12 +170,8 @@ export async function persistHdWallet({
             });
         }
 
-        // 7. Persist the Wallet record, now in its final shape. One
-        //    put instead of two: there is no window in which the
-        //    record exists without its passphrase already sealed.
-        await vault.wallets.put(walletRecord);
-
-        // 8. First address per active chain.
+        // 7. Build the first address per active chain before any wallet
+        //    records are persisted.
         const addresses = [];
         for (const chainId of activeChainIds) {
             const descriptor = chainRegistry.get(chainId);
@@ -208,15 +201,32 @@ export async function persistHdWallet({
                 label: initialAddressLabel ?? `${tickerForCoin(descriptor.coin)} Address #1`,
                 signerId: signer.id,
             });
-            await vault.addresses.put(record);
             addresses.push({ chainId, address: record });
         }
 
-        // 9. Seed per-chain Settings entries (fees + ADS) for any
+        // 8. Seed per-chain Settings entries (fees + ADS) for any
         //    active chain not already configured. Idempotent: a user's
         //    customized fee strategy on an earlier wallet is preserved
-        //    if they create a second wallet in the same vault.
+        //    if they create a second wallet in the same vault. This runs
+        //    before wallet records so a settings failure cannot leave an
+        //    incomplete wallet behind.
         await ensureSettings(vault, chainRegistry, activeChainIds, { activeNetwork });
+
+        // 9. Persist the complete wallet graph. Every generated id is new,
+        //    so removing these records restores the pre-call graph if a
+        //    collection write fails after mutating the in-memory vault.
+        try {
+            await vault.wallets.put(walletRecord);
+            await vault.accounts.put(account);
+            for (const { address } of addresses) await vault.addresses.put(address);
+        } catch (error) {
+            for (const { address } of addresses) {
+                try { await vault.addresses.delete(address.id); } catch { /* Preserve the write error. */ }
+            }
+            try { await vault.accounts.delete(account.id); } catch { /* Preserve the write error. */ }
+            try { await vault.wallets.delete(walletRecord.id); } catch { /* Preserve the write error. */ }
+            throw error;
+        }
 
         return { wallet: walletRecord, account, addresses };
     } finally {

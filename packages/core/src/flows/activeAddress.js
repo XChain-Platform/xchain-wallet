@@ -17,6 +17,7 @@
 // to the default automatically.
 
 import { recordLastUsedChain } from '../shared/chainSelection.js';
+import { defaultRegistry } from '../registry/index.js';
 import { updateSettings } from './settings.js';
 
 /**
@@ -53,7 +54,11 @@ function defaultActiveFor(addresses) {
 async function resolveAccount(vault, walletId, accountId) {
     if (typeof accountId === 'string' && accountId.length > 0) {
         const a = await vault.accounts.get(accountId);
-        if (a) return a;
+        if (!a) return null;
+        if (typeof walletId === 'string' && walletId.length > 0 && a.walletId !== walletId) {
+            return null;
+        }
+        return a;
     }
     if (typeof walletId === 'string' && walletId.length > 0) {
         const list = await vault.accounts.findBy('walletId', walletId);
@@ -78,6 +83,7 @@ export async function resolveActiveAddresses({ vault, walletId, accountId, chain
     if (!chainRegistry) throw new Error('resolveActiveAddresses: chainRegistry is required');
 
     const account = await resolveAccount(vault, walletId, accountId);
+    if (!account) return {};
     const overrides = (account && account.activeAddressByChainId) || {};
     const accId = account?.id;
 
@@ -103,13 +109,14 @@ export async function resolveActiveAddresses({ vault, walletId, accountId, chain
     const all = await vault.addresses.list();
     /** @type {Map<string, import('../schemas/address.js').Address[]>} */
     const byChain = new Map();
-    /** @type {Map<string, import('../schemas/address.js').Address>} */
-    const importedById = new Map();
+    /** @type {Map<string, Map<string, import('../schemas/address.js').Address>>} */
+    const importedByChain = new Map();
     for (const a of all) {
         const chainId = chainRegistry.chainIdFor(a.chain, a.network);
         if (!chainId) continue;
         if (a.accountId == null && importedIds.has(a.id)) {
-            importedById.set(a.id, a);
+            if (!importedByChain.has(chainId)) importedByChain.set(chainId, new Map());
+            importedByChain.get(chainId).set(a.id, a);
             if (!byChain.has(chainId)) byChain.set(chainId, []);
             continue;
         }
@@ -125,7 +132,7 @@ export async function resolveActiveAddresses({ vault, walletId, accountId, chain
         const overrideId = overrides[chainId];
         if (overrideId) {
             chosen = addrs.find((a) => a.id === overrideId)
-                || importedById.get(overrideId)
+                || importedByChain.get(chainId)?.get(overrideId)
                 || null;
         }
         if (!chosen) chosen = defaultActiveFor(addrs);
@@ -169,9 +176,12 @@ async function isImportedKeyOfAccount(vault, account, addr) {
  * @param {string} opts.accountId
  * @param {string} opts.chainId
  * @param {string} opts.addressId
+ * @param {import('../registry/index.js').ChainRegistry} [opts.chainRegistry]
  * @returns {Promise<{ ok: true }>}
  */
-export async function setActiveAddress({ vault, accountId, chainId, addressId }) {
+export async function setActiveAddress({
+    vault, accountId, chainId, addressId, chainRegistry = defaultRegistry(),
+}) {
     if (!vault) throw new Error('setActiveAddress: vault is required');
     if (typeof accountId !== 'string' || !accountId) throw new Error('setActiveAddress: accountId is required');
     if (typeof chainId !== 'string' || !chainId) throw new Error('setActiveAddress: chainId is required');
@@ -181,6 +191,9 @@ export async function setActiveAddress({ vault, accountId, chainId, addressId })
     if (!account) throw new Error(`setActiveAddress: account "${accountId}" not found`);
     const addr = await vault.addresses.get(addressId);
     if (!addr) throw new Error(`setActiveAddress: address "${addressId}" not found`);
+    if (chainRegistry.chainIdFor(addr.chain, addr.network) !== chainId) {
+        throw new Error('setActiveAddress: address does not belong to this chain');
+    }
     if (addr.accountId !== accountId && !(await isImportedKeyOfAccount(vault, account, addr))) {
         throw new Error('setActiveAddress: address does not belong to this account');
     }
