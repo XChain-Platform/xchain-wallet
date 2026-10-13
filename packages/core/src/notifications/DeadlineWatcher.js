@@ -51,6 +51,7 @@
 // order-fill notifications.
 
 import { targetBlockSecondsForCoin } from '../shared/utils/blockDateEstimate.js';
+import { taggedLogger } from './taggedLogger.js';
 
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000;
 /** How far ahead a deadline counts as "approaching". */
@@ -58,8 +59,6 @@ const DEFAULT_WINDOW_SECONDS = 24 * 60 * 60;
 const SEEN_CAP_PER_CHAIN = 500;
 /** Past this many in one tick, send one summary instead. */
 const MAX_NOTIFICATIONS_PER_TICK = 5;
-
-const NOOP_LOGGER = { debug() {}, warn() {}, error() {} };
 
 /** Deep-link targets the shells route on. */
 const ROUTE_BY_KIND = {
@@ -117,7 +116,7 @@ export class DeadlineWatcher {
         this._intervalMs = Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : DEFAULT_INTERVAL_MS;
         this._windowSeconds = Number.isFinite(windowSeconds) && windowSeconds > 0
             ? windowSeconds : DEFAULT_WINDOW_SECONDS;
-        this._log = logger || NOOP_LOGGER;
+        this._log = taggedLogger(logger, 'deadline');
 
         this._timer = null;
         this._ticking = false;

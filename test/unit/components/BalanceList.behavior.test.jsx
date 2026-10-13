@@ -5,7 +5,11 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { BalanceList, isSmallBalanceRow } from '../../../packages/core/src/shared/components/BalanceList.jsx';
+import {
+    BalanceList,
+    buildBalanceRows,
+    isSmallBalanceRow,
+} from '../../../packages/core/src/shared/components/BalanceList.jsx';
 
 afterEach(() => cleanup());
 
@@ -102,5 +106,75 @@ describe('BalanceList ordering and visibility', () => {
 
         expect(screen.getByTitle(displayName)).toHaveTextContent(displayName);
         expect(screen.getByRole('button', { name: `Open ${displayName} details` })).toBeInTheDocument();
+    });
+
+    it('keeps a decorative avatar under slow or broken token artwork', () => {
+        const imageUrl = 'https://issuer.example/slow.png';
+        render(<BalanceList rows={[row('ART', { imageUrl })]} />);
+
+        const image = document.querySelector(`img[src="${imageUrl}"]`);
+        expect(image).toHaveAttribute('alt', '');
+        expect(image).toHaveAttribute('aria-hidden', 'true');
+        expect(image).toHaveStyle({ position: 'absolute', inset: '0' });
+        expect(screen.getByText('A')).toBeInTheDocument();
+
+        fireEvent.error(image);
+        expect(image).toHaveStyle({ display: 'none' });
+        expect(screen.getByText('A')).toBeInTheDocument();
+    });
+
+    it('does not mount or forward a remote image when metadata privacy is enabled', () => {
+        const imageUrl = 'https://issuer.example/private.png';
+        const onSelectToken = vi.fn();
+        render(
+            <BalanceList
+                rows={[row('PRIVATE', { imageUrl })]}
+                onSelectToken={onSelectToken}
+                allowRemoteImages={false}
+            />,
+        );
+
+        expect(document.querySelector(`img[src="${imageUrl}"]`)).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Open PRIVATE token details' }));
+        expect(onSelectToken).toHaveBeenCalledWith(expect.objectContaining({ imageUrl: null }));
+    });
+
+    it('names each chain when rows from more than one chain share the list', () => {
+        render(
+            <BalanceList rows={[
+                row('XCHAIN', { chainDisplayName: 'Bitcoin', networkKind: 'mainnet' }),
+                row('XCHAIN', {
+                    chainId: 'litecoin-regtest',
+                    coin: 'litecoin',
+                    chainDisplayName: 'Litecoin',
+                    networkKind: 'regtest',
+                }),
+            ]} />,
+        );
+
+        expect(screen.getByText('XCHAIN · Bitcoin')).toBeInTheDocument();
+        expect(screen.getByText('XCHAIN · Litecoin · regtest')).toBeInTheDocument();
+    });
+
+    it('labels confirmed and pending amounts separately', () => {
+        const [pending] = buildBalanceRows({
+            'bitcoin-mainnet': [{
+                address: 'bc1qpending',
+                balances: {
+                    native: {
+                        tick: 'BTC', quantity: '0', pendingQuantity: '25000000', divisibility: 8,
+                    },
+                    tokens: [],
+                },
+            }],
+        }, {
+            get: () => ({ coin: 'bitcoin', displayName: 'Bitcoin', networkKind: 'mainnet' }),
+        });
+        expect(isSmallBalanceRow(pending)).toBe(false);
+        render(<BalanceList rows={[pending]} hideSmallBalances />);
+
+        expect(screen.getByRole('listitem')).toHaveTextContent('0.00000000 confirmed');
+        expect(screen.getByTestId('balance-pending')).toHaveTextContent('0.25000000 pending');
+        expect(screen.queryByTestId('small-balances-toggle')).toBeNull();
     });
 });

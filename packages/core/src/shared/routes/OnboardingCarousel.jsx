@@ -120,13 +120,16 @@ export function OnboardingCarousel({
                 data-reduced-motion="true"
             >
                 <div className={styles.stack}>
-                    {frames.map((frame, i) => (
-                        <section key={frame.id || i} className={styles.stackFrame}>
-                            {frame.icon ? <div className={styles.frameIcon}>{frame.icon}</div> : null}
-                            <h2 className={styles.frameTitle}>{frame.title}</h2>
-                            <p className={styles.frameBody}>{frame.body}</p>
-                        </section>
-                    ))}
+                    {frames.map((frame, i) => {
+                        const Heading = i === 0 ? 'h1' : 'h2';
+                        return (
+                            <section key={frame.id || i} className={styles.stackFrame}>
+                                {frame.icon ? <div className={styles.frameIcon}>{frame.icon}</div> : null}
+                                <Heading className={styles.frameTitle}>{frame.title}</Heading>
+                                <p className={styles.frameBody}>{frame.body}</p>
+                            </section>
+                        );
+                    })}
                 </div>
                 <div className={styles.actions}>
                     <Button variant="primary" block onClick={handleFinish} icon={<Icon.CheckIcon />}>
@@ -155,20 +158,23 @@ export function OnboardingCarousel({
                 aria-live="polite"
                 aria-atomic="true"
             >
-                {frames.map((item, i) => (
-                    <section
-                        key={`${item.id || i}-${i === index ? 'active' : 'inactive'}`}
-                        id={`${idPrefix}-panel-${i}`}
-                        role="tabpanel"
-                        aria-labelledby={`${idPrefix}-tab-${i}`}
-                        hidden={i !== index}
-                        className={styles.frame}
-                    >
-                        {item.icon ? <div className={styles.frameIcon}>{item.icon}</div> : null}
-                        <h2 className={styles.frameTitle}>{item.title}</h2>
-                        <p className={styles.frameBody}>{item.body}</p>
-                    </section>
-                ))}
+                {frames.map((item, i) => {
+                    const Heading = i === index ? 'h1' : 'h2';
+                    return (
+                        <section
+                            key={`${item.id || i}-${i === index ? 'active' : 'inactive'}`}
+                            id={`${idPrefix}-panel-${i}`}
+                            role="tabpanel"
+                            aria-labelledby={`${idPrefix}-tab-${i}`}
+                            hidden={i !== index}
+                            className={styles.frame}
+                        >
+                            {item.icon ? <div className={styles.frameIcon}>{item.icon}</div> : null}
+                            <Heading className={styles.frameTitle}>{item.title}</Heading>
+                            <p className={styles.frameBody}>{item.body}</p>
+                        </section>
+                    );
+                })}
             </div>
 
             <div

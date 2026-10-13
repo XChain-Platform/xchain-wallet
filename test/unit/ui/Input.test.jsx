@@ -112,6 +112,22 @@ describe('<Input>', () => {
         expect(input).toHaveAttribute('enterkeyhint', 'go');
     });
 
+    it.each([
+        ['email', 'email'],
+        ['number', 'decimal'],
+        ['search', 'search'],
+        ['tel', 'tel'],
+        ['url', 'url'],
+    ])('uses the %s mobile keyboard for a semantic input type', (type, inputMode) => {
+        render(<Input label="Value" type={type} />);
+        expect(screen.getByLabelText('Value')).toHaveAttribute('inputmode', inputMode);
+    });
+
+    it('honors an input mode override', () => {
+        render(<Input label="Whole number" type="number" inputMode="numeric" />);
+        expect(screen.getByLabelText('Whole number')).toHaveAttribute('inputmode', 'numeric');
+    });
+
     it('pass-through value + onChange work end-to-end', () => {
         const onChange = vi.fn();
         render(<Input label="Amount" value="1" onChange={onChange} />);

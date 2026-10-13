@@ -430,6 +430,8 @@ function decodeOrderSwap(action, p, chainSuffix) {
     const getOwnership = str(p.GET_OWNERSHIP) === '1';
     const getAddress = str(p.GET_ADDRESS);
     const expiration = str(p.EXPIRATION);
+    const allowList = str(p.ALLOW_LIST);
+    const blockList = str(p.BLOCK_LIST);
     const coinLabel = (coin) => (coin ? `${coin} (native coin)` : '');
     const giveLabel = giveOwnership
         ? `ownership of ${giveTick || '?'}`
@@ -442,8 +444,10 @@ function decodeOrderSwap(action, p, chainSuffix) {
         details: [
             { label: 'Give', value: giveLabel },
             { label: 'Get', value: getLabel },
-            ...(getAddress ? [{ label: 'Counterparty', value: getAddress }] : []),
+            ...(getAddress ? [{ label: 'Receive at', value: getAddress }] : []),
             ...(expiration ? [{ label: 'Expiration', value: expiration }] : []),
+            ...(allowList ? [{ label: 'Allow list', value: `#${allowList}` }] : []),
+            ...(blockList ? [{ label: 'Block list', value: `#${blockList}` }] : []),
             ...(memo ? [{ label: 'Memo', value: memo }] : []),
         ],
         warnings: [

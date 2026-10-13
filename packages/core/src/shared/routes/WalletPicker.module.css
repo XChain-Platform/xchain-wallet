@@ -101,11 +101,17 @@
 .rowText {
     min-width: 0;
     max-width: 100%;
+    overflow: hidden;
 }
 
 .rowText > span {
+    display: block;
+    min-width: 0;
+    width: 100%;
     max-width: 100%;
-    overflow-wrap: anywhere;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .rowMenuBtn {

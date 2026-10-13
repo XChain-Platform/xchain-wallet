@@ -73,6 +73,10 @@ describe('DisplaySection', () => {
         });
 
         fireEvent.click(await screen.findByRole('button', { name: 'Reset to defaults' }));
+        expect(messaging.updateSettings).not.toHaveBeenCalled();
+        const dialog = screen.getByRole('dialog', { name: 'Reset display settings?' });
+        expect(dialog).toHaveTextContent('This restores all balance display options and clears pinned tokens, hidden tokens, and saved list preferences. This cannot be undone.');
+        fireEvent.click(screen.getByRole('button', { name: 'Reset settings' }));
 
         await waitFor(() => expect(messaging.updateSettings).toHaveBeenCalledWith({
             pinnedTokens: [],

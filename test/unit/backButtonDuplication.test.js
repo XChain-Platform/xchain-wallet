@@ -68,7 +68,6 @@ const PARSER_PLUGINS = [
 // here and delete its bottom button in the same change.
 const HEADER_LESS_SCREENS = new Set([
     'packages/core/src/shared/routes/CreateWallet.jsx',
-    'packages/core/src/shared/routes/ResumeConfirm.jsx',
     'packages/core/src/shared/components/OpenOrdersPanel.jsx',
 ]);
 
@@ -91,7 +90,6 @@ const STEP_BACK_REQUIRED = [
     'packages/core/src/shared/routes/PollDetail.jsx',
     'packages/core/src/shared/routes/ProjectRosterForm.jsx',
     'packages/core/src/shared/routes/PublishFileForm.jsx',
-    'packages/core/src/shared/routes/ResumeConfirm.jsx',
 ];
 
 // "Back", "Back to tracker", "Back to compose". Deliberately anchored so
@@ -154,6 +152,14 @@ describe('bottom Back buttons do not duplicate the header chevron', () => {
     it('discovers JSX files to scan', () => {
         // A glob that silently matched nothing would make this a no-op.
         expect(entries.length).toBeGreaterThan(100);
+    });
+
+    it('gives bespoke back buttons a destination-specific accessible name', () => {
+        const offenders = entries
+            .filter(([, code]) => /aria-label=(?:"Back"|'Back')/.test(code))
+            .map(([file]) => file);
+
+        expect(offenders).toEqual([]);
     });
 
     for (const [file, code] of entries) {

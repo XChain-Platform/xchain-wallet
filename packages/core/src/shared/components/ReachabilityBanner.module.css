@@ -54,11 +54,11 @@
 
 .staleness {
     font-style: italic;
-    margin-inline-start: 4px;
+    margin-inline-start: var(--xc-space-1);
 }
 
 .retry {
-    padding: 4px 10px;
+    padding: var(--xc-space-1) 10px;
     border-radius: var(--xc-radius-sm);
     border: 1px solid currentColor;
     background: transparent;

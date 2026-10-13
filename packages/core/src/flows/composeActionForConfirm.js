@@ -30,12 +30,33 @@ import { composeForConfirm } from './composeForConfirm.js';
 import { isBareNativePayment } from './nativePayment.js';
 import { assertNoTamper, TamperDetectedError } from './confirmChecks.js';
 import { checkEnvelopeReveal, envelopeNetworkFees } from './envelopeRevealCheck.js';
-import { totalNetworkFeeSats, sumExactSats } from './psbtNetworkFee.js';
+import { totalNetworkFeeSats, sumExactSats, exactSats } from './psbtNetworkFee.js';
 import { satsToCoinDecimal } from './feeEstimate.js';
 import { addressBalances } from './balances.js';
 import { simulateAction } from '../decoder/txSimulator.js';
 import { balancesFromSdk } from '../decoder/balanceAdapter.js';
 import { withListRemovalDescriptions } from '../decoder/list_removal_description.js';
+import { resolveDustThreshold } from '../sdk/nativeFeePreflight.js';
+
+function hasOwnChangeOutput(outputs, expectedOutputs, ownAddresses) {
+    const consumed = new Set();
+    for (const expected of expectedOutputs?.addressed || []) {
+        const expectedValue = exactSats(expected?.value);
+        const index = expectedValue === null ? -1 : outputs.findIndex((output, outputIndex) => {
+            const outputValue = exactSats(output?.value);
+            return !consumed.has(outputIndex)
+                && String(output?.address || '') === String(expected?.address || '')
+                && outputValue !== null
+                && outputValue === expectedValue;
+        });
+        if (index >= 0) consumed.add(index);
+    }
+    return outputs.some((output, outputIndex) => (
+        !consumed.has(outputIndex)
+        && output?.address
+        && ownAddresses.has(output.address)
+    ));
+}
 
 /**
  * @typedef {Object} ComposeActionForConfirmOpts
@@ -95,6 +116,7 @@ import { withListRemovalDescriptions } from '../decoder/list_removal_description
  * @property {(() => Promise<any>)|undefined} releaseEncoderInputs  releases the encoder's held inputs when this compose is rejected
  * @property {{ compressed: boolean, data?: string, rawData?: string }|null} compression  the encoder's transparent-compression report for these bytes; NULL when it did not report one
  * @property {number|null} networkFeeSats    exact miner fee of the built bytes; NULL when not derivable
+ * @property {number|null} dustChangeLimitSats  native payment only: the coin dust floor when no spendable change output was created
  * @property {number|null} protocolFeeSats   protocol fee in the native coin; NULL in XCHAIN-fee mode
  * @property {string|null} xchainFee         protocol fee in XCHAIN; NULL in native mode / unquotable
  * @property {{ deltas: object[], sideEffects: object[], notes: string[] }|null} simulation  NULL when uncomputable
@@ -205,6 +227,18 @@ export async function composeActionForConfirm({
             ? sumExactSats(revealOutputs.map((o) => o?.value))
             : (composed.quote?.requiredFeeSats ?? 0),
     });
+    // The exact fee above already includes every input satoshi not returned by an
+    // output. For a native payment with no change output, the encoder has therefore
+    // folded any sub-dust remainder into that fee. Expected outputs are consumed
+    // first so a self-payment is not mistaken for change merely because its
+    // destination is wallet-owned.
+    const dustFloor = resolveDustThreshold(sdk);
+    const dustChangeLimitSats = composed.bareNativePayment
+        && Number.isFinite(networkFeeSats)
+        && dustFloor
+        && !hasOwnChangeOutput(decomposed.outputs || [], composed.expectedOutputs, own)
+        ? dustFloor
+        : null;
     assertNoTamper({
         psbtHex: composed.psbt,
         expected: composed.expectedOutputs,
@@ -416,6 +450,11 @@ export async function composeActionForConfirm({
         // §5.2.5: exact fee in the chain's smallest unit, or null when the PSBT
         // does not carry every input value. Never a rate estimate.
         networkFeeSats,
+        // The review uses this to explain why the exact fee can be higher than
+        // the selected rate implies. It states the bound, not an invented
+        // remainder amount, because a no-change transaction can also spend its
+        // inputs exactly.
+        dustChangeLimitSats,
         // The action's own protocol fee in the chain's smallest unit,
         // when it is being paid in the native coin and therefore known. Null
         // in XCHAIN-fee mode, which pays no coin output.

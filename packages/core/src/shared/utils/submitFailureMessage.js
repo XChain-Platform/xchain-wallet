@@ -53,7 +53,7 @@ import { broadcastFailureKindFromError } from '../../flows/broadcastPermanence.j
 import { humanizeError } from './humanizeError.js';
 import { actionDisplayLabel } from './actionDisplayLabel.js';
 import { CHUNK_LANE_OPENER_RE } from './chunkLaneCopy.js';
-import { userFacingMessage } from './userFacingMessage.js';
+import { protocolRefusalReason, userFacingMessage } from './userFacingMessage.js';
 
 const SDK_ERROR_MESSAGES = Object.freeze({
     SDKHubError: 'The wallet could not reach its service directory. Check your connection and try again.',
@@ -268,6 +268,8 @@ export function submitFailureMessage(
     err, { coinTicker, mandatory = false, chainId, networkKind, requiredNative, fallback = '', verb = 'complete this' } = {},
 ) {
     const generic = `Couldn't ${verb}. Something went wrong. Try again.`;
+    const protocolRefusal = protocolRefusalReason(err);
+    if (protocolRefusal) return protocolRefusal;
     if (isNativeFeeForfeit(err)) {
         return userFacingMessage(
             nativeFeeErrorMessage(err, { coinTicker, mandatory, chainId, networkKind }), generic,

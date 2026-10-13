@@ -86,6 +86,7 @@ describe('BackupSection encrypted export', () => {
     it('requires an eight-character password and an exact confirmation', () => {
         const messaging = mount();
 
+        expect(screen.getByText(/configured download location, usually the Downloads folder/i)).toBeTruthy();
         fillPasswords('short', 'short');
         expect(screen.getByText('Backup password must be at least 8 characters.')).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Export' })).toBeDisabled();
@@ -116,6 +117,7 @@ describe('BackupSection encrypted export', () => {
         finish({ fileContent: CONTENT });
         expect(await screen.findByText('Backup file saved')).toBeTruthy();
         expect(clickedDownload).toBe('Cold-Vault-backup-2026-10-13.xchain-wallet');
+        expect(screen.getByText(/configured download location, usually the Downloads folder/i)).toBeTruthy();
         expect(downloadedBlob).toBeInstanceOf(Blob);
         expect(downloadedBlob.type).toBe('application/json');
         expect(downloadedBlob.size).toBe(new Blob([CONTENT]).size);
