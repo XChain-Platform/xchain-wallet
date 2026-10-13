@@ -245,7 +245,7 @@ describe('main flow browser-storage privacy', () => {
         fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: PASSWORD } });
         fireEvent.click(screen.getByRole('button', { name: 'Next' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Reveal recovery phrase' }));
-        fireEvent.click(screen.getByRole('checkbox', { name: /written down my recovery phrase/ }));
+        fireEvent.click(screen.getByRole('checkbox', { name: /saved my recovery phrase/ }));
         fireEvent.click(screen.getByRole('button', { name: 'Verify recovery phrase' }));
         answerQuiz();
         fireEvent.click(screen.getByRole('button', { name: 'Create wallet' }));
