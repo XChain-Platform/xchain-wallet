@@ -43,6 +43,7 @@ import { tickerForCoin } from '../../registry/coinTicker.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
+import { useLongOperationStatus } from '../hooks/useLongOperationStatus.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -162,7 +163,9 @@ function BroadcastKindPicker({ value, onChange }) {
     );
 }
 
-function RawTransactionBroadcast({ walletId, chainId, setChainId, messaging, onKindChange }) {
+function RawTransactionBroadcast({
+    walletId, chainId, setChainId, messaging, onKindChange, onBusyChange,
+}) {
     const { settings } = useSettings();
     const [raw, setRaw] = useState('');
     const [preview, setPreview] = useState(/** @type {{ txHex: string, decoded: any } | null} */ (null));
@@ -173,6 +176,7 @@ function RawTransactionBroadcast({ walletId, chainId, setChainId, messaging, onK
     const ticker = tickerForCoin(descriptor?.coin);
     const mismatch = rawTransactionMismatch(preview?.decoded, descriptor);
     const chainIds = chainRegistry.supportedChains().map((chain) => chain.id);
+    const broadcastTime = useLongOperationStatus(state === 'submitting', { timeoutMs: 30_000 });
 
     function review(event) {
         event.preventDefault();
@@ -194,6 +198,7 @@ function RawTransactionBroadcast({ walletId, chainId, setChainId, messaging, onK
         event.preventDefault();
         if (!preview || !chainId || mismatch || state === 'submitting') return;
         setState('submitting');
+        onBusyChange(true);
         setError(null);
         try {
             const response = await messaging.broadcastSignedTxRequest({
@@ -206,6 +211,8 @@ function RawTransactionBroadcast({ walletId, chainId, setChainId, messaging, onK
         } catch (err) {
             setError(rawBroadcastFailure(err));
             setState('preview');
+        } finally {
+            onBusyChange(false);
         }
     }
 
@@ -254,7 +261,13 @@ function RawTransactionBroadcast({ walletId, chainId, setChainId, messaging, onK
                 ) : null}
                 actions={(
                     <>
-                        <Button type="button" onClick={() => setState('form')}>Back</Button>
+                        <Button
+                            type="button"
+                            onClick={() => setState('form')}
+                            disabled={state === 'submitting'}
+                        >
+                            Back
+                        </Button>
                         <Button type="submit" variant="primary" loading={state === 'submitting'} disabled={!!mismatch}>
                             Broadcast transaction
                         </Button>
@@ -282,6 +295,16 @@ function RawTransactionBroadcast({ walletId, chainId, setChainId, messaging, onK
                 <p className={styles.hint}>
                     Raw transaction data does not identify mainnet, testnet, or regtest. Confirm that the selected network is the one that created it.
                 </p>
+                {broadcastTime.showElapsed ? (
+                    <p role="status" className={styles.hint} data-testid="raw-broadcast-elapsed">
+                        Waiting for the relay for {broadcastTime.elapsedSeconds} seconds.
+                    </p>
+                ) : null}
+                {broadcastTime.timedOut ? (
+                    <StatusMessage variant="error" className={styles.error} data-testid="raw-broadcast-timeout">
+                        The relay has not responded. Check History or a block explorer before trying again. Closing this screen does not cancel a transaction the relay already received.
+                    </StatusMessage>
+                ) : null}
             </FormPage>
         );
     }
@@ -369,6 +392,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
     const [feedFee, setFeedFee] = useState('');
     const [includeTimestamp, setIncludeTimestamp] = useState(false);
     const [broadcastKind, setBroadcastKind] = useState('message');
+    const [rawBroadcastBusy, setRawBroadcastBusy] = useState(false);
     const [password, setPassword] = useState('');
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
 
@@ -736,6 +760,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
         const header = (
         <PageHeader
             onBack={onBack}
+            backDisabled={stage === 'submitting' || rawBroadcastBusy}
             title={stage === 'review' || stage === 'submitting'
                     ? 'Review broadcast'
                     : (broadcastKind === 'transaction' ? 'Broadcast transaction' : 'Broadcast')}
@@ -755,6 +780,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
                 setChainId={setChainId}
                 messaging={messaging}
                 onKindChange={setBroadcastKind}
+                onBusyChange={setRawBroadcastBusy}
             />,
         );
     }

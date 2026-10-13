@@ -38,6 +38,7 @@ import { satsToCoinDecimal } from '../../flows/feeEstimate.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { formatDisplayAmount } from '../utils/amountFormat.js';
 import { OriginIdentity } from './OriginIdentity.jsx';
+import { useLongOperationStatus } from '../hooks/useLongOperationStatus.js';
 import styles from './ConfirmActionModal.module.css';
 
 const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', 'done', 'error', 'signed-not-broadcast']);
@@ -204,6 +205,7 @@ export function ConfirmActionModal({
     const signaturePhase = phase === 'signing' || phase === 'rechecking';
     const terminal = phase === 'done' || phase === 'error' || phase === 'signed-not-broadcast';
     const open = OPEN_PHASES.has(phase);
+    const signingTime = useLongOperationStatus(signaturePhase);
 
     // A signature exists once we leave the pre-sign phases into signing and
     // the signer has produced it. We approximate "signature exists" as any
@@ -393,6 +395,16 @@ export function ConfirmActionModal({
 
                     {phase === 'rechecking' ? (
                         <p className={styles.recheck} data-testid="confirm-rechecking">Re-checking…</p>
+                    ) : null}
+                    {signingTime.showElapsed ? (
+                        <p className={styles.recheck} role="status" data-testid="confirm-signing-elapsed">
+                            Signing for {signingTime.elapsedSeconds} seconds. Check your hardware wallet screen if one is connected.
+                        </p>
+                    ) : null}
+                    {signingTime.timedOut ? (
+                        <div className={styles.error} role="alert" data-testid="confirm-signing-timeout">
+                            Signing is taking longer than expected. Keep this screen open and check the device or wallet service. Before trying again, check History and the queued-transactions banner so you do not submit the same transaction twice.
+                        </div>
                     ) : null}
                     {/* this line used to promise a retry, and nothing retries
                         on its own. The queue holds the signed transaction until the
