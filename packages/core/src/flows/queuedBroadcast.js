@@ -29,6 +29,7 @@
 
 import { createPendingTx } from '../schemas/pendingTx.js';
 import { assertSigningAllowed } from './panicMode.js';
+import { assertMainnetActionAllowed } from './mainnetPrelaunch.js';
 import { classifyBroadcastFailure, isAlreadyOnNetworkRejection } from './broadcastPermanence.js';
 
 // In-flight drain guard. `broadcastTx` is an irreversible effector, so two
@@ -199,6 +200,12 @@ export async function drainQueuedBroadcast({
                 `drainQueuedBroadcast: no registered chain for ${existing.chain}/${existing.network}`,
             );
         }
+        // A queued XChain action on *-mainnet stays queued (no mutation) until launch.
+        assertMainnetActionAllowed({
+            chainId,
+            actionData: { action: existing.action, params: existing.params },
+            descriptor: chainRegistry.get?.(chainId),
+        });
         const sdk = sdkRegistry.get(chainId);
 
         // Persist the in-flight status before the network call so a crash
