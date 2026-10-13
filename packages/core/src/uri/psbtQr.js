@@ -44,6 +44,8 @@ import { base64ToBytes, bytesToBase64 } from '../crypto/kdf.js';
 
 export const XCW_PREFIX = 'XCW:';
 export const DEFAULT_CHUNK_BYTES = 180;  // base64(180) ≈ 240 chars; fits in alphanumeric QR ≤ 300 chars
+export const XCW_MAX_FRAMES = 4096;
+export const XCW_MAX_FRAME_CHARS = 8 * 1024;
 const SHA256_LEN = 32;
 
 const CHUNK_RE = /^XCW:(\d+)\/(\d+):([0-9a-f]{8}):(.+)$/;
@@ -99,6 +101,9 @@ export function encodeXcwChunks(psbt, opts = {}) {
     }
 
     const total = pieces.length;
+    if (total > XCW_MAX_FRAMES) {
+        throw new XcwChunkError(`PSBT would need ${total} frames, over the ${XCW_MAX_FRAMES}-frame cap`);
+    }
     /** @type {string[]} */
     const frames = [];
     for (let i = 0; i < total; i++) {
@@ -109,7 +114,11 @@ export function encodeXcwChunks(psbt, opts = {}) {
                 : payload;
         const crc = crc32(content).toString(16).padStart(8, '0');
         const b64 = bytesToBase64(content);
-        frames.push(`${XCW_PREFIX}${i + 1}/${total}:${crc}:${b64}`);
+        const frame = `${XCW_PREFIX}${i + 1}/${total}:${crc}:${b64}`;
+        if (frame.length > XCW_MAX_FRAME_CHARS) {
+            throw new XcwChunkError(`encoded frame is ${frame.length} chars, over the ${XCW_MAX_FRAME_CHARS}-char cap`);
+        }
+        frames.push(frame);
     }
     return frames;
 }
@@ -123,6 +132,9 @@ export function encodeXcwChunks(psbt, opts = {}) {
  */
 export function parseXcwChunk(frame) {
     if (typeof frame !== 'string') throw new XcwChunkError('frame must be a string');
+    if (frame.length > XCW_MAX_FRAME_CHARS) {
+        throw new XcwChunkError(`frame is ${frame.length} chars, over the ${XCW_MAX_FRAME_CHARS}-char cap`);
+    }
     const trimmed = frame.trim();
     const m = CHUNK_RE.exec(trimmed);
     if (!m) throw new XcwChunkError(`malformed frame: "${trimmed.slice(0, 40)}…"`);
@@ -132,6 +144,9 @@ export function parseXcwChunk(frame) {
     const b64 = m[4];
     if (!(n >= 1 && total >= 1 && n <= total)) {
         throw new XcwChunkError(`bad chunk index ${n}/${total}`);
+    }
+    if (total > XCW_MAX_FRAMES) {
+        throw new XcwChunkError(`frame count ${total} exceeds the ${XCW_MAX_FRAMES}-frame cap`);
     }
     let content;
     try {
@@ -184,7 +199,7 @@ export function createXcwCollector() {
  * @returns {XcwCollectorState}
  */
 export function addChunkToCollector(state, frame) {
-    if (state.complete) return state;
+    if (state.complete || state.error) return state;
     /** @type {{ n: number, total: number, content: Uint8Array }} */
     let parsed;
     try {
@@ -200,19 +215,30 @@ export function addChunkToCollector(state, frame) {
         state.error = `total mismatch: saw ${parsed.total}, expected ${state.total}`;
         return state;
     }
-    if (state.received[parsed.n - 1]) {
-        // Duplicate scan (animated QR loops). Silently ignore.
-        return state;
-    }
-
     if (parsed.n === 1) {
         if (parsed.content.length < SHA256_LEN) {
             state.error = 'chunk 1 too short to hold SHA256 hash';
             return state;
         }
+        if (state.received[0]) {
+            const hash = parsed.content.subarray(0, SHA256_LEN);
+            const payload = parsed.content.subarray(SHA256_LEN);
+            if (!state.expectedHash
+                || !bytesEqual(hash, state.expectedHash)
+                || !bytesEqual(payload, state.received[0])) {
+                state.error = 'conflicting content for chunk 1';
+            }
+            return state;
+        }
         state.expectedHash = parsed.content.subarray(0, SHA256_LEN);
         state.received[0] = parsed.content.subarray(SHA256_LEN);
     } else {
+        if (state.received[parsed.n - 1]) {
+            if (!bytesEqual(parsed.content, state.received[parsed.n - 1])) {
+                state.error = `conflicting content for chunk ${parsed.n}`;
+            }
+            return state;
+        }
         state.received[parsed.n - 1] = parsed.content;
     }
     state.receivedCount += 1;
