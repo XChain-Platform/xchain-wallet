@@ -48,18 +48,26 @@ export function ConfirmModal({
 }) {
     const cancel = useCallback(() => { if (!busy) onCancel(); }, [busy, onCancel]);
     const confirmingRef = useRef(false);
+    const confirmationIdRef = useRef(0);
+    const releaseTimerRef = useRef(null);
     const confirm = useCallback((event) => {
         event?.preventDefault();
         // Hold the first activation while the parent closes the dialog or exposes its busy state.
         if (busy || confirmingRef.current) return;
         confirmingRef.current = true;
-        const release = () => { confirmingRef.current = false; };
+        const confirmationId = ++confirmationIdRef.current;
+        const release = () => {
+            if (confirmationId === confirmationIdRef.current) confirmingRef.current = false;
+        };
         try {
             const result = onConfirm();
             if (result && typeof result.then === 'function') {
                 Promise.resolve(result).then(release, release);
             } else {
-                setTimeout(release, 0);
+                releaseTimerRef.current = setTimeout(() => {
+                    releaseTimerRef.current = null;
+                    release();
+                }, 0);
             }
         } catch (error) {
             release();
@@ -74,6 +82,13 @@ export function ConfirmModal({
     useInertBackground(rootRef, { active: true });
     // The system Back gesture closes this before it leaves the screen.
     useBackHandler(cancel);
+    useEffect(() => () => {
+        confirmationIdRef.current += 1;
+        if (releaseTimerRef.current !== null) {
+            clearTimeout(releaseTimerRef.current);
+            releaseTimerRef.current = null;
+        }
+    }, []);
     useEffect(() => {
         const onKey = (e) => { if (e.key === 'Escape') cancel(); };
         window.addEventListener('keydown', onKey);

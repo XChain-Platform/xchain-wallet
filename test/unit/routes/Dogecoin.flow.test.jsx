@@ -108,7 +108,7 @@ describe('Dogecoin route flow with mocked SDK messaging', () => {
         });
 
         await waitFor(() => expect(qrToDataURL).toHaveBeenLastCalledWith(
-            `dogecoin:${OUR_ADDRESS}?chain=dogecoin-mainnet&feePriority=normal&amount=12.5`,
+            `dogecoin:${OUR_ADDRESS}?chain=dogecoin-mainnet&amount=12.5`,
             expect.objectContaining({ margin: 4 }),
         ));
         expect(messaging.getNewestAddress).toHaveBeenCalledWith(

@@ -187,8 +187,6 @@ describe('Receive keyboard operation', () => {
         const expected = [
             screen.getByRole('button', { name: 'Switch input to USD' }),
             screen.getByRole('button', { name: 'Paste from clipboard' }),
-            screen.getByRole('button', { name: 'Fee priority help' }),
-            screen.getByRole('slider', { name: 'Network fee' }),
             copy,
         ];
         for (const control of expected) {

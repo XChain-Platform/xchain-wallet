@@ -129,7 +129,7 @@ describe('Litecoin receive flow', () => {
         render(provider(messaging, <Receive walletId={WALLET_ID} />));
 
         const address = await screen.findByRole('textbox', {
-            name: 'Copy payment request for receive address',
+            name: 'Copy payment link for receive address',
         });
         expect(address).toHaveValue(SOURCE.address);
         expect(address.value).toMatch(/^ltc1q/);

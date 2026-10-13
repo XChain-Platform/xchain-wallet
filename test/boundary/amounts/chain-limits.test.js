@@ -8,7 +8,6 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -26,10 +25,10 @@ import {
     decimalToBaseUnits,
     tokenAmountPrecisionError,
 } from '../../../packages/core/src/shared/utils/amountFormat.js';
+import { requireSdkDeep } from '../../helpers/sdkDeepPaths.js';
 
-const require = createRequire(import.meta.url);
-const Validator = require('xchain-sdk/src/protocol/validator.js');
-const Utility = require('xchain-sdk/src/utils/utility.js');
+const Validator = requireSdkDeep('protocolValidator');
+const Utility = requireSdkDeep('utility');
 
 const MAX_TOKEN_SUPPLY = '1000000000000000000000';
 const CHAINS = [

@@ -24,6 +24,7 @@ import { ConfirmModal } from '../../../../packages/core/src/shared/components/Co
 
 afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     vi.restoreAllMocks();
 });
 
@@ -130,6 +131,20 @@ describe('ConfirmModal', () => {
         fireEvent.click(screen.getByText('Confirm'));
         expect(onConfirm).toHaveBeenCalledTimes(1);
         expect(onCancel).not.toHaveBeenCalled();
+    });
+
+    it('clears a pending confirmation release timer on unmount', () => {
+        vi.useFakeTimers();
+        const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+        const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
+        const { unmount } = setup();
+        const timersBeforeConfirm = setTimeoutSpy.mock.calls.length;
+        fireEvent.click(screen.getByText('Confirm'));
+        expect(setTimeoutSpy).toHaveBeenCalledTimes(timersBeforeConfirm + 1);
+        const releaseTimer = setTimeoutSpy.mock.results.at(-1).value;
+
+        unmount();
+        expect(clearTimeoutSpy).toHaveBeenCalledWith(releaseTimer);
     });
 
     it('cancel button calls onCancel only', () => {
