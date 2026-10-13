@@ -30,16 +30,20 @@
 //     `registry.js`), so a name added on one side only is an undefined at
 //     runtime, on the shell with the least test coverage.
 
-import { MarketsList } from '@xchain-wallet/core/shared/routes/MarketsList.jsx';
-import { MarketView } from '@xchain-wallet/core/shared/routes/MarketView.jsx';
-import { MarketActivity } from '@xchain-wallet/core/shared/routes/MarketActivity.jsx';
-import { CreateOrderForm } from '@xchain-wallet/core/shared/routes/CreateOrderForm.jsx';
-import { MyOrdersView } from '@xchain-wallet/core/shared/routes/MyOrdersView.jsx';
-import { MySwapsView } from '@xchain-wallet/core/shared/routes/MySwapsView.jsx';
-import { SwapForm } from '@xchain-wallet/core/shared/routes/SwapForm.jsx';
-import { CrossChainSwapForm } from '@xchain-wallet/core/shared/routes/CrossChainSwapForm.jsx';
-import { CrossChainOrderForm } from '@xchain-wallet/core/shared/routes/CrossChainOrderForm.jsx';
-import { ReceivePicker } from '@xchain-wallet/core/shared/routes/ReceivePicker.jsx';
+import { lazy } from 'react';
+
+const lazyRoute = (load, name) => lazy(() => load().then((module) => ({ default: module[name] })));
+
+const MarketsList = lazyRoute(() => import('@xchain-wallet/core/shared/routes/MarketsList.jsx'), 'MarketsList');
+const MarketView = lazyRoute(() => import('@xchain-wallet/core/shared/routes/MarketView.jsx'), 'MarketView');
+const MarketActivity = lazyRoute(() => import('@xchain-wallet/core/shared/routes/MarketActivity.jsx'), 'MarketActivity');
+const CreateOrderForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/CreateOrderForm.jsx'), 'CreateOrderForm');
+const MyOrdersView = lazyRoute(() => import('@xchain-wallet/core/shared/routes/MyOrdersView.jsx'), 'MyOrdersView');
+const MySwapsView = lazyRoute(() => import('@xchain-wallet/core/shared/routes/MySwapsView.jsx'), 'MySwapsView');
+const SwapForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/SwapForm.jsx'), 'SwapForm');
+const CrossChainSwapForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/CrossChainSwapForm.jsx'), 'CrossChainSwapForm');
+const CrossChainOrderForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/CrossChainOrderForm.jsx'), 'CrossChainOrderForm');
+const ReceivePicker = lazyRoute(() => import('@xchain-wallet/core/shared/routes/ReceivePicker.jsx'), 'ReceivePicker');
 
 /**
  * Whether this build carries the DEX surface. `false` in the twin.
