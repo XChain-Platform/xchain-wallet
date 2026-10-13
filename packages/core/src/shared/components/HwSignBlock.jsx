@@ -27,6 +27,7 @@
 // state. `HwSignBlock` exposes the status via the `useSignerStatus`
 // hook so the parent can gate Submit on `status === 'available'`.
 
+import { useEffect, useRef } from 'react';
 import { useSignerStatus } from '../hooks/useSignerStatus.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { DerivationPathCrossCheck } from './DerivationPathCrossCheck.jsx';
@@ -63,10 +64,15 @@ export function HwSignBlock({
     const { status, detail, refresh } = useSignerStatus({ getStatus, chainId });
 
     // Surface the live state so the parent form can gate its Submit
-    // button without re-polling. A memoized snapshot via useRef would
-    // make this a zero-render no-op; a simple call each render is
-    // fine for the poll cadence we use.
-    if (onStatusChange) onStatusChange({ status, detail, refresh });
+    // button without re-polling. Parents store it with setState, so it is
+    // reported after commit: calling a parent setter during this render is
+    // the "Cannot update a component while rendering a different component"
+    // React error. The ref keeps an inline parent callback from re-firing it.
+    const onStatusChangeRef = useRef(onStatusChange);
+    onStatusChangeRef.current = onStatusChange;
+    useEffect(() => {
+        onStatusChangeRef.current?.({ status, detail, refresh });
+    }, [status, detail, refresh]);
 
     return (
         <div className={styles.root}>
