@@ -20,16 +20,25 @@ describe('STYLE_GUIDE component contracts', () => {
     it('lists every supported Button variant and size', () => {
         const source = read('packages/core/src/ui/Button.jsx');
         const css = read('packages/core/src/ui/Button.module.css');
+        const section = read('packages/web/src/style-guide/sections/ButtonsSection.jsx');
         for (const variant of ['primary', 'secondary', 'ghost', 'danger', 'success']) {
             expect(source).toContain(`'${variant}'`);
             expect(css).toMatch(new RegExp(`\\.${variant}\\s*\\{`));
             expect(guide).toMatch(new RegExp(`\`${variant}\``));
         }
         expect(source).toContain("size = 'md'");
-        expect(css).toMatch(/\.md\s*\{[^}]*min-height:\s*36px/s);
-        expect(css).toMatch(/\.sm\s*\{[^}]*min-height:\s*28px/s);
+        for (const size of ['sm', 'md', 'lg']) {
+            expect(source).toContain(`'${size}'`);
+            expect(css).toMatch(new RegExp(
+                `\\.${size}\\s*\\{[^}]*--xc-button-height:\\s*var\\(--xc-control-h-${size}\\)`,
+                's',
+            ));
+        }
         expect(guide).toContain('`md` (36px minimum height, default)');
         expect(guide).toContain('`sm` (28px minimum height)');
+        expect(section).toMatch(/import \{ Button, Icon, Input \}/);
+        expect(section).toMatch(/\['sm', 'md', 'lg'\]\.map/);
+        expect(section).toMatch(/<Input[\s\S]*?size=\{size\}[\s\S]*?<Button[\s\S]*?size=\{size\}/);
     });
 
     it('uses shared Button variants for shared call-to-action controls', () => {
