@@ -318,6 +318,12 @@ export function Locked({ onUnlocked }) {
             // A closed prompt is a choice: back to the password field, quietly.
             if (err?.name === 'BiometricCancelledError') {
                 setBusy(false);
+                // The input stays disabled until React applies the busy-state
+                // update, so focus it on the next task when it accepts input.
+                window.setTimeout(() => {
+                    inputRef.current?.focus();
+                    inputRef.current?.select();
+                }, 0);
                 return;
             }
             if (err?.name === 'BiometricNotRegisteredError') {
