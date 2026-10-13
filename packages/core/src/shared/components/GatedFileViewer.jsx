@@ -107,23 +107,42 @@ export function GatedFileViewer({ name, declaredType, plaintextBase64, onClose }
     const previewTooLarge = Boolean(bytes && bytes.length > MAX_PREVIEW_BYTES);
     const [loadedImageUrl, setLoadedImageUrl] = useState(null);
     const [failedImageUrl, setFailedImageUrl] = useState(null);
+    const [imagePreview, setImagePreview] = useState(null);
+    const pendingDownloadsRef = useRef(new Set());
 
     // Inline-render blob URL, typed with the SNIFFED mime only. Created
     // solely for <img> consumption; never opened as a document.
-    const imageUrl = useMemo(() => {
-        if (!bytes || previewTooLarge) return null;
-        if (sniffed.kind !== 'image' && sniffed.kind !== 'svg') return null;
-        try {
-            return URL.createObjectURL(new Blob([bytes], { type: sniffed.mime }));
-        } catch (_e) {
-            return null;
-        }
-    }, [bytes, previewTooLarge, sniffed]);
-
     useEffect(() => {
-        if (!imageUrl) return undefined;
-        return () => URL.revokeObjectURL(imageUrl);
-    }, [imageUrl]);
+        if (!bytes || previewTooLarge
+            || (sniffed.kind !== 'image' && sniffed.kind !== 'svg')) {
+            setImagePreview(null);
+            return undefined;
+        }
+        let url;
+        try {
+            url = URL.createObjectURL(new Blob([bytes], { type: sniffed.mime }));
+        } catch (_e) {
+            setImagePreview(null);
+            return undefined;
+        }
+        setImagePreview({ bytes, url });
+        return () => URL.revokeObjectURL(url);
+    }, [bytes, previewTooLarge, sniffed.kind, sniffed.mime]);
+
+    const imageUrl = imagePreview?.bytes === bytes ? imagePreview.url : null;
+
+    // Download URLs remain alive long enough for the browser to consume
+    // them, while unmount still releases every pending URL and timer.
+    useEffect(() => {
+        const pendingDownloads = pendingDownloadsRef.current;
+        return () => {
+            for (const pending of pendingDownloads) {
+                clearTimeout(pending.timer);
+                URL.revokeObjectURL(pending.url);
+            }
+            pendingDownloads.clear();
+        };
+    }, []);
 
     useEffect(() => {
         const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -162,7 +181,14 @@ export function GatedFileViewer({ name, declaredType, plaintextBase64, onClose }
         } catch (_e) {
             // Nothing actionable; the button stays available for retry.
         } finally {
-            if (url) setTimeout(() => URL.revokeObjectURL(url), 60_000);
+            if (url) {
+                const pending = { url, timer: null };
+                pending.timer = setTimeout(() => {
+                    URL.revokeObjectURL(url);
+                    pendingDownloadsRef.current.delete(pending);
+                }, 60_000);
+                pendingDownloadsRef.current.add(pending);
+            }
         }
     }
 
