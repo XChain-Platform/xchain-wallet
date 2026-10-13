@@ -18,10 +18,11 @@ import { render, screen, within } from '@testing-library/react';
 import { TxStatusTimeline } from '../../../packages/core/src/shared/components/TxStatusTimeline.jsx';
 import { QueuedResultPanel } from '../../../packages/core/src/shared/components/QueuedResultPanel.jsx';
 
-const timelineCss = readFileSync(join(
+const componentCss = (name) => readFileSync(join(
     process.cwd(),
-    'packages/core/src/shared/components/TxStatusTimeline.module.css',
+    `packages/core/src/shared/components/${name}.module.css`,
 ), 'utf8');
+const timelineCss = componentCss('TxStatusTimeline');
 const queuedCss = readFileSync(join(
     process.cwd(),
     'packages/core/src/shared/components/QueuedResultPanel.module.css',
@@ -147,12 +148,37 @@ describe('<TxStatusTimeline>', () => {
     });
 
     it('keeps both status surfaces shrinkable at a 320px viewport', () => {
-        expect(timelineCss).toMatch(/grid-template-columns:\s*20px minmax\(0, 1fr\)/);
+        expect(timelineCss).toMatch(/grid-template-columns:\s*var\(--xc-icon-lg\) minmax\(0, 1fr\)/);
         expect(timelineCss).toMatch(/@media \(max-width: 360px\)/);
         expect(timelineCss).toMatch(/overflow-wrap:\s*anywhere/);
         expect(queuedCss).toMatch(/box-sizing:\s*border-box/);
         expect(queuedCss).toMatch(/width:\s*100%/);
         expect(queuedCss).toMatch(/@media \(max-width: 360px\)/);
         expect(queuedCss).toMatch(/overflow-wrap:\s*anywhere/);
+    });
+
+    it('uses shared tokens for the cleaned component geometry', () => {
+        const routeErrorCss = componentCss('RouteErrorBoundary');
+        const toastCss = componentCss('ToastHost');
+        const tokenFieldCss = componentCss('TokenField');
+        const heroCss = componentCss('TotalBalanceHero');
+        const undoToastCss = componentCss('UndoSendToast');
+
+        expect(routeErrorCss).toContain('padding: var(--xc-page-top) var(--xc-page-gutter);');
+        expect(toastCss).toContain('transform: translateY(var(--xc-space-2));');
+        expect(toastCss).not.toContain('translateY(8px)');
+        expect(tokenFieldCss).toContain('min-height: var(--xc-control-h-md);');
+        expect(tokenFieldCss).toContain('min-height: var(--xc-control-h-lg);');
+        expect(tokenFieldCss).not.toMatch(/min-height:\s*(?:36|48)px/);
+        expect(heroCss).toContain('width: var(--xc-control-h-sm);');
+        expect(heroCss).toContain('height: var(--xc-control-h-sm);');
+        expect(heroCss).toContain('font-size: var(--xc-text-lg);');
+        expect(heroCss).not.toMatch(/(?:width|height):\s*28px/);
+        expect(timelineCss).toContain('grid-template-columns: var(--xc-icon-xl) minmax(0, 1fr);');
+        expect(timelineCss).toContain('width: var(--xc-icon-md);');
+        expect(timelineCss).toContain('font-size: var(--xc-text-lg);');
+        expect(timelineCss).not.toMatch(/(?:width|height):\s*18px/);
+        expect(undoToastCss).toContain('transform: translateY(var(--xc-space-2));');
+        expect(undoToastCss).not.toContain('translateY(8px)');
     });
 });
