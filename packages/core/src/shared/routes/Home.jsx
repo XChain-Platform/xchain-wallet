@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Icon, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -901,7 +901,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     if (isSignerMode) {
         return (
             <Screen variant={variant}>
-                <div className={isFull ? styles.bodyFull : styles.bodyPopup}>
+                <ListPage className={isFull ? styles.bodyFull : undefined}>
                     {loadErrorText ? (
                         <StatusMessage variant="error" className={styles.error}>{loadErrorText}</StatusMessage>
                     ) : null}
@@ -921,14 +921,14 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         onSignMessage={onSignMessage}
                         onVerifySignature={onVerifySignature}
                     />
-                </div>
+                </ListPage>
             </Screen>
         );
     }
 
     return (
         <Screen variant={variant}>
-            <div className={isFull ? styles.bodyFull : styles.bodyPopup}>
+            <ListPage className={isFull ? styles.bodyFull : undefined}>
                 {loadErrorText ? (
                     <StatusMessage variant="error" className={styles.error}>{loadErrorText}</StatusMessage>
                 ) : null}
@@ -1157,19 +1157,13 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
 
 
                 {balances && Object.keys(balances).length === 0 ? (
-                    <div className={styles.emptyState}>
-                        <p className={styles.hint}>
-                            No addresses yet. Generate one to start receiving.
-                        </p>
-                        <Button
-                            variant="primary"
-                            size="md"
-                            onClick={() => setAddAddressOpen(true)}
-                            icon={<Icon.PlusIcon />}
-                        >
-                            Generate an address
-                        </Button>
-                    </div>
+                    <EmptyState
+                        title="No addresses yet. Generate one to start receiving."
+                        titleAs="p"
+                        actionLabel="Generate an address"
+                        onAction={() => setAddAddressOpen(true)}
+                        actionIcon={<Icon.PlusIcon />}
+                    />
                 ) : null}
 
                 {/* Action button grid is full-mode only. In small mode the
@@ -1290,7 +1284,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                     </Button>
                 </div>
                 ) : null}
-            </div>
+            </ListPage>
             {alertsOpen ? (
                 <AlertsOverlay
                     alerts={alerts}
