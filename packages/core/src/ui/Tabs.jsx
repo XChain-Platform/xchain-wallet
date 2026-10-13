@@ -82,9 +82,10 @@ export function Tabs({
         >
             {items.map((item, index) => {
                 const selected = index === rovingIndex;
+                // aria-controls names a rendered panel supplied by the caller.
                 const controls = item.controls
                     || (typeof panelId === 'function' ? panelId(item) : panelId)
-                    || `${tabsId}-panel-${item.id}`;
+                    || undefined;
                 return (
                     <button
                         key={item.id}

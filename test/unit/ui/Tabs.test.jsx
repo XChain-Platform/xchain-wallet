@@ -46,6 +46,14 @@ describe('<Tabs>', () => {
         expect(activity).toHaveAttribute('tabindex', '-1');
     });
 
+    it('omits aria-controls when the caller renders no panel', () => {
+        render(<Tabs items={items} value="coins" onChange={() => {}} aria-label="Kind" />);
+
+        for (const tab of screen.getAllByRole('tab')) {
+            expect(tab).not.toHaveAttribute('aria-controls');
+        }
+    });
+
     it('selects and focuses tabs with arrows, Home, and End', () => {
         render(<ControlledTabs />);
         const coins = screen.getByRole('tab', { name: 'Coins' });
