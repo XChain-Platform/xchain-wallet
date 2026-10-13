@@ -27,6 +27,13 @@ const cardModules = [
     'ReachabilityBanner.module.css',
     'TotalBalanceHero.module.css',
 ];
+const routeModules = [
+    'DispenserExplorer.module.css',
+    'Home.module.css',
+    'ImportWallet.module.css',
+    'IssueTokenForm.module.css',
+    'Loading.module.css',
+];
 
 function cssModulesBelow(directory) {
     return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -120,6 +127,37 @@ it('uses spacing tokens for matching shared module margins and paddings', () => 
     }
 
     expect(violations).toEqual([]);
+});
+
+it('uses shared tokens for route control, icon, and loader geometry', () => {
+    const routesRoot = join(sharedRoot, 'routes');
+    const routeCss = new Map(routeModules.map((file) => [
+        file,
+        readFileSync(join(routesRoot, file), 'utf8'),
+    ]));
+    const home = routeCss.get('Home.module.css');
+    const imported = routeCss.get('ImportWallet.module.css');
+    const issue = routeCss.get('IssueTokenForm.module.css');
+    const loading = routeCss.get('Loading.module.css');
+
+    for (const [file, css] of routeCss) {
+        expect(withoutComments(css), file)
+            .not.toMatch(/(?:gap|font-size|border-radius)\s*:[^;}]*(?:\d*\.)?\d+px/);
+    }
+    expect(home).toMatch(
+        /\.menuBtn\s*\{[^}]*border-radius:\s*var\(--xc-control-radius\)[^}]*width:\s*var\(--xc-control-h-md\)[^}]*height:\s*var\(--xc-control-h-md\)/s,
+    );
+    expect(home).toMatch(
+        /\.quickActionIcon\s*\{[^}]*width:\s*var\(--xc-control-h-sm\)[^}]*height:\s*var\(--xc-control-h-sm\)/s,
+    );
+    expect(home).toMatch(
+        /\.quickActionMoreItemIcon\s*\{[^}]*width:\s*var\(--xc-icon-sm\)[^}]*height:\s*var\(--xc-icon-sm\)/s,
+    );
+    expect(imported).not.toMatch(/(?:margin|padding|outline-offset):[^;]*-?2px/);
+    expect(issue).not.toMatch(/outline-offset:\s*-?2px/);
+    expect(loading).toMatch(
+        /\.dots > span\s*\{[^}]*width:\s*var\(--xc-space-2\)[^}]*height:\s*var\(--xc-space-2\)/s,
+    );
 });
 
 it('lists raw pixel paddings on card-like module CSS rules', () => {

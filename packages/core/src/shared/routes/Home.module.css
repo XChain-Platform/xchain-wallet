@@ -5,9 +5,9 @@
     appearance: none;
     background: transparent;
     border: 1px solid var(--xc-border-strong);
-    border-radius: 8px;
-    width: 38px;
-    height: 38px;
+    border-radius: var(--xc-control-radius);
+    width: var(--xc-control-h-md);
+    height: var(--xc-control-h-md);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -21,7 +21,7 @@
 
 .menuBtn:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
+    outline-offset: calc(var(--xc-space-1) / 2);
 }
 
 .error {
@@ -48,6 +48,7 @@
 
 .grid {
     display: grid;
+    /* Keep asset cards readable at the smallest untiled column width. */
     grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
     gap: var(--xc-space-3);
     margin-bottom: var(--xc-space-5);
@@ -69,6 +70,7 @@
    to the hero. */
 .quickActions {
     display: grid;
+    /* Keep action labels usable when all four actions share one row. */
     grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
     gap: var(--xc-space-2);
     margin-top: calc(var(--xc-space-2) - var(--xc-space-3));
@@ -78,6 +80,7 @@
    canonical quick-action measure instead of stretching it like a list row. */
 @media (min-width: 48rem) {
     .quickActionsSingle {
+        /* Keep the lone action at the same measure as a four-up action. */
         grid-template-columns: minmax(76px, 10rem);
     }
 }
@@ -104,6 +107,7 @@
     font-family: inherit;
     font-size: var(--xc-text-xs);
     font-weight: 600;
+    /* Keep enough vertical room for the icon and a wrapped label. */
     min-height: 72px;
     min-width: 0;
     text-align: center;
@@ -126,7 +130,7 @@
 
 .quickAction:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
+    outline-offset: calc(var(--xc-space-1) / 2);
 }
 
 .quickAction:disabled {
@@ -135,8 +139,8 @@
 }
 
 .quickActionIcon {
-    width: 32px;
-    height: 32px;
+    width: var(--xc-control-h-sm);
+    height: var(--xc-control-h-sm);
     border-radius: 50%;
     background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
     color: var(--xc-accent-text);
@@ -162,6 +166,7 @@
     position: absolute;
     inset-inline-end: 0;
     top: calc(100% + var(--xc-space-1));
+    /* Keep menu labels on one line at their intended content measure. */
     min-width: 200px;
     background: var(--xc-surface-raised);
     border: 1px solid var(--xc-border);
@@ -189,7 +194,7 @@
 .quickActionMoreItem:hover { background: var(--xc-bg-muted); }
 .quickActionMoreItem:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
-    outline-offset: -2px;
+    outline-offset: calc(var(--xc-space-1) / -2);
 }
 .quickActionMoreItem:disabled {
     color: var(--xc-text-muted);
@@ -200,8 +205,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 16px;
-    height: 16px;
+    width: var(--xc-icon-sm);
+    height: var(--xc-icon-sm);
     color: var(--xc-accent-text);
 }
 
