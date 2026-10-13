@@ -20,6 +20,7 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MyTokens } from '../../../packages/core/src/shared/routes/MyTokens.jsx';
 import { BridgeOriginTick } from '../../../packages/core/src/shared/routes/BridgeOriginBadge.jsx';
+import { BalanceList } from '../../../packages/core/src/shared/components/BalanceList.jsx';
 
 const DOGE = 'dogecoin-mainnet';
 const BTC = 'bitcoin-mainnet';
@@ -28,13 +29,14 @@ const WAIT = { timeout: 4000 };
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 describe('BridgeOriginTick', () => {
-    it('renders the bare name with an origin badge, and keeps the wire name on hover', () => {
+    it('renders the bare name, origin badge, and wire name without hover', () => {
         render(React.createElement(BridgeOriginTick, { tick: 'BTC.PEPECASH', localCoin: 'DOGE' }));
         const badge = screen.getByText('Bridged from Bitcoin');
         expect(badge).toBeInTheDocument();
         expect(badge).toHaveStyle({ maxWidth: '100%', overflowWrap: 'anywhere' });
         expect(screen.getByTitle('On-chain token name: BTC.PEPECASH')).toBeInTheDocument();
-        expect(screen.getByText(/PEPECASH/)).toBeInTheDocument();
+        expect(screen.getByText('PEPECASH')).toBeInTheDocument();
+        expect(screen.getByText('On-chain token name: BTC.PEPECASH')).toBeInTheDocument();
     });
 
     it('adds nothing to a native row', () => {
@@ -82,16 +84,43 @@ describe('MyTokens: origin badge on an owned row', () => {
         ));
     }
 
-    it('lists a bridged copy by its bare name plus its origin, never the rooted wire name', async () => {
+    it('lists a bridged copy by its bare name, origin, and support-facing wire name', async () => {
         mount([
             { tick: 'BTC.PEPECASH', locked: false, description: null },
             { tick: 'FUFU', locked: false, description: null },
         ]);
         await waitFor(() => expect(screen.getByText('Bridged from Bitcoin')).toBeInTheDocument(), WAIT);
         expect(screen.getByText('PEPECASH')).toBeInTheDocument();
+        expect(screen.getByText('On-chain token name: BTC.PEPECASH')).toBeInTheDocument();
         // The native row beside it is untouched.
         expect(screen.getByText('FUFU')).toBeInTheDocument();
-        expect(screen.queryByText('BTC.PEPECASH')).toBeNull();
+    });
+});
+
+describe('BalanceList unavailable explanations', () => {
+    const unavailableRow = (unavailable, unavailableReason) => ({
+        chainId: 'bitcoin-mainnet',
+        coin: 'bitcoin',
+        tick: 'BTC',
+        kind: 'native',
+        displayName: 'Bitcoin',
+        quantity: '100000000',
+        divisibility: 8,
+        fiatRate: 50_000,
+        unavailable,
+        unavailableReason,
+    });
+
+    it.each([
+        ['all', 'explorer unavailable'],
+        ['partial', 'one address could not be read'],
+    ])('shows the %s balance reason without hover', (unavailable, reason) => {
+        render(React.createElement(BalanceList, {
+            rows: [unavailableRow(unavailable, reason)],
+        }));
+
+        expect(document.body).toHaveTextContent(reason);
+        expect(screen.queryByTitle(reason)).toBeNull();
     });
 });
 

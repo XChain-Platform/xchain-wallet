@@ -66,6 +66,12 @@ export function RelativeTime({ timestamp, className, children }) {
             dateTime={Number.isNaN(ms) ? undefined : new Date(ms).toISOString()}
             title={exact}
             aria-label={`${label}. Exact time: ${exact}`}
+            tabIndex={0}
+            onFocus={() => setShowExact(true)}
+            onBlur={() => setShowExact(false)}
+            onKeyDown={(event) => {
+                if (event.key === 'Escape') event.currentTarget.blur();
+            }}
             onPointerDown={onPointerDown}
             onPointerUp={cancelPress}
             onPointerCancel={cancelPress}

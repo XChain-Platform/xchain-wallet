@@ -23,13 +23,14 @@ afterEach(() => {
     __clearTokenInfoCache();
 });
 
-function mount({ holders, rejectHolders = null, omitHolders = false, tokenInfo = {} } = {}) {
+function mount({ holders, rejectHolders = null, omitHolders = false, tokenInfo = {}, props = {}, messagingOverrides = {} } = {}) {
     const messaging = {
         getTokenInfo: vi.fn().mockResolvedValue({ creator: OWNER, divisibility: 8, ...tokenInfo }),
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [{ address: OWNER }] }),
         getWalletBalances: vi.fn().mockResolvedValue({}),
         getHistoryForToken: vi.fn().mockResolvedValue({ data: [] }),
         getDispensersForToken: vi.fn().mockResolvedValue({ data: [] }),
+        ...messagingOverrides,
     };
     if (!omitHolders) {
         messaging.getHoldersForToken = rejectHolders
@@ -38,7 +39,7 @@ function mount({ holders, rejectHolders = null, omitHolders = false, tokenInfo =
     }
     render(
         <MessagingProvider shell="web" messaging={messaging}>
-            <ManageToken walletId="wallet" chainId={CHAIN} tick="MANAGEPROBE" onBack={() => {}} />
+            <ManageToken walletId="wallet" chainId={CHAIN} tick="MANAGEPROBE" onBack={() => {}} {...props} />
         </MessagingProvider>,
     );
     return messaging;
@@ -95,5 +96,28 @@ describe('ManageToken holders', () => {
         const copy = await screen.findByRole('button', { name: 'Copy owner address' });
         fireEvent.click(copy);
         await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(OWNER));
+    });
+
+    it('shows a disabled action reason without relying on hover', async () => {
+        mount({
+            tokenInfo: { lockBridge: true },
+            props: { onBridgeSettings: vi.fn() },
+        });
+
+        const bridge = await screen.findByRole('button', {
+            name: 'Bridge: Bridge settings are frozen for this token and can never change.',
+        });
+        expect(bridge).toBeDisabled();
+        expect(bridge).not.toHaveAttribute('title');
+    });
+
+    it('shows the complete paused state without relying on hover', async () => {
+        mount({ messagingOverrides: {
+            sleepState: vi.fn().mockResolvedValue({ resumeBlock: 900 }),
+            getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 800 }),
+        } });
+
+        expect(await screen.findByText('Paused until block 900')).toBeInTheDocument();
+        expect(screen.queryByTitle('Paused until block 900')).toBeNull();
     });
 });
