@@ -44,6 +44,41 @@ export const en = {
     'common.done': 'Done',
     'common.loading': 'Loading…',
     'common.password': 'Password',
+    'common.confirm': 'Confirm',
+    'common.settingsUnavailable': 'Settings unavailable.',
+
+    // --- shared components ---------------------------------------
+    'adsNotice.title': 'Automatic Donation System',
+    'adsNotice.subtitle':
+        'XChain Wallet includes an Automatic Donation System (ADS) that supports continued development of the XChain Platform.',
+    'adsNotice.defaultBehavior':
+        'ADS is on by default. It sets aside a small amount when you send a transaction and sends it as one donation once it adds up.',
+    'adsNotice.optional': 'You do not need to donate to use this wallet.',
+    'adsNotice.settings':
+        'How much, how often, and whether to donate at all are yours to set under Settings → Automatic Donation System, where ADS can also be turned off entirely.',
+    'adsNotice.continue': 'Continue',
+    'alerts.dialogLabel': 'Wallet alerts',
+    'alerts.title': 'Alerts',
+    'alerts.close': 'Close alerts',
+    'alerts.empty': "No alerts. You're all caught up.",
+    'backupReminder.backupNow': 'Back up now',
+    'backupReminder.remindTomorrow': 'Remind me tomorrow',
+
+    // --- settings ------------------------------------------------
+    'settings.network.label': 'Network',
+    'settings.network.activeLabel': 'Active network',
+    'settings.network.switchTitle': 'Switch to {network}?',
+    'settings.network.switchMessage':
+        'The wallet will reload and show {nextNetwork} chains. Your {currentNetwork} balances and chain settings stay unchanged.',
+    'settings.network.switchConfirm': 'Switch network',
+    'settings.network.switchError': 'Could not switch networks. Try again.',
+    'settings.undoSend.label': 'Hold signed sends before broadcast',
+    'settings.undoSend.hintUnavailable':
+        'This build cannot hold sends. The preference is saved for a build that supports it.',
+    'settings.undoSend.hintAvailable':
+        'When enabled, holds each signed send for the duration below so you can cancel it before broadcast. A duration of 0 does not hold sends.',
+    'settings.undoSend.durationLabel': 'Hold duration in seconds (0 disables)',
+    'settings.undoSend.durationAriaLabel': 'Send hold duration in seconds',
 
     // --- home -----------------------------------------------------
     'home.receive': 'Receive',

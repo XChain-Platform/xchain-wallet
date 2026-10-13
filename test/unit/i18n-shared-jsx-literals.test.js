@@ -19,7 +19,23 @@ const sources = import.meta.glob(
     { query: '?raw', import: 'default', eager: true },
 );
 
+const localizedComponents = [
+    'AdsNotice.jsx',
+    'AlertsOverlay.jsx',
+    'BackupReminderCard.jsx',
+    'ConfirmModal.jsx',
+    'settings/NetworkSection.jsx',
+    'settings/UndoSendRow.jsx',
+];
+
 describe('shared route localization', () => {
+    test('localized shared components stay in the literal guard', () => {
+        for (const component of localizedComponents) {
+            const entry = Object.entries(sources).find(([file]) => file.endsWith(`/components/${component}`));
+            expect(entry?.[1], component).toMatch(/\bt\s*\(/);
+        }
+    });
+
     test('screens using t() keep user-facing JSX copy in the locale dictionary', () => {
         const violations = [];
         const missingKeys = [];
