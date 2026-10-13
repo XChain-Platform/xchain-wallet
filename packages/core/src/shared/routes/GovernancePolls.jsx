@@ -10,7 +10,7 @@
 
 import { useEffect, useState } from 'react';
 import {
-    Button, EmptyState, ListPage, NetworkField, PageHeader, Screen, StatusMessage,
+    Button, EmptyState, ListPage, ListRow, NetworkField, PageHeader, Screen, StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -203,22 +203,22 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
                         const id = p.action_index;
                         const label = p.question || (Array.isArray(p.options) ? p.options.join(' / ') : String(p.options || ''));
                         return (
-                            /* The native row button keeps the whole poll card as one target. */
-                            <button
+                            <ListRow
                                 key={String(id)}
                                 type="button"
                                 onClick={() => onOpenPoll(chainId, id)}
                                 className={local.pollCard}
-                            >
-                                <div className={local.pollHeader}>
-                                    <strong className={local.pollTitle}>#{String(id)} · {p.tick || t('common.notAvailable')}</strong>
-                                    <StatusPill status={p.poll_status} />
-                                </div>
-                                {label ? <div className={`${styles.hint} ${local.pollText}`}>{String(label).slice(0, 100)}</div> : null}
-                                <div className={`${styles.hint} ${local.pollText}`}>
-                                    {t('governance.closesAtBlock', { block: String(p.end_block ?? t('common.notAvailable')) })}
-                                </div>
-                            </button>
+                                title={<span className={local.pollTitle}>#{String(id)} · {p.tick || t('common.notAvailable')}</span>}
+                                subtitle={(
+                                    <>
+                                        {label ? <span className={`${styles.hint} ${local.pollText}`} style={{ display: 'block' }}>{String(label).slice(0, 100)}</span> : null}
+                                        <span className={`${styles.hint} ${local.pollText}`} style={{ display: 'block' }}>
+                                            {t('governance.closesAtBlock', { block: String(p.end_block ?? t('common.notAvailable')) })}
+                                        </span>
+                                    </>
+                                )}
+                                trailing={<StatusPill status={p.poll_status} />}
+                            />
                         );
                     })}
                 </div>

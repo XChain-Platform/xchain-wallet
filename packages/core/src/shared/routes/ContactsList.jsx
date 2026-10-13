@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, Button, ChainBadge, EmptyState, FormPage, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Select, Skeleton, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, Button, ChainBadge, EmptyState, FormPage, Icon, Input, ListPage, ListRow, PageHeader, Screen, SectionHeader, Select, Skeleton, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { useBackHandler } from '../../ui/backStack.js';
@@ -995,35 +995,39 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     }}
                 />
             ) : (
-                <div className={picker.list} role="list" aria-label="Contacts">
-                    {filteredContacts.map((c) => {
+                <ul className={picker.list} aria-label="Contacts">
+                    {filteredContacts.map((c, index) => {
                         const uniqueChains = [...new Map((c.entries || []).map((entry) => [
                             `${resolvedChain(entry)}:${chainIdFor(resolvedChain(entry), entry.address) || ''}`,
                             entry,
                         ])).values()];
                         return (
-                            <Button
+                            <li
                                 key={c.id}
-                                type="button"
-                                role="listitem"
-                                className={picker.row}
-                                onClick={() => { setActiveId(c.id); setMode('detail'); }}
-                                aria-label={c.name}
+                                style={{ borderTop: index === 0 ? 'none' : '1px solid var(--xc-border)' }}
                             >
-                                <span className={picker.rowName}>{c.name}</span>
-                                <span className={picker.rowChains}>
-                                    {uniqueChains.map((entry) => (
-                                        <ChainCoinIcon
-                                            key={`${resolvedChain(entry)}:${entry.address}`}
-                                            chain={resolvedChain(entry)}
-                                            address={entry.address}
-                                        />
-                                    ))}
-                                </span>
-                            </Button>
+                                <ListRow
+                                    type="button"
+                                    className={picker.row}
+                                    onClick={() => { setActiveId(c.id); setMode('detail'); }}
+                                    aria-label={c.name}
+                                    title={<span className={picker.rowName}>{c.name}</span>}
+                                    trailing={(
+                                        <span className={picker.rowChains}>
+                                            {uniqueChains.map((entry) => (
+                                                <ChainCoinIcon
+                                                    key={`${resolvedChain(entry)}:${entry.address}`}
+                                                    chain={resolvedChain(entry)}
+                                                    address={entry.address}
+                                                />
+                                            ))}
+                                        </span>
+                                    )}
+                                />
+                            </li>
                         );
                     })}
-                </div>
+                </ul>
             )}
         </ListPage>,
     );

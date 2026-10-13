@@ -23,6 +23,7 @@ import {
     AddressText,
     EmptyState,
     ListPage,
+    ListRow,
     StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
@@ -91,38 +92,23 @@ export function CoSignerAccountList({ walletId, onBack, onProvision, onOpen }) {
                         const descriptor = chainRegistry.get(a.chainId);
                         return (
                             <li key={a.id} style={{ marginBottom: 'var(--xc-space-2)' }}>
-                                {/* The native row button keeps the whole account card as one target. */}
-                                <button
+                                <ListRow
                                     type="button"
                                     onClick={() => onOpen(a.id)}
-                                    style={{
-                                        display: 'flex',
-                                        width: '100%',
-                                        gap: 'var(--xc-space-2)',
-                                        alignItems: 'center',
-                                        justifyContent: 'space-between',
-                                        padding: 'var(--xc-space-3)',
-                                        border: '1px solid var(--xc-border)',
-                                        borderRadius: 'var(--xc-radius-md)',
-                                        background: 'var(--xc-surface-raised)',
-                                        cursor: 'pointer',
-                                        textAlign: 'left',
-                                    }}
-                                >
-                                    <span style={{ minWidth: 0 }}>
-                                        <strong style={{ display: 'block' }}>{a.name}</strong>
-                                        <AddressText address={a.aggregateAddress} truncate />
-                                    </span>
-                                    <span style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'center', flexShrink: 0 }}>
-                                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
-                                        <span style={{
-                                            fontSize: '0.8em',
-                                            color: a.enabled ? 'var(--xc-success, green)' : 'var(--xc-text-muted)',
-                                        }}>
-                                            {a.enabled ? 'Active' : 'Disabled'}
+                                    title={a.name}
+                                    subtitle={<AddressText address={a.aggregateAddress} truncate />}
+                                    trailing={(
+                                        <span style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'center', flexShrink: 0 }}>
+                                            {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
+                                            <span style={{
+                                                fontSize: '0.8em',
+                                                color: a.enabled ? 'var(--xc-success, green)' : 'var(--xc-text-muted)',
+                                            }}>
+                                                {a.enabled ? 'Active' : 'Disabled'}
+                                            </span>
                                         </span>
-                                    </span>
-                                </button>
+                                    )}
+                                />
                             </li>
                         );
                     })}

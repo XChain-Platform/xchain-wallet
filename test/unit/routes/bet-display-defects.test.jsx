@@ -318,10 +318,10 @@ describe('(c) MyBets names each row\'s outcome', () => {
         bet_status: 'open',
     });
 
-    async function openMyBets(messaging) {
+    async function openMyBets(messaging, props = {}) {
         let utils;
         await domAct(async () => {
-            utils = mount(MyBets, messaging, {});
+            utils = mount(MyBets, messaging, props);
             await drain();
         });
         // The label read is a second wave of effects behind the bet list.
@@ -331,9 +331,12 @@ describe('(c) MyBets names each row\'s outcome', () => {
 
     it('reads the market for its labels and names the backed side', async () => {
         const { messaging, calls } = harness({ bets: () => Promise.resolve({ data: [BET_ROW] }) });
-        const utils = await openMyBets(messaging);
+        const onOpenMarket = vi.fn();
+        const utils = await openMyBets(messaging, { onOpenMarket });
         expect(utils.container.textContent).toContain('Backed "No" (outcome 1)');
         expect(utils.container.textContent).toContain('staked 100 XCHAIN');
+        fireEvent.click(utils.getByRole('button', { name: /Market #1169.*Backed "No"/ }));
+        expect(onOpenMarket).toHaveBeenCalledWith(CHAIN, '1169');
         // One read per DISTINCT market, not per row.
         expect(calls.filter((c) => c.method === 'betFeed').length).toBe(1);
     });

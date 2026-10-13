@@ -4,11 +4,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MessagingProvider } from '../../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MyLists } from '../../../../packages/core/src/shared/routes/MyLists.jsx';
 
-function renderLists(rows) {
+function renderLists(rows, onOpenList = () => {}) {
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue({
             'bitcoin-testnet': [{ address: 'tb1qexampleaddress0000000000000000000000' }],
@@ -17,7 +17,7 @@ function renderLists(rows) {
     };
     return render(
         <MessagingProvider shell="web" messaging={messaging}>
-            <MyLists walletId="w1" onOpenList={() => {}} onBack={() => {}} />
+            <MyLists walletId="w1" onOpenList={onOpenList} onBack={() => {}} />
         </MessagingProvider>,
     );
 }
@@ -31,24 +31,26 @@ afterEach(() => {
 
 describe('MyLists row names', () => {
     it('shows a named token list with its name and matching aria-label', async () => {
-        renderLists([row({ name: 'Payroll' })]);
+        const onOpenList = vi.fn();
+        renderLists([row({ name: 'Payroll' })], onOpenList);
 
         expect(await screen.findByText('Payroll (List #12)')).toBeTruthy();
-        expect(screen.getByLabelText('Open Payroll (List #12)')).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Open Payroll (List #12)' }));
+        expect(onOpenList).toHaveBeenCalledWith('bitcoin-testnet', '12');
     }, 20_000);
 
     it('shows a named address list with its name and generic list label', async () => {
         renderLists([row({ type: '2', action_index: 13, name: 'Allowlist' })]);
 
         expect(await screen.findByText('Allowlist (List #13)')).toBeTruthy();
-        expect(screen.getByLabelText('Open Allowlist (List #13)')).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Open Allowlist (List #13)' })).toBeTruthy();
     }, 20_000);
 
     it('shows an unnamed address list as today', async () => {
         renderLists([row({ type: '2', action_index: 13 })]);
 
         expect(await screen.findByText('Address list #13')).toBeTruthy();
-        expect(screen.getByLabelText('Open address list #13')).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Open address list #13' })).toBeTruthy();
     }, 20_000);
 
     it.each([
@@ -59,7 +61,7 @@ describe('MyLists row names', () => {
         renderLists([row(extra)]);
 
         expect(await screen.findByText('Token list #12')).toBeTruthy();
-        expect(screen.getByLabelText('Open token list #12')).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Open token list #12' })).toBeTruthy();
     }, 20_000);
 
     it('neutralizes a right-to-left override in the name', async () => {
@@ -67,6 +69,6 @@ describe('MyLists row names', () => {
         renderLists([row({ name: `Safe${rlo}name` })]);
 
         expect(await screen.findByText('Safe␦name (List #12)')).toBeTruthy();
-        expect(screen.getByLabelText('Open Safe␦name (List #12)')).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Open Safe␦name (List #12)' })).toBeTruthy();
     }, 20_000);
 });
