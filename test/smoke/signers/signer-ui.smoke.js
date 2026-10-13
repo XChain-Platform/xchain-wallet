@@ -104,17 +104,13 @@ assert.ok(
     'ViewPrivateKey is a named export',
 );
 
-// Three-stage flow + two informational panels (password stage retired).
-for (const stage of ['warning', 'submitting', 'revealed']) {
+// Four-stage flow + two informational panels.
+for (const stage of ['warning', 'password', 'submitting', 'revealed']) {
     assert.ok(
         viewSrc.includes(`'${stage}'`),
         `ViewPrivateKey tracks stage "${stage}"`,
     );
 }
-assert.ok(
-    !/'password'/.test(viewSrc),
-    'ViewPrivateKey no longer has a password stage',
-);
 
 // HW + watch-only routing.
 assert.ok(
@@ -137,30 +133,34 @@ assert.ok(
 // Security ceremony.
 assert.ok(
     /messaging\.exportPrivateKey\s*\(/.test(viewSrc),
-    'ViewPrivateKey calls messaging.exportPrivateKey (from the unlocked session, no password)',
+    'ViewPrivateKey calls messaging.exportPrivateKey',
+);
+assert.ok(
+    /messaging\.exportPrivateKey\s*\(\{[\s\S]*?password,[\s\S]*?addressId:/.test(viewSrc),
+    'ViewPrivateKey sends the confirmed password with the export request',
 );
 assert.ok(
     /addEventListener\('blur'/.test(viewSrc),
     'ViewPrivateKey auto-hides on window blur (§17.7.1)',
 );
-// §17.7.1 / G028's clipboard auto-clear is GONE, with the Copy button it
-// served: (2026-08-01) made key material uncopyable on every shell,
-// so there is nothing on a clipboard to clear. The guardrails that remain are
-// asserted above (tap-to-reveal, auto-hide on blur).
 assert.ok(
-    !/navigator\.clipboard/.test(viewSrc) && !/copyText\(/.test(viewSrc),
-    'ViewPrivateKey copies nothing to the clipboard',
+    /REVEAL_TIMEOUT_MS\s*=\s*30_000/.test(viewSrc)
+        && /setTimeout\(\(\) => setRevealed\(false\), REVEAL_TIMEOUT_MS\)/.test(viewSrc),
+    'ViewPrivateKey auto-hides after a fixed reveal timeout',
+);
+assert.ok(
+    /<CopyButton[\s\S]*?sensitive[\s\S]*?onCopied=/.test(viewSrc)
+        && !/navigator\.clipboard/.test(viewSrc),
+    'ViewPrivateKey uses the shared sensitive clipboard path',
 );
 assert.ok(
     /Tap to reveal/.test(viewSrc),
     'ViewPrivateKey uses tap-to-reveal, not auto-reveal',
 );
 
-// No password re-prompt: reveal is gated by the "Before you continue"
-// warning only, then exports from the already-unlocked session signer.
 assert.ok(
-    !/type="password"/.test(viewSrc) && !/Required every time/.test(viewSrc),
-    'ViewPrivateKey reveals from the unlocked session without a password prompt',
+    /type="password"/.test(viewSrc) && /Required every time/.test(viewSrc),
+    'ViewPrivateKey requires password confirmation for every export',
 );
 assert.ok(
     /Before you continue/.test(viewSrc),
@@ -272,5 +272,5 @@ assert.ok(
 );
 
 console.log(
-    'OK: signer UI smoke (PairSignerForm §17.6/§18.3: vendor picker + DI factories + firmware-verdict gating + messaging.registerSigner wiring; ViewPrivateKey §17.7: classifySource routes HW/watch-only to info panels + tap-to-reveal + window-blur auto-hide + no clipboard path at all + password re-prompt; exportPrivateKey handler + messaging; pair-signer sub-route wired into both shells)',
+    'OK: signer UI smoke (PairSignerForm §17.6/§18.3: vendor picker + DI factories + firmware-verdict gating + messaging.registerSigner wiring; ViewPrivateKey §17.7: HW/watch-only gating + password confirmation + tap-to-reveal + timed and blur auto-hide + sensitive clipboard; exportPrivateKey handler + messaging; pair-signer sub-route wired into both shells)',
 );
