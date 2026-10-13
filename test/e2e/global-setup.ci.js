@@ -20,7 +20,7 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const CI_ONLY_SUITES = ['test:boundary', 'test:chaos', 'test:a11y'];
 
 export default function globalSetup() {
-    if (!process.env.CI) return;
+    if (!process.env.CI || process.env.XCHAIN_CI_FULL_VITEST_TIERS === '1') return;
 
     for (const suite of CI_ONLY_SUITES) {
         execFileSync('pnpm', ['run', suite], {
