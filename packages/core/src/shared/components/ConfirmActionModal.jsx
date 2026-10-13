@@ -26,7 +26,7 @@
 // lock until a terminal state. Approve disables synchronously in the
 // click handler's tick, before any await.
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useContext, useEffect } from 'react';
 import { AddressText, Button, Icon, Screen, PageHeader } from '@xchain-wallet/core/ui';
 import { ActionIntentSummary } from './ActionIntentSummary.jsx';
 import { PreflightPanel } from './PreflightPanel.jsx';
@@ -35,15 +35,44 @@ import { xchainProtocolFeeLine } from '../../flows/protocolFeeDisclosure.js';
 import { oracleUsageFeeLine } from '../../flows/oracleFeeDisclosure.js';
 import { envelopeTransactionLines } from '../../flows/envelopeFeeDisclosure.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { formatDisplayAmount } from '../utils/amountFormat.js';
 import { formatNativeBaseUnits } from '../../registry/coinTicker.js';
 import { defaultRegistry } from '../../registry/index.js';
 import { OriginIdentity } from './OriginIdentity.jsx';
 import { useLongOperationStatus } from '../hooks/useLongOperationStatus.js';
+import { CONTRACT_CALL_WARNING } from '../utils/securityMomentCopy.js';
+import { WalletIdentity } from './WalletIdentity.jsx';
+import { MessagingContext } from '../MessagingContext.js';
+import { readActiveWallet } from '../utils/activeWalletMemory.js';
 import styles from './ConfirmActionModal.module.css';
 
 const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', 'done', 'error', 'signed-not-broadcast']);
 const chainRegistry = defaultRegistry();
+
+function useSigningWallet(wallet) {
+    const messaging = useContext(MessagingContext)?.messaging;
+    const [resolvedWallet, setResolvedWallet] = useState(wallet);
+
+    useEffect(() => {
+        let cancelled = false;
+        if (wallet) {
+            setResolvedWallet(wallet);
+            return undefined;
+        }
+        setResolvedWallet(null);
+        const walletId = readActiveWallet();
+        if (!walletId || typeof messaging?.listWallets !== 'function') return undefined;
+        Promise.resolve().then(() => messaging.listWallets()).then((walletsValue) => {
+            if (cancelled) return;
+            const wallets = Array.isArray(walletsValue) ? walletsValue : [];
+            setResolvedWallet(wallets.find((candidate) => candidate.id === walletId) || null);
+        }).catch(() => {});
+        return () => { cancelled = true; };
+    }, [messaging, wallet]);
+
+    return resolvedWallet;
+}
 
 function formatReviewDecoded(decoded) {
     if (!decoded) return decoded;
@@ -146,6 +175,7 @@ function reviewActionLabel(decoded, fallback, chainLabel) {
  *   several owned addresses at once, so its input list identifies them instead.
  * @param {string} [props.sourceName] the address-record label, followed by the
  *   wallet name when more than one wallet exists
+ * @param {{ id: string, name?: string } | null} [props.signingWallet] wallet that will approve the request
  * @param {string} [props.nativeTicker]                      the chain's native ticker, for coin-denominated lines
  *   read off the composed envelope (the oracle usage fee, the envelope's two transactions)
  * @param {(amount: string) => string|null} [props.formatNativeFee]
@@ -160,6 +190,7 @@ export function ConfirmActionModal({
     screenVariant = 'small', feeText, totalText, error = null,
     psbtPanel = null, messageText, requestOrigin = '', refusal = null, headline,
     sourceAddress = null, sourceName = '', nativeTicker = '',
+    signingWallet = null,
     formatNativeFee, formatProtocolFee,
 }) {
     const formattedDecoded = formatReviewDecoded(decoded);
@@ -175,6 +206,8 @@ export function ConfirmActionModal({
     const resolvedApproveLabel = approveLabel || (variant === 'action'
         ? reviewActionLabel(formattedDecoded, defaultApproveLabel, chainLabel)
         : headlineText);
+    const isContractCall = variant === 'action'
+        && /^(?:contract call|call contract\b)/i.test(headlineText);
     const reviewDetails = (formattedDecoded?.details || []).map((detail, index) => ({
         ...detail,
         label: detail.label === 'Destination'
@@ -247,6 +280,7 @@ export function ConfirmActionModal({
     const envelopeLines = variant === 'action'
         ? envelopeTransactionLines({ composed, ticker: nativeTicker })
         : null;
+    const resolvedSigningWallet = useSigningWallet(signingWallet);
     const [approveDisabled, setApproveDisabled] = useState(false);
     const signaturePhase = phase === 'signing' || phase === 'rechecking';
     const terminal = phase === 'done' || phase === 'error' || phase === 'signed-not-broadcast';
@@ -292,6 +326,7 @@ export function ConfirmActionModal({
                 </div>
 
                 <div className={styles.body}>
+                    <WalletIdentity wallet={resolvedSigningWallet} label="Signing with" />
                     <OriginIdentity
                         origin={requestOrigin}
                         label="Requesting site"
@@ -320,6 +355,12 @@ export function ConfirmActionModal({
 
                     {variant === 'action' && reviewDecoded ? (
                         <ActionIntentSummary decoded={reviewDecoded} simulation={simulation} />
+                    ) : null}
+
+                    {isContractCall ? (
+                        <p className={styles.hwNote} data-testid="contract-call-warning">
+                            {CONTRACT_CALL_WARNING}
+                        </p>
                     ) : null}
 
                     {/* The wallet can hold several addresses per chain, so the
@@ -417,9 +458,10 @@ export function ConfirmActionModal({
                         so the message is adjacent to the field it refers to. */}
                     {error ? (
                         <div className={styles.error} role="alert" data-testid="confirm-error">
-                            {typeof error === 'string'
-                                ? error
-                                : (error?.message || 'The request stopped because the wallet service returned no explanation.')}
+                            {userFacingMessage(
+                                error,
+                                'The request stopped because the wallet service returned no explanation.',
+                            )}
                         </div>
                     ) : null}
 

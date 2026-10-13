@@ -54,6 +54,17 @@ describe('ConfirmActionModal', () => {
         expect(screen.getByTestId('confirm-approve').textContent)
             .toBe('Send 5 JDOG');
         expect(screen.getByTestId('confirm-reject').textContent).toBe('Reject');
+        expect(screen.queryByTestId('contract-call-warning')).toBeNull();
+    });
+
+    it('uses a short warning only when approving a contract call', () => {
+        render(<ConfirmActionModal {...base({
+            decoded: { summary: 'Call contract #21', details: [], warnings: [] },
+        })} />);
+
+        expect(screen.getByTestId('contract-call-warning')).toHaveTextContent(
+            'Only approve a contract call you understand. Review the contract, method, amounts, and permissions first.',
+        );
     });
 
     it('names amount-free actions and updates when the reviewed amount changes', () => {
@@ -346,6 +357,13 @@ describe('ConfirmActionModal', () => {
     it('accepts a plain string error', () => {
         render(<ConfirmActionModal {...base({ error: 'Something broke.' })} />);
         expect(screen.getByTestId('confirm-error').textContent).toMatch(/Something broke/);
+    });
+
+    it('replaces internal error identifiers with plain copy', () => {
+        render(<ConfirmActionModal {...base({ error: 'SDKEncoderError: INSUFFICIENT_FUNDS' })} />);
+        const text = screen.getByTestId('confirm-error').textContent;
+        expect(text).toMatch(/wallet service returned no explanation/i);
+        expect(text).not.toMatch(/SDKEncoderError|INSUFFICIENT_FUNDS/);
     });
 
     it('explains when a failed request carries no diagnostic message', () => {

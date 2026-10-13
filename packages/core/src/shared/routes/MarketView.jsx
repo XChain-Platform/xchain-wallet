@@ -19,9 +19,11 @@ import { PlaceOrderPanel } from '../components/PlaceOrderPanel.jsx';
 import { OpenOrdersPanel } from '../components/OpenOrdersPanel.jsx';
 import { TradeHistoryPanel } from '../components/TradeHistoryPanel.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
+import { RouteErrorBoundary } from '../components/RouteErrorBoundary.jsx';
 import { sampleMatchesFor } from '../../market/sampleMarketData.js';
 import { normalizeMarketHistoryRowExact } from '../../market/history_rows.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
+import { percentChangeDisplay } from '../utils/percentFormat.js';
 import {
     compareDecimalStrings,
     divideDecimalStrings,
@@ -125,9 +127,10 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
     const stats = useMemo(() => derive24hStats(historyRows, tick1, tick2), [historyRows, tick1, tick2]);
     const lastPrice = stats.lastPrice;
     const changePct = stats.changePct;
-    const changeColor = Number.isFinite(changePct)
-        ? (changePct > 0 ? 'var(--xc-success)' : changePct < 0 ? 'var(--xc-danger)' : 'var(--xc-text-muted)')
-        : 'var(--xc-text-muted)';
+    const changeDisplay = percentChangeDisplay(changePct);
+    const changeColor = changeDisplay?.direction === 'positive'
+        ? 'var(--xc-success)'
+        : changeDisplay?.direction === 'negative' ? 'var(--xc-danger)' : 'var(--xc-text-muted)';
     const marketKey = `${chainId}:${tick1}:${tick2}`;
 
     const header = (
@@ -193,12 +196,15 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                 <span style={{ fontSize: 'var(--xc-text-lg)', fontWeight: 700, color: 'var(--xc-text)' }}>
                     {formatPrice(lastPrice)} <span style={{ fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)', fontWeight: 500 }}>{tick2}</span>
                 </span>
-                {Number.isFinite(changePct) ? (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 'var(--xc-text-sm)', fontWeight: 600, color: changeColor }}>
-                        {formatChangePct(changePct)}
-                        {changePct !== 0 ? (
+                {changeDisplay ? (
+                    <span
+                        aria-label={`24-hour change. ${changeDisplay.label}`}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 'var(--xc-text-sm)', fontWeight: 600, color: changeColor }}
+                    >
+                        {changeDisplay.text}
+                        {changeDisplay.direction !== 'neutral' ? (
                             <span aria-hidden="true" style={{ fontSize: '0.8em', lineHeight: 1 }}>
-                                {changePct > 0 ? '▲' : '▼'}
+                                {changeDisplay.direction === 'positive' ? '▲' : '▼'}
                             </span>
                         ) : null}
                     </span>
@@ -230,13 +236,17 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                         {summaryError ? (
                             <StatusMessage variant="error" className={styles.error}>{summaryError}</StatusMessage>
                         ) : null}
-                        {headerCard}
+                        <RouteErrorBoundary variant="compact" resetKey={`${marketKey}:ticker`}>
+                            {headerCard}
+                        </RouteErrorBoundary>
                     </>
                 )}
             </div>
 
             <div style={{ marginTop: 'var(--xc-space-3)' }}>
-                <MarketChart key={marketKey} chainId={chainId} tick1={tick1} tick2={tick2} demo={demo} />
+                <RouteErrorBoundary variant="compact" resetKey={`${marketKey}:chart`}>
+                    <MarketChart key={marketKey} chainId={chainId} tick1={tick1} tick2={tick2} demo={demo} />
+                </RouteErrorBoundary>
             </div>
 
             <div
@@ -277,47 +287,49 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                 role="tabpanel"
                 aria-labelledby={`${tabsId}-tab-${tab}`}
             >
-                {tab === 'book' ? (
-                    <OrderbookPanel
-                        key={marketKey}
-                        chainId={chainId}
-                        tick1={tick1}
-                        tick2={tick2}
-                        demo={demo}
-                        onPickPrice={(price) => { setPrefillPrice(price); setTab('place'); }}
-                    />
-                ) : null}
-                {tab === 'trades' ? (
-                    <RecentTradesPanel key={marketKey} chainId={chainId} tick1={tick1} tick2={tick2} demo={demo} />
-                ) : null}
-                {tab === 'place' ? (
-                    <PlaceOrderPanel
-                        key={marketKey}
-                        walletId={walletId}
-                        chainId={chainId}
-                        tick1={tick1}
-                        tick2={tick2}
-                        prefillPrice={prefillPrice}
-                    />
-                ) : null}
-                {tab === 'orders' ? (
-                    <OpenOrdersPanel
-                        key={marketKey}
-                        walletId={walletId}
-                        chainId={chainId}
-                        tick1={tick1}
-                        tick2={tick2}
-                    />
-                ) : null}
-                {tab === 'history' ? (
-                    <TradeHistoryPanel
-                        key={marketKey}
-                        walletId={walletId}
-                        chainId={chainId}
-                        tick1={tick1}
-                        tick2={tick2}
-                    />
-                ) : null}
+                <RouteErrorBoundary variant="compact" resetKey={`${marketKey}:${tab}`}>
+                    {tab === 'book' ? (
+                        <OrderbookPanel
+                            key={marketKey}
+                            chainId={chainId}
+                            tick1={tick1}
+                            tick2={tick2}
+                            demo={demo}
+                            onPickPrice={(price) => { setPrefillPrice(price); setTab('place'); }}
+                        />
+                    ) : null}
+                    {tab === 'trades' ? (
+                        <RecentTradesPanel key={marketKey} chainId={chainId} tick1={tick1} tick2={tick2} demo={demo} />
+                    ) : null}
+                    {tab === 'place' ? (
+                        <PlaceOrderPanel
+                            key={marketKey}
+                            walletId={walletId}
+                            chainId={chainId}
+                            tick1={tick1}
+                            tick2={tick2}
+                            prefillPrice={prefillPrice}
+                        />
+                    ) : null}
+                    {tab === 'orders' ? (
+                        <OpenOrdersPanel
+                            key={marketKey}
+                            walletId={walletId}
+                            chainId={chainId}
+                            tick1={tick1}
+                            tick2={tick2}
+                        />
+                    ) : null}
+                    {tab === 'history' ? (
+                        <TradeHistoryPanel
+                            key={marketKey}
+                            walletId={walletId}
+                            chainId={chainId}
+                            tick1={tick1}
+                            tick2={tick2}
+                        />
+                    ) : null}
+                </RouteErrorBoundary>
             </div>
         </>,
     );
@@ -383,12 +395,6 @@ function formatPrice(n) {
     if (compareDecimalStrings(n, '1') >= 0) return roundDecimalString(n, 4);
     if (compareDecimalStrings(n, '0.01') >= 0) return roundDecimalString(n, 6);
     return roundDecimalString(n, 8);
-}
-
-function formatChangePct(n) {
-    if (!Number.isFinite(n)) return '';
-    const sign = n > 0 ? '+' : '';
-    return `${sign}${n.toFixed(2)}%`;
 }
 
 function formatVolume(n) {

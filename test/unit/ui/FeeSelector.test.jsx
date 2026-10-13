@@ -147,7 +147,7 @@ describe('<FeeSelector>', () => {
         expect(screen.getByRole('slider')).toBeDisabled();
         expect(screen.queryByRole('button', { name: 'Custom' })).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /Edit/ })).not.toBeInTheDocument();
-        for (const name of ['Low', 'Normal', 'Fast']) {
+        for (const name of ['Slow', 'Normal', 'Fast']) {
             expect(document.querySelector(`button[aria-label="${name}"]`)).toBeDisabled();
         }
     });

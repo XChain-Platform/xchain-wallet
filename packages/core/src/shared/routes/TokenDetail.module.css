@@ -916,24 +916,6 @@
     margin-bottom: var(--xc-space-1);
 }
 
-.holdersList {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-1);
-}
-
-.holdersRow {
-    display: flex;
-    justify-content: space-between;
-    gap: var(--xc-space-2);
-    font-size: var(--xc-text-sm);
-    align-items: center;
-    flex-wrap: wrap;
-}
-
 .holdersAddr {
     font-family: var(--xc-font-mono, monospace);
     color: var(--xc-text);

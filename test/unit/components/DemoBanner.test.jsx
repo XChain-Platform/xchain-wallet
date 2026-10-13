@@ -232,7 +232,7 @@ describe('DemoBanner: the demo disclosure on Home', () => {
 
     it('mounts the extension banner in the layout header so it cannot consume route height', () => {
         expect(popupAppSource).toMatch(
-            /<FullLayoutWithNav[\s\S]*?header=\{activeWalletId \? \([\s\S]*?<DemoBanner activeWalletId=\{activeWalletId\} onExited=\{refresh\} \/>[\s\S]*?\) : null\}[\s\S]*?>/,
+            /<FullLayoutWithNav[\s\S]*?header=\{\(\s*<>[\s\S]*?<AppHeader[\s\S]*?\{activeWalletId \? <DemoBanner activeWalletId=\{activeWalletId\} onExited=\{refresh\} \/> : null\}\s*<\/>\s*\)\}\s*bottomBar=/,
         );
         expect(popupAppSource).not.toMatch(
             /<FullLayoutWithNav[\s\S]*?>\s*\{activeWalletId \? \(\s*<DemoBanner/,

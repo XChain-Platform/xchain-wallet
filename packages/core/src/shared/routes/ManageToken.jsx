@@ -16,6 +16,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { useIsTokenIssuer } from '../hooks/useIsTokenIssuer.js';
 import { TickerIcon } from '../components/TickerIcon.jsx';
+import tableStyles from '../components/DataTable.module.css';
 import { formatAmount } from '../components/BalanceList.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { Sparkline, synthesizeTokenChart } from '../components/Sparkline.jsx';
@@ -1070,31 +1071,39 @@ function HoldersPanel({ holders, error, onViewAll, divisibility }) {
     );
     return (
         <>
-            {/* Safari needs an explicit list role because this class removes list styling. */}
-            <ul className={styles.list} role="list">
-                {holders.slice(0, 10).map((h, i) => (
-                    <li key={`${h.address || h.holder || i}`}>
-                        <div className={styles.row}>
-                            <span className={styles.holderAddress}>
-                                <span className={styles.rowMono} title={h.address || h.holder || undefined}>
-                                    {(h.address || h.holder || '-').replace(/^(.{6}).+(.{4})$/, '$1…$2')}
+            <table className={tableStyles.table}>
+                <caption className={tableStyles.visuallyHiddenCaption}>Top holder balances</caption>
+                <thead>
+                    <tr>
+                        <th className={tableStyles.headerCell} scope="col">Address</th>
+                        <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Balance</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {holders.slice(0, 10).map((h, i) => (
+                        <tr key={`${h.address || h.holder || i}`}>
+                            <td className={tableStyles.cell} data-label="Address">
+                                <span className={styles.holderAddress}>
+                                    <span className={styles.rowMono} title={h.address || h.holder || undefined}>
+                                        {(h.address || h.holder || '-').replace(/^(.{6}).+(.{4})$/, '$1…$2')}
+                                    </span>
+                                    {(h.address || h.holder) ? (
+                                        <CopyButton
+                                            value={h.address || h.holder}
+                                            ariaLabel={`Copy holder address ${i + 1}`}
+                                        />
+                                    ) : null}
                                 </span>
-                                {(h.address || h.holder) ? (
-                                    <CopyButton
-                                        value={h.address || h.holder}
-                                        ariaLabel={`Copy holder address ${i + 1}`}
-                                    />
-                                ) : null}
-                            </span>
-                            <span className={styles.rowSub}>
+                            </td>
+                            <td className={`${tableStyles.cell} ${tableStyles.numeric} ${styles.rowSub}`} data-label="Balance">
                                 {h.quantity != null
                                     ? formatAmount(String(h.quantity), divisibility || 0)
                                     : (h.amount != null ? formatWithThousands(h.amount) : '-')}
-                            </span>
-                        </div>
-                    </li>
-                ))}
-            </ul>
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
             {typeof onViewAll === 'function' && holders.length > 10 ? (
                 <button type="button" className={styles.viewAll} onClick={onViewAll}>
                     View all {holders.length} holders

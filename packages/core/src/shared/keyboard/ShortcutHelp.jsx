@@ -14,7 +14,7 @@
 // dispatcher actually binds. Rebinding itself lives in Settings → Keyboard;
 // the footer points there.
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '../../ui/index.js';
 import { SHORTCUT_GROUPS, formatBinding, resolveBindings } from './shortcuts.js';
 import styles from './ShortcutHelp.module.css';
@@ -35,6 +35,7 @@ function isMac() {
  */
 export function ShortcutHelp({ open, onClose, overrides }) {
     const shortcuts = useMemo(() => resolveBindings(overrides), [overrides]);
+    const [extensionCommands, setExtensionCommands] = useState([]);
     // The system Back gesture closes this before it leaves the screen.
     useBackHandler(open ? onClose : undefined);
     // Opened by a bare key, so focus starts on the page: move it into the
@@ -47,6 +48,17 @@ export function ShortcutHelp({ open, onClose, overrides }) {
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
     }, [open, onClose]);
+    useEffect(() => {
+        if (!open || typeof chrome === 'undefined' || !chrome.commands?.getAll) return undefined;
+        let active = true;
+        chrome.commands.getAll((commands) => {
+            if (!active) return;
+            setExtensionCommands((Array.isArray(commands) ? commands : []).filter(
+                (command) => command?.name && command?.description,
+            ));
+        });
+        return () => { active = false; };
+    }, [open]);
 
     if (!open) return null;
     const mac = isMac();
@@ -90,8 +102,26 @@ export function ShortcutHelp({ open, onClose, overrides }) {
                             </dl>
                         </section>
                     ))}
+                    {extensionCommands.length > 0 ? (
+                        <section className={styles.group}>
+                            <h2 className={styles.groupTitle}>Browser extension</h2>
+                            <dl className={styles.list}>
+                                {extensionCommands.map((command) => (
+                                    <div key={command.name} className={styles.row}>
+                                        <dt className={styles.label}>{command.description}</dt>
+                                        <dd className={styles.keys}>
+                                            <kbd className={styles.kbd}>{command.shortcut || 'Not set'}</kbd>
+                                        </dd>
+                                    </div>
+                                ))}
+                            </dl>
+                        </section>
+                    ) : null}
                     <p className={styles.footerNote}>
-                        Rebind shortcuts in Settings → Keyboard.
+                        Rebind wallet shortcuts in Settings → Keyboard.
+                        {extensionCommands.length > 0
+                            ? ' Manage browser extension shortcuts in your browser.'
+                            : null}
                     </p>
                 </div>
             </div>

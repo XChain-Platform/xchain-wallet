@@ -15,7 +15,7 @@
     background: var(--xc-surface-raised);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-lg);
-    box-shadow: var(--xc-shadow-md);
+    box-shadow: var(--xc-list-shadow);
     cursor: pointer;
 }
 

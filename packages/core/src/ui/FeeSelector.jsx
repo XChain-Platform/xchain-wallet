@@ -19,14 +19,14 @@ import { InfoTip } from './InfoTip.jsx';
 
 const TIER_SPEEDS = ['low', 'normal', 'fast'];
 const SPEEDS_WITH_CUSTOM = [...TIER_SPEEDS, 'custom'];
-const SPEED_LABELS = { low: 'Low', normal: 'Normal', fast: 'Fast', custom: 'Custom' };
-const HIGH_FEE_MULTIPLIER = 100;
+const SPEED_LABELS = { low: 'Slow', normal: 'Normal', fast: 'Fast', custom: 'Custom' };
+const HIGH_FEE_MULTIPLIER = 10;
 // ETA-pill tint per priority: slower = warmer/riskier. Maps to the
 // per-tone classes in the stylesheet (red / orange / green / white).
 const ETA_TONE = { low: 'etaLow', normal: 'etaNormal', fast: 'etaFast', custom: 'etaCustom' };
 
 /**
- * FeeSelector (§44.2): Low / Normal / Fast / Custom slider. Rendering
+ * FeeSelector (§44.2): Slow / Normal / Fast / Custom slider. Rendering
  * is driven by `tiers` from
  * `flows/feeEstimate.estimateNativeSendFeeTiers`; selection writes
  * back via `onChange`.
@@ -251,11 +251,12 @@ export function FeeSelector({
         && feeDraftCanonical !== '.'
         ? Number(feeDraftCanonical)
         : Number.NaN;
-    const highestPresetRate = Math.max(
-        0,
-        ...tierList.map(({ estimate }) => estimate?.rateValue)
-            .filter((rate) => Number.isFinite(rate) && rate > 0),
-    );
+    const fastPresetRate = Number.isFinite(tiers.fast?.rateValue) && tiers.fast.rateValue > 0
+        ? tiers.fast.rateValue
+        : null;
+    const minimumRate = Number.isFinite(tiers.minimumRate) && tiers.minimumRate > 0
+        ? tiers.minimumRate
+        : null;
     let customFeedback = null;
     let customFeedbackTone = null;
     if (feeDraft !== null && (!Number.isFinite(feeDraftNumber) || feeDraftNumber < 0)) {
@@ -267,9 +268,13 @@ export function FeeSelector({
     } else if (isCustom && (!Number.isFinite(customRateNumber) || customRateNumber <= 0)) {
         customFeedback = 'Custom fee rate must be greater than zero.';
         customFeedbackTone = 'error';
-    } else if (isCustom && highestPresetRate > 0
-        && customRateNumber > highestPresetRate * HIGH_FEE_MULTIPLIER) {
-        customFeedback = 'This fee rate is unusually high. Check it carefully before sending.';
+    } else if (isCustom && minimumRate !== null && customRateNumber < minimumRate) {
+        customFeedback = `This rate is below the network minimum of ${formatWithThousands(minimumRate)} ${tiers.unit}. `
+            + 'It may not relay.';
+        customFeedbackTone = 'warning';
+    } else if (isCustom && fastPresetRate !== null
+        && customRateNumber > fastPresetRate * HIGH_FEE_MULTIPLIER) {
+        customFeedback = 'This rate is more than 10 times the Fast rate. Check it carefully before sending.';
         customFeedbackTone = 'warning';
     }
 
@@ -304,7 +309,10 @@ export function FeeSelector({
                             tabIndex={-1}
                             aria-label={SPEED_LABELS[s]}
                         >
-                            {SPEED_LABELS[s]}
+                            <span>{SPEED_LABELS[s]}</span>
+                            {Number.isFinite(tiers[s]?.etaMinutes) ? (
+                                <span className={styles.sliderTickEta}>~{tiers[s].etaMinutes} min</span>
+                            ) : null}
                         </button>
                     ))}
                 </div>

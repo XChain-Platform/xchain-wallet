@@ -18,6 +18,7 @@ import { MnemonicGrid } from '../components/MnemonicGrid.jsx';
 import { AdsNotice } from '../components/AdsNotice.jsx';
 import { pickQuizPositions } from '../utils/pickQuizPositions.js';
 import { nextPaint } from '../utils/nextPaint.js';
+import { RECOVERY_PHRASE_WARNING } from '../utils/securityMomentCopy.js';
 import styles from './CreateWallet.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
@@ -84,15 +85,26 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         /** @type {string | null} */ (null),
     );
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const firstQuizInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const stageFormRef = useRef(/** @type {HTMLFormElement | null} */ (null));
 
     // The clipboard auto-clear that used to live here is gone with the copy
     // button it existed for (, decided 2026-08-01): the phrase cannot
     // be copied, so there is nothing to clear.
 
     useEffect(() => {
-        if (stage === 'password') {
-            setTimeout(() => passwordRef.current?.focus(), 0);
-        }
+        const id = setTimeout(() => {
+            if (stage === 'password') passwordRef.current?.focus();
+            else if (stage === 'verify') firstQuizInputRef.current?.focus();
+            else {
+                const heading = stageFormRef.current?.querySelector('h1');
+                if (heading instanceof HTMLElement) {
+                    heading.tabIndex = -1;
+                    heading.focus();
+                }
+            }
+        }, 0);
+        return () => clearTimeout(id);
     }, [stage]);
 
     function handlePasswordSubmit(event) {
@@ -230,7 +242,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         );
         return (
             <Screen variant={variant} header={screenHeader}>
-                <FormPage label="Automatic Donation System">
+                <FormPage ref={stageFormRef} label="Automatic Donation System">
                     {noticeBody}
                 </FormPage>
             </Screen>
@@ -250,7 +262,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         );
         return (
             <Screen variant={variant} header={screenHeader}>
-                <FormPage label="Wallet creation status">
+                <FormPage ref={stageFormRef} label="Wallet creation status">
                     {persistingBody}
                 </FormPage>
             </Screen>
@@ -260,6 +272,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     if (stage === 'verify') {
         const verifyBody = (
             <FormPage
+                ref={stageFormRef}
                 label="Verify recovery phrase"
                 onSubmit={handleSubmitVerify}
                 status={<FormErrorSummary
@@ -309,6 +322,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                         <li key={p} className={styles.quizRow}>
                             <Input
                                 id={`create-quiz-word-${p}`}
+                                ref={p === quizPositions[0] ? firstQuizInputRef : undefined}
                                 label={`Word ${p}`}
                                 value={quizAnswers[p] || ''}
                                 onChange={(e) => {
@@ -339,6 +353,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     if (stage === 'mnemonic') {
         const mnemonicBody = (
             <FormPage
+                ref={stageFormRef}
                 label="Recovery phrase"
                 status={persistError ? (
                     <StatusMessage variant="error" className={styles.error}>{persistError}</StatusMessage>
@@ -362,8 +377,8 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     </h1>
                     <p className={subtitleClass}>
                         {isFull
-                            ? `These ${wordCount === 24 ? 'twenty-four' : 'twelve'} words are the ONLY way to recover your wallet if you lose access to this device. Write them down on paper and store them somewhere safe. Never type them into a website, email, or photo.`
-                            : `Write these ${wordCount} words down and store them somewhere safe. They're the only way to recover your wallet.`}
+                            ? `Write these ${wordCount === 24 ? 'twenty-four' : 'twelve'} words down on paper and store them somewhere safe. ${RECOVERY_PHRASE_WARNING}`
+                            : `Write these ${wordCount} words down and store them somewhere safe. ${RECOVERY_PHRASE_WARNING}`}
                     </p>
                 </header>
                 <MnemonicGrid mnemonic={mnemonic || ''} variant={variant} />
@@ -417,6 +432,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         : [];
     const formBody = (
         <FormPage
+            ref={stageFormRef}
             label="Create wallet"
             onSubmit={handlePasswordSubmit}
             status={passwordError ? (

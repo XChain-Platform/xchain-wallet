@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import {
@@ -23,6 +23,10 @@ import { NetworkFilter } from '../components/NetworkFilter.jsx';
 import { bridgeDisplayTick } from './BridgeTick.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
+import {
+    pinnedTokensForWallet,
+    pinnedTokensPatchForWallet,
+} from '../../schemas/settings.js';
 import styles from './TokenPicker.module.css';
 
 const PLATFORM_QUERY_MIN_CHARS = 3;
@@ -159,21 +163,21 @@ export function TokenPicker({
     useEffect(() => {
         let cancelled = false;
         if (typeof messaging?.getSettings !== 'function') return undefined;
+        setPinnedTokens([]);
         messaging.getSettings()
             .then((s) => {
                 if (cancelled) return;
                 const hides = Array.isArray(s?.hiddenTokens)
                     ? s.hiddenTokens.filter((k) => typeof k === 'string')
                     : [];
-                const pins = Array.isArray(s?.pinnedTokens)
-                    ? s.pinnedTokens.filter((k) => typeof k === 'string')
-                    : [];
+                const pins = pinnedTokensForWallet(s, walletId)
+                    .filter((k) => typeof k === 'string');
                 setHiddenTokens(hides);
                 setPinnedTokens(pins);
             })
             .catch(() => { /* empty hide/pin lists are fine defaults */ });
         return () => { cancelled = true; };
-    }, [messaging]);
+    }, [messaging, walletId]);
 
     useEffect(() => {
         if (!walletId) return undefined;
@@ -280,6 +284,21 @@ export function TokenPicker({
 
     const hiddenSet = useMemo(() => new Set(hiddenTokens), [hiddenTokens]);
     const pinnedSet = useMemo(() => new Set(pinnedTokens), [pinnedTokens]);
+    const handleTogglePin = useCallback((key, nextPinned) => {
+        if (typeof key !== 'string' || !key) return;
+        setPinnedTokens((previous) => {
+            const nextSet = new Set(previous);
+            if (nextPinned) nextSet.add(key);
+            else nextSet.delete(key);
+            const next = Array.from(nextSet);
+            if (typeof messaging?.updateSettings === 'function') {
+                messaging.updateSettings(
+                    pinnedTokensPatchForWallet(walletId, next),
+                ).catch(() => {});
+            }
+            return next;
+        });
+    }, [messaging, walletId]);
 
     // Platform discovery (receive only): when the user types a partial
     // ticker, substring-search every chain the wallet has addresses on and
@@ -577,6 +596,7 @@ export function TokenPicker({
                             getRowActionLabel={tokenSelectionLabel}
                             hiddenKeys={hiddenSet}
                             pinnedKeys={pinnedSet}
+                            onTogglePin={handleTogglePin}
                             allowRemoteImages={allowRemoteImages}
                             getRowTabIndex={(row) => (
                                 `${row.chainId}:${row.tick}` === optionTabStop ? 0 : -1

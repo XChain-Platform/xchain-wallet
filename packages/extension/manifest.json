@@ -21,6 +21,20 @@
             "128": "icons/icon-128.png"
         }
     },
+    "commands": {
+        "open-wallet": {
+            "suggested_key": {
+                "default": "Alt+Shift+X"
+            },
+            "description": "Open XChain Wallet"
+        },
+        "lock-wallet": {
+            "suggested_key": {
+                "default": "Alt+Shift+L"
+            },
+            "description": "Lock XChain Wallet"
+        }
+    },
     "side_panel": {
         "default_path": "sidepanel.html"
     },

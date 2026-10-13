@@ -13,11 +13,11 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    transition: color 0.12s ease;
 }
 /* Hover state highlights the chevron itself (color shift) instead of
    painting a muted-bg box behind it - the box rendered as a heavy
    dark rectangle in dark mode. Matches TokenDetail.module.css. */
-.back { transition: color 0.12s ease; }
 .back:hover {
     background: transparent;
     color: color-mix(in srgb, var(--xc-accent-primary) 70%, white 30%);

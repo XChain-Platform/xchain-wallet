@@ -23,6 +23,7 @@ import {
     formatFiatAmount as formatFiatValue,
     formatFiatAmountForSpeech,
 } from '../utils/fiatAmountFormat.js';
+import { percentChangeDisplay } from '../utils/percentFormat.js';
 
 /**
  * Hero block at the top of Home: total fiat value across every
@@ -141,12 +142,14 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
     const filterLabel = networkFilter === 'all' ? null : networkFilter.toUpperCase();
     const hasUnpriced = unpriced > 0;
     const hasSync = typeof lastSyncedAt === 'number' && lastSyncedAt > 0;
+    const stalePriceAsOf = oldestStalePriceTimestamp(rows);
     const hasPriceSync = typeof pricesFetchedAt === 'number' && pricesFetchedAt > 0;
     const hasChange = !hidden
         && change24h
         && Number.isFinite(change24h.delta)
         && Number.isFinite(change24h.pct);
-    const showMeta = !hidden && (hasChange || hasUnpriced || hasSync || hasPriceSync);
+    const changeDisplay = hasChange ? percentChangeDisplay(change24h.pct) : null;
+    const showMeta = !hidden && (hasChange || hasUnpriced || hasSync || hasPriceSync || stalePriceAsOf !== null);
 
     return (
         // Home's rows hold only the ACTIVE address on each chain (Home.jsx), so
@@ -274,15 +277,15 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                         {hasChange ? (
                             <span
                                 className={
-                                    change24h.delta > 0 ? styles.changePositive
-                                        : change24h.delta < 0 ? styles.changeNegative
+                                    changeDisplay.direction === 'positive' ? styles.changePositive
+                                        : changeDisplay.direction === 'negative' ? styles.changeNegative
                                         : styles.changeNeutral
                                 }
-                                aria-label={`${change24h.delta > 0 ? 'Gained' : change24h.delta < 0 ? 'Lost' : 'No change'}, ${formatFiatAmountForSpeech(Math.abs(change24h.delta), fiatCurrency, fiatLocale)}, ${Math.abs(change24h.pct).toFixed(2)} percent`}
+                                aria-label={`${changeDisplay.label}; ${formatFiatAmountForSpeech(Math.abs(change24h.delta), fiatCurrency, fiatLocale)}`}
                             >
-                                {change24h.delta > 0 ? '▲' : change24h.delta < 0 ? '▼' : '-'}{' '}
+                                {changeDisplay.direction === 'positive' ? '▲' : changeDisplay.direction === 'negative' ? '▼' : '-'}{' '}
                                 {formatFiatAmount(Math.abs(change24h.delta), fiatCurrency, fiatLocale)}{' '}
-                                ({change24h.pct > 0 ? '+' : ''}{change24h.pct.toFixed(2)}%)
+                                ({changeDisplay.text})
                             </span>
                         ) : null}
                         {hasUnpriced ? (
@@ -298,7 +301,14 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                             className={styles.metaRight}
                         />
                     ) : null}
-                    {hasPriceSync ? (
+                    {stalePriceAsOf !== null ? (
+                        <StalenessLabel
+                            lastSyncedAt={stalePriceAsOf}
+                            prefix="Prices as of"
+                            warnAfterMs={0}
+                            className={styles.metaRight}
+                        />
+                    ) : hasPriceSync ? (
                         <StalenessLabel
                             lastSyncedAt={pricesFetchedAt}
                             prefix="Prices updated"
@@ -310,6 +320,17 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
             ) : null}
         </section>
     );
+}
+
+function oldestStalePriceTimestamp(rows) {
+    let oldest = null;
+    for (const row of rows || []) {
+        if (row?.fiatRateStale !== true || typeof row.fiatRate !== 'number') continue;
+        const timestamp = Date.parse(row.fiatRateFetchedAt);
+        if (!Number.isFinite(timestamp)) continue;
+        if (oldest === null || timestamp < oldest) oldest = timestamp;
+    }
+    return oldest;
 }
 
 // The "not priced" note, naming coins and tokens apart: BTC, LTC and DOGE

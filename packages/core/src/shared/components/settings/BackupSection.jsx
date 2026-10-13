@@ -58,6 +58,7 @@ import { copyText } from '../../clipboard.js';
 import { useHapticFeedback } from '../../hooks/useHaptic.js';
 import { useLongOperationStatus } from '../../hooks/useLongOperationStatus.js';
 import { ADDRESS_TYPE_LABEL } from '../../utils/addressTypeLabel.js';
+import { RECOVERY_PHRASE_WARNING } from '../../utils/securityMomentCopy.js';
 import { ROW, ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
 import styles from './BackupSection.module.css';
 
@@ -451,7 +452,7 @@ export function BackupSection({ activeWallet }) {
             {revealStage === 'password' ? (
                 <UnlockPrompt
                     label="Reveal recovery phrase"
-                    hint="Enter your wallet password. The recovery phrase is the master key: anyone who sees it can spend your funds. Make sure no one is looking over your shoulder."
+                    hint={`Enter your wallet password. ${RECOVERY_PHRASE_WARNING} Make sure no one is looking over your shoulder.`}
                     busy={revealing}
                     onCancel={() => { setRevealStage('idle'); setRevealError(null); }}
                     onSubmit={(pw) => onReveal(pw)}
@@ -702,9 +703,8 @@ function UnlockPrompt({ label, hint, busy, error, onCancel, onSubmit }) {
  * §15.6: a wallet with a stored 25th-word passphrase shows it under the
  * words, behind the same tap-to-reveal blur and the same password gate
  * as the seed itself. There is no separate reveal toggle and no copy
- * control for it, matching the seed row above (see the "never paste it
- * into anything else" hint), since a clipboard write here would
- * contradict that same sentence. A wallet without `passphraseEnabled`
+ * control for it, matching the seed row above, because clipboard
+ * contents are available to other apps. A wallet without `passphraseEnabled`
  * renders nothing extra; a legacy wallet that has not captured its
  * passphrase yet (`passphraseEnabled` true, nothing stored) gets one
  * line saying so instead of a blank row.
@@ -734,9 +734,8 @@ function RevealedMnemonic({
             </div>
             <div className={styles.sheetMeta}>Wallet: {walletName}</div>
             <div style={ROW_HINT}>
-                Write it on paper or store it in a password manager. Never type or
-                paste it into anything else. The wallet has nothing else that can
-                recover this. Losing the seed and your password loses the funds.
+                {RECOVERY_PHRASE_WARNING} Write it on paper or store it in a
+                password manager.
             </div>
             <button
                 type="button"

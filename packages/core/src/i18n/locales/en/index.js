@@ -45,6 +45,7 @@ export const en = {
     'common.done': 'Done',
     'common.loading': 'Loading…',
     'common.password': 'Password',
+    'common.contactName': 'Contact name',
 
     // --- home -----------------------------------------------------
     'home.receive': 'Receive',
@@ -70,7 +71,7 @@ export const en = {
         "Your transaction is signed but couldn't reach the network just now. It's waiting in the queued-transactions banner and won't go out until you broadcast it from there; the wallet reminds you when the network is back. Don't send this payment again.",
     'send.success.broadcastPending': 'Broadcast pending',
     'send.success.broadcastPendingBody':
-        'Your transaction is on its way. It will confirm in the next few blocks; you can leave this screen at any time.',
+        'Your transaction was broadcast but is not confirmed yet. Confirmation time depends on the selected network and fee.',
     'send.success.copyTransactionId': 'Copy transaction id',
     'send.success.copy': 'Copy',
     'send.success.viewOnExplorer': 'View on explorer',
@@ -132,7 +133,6 @@ export const en = {
     'send.paste.checkLabel': 'Check pasted recipient',
     'send.paste.checkHint': 'Compare the first and last 6 characters.',
     'send.saveRecipient.open': 'Save recipient',
-    'send.saveRecipient.nameLabel': 'Contact name',
     'send.saveRecipient.save': 'Save contact',
     'send.saveRecipient.saving': 'Saving…',
     'send.saveRecipient.saved': 'Recipient saved to contacts.',
@@ -238,6 +238,9 @@ export const en = {
     'history.title': 'History',
     'history.refresh': 'Refresh history',
     'history.refreshing': 'Refreshing history',
+    'history.offline.cached': 'You are offline. Showing the last saved history. Network actions will be available when your connection returns.',
+    'history.offline.empty': 'You are offline. Connect to load history and use network actions.',
+    'history.offline.refreshFailed': 'Could not refresh history. Showing the last saved history.',
     'history.showMore': 'Show more history',
     'history.itemsShown': '{shown} of {total} history items shown',
     'history.showMoreGroupEntries': 'Show more group entries ({shown} of {total} shown)',
@@ -305,7 +308,6 @@ export const en = {
         'Peer chain not bundled in this wallet; open the block explorer for {ticker} to view {ticker} #{index}.',
     'history.detail.openNewWindow': 'Open in new window',
     'history.contact.saveAs': 'Save {address} as',
-    'history.contact.name': 'Contact name',
     'history.contact.save': 'Save',
     'history.copy.clipboard': 'Copy to clipboard',
     'history.copy.copied': 'Copied',
@@ -368,7 +370,6 @@ export const en = {
     'pending.row.dropped': 'no longer seen by network',
     'pending.row.replaced': 'replaced',
     'pending.row.confirmed': 'confirmed',
-    'pending.row.generic': 'pending',
     // The wallet gave up before the network took the send. Its own record is
     // the only trace, so the row says so plainly rather than "pending".
     'pending.row.failed': 'failed, never sent',

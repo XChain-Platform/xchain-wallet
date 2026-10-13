@@ -17,6 +17,7 @@ import { isDemoGatedActionIndex } from '../../flows/demoGatedContent.js';
 import { StalenessLabel } from '../components/StalenessLabel.jsx';
 import { GatedFileViewer } from '../components/GatedFileViewer.jsx';
 import { Sparkline, synthesizeTokenChart } from '../components/Sparkline.jsx';
+import tableStyles from '../components/DataTable.module.css';
 import { isDemoWallet } from '../../flows/demoMode.js';
 import { RANGES as CHART_RANGES, resampleTo as resampleSeriesTo } from '../components/PortfolioChart.jsx';
 import portfolioChartStyles from '../components/PortfolioChart.module.css';
@@ -25,6 +26,7 @@ import { useIsTokenIssuer } from '../hooks/useIsTokenIssuer.js';
 import { useNativePrice } from '../hooks/useNativePrice.js';
 import { usePriceAlerts } from '../hooks/usePriceAlerts.js';
 import { PriceAlertForm } from '../components/PriceAlertForm.jsx';
+import { RouteErrorBoundary } from '../components/RouteErrorBoundary.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { usePortfolioChartVisible } from '../hooks/usePortfolioChartVisible.js';
@@ -45,10 +47,12 @@ import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import { extractHolderRows } from '../utils/holderRows.js';
 import { explorerPage, uniqueRows } from '../utils/pagedRows.js';
+import { percentChangeDisplay } from '../utils/percentFormat.js';
 import styles from './TokenDetail.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 const HOLDERS_PAGE_SIZE = 25;
+const HOLDER_WINDOW_SIZE = 100;
 
 /**
  * §27.6 token detail page (G071).
@@ -506,26 +510,36 @@ export function TokenDetail({
                     chart uses, so the toggle persists across both surfaces). */}
                 {chartVisible ? (
                     <div className={`${styles.infoCard} ${styles.marketCardOffset}`}>
-                        <MarketPanel
-                            isNative={isNative}
-                            nativePrice={nativePrice}
-                            showNativeStats={showNativeStats}
-                            showSparkline={showSparkline}
-                            isDemo={isDemo}
-                            assetInfo={assetInfo}
-                            tick={tick}
-                            chainId={chainId}
-                            hasMarketData={hasMarketData}
-                            fiatRate={fiatRate}
-                            fiatRateSource={fiatRateSource}
-                            fiatCurrency={fiatCurrency}
-                        />
+                        <RouteErrorBoundary
+                            variant="compact"
+                            resetKey={`${chainId}:${tick}:market`}
+                        >
+                            <MarketPanel
+                                isNative={isNative}
+                                nativePrice={nativePrice}
+                                showNativeStats={showNativeStats}
+                                showSparkline={showSparkline}
+                                isDemo={isDemo}
+                                assetInfo={assetInfo}
+                                tick={tick}
+                                chainId={chainId}
+                                hasMarketData={hasMarketData}
+                                fiatRate={fiatRate}
+                                fiatRateSource={fiatRateSource}
+                                fiatCurrency={fiatCurrency}
+                            />
+                        </RouteErrorBoundary>
                     </div>
                 ) : null}
 
                 {!isNative && supplyHistory.length >= 2 ? (
                     <div className={styles.infoCard}>
-                        <SupplyChart points={supplyHistory} divisibility={divisibility} tick={tick} />
+                        <RouteErrorBoundary
+                            variant="compact"
+                            resetKey={`${chainId}:${tick}:supply`}
+                        >
+                            <SupplyChart points={supplyHistory} divisibility={divisibility} tick={tick} />
+                        </RouteErrorBoundary>
                     </div>
                 ) : null}
 
@@ -666,6 +680,7 @@ export function TokenDetail({
                                         displayName={displayName || tick}
                                     />
                                     <HoldersPanel
+                                        holderListScope={`${chainId}:${tick}`}
                                         holders={holders}
                                         holdersLoading={holdersLoading}
                                         holdersError={holdersError}
@@ -823,6 +838,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
     let priceLabel = 'Price';
     let marketCapCell = 'N/A';
     let floorCell = 'N/A';
+    let pctLabel24h;
     let pctTone24h;
     let pct24h = 'N/A';
     let sparkline = null;
@@ -838,8 +854,10 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
             if (e.priceFiat != null) priceCell = formatFiat(e.priceFiat, fiatCurrency);
             if (e.marketCapFiat != null) marketCapCell = formatCompactFiat(e.marketCapFiat, fiatCurrency);
             if (e.change24hPct != null) {
-                pct24h = formatPct(e.change24hPct);
-                pctTone24h = pctTone(e.change24hPct);
+                const display = percentChangeDisplay(e.change24hPct);
+                pct24h = display?.text ?? 'N/A';
+                pctLabel24h = display?.label;
+                pctTone24h = display?.direction;
             }
             if (showSparkline && range.realCapable && Array.isArray(e.sparkline) && e.sparkline.length >= 2) {
                 // Real CoinGecko sparkline = 168 hourly points (7d).
@@ -869,7 +887,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
                 <section className={styles.stats}>
                     <StatCell label="Price" value={priceCell} />
                     <StatCell label="Market cap" value={marketCapCell} />
-                    <StatCell label="24h" value={pct24h} tone={pctTone24h} />
+                    <StatCell label="24h" value={pct24h} valueLabel={pctLabel24h} tone={pctTone24h} />
                 </section>
                 {/* Range tabs show only when some range can carry a line: a real
                     series exists, or the wallet is a demo wallet. */}
@@ -939,8 +957,10 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
         if (isDemo) {
             const synth = synthesizeTokenChart(`${chainId}|${tick}|native|${range.id}`, marketPriceNum, range.points);
             if (synth.change24hPct != null) {
-                pct24h = formatPct(synth.change24hPct);
-                pctTone24h = pctTone(synth.change24hPct);
+                const display = percentChangeDisplay(synth.change24hPct);
+                pct24h = display?.text ?? 'N/A';
+                pctLabel24h = display?.label;
+                pctTone24h = display?.direction;
             }
             sparkline = synth.sparkline;
         }
@@ -950,8 +970,10 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
         if (isDemo) {
             const synth = synthesizeTokenChart(`${chainId}|${tick}|fiat|${range.id}`, fiatRate, range.points);
             if (synth.change24hPct != null) {
-                pct24h = formatPct(synth.change24hPct);
-                pctTone24h = pctTone(synth.change24hPct);
+                const display = percentChangeDisplay(synth.change24hPct);
+                pct24h = display?.text ?? 'N/A';
+                pctLabel24h = display?.label;
+                pctTone24h = display?.direction;
             }
             sparkline = synth.sparkline;
         }
@@ -964,7 +986,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
             <section className={styles.stats}>
                 <StatCell label={priceLabel} value={priceCell} />
                 <StatCell label="Market cap" value={marketCapCell} />
-                <StatCell label="24h" value={pct24h} tone={pctTone24h} />
+                <StatCell label="24h" value={pct24h} valueLabel={pctLabel24h} tone={pctTone24h} />
             </section>
             {sparkline ? (
                 <div
@@ -1213,7 +1235,7 @@ function DnsBlock({ dns }) {
     return (
         <div className={styles.metaBlock}>
             <h2 className={styles.metaBlockTitle}>DNS</h2>
-            <table className={styles.metaTable}>
+            <table className={styles.metaTable} aria-label="DNS records">
                 <tbody>
                     {dns.map((r, i) => (
                         <tr key={`${r.type}:${r.host}:${i}`} className={styles.metaRow}>
@@ -1435,7 +1457,7 @@ function OwnerBlock({ owner }) {
     return (
         <div className={styles.metaBlock}>
             <h2 className={styles.metaBlockTitle}>Owner</h2>
-            <table className={styles.metaTable}>
+            <table className={styles.metaTable} aria-label="Token owner">
                 <tbody>
                     {owner.name ? (
                         <tr className={styles.metaRow}>
@@ -1473,7 +1495,7 @@ function ContactsBlock({ contacts }) {
     return (
         <div className={styles.metaBlock}>
             <h2 className={styles.metaBlockTitle}>Contact</h2>
-            <table className={styles.metaTable}>
+            <table className={styles.metaTable} aria-label="Token contacts">
                 <tbody>
                     {contacts.map((c, i) => {
                         const label = CONTACT_LABELS[c.type] || (c.type.charAt(0).toUpperCase() + c.type.slice(1));
@@ -1511,7 +1533,7 @@ function CategoriesBlock({ categories }) {
     return (
         <div className={styles.metaBlock}>
             <h2 className={styles.metaBlockTitle}>Categories</h2>
-            <table className={styles.metaTable}>
+            <table className={styles.metaTable} aria-label="Token categories">
                 <tbody>
                     {categories.map((c, i) => (
                         <tr key={`${c.type}:${i}`} className={styles.metaRow}>
@@ -2274,6 +2296,7 @@ function UnlockedFileLink({ name, type, onOpen }) {
 }
 
 function HoldersPanel({
+    holderListScope,
     holders,
     holdersLoading,
     holdersError,
@@ -2285,6 +2308,14 @@ function HoldersPanel({
     onLoadMore,
     divisibility,
 }) {
+    const [holderWindow, setHolderWindow] = useState(() => ({
+        scope: '',
+        count: HOLDER_WINDOW_SIZE,
+    }));
+    const visibleHolderCount = holderWindow.scope === holderListScope
+        ? holderWindow.count
+        : HOLDER_WINDOW_SIZE;
+
     if (holdersLoading) return <p className={styles.muted}>Loading holders…</p>;
     if (holdersError) return <StatusMessage variant="error" className={styles.error}>{holdersError}</StatusMessage>;
     if (!holders || holders.length === 0) {
@@ -2293,6 +2324,17 @@ function HoldersPanel({
     const count = holdersTotal != null && holdersTotal > holders.length
         ? `${holders.length} of ${holdersTotal}`
         : String(holders.length);
+    const renderedHolders = holders.slice(0, visibleHolderCount);
+    const showMoreLoadedHolders = () => {
+        setHolderWindow((current) => ({
+            scope: holderListScope,
+            count: Math.min(
+                holders.length,
+                (current.scope === holderListScope ? current.count : HOLDER_WINDOW_SIZE)
+                    + HOLDER_WINDOW_SIZE,
+            ),
+        }));
+    };
     return (
         <section className={styles.infoCard} aria-label="Holders">
             <SectionHeader title={`Holders (${count})`} />
@@ -2301,32 +2343,47 @@ function HoldersPanel({
                     <StalenessLabel lastSyncedAt={holdersFetchedAt} warnAfterMs={10 * 60_000} />
                 </div>
             ) : null}
-            <ol className={styles.holdersList}>
-                {holders.map((h, i) => (
-                    <li key={holderIdentity(h) || `holder:${i}`} className={styles.holdersRow}>
-                        <span className={styles.holdersAddrWrap}>
-                            <span className={styles.holdersAddr} title={h.address || h.ADDRESS || undefined}>
-                                {shorten(h.address || h.ADDRESS || 'unknown')}
-                            </span>
-                            {(h.address || h.ADDRESS) ? (
-                                <CopyButton
-                                    value={h.address || h.ADDRESS}
-                                    ariaLabel={`Copy holder address ${i + 1}`}
-                                />
-                            ) : null}
-                        </span>
-                        <span className={styles.holdersQty}>
-                            {h.quantity != null || h.QUANTITY != null
-                                ? formatAmount(String(h.quantity ?? h.QUANTITY), divisibility)
-                                : formatWithThousands(String(h.amount ?? h.AMOUNT ?? '0'))}
-                        </span>
-                    </li>
-                ))}
-            </ol>
+            <table className={tableStyles.table}>
+                <caption className={tableStyles.visuallyHiddenCaption}>Holder balances</caption>
+                <thead>
+                    <tr>
+                        <th className={tableStyles.headerCell} scope="col">Address</th>
+                        <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Balance</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {renderedHolders.map((h, i) => (
+                        <tr key={holderIdentity(h) || `holder:${i}`}>
+                            <td className={tableStyles.cell} data-label="Address">
+                                <span className={styles.holdersAddrWrap}>
+                                    <span className={styles.holdersAddr} title={h.address || h.ADDRESS || undefined}>
+                                        {shorten(h.address || h.ADDRESS || 'unknown')}
+                                    </span>
+                                    {(h.address || h.ADDRESS) ? (
+                                        <CopyButton
+                                            value={h.address || h.ADDRESS}
+                                            ariaLabel={`Copy holder address ${i + 1}`}
+                                        />
+                                    ) : null}
+                                </span>
+                            </td>
+                            <td className={`${tableStyles.cell} ${tableStyles.numeric} ${styles.holdersQty}`} data-label="Balance">
+                                {h.quantity != null || h.QUANTITY != null
+                                    ? formatAmount(String(h.quantity ?? h.QUANTITY), divisibility)
+                                    : formatWithThousands(String(h.amount ?? h.AMOUNT ?? '0'))}
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
             {holdersMoreError ? (
                 <StatusMessage variant="error" className={styles.error}>{holdersMoreError}</StatusMessage>
             ) : null}
-            {holdersHasMore ? (
+            {visibleHolderCount < holders.length ? (
+                <Button type="button" variant="secondary" onClick={showMoreLoadedHolders}>
+                    Show more holders ({Math.min(visibleHolderCount, holders.length).toLocaleString('en-US')} of {holders.length.toLocaleString('en-US')} shown)
+                </Button>
+            ) : holdersHasMore ? (
                 <Button type="button" variant="secondary" loading={holdersLoadingMore} onClick={onLoadMore}>
                     Load more holders
                 </Button>
@@ -2339,14 +2396,14 @@ function holderIdentity(holder) {
     return holder?.address ?? holder?.ADDRESS ?? null;
 }
 
-function StatCell({ label, value, tone }) {
+function StatCell({ label, value, valueLabel, tone }) {
     const cls = tone === 'positive' ? styles.statValuePositive
         : tone === 'negative' ? styles.statValueNegative
         : styles.statValue;
     return (
         <div className={styles.statCell}>
             <div className={styles.statLabel}>{label}</div>
-            <div className={cls}>{value}</div>
+            <div className={cls} aria-label={valueLabel}>{value}</div>
         </div>
     );
 }
@@ -2359,19 +2416,6 @@ function formatCompactFiat(value, currency) {
     if (abs >= 1e6) return `${formatFiat(value / 1e6, currency)}M`;
     if (abs >= 1e3) return `${formatFiat(value / 1e3, currency)}K`;
     return formatFiat(value, currency);
-}
-
-function formatPct(pct) {
-    if (pct === null || pct === undefined || !isFinite(pct)) return 'N/A';
-    const sign = pct > 0 ? '+' : '';
-    return `${sign}${pct.toFixed(2)}%`;
-}
-
-function pctTone(pct) {
-    if (typeof pct !== 'number' || !isFinite(pct)) return undefined;
-    if (pct > 0) return 'positive';
-    if (pct < 0) return 'negative';
-    return undefined;
 }
 
 function kindLabel(kind) {

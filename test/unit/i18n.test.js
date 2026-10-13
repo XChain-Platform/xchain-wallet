@@ -10,10 +10,11 @@
 
 import { parse } from '@babel/parser';
 import _traverse from '@babel/traverse';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
     getLocale,
+    onLocaleChange,
     registerLocale,
     setLocale,
     t,
@@ -97,6 +98,20 @@ describe('translations', () => {
         expect(t('scan.title')).toBe('Scan');
     });
 
+    it('stamps root language metadata when the selected locale is already active', async () => {
+        document.documentElement.removeAttribute('dir');
+        document.documentElement.lang = 'stale';
+        const subscriber = vi.fn();
+        const unsubscribe = onLocaleChange(subscriber);
+
+        await setLocale('en');
+
+        expect(document.documentElement.lang).toBe('en');
+        expect(document.documentElement.dir).toBe('ltr');
+        expect(subscriber).not.toHaveBeenCalled();
+        unsubscribe();
+    });
+
     it('interpolates message variables', () => {
         expect(t('pending.detail.firstSeen', { when: 'just now' }))
             .toBe('First seen by the network just now');
@@ -110,6 +125,24 @@ describe('translations', () => {
 
         expect(t('test.addressCount', { count: 1 })).toBe('1 address');
         expect(t('test.addressCount', { count: 2 })).toBe('2 addresses');
+    });
+
+    it('keeps duplicate English text only when translation context differs', () => {
+        const keysByText = Object.entries(en).reduce((groups, [key, text]) => {
+            const keys = groups.get(text) ?? [];
+            keys.push(key);
+            groups.set(text, keys);
+            return groups;
+        }, new Map());
+        const duplicateKeyGroups = [...keysByText.values()]
+            .filter((keys) => keys.length > 1)
+            .map((keys) => keys.sort())
+            .sort((a, b) => a[0].localeCompare(b[0]));
+
+        expect(duplicateKeyGroups).toEqual([
+            ['home.receive', 'uri.intent.receive'],
+            ['send.title', 'uri.intent.send'],
+        ]);
     });
 
     it('reports a table-driven key from a new namespace as missing', () => {

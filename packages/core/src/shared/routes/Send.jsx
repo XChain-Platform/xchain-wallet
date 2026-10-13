@@ -42,7 +42,7 @@ import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { buildRecentDestinations } from '../../flows/recentDestinations.js';
-import { detectAddressCoin, isValidAddressForChain } from '../utils/addressValidation.js';
+import { addressValidationError, detectAddressCoin, isValidAddressForChain } from '../utils/addressValidation.js';
 import { neutralizeControlText, ZERO_WIDTH } from '../utils/textHardening.js';
 import { findLookalike } from '../utils/lookalike.js';
 import { checkPasteIntegrity } from '../utils/pasteIntegrity.js';
@@ -145,6 +145,44 @@ function isPositiveDecimalAmount(raw) {
     const value = String(raw ?? '').trim();
     return /^(?:\d+(?:\.\d+)?|\.\d+)$/.test(value) && /[1-9]/.test(value);
 }
+
+export function getUnusualSendWarnings({
+    sendTotals,
+    balances,
+    feeAmount,
+    nativeTicker,
+    isNativeSend,
+}) {
+    const warnings = [];
+    const balancesByTick = new Map((balances || []).map((balance) => [
+        String(balance?.tick || '').trim().toUpperCase(),
+        String(balance?.amount || '').trim(),
+    ]));
+
+    for (const total of sendTotals || []) {
+        const tick = String(total?.tick || '').trim().toUpperCase();
+        const balance = balancesByTick.get(tick);
+        if (!tick || compareDecimalStrings(balance, '0') !== 1) continue;
+        const threshold = multiplyDecimalStrings(balance, '0.9');
+        if (threshold !== null && compareDecimalStrings(total?.amount, threshold) === 1) {
+            warnings.push(`This sends more than 90% of your ${tick} balance.`);
+        }
+    }
+
+    if (isNativeSend && nativeTicker && feeAmount) {
+        const sent = (sendTotals || []).find(
+            (total) => String(total?.tick || '').trim().toUpperCase() === nativeTicker,
+        )?.amount;
+        const threshold = multiplyDecimalStrings(sent, '0.1');
+        if (threshold !== null && compareDecimalStrings(feeAmount, threshold) === 1) {
+            warnings.push(
+                `The network fee is more than 10% of the ${nativeTicker} amount you are sending.`,
+            );
+        }
+    }
+
+    return warnings;
+}
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -176,6 +214,7 @@ import {
     countNonCommaBefore,
     indexAfterNonCommaCount,
     compareDecimalStrings,
+    multiplyDecimalStrings,
     roundDecimalString,
 } from '../utils/amountFormat.js';
 import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
@@ -207,8 +246,6 @@ function nativeTickerFor(descriptor) {
     return tickerForDescriptor(descriptor);
 }
 
-const COIN_DISPLAY = { bitcoin: 'Bitcoin', litecoin: 'Litecoin', dogecoin: 'Dogecoin' };
-
 function utxoKey(utxo) {
     return `${utxo?.txid || ''}:${utxo?.vout ?? ''}`;
 }
@@ -239,28 +276,27 @@ function utxoOutpoint(utxo) {
 // Validate the destination against the chain the SEND will be broadcast on.
 // A SEND pays an on-chain output on that chain, so an address for another coin,
 // for the right coin on the wrong network, or simply mistyped, is unspendable:
-// the tokens are gone. `isValidAddressForChain` decodes the base58check checksum
+// the tokens are gone. `addressValidationError` decodes the base58check checksum
 // (or bech32) against that coin+network's parameters, so it catches all three -
 // unlike a leading-character guess, which passes any typo that preserves the
 // first letter and cannot tell mainnet from testnet on the shared 'm'/'n'/'2'
 // leaders. Returns an error string, or null when the address is good (or when
 // there is not yet a chain to validate against).
+const COIN_DISPLAY = { bitcoin: 'Bitcoin', litecoin: 'Litecoin', dogecoin: 'Dogecoin' };
+
 function destinationAddressError(address, descriptor) {
     const a = (address || '').trim();
-    if (!a || !descriptor?.coin || !descriptor?.networkKind) return null;
-    if (isValidAddressForChain(a, descriptor.coin, descriptor.networkKind)) return null;
-
-    const chainName = COIN_DISPLAY[descriptor.coin] || descriptor.coin;
-    // Name the coin it *does* look like when that's unambiguous: a much more
-    // useful error than "invalid" when someone pastes the wrong address.
-    const detected = detectAddressCoin(a);
-    if (detected && detected !== descriptor.coin) {
-        return `This looks like a ${COIN_DISPLAY[detected] || detected} address, not a ${chainName} address.`;
+    if (a && descriptor?.coin && descriptor?.networkKind
+        && !isValidAddressForChain(a, descriptor.coin, descriptor.networkKind)) {
+        // A different coin gets the plain "looks like" wording; the same coin on
+        // another network, or a checksum typo, takes the network-aware copy.
+        const detected = detectAddressCoin(a);
+        if (detected && detected !== descriptor.coin) {
+            const chainName = COIN_DISPLAY[descriptor.coin] || descriptor.coin;
+            return `This looks like a ${COIN_DISPLAY[detected] || detected} address, not a ${chainName} address.`;
+        }
     }
-    const where = descriptor.networkKind === 'mainnet'
-        ? chainName
-        : `${chainName} ${descriptor.networkKind}`;
-    return `This is not a valid ${where} address. Check it for typos.`;
+    return addressValidationError(address, descriptor);
 }
 
 function normalizePastedRecipient(value) {
@@ -310,8 +346,11 @@ function normalizePastedRecipient(value) {
  *        the card's copy says as much. Omit to hide the action.
  * @param {() => void} [props.onReceive] navigate to Receive when this wallet has no funds
  *        on the selected chain
+ * @param {() => void} [props.onDone]
+ *        Leaves a completed send for Home. Falls back to onBack for callers
+ *        that do not distinguish completion from ordinary back navigation.
  */
-export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsset, onViewHistory, onReceive }) {
+export function Send({ walletId, accountId, onBack, prefill = null, onDone, onChangeAsset, onViewHistory, onReceive }) {
     const { messaging, shell } = useMessaging();
     // Unlocked software session signs without a password.
     const signerReady = useSignerReady(walletId);
@@ -1628,6 +1667,25 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         };
     }, [previewBalances.sdkShape, tick]);
 
+    const unusualSendWarnings = useMemo(() => {
+        const exactFeeSats = confirmAction.composed?.networkFeeSats;
+        const feeAmount = Number.isSafeInteger(exactFeeSats) && exactFeeSats >= 0
+            ? decimalStringFromSats(BigInt(exactFeeSats))
+            : feeEstimate?.coinAmount;
+        const balances = previewBalances.sdkShape
+            ? decoderLib.balancesFromSdk(previewBalances.sdkShape)
+            : [];
+        return getUnusualSendWarnings({
+            sendTotals,
+            balances,
+            feeAmount,
+            nativeTicker: nativeTickerFor(descriptor),
+            isNativeSend,
+        });
+    }, [
+        confirmAction.composed?.networkFeeSats, feeEstimate?.coinAmount,
+        previewBalances.sdkShape, sendTotals, descriptor, isNativeSend,
+    ]);
     const nativeSourceBalance = useMemo(() => {
         if (!previewBalances.sdkShape) return null;
         const nativeTicker = String(previewBalances.sdkShape.native?.tick || '').toUpperCase();
@@ -2374,6 +2432,13 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             </div>
         </div>
     ) : null;
+    const unusualSendWarningBlock = unusualSendWarnings.length > 0 ? (
+        <div role="alert" className={styles.warnings} data-testid="send-unusual-warnings">
+            {unusualSendWarnings.map((warning) => (
+                <p key={warning} className={styles.warning}>{warning}</p>
+            ))}
+        </div>
+    ) : null;
 
     // §20: signer mode does not spend. The Wallet Mode screen
     // promises "Send / receive screens are hidden; this wallet does not
@@ -2480,6 +2545,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                 hwRequireExplicitConfirmReason={signRisk.reason}
                 extraCredentials={(
                     <>
+                        {unusualSendWarningBlock}
                         {dispenserNoticeBlock}
                         <dl className={styles.advancedReviewList} aria-label={t('send.advanced.label')}>
                             <DetailRow label={t('send.memo')} value={trimmedMemo || t('send.advanced.none')} />
@@ -2571,7 +2637,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         // PSBT instead of a broadcast txid; render the export UI (paste +
         // animated QR) so the user can transport it to a Signer-mode wallet.
         if (result?.psbtHex && !txid) {
-            return wrap(<WatcherResultPanel result={result} onSendAnother={sendAnother} onDone={leaveGuard.guardedOnBack} />);
+            return wrap(<WatcherResultPanel result={result} onSendAnother={sendAnother} onDone={onDone || leaveGuard.guardedOnBack} />);
         }
 
         // §5.3.4 TRANSIENT broadcast failure: the transaction IS signed and
@@ -2597,7 +2663,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                         </p>
                     </div>
                     <div className={styles.actions}>
-                        <Button variant="primary" onClick={leaveGuard.guardedOnBack}>{t('common.done')}</Button>
+                        <Button variant="primary" onClick={onDone || leaveGuard.guardedOnBack}>{t('common.done')}</Button>
                     </div>
                 </>,
             );
@@ -2605,12 +2671,14 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
 
         return wrap(
             <>
-                <div className={styles.successCard} role="status" aria-live="polite">
+                <div className={styles.successCard}>
                     <div className={styles.successIcon} aria-hidden="true">✓</div>
-                    <h2 className={styles.successTitle}>{t('send.success.broadcastPending')}</h2>
-                    <p className={styles.successHint}>
-                        {t('send.success.broadcastPendingBody')}
-                    </p>
+                    <div role="status" aria-live="polite" aria-atomic="true">
+                        <h2 className={styles.successTitle}>{t('send.success.broadcastPending')}</h2>
+                        <p className={styles.successHint}>
+                            {t('send.success.broadcastPendingBody')}
+                        </p>
+                    </div>
                     {sentAmount || recipient ? (
                         <dl className={styles.successSummary}>
                             {sentAmount ? (
@@ -2628,7 +2696,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                             {desc ? (
                                 <div className={styles.successRow}>
                                     <dt>{t('send.fields.chain')}</dt>
-                                    <dd>{desc.displayName}</dd>
+                                    <dd><ChainBadge descriptor={desc} /></dd>
                                 </div>
                             ) : null}
                         </dl>
@@ -2674,7 +2742,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                 {contactSaveStage === 'editing' || contactSaveStage === 'saving' ? (
                     <form className={styles.saveRecipient} onSubmit={saveRecipient}>
                         <Input
-                            label={t('send.saveRecipient.nameLabel')}
+                            label={t('common.contactName')}
                             value={contactName}
                             onChange={(event) => {
                                 setContactName(event.target.value);
@@ -2723,7 +2791,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                     <Button variant="secondary" onClick={sendAnother}>
                         {t('send.success.sendAnother')}
                     </Button>
-                    <Button variant="primary" onClick={leaveGuard.guardedOnBack}>{t('common.done')}</Button>
+                    <Button variant="primary" onClick={onDone || leaveGuard.guardedOnBack}>{t('common.done')}</Button>
                 </div>
             </>,
         );
@@ -2833,6 +2901,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                         ))}
                     </div>
                 ) : null}
+                {unusualSendWarningBlock}
                 {testSendGateBanner}
                 <RawPsbtViewer
                     developerMode={developerMode}
@@ -3498,7 +3567,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                                     disabled={selectedUtxos.length === 0}
                                     onClick={() => setSelectedUtxoKeys(new Set())}
                                 >
-                                    {t('send.advanced.clearSelection')}
+                                    {t('common.clear')}
                                 </button>
                             </span>
                         </div>

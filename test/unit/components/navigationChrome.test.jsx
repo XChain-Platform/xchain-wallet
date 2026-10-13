@@ -9,8 +9,8 @@
 // contact legal@dankest.llc.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { userEvent } from '../../helpers/userEvent.js';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { userEvent as keyboardUser } from '../../helpers/userEvent.js';
 import { AppHeader } from '../../../packages/core/src/shared/components/AppHeader.jsx';
 import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
 import {
@@ -21,6 +21,46 @@ import {
 import { Screen, ScrollRestoration } from '../../../packages/core/src/ui/Screen.jsx';
 
 afterEach(() => cleanup());
+
+const TABBABLE = [
+    'a[href]',
+    'button:not([disabled])',
+    'input:not([disabled]):not([type="hidden"])',
+    'select:not([disabled])',
+    'textarea:not([disabled])',
+    '[tabindex]:not([tabindex="-1"])',
+].join(',');
+
+// The workspace does not install @testing-library/user-event, so this local
+// driver supplies its Tab behavior without adding a package for one test.
+const userEvent = {
+    tab({ shift = false } = {}) {
+        const active = document.activeElement || document.body;
+        const movesNatively = fireEvent.keyDown(active, {
+            key: 'Tab',
+            code: 'Tab',
+            shiftKey: shift,
+        });
+        if (movesNatively) {
+            const tabbable = [...document.querySelectorAll(TABBABLE)]
+                .filter((element) => !element.closest('[inert]') && element.tabIndex >= 0);
+            const current = tabbable.indexOf(active);
+            const next = shift
+                ? (current <= 0 ? tabbable.length - 1 : current - 1)
+                : (current + 1) % tabbable.length;
+            tabbable[next]?.focus();
+        }
+        fireEvent.keyUp(document.activeElement || active, {
+            key: 'Tab',
+            code: 'Tab',
+            shiftKey: shift,
+        });
+    },
+};
+
+const settleFocus = () => act(async () => {
+    await new Promise((resolve) => { setTimeout(resolve, 25); });
+});
 
 const NAV_ITEMS = [
     'home',
@@ -107,7 +147,7 @@ describe('navigation route highlighting', () => {
 
 describe('More sheet dismissal', () => {
     it('roves one bottom-bar tab stop and supports jump keys', async () => {
-        const user = userEvent.setup();
+        const user = keyboardUser.setup();
         const onSelect = vi.fn();
         render(<BottomTabBar currentView="home" onSelect={onSelect} />);
         const tabs = ['Home', 'History', 'Send', 'Scan', 'More'].map((name) => (
@@ -165,6 +205,89 @@ describe('More sheet dismissal', () => {
 
         expect(screen.queryByRole('dialog', { name: 'More' })).toBeNull();
         expect(more).toHaveFocus();
+    });
+
+    it('traps user-event Tab in the sheet and restores More on close', async () => {
+        render(
+            <>
+                <button type="button">Before navigation</button>
+                <BottomTabBar
+                    currentView="home"
+                    onSelect={() => {}}
+                    onLock={() => {}}
+                    onOpenSettings={() => {}}
+                />
+                <button type="button">After navigation</button>
+            </>,
+        );
+        const more = screen.getByRole('button', { name: 'More' });
+        more.focus();
+        fireEvent.click(more);
+        await settleFocus();
+
+        const receive = screen.getByRole('button', { name: 'Receive' });
+        const lock = screen.getByRole('button', { name: 'Lock' });
+        expect(receive).toHaveFocus();
+
+        lock.focus();
+        userEvent.tab();
+        expect(receive).toHaveFocus();
+        userEvent.tab({ shift: true });
+        expect(lock).toHaveFocus();
+        expect(screen.getByRole('button', { name: 'After navigation' })).not.toHaveFocus();
+
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(more).toHaveFocus();
+    });
+});
+
+describe('navigation Tab order', () => {
+    it('enters the bottom bar at its one roving tab stop and leaves on the next Tab', () => {
+        render(
+            <>
+                <button type="button">Before navigation</button>
+                <BottomTabBar currentView="home" onSelect={() => {}} />
+                <button type="button">After navigation</button>
+            </>,
+        );
+        screen.getByRole('button', { name: 'Before navigation' }).focus();
+
+        // Arrow keys move between the tabs; Tab passes over the rest of the bar.
+        for (const label of ['Home', 'After navigation']) {
+            userEvent.tab();
+            expect(screen.getByRole('button', { name: label })).toHaveFocus();
+        }
+    });
+
+    it('reaches every side navigation action in DOM order', () => {
+        render(
+            <>
+                <button type="button">Before navigation</button>
+                <LeftNav
+                    currentView="home"
+                    onSelect={() => {}}
+                    onCommandPalette={() => {}}
+                    onOpenWalletPicker={() => {}}
+                    onOpenSettings={() => {}}
+                    onLock={() => {}}
+                    walletName="Main wallet"
+                    hasVmAddress
+                />
+                <button type="button">After navigation</button>
+            </>,
+        );
+        screen.getByRole('button', { name: 'Before navigation' }).focus();
+
+        const order = [
+            'Open command palette', 'Home', 'History', 'Send', 'Receive',
+            'Scan', 'DEX', 'Dispensers', 'Contracts', 'Messaging', 'Contacts',
+            'Lists', 'Payments due', 'Main wallet', 'Settings', 'Lock',
+            'After navigation',
+        ];
+        for (const label of order) {
+            userEvent.tab();
+            expect(screen.getByRole('button', { name: label })).toHaveFocus();
+        }
     });
 });
 

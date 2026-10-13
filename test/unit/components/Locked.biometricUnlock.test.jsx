@@ -96,6 +96,12 @@ afterEach(() => {
 });
 
 describe('Locked biometric unlock', () => {
+    it('focuses the password field when the lock screen mounts', async () => {
+        mount(provider({ isRegistered: vi.fn(() => false) }));
+
+        await waitFor(() => expect(screen.getByLabelText('Password')).toHaveFocus());
+    });
+
     it('shows the button only when a credential is enrolled and available', async () => {
         const unavailable = provider({ isSupported: vi.fn(async () => false) });
         mount(unavailable);

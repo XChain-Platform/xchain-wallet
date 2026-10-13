@@ -46,6 +46,7 @@ const balances = {
 function makeMessaging(overrides = {}) {
     return {
         getSettings: vi.fn().mockResolvedValue({}),
+        updateSettings: vi.fn().mockResolvedValue({}),
         getWalletBalances: vi.fn().mockResolvedValue(balances),
         getAddressesByChain: vi.fn().mockResolvedValue({
             'bitcoin-mainnet': [{ address: 'bc1qpicker' }],
@@ -76,6 +77,38 @@ afterEach(() => {
 });
 
 describe('TokenPicker asset visibility and filtering', () => {
+    it('shows persisted pins first and exposes an accessible persistent toggle', async () => {
+        const messaging = makeMessaging({
+            getSettings: vi.fn().mockResolvedValue({
+                pinnedTokens: ['bitcoin-mainnet:BTC'],
+                pinnedTokensByWallet: {
+                    'wallet-1': ['litecoin-mainnet:LTC'],
+                    'wallet-2': ['bitcoin-mainnet:BTC'],
+                },
+            }),
+        });
+        mount({ messaging });
+
+        const pinnedButton = await screen.findByRole('button', { name: 'Unpin LTC' });
+        expect(pinnedButton).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getAllByRole('listitem').map((item) => item.dataset.balanceKey))
+            .toEqual([
+                'litecoin-mainnet:LTC',
+                'bitcoin-mainnet:BTC',
+                'bitcoin-mainnet:WRP123',
+            ]);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Pin WRP123' }));
+        expect(await screen.findByRole('button', { name: 'Unpin WRP123' }))
+            .toHaveAttribute('aria-pressed', 'true');
+        expect(messaging.updateSettings).toHaveBeenCalledWith({
+            pinnedTokens: ['litecoin-mainnet:LTC', 'bitcoin-mainnet:WRP123'],
+            pinnedTokensByWallet: {
+                'wallet-1': ['litecoin-mainnet:LTC', 'bitcoin-mainnet:WRP123'],
+            },
+        });
+    });
+
     it('hides known zero balances for Send but keeps them available for Receive', async () => {
         const { unmount } = mount({ purpose: 'send' });
 
