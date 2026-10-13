@@ -465,11 +465,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const [searchQuery, setSearchQuery] = useState(initialSearchQuery || '');
     const [actionTypeFilter, setActionTypeFilter] = useState(/** @type {Set<string>} */ (new Set()));
     const [statusFilter, setStatusFilter] = useState(/** @type {Set<string>} */ (new Set()));
-    // Default to the last 30 days so a fresh History view surfaces
-    // recent activity without the user having to pick a range. ISO
-    // YYYY-MM-DD format matches what <input type="date"> expects.
-    const [dateFrom, setDateFrom] = useState(() => isoDateDaysAgo(30));
+    // The inclusive endpoints cover exactly 30 local calendar days.
+    const [dateFrom, setDateFrom] = useState(() => isoDateDaysAgo(29));
     const [dateTo, setDateTo] = useState(() => isoDateDaysAgo(0));
+    const [dateError, setDateError] = useState('');
     const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
     // The export modal controls only the file representation. Row selection
     // remains owned by the History filters so the file matches the list.
@@ -1051,6 +1050,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         setStatusFilter(new Set());
         setDateFrom('');
         setDateTo('');
+        setDateError('');
         setEnabledChains(new Set(activeChainIds));
         setCrossChainOnly(false);
         setMultisigOnly(false);
@@ -1078,14 +1078,42 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     };
 
     const updateDateFrom = (value) => {
+        if (value && dateTo && value > dateTo) {
+            setDateError('From date must be on or before To date.');
+            return;
+        }
         setDateFrom(value);
-        if (value && dateTo && value > dateTo) setDateTo(value);
+        setDateError('');
     };
 
     const updateDateTo = (value) => {
+        if (value && dateFrom && value < dateFrom) {
+            setDateError('To date must be on or after From date.');
+            return;
+        }
         setDateTo(value);
-        if (value && dateFrom && value < dateFrom) setDateFrom(value);
+        setDateError('');
     };
+
+    const setDatePreset = (days) => {
+        if (days == null) {
+            setDateFrom('');
+            setDateTo('');
+        } else {
+            setDateFrom(isoDateDaysAgo(days - 1));
+            setDateTo(isoDateDaysAgo(0));
+        }
+        setDateError('');
+    };
+
+    const todayIso = isoDateDaysAgo(0);
+    const activeDatePreset = !dateFrom && !dateTo
+        ? 'all'
+        : dateTo === todayIso && dateFrom === isoDateDaysAgo(6)
+            ? '7'
+            : dateTo === todayIso && dateFrom === isoDateDaysAgo(29)
+                ? '30'
+                : '';
 
     // For drawing the vertical connector: an entry is "threaded with
     // the entry above it" iff both sides are linked AND the row above
@@ -1418,6 +1446,38 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         className={styles.dateInput}
                     />
                 </div>
+                <div className={styles.dateTools}>
+                    <div className={styles.datePresets} role="group" aria-label="Date range presets">
+                        <button
+                            type="button"
+                            className={`${styles.chip} ${activeDatePreset === '7' ? styles.chipActive : ''}`}
+                            aria-pressed={activeDatePreset === '7'}
+                            onClick={() => setDatePreset(7)}
+                        >7 days</button>
+                        <button
+                            type="button"
+                            className={`${styles.chip} ${activeDatePreset === '30' ? styles.chipActive : ''}`}
+                            aria-pressed={activeDatePreset === '30'}
+                            onClick={() => setDatePreset(30)}
+                        >30 days</button>
+                        <button
+                            type="button"
+                            className={`${styles.chip} ${activeDatePreset === 'all' ? styles.chipActive : ''}`}
+                            aria-pressed={activeDatePreset === 'all'}
+                            onClick={() => setDatePreset(null)}
+                        >All</button>
+                    </div>
+                    <span className={styles.dateZone}>Day boundaries use local time.</span>
+                </div>
+                {dateError ? (
+                    <div className={styles.dateError} role="alert">{dateError}</div>
+                ) : null}
+                {dateFrom || dateTo ? (
+                    <div className={styles.activeDateRange}>
+                        <span>Active range: {dateFrom || 'any date'} to {dateTo || 'any date'}</span>
+                        <button type="button" onClick={() => setDatePreset(null)}>Clear date range</button>
+                    </div>
+                ) : null}
 
                 <div className={styles.filterFooter}>
                     <button
