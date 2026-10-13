@@ -311,7 +311,7 @@ function AppInner() {
     // {chainId, actionIndex, type, items} handed from ListDetail's
     // "Fork & edit" button into ListForkForm.
     const [listRef, setListRef] = useState(
-        /** @type {{ chainId: string, actionIndex: string } | null} */ (null),
+        /** @type {{ chainId: string, actionIndex: string, origin?: 'shared', directoryChainId?: string } | null} */ (null),
     );
     const [listForkRef, setListForkRef] = useState(
         /** @type {{ chainId: string, actionIndex: string, type: string, items: string[] } | null} */ (null),
@@ -1123,11 +1123,11 @@ function AppInner() {
                     <ListDetail
                         chainId={listRef.chainId}
                         actionIndex={listRef.actionIndex}
-                        onBack={() => setUnlockedView('lists')}
+                        onBack={() => setUnlockedView(listRef.origin === 'shared' ? 'shared-lists' : 'lists')}
                         onFork={(ref) => { setListForkRef(ref); setUnlockedView('list-fork'); }}
-                        onShare={(ref) => { setListRef(ref); setUnlockedView('list-share'); }}
-                        onTransfer={(ref) => { setListRef(ref); setUnlockedView('list-transfer'); }}
-                        onRename={(ref) => { setListRef(ref); setUnlockedView('list-rename'); }}
+                        onShare={listRef.origin === 'shared' ? undefined : (ref) => { setListRef(ref); setUnlockedView('list-share'); }}
+                        onTransfer={listRef.origin === 'shared' ? undefined : (ref) => { setListRef(ref); setUnlockedView('list-transfer'); }}
+                        onRename={listRef.origin === 'shared' ? undefined : (ref) => { setListRef(ref); setUnlockedView('list-rename'); }}
                     />
                 );
             }
@@ -1199,8 +1199,17 @@ function AppInner() {
                 return (
                     <SharedListDirectory
                         walletId={activeWalletId}
-                        chainId={listRef?.chainId || 'bitcoin-mainnet'}
+                        chainId={listRef?.directoryChainId || listRef?.chainId || 'bitcoin-mainnet'}
                         mode="browse"
+                        onOpenList={(chainId, actionIndex) => {
+                            setListRef({
+                                chainId,
+                                actionIndex,
+                                origin: 'shared',
+                                directoryChainId: listRef?.directoryChainId || listRef?.chainId || 'bitcoin-mainnet',
+                            });
+                            setUnlockedView('list-detail');
+                        }}
                         onBack={() => setUnlockedView('lists')}
                     />
                 );
