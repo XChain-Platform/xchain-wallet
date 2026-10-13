@@ -47,6 +47,7 @@ import {
     SIGN_THROTTLE_DEFAULT_BURST,
     SIGN_THROTTLE_DEFAULT_WINDOW_MS,
 } from '../../../flows/signThrottle.js';
+import { blurNumberInputOnWheel } from '../../utils/formInput.js';
 
 export function ConnectedSitesSection() {
     const { messaging } = useMessaging();
@@ -286,18 +287,25 @@ function BlocklistAuditPanel({ confirm }) {
     const [entries, setEntries] = useState(/** @type {any[] | null} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [clearing, setClearing] = useState(false);
+    const reloadRequestRef = useRef(0);
 
-    const reload = async () => {
+    const reload = useCallback(async () => {
+        const request = ++reloadRequestRef.current;
         try {
             const list = await messaging.listBlocklistAuditLog();
+            if (request !== reloadRequestRef.current) return;
             setEntries(Array.isArray(list) ? list : []);
             setError(null);
         } catch (err) {
+            if (request !== reloadRequestRef.current) return;
             setError(err instanceof Error ? err.message : String(err));
         }
-    };
+    }, [messaging]);
 
-    useEffect(() => { reload(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+    useEffect(() => {
+        reload();
+        return () => { reloadRequestRef.current += 1; };
+    }, [reload]);
 
     const onClear = async () => {
         if (clearing) return;
@@ -500,6 +508,7 @@ function SignThrottlePanel() {
                     type="number"
                     inputMode="numeric"
                     enterKeyHint="next"
+                    autoComplete="off"
                     min={SIGN_THROTTLE_BURST_MIN}
                     max={SIGN_THROTTLE_BURST_MAX}
                     step={1}
@@ -508,6 +517,7 @@ function SignThrottlePanel() {
                         setBurstInput(e.target.value);
                         if (error) setError(null);
                     }}
+                    onWheel={blurNumberInputOnWheel}
                     placeholder={String(SIGN_THROTTLE_DEFAULT_BURST)}
                     aria-label="Sign-throttle burst (max requests per window)"
                     style={{ width: '5rem' }}
@@ -516,8 +526,9 @@ function SignThrottlePanel() {
                     id="sign-throttle-window"
                     label="Window (seconds)"
                     type="number"
-                    inputMode="numeric"
+                    inputMode="decimal"
                     enterKeyHint="go"
+                    autoComplete="off"
                     min={SIGN_THROTTLE_WINDOW_MS_MIN / 1000}
                     max={SIGN_THROTTLE_WINDOW_MS_MAX / 1000}
                     step={0.001}
@@ -526,6 +537,7 @@ function SignThrottlePanel() {
                         setWindowSecondsInput(e.target.value);
                         if (error) setError(null);
                     }}
+                    onWheel={blurNumberInputOnWheel}
                     placeholder={String(SIGN_THROTTLE_DEFAULT_WINDOW_MS / 1000)}
                     aria-label="Sign-throttle window in seconds"
                     style={{ width: '5rem' }}

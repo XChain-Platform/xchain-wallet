@@ -1008,10 +1008,17 @@
 
 .resultsHeader {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: var(--xc-space-2);
     margin-bottom: var(--xc-space-2);
+}
+
+.resultsHeader > div {
+    min-width: 0;
+    flex-wrap: wrap;
+    justify-content: flex-end;
 }
 
 .exportControls {
@@ -1289,7 +1296,10 @@
     user-select: text;
 }
 
-/* Phone layouts keep the full filter form behind one compact disclosure. */
+/* Phone layouts keep the full filter form behind one compact disclosure.
+   Font-scaled phone layouts also wrap controls and row metadata, while detail
+   keys stack above their values. System text zoom does not reduce the CSS
+   viewport, so this reflow includes common 375px through 430px phone widths. */
 @media not all and (min-width: 480px) {
     .phoneFilterToggle {
         display: flex;
@@ -1308,12 +1318,7 @@
     .filterCard.filterCardOpen {
         display: flex;
     }
-}
 
-/* Compact history layouts wrap controls and row metadata, while detail keys
-   stack above their values. This keeps each piece of content in its own track
-   when the available width reaches the 320px phone viewport. */
-@media not all and (min-width: 400px) {
     .filterCard {
         min-width: 0;
     }

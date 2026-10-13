@@ -98,6 +98,9 @@ export async function checkReachability({
     if (!Array.isArray(chainIds) || chainIds.length === 0) {
         throw new Error('checkReachability: chainIds must be a non-empty array');
     }
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+        throw new Error('checkReachability: timeoutMs must be a positive number');
+    }
     const encoderProbe = probes.encoder === null
         ? null
         : probes.encoder ?? defaultEncoderProbe;
@@ -249,8 +252,8 @@ function rollupOverall(perChain) {
 
 /** @type {ServiceProbe} */
 async function defaultEncoderProbe(sdk) {
-    if (typeof sdk.pingEncoder === 'function') return sdk.pingEncoder();
-    if (sdk.encoder && typeof sdk.encoder.ping === 'function') return sdk.encoder.ping();
+    if (typeof sdk.pingEncoder === 'function') return assertPinged(await sdk.pingEncoder(), 'encoder');
+    if (sdk.encoder && typeof sdk.encoder.ping === 'function') return assertPinged(await sdk.encoder.ping(), 'encoder');
     throw new Error('encoder ping not available on SDK');
 }
 
@@ -269,14 +272,14 @@ async function defaultEncoderProbe(sdk) {
  * @type {ServiceProbe}
  */
 async function defaultHubProbe(sdk) {
-    if (typeof sdk.pingHub === 'function') return assertPinged(await sdk.pingHub());
-    if (sdk.hub && typeof sdk.hub.ping === 'function') return assertPinged(await sdk.hub.ping());
+    if (typeof sdk.pingHub === 'function') return assertPinged(await sdk.pingHub(), 'hub');
+    if (sdk.hub && typeof sdk.hub.ping === 'function') return assertPinged(await sdk.hub.ping(), 'hub');
     throw new Error('hub ping not available on SDK');
 }
 
 /** A probe that RESOLVES falsy is a failed probe, not a reachable service. */
-function assertPinged(result) {
-    if (result === false || result == null) throw new Error('hub ping reported unreachable');
+function assertPinged(result, service) {
+    if (result === false || result == null) throw new Error(`${service} ping reported unreachable`);
     return result;
 }
 
@@ -315,7 +318,7 @@ async function defaultExplorerProbe(sdk) {
             return await sdk.getStatus();
         } catch (e) {
             const msg = String(e?.message ?? e);
-            if (/\b(4\d\d|5\d\d)\b/.test(msg) || /status/i.test(msg)) return undefined;
+            if (/\b(4\d\d|5\d\d)\b/.test(msg)) return undefined;
             // A rate limit is the explorer answering, so it is reachable.
             if (explorerErrorCode(e) === 'RATE_LIMITED') return undefined;
             throw e;
@@ -336,7 +339,7 @@ async function defaultExplorerProbe(sdk) {
         // network/timeout error surfaces distinguishably and gets
         // propagated to mark the service unreachable.
         const msg = String(e?.message ?? e);
-        if (/\b(4\d\d|5\d\d)\b/.test(msg) || /status/i.test(msg)) return;
+        if (/\b(4\d\d|5\d\d)\b/.test(msg)) return;
         if (explorerErrorCode(e) === 'RATE_LIMITED') return;
         throw e;
     }

@@ -19,10 +19,10 @@
 //        widths (e.g., the popup viewport). Fix: `white-space: nowrap`
 //        on the base .btn class.
 //
-//   2026-10-13: superseded by the pseudo-long layout guard. A nowrap
-//        label pushed long translations past narrow screens, so the base
-//        .btn now wraps inside its own box (max-width: 100%, min-width: 0,
-//        overflow-wrap: anywhere) instead of overflowing it.
+//        Superseded 2026-10-13 by the pseudo-long layout guard: a nowrap
+//        label in a long locale was clipped to an ellipsis, hiding what the
+//        button does. Labels now wrap inside the button and break long words
+//        rather than overflow it, so the pin below is on that contract.
 
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -58,11 +58,13 @@ describe('regression/ui-button-defaults', () => {
         }
     });
 
-    it('[REGRESSION P1] base .btn wraps inside its box instead of overflowing', () => {
-        const base = css.match(/^\.btn\s*\{([^}]*)\}/m)?.[1] ?? '';
-        expect(base).toMatch(/max-width:\s*100%/);
-        expect(base).toMatch(/min-width:\s*0/);
-        expect(base).toMatch(/white-space:\s*normal/);
-        expect(base).toMatch(/overflow-wrap:\s*anywhere/);
+    it('[REGRESSION P1] base .btn wraps a long label inside the button instead of clipping it', () => {
+        const base = css.match(/(?:^|\n)\.btn\s*\{[^}]*\}/);
+        expect(base, 'base .btn rule').toBeTruthy();
+        expect(base[0]).toMatch(/white-space:\s*normal/);
+        expect(base[0]).toMatch(/overflow-wrap:\s*anywhere/);
+        expect(base[0]).toMatch(/max-width:\s*100%/);
+        expect(base[0]).toMatch(/min-width:\s*0/);
+        expect(base[0]).not.toMatch(/text-overflow:\s*ellipsis/);
     });
 });

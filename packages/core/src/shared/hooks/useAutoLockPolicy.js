@@ -155,9 +155,9 @@ export function useAutoLockPolicy({ sessionState, activeWalletId, onLocked } = {
     useEffect(() => {
         if (sessionState === 'loading') return;
         if (typeof messaging?.reportAutoLock !== 'function') return;
-        Promise.resolve(
-            messaging.reportAutoLock({ armed, idleMs }),
-        ).catch(() => { /* best-effort */ });
+        Promise.resolve()
+            .then(() => messaging.reportAutoLock({ armed, idleMs }))
+            .catch(() => { /* best-effort */ });
     }, [messaging, sessionState, armed, idleMs]);
 
     return { armed, idleMs, minutes, checkNow };

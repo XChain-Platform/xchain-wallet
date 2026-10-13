@@ -49,7 +49,10 @@ import { neutralizeControlText, ZERO_WIDTH } from '../utils/textHardening.js';
 import { findLookalike } from '../utils/lookalike.js';
 import { checkPasteIntegrity } from '../utils/pasteIntegrity.js';
 import { humanizeError } from '../utils/humanizeError.js';
-import { SIGNED_NOT_BROADCAST_TITLE } from '../utils/submitFailureMessage.js';
+import {
+    SIGNED_NOT_BROADCAST_TITLE,
+    submitFailureMessage,
+} from '../utils/submitFailureMessage.js';
 import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -509,12 +512,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     // Inline error on the To field, e.g. a wrong-chain destination address.
     const [toError, setToError] = useState(/** @type {string | null} */ (null));
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
-    // Raw backend/SDK/RPC error string kept for a collapsible "technical
-    // details" disclosure so debuggability is preserved without leading
-    // the review dialog with jargon.
-    const [submitErrorDetail, setSubmitErrorDetail] = useState(/** @type {string | null} */ (null));
-    // Recognized cause from humanizeError; recovery affordances key off
-    // this instead of re-parsing the displayed message text.
+    // Recognized recovery cause for affordances that must not match display copy.
     const [submitErrorCause, setSubmitErrorCause] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
@@ -603,8 +601,10 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     settings: loadedSettings,
                 }));
             })
-            .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || "Couldn't load addresses. Try again.");
+            .catch(() => {
+                if (!cancelled) {
+                    setLoadError("Couldn't load addresses. Check your connection and try again.");
+                }
             });
         return () => { cancelled = true; };
     }, [walletId, accountId, messaging, prefill?.chainId]);
@@ -883,6 +883,23 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         return `Looks ${pct}% similar to ${sourceLabel}: ${hit.match.address}. Double-check this is the address you mean.`;
     }, [toAddress, suggestions]);
 
+    const primaryRecipientNovelty = useMemo(() => {
+        const thresholdText = String(settings?.grace?.testSendThresholdSats ?? '0').trim();
+        const threshold = /^\d+$/.test(thresholdText) ? BigInt(thresholdText) : 0n;
+        if (threshold <= 0n) return null;
+        const dest = toAddress.trim();
+        const desc = chainId ? chainRegistry.get(chainId) : null;
+        if (!dest || !desc?.coin) return null;
+        const nativeTicker = nativeTickerFor(desc);
+        if (!nativeTicker || tick.trim().toUpperCase() !== nativeTicker) return null;
+        return checkRecipientNovelty({
+            address: dest,
+            chainCoin: desc.coin,
+            contacts,
+            historyRows,
+        });
+    }, [settings, toAddress, tick, chainId, contacts, historyRows]);
+
     // §21.4 test-send gate. Active when:
     //   - threshold > 0 (Settings → Safety → Test-send warning)
     //   - the send is a native-coin send (tick matches descriptor.coin
@@ -907,20 +924,14 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             : exactSatsBigIntFromDecimalString(amount, desc);
         if (amountSats === null || amountSats <= 0n) return null;
         if (amountSats <= threshold) return null;
-        const novelty = checkRecipientNovelty({
-            address: dest,
-            chainCoin: desc.coin,
-            contacts,
-            historyRows,
-        });
-        if (!novelty.novel) return null;
+        if (!primaryRecipientNovelty?.novel) return null;
         if (testedThisSession.has(dest)) return null;
         return {
             amountSats,
             threshold,
             ticker: nativeTicker,
         };
-    }, [settings, toAddress, tick, amount, chainId, contacts, historyRows, testedThisSession]);
+    }, [settings, toAddress, tick, amount, chainId, primaryRecipientNovelty, testedThisSession]);
 
     // §29.2 Max + §29.3 fiat toggle.
     // Fiat rate for the approximate-value preview + the optional fiat-entry mode.
@@ -1351,11 +1362,11 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 if (cancelled) return;
                 setPreviewBalances({ loading: false, error: null, sdkShape });
             })
-            .catch((err) => {
+            .catch(() => {
                 if (cancelled) return;
                 setPreviewBalances({
                     loading: false,
-                    error: err?.message || 'balance fetch failed',
+                    error: 'Balances could not be loaded. Check your connection and try again.',
                     sdkShape: null,
                 });
             });
@@ -1532,7 +1543,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         } catch (err) {
             if (!mountedRef.current || gatedProbeSeq.current !== seq) return;
             const bad = err?.name === 'WrongPasswordError' || err?.name === 'InvalidPasswordError';
-            setGatedScanError(bad ? 'Incorrect password.' : (err?.message || 'Could not recover unlock keys. Try again.'));
+            setGatedScanError(bad
+                ? 'Incorrect password.'
+                : 'Could not recover unlock keys. Check your connection and try again.');
         } finally {
             if (gatedProbeSeq.current === seq) gatedScanBusyRef.current = false;
             if (mountedRef.current && gatedProbeSeq.current === seq) setGatedScanBusy(false);
@@ -2099,6 +2112,18 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     }
 
     const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
+    const hasNovelSendRecipient = useMemo(() => {
+        const desc = chainId ? chainRegistry.get(chainId) : null;
+        if (!isHwSource || !desc?.coin) return false;
+        const sendLegs = [{ to: toAddress }, ...extraLegs.map((leg) => ({ to: leg.to }))];
+        const recipientNovel = sendLegs.some((leg) => leg.to.trim() && checkRecipientNovelty({
+            address: leg.to,
+            chainCoin: desc.coin,
+            contacts,
+            historyRows,
+        }).novel === true);
+        return recipientNovel;
+    }, [isHwSource, toAddress, extraLegs, chainId, contacts, historyRows]);
     const hwSignerInfo = useSignerInfo({
         walletId,
         signerId: isHwSource ? fromAddress?.signerId : null,
@@ -2122,30 +2147,17 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             && tick.trim().toUpperCase() === nativeTicker
             && sats !== null && sats > 0n;
         const amountSats = isNativeSend ? sats : 0n;
-        let recipientNovel = false;
-        // PC-52: ANY never-seen recipient makes the send novel, not just the
-        // first row. The cross-check exists so a hardware user verifies an
-        // unfamiliar address on the device, and a multi-recipient send has more
-        // addresses to get wrong, not fewer.
-        if (desc?.coin) {
-            recipientNovel = sendLegs.some((leg) => leg.to && checkRecipientNovelty({
-                address: leg.to,
-                chainCoin: desc.coin,
-                contacts,
-                historyRows,
-            }).novel === true);
-        }
         return classifySignRisk({
             signerKind: fromAddress?.source,
             amountSats,
-            recipientNovel,
+            recipientNovel: hasNovelSendRecipient,
             multisig: false, // Send.jsx is single-sig; multisig flow is separate.
             settings: {
                 testSendThresholdSats: settings?.grace?.testSendThresholdSats ?? '0',
                 alwaysRequireHwExplicitConfirm: settings?.privacy?.alwaysRequireHwExplicitConfirm === true,
             },
         });
-    }, [isHwSource, fromAddress?.source, chainId, tick, amount, sendLegs, contacts, historyRows, settings]);
+    }, [isHwSource, fromAddress?.source, chainId, tick, amount, hasNovelSendRecipient, settings]);
     // Reset the confirm state whenever the requirement flips on, so a
     // user can't carry a stale "yes" through a recipient/amount change.
     // Editing ANY recipient row counts as that change (PC-52).
@@ -2196,7 +2208,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 ...(createUndoSendRequest(settings) || {}),
             };
             setSubmitError(null);
-            setSubmitErrorDetail(null);
             setSubmitErrorCause(null);
             const res = await confirmAction.confirm({
                 chainId,
@@ -2293,16 +2304,17 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 showToast({ message: 'Transaction cancelled.' });
                 return;
             }
-            // User rejection is a calm no-op: stay on the form untouched.
+            // Rejection returns to the intact draft without carrying a signing
+            // credential into the next review.
             if (err && (err.reason === 'user-rejected' || err.name === 'UserRejectedError')) {
+                setPassword('');
                 return;
             }
             // Everything else (compose/tamper failure, bad password, broadcast
             // failure) surfaces in the form's existing error banner; the modal
             // has already unmounted (terminal phase leaves CONFIRM_MODAL_PHASES).
             console.error('Send (confirm) failed:', err); // eslint-disable-line no-console
-            const h = humanizeError(err, 'send');
-            setFormError(h.message);
+            setFormError(submitFailureMessage(err, { verb: 'send' }));
             haptic.error();
         } finally {
             confirmLaunchRef.current = false;
@@ -2328,7 +2340,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         submitInFlightRef.current = true;
         setStage('submitting');
         setSubmitError(null);
-        setSubmitErrorDetail(null);
         setSubmitErrorCause(null);
         try {
             const base = {
@@ -2389,7 +2400,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 // form with a dismissible "Transaction cancelled." toast.
                 // Form values stay intact so the user can edit and retry.
                 setSubmitError(null);
-                setSubmitErrorDetail(null);
                 setSubmitErrorCause(null);
                 setPassword('');
                 setStage('form');
@@ -2398,16 +2408,12 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             }
             if (isBadPassword) {
                 setSubmitError('Incorrect password.');
-                setSubmitErrorDetail(null);
                 setSubmitErrorCause(null);
             } else {
-                // #2505: lead with plain-language copy; keep the raw
-                // backend/SDK/RPC message for logs + a collapsible detail.
                 console.error('Send failed:', err); // eslint-disable-line no-console
-                const h = humanizeError(err, 'send');
-                setSubmitError(h.message);
-                setSubmitErrorDetail(rawMsg && rawMsg !== h.message ? rawMsg : null);
-                setSubmitErrorCause(h.cause);
+                const message = submitFailureMessage(err, { verb: 'send' });
+                setSubmitError(message);
+                setSubmitErrorCause(humanizeError(err, 'send').cause);
             }
             setStage('review');
             haptic.error();
@@ -2423,7 +2429,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     const header = (
         <PageHeader
             onBack={stage === 'review'
-                ? () => { setSubmitError(null); setStage('form'); }
+                ? () => { setSubmitError(null); setPassword(''); setStage('form'); }
                 : leaveGuard.guardedOnBack}
             backDisabled={stage === 'submitting'}
             backLabel={stage === 'review' ? t('send.backToEdit') : t('common.backToHome')}
@@ -2669,9 +2675,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                         : [...current, saved]);
                 }
                 setContactSaveStage('saved');
-            } catch (err) {
+            } catch {
                 if (!mountedRef.current) return;
-                setContactSaveError(err?.message || 'Could not save this contact. Try again.');
+                setContactSaveError('Could not save this contact. Check your connection and try again.');
                 setContactSaveStage('editing');
             } finally {
                 contactSaveBusyRef.current = false;
@@ -2853,7 +2859,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 status={submitError ? (
                     <StatusMessage
                         variant="error"
-                        details={submitErrorDetail || undefined}
                         recovery={
                             submitErrorCause === 'insufficient_funds' && sourceBalance && parseFloat(sourceBalance.amount || '0') > 0
                                 ? { label: t('send.useMax'), onAction: () => { setStage('form'); onMax(); } }
@@ -3031,7 +3036,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                         value={password}
                         onChange={(e) => {
                             setPassword(e.target.value);
-                            if (submitError) { setSubmitError(null); setSubmitErrorDetail(null); setSubmitErrorCause(null); }
+                            if (submitError) { setSubmitError(null); setSubmitErrorCause(null); }
                         }}
                         autoComplete="current-password"
                         disabled={stage === 'submitting'}

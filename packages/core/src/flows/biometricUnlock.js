@@ -193,6 +193,7 @@ async function webauthnDescribe() {
     if (typeof navigator === 'undefined'
         || !navigator.credentials
         || typeof navigator.credentials.create !== 'function'
+        || typeof navigator.credentials.get !== 'function'
         || typeof globalThis.PublicKeyCredential === 'undefined'
         || typeof globalThis.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable !== 'function') {
         return {

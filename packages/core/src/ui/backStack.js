@@ -11,8 +11,8 @@
 // The system Back gesture runs the same action as the visible back control.
 // Android's narrow App plugin dispatches directly to the top handler and
 // minimizes when the stack is empty. Browsers use a sentinel history entry
-// when route snapshots do not already own history. Overlay handlers register
-// above route handlers, so a modal or sheet always closes first.
+// when route snapshots do not already own history. Overlay handlers take
+// priority over route handlers, so a modal or sheet always closes first.
 
 import { useEffect, useRef } from 'react';
 
@@ -31,7 +31,12 @@ const hasHistory = () => typeof window !== 'undefined' && Boolean(window.history
 
 const capacitorApp = () => globalThis.Capacitor?.Plugins?.App;
 
-const topHandler = () => handlers[handlers.length - 1];
+function topHandler() {
+    for (let i = handlers.length - 1; i >= 0; i -= 1) {
+        if (handlers[i].kind === 'overlay') return handlers[i];
+    }
+    return handlers[handlers.length - 1];
+}
 
 function onNativeBack() {
     const top = topHandler();
@@ -95,7 +100,7 @@ function onPopState() {
     }
     if (!armed) return; // not our entry; someone else's navigation
     armed = false;
-    const top = handlers[handlers.length - 1];
+    const top = topHandler();
     try {
         if (top) top.run();
     } finally {
@@ -121,8 +126,8 @@ function onKeyDown(event) {
 }
 
 /**
- * Register a back action. The most recently registered one is "on top" and
- * is the one a Back press runs.
+ * Register a back action. The most recently registered overlay is "on top";
+ * route handlers run only when no overlay is present.
  *
  * @param {() => void} run
  * @param {'route' | 'overlay'} [kind]

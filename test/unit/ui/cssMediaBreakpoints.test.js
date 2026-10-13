@@ -56,8 +56,6 @@ describe('core CSS module media breakpoints', () => {
             .toContain('@media not all and (min-width: 640px)');
         expect(modules.get('shared/routes/IssueTokenForm.module.css'))
             .toContain('@media not all and (min-width: 400px)');
-        expect(modules.get('shared/routes/Locked.module.css'))
-            .toContain('@media not all and (min-width: 600px)');
         expect(modules.get('shared/routes/ManageToken.module.css').match(
             /@media not all and \(min-width: 600px\)/g,
         )).toHaveLength(2);
@@ -69,6 +67,7 @@ describe('core CSS module media breakpoints', () => {
 
         expect(formPage).toContain('@media (min-width: 600px)');
         expect(locked).toContain('@media (min-width: 600px)');
-        expect(locked).toContain('@media not all and (min-width: 600px)');
+        // The short-viewport rule keys on landscape height, not on width.
+        expect(locked).toContain('@media (orientation: landscape) and (max-height: 480px)');
     });
 });

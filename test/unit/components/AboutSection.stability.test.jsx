@@ -56,7 +56,8 @@ describe('AboutSection diagnostics', () => {
             });
             fireEvent.click(screen.getByRole('button', { name: 'Copy diagnostics' }));
 
-            await screen.findByText(/Copied/);
+            // The button label also reads "Copied" now; wait for the status line.
+            await screen.findByText(/^Copied \(\d+ bytes\)/);
             const copied = writeText.mock.calls[0][0];
             expect(copied).not.toContain('hunter2');
             expect(copied).not.toContain('1BoatSLRHtKNngkdXEeobR76b53LETtpyT');

@@ -55,6 +55,7 @@ import {
     Input,
     SectionHeader,
     Select,
+    StatusMessage,
     Textarea,
 } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../../useMessaging.js';
@@ -67,6 +68,8 @@ import { userFacingMessage } from '../../utils/userFacingMessage.js';
 import { useLongOperationStatus } from '../../hooks/useLongOperationStatus.js';
 import { ADDRESS_TYPE_LABEL } from '../../utils/addressTypeLabel.js';
 import { RECOVERY_PHRASE_WARNING } from '../../utils/securityMomentCopy.js';
+import { blurNumberInputOnWheel } from '../../utils/formInput.js';
+import { useProtectedScreen } from '../../utils/screenGuard.js';
 import { ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
 import styles from './BackupSection.module.css';
 
@@ -110,6 +113,29 @@ export function BackupSection({ activeWallet }) {
     const [mnemonicHidden, setMnemonicHidden] = useState(true);
     const [revealPassphraseEnabled, setRevealPassphraseEnabled] = useState(false);
     const [revealPassphrase, setRevealPassphrase] = useState(/** @type {string | null} */ (null));
+    const [revealedWalletId, setRevealedWalletId] = useState(/** @type {string | null} */ (null));
+    const revealAttemptRef = useRef(0);
+    const activeWalletId = activeWallet?.id || null;
+    const activeWalletIdRef = useRef(activeWalletId);
+    activeWalletIdRef.current = activeWalletId;
+
+    useProtectedScreen(revealStage !== 'idle');
+
+    useEffect(() => {
+        revealAttemptRef.current += 1;
+        setRevealing(false);
+        setMnemonic('');
+        setRevealPassphraseEnabled(false);
+        setRevealPassphrase(null);
+        setRevealedWalletId(null);
+        setMnemonicHidden(true);
+        setRevealStage('idle');
+        setRevealError(null);
+    }, [activeWalletId]);
+
+    useEffect(() => () => {
+        revealAttemptRef.current += 1;
+    }, []);
 
     // §19.6 dry-run restore state.
     const [dryRunStage, setDryRunStage] = useState(
@@ -213,33 +239,40 @@ export function BackupSection({ activeWallet }) {
             setRevealError('No active wallet.');
             return;
         }
+        const walletId = activeWallet.id;
+        const attempt = ++revealAttemptRef.current;
         setRevealing(true);
         setRevealError(null);
         try {
             const r = await messaging.revealMnemonicRequest({
-                walletId: activeWallet.id,
+                walletId,
                 password,
             });
+            if (attempt !== revealAttemptRef.current || activeWalletIdRef.current !== walletId) return;
             setMnemonic(r?.mnemonic || '');
             setRevealPassphraseEnabled(Boolean(r?.passphraseEnabled));
             setRevealPassphrase(typeof r?.bip39Passphrase === 'string' ? r.bip39Passphrase : null);
+            setRevealedWalletId(walletId);
             setRevealStage('shown');
             setMnemonicHidden(true);
         } catch (err) {
+            if (attempt !== revealAttemptRef.current || activeWalletIdRef.current !== walletId) return;
             const name = err?.name || '';
             const msg = name === 'NoMnemonicForWifOnlyError'
                 ? 'This wallet was imported from a private key only. There is no recovery phrase to reveal.'
                 : passwordStepFailure(err, 'Could not show the recovery phrase. Try again.');
             setRevealError(msg);
         } finally {
-            setRevealing(false);
+            if (attempt === revealAttemptRef.current) setRevealing(false);
         }
     };
 
     function handleHideMnemonic() {
+        revealAttemptRef.current += 1;
         setMnemonic('');
         setRevealPassphraseEnabled(false);
         setRevealPassphrase(null);
+        setRevealedWalletId(null);
         setMnemonicHidden(true);
         setRevealStage('idle');
         setRevealError(null);
@@ -452,11 +485,11 @@ export function BackupSection({ activeWallet }) {
                     label="Reveal recovery phrase"
                     hint={`Enter your wallet password. ${RECOVERY_PHRASE_WARNING} Make sure no one is looking over your shoulder.`}
                     busy={revealing}
-                    onCancel={() => { setRevealStage('idle'); setRevealError(null); }}
+                    onCancel={handleHideMnemonic}
                     onSubmit={(pw) => onReveal(pw)}
                     error={revealError}
                 />
-            ) : revealStage === 'shown' ? (
+            ) : revealStage === 'shown' && revealedWalletId === activeWalletId ? (
                 <RevealedMnemonic
                     mnemonic={mnemonic}
                     hidden={mnemonicHidden}
@@ -644,6 +677,11 @@ function UnlockPrompt({ label, hint, busy, error, onCancel, onSubmit }) {
     );
 }
 
+/** Cancels a copy gesture on a revealed seed or passphrase. */
+function blockSecretCopy(event) {
+    event.preventDefault();
+}
+
 /**
  * Tap-to-reveal mnemonic display. The seed is rendered with a CSS blur
  * filter when hidden, so the layout is stable but the text isn't
@@ -676,10 +714,13 @@ function RevealedMnemonic({
             className={`${styles.formSection} ${styles.recoverySheet}`}
         >
             <div className={styles.sheetMeta} data-xc-recovery-sheet>Wallet: {walletName}</div>
+            {/* The words and the passphrase refuse a copy: the only way out of
+                this sheet is paper or the print path. */}
             <Button
                 variant="ghost"
                 block
                 icon={null}
+                onCopy={blockSecretCopy}
                 onClick={onToggle}
                 aria-label={hidden ? 'Reveal recovery phrase' : 'Hide recovery phrase'}
                 className={styles.secret}
@@ -698,6 +739,8 @@ function RevealedMnemonic({
                     minHeight: 60,
                     wordBreak: 'break-word',
                     whiteSpace: 'pre-wrap',
+                    WebkitUserSelect: 'none',
+                    userSelect: 'none',
                 }}
             >
                 {mnemonic || ' '}
@@ -709,6 +752,7 @@ function RevealedMnemonic({
                         variant="ghost"
                         block
                         icon={null}
+                        onCopy={blockSecretCopy}
                         onClick={onToggle}
                         aria-label={hidden ? 'Reveal passphrase' : 'Hide passphrase'}
                         className={styles.secret}
@@ -727,6 +771,8 @@ function RevealedMnemonic({
                             minHeight: 60,
                             wordBreak: 'break-word',
                             whiteSpace: 'pre-wrap',
+                            WebkitUserSelect: 'none',
+                            userSelect: 'none',
                         }}
                     >
                         {passphrase || ' '}
@@ -806,11 +852,14 @@ function DryRunForm({ busy, error, onCancel, onSubmit }) {
                         label="Addresses to check:"
                         type="number"
                         inputMode="numeric"
+                        enterKeyHint="go"
+                        autoComplete="off"
                         min={1}
                         max={100}
                         step={1}
                         value={gapLimit}
                         onChange={(e) => setGapLimit(e.target.value)}
+                        onWheel={blurNumberInputOnWheel}
                         aria-label="Addresses to check"
                         className={styles.gapLimitInput}
                     />
@@ -1205,6 +1254,18 @@ function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, 
  */
 function PublishLabelsReport({ result, onDone }) {
     const txid = result?.txid || '';
+    // CopyButton flips its own label; this status line is the announced
+    // confirmation and clears on the same 1.5 s beat.
+    const [copyStatus, setCopyStatus] = useState(/** @type {string | null} */ (null));
+    const copyResetRef = useRef(null);
+
+    useEffect(() => () => clearTimeout(copyResetRef.current), []);
+
+    const onTxidCopied = () => {
+        clearTimeout(copyResetRef.current);
+        setCopyStatus('Copied');
+        copyResetRef.current = setTimeout(() => setCopyStatus(null), 1500);
+    };
     // Say "published" only for a broadcast that returned a txid; a transient
     // failure resolves queued, with the signed bytes in the broadcast queue.
     if (!txid) {
@@ -1236,9 +1297,10 @@ function PublishLabelsReport({ result, onDone }) {
                 <dd style={{ margin: 0, fontFamily: 'var(--xc-font-mono)', fontSize: 'var(--xc-text-xs)', wordBreak: 'break-all' }}>{result?.discoveryName || '-'}</dd>
             </dl>
             <div className={styles.actions}>
-                <CopyButton value={txid} label="Copy txid" />
+                <CopyButton value={txid} label="Copy txid" onCopied={onTxidCopied} />
                 <Button variant="ghost" size="sm" onClick={onDone}>Done</Button>
             </div>
+            {copyStatus ? <StatusMessage variant="success">{copyStatus}</StatusMessage> : null}
         </FormSection>
     );
 }

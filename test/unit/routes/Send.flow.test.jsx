@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
@@ -17,6 +17,7 @@ import {
     Send,
     getUnusualSendWarnings,
 } from '../../../packages/core/src/shared/routes/Send.jsx';
+import { Receive } from '../../../packages/core/src/shared/routes/Receive.jsx';
 import { sendToken as submitSendToken } from '../../../packages/core/src/flows/sendToken.js';
 import { userEvent } from '../../helpers/userEvent.js';
 
@@ -65,6 +66,7 @@ function mount({
     history = [],
     networkFeeSats = 1234,
     encoding,
+    messagingOverrides = {},
     overrides = {},
 } = {}) {
     const base = {
@@ -121,6 +123,7 @@ function mount({
             fromAddress: FROM,
             chainId: CHAIN_ID,
         }),
+        ...messagingOverrides,
         ...overrides,
     };
     // Send's supporting lookups are not part of this flow contract. Empty
@@ -224,6 +227,58 @@ afterEach(() => {
 });
 
 describe('Send flow with mocked messaging', () => {
+    it('does not show SDK text when loading send or receive addresses fails', async () => {
+        const sdkFailure = Object.assign(
+            new Error('SDKHubError: request failed with status code 503\n    at load.js:4:2'),
+            { name: 'SDKHubError', code: 'HUB_UNAVAILABLE' },
+        );
+        mount({
+            messagingOverrides: {
+                getAddressesByChain: vi.fn().mockRejectedValue(sdkFailure),
+            },
+        });
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            "Couldn't load addresses. Check your connection and try again.",
+        );
+        expect(document.body).not.toHaveTextContent('SDKHubError');
+        expect(document.body).not.toHaveTextContent('status code 503');
+
+        cleanup();
+        render(
+            <MessagingProvider shell="web" messaging={{
+                getAddressesByChain: vi.fn().mockRejectedValue(sdkFailure),
+                getSettings: vi.fn().mockResolvedValue({ activeNetwork: 'mainnet' }),
+            }}>
+                <Receive walletId={WALLET_ID} />
+            </MessagingProvider>,
+        );
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            "Couldn't load addresses. Check your connection and try again.",
+        );
+        expect(document.body).not.toHaveTextContent('SDKHubError');
+        expect(document.body).not.toHaveTextContent('status code 503');
+    });
+
+    it('replaces an SDK send failure and its raw details with actionable copy', async () => {
+        const sdkFailure = Object.assign(
+            new Error('SDK wallet exploded\n    at signer.js:9:3'),
+            { name: 'SDKWalletError', code: 'SDK_WALLET_FAILED' },
+        );
+        const messaging = mount({ sendResult: sdkFailure });
+        await openPasswordConfirm(messaging);
+        await approveWithPassword(messaging);
+
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent(
+            'The wallet could not prepare or sign this request. Check the wallet details and try again.',
+        );
+        expect(alert).not.toHaveTextContent('SDK wallet exploded');
+        expect(alert).not.toHaveTextContent('signer.js');
+        expect(screen.queryByText(/technical details/i)).toBeNull();
+    });
+
     it('keeps field labels ahead of their values in DOM reading order', async () => {
         mount();
 
@@ -509,6 +564,21 @@ describe('Send flow with mocked messaging', () => {
         expect(warning).toHaveTextContent(SAVED_LOOKALIKE);
         expect(screen.getByRole('form', { name: 'Send' })).toBeInTheDocument();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('rejects an iOS-swiped review without retaining its partial password', async () => {
+        const onBack = vi.fn();
+        const messaging = mount({ onBack });
+        await openPasswordConfirm(messaging);
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'partial secret' } });
+
+        act(() => window.dispatchEvent(new Event('xchain:native-edge-back')));
+
+        await waitFor(() => expect(screen.getByRole('form', { name: 'Send' })).toBeInTheDocument());
+        expect(onBack).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(2));
+        expect(await screen.findByLabelText('Password')).toHaveValue('');
     });
 
     it('reviews every payment field, signs with the password, and shows the txid', async () => {

@@ -130,7 +130,13 @@ describe('web create-wallet flow', () => {
         expect(background.getSessionStatus).toHaveBeenCalledTimes(1);
         fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
 
-        expect(await screen.findByRole('heading', { name: 'Home' }, { timeout: 10_000 })).toBeInTheDocument();
+        // Home is keyed by wallet and account, so it mounts once wallet-wide and
+        // again when the first account is selected. Query afresh each time
+        // rather than holding a heading from the first mount.
+        await waitFor(
+            () => expect(screen.getByRole('heading', { name: 'Home' })).toBeInTheDocument(),
+            { timeout: 10_000 },
+        );
         expect(background.getSessionStatus).toHaveBeenCalledTimes(2);
     });
 });

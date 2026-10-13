@@ -149,6 +149,15 @@ describe('viewport surfaces keep content inside device safe areas', () => {
         expect(viewport).toMatch(new RegExp(inset('bottom')));
     });
 
+    it('keeps the fixed undo action inside every adjacent device inset', () => {
+        const css = read('packages/core/src/shared/components/UndoSendToast.module.css');
+        const toast = css.match(/\.toast\s*\{[^}]*\}/)[0];
+
+        expect(toast).toMatch(new RegExp(`inset-inline-start:[^;]*${inset('left')}`));
+        expect(toast).toMatch(new RegExp(`inset-inline-end:[^;]*${inset('right')}`));
+        expect(toast).toMatch(new RegExp(`bottom:[^}]*${inset('bottom')}`));
+    });
+
     it('pads the inline History export modal on every viewport edge', () => {
         const history = read('packages/core/src/shared/routes/History.jsx');
         const scrim = history.match(/const MODAL_SCRIM = \{[^}]*\}/)[0];

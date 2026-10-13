@@ -169,14 +169,20 @@ export function insufficientFundsQuote(err) {
  */
 export async function quoteMaxSendable({
     sdkRegistry, chainRegistry, vault, chainId, source, destination, encoderOpts, signal,
-}) {
-    const descriptor = chainRegistry?.get?.(chainId);
+} = {}) {
+    let descriptor;
+    let sdk;
+    try {
+        descriptor = chainRegistry?.get?.(chainId);
+        sdk = sdkRegistry?.get?.(chainId);
+    } catch {
+        return null;
+    }
     const ticker = tickerForCoin(descriptor?.coin);
     if (!ticker) return null;
     if (typeof source !== 'string' || !source.trim()) return null;
     if (typeof destination !== 'string' || !destination.trim()) return null;
 
-    const sdk = sdkRegistry.get(chainId);
     if (!sdk?.encoder) return null;
 
     // The probe's payment output has to be big enough that no prefix of the
@@ -187,10 +193,8 @@ export async function quoteMaxSendable({
     // the compose selects from.
     let utxoTotal;
     try {
-        const selected = Array.isArray(encoderOpts?.utxos) && encoderOpts.utxos.length > 0
-            ? encoderOpts.utxos
-            : null;
-        const res = selected || await sdk.encoder.getUTXOs(source.trim());
+        const hasSelection = Array.isArray(encoderOpts?.utxos);
+        const res = hasSelection ? encoderOpts.utxos : await sdk.encoder.getUTXOs(source.trim());
         const rows = Array.isArray(res) ? res : (Array.isArray(res?.utxos) ? res.utxos : null);
         if (!rows || rows.length === 0) return null;
         utxoTotal = 0n;
@@ -215,20 +219,28 @@ export async function quoteMaxSendable({
     };
 
     let quote = null;
+    let built = null;
     try {
-        await composeForConfirm({
+        built = await composeForConfirm({
             sdkRegistry, chainRegistry, vault, chainId, actionData, encoderOpts,
             source: source.trim(), signal,
         });
-        // It BUILT a transaction that pays out every satoshi the address holds
-        // and still affords a fee. That cannot be true, so something about this
-        // probe is not what this module thinks it is; say nothing rather than
-        // derive an amount from a premise that just failed.
-        return null;
     } catch (err) {
         quote = insufficientFundsQuote(err);
     }
+    if (built) {
+        // A successful compose reserves its inputs. The probe is discarded,
+        // so release that reservation before refusing the impossible result.
+        try {
+            await built.releaseEncoderInputs?.();
+        } catch {
+            // A failed cleanup still has to settle here, not escape as an
+            // unhandled rejection from an optional quote.
+        }
+        return null;
+    }
     if (!quote) return null;
+    if (quote.available > utxoTotal) return null;
 
     // Outputs the pipeline added on top of the payment (an ADS donation, a
     // native-coin protocol fee). They are paid out of the same coins, so the

@@ -102,6 +102,21 @@ describe('userFacingMessage', () => {
         expect(userFacingMessage(raw, FALLBACK)).toBe(FALLBACK);
     });
 
+    it.each([
+        ['InvalidPasswordError', 'Incorrect password.'],
+        ['HardwareSigningRetryError', 'Your hardware wallet is locked. Unlock it, then select Approve again.'],
+        ['RbfPlanError', 'Already confirmed.'],
+    ])('keeps the copy an app-defined %s carries', (name, message) => {
+        expect(userFacingMessage(Object.assign(new Error(message), { name }), FALLBACK)).toBe(message);
+    });
+
+    it('hides platform storage exceptions, with or without their class', () => {
+        expect(userFacingMessage(new DOMException('Private storage payload detail', 'QuotaExceededError'), FALLBACK))
+            .toBe(FALLBACK);
+        expect(userFacingMessage({ name: 'QuotaExceededError', message: 'Private storage payload detail' }, FALLBACK))
+            .toBe(FALLBACK);
+    });
+
     it('isDeveloperMessage reports the same verdict for logging callers', () => {
         expect(isDeveloperMessage(new Error('importWif: boom'))).toBe(true);
         expect(isDeveloperMessage(new Error('That is not a valid private key.'))).toBe(false);

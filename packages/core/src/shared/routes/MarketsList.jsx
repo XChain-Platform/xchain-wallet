@@ -20,6 +20,7 @@ import styles from './IssueTokenForm.module.css';
 import receiveStyles from './Receive.module.css';
 import marketsStyles from './MarketsList.module.css';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
+import { withRequestTimeout } from '../utils/requestTimeout.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const MARKETS_PAGE_SIZE = 25;
@@ -68,6 +69,8 @@ export function MarketsList({
     const [tab, setTab] = useState(/** @type {'all' | 'popular' | 'watchlist'} */ ('popular'));
     const [search, setSearch] = useState('');
     const watchlistRequestId = useRef(0);
+    const pendingWatchlistKeysRef = useRef(new Set());
+    const [pendingWatchlistKeys, setPendingWatchlistKeys] = useState(new Set());
     const [debouncedSearch, setDebouncedSearch] = useState('');
     const searchRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const marketResultsRef = useRef(/** @type {HTMLUListElement | null} */ (null));
@@ -125,7 +128,7 @@ export function MarketsList({
                 setMarkets(filtered);
             }
         };
-        messaging.getMarkets({ chainId: selectedAsset.chainId })
+        withRequestTimeout(messaging.getMarkets({ chainId: selectedAsset.chainId }))
             .then((resp) => applyResult(extractRows(resp)))
             .catch(() => {
                 if (!cancelled) setLoadError('Could not load markets. Try again.');
@@ -227,6 +230,9 @@ export function MarketsList({
 
     const toggleStar = useCallback(async (chainId, tick1, tick2) => {
         const key = `${chainId}::${tick1}::${tick2}`;
+        if (pendingWatchlistKeysRef.current.has(key)) return;
+        pendingWatchlistKeysRef.current.add(key);
+        setPendingWatchlistKeys((current) => new Set(current).add(key));
         const existing = watchlist.find(
             (e) => `${e.chainId}::${e.tick1}::${e.tick2}` === key,
         );
@@ -239,6 +245,13 @@ export function MarketsList({
             await loadWatchlist();
         } catch {
             /* ignore; star will revert visually on next reload */
+        } finally {
+            pendingWatchlistKeysRef.current.delete(key);
+            setPendingWatchlistKeys((current) => {
+                const next = new Set(current);
+                next.delete(key);
+                return next;
+            });
         }
     }, [watchlist, walletId, messaging, loadWatchlist]);
 
@@ -387,6 +400,9 @@ export function MarketsList({
                             <EmptyState
                                 title="No asset selected"
                                 body="Choose a coin or token to view its markets."
+                                actionLabel="Choose an asset"
+                                onAction={onChangeAsset}
+                                actionIcon={<Icon.MarketIcon />}
                             />
                         ) : marketsLoading && !hasCachedMarkets ? (
                             <div role="status" aria-label="Loading markets">
@@ -442,6 +458,7 @@ export function MarketsList({
                                         change24h={m.change24h}
                                         depth={m.depth}
                                         starred={watchlistKeySet.has(`${selectedAsset.chainId}::${m.tick1}::${m.tick2}`)}
+                                        starBusy={pendingWatchlistKeys.has(`${selectedAsset.chainId}::${m.tick1}::${m.tick2}`)}
                                         onOpen={() => onOpenMarket(selectedAsset.chainId, m.tick1, m.tick2)}
                                         openDisabled={networkOffline}
                                         onToggleStar={() => toggleStar(selectedAsset.chainId, m.tick1, m.tick2)}
@@ -483,11 +500,12 @@ export function MarketsList({
  * @param {string} [props.change24h]
  * @param {number} [props.depth]
  * @param {boolean} [props.starred]
+ * @param {boolean} [props.starBusy]
  * @param {boolean} [props.openDisabled]
  * @param {() => void} props.onOpen
  * @param {() => void} props.onToggleStar
  */
-function MarketRow({ chainId, selectedTick, tick1, tick2, name1, name2, lastPrice, change24h, depth, starred, openDisabled, onOpen, onToggleStar, first }) {
+function MarketRow({ chainId, selectedTick, tick1, tick2, name1, name2, lastPrice, change24h, depth, starred, starBusy, openDisabled, onOpen, onToggleStar, first }) {
     const selUpper = String(selectedTick || '').toUpperCase();
     // Show the icon for the OTHER side of the pair, the side the user
     // didn't pick. Falls back to tick1 if neither side matches.
@@ -521,6 +539,8 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, name1, name2, lastPric
                 className={marketsStyles.starButton}
                 onClick={(e) => { e.stopPropagation(); onToggleStar(); }}
                 aria-label={starred ? 'Remove from watchlist' : 'Add to watchlist'}
+                aria-busy={starBusy || undefined}
+                disabled={starBusy}
                 onMouseDown={(e) => e.stopPropagation()}
                 style={{
                     color: starred ? 'var(--xc-accent-primary)' : 'var(--xc-text-muted)',

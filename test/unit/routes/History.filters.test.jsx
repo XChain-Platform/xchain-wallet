@@ -417,7 +417,7 @@ describe('History filters', () => {
             expect(ruleBody(phone, '.filterCard')).toMatch(/display:\s*none/);
             expect(ruleBody(phone, '.filterCard.filterCardOpen')).toMatch(/display:\s*flex/);
 
-            const narrow = mediaBlock(historyCss, 'not all and (min-width: 400px)');
+            const narrow = mediaBlock(historyCss, 'not all and (min-width: 480px)');
             // The two date fields stack into one full-width column on phones.
             expect(ruleBody(narrow, '.dateRow')).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\);/);
             expect(ruleBody(narrow, '.dateSep')).toMatch(/display:\s*none/);

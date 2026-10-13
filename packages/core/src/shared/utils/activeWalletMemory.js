@@ -68,6 +68,23 @@ export function readActiveWalletName() {
 }
 
 /**
+ * Notify a mounted surface when another browser tab changes the selection.
+ * The storage event does not fire in the tab that made the write.
+ *
+ * @param {(selection: { id: string | null, name: string | null }) => void} onChange
+ * @returns {() => void}
+ */
+export function subscribeActiveWallet(onChange) {
+    if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return () => {};
+    const onStorage = (event) => {
+        if (event?.key !== KEY) return;
+        onChange({ id: readActiveWallet(), name: readActiveWalletName() });
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+}
+
+/**
  * Persist the active-wallet id.
  *
  * @param {string | null | undefined} walletId

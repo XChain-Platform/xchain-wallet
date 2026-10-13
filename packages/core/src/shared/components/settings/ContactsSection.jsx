@@ -18,7 +18,7 @@
 // `ContactsList` route reached from the main menu. Settings only
 // owns the bulk export / import action.
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
 import { useDropZone } from '../../hooks/useDropZone.js';
@@ -38,22 +38,29 @@ export function ContactsSection() {
         (null),
     );
     const fileInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const reloadRequestRef = useRef(0);
 
-    const reload = async () => {
+    const reload = useCallback(async () => {
+        const request = ++reloadRequestRef.current;
         if (typeof messaging?.listContacts !== 'function') {
             setError('Contacts is not wired in this shell yet.');
             return;
         }
         try {
             const list = await messaging.listContacts();
+            if (request !== reloadRequestRef.current) return;
             setCount(Array.isArray(list) ? list.length : 0);
             setError(null);
         } catch (err) {
+            if (request !== reloadRequestRef.current) return;
             setError(err instanceof Error ? err.message : String(err));
         }
-    };
+    }, [messaging]);
 
-    useEffect(() => { reload(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+    useEffect(() => {
+        reload();
+        return () => { reloadRequestRef.current += 1; };
+    }, [reload]);
 
     const onExport = async () => {
         try {

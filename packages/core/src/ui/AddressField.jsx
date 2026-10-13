@@ -110,7 +110,9 @@ export const AddressField = forwardRef(function AddressField(
                 value={value}
                 onChange={onChange}
                 onPaste={handlePaste}
+                pasteGuard
                 {...rest}
+                dir="ltr"
             />
             {showReadOnlyAddress ? (
                 <span className={styles.readOnlyValue} aria-hidden="true">

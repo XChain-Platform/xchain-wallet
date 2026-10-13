@@ -242,7 +242,7 @@ export function ImportWallet({
         };
     }, []);
 
-    useBackHandler(handleBack, busy);
+    useBackHandler(handleBack, busy || adsNotice);
 
     function clearSensitiveState() {
         setMnemonic('');
@@ -291,6 +291,17 @@ export function ImportWallet({
     }
 
     function handleBack() {
+        if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        // Back first closes an open scanner, as the iOS swipe and Android
+        // Back expect; only a second Back leaves the import flow.
+        if (scanning) {
+            setScanning(false);
+            return;
+        }
+        if (backupScanning) {
+            setBackupScanning(false);
+            return;
+        }
         invalidatePendingInput();
         clearSensitiveState();
         setError(null);
@@ -333,9 +344,12 @@ export function ImportWallet({
         readAs: 'text',
         disabled: busy,
         onError: (message) => {
-            if (inputGeneration === inputGenerationRef.current && activeLaneRef.current === 'backup') {
-                setError(message);
-            }
+            if (inputGeneration !== inputGenerationRef.current || activeLaneRef.current !== 'backup') return;
+            const validation = typeof message === 'string'
+                && /^(?:File is too large|File type not accepted)/.test(message);
+            setError(validation
+                ? `${message} Choose a supported backup file and try again.`
+                : 'Could not read the backup file. Choose another file and try again.');
         },
         onFile: ({ file, content }) => {
             if (inputGeneration !== inputGenerationRef.current || activeLaneRef.current !== 'backup') return;
@@ -499,12 +513,15 @@ export function ImportWallet({
                     if (typeof text === 'string' && text.length > 0) {
                         handleQrFrame(text);
                     } else {
-                        setError('No QR code found in the dropped image.');
+                        setError('No QR code found in the dropped image.'
+                            + ' Choose another image or use Scan QR.');
                     }
                 })
-                .catch((err) => {
+                .catch(() => {
                     if (inputGeneration !== inputGenerationRef.current || activeLaneRef.current !== 'mnemonic') return;
-                    setError(userFacingMessage(err, 'Could not decode QR from the dropped image.'));
+                    setError(
+                        'Could not read a QR code from that image. Choose another image or use Scan QR.',
+                    );
                 });
             return;
         }
@@ -532,7 +549,7 @@ export function ImportWallet({
         };
         reader.onerror = () => {
             if (inputGeneration !== inputGenerationRef.current || activeLaneRef.current !== 'mnemonic') return;
-            setError('Could not read the dropped file.');
+            setError('Could not read that file. Choose another file and try again.');
         };
         reader.readAsText(file);
     }
@@ -606,7 +623,10 @@ export function ImportWallet({
                 showRestoredLabels(result?.labelSync);
             }
         } catch (err) {
-            setError(userFacingMessage(err, 'Could not import the wallet.'));
+            setError(userFacingMessage(
+                err,
+                'Could not import the wallet. Check the recovery phrase and try again.',
+            ));
             endBusy();
         }
     }

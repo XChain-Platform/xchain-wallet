@@ -31,8 +31,13 @@ import { InfoTip } from './InfoTip.jsx';
  * @param {'verified' | 'failed' | 'unavailable' | 'pending'} props.status
  * @param {string | null} [props.reason]   light-client reason code, shown in the info tip
  * @param {'sm' | 'md'} [props.size]        default 'sm'
+ * @param {boolean} [props.details]          default true. Pass false where the
+ *   badge sits inside a button (a History or balance row): the info tip is a
+ *   button itself, and a button inside a button is invalid HTML whose inner
+ *   click also toggles the row. The badge's accessible name still carries the
+ *   full explanation, and the detail screens show the tip.
  */
-export function VerifiedBadge({ status, reason, size = 'sm' }) {
+export function VerifiedBadge({ status, reason, size = 'sm', details = true }) {
     const spec = BADGE_SPEC[status];
     if (!spec) return null;
 
@@ -66,7 +71,7 @@ export function VerifiedBadge({ status, reason, size = 'sm' }) {
                 <span aria-hidden="true">{spec.glyph}</span>
                 <span>{spec.label}</span>
             </span>
-            <InfoTip aria={`${spec.label} details`} label={title} />
+            {details ? <InfoTip aria={`${spec.label} details`} label={title} /> : null}
         </span>
     );
 }

@@ -26,14 +26,24 @@ const address = (id, overrides = {}) => ({
     ...overrides,
 });
 
-function harness(addresses, accounts = [{ id: 'account-1', walletId: 'wallet-1' }]) {
+// A signer may only claim addresses in its own wallet, so every signer these
+// tests use is recorded in wallet-1.
+const SIGNER_RECORDS = ['signer-1', 's', 'a', 'b'].map((id) => ({ id, walletId: 'wallet-1' }));
+
+function harness(
+    addresses,
+    accounts = [{ id: 'account-1', walletId: 'wallet-1' }],
+    signerRecords = SIGNER_RECORDS,
+) {
     const put = vi.fn(async () => {});
     return {
         put,
         vault: {
             accounts: {
                 findBy: vi.fn(async (field, value) => accounts.filter((row) => row[field] === value)),
+                list: vi.fn(async () => accounts),
             },
+            signers: { list: vi.fn(async () => signerRecords) },
             addresses: { list: vi.fn(async () => addresses), put },
         },
         chainRegistry: {

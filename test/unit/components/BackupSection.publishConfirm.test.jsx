@@ -4,11 +4,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { BackupSection } from '../../../packages/core/src/shared/components/settings/BackupSection.jsx';
+import { AboutSection } from '../../../packages/core/src/shared/components/settings/AboutSection.jsx';
 
 const CHAIN_ID = 'bitcoin-mainnet';
 const FROM = {
@@ -207,6 +208,34 @@ describe('BackupSection label publication confirmation', () => {
         }
     });
 
+    it('announces a copied transaction id and restores the control label', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true, advanceTimeDelta: 5 });
+        const prior = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+        const writeText = vi.fn(async () => {});
+        Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+        try {
+            mount();
+            fireEvent.click(screen.getByRole('button', { name: 'Publish now…' }));
+            fireEvent.change(await screen.findByLabelText('Wallet password'), { target: { value: 'secret' } });
+            fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+            fireEvent.click(await screen.findByTestId('confirm-approve'));
+
+            const button = await screen.findByRole('button', { name: 'Copy txid' });
+            fireEvent.click(button);
+
+            expect(await screen.findByRole('status')).toHaveTextContent('Copied');
+            expect(writeText).toHaveBeenCalledWith('label-txid');
+            expect(button).toHaveTextContent('Copied');
+            act(() => vi.advanceTimersByTime(1501));
+            expect(screen.queryByRole('status')).toBeNull();
+            expect(button).toHaveTextContent('Copy txid');
+        } finally {
+            vi.useRealTimers();
+            if (prior) Object.defineProperty(navigator, 'clipboard', prior);
+            else delete navigator.clipboard;
+        }
+    });
+
     // A transient broadcast failure resolves queued: the signed bytes wait in the
     // broadcast queue, so the panel must not say the labels were published, and the
     // pending batch notice must survive because nothing has landed yet.
@@ -231,5 +260,38 @@ describe('BackupSection label publication confirmation', () => {
 
         fireEvent.click(within(queued).getByRole('button', { name: 'Done' }));
         expect(await screen.findByText('Labels changed since the last publish')).toBeTruthy();
+    });
+});
+
+describe('AboutSection copy confirmation', () => {
+    it('announces copied diagnostics and restores the control label', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true, advanceTimeDelta: 5 });
+        const prior = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+        const writeText = vi.fn(async () => {});
+        Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+        try {
+            render(
+                <MessagingProvider
+                    shell="web"
+                    messaging={{ getDiagnosticDump: vi.fn(async () => ({ version: 'test' })) }}
+                >
+                    <AboutSection />
+                </MessagingProvider>,
+            );
+
+            const button = screen.getByRole('button', { name: 'Copy diagnostics' });
+            fireEvent.click(button);
+
+            expect(await screen.findByRole('status')).toHaveTextContent(/^Copied/);
+            expect(writeText).toHaveBeenCalledOnce();
+            expect(button).toHaveTextContent('Copied');
+            act(() => vi.advanceTimersByTime(1501));
+            expect(screen.queryByRole('status')).toBeNull();
+            expect(button).toHaveTextContent('Copy diagnostics');
+        } finally {
+            vi.useRealTimers();
+            if (prior) Object.defineProperty(navigator, 'clipboard', prior);
+            else delete navigator.clipboard;
+        }
     });
 });

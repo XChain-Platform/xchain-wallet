@@ -139,6 +139,12 @@ describe('coSignerAccount Vault-backed window persistence', () => {
         await expect(persistence.read()).rejects.toThrow(/not found/);
     });
 
+    it('requires a complete Vault collection port', () => {
+        expect(() => createVaultWindowPersistence({ coSignerAccounts: {} }, account.id))
+            .toThrow(/vault with coSignerAccounts/);
+        expect(() => createVaultWindowPersistence(vault, '   ')).toThrow(/accountId/);
+    });
+
     it('buildAccountWindowStore returns a working store wired to the account', async () => {
         const store = buildAccountWindowStore({ vault, account, now: () => 5_000 });
         expect(store).toBeInstanceOf(VaultWindowStore);
@@ -154,5 +160,30 @@ describe('coSignerAccount Vault-backed window persistence', () => {
     it('returns null when the policy has no maxPerWindow cap', () => {
         const noCap = createCoSignerAccount(baseInput({ policy: { allowedActions: ['SEND'] } }));
         expect(buildAccountWindowStore({ vault, account: noCap })).toBeNull();
+    });
+
+    it('rejects a malformed window cap instead of silently disabling it', () => {
+        for (const maxPerWindow of [{}, { hours: 0 }, { hours: Number.NaN }, { hours: '24' }]) {
+            const malformed = {
+                ...account,
+                policy: { ...account.policy, maxPerWindow },
+            };
+            expect(() => buildAccountWindowStore({ vault, account: malformed }))
+                .toThrow(/maxPerWindow\.hours/);
+        }
+    });
+
+    it('refuses to persist a charge after the account id moves to another wallet or chain', async () => {
+        for (const [field, value] of [['walletId', 'wallet-2'], ['chainId', 'bitcoin-regtest']]) {
+            await vault.coSignerAccounts.put(account);
+            const store = buildAccountWindowStore({ vault, account, now: () => 5_000 });
+            await store.load();
+            store.record({ action: 'SEND', tick: 'X', amount: '2' });
+            await vault.coSignerAccounts.put({ ...account, [field]: value });
+
+            await expect(store.flush()).rejects.toThrow(new RegExp(`${field} changed`));
+            const replacement = await vault.coSignerAccounts.get(account.id);
+            expect(replacement.window).toBeNull();
+        }
     });
 });

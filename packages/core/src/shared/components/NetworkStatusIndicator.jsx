@@ -10,6 +10,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { registry as registryLib } from '../../index.js';
+import { useBackHandler } from '../../ui/backStack.js';
 import { useReachability } from '../hooks/useReachability.js';
 import styles from './NetworkStatusIndicator.module.css';
 
@@ -69,6 +70,11 @@ export function NetworkStatusIndicator({ onOpenNetworkSettings }) {
         : state === 'offline'
             ? `${label}: no selected chain is reachable`
             : label;
+
+    useBackHandler(open ? () => {
+        setOpen(false);
+        triggerRef.current?.focus();
+    } : undefined);
 
     useEffect(() => {
         if (!open) return undefined;

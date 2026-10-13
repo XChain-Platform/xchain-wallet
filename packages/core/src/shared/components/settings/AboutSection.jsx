@@ -89,6 +89,7 @@ export function AboutSection() {
     const [reportBusy, setReportBusy] = useState(false);
     const [licenseOpen, setLicenseOpen] = useState(false);
     const [diagnosticMeta, setDiagnosticMeta] = useState(null);
+    const copyResetRef = useRef(null);
     // Read once at mount: the provider is installed at shell boot, before any
     // settings route can render, so this cannot go stale within a session.
     const [updateLane] = useState(() => hasDirectUpdateLane());
@@ -97,6 +98,8 @@ export function AboutSection() {
     // re-running the same fetch, so the error surface offers a one-click
     // "Try again" against whichever action last failed.
     const retryRef = useRef(/** @type {null | (() => void)} */ (null));
+
+    useEffect(() => () => clearTimeout(copyResetRef.current), []);
 
     async function fetchDump() {
         if (typeof messaging?.getDiagnosticDump !== 'function') {
@@ -125,6 +128,7 @@ export function AboutSection() {
 
     async function handleCopyDiagnostics() {
         if (busy) return;
+        clearTimeout(copyResetRef.current);
         setBusy(true);
         setStatus(null);
         setError(null);
@@ -137,6 +141,7 @@ export function AboutSection() {
                 throw new Error('Copy is not available here. Select the diagnostics preview and copy it manually.');
             }
             setStatus(`Copied (${text.length.toLocaleString()} bytes). Paste into your bug report.`);
+            copyResetRef.current = setTimeout(() => setStatus(null), 1500);
             haptic.tap();
         } catch (err) {
             retryRef.current = handleCopyDiagnostics;
@@ -328,7 +333,7 @@ export function AboutSection() {
                         loading={busy}
                         disabled={busy}
                     >
-                        Copy diagnostics
+                        {status ? 'Copied' : 'Copy diagnostics'}
                     </Button>
                 </div>
             </Row>

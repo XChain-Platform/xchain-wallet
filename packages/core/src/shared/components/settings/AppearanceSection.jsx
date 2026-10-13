@@ -23,8 +23,12 @@
 // Deferred:
 //   - Accent color (per spec §35.1 only "when brand is finalized"); no row renders until it exists.
 
+import { useState } from 'react';
 import { useSettings } from '../../hooks/useSettings.js';
-import { SELECT, STACK, SettingsFieldRow, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
+import { userFacingMessage } from '../../utils/userFacingMessage.js';
+import {
+    SELECT, STACK, SettingsFieldRow, SettingsLoadError, Status,
+} from './_settingsPrimitives.jsx';
 
 const THEME_OPTIONS = /** @type {const} */ ([
     { value: 'system', label: 'System default' },
@@ -40,23 +44,28 @@ const REDUCED_MOTION_OPTIONS = /** @type {const} */ ([
 
 export function AppearanceSection() {
     const { settings, loading, error, update } = useSettings();
+    const [saveError, setSaveError] = useState(/** @type {string | null} */ (null));
 
     if (loading) return <Status text="Loading…" />;
     if (error) return <SettingsLoadError error={error} />;
     if (!settings) return <Status text="Settings unavailable." tone="error" />;
 
     const onThemeChange = async (next) => {
+        setSaveError(null);
         try {
             await update({ theme: next });
         } catch (err) {
+            setSaveError(userFacingMessage(err, 'Could not save appearance settings. Try again.'));
             // eslint-disable-next-line no-console
             console.error('appearance.theme update failed:', err);
         }
     };
     const onReducedMotionChange = async (next) => {
+        setSaveError(null);
         try {
             await update({ reducedMotion: next });
         } catch (err) {
+            setSaveError(userFacingMessage(err, 'Could not save appearance settings. Try again.'));
             // eslint-disable-next-line no-console
             console.error('appearance.reducedMotion update failed:', err);
         }
@@ -64,6 +73,7 @@ export function AppearanceSection() {
 
     return (
         <div style={STACK}>
+            {saveError ? <Status text={saveError} tone="error" /> : null}
             <SettingsFieldRow
                 label="Theme"
                 hint="Choose a light or dark wallet theme, or follow your device setting."

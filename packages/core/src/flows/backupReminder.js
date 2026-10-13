@@ -81,8 +81,9 @@ export function getBackupVerifiedAt(walletId) {
  */
 export function dismissBackupReminder(walletId, now = Date.now()) {
     if (typeof walletId !== 'string' || !walletId) return;
+    const dismissedAt = typeof now === 'number' && Number.isFinite(now) ? now : Date.now();
     const map = readStore(SESSION_DISMISS_KEY);
-    map[walletId] = now + DISMISS_HOURS * 60 * 60 * 1000;
+    map[walletId] = dismissedAt + DISMISS_HOURS * 60 * 60 * 1000;
     writeStore(SESSION_DISMISS_KEY, map);
 }
 
@@ -139,8 +140,10 @@ export function hasBackupReminderFunds(rows) {
  */
 export function computeBackupReminderState(input) {
     const { walletId, hasFunds = false } = input || {};
-    const now = typeof input?.now === 'number' ? input.now : Date.now();
-    if (!walletId) return { kind: 'hidden' };
+    const now = typeof input?.now === 'number' && Number.isFinite(input.now)
+        ? input.now
+        : Date.now();
+    if (typeof walletId !== 'string' || !walletId) return { kind: 'hidden' };
 
     const verifiedAt = getBackupVerifiedAt(walletId);
     if (verifiedAt) return { kind: 'hidden' };

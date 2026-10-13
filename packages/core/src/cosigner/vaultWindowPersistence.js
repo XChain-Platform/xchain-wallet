@@ -22,24 +22,42 @@ import { VaultWindowStore } from './vaultWindowStore.js';
  *
  * @param {import('../storage/Vault.js').Vault} vault
  * @param {string} accountId
+ * @param {{ walletId?: string, chainId?: string }} [expectedScope]
  * @returns {import('./vaultWindowStore.js').WindowPersistence}
  */
-export function createVaultWindowPersistence(vault, accountId) {
-    if (!vault || !vault.coSignerAccounts) {
+export function createVaultWindowPersistence(vault, accountId, expectedScope = {}) {
+    if (!vault || !vault.coSignerAccounts
+        || typeof vault.coSignerAccounts.get !== 'function'
+        || typeof vault.coSignerAccounts.put !== 'function') {
         throw new Error('createVaultWindowPersistence: vault with coSignerAccounts is required');
     }
-    if (typeof accountId !== 'string' || accountId.length === 0) {
+    if (typeof accountId !== 'string' || accountId.trim().length === 0) {
         throw new Error('createVaultWindowPersistence: accountId is required');
     }
+    if (!expectedScope || typeof expectedScope !== 'object' || Array.isArray(expectedScope)) {
+        throw new Error('createVaultWindowPersistence: expectedScope must be an object');
+    }
+
+    function requireAccountScope(acct) {
+        if (!acct) throw new Error(`coSignerAccount "${accountId}" not found`);
+        if (acct.id !== accountId) {
+            throw new Error(`coSignerAccount "${accountId}" resolved to a different account`);
+        }
+        for (const field of ['walletId', 'chainId']) {
+            if (expectedScope[field] !== undefined && acct[field] !== expectedScope[field]) {
+                throw new Error(`coSignerAccount "${accountId}" ${field} changed`);
+            }
+        }
+        return acct;
+    }
+
     return {
         async read() {
-            const acct = await vault.coSignerAccounts.get(accountId);
-            if (!acct) throw new Error(`coSignerAccount "${accountId}" not found`);
+            const acct = requireAccountScope(await vault.coSignerAccounts.get(accountId));
             return acct.window ?? null;
         },
         async write(state) {
-            const acct = await vault.coSignerAccounts.get(accountId);
-            if (!acct) throw new Error(`coSignerAccount "${accountId}" not found`);
+            const acct = requireAccountScope(await vault.coSignerAccounts.get(accountId));
             await vault.coSignerAccounts.put({
                 ...acct,
                 window: state,
@@ -65,11 +83,20 @@ export function buildAccountWindowStore({ vault, account, now }) {
         throw new Error('buildAccountWindowStore: account with a policy is required');
     }
     const win = account.policy.maxPerWindow;
-    if (!win || !(typeof win.hours === 'number' && win.hours > 0)) {
-        return null;
+    if (win === null || win === undefined) return null;
+    if (!win || typeof win !== 'object' || !Number.isFinite(win.hours) || win.hours <= 0) {
+        throw new Error('buildAccountWindowStore: maxPerWindow.hours must be a positive number');
+    }
+    for (const field of ['id', 'walletId', 'chainId']) {
+        if (typeof account[field] !== 'string' || account[field].trim().length === 0) {
+            throw new Error(`buildAccountWindowStore: account.${field} is required`);
+        }
     }
     return new VaultWindowStore({
-        persistence: createVaultWindowPersistence(vault, account.id),
+        persistence: createVaultWindowPersistence(vault, account.id, {
+            walletId: account.walletId,
+            chainId: account.chainId,
+        }),
         hours: win.hours,
         now,
     });

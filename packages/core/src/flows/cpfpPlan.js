@@ -108,8 +108,13 @@ export function planCpfpChild({
     // Package fee must reach feeRate over parent + child; the child carries
     // whatever the parent is short, and never less than feeRate on its own.
     const packageBytes = pBytes + cBytes;
-    const packageFloor = BigInt(Math.ceil(rate * packageBytes));
-    const childFloor = BigInt(Math.ceil(rate * cBytes));
+    const roundedPackageFee = Math.ceil(rate * packageBytes);
+    const roundedChildFee = Math.ceil(rate * cBytes);
+    if (!Number.isSafeInteger(roundedPackageFee) || !Number.isSafeInteger(roundedChildFee)) {
+        throw new CpfpPlanError('planCpfpChild: feeRate produces an inexact satoshi amount');
+    }
+    const packageFloor = BigInt(roundedPackageFee);
+    const childFloor = BigInt(roundedChildFee);
     const shortfall = packageFloor > parentFee ? packageFloor - parentFee : 0n;
     const childFee = shortfall > childFloor ? shortfall : childFloor;
     if (spend.value < childFee + DUST_SATS) {

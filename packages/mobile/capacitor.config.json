@@ -14,7 +14,7 @@
         "SystemBars": {
             "insetsHandling": "css",
             "initialViewportFitValueHint": "cover",
-            "style": "LIGHT"
+            "style": "DEFAULT"
         }
     },
     "ios": {

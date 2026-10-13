@@ -78,6 +78,10 @@ export function TickerIcon({ chainId, tick, size = 28 }) {
         display: 'block',
     };
     const nativeIconUrl = descriptor ? brandingLib.chainIconLargeUrl(descriptor.id) : null;
+    const nativeIconSmallUrl = descriptor ? brandingLib.chainIconSmallUrl(descriptor.id) : null;
+    const nativeIconSrcSet = nativeIconUrl && nativeIconSmallUrl && nativeIconUrl !== nativeIconSmallUrl
+        ? `${nativeIconSmallUrl} 144w, ${nativeIconUrl} 500w`
+        : undefined;
     const chainPipUrl = descriptor ? brandingLib.chainIconSmallUrl(descriptor.id) : null;
     const showNativeIcon = isNative && nativeIconUrl && failedImageUrl !== nativeIconUrl;
     return (
@@ -85,9 +89,14 @@ export function TickerIcon({ chainId, tick, size = 28 }) {
             {showNativeIcon ? (
                 <img
                     src={nativeIconUrl}
+                    srcSet={nativeIconSrcSet}
+                    sizes={nativeIconSrcSet ? `${size}px` : undefined}
+                    width={size}
+                    height={size}
                     alt=""
                     aria-hidden="true"
                     style={imgStyle}
+                    decoding="async"
                     onError={() => setFailedImageUrl(nativeIconUrl)}
                 />
             ) : (
@@ -98,10 +107,13 @@ export function TickerIcon({ chainId, tick, size = 28 }) {
             {!isNative && chainPipUrl && failedImageUrl !== chainPipUrl ? (
                 <img
                     src={chainPipUrl}
+                    width={pipSize}
+                    height={pipSize}
                     alt=""
                     aria-hidden="true"
                     title={descriptor?.displayName}
                     style={pipStyle}
+                    decoding="async"
                     onError={() => setFailedImageUrl(chainPipUrl)}
                 />
             ) : null}

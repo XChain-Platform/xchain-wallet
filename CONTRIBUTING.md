@@ -185,7 +185,7 @@ v0.X.Y §NN Cluster Z, Step N of M: <short title>
 Closes G<NNN>.
 ```
 
-Branch off `master`, keep history linear (rebase, don't merge). One commit per release-worthy change is fine; don't batch unrelated work into a single commit.
+Fork the repository, branch off `develop`, and open your pull request against `develop`. Keep history linear (rebase, don't merge). `master` is what production runs and only ever receives release merges from `develop`; a pull request into `master` from a fork or any other branch fails the `base-branch guard` check and cannot be merged. One commit per release-worthy change is fine; don't batch unrelated work into a single commit.
 
 **No `Co-Authored-By` trailers.** This is a project policy, enforced at review time.
 

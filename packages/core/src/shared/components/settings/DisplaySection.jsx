@@ -85,6 +85,7 @@ export function DisplaySection() {
     const [debouncedTokenQuery, setDebouncedTokenQuery] = useState('');
     const tokenSearchRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const tokenListsRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+    const watchRequestRef = useRef(0);
 
     const walletId = readActiveWallet();
     const legacyPinned = Array.isArray(settings?.pinnedTokens) ? settings.pinnedTokens : [];
@@ -96,6 +97,8 @@ export function DisplaySection() {
         const handle = setTimeout(() => setDebouncedTokenQuery(tokenQuery), SEARCH_DEBOUNCE_MS);
         return () => clearTimeout(handle);
     }, [tokenQuery]);
+
+    useEffect(() => () => { watchRequestRef.current += 1; }, []);
 
     const tokenMatches = useCallback((key) => {
         const query = debouncedTokenQuery.trim().toLowerCase();
@@ -171,6 +174,7 @@ export function DisplaySection() {
 
     const addWatchedToken = useCallback(async (event) => {
         event.preventDefault();
+        const request = ++watchRequestRef.current;
         setWatchMessage(null);
         const tick = watchTicker.trim();
         const grammarError = tickerReferenceError(tick, { allowRef: true });
@@ -196,6 +200,7 @@ export function DisplaySection() {
         setWatching(true);
         try {
             const info = await messaging.getTokenInfo({ chainId: watchChainId, tick, demo: false });
+            if (request !== watchRequestRef.current) return;
             const canonicalTick = typeof info?.canonicalTick === 'string'
                 ? info.canonicalTick.trim()
                 : '';
@@ -212,12 +217,15 @@ export function DisplaySection() {
                 watchedTokens: [...watched, key],
                 hiddenTokens: hidden.filter((candidate) => candidate !== key),
             });
+            if (request !== watchRequestRef.current) return;
             setWatchTicker('');
             setWatchMessage(`${canonicalTick} is now shown in balances.`);
         } catch {
-            setWatchMessage(`Could not look up ${tick} on ${chainLabel}. Try again.`);
+            if (request === watchRequestRef.current) {
+                setWatchMessage(`Could not look up ${tick} on ${chainLabel}. Try again.`);
+            }
         } finally {
-            setWatching(false);
+            if (request === watchRequestRef.current) setWatching(false);
         }
     }, [chains, hidden, messaging, update, watchChainId, watchTicker, watched]);
 
@@ -380,7 +388,11 @@ export function DisplaySection() {
                 <Select
                     aria-label="Token chain"
                     value={watchChainId}
-                    onChange={(event) => setWatchChainId(event.target.value)}
+                    onChange={(event) => {
+                        watchRequestRef.current += 1;
+                        setWatching(false);
+                        setWatchChainId(event.target.value);
+                    }}
                 >
                     {/* Native options remain because Select owns the listbox control, not its choices. */}
                     {chains.map((chain) => (
@@ -392,7 +404,11 @@ export function DisplaySection() {
                 <Input
                     aria-label="Token ticker"
                     value={watchTicker}
-                    onChange={(event) => setWatchTicker(event.target.value)}
+                    onChange={(event) => {
+                        watchRequestRef.current += 1;
+                        setWatching(false);
+                        setWatchTicker(event.target.value);
+                    }}
                     placeholder="Ticker"
                     autoComplete="off"
                     style={{ minWidth: 120 }}

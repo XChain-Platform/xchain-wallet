@@ -78,25 +78,35 @@ export async function reconcileAddressSigners({
     if (!Array.isArray(signers) || signers.length === 0) {
         throw new Error('reconcileAddressSigners: signers must be a non-empty array');
     }
-
-    // Optional wallet filter: resolve accountIds owned by the wallet.
-    /** @type {Set<string> | null} */
-    let accountIdFilter = null;
-    if (walletId !== undefined) {
-        const accts = await vault.accounts.findBy('walletId', walletId);
-        accountIdFilter = new Set(accts.map((a) => a.id));
+    for (const signer of signers) {
+        if (!signer || typeof signer.id !== 'string' || !signer.id
+            || typeof signer.getPublicKey !== 'function') {
+            throw new Error('reconcileAddressSigners: every signer must have an id and getPublicKey');
+        }
     }
+    if (walletId !== undefined && (typeof walletId !== 'string' || !walletId)) {
+        throw new Error('reconcileAddressSigners: walletId must be a non-empty string');
+    }
+    if (chainId !== undefined && (typeof chainId !== 'string' || !chainId)) {
+        throw new Error('reconcileAddressSigners: chainId must be a non-empty string');
+    }
+
+    const accounts = await vault.accounts.list();
+    const accountWalletIds = new Map(accounts.map((account) => [account.id, account.walletId]));
+    const signerRecords = await vault.signers.list();
+    const signerWalletIds = new Map(signerRecords.map((record) => [record.id, record.walletId]));
 
     const addresses = await vault.addresses.list();
 
     /** @type {ReconcileSkip[]} */
     const skipped = [];
     let scanned = 0;
-    let reconciled = 0;
+    const updates = [];
 
     for (const addr of addresses) {
         if (addr.signerId !== null) continue;
-        if (accountIdFilter && (!addr.accountId || !accountIdFilter.has(addr.accountId))) continue;
+        const addressWalletId = accountWalletIds.get(addr.accountId);
+        if (walletId !== undefined && addressWalletId !== walletId) continue;
 
         const cid = chainRegistry.chainIdFor(addr.chain, addr.network);
         if (chainId && cid !== chainId) continue;
@@ -113,17 +123,12 @@ export async function reconcileAddressSigners({
 
         const matches = [];
         for (const signer of signers) {
-            let derived;
-            try {
-                derived = await signer.getPublicKey({
-                    chainId: cid,
-                    path: addr.derivationPath,
-                });
-            } catch {
-                // Signer can't derive at this path (e.g. locked, wrong chain
-                // support). Not a match; try the next.
-                continue;
-            }
+            const signerWalletId = signerWalletIds.get(signer.id) ?? signer.id;
+            if (!addressWalletId || signerWalletId !== addressWalletId) continue;
+            const derived = await signer.getPublicKey({
+                chainId: cid,
+                path: addr.derivationPath,
+            });
             if (derived.publicKey && derived.publicKey === addr.publicKey) {
                 matches.push(signer.id);
             }
@@ -137,9 +142,10 @@ export async function reconcileAddressSigners({
             throw new AmbiguousSignerMatchError(addr.id, matches);
         }
 
-        await vault.addresses.put({ ...addr, signerId: matches[0] });
-        reconciled++;
+        updates.push({ ...addr, signerId: matches[0] });
     }
 
-    return { scanned, reconciled, skipped };
+    for (const update of updates) await vault.addresses.put(update);
+
+    return { scanned, reconciled: updates.length, skipped };
 }

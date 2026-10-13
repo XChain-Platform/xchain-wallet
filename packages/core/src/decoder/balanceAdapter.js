@@ -49,11 +49,10 @@ export function balancesFromSdk(sdkBalances) {
     } else if (native && typeof native === 'object') {
         const tick = String(native.tick || '').toUpperCase();
         if (tick) {
-            out.push({
-                tick,
-                amount: scaleDown(native.quantity, native.divisibility),
-                isCoin: true,
-            });
+            const amount = scaleDown(native.quantity, native.divisibility);
+            out.push(amount === null
+                ? { tick, amount: '', isCoin: true, unknown: true }
+                : { tick, amount, isCoin: true });
         }
     }
 
@@ -62,11 +61,10 @@ export function balancesFromSdk(sdkBalances) {
         if (!a || typeof a !== 'object') continue;
         const tick = String(a.tick || '').toUpperCase();
         if (!tick) continue;
-        out.push({
-            tick,
-            amount: scaleDown(a.quantity, a.divisibility),
-            isCoin: false,
-        });
+        const amount = scaleDown(a.quantity, a.divisibility);
+        out.push(amount === null
+            ? { tick, amount: '', isCoin: false, unknown: true }
+            : { tick, amount, isCoin: false });
     }
 
     return out;
@@ -82,11 +80,13 @@ export function balancesFromSdk(sdkBalances) {
  *
  * @param {string | number | null | undefined} qty
  * @param {number | string | null | undefined} divisibility
- * @returns {string}
+ * @returns {string | null}
  */
 function scaleDown(qty, divisibility) {
-    const div = Number(divisibility ?? 0) || 0;
+    const div = Number(divisibility ?? 0);
     const raw = qty === null || qty === undefined ? '0' : String(qty).trim();
+    if (!Number.isInteger(div) || div < 0 || div > 18) return null;
+    if (!/^-?(?:\d+(?:\.\d*)?|\.\d+)$/.test(raw)) return null;
     if (raw === '' || raw === '0') return '0';
     if (div <= 0) return raw;
 

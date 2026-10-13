@@ -64,6 +64,39 @@ afterEach(() => {
 });
 
 describe('Home honours the host active wallet', () => {
+    it('replaces the first-paint skeleton in the balance surface slot', async () => {
+        let finishBalances;
+        const messaging = {
+            listWallets: vi.fn().mockResolvedValue([WALLET_A]),
+            listAccounts: vi.fn().mockResolvedValue([]),
+            getWalletBalances: vi.fn(() => new Promise((resolve) => { finishBalances = resolve; })),
+            getAddressesByChain: vi.fn().mockResolvedValue({}),
+            getActiveAddresses: vi.fn().mockResolvedValue({}),
+            getSettings: vi.fn().mockResolvedValue({}),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <Home
+                    activeWalletId={WALLET_A.id}
+                    activeAccountId="account-a"
+                    onSend={() => {}}
+                    onReceive={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        const loading = await screen.findByRole('status', { name: /loading balances/i });
+        const slotAnchor = loading.previousElementSibling;
+        expect(loading.querySelectorAll('[aria-hidden="true"]')).not.toHaveLength(0);
+        expect([...loading.querySelectorAll('[style]')].some((node) => node.style.height === '72px')).toBe(true);
+
+        await act(async () => { finishBalances({}); });
+
+        const walletTabs = await screen.findByRole('tablist', { name: 'Wallet view' });
+        expect(walletTabs.parentElement.previousElementSibling).toBe(slotAnchor);
+        expect(screen.queryByRole('status', { name: /loading balances/i })).toBeNull();
+    });
+
     it('reads balances for the HOST wallet, not wallets[0]', async () => {
         // The switched-to wallet is second in the list: self-electing wallets[0]
         // is exactly the bug, so a passing assertion here has to come from the

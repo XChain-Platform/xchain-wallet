@@ -30,6 +30,7 @@ import {
     settingsCustomToDisplayRate,
     displayRateToSettingsCustom,
     defaultCustomSettingsRate,
+    satsToCoinDecimal,
 } from '../../../packages/core/src/flows/feeEstimate.js';
 
 describe('resolveFeeUnit', () => {
@@ -122,5 +123,9 @@ describe('resolveFeeUnit', () => {
         });
 
         expect(tiers.minimumRate).toBe(1.5);
+    });
+
+    it('formats an exact whole coin without a decimal point', () => {
+        expect(satsToCoinDecimal(100_000_000)).toBe('1');
     });
 });

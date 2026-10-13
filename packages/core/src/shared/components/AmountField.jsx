@@ -18,6 +18,7 @@
 import { useState } from 'react';
 import { Button, Input, Icon } from '@xchain-wallet/core/ui';
 import { ClipboardPasteButton } from '../../ui/ClipboardPasteButton.jsx';
+import { inspectFieldPaste } from '../../ui/Input.jsx';
 import {
     formatWithThousands,
     normalizeAmountFieldInput,
@@ -139,7 +140,7 @@ export function AmountField({
                     onChange={handleChange}
                     autoComplete="off"
                     placeholder="0.00"
-                    style={onMax ? { paddingRight: '64px' } : undefined}
+                    style={onMax ? { paddingInlineEnd: '64px' } : undefined}
                 />
                 {onMax ? (
                     <Button
@@ -185,9 +186,19 @@ export function AmountField({
                 )}
                 <span className={styles.amountFooterRight}>
                     <ClipboardPasteButton
-                        onPaste={(text) => handleChange({
-                            target: { value: text, selectionStart: text.length },
-                        })}
+                        onPaste={(text) => {
+                            const inspected = inspectFieldPaste(text);
+                            if (!inspected.ok) {
+                                setInputError(inspected.error);
+                                return;
+                            }
+                            handleChange({
+                                target: {
+                                    value: inspected.value,
+                                    selectionStart: inspected.value.length,
+                                },
+                            });
+                        }}
                     />
                     <span
                         role={hasBalanceText ? 'status' : undefined}

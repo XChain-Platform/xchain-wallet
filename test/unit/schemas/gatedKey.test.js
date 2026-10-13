@@ -54,6 +54,25 @@ describe('schemas/gatedKey', () => {
         expect(validateGatedKey({ ...r, gateTicker: '' }).ok).toBe(false);
     });
 
+    it('rejects rows whose canonical id targets different key metadata', () => {
+        const r = createGatedKey(INPUT);
+        for (const patch of [
+            { walletId: 'other-wallet' },
+            { chainId: 'litecoin-regtest' },
+            { gateTicker: 'OTHERTOKEN' },
+            { keyHash: 'b'.repeat(64) },
+        ]) {
+            const result = validateGatedKey({ ...r, ...patch });
+            expect(result.ok).toBe(false);
+            expect(result.errors.join(' ')).toMatch(/id/);
+        }
+    });
+
+    it('rejects a non-canonical ticker that lookup filters cannot match', () => {
+        const r = createGatedKey(INPUT);
+        expect(validateGatedKey({ ...r, gateTicker: 'mytoken' }).ok).toBe(false);
+    });
+
     it('gatedKeyMetadata strips the secret and nothing else', () => {
         const r = createGatedKey(INPUT);
         const meta = gatedKeyMetadata(r);
