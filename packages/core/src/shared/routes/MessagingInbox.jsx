@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, EmptyState, FormPage, Icon, Input, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, CopyButton, EmptyState, FormPage, Icon, Input, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -26,6 +26,7 @@ import {
     writeMsgRequestDeclined,
     writeMsgUnread,
 } from '../utils/msgReadMemory.js';
+import { parseMessageContent } from '../utils/messageContent.js';
 import styles from './IssueTokenForm.module.css';
 import local from './MessagingInbox.module.css';
 
@@ -404,7 +405,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     // only when the conversation or the unread boundary changes, so a new
     // message arriving mid-read doesn't yank the view.
     useEffect(() => {
-        if (firstUnreadRef.current) {
+        if (typeof firstUnreadRef.current?.scrollIntoView === 'function') {
             firstUnreadRef.current.scrollIntoView({ block: 'start' });
         }
     }, [selectedCounterparty, firstUnreadMsg]);
@@ -579,6 +580,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                         const m = item.m;
                         const isOutgoing = ownerSet.has(m.from);
                         const isFirstUnread = m === firstUnreadMsg;
+                        const content = m.text !== null ? parseMessageContent(m.text) : null;
                         return (
                             <Fragment key={item.key}>
                                 {isFirstUnread ? (
@@ -598,11 +600,12 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                                     }}
                                 >
                                     <div
+                                        className={local.messageBubble}
                                         style={{
                                             maxWidth: '75%',
-                                            padding: '0.4rem 0.7rem',
                                             borderRadius: '1.1rem',
                                             whiteSpace: 'pre-wrap',
+                                            overflowWrap: 'anywhere',
                                             wordBreak: 'break-word',
                                             background: isOutgoing
                                                 ? 'var(--xc-accent-primary)'
@@ -610,14 +613,19 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                                             color: isOutgoing ? 'var(--xc-on-accent)' : 'var(--xc-text)',
                                         }}
                                     >
-                                        {m.text !== null ? m.text : encryptedPlaceholder()}
+                                        {content ? <MessageContent content={content} /> : encryptedPlaceholder()}
                                     </div>
-                                    {m.timestamp ? (
-                                        <span style={{ fontSize: '0.65rem', color: 'var(--xc-text-muted)', margin: '2px 0.3rem 0' }}>
-                                            {formatTime(m.timestamp)}
-                                            {m.method ? ` · ${methodLabel(m.method)}` : ''}
-                                        </span>
-                                    ) : null}
+                                    <div className={local.messageMeta}>
+                                        {m.timestamp ? (
+                                            <span>
+                                                {formatTime(m.timestamp)}
+                                                {m.method ? ` · ${methodLabel(m.method)}` : ''}
+                                            </span>
+                                        ) : null}
+                                        {content ? (
+                                            <CopyButton value={content.text} label="Copy" ariaLabel="Copy message" />
+                                        ) : null}
+                                    </div>
                                 </li>
                             </Fragment>
                         );
@@ -785,6 +793,47 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                 </div>
             )}
         </ListPage>,
+    );
+}
+
+/**
+ * Message text keeps line breaks, turns only HTTP(S) URLs into links, and
+ * exposes validated attachment envelopes as downloads.
+ *
+ * @param {{ content: { text: string, attachment: { name: string, type: string, dataUrl: string, size: number } | null } }} props
+ */
+function MessageContent({ content }) {
+    const parts = content.text.split(/(https?:\/\/[^\s<>"']+)/gi);
+    return (
+        <>
+            {content.text ? (
+                <span>
+                    {parts.map((part, index) => /^https?:\/\//i.test(part) ? (
+                        <a
+                            key={`${index}-${part}`}
+                            href={part}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={local.messageLink}
+                        >
+                            {part}
+                        </a>
+                    ) : <Fragment key={`${index}-${part}`}>{part}</Fragment>)}
+                </span>
+            ) : null}
+            {content.attachment ? (
+                <a
+                    href={content.attachment.dataUrl}
+                    download={content.attachment.name}
+                    className={local.attachmentLink}
+                >
+                    <Icon.DownloadIcon />
+                    <span>
+                        {content.attachment.name} ({content.attachment.size.toLocaleString()} bytes)
+                    </span>
+                </a>
+            ) : null}
+        </>
     );
 }
 
@@ -1145,6 +1194,10 @@ function formatRelative(ts) {
 // from the wallet's keys, so a missing body is a shared-key (AES) message or
 // one not for us; show a short lock label rather than the long thread notice.
 function previewFor(text) {
-    if (typeof text === 'string' && text.trim()) return text;
+    if (typeof text === 'string' && text.trim()) {
+        const content = parseMessageContent(text);
+        if (content.text.trim()) return content.text;
+        if (content.attachment) return `Attachment: ${content.attachment.name}`;
+    }
     return '🔒 Encrypted message';
 }

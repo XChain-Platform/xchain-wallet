@@ -164,6 +164,44 @@
     opacity: 0.4;
 }
 
+.messageBubble {
+    min-width: 0;
+    padding: 0.4rem 0.7rem;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.messageLink {
+    color: inherit;
+    text-decoration: underline;
+    overflow-wrap: anywhere;
+}
+
+.attachmentLink {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    margin-top: var(--xc-space-2);
+    color: inherit;
+    overflow-wrap: anywhere;
+}
+
+.attachmentLink svg {
+    flex: 0 0 auto;
+    width: 1rem;
+    height: 1rem;
+}
+
+.messageMeta {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    margin: 2px 0.3rem 0;
+    color: var(--xc-text-muted);
+    font-size: 0.65rem;
+}
+
 /* Docked thread composer: lives in the Screen footer, which flex-pins it to
    the bottom of the screen and supplies the top border + raised background.
    We pull against the footer's default padding (space-3 vertical / space-4
