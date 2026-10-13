@@ -876,12 +876,12 @@ function SessionRequestRow({ request, record, signerReady, messaging, walletId, 
                 </p>
             ) : (
                 <div className={local.requestActions}>
-                    <Button variant="primary" onClick={handleShare} loading={stage === 'sending'}>
-                        Share my key
-                    </Button>
                     {onMessage ? (
                         <Button variant="ghost" onClick={onMessage}>Message</Button>
                     ) : null}
+                    <Button variant="primary" onClick={handleShare} loading={stage === 'sending'}>
+                        Share my key
+                    </Button>
                 </div>
             )}
             {error ? (

@@ -146,7 +146,7 @@ export function DemoBanner({ activeWalletId, onExited }) {
             <div className={styles.actions} hidden={!expanded}>
                 <Button
                     size="sm"
-                    variant="secondary"
+                    variant="danger"
                     onClick={handleExit}
                     loading={busy}
                     disabled={busy}

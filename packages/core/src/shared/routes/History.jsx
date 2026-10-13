@@ -937,6 +937,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     // opts out via `verifyProofs` (default on). The map is keyed by
     // entry.key; EntryRow badges from it.
     const proofSettings = useSettings();
+    const [fiatToggleBusy, setFiatToggleBusy] = useState(false);
     const verifyProofsEnabled = proofSettings.settings?.verifyProofs !== false
         && !flowsLib.isDemoWallet(walletId);
     // History-local fiat toggle, persisted on the Settings record
@@ -945,10 +946,14 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const showFiatInHistory = Boolean(proofSettings.settings?.showFiatInHistory);
     const fiatCurrency = proofSettings.settings?.fiatCurrency || 'USD';
     const toggleShowFiatInHistory = async () => {
+        if (fiatToggleBusy) return;
+        setFiatToggleBusy(true);
         try {
             await proofSettings.update({ showFiatInHistory: !showFiatInHistory });
         } catch {
             // Best-effort; the toggle simply won't persist this time.
+        } finally {
+            setFiatToggleBusy(false);
         }
     };
     const verifyItems = useMemo(
@@ -1281,6 +1286,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         className={`${styles.filterDisclosure} ${showFiatInHistory ? styles.filterDisclosureActive : ''}`}
                         aria-pressed={showFiatInHistory}
                         onClick={toggleShowFiatInHistory}
+                        disabled={fiatToggleBusy}
+                        aria-busy={fiatToggleBusy}
                         title="Show the fiat equivalent for native-coin amounts"
                     >
                         {showFiatInHistory ? `Fiat: ${fiatCurrency}` : 'Show fiat'}

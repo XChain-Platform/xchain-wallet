@@ -174,6 +174,7 @@ export function AddressList({
     // Inline label editor state for the detail view.
     const [labelDraft, setLabelDraft] = useState('');
     const [labelSaving, setLabelSaving] = useState(false);
+    const [detailAction, setDetailAction] = useState(/** @type {'use' | 'delete' | null} */ (null));
     // Brief "copied" feedback on the inline address copy icon.
     const [addrCopied, setAddrCopied] = useState(false);
 
@@ -1047,7 +1048,8 @@ export function AddressList({
             showToast({ message: 'Copy failed: clipboard unavailable', variant: 'error' });
         };
         const removeAddress = async () => {
-            if (!selected.record?.id) return;
+            if (!selected.record?.id || detailAction) return;
+            setDetailAction('delete');
             // Deleting is allowed even for the active or only address on a
             // chain: the active pointer falls back to the lowest remaining
             // index on its own, and removing the last record is the only
@@ -1066,7 +1068,10 @@ export function AddressList({
                 }),
                 confirmLabel: 'Delete',
                 danger: true,
-            }))) return;
+            }))) {
+                setDetailAction(null);
+                return;
+            }
             // §37.2 / Cluster D FOLLOWUP 2: snapshot the whole record
             // before the delete so the Undo toast can put it back
             // verbatim. Taken here rather than inside onAction because
@@ -1107,10 +1112,13 @@ export function AddressList({
                 }
             } catch (err) {
                 setLoadError(userFacingMessage(err, 'Could not delete that address. Try again.'));
+            } finally {
+                setDetailAction(null);
             }
         };
         const setAsActive = async () => {
-            if (!selected.record?.id || typeof messaging.setActiveAddress !== 'function') return;
+            if (!selected.record?.id || detailAction || typeof messaging.setActiveAddress !== 'function') return;
+            setDetailAction('use');
             try {
                 await messaging.setActiveAddress(accountId, selected.chainId, selected.record.id);
                 // Choosing an address is choosing its chain: the action forms
@@ -1129,6 +1137,8 @@ export function AddressList({
                 // same way - a flow name and an internal - so the copy is
                 // guarded here rather than left to the next one.
                 setLoadError(userFacingMessage(err, 'Could not switch to that address. Try again.'));
+            } finally {
+                setDetailAction(null);
             }
         };
         return (
@@ -1186,10 +1196,12 @@ export function AddressList({
                             type="button"
                             className={local.quickAction}
                             onClick={setAsActive}
+                            disabled={detailAction !== null}
+                            aria-busy={detailAction === 'use'}
                             title={isActiveRow(selected) ? 'This is the active address' : 'Make this the active address'}
                         >
                             <span className={local.quickActionIcon} aria-hidden="true"><Icon.ReceiveIcon /></span>
-                            <span>Use</span>
+                            <span>{detailAction === 'use' ? 'Switching…' : 'Use'}</span>
                         </button>
                     ) : null}
                     {canSecret ? (
@@ -1215,9 +1227,11 @@ export function AddressList({
                             type="button"
                             className={local.quickAction}
                             onClick={removeAddress}
+                            disabled={detailAction !== null}
+                            aria-busy={detailAction === 'delete'}
                         >
                             <span className={local.quickActionIcon} aria-hidden="true"><Icon.TrashIcon /></span>
-                            <span>Delete</span>
+                            <span>{detailAction === 'delete' ? 'Deleting…' : 'Delete'}</span>
                         </button>
                     ) : null}
                     </div>

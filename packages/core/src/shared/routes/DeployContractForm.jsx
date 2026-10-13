@@ -233,6 +233,7 @@ export function DeployContractForm({ walletId, onBack }) {
     );
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
+    const [toolBusy, setToolBusy] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
@@ -459,7 +460,8 @@ export function DeployContractForm({ walletId, onBack }) {
     const metaAbsent = metaRead?.status === 'absent';
 
     async function handleUseTemplate(templateName) {
-        if (!chainId) return;
+        if (!chainId || toolBusy) return;
+        setToolBusy(`template:${templateName}`);
         setFormError(null);
         try {
             const { code: src } = await messaging.scaffoldContract({ chainId, name: templateName });
@@ -468,11 +470,14 @@ export function DeployContractForm({ walletId, onBack }) {
             setSizeInfo(null);
         } catch (e) {
             setFormError(e?.message || `Could not load the "${templateName}" template.`);
+        } finally {
+            setToolBusy(null);
         }
     }
 
     async function handleValidate() {
-        if (!chainId) return;
+        if (!chainId || toolBusy) return;
+        setToolBusy('validate');
         setFormError(null);
         try {
             const res = await messaging.validateContractCode({ chainId, code });
@@ -497,6 +502,8 @@ export function DeployContractForm({ walletId, onBack }) {
                 warnings: [],
                 errors: normalizeValidationDiagnostics(e),
             });
+        } finally {
+            setToolBusy(null);
         }
     }
 
@@ -553,17 +560,21 @@ export function DeployContractForm({ walletId, onBack }) {
     }
 
     async function handleCheckSize() {
-        if (!chainId) return;
+        if (!chainId || toolBusy) return;
+        setToolBusy('size');
         try {
             const res = await messaging.checkContractCodeSize({ chainId, code });
             setSizeInfo(res);
         } catch (e) {
             setFormError(e?.message || 'Size check failed.');
+        } finally {
+            setToolBusy(null);
         }
     }
 
     async function handleSuggestGas() {
-        if (!chainId) return;
+        if (!chainId || toolBusy) return;
+        setToolBusy('gas');
         try {
             // sdk.contracts.suggestGasLimit returns { suggested, rationale };
             // pull the scalar out (rendering the object crashed the form).
@@ -573,6 +584,22 @@ export function DeployContractForm({ walletId, onBack }) {
             if (!gasLimit) setGasLimit(String(suggested));
         } catch (e) {
             setFormError(e?.message || 'Gas suggestion failed.');
+        } finally {
+            setToolBusy(null);
+        }
+    }
+
+    async function handleDiscardPending(id) {
+        if (toolBusy) return;
+        setToolBusy(`discard:${id}`);
+        try {
+            await messaging.clearPendingDeploy({ id });
+            setResumable((rows) => rows.filter((x) => x.id !== id));
+            if (resumeId === id) setResumeId(null);
+        } catch (e) {
+            setFormError(e?.message || 'Could not discard the pending publish.');
+        } finally {
+            setToolBusy(null);
         }
     }
 
@@ -1223,12 +1250,10 @@ export function DeployContractForm({ walletId, onBack }) {
                                     </Button>
                                     <Button
                                         type="button"
-                                        variant="ghost"
-                                        onClick={async () => {
-                                            await messaging.clearPendingDeploy({ id: r.id });
-                                            setResumable((rows) => rows.filter((x) => x.id !== r.id));
-                                            if (resumeId === r.id) setResumeId(null);
-                                        }}
+                                        variant="danger"
+                                        onClick={() => handleDiscardPending(r.id)}
+                                        loading={toolBusy === `discard:${r.id}`}
+                                        disabled={toolBusy !== null}
                                     >
                                         Discard
                                     </Button>
@@ -1250,6 +1275,8 @@ export function DeployContractForm({ walletId, onBack }) {
                                 type="button"
                                 variant="ghost"
                                 onClick={() => handleUseTemplate(t)}
+                                loading={toolBusy === `template:${t}`}
+                                disabled={toolBusy !== null}
                             >
                                 {t}
                             </Button>
@@ -1287,13 +1314,13 @@ export function DeployContractForm({ walletId, onBack }) {
             </label>
 
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
-                <Button type="button" variant="ghost" onClick={handleValidate} disabled={!code.trim()}>
+                <Button type="button" variant="ghost" onClick={handleValidate} loading={toolBusy === 'validate'} disabled={!code.trim() || toolBusy !== null}>
                     Validate code
                 </Button>
-                <Button type="button" variant="ghost" onClick={handleCheckSize} disabled={!code.trim()}>
+                <Button type="button" variant="ghost" onClick={handleCheckSize} loading={toolBusy === 'size'} disabled={!code.trim() || toolBusy !== null}>
                     Estimate size
                 </Button>
-                <Button type="button" variant="ghost" onClick={handleSuggestGas} disabled={!code.trim()}>
+                <Button type="button" variant="ghost" onClick={handleSuggestGas} loading={toolBusy === 'gas'} disabled={!code.trim() || toolBusy !== null}>
                     Suggest gas
                 </Button>
             </div>

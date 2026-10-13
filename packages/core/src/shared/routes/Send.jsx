@@ -1908,17 +1908,17 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
             <div className={styles.testSendActions}>
                 <Button
                     type="button"
-                    variant="primary"
-                    onClick={onSendSmallTest}
-                >
-                    Send a small test first
-                </Button>
-                <Button
-                    type="button"
                     variant="secondary"
                     onClick={() => markTested(toAddress.trim())}
                 >
                     I've verified, continue
+                </Button>
+                <Button
+                    type="button"
+                    variant="primary"
+                    onClick={onSendSmallTest}
+                >
+                    Send a small test first
                 </Button>
             </div>
         </div>
