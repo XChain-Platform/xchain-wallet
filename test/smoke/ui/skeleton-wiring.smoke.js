@@ -42,6 +42,7 @@ const ROUTES = [
         name: 'History',
         path: join(sharedRoutes, 'History.jsx'),
         ariaLabel: 'Loading history',
+        ariaPattern: /role="status"[\s\S]*aria-label=\{t\('history\.loading'\)\}/,
         oldText: 'Loading history…',
     },
     {
@@ -63,7 +64,7 @@ for (const r of ROUTES) {
         `${r.name}.jsx renders <Skeleton.List>`,
     );
     assert.ok(
-        new RegExp(`role="status"[\\s\\S]*aria-label="${r.ariaLabel}"`).test(src),
+        (r.ariaPattern || new RegExp(`role="status"[\\s\\S]*aria-label="${r.ariaLabel}"`)).test(src),
         `${r.name}.jsx wraps the skeleton in role="status" + aria-label="${r.ariaLabel}"`,
     );
     assert.ok(

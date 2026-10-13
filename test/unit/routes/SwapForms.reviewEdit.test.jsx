@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 
 vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
@@ -106,6 +106,33 @@ describe('swap review editing', () => {
         fireEvent.click(edit);
         expect(await screen.findByLabelText('Give amount (ALPHA)')).toHaveValue('2');
         expect(screen.getByLabelText('Get amount (BETA)')).toHaveValue('3');
+    });
+
+    it('shows every same-chain offer term on the watcher review', async () => {
+        render(
+            <MessagingProvider shell="desktop" messaging={messaging()}>
+                <SwapForm walletId="w" onBack={() => {}} initialChainId={BTC} initialGiveTick="ALPHA" />
+            </MessagingProvider>,
+        );
+        await waitFor(() => expect(screen.getByRole('button', { name: /Get token:/ })).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: /Get token:/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Choose Select get token' }));
+        setAmount('Give amount (ALPHA)', '2');
+        setAmount('Get amount (BETA)', '3');
+        fireEvent.click(screen.getByLabelText('Expire at a specific time'));
+        fireEvent.change(screen.getByLabelText('Expires'), { target: { value: '2099-01-02T03:04' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Advanced options (receive address, lists)' }));
+        fireEvent.change(screen.getByLabelText('Receive at (optional)'), { target: { value: 'bc1qrecipient' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+
+        const giveValue = await screen.findByText('2 ALPHA');
+        const details = giveValue.closest('dl');
+        expect(details).not.toBeNull();
+        expect(within(details).getByText('2 ALPHA')).toBeInTheDocument();
+        expect(within(details).getByText('3 BETA')).toBeInTheDocument();
+        expect(within(details).getByText(new Date('2099-01-02T03:04').toLocaleString())).toBeInTheDocument();
+        expect(within(details).getByText('bc1qrecipient')).toBeInTheDocument();
+        expect(within(details).getAllByText('None')).toHaveLength(2);
     });
 
     it('returns from the cross-chain review to the populated form', async () => {

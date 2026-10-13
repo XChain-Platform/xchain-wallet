@@ -30,6 +30,7 @@ const ACTION_MIN_DURATION_MS = 12000;
 /**
  * @typedef {{
  *   showToast: (toast: ToastInput) => string,
+ *   announce: (message: string) => void,
  *   dismissToast: (id: string) => void,
  *   clearToasts: () => void,
  * }} ToastApi
@@ -46,8 +47,14 @@ const ToastContext = createContext(null);
  */
 export function ToastHost({ children }) {
     const [toasts, setToasts] = useState(/** @type {ToastInput[]} */ ([]));
+    const [announcement, setAnnouncement] = useState({ id: 0, message: '' });
     const timersRef = useRef(/** @type {Map<string, ReturnType<typeof setTimeout>>} */ (new Map()));
     const haptic = useHaptic();
+
+    const announce = useCallback((message) => {
+        if (typeof message !== 'string' || message.length === 0) return;
+        setAnnouncement((current) => ({ id: current.id + 1, message }));
+    }, []);
 
     const dismissToast = useCallback((id) => {
         setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -85,8 +92,8 @@ export function ToastHost({ children }) {
         timersRef.current.clear();
     }, []);
 
-    const api = useMemo(() => ({ showToast, dismissToast, clearToasts }), [
-        showToast, dismissToast, clearToasts,
+    const api = useMemo(() => ({ showToast, announce, dismissToast, clearToasts }), [
+        showToast, announce, dismissToast, clearToasts,
     ]);
 
     const visibleToasts = toasts.slice(0, VISIBLE_LIMIT);
@@ -118,7 +125,13 @@ export function ToastHost({ children }) {
                     className={styles.viewport}
                     role="region"
                     aria-label="Notifications"
+                    aria-live="polite"
+                    aria-atomic="false"
+                    aria-relevant="additions text"
                 >
+                    <span className={styles.liveAnnouncement} key={announcement.id}>
+                        {announcement.message}
+                    </span>
                     {hiddenCount > 0 ? (
                         <div className={styles.overflowBadge} aria-hidden="true">
                             {`+${hiddenCount} more`}
@@ -150,9 +163,6 @@ function ToastItem({ toast, onAction, onDismiss }) {
     return (
         <div
             className={`${styles.toast} ${styles[`variant_${variant}`] || ''}`}
-            role={variant === 'error' ? 'alert' : 'status'}
-            aria-live={variant === 'error' ? 'assertive' : 'polite'}
-            aria-atomic="true"
             onKeyDown={(event) => {
                 if (event.key !== 'Escape') return;
                 event.preventDefault();
@@ -195,6 +205,7 @@ export function useToast() {
     if (ctx) return ctx;
     return /** @type {ToastApi} */ ({
         showToast: () => '',
+        announce: () => {},
         dismissToast: () => {},
         clearToasts: () => {},
     });

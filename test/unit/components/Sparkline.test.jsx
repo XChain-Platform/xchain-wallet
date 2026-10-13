@@ -29,6 +29,9 @@ describe('Sparkline', () => {
         expect(image.tagName).toBe('svg');
         expect(image.querySelector('polyline')?.getAttribute('points'))
             .toBe('1.00,99.00 99.00,1.00');
+        expect(image.querySelector('title')).toHaveTextContent(
+            'Price trend. Values range from 1 to 3. Start 1. End 3. Change +2 (+200.00%).',
+        );
     });
 
     it('includes range context and formatted falling values in its summary', () => {

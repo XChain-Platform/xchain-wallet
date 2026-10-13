@@ -13,6 +13,7 @@ import { Icon } from '@xchain-wallet/core/ui';
 import { formatBadgeCount, isNavItemActive } from './LeftNav.jsx';
 import styles from './BottomTabBar.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
+import { useFocusTrap } from '../utils/focusTrap.js';
 
 /**
  * §24.3 / G054: mobile bottom-sheet navigation.
@@ -70,6 +71,11 @@ const SHEET_PRIMARY = [
     { id: 'obligations', label: 'Payments due', Icon: Icon.ClockIcon, group: ['obligations'] },
 ];
 
+function scrollMainToTop() {
+    const main = typeof document === 'undefined' ? null : document.getElementById('xc-main');
+    if (main) main.scrollTop = 0;
+}
+
 export function BottomTabBar({
     currentView,
     onSelect,
@@ -83,9 +89,10 @@ export function BottomTabBar({
 }) {
     const [sheetOpen, setSheetOpen] = useState(false);
     const moreTriggerRef = useRef(null);
-    const sheetWasOpen = useRef(false);
+    const sheetRef = useRef(null);
     // The system Back gesture closes this before it leaves the screen.
     useBackHandler(sheetOpen ? () => setSheetOpen(false) : undefined);
+    useFocusTrap(sheetRef, { active: sheetOpen, restoreFocusRef: moreTriggerRef });
 
     // Close the sheet whenever the user navigates. The parent flips
     // currentView, which is enough of a signal that the user picked a
@@ -96,7 +103,7 @@ export function BottomTabBar({
     // without the bar leave the variable unset and keep their own offset.
     useEffect(() => {
         const root = document.documentElement;
-        root.style.setProperty('--xc-bottom-bar-h', '56px');
+        root.style.setProperty('--xc-bottom-bar-h', '3.5rem');
         return () => root.style.removeProperty('--xc-bottom-bar-h');
     }, []);
 
@@ -104,11 +111,6 @@ export function BottomTabBar({
         if (sheetOpen) setSheetOpen(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentView]);
-
-    useEffect(() => {
-        if (sheetWasOpen.current && !sheetOpen) moreTriggerRef.current?.focus();
-        sheetWasOpen.current = sheetOpen;
-    }, [sheetOpen]);
 
     // Esc closes the sheet (sheet acts as a transient overlay).
     useEffect(() => {
@@ -154,7 +156,10 @@ export function BottomTabBar({
                             type="button"
                             className={`${styles.tab} ${active ? styles.tabActive : ''}`}
                             aria-current={active ? 'page' : undefined}
-                            onClick={() => onSelect(tab.id)}
+                            onClick={() => {
+                                if (active) scrollMainToTop();
+                                onSelect(tab.id);
+                            }}
                         >
                             <span className={styles.tabIcon} aria-hidden="true">
                                 <tab.Icon />
@@ -192,12 +197,15 @@ export function BottomTabBar({
                         tabIndex={-1}
                     />
                     <div
+                        ref={sheetRef}
                         id="xc-bottom-sheet"
                         role="dialog"
+                        aria-modal="true"
                         aria-label="More navigation"
                         className={styles.sheet}
                     >
                         <div className={styles.handle} aria-hidden="true" />
+                        {/* Safari needs an explicit list role because this class removes list styling. */}
                         <ul className={styles.sheetList} role="list">
                             {sheetRows.map((row) => {
                                 const active = isNavItemActive(row.id, currentView);
@@ -227,6 +235,7 @@ export function BottomTabBar({
                             })}
                         </ul>
                         <div className={styles.sheetDivider} />
+                        {/* Safari needs an explicit list role because this class removes list styling. */}
                         <ul className={styles.sheetList} role="list">
                             {onOpenWalletPicker ? (
                                 <li>

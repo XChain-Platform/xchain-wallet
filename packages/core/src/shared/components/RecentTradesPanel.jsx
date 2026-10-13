@@ -16,6 +16,7 @@
 // Raw give/get rows retain orientation support for older explorers.
 
 import { useEffect, useState } from 'react';
+import { StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../useMessaging.js';
 import { sampleMatchesFor } from '../../market/sampleMarketData.js';
 import { normalizeMarketHistoryRowExact } from '../../market/history_rows.js';
@@ -26,6 +27,13 @@ import {
 } from '../utils/amountFormat.js';
 
 const MAX_ROWS = 30;
+const TRADE_GRID_COLUMNS = 'minmax(5rem, 1fr) repeat(2, minmax(5rem, 1fr)) minmax(3rem, 0.6fr)';
+const NUMERIC_CELL_STYLE = {
+    minWidth: 0,
+    textAlign: 'right',
+    fontVariantNumeric: 'tabular-nums',
+    overflowWrap: 'anywhere',
+};
 
 /**
  * @param {object} props
@@ -38,12 +46,14 @@ const MAX_ROWS = 30;
 export function RecentTradesPanel({ chainId, tick1, tick2, demo = false, onOpenTx }) {
     const { messaging } = useMessaging();
     const [rows, setRows] = useState(/** @type {any[]} */ ([]));
+    const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
     useEffect(() => {
         let cancelled = false;
         setRows([]);
         setLoadError(null);
+        setLoading(true);
         messaging.getMarketHistory({ chainId, tick1, tick2 })
             .then((resp) => {
                 if (cancelled) return;
@@ -53,17 +63,25 @@ export function RecentTradesPanel({ chainId, tick1, tick2, demo = false, onOpenT
                 // yet" empty state. Never fabricated trades.
                 const next = real.length > 0 ? real : (demo ? sampleMatchesFor(tick1, tick2) : []);
                 setRows(next.slice(0, MAX_ROWS));
+                setLoading(false);
             })
             .catch((err) => {
                 if (cancelled) return;
                 setRows(demo ? sampleMatchesFor(tick1, tick2).slice(0, MAX_ROWS) : []);
                 setLoadError(readFailureMessage(err, 'load recent trades'));
+                setLoading(false);
             });
         return () => { cancelled = true; };
     }, [messaging, chainId, tick1, tick2, demo]);
 
+    const summaries = rows
+        .map((row) => ({ row, summary: summarizeRow(row, tick1, tick2) }))
+        .filter(({ summary }) => Boolean(summary));
+
     return (
-        <div
+        <section
+            aria-label="Recent trades"
+            aria-busy={loading || undefined}
             style={{
                 border: '1px solid var(--xc-border)',
                 borderRadius: '4px',
@@ -71,83 +89,90 @@ export function RecentTradesPanel({ chainId, tick1, tick2, demo = false, onOpenT
             }}
         >
             <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>Recent trades</p>
-            <div
-                style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr 1fr 0.75fr',
-                    gap: '0.25rem',
-                    fontSize: '0.75rem',
-                    color: 'var(--xc-fg-muted)',
-                    padding: '0 0.25rem 0.25rem',
-                }}
-            >
-                <span>Time</span>
-                <span>Price</span>
-                <span>Size ({tick1})</span>
-                <span>Side</span>
-            </div>
-            {loadError ? (
-                <p style={{ margin: '0.25rem 0.25rem 0', color: 'var(--xc-fg-muted)', fontSize: '0.75rem' }}>
-                    {loadError}
-                </p>
+            {loading ? (
+                <StatusMessage variant="status">Loading recent trades…</StatusMessage>
             ) : null}
-            {!loadError && rows.length === 0 ? (
+            {loadError ? (
+                <StatusMessage variant="error">{loadError}</StatusMessage>
+            ) : null}
+            {!loadError && !loading && summaries.length === 0 ? (
                 <p style={{ margin: '0.25rem 0.25rem 0', color: 'var(--xc-fg-muted)', fontSize: '0.75rem' }}>
                     No trades yet.
                 </p>
             ) : null}
-            <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                {rows.map((row) => {
-                    const summary = summarizeRow(row, tick1, tick2);
-                    if (!summary) return null;
-                    const content = (
-                        <div
-                            style={{
-                                display: 'grid',
-                                gridTemplateColumns: '1fr 1fr 1fr 0.75fr',
-                                gap: '0.25rem',
-                                padding: '0.15rem 0.25rem',
-                                fontSize: '0.7rem',
-                                fontVariantNumeric: 'tabular-nums',
-                            }}
-                        >
-                            <span style={{ color: 'var(--xc-fg-muted)' }}>
-                                {summary.timeLabel}
-                            </span>
-                            <span style={{ color: summary.side === 'buy' ? '#26a69a' : '#ef5350' }}>
-                                {summary.price}
-                            </span>
-                            <span>{summary.size}</span>
-                            <span>{summary.side === 'buy' ? 'Buy' : 'Sell'}</span>
-                        </div>
-                    );
-                    const key = String(row.action_index ?? `${summary.timeLabel}-${summary.price}-${summary.size}`);
-                    if (!onOpenTx || !row.tx_hash) {
-                        return <li key={key}>{content}</li>;
-                    }
-                    return (
-                        <li key={key}>
-                            <button
-                                type="button"
-                                onClick={() => onOpenTx(String(row.tx_hash))}
-                                aria-label={`Open transaction ${row.tx_hash}`}
-                                style={{
-                                    display: 'block',
-                                    width: '100%',
-                                    background: 'none',
-                                    border: 'none',
-                                    padding: 0,
-                                    cursor: 'pointer',
-                                    textAlign: 'left',
-                                }}
-                            >
-                                {content}
-                            </button>
-                        </li>
-                    );
-                })}
-            </ul>
-        </div>
+            {summaries.length > 0 ? (
+                <div style={{ maxWidth: '100%', overflowX: 'auto' }}>
+                    <div
+                        style={{
+                            display: 'grid',
+                            gridTemplateColumns: TRADE_GRID_COLUMNS,
+                            gap: '0.25rem',
+                            minWidth: '20rem',
+                            fontSize: '0.75rem',
+                            color: 'var(--xc-fg-muted)',
+                            padding: '0 0.25rem 0.25rem',
+                        }}
+                    >
+                        <span style={NUMERIC_CELL_STYLE}>Time</span>
+                        <span style={NUMERIC_CELL_STYLE}>Price</span>
+                        <span style={NUMERIC_CELL_STYLE}>Size ({tick1})</span>
+                        <span>Side</span>
+                    </div>
+                    <ul style={{ listStyle: 'none', padding: 0, margin: 0, minWidth: '20rem' }}>
+                        {summaries.map(({ row, summary }) => {
+                            const sideColor = summary.side === 'buy' ? 'var(--xc-success)' : 'var(--xc-danger)';
+                            const content = (
+                                <div
+                                    style={{
+                                        display: 'grid',
+                                        gridTemplateColumns: TRADE_GRID_COLUMNS,
+                                        gap: '0.25rem',
+                                        padding: '0.15rem 0.25rem',
+                                        fontSize: '0.7rem',
+                                    }}
+                                >
+                                    <span style={{ ...NUMERIC_CELL_STYLE, color: 'var(--xc-fg-muted)' }}>
+                                        {summary.timeLabel}
+                                    </span>
+                                    <span style={{ ...NUMERIC_CELL_STYLE, color: sideColor }}>
+                                        {summary.price}
+                                    </span>
+                                    <span style={NUMERIC_CELL_STYLE}>{summary.size}</span>
+                                    <span style={{ color: sideColor, fontWeight: 600 }}>
+                                        {summary.side === 'buy' ? 'Buy' : 'Sell'}
+                                    </span>
+                                </div>
+                            );
+                            const key = String(row.action_index ?? `${summary.timeLabel}-${summary.price}-${summary.size}`);
+                            if (!onOpenTx || !row.tx_hash) {
+                                return <li key={key}>{content}</li>;
+                            }
+                            return (
+                                <li key={key}>
+                                    <button
+                                        type="button"
+                                        onClick={() => onOpenTx(String(row.tx_hash))}
+                                        aria-label={`Open transaction ${row.tx_hash}`}
+                                        style={{
+                                            display: 'block',
+                                            width: '100%',
+                                            background: 'none',
+                                            border: 'none',
+                                            padding: 0,
+                                            cursor: 'pointer',
+                                            textAlign: 'left',
+                                            color: 'inherit',
+                                        }}
+                                    >
+                                        {content}
+                                    </button>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                </div>
+            ) : null}
+        </section>
     );
 }
 
