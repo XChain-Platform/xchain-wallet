@@ -37,7 +37,7 @@
  * @property {string} why                     the user-visible reason the request exists
  * @property {string} carries                 what leaves the device, stated plainly
  * @property {string} control                 how a user stops it: 'none', a settings path, or the structural reason it cannot happen
- * @property {string[]} shells                shells on which the request actually occurs
+ * @property {readonly string[]} shells       shells on which the request actually occurs
  * @property {string} source                  the module that names the host
  */
 
@@ -228,7 +228,10 @@ export const WIRE_AUDIT = Object.freeze([
         shells: ['web', 'desktop', 'extension', 'mobile'],
         source: 'restore-from-link flow',
     },
-]);
+].map((entry) => Object.freeze({
+    ...entry,
+    shells: Object.freeze([...entry.shells]),
+})));
 
 /**
  * The hosts a given shell actually contacts, automatically, at default

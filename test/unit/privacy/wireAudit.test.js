@@ -74,6 +74,19 @@ describe('privacy/wireAudit', () => {
         expect(registeredHosts()).not.toContain('mutated.example');
     });
 
+    it('deep-freezes audit rows so consumers cannot alter egress policy', () => {
+        const entry = WIRE_AUDIT[0];
+        const originalHost = entry.host;
+        const originalShells = [...entry.shells];
+
+        expect(Object.isFrozen(entry)).toBe(true);
+        expect(Object.isFrozen(entry.shells)).toBe(true);
+        expect(() => { entry.host = 'mutated.example'; }).toThrow(TypeError);
+        expect(() => { entry.shells.push('mutated'); }).toThrow(TypeError);
+        expect(entry.host).toBe(originalHost);
+        expect(entry.shells).toEqual(originalShells);
+    });
+
     it('registers every concrete host and excludes the wildcard class', () => {
         const expected = new Set(WIRE_AUDIT.map((entry) => entry.host));
         expected.delete('*');
