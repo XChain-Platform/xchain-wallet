@@ -327,7 +327,9 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         ? Number(settings.privacy.formDraftTtlMs)
         : undefined;
     const draft = useFormDraft({ view: 'dispenser', walletId, ttlMs: formDraftTtlMs });
-    const [draftPending, setDraftPending] = useState(() => draft.hasDraft());
+    // A stored draft waits for an explicit Restore. A fresh form starts
+    // saving immediately so an auto-lock unmount cannot erase typed values.
+    const [draftPending, setDraftPending] = useState(() => !draft.hasDraft());
     useEffect(() => {
         if (stage !== 'form' || !draftPending) return;
         draft.save({
@@ -367,7 +369,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     }, [draft]);
     const dismissDraft = useCallback(() => {
         draft.clear();
-        setDraftPending(false);
+        setDraftPending(true);
     }, [draft]);
 
     // The active map and the settings read are best-effort: a host without
@@ -1395,7 +1397,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             variant="status"
             recovery={{ label: 'Restore', onAction: restoreDraft }}
         >
-            You have an unfinished dispenser draft.
+            Your unfinished dispenser draft was saved. Restore it to continue. Nothing was submitted.
             <button
                 type="button"
                 onClick={dismissDraft}

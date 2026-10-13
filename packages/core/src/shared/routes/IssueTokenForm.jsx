@@ -157,7 +157,9 @@ export function IssueTokenForm({ walletId, onBack }) {
         ? Number(settings.privacy.formDraftTtlMs)
         : undefined;
     const draft = useFormDraft({ view: 'issue-token', walletId, ttlMs: formDraftTtlMs });
-    const [draftPending, setDraftPending] = useState(() => draft.hasDraft());
+    // A stored draft waits for an explicit Restore. A fresh form starts
+    // saving immediately so an auto-lock unmount cannot erase typed values.
+    const [draftPending, setDraftPending] = useState(() => !draft.hasDraft());
     useEffect(() => {
         if (stage !== 'form' || !draftPending) return;
         draft.save({
@@ -188,7 +190,7 @@ export function IssueTokenForm({ walletId, onBack }) {
     }, [draft]);
     const dismissDraft = useCallback(() => {
         draft.clear();
-        setDraftPending(false);
+        setDraftPending(true);
     }, [draft]);
 
     // The active map and the settings read are best-effort: a host without
@@ -794,7 +796,7 @@ export function IssueTokenForm({ walletId, onBack }) {
             variant="status"
             recovery={{ label: 'Restore', onAction: restoreDraft }}
         >
-            You have an unfinished issue draft.
+            Your unfinished issue draft was saved. Restore it to continue. Nothing was submitted.
             <button
                 type="button"
                 onClick={dismissDraft}

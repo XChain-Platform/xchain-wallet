@@ -419,7 +419,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         ? Number(settings.privacy.formDraftTtlMs)
         : undefined;
     const draft = useFormDraft({ view: 'send', walletId, ttlMs: formDraftTtlMs });
-    const [draftPending, setDraftPending] = useState(() => draft.hasDraft());
+    // A stored draft waits for an explicit Restore. A fresh form starts
+    // saving immediately so an auto-lock unmount cannot erase typed values.
+    const [draftPending, setDraftPending] = useState(() => !draft.hasDraft());
     useEffect(() => {
         if (stage !== 'form' || !draftPending) return;
         draft.save({ chainId, toAddress, tick, amount, memo });
@@ -436,7 +438,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
     }, [draft]);
     const dismissDraft = useCallback(() => {
         draft.clear();
-        setDraftPending(false);
+        setDraftPending(true);
     }, [draft]);
 
     // The settings read rides the address load so the last-used chain is
@@ -2560,7 +2562,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             variant="status"
             recovery={{ label: 'Restore', onAction: restoreDraft }}
         >
-            You have an unfinished Send draft.
+            Your unfinished Send draft was saved. Restore it to continue. Nothing was submitted.
             <button
                 type="button"
                 onClick={dismissDraft}
