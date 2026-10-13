@@ -14,6 +14,7 @@
 .panel {
     width: 100%;
     max-width: 380px;
+    min-height: 0;
     background: var(--xc-surface);
     color: var(--xc-text);
     display: flex;
@@ -35,7 +36,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: var(--xc-space-3) var(--xc-space-4);
+    padding: calc(var(--xc-space-3) + env(safe-area-inset-top, 0px)) var(--xc-space-4) var(--xc-space-3);
     border-bottom: 1px solid var(--xc-border);
     flex: 0 0 auto;
 }
@@ -93,6 +94,7 @@
     min-height: 0;
     overflow-y: auto;
     padding: var(--xc-space-3);
+    padding-bottom: calc(var(--xc-space-3) + env(safe-area-inset-bottom, 0px));
 }
 
 .empty {
@@ -155,9 +157,15 @@
     font-size: var(--xc-text-sm);
     font-weight: 600;
     cursor: pointer;
+    min-height: var(--xc-tap-min);
 }
 
 .alertAction:hover {
     background: var(--xc-accent-primary-hover);
     border-color: var(--xc-accent-primary-hover);
+}
+
+.alertAction:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
 }
