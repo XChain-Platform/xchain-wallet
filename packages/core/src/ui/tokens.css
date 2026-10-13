@@ -340,7 +340,8 @@ body {
      * themselves by `env(safe-area-inset-bottom)`, and they are pinned to the
      * viewport rather than to body flow, so adding it here as well would open
      * a second gap under the tab bar on exactly the devices this is meant to
-     * fix. The bottom stays owned by the two components that render there. */
+     * fix. The bottom stays owned by what renders there: those two, or the
+     * Screen itself when neither does (Screen.module.css). */
     padding-top: env(safe-area-inset-top, 0);
     padding-left: env(safe-area-inset-left, 0);
     padding-right: env(safe-area-inset-right, 0);

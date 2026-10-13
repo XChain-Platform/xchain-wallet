@@ -77,6 +77,8 @@
 
 .layoutWithBottomBar > .main {
     padding-bottom: calc(56px + env(safe-area-inset-bottom, 0));
+    /* The bar pays the home-indicator inset, so the Screen above it does not. */
+    --xc-screen-safe-bottom: 0px;
 }
 
 /* The bar is hidden while the keyboard is up (BottomTabBar.module.css), so
@@ -97,6 +99,8 @@
     background: var(--xc-surface-raised);
     border-inline-end: 1px solid var(--xc-border);
     padding: var(--xc-space-3) 0;
+    /* Keep Settings and Lock at the foot of the rail clear of the home indicator. */
+    padding-bottom: calc(var(--xc-space-3) + env(safe-area-inset-bottom, 0px));
     overflow-y: auto;
 }
 
