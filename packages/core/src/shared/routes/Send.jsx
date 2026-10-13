@@ -2193,7 +2193,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             <EmptyState
                 title={NO_CHAINS_TITLE}
                 body={NO_CHAINS_BODY}
-                actionLabel="Open Network settings"
+                actionLabel={t('common.openNetworkSettings')}
                 onAction={() => setNetworkSettingsOpen(true)}
                 actionIcon={<Icon.GearIcon />}
             />,
