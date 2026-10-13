@@ -9,6 +9,14 @@
     box-sizing: border-box;
 }
 
+.refreshing svg {
+    animation: history-refresh-spin 0.8s linear infinite;
+}
+
+@keyframes history-refresh-spin {
+    to { transform: rotate(360deg); }
+}
+
 /* Unified filter card containing search, chain picker, and the collapsible
    advanced-filters panel in one bordered container so the mobile view reads
    as one block instead of three stacked widgets. */

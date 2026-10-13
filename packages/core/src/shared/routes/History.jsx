@@ -434,6 +434,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [entries, setEntries] = useState(/** @type {HistoryEntry[]} */ ([]));
     const [historyLoaded, setHistoryLoaded] = useState(false);
+    const historyLoadedRef = useRef(false);
+    historyLoadedRef.current = historyLoaded;
+    const [refreshing, setRefreshing] = useState(false);
     const [addressesReload, setAddressesReload] = useState(0);
     // Cluster G FOLLOWUP 5: Unix ms of the last successful per-chain
     // history+links fan-out completion. Surfaces as a "Last synced …"
@@ -501,6 +504,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         setEntries([]);
         setHistoryFetchedAt(null);
         setLoadingChains(new Set());
+        setRefreshing(false);
         setLoadError(null);
         setIndexerWatermarkByChainId({});
         setMultisigAddress(null);
@@ -660,6 +664,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             setEntries([]);
             setHistoryLoaded(true);
             setHistoryFetchedAt(null);
+            setRefreshing(false);
             // Nothing to fetch, so nothing lands below to release the slot a
             // focus may have claimed on the way here. `fail()` rather than
             // `succeed()`: no read happened, so the window must not move.
@@ -678,6 +683,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         const throttle = pollThrottleRef.current;
         throttle.reset();
         throttle.start();
+        setRefreshing(true);
         // A background refresh must not blank the list it is refreshing; the
         // loading state belongs to the first load only.
         if (entriesRef.current.length === 0) setLoadingChains(new Set(chainsToLoad));
@@ -687,6 +693,16 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         // isn't an empty wasteland during the demo. Real history rows
         // arrive once the user exits demo mode + funds the wallet.
         const isDemo = flowsLib.isDemoWallet(walletId);
+        const optionalRows = (promise) => promise
+            .then((response) => extractRows(response))
+            .catch((err) => {
+                // An initial load can still show confirmed rows when an older
+                // explorer lacks an optional channel. A refresh keeps every
+                // shown row when any channel fails, because an empty fallback
+                // is indistinguishable from pending activity disappearing.
+                if (historyLoadedRef.current) throw err;
+                return [];
+            });
 
         const tasks = [];
         for (const cid of chainsToLoad) {
@@ -704,23 +720,16 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     Promise.all([
                         messaging.getAddressHistory({ chainId: cid, address: a.address })
                             .then((r) => extractRows(r)),
-                        messaging.getLinksForAddress({ chainId: cid, address: a.address })
-                            .then((r) => extractRows(r))
-                            .catch(() => []),
+                        optionalRows(messaging.getLinksForAddress({ chainId: cid, address: a.address })),
                         // M2.1: both pending sources. Each degrades to [] on
-                        // its own, so an explorer without the unconfirmed
-                        // surface still shows our own broadcast sends, and a
-                        // shell whose messaging predates these channels shows
-                        // confirmed history exactly as it did before.
+                        // the initial load, so an explorer without the
+                        // unconfirmed surface still shows confirmed history.
+                        // Refresh failures preserve the complete shown list.
                         typeof messaging.getAddressMempool === 'function'
-                            ? messaging.getAddressMempool({ chainId: cid, address: a.address })
-                                .then((r) => extractRows(r))
-                                .catch(() => [])
+                            ? optionalRows(messaging.getAddressMempool({ chainId: cid, address: a.address }))
                             : Promise.resolve([]),
                         typeof messaging.getPendingTxsForAddress === 'function'
-                            ? messaging.getPendingTxsForAddress({ chainId: cid, address: a.address })
-                                .then((r) => extractRows(r))
-                                .catch(() => [])
+                            ? optionalRows(messaging.getPendingTxsForAddress({ chainId: cid, address: a.address }))
                             : Promise.resolve([]),
                     ]).then(([history, links, mempool, pendingTxs]) => (
                         { chainId: cid, address: a.address, history, links, mempool, pendingTxs }
@@ -855,12 +864,21 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             setLoadingChains(new Set());
             setHistoryFetchedAt(Date.now());
             setHistoryLoaded(true);
-        }).catch(() => {
+            setRefreshing(false);
+        }).catch((err) => {
             if (cancelled) return;
             throttle.fail();
             setLoadingChains(new Set());
-            setHistoryLoaded(true);
-            setLoadError('Could not load history. Try again.');
+            setRefreshing(false);
+            if (historyLoadedRef.current) {
+                showToast({
+                    message: humanizeError(err, 'refresh history').message,
+                    variant: 'error',
+                });
+            } else {
+                setHistoryLoaded(true);
+                setLoadError('Could not load history. Try again.');
+            }
         });
 
         return () => { cancelled = true; };
@@ -1329,6 +1347,25 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             onBack={onBack}
             backLabel="Back to home"
             title="History"
+            trailing={(
+                <button
+                    type="button"
+                    className={refreshing ? styles.refreshing : undefined}
+                    aria-label={refreshing ? 'Refreshing history' : 'Refresh history'}
+                    title={refreshing ? 'Refreshing history' : 'Refresh history'}
+                    disabled={refreshing || !historyLoaded}
+                    onClick={() => {
+                        const throttle = pollThrottleRef.current;
+                        if (throttle.isInFlight()) return;
+                        throttle.reset();
+                        throttle.start();
+                        setRefreshing(true);
+                        setRefreshTick((n) => n + 1);
+                    }}
+                >
+                    <Icon.RefreshIcon />
+                </button>
+            )}
         />
     );
     const wrap = (children) => (

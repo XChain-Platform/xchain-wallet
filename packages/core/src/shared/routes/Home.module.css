@@ -30,6 +30,11 @@
     padding: var(--xc-space-4) 0;
 }
 
+.refreshRow {
+    display: flex;
+    justify-content: flex-end;
+}
+
 .error {
     font-size: var(--xc-text-sm);
     color: var(--xc-danger-fg);
