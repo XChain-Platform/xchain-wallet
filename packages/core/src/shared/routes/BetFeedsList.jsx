@@ -208,16 +208,24 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
     return wrap(
         <ListPage
             toolbar={(
-                <>
-                    <NetworkField value={chainId} onChange={setChainId} chainIds={betChains.length ? betChains : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
-                    <div className={styles.betActions}>
+                <div className={local.toolbarRow}>
+                    <div className={local.toolbarNetwork}>
+                        <NetworkField
+                            value={chainId}
+                            onChange={setChainId}
+                            chainIds={betChains.length ? betChains : (chainId ? [chainId] : [])}
+                            chainRegistry={chainRegistry}
+                            size="md"
+                        />
+                    </div>
+                    <div className={`${styles.betActions} ${local.toolbarActions}`}>
                         {/* A two-way filter: the colour shows the active side, and
                             aria-pressed says the same to a screen reader. */}
-                        <Button variant={openOnly ? 'primary' : 'ghost'} aria-pressed={openOnly} onClick={() => setOpenOnly(true)}>Taking bets</Button>
-                        <Button variant={openOnly ? 'ghost' : 'primary'} aria-pressed={!openOnly} onClick={() => setOpenOnly(false)}>All markets</Button>
-                        {onCreate ? <Button variant="ghost" onClick={() => onCreate(chainId)}>Create market</Button> : null}
+                        <Button size="md" variant={openOnly ? 'primary' : 'ghost'} aria-pressed={openOnly} onClick={() => setOpenOnly(true)}>Taking bets</Button>
+                        <Button size="md" variant={openOnly ? 'ghost' : 'primary'} aria-pressed={!openOnly} onClick={() => setOpenOnly(false)}>All markets</Button>
+                        {onCreate ? <Button size="md" variant="ghost" onClick={() => onCreate(chainId)}>Create market</Button> : null}
                     </div>
-                </>
+                </div>
             )}
         >
             {/* This screen is the whole family's entry point (the GovernancePolls
@@ -225,8 +233,8 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
                 needing its own slot in the actions menu. */}
             {onMyBets || onMyMarkets ? (
                 <div className={styles.betActions}>
-                    {onMyBets ? <Button variant="ghost" onClick={onMyBets}>My bets</Button> : null}
-                    {onMyMarkets ? <Button variant="ghost" onClick={onMyMarkets}>My markets</Button> : null}
+                    {onMyBets ? <Button size="md" variant="ghost" onClick={onMyBets}>My bets</Button> : null}
+                    {onMyMarkets ? <Button size="md" variant="ghost" onClick={onMyMarkets}>My markets</Button> : null}
                 </div>
             ) : null}
 
