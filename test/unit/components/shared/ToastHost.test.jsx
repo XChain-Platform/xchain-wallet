@@ -56,7 +56,7 @@ describe('ToastHost', () => {
         show({ id: 'ok', message: 'Saved', durationMs: 0 });
         show({ id: 'bad', message: 'Save failed', variant: 'error', durationMs: 0 });
 
-        const region = screen.getByRole('region', { name: 'Notifications' });
+        const region = screen.getByRole('status', { name: 'Notifications' });
         expect(region).toHaveAttribute('aria-live', 'polite');
         expect(region).toHaveAttribute('aria-atomic', 'false');
         expect(region).toHaveTextContent('Saved');
@@ -68,7 +68,7 @@ describe('ToastHost', () => {
     it('publishes copied and saved results through the same region', () => {
         setup();
         act(() => toastApi.announce('Copied'));
-        const region = screen.getByRole('region', { name: 'Notifications' });
+        const region = screen.getByRole('status', { name: 'Notifications' });
         expect(region).toHaveTextContent('Copied');
 
         act(() => toastApi.announce('Saved'));

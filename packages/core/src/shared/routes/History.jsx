@@ -2974,7 +2974,7 @@ function copyLabelForDetailField(key) {
 
 function CopyIconButton({ value, label = t('history.copy.clipboard') }) {
     const [copied, setCopied] = useState(false);
-    const { showToast } = useToast();
+    const { showToast, announce } = useToast();
     const haptic = useHapticFeedback();
     const handleClick = async (event) => {
         event.stopPropagation();
@@ -2984,6 +2984,7 @@ function CopyIconButton({ value, label = t('history.copy.clipboard') }) {
             setCopied(true);
             setTimeout(() => setCopied(false), 1500);
             haptic.tap();
+            announce(t('history.copy.copied'));
             return;
         }
         showToast({ message: 'Copy failed: clipboard unavailable', variant: 'error' });

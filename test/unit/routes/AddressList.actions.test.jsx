@@ -90,6 +90,9 @@ describe('Address detail actions', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Copy address' }));
 
         expect(await screen.findByRole('button', { name: 'Copied' })).toBeInTheDocument();
+        const notifications = screen.getByRole('status', { name: 'Notifications' });
+        expect(notifications).toHaveTextContent('Copied');
+        expect(screen.getAllByText('Copied')).toHaveLength(1);
     });
 
     it('reports clipboard failure and does not switch the button to Copied', async () => {
@@ -143,6 +146,7 @@ describe('Address detail actions', () => {
 
         await waitFor(() => expect(messaging.setAddressLabel).toHaveBeenCalledWith('addr-1', 'Savings'));
         expect(screen.getByRole('textbox', { name: 'Address label' })).toHaveValue('Savings');
+        expect(screen.getByRole('status', { name: 'Notifications' })).toHaveTextContent('Address label saved.');
     });
 
     it('does not offer to activate the address that is already active', async () => {
