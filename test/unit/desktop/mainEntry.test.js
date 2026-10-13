@@ -14,6 +14,22 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const electron = vi.hoisted(() => {
     const appListeners = new Map();
     const isolatedSession = { partition: 'trezor-connect-isolated' };
+    class BrowserWindow {
+        static instances = [];
+
+        constructor(options) {
+            this.options = options;
+            this.loadFile = vi.fn();
+            this.once = vi.fn();
+            this.on = vi.fn();
+            this.isDestroyed = vi.fn(() => false);
+            BrowserWindow.instances.push(this);
+        }
+
+        static getAllWindows() {
+            return BrowserWindow.instances;
+        }
+    }
     return {
         appListeners,
         isolatedSession,
@@ -23,10 +39,11 @@ const electron = vi.hoisted(() => {
             quit: vi.fn(),
             whenReady: vi.fn(() => new Promise(() => {})),
         },
-        BrowserWindow: class BrowserWindow {},
+        BrowserWindow,
         Menu: { buildFromTemplate: vi.fn(), setApplicationMenu: vi.fn() },
         ipcMain: { handle: vi.fn() },
         safeStorage: {},
+        screen: { getAllDisplays: vi.fn(() => []) },
         session: {
             defaultSession: {},
             fromPartition: vi.fn(() => isolatedSession),
@@ -114,6 +131,7 @@ const appIndex = pathToFileURL(join(
 
 beforeEach(() => {
     electron.appListeners.clear();
+    electron.BrowserWindow.instances.length = 0;
     vi.clearAllMocks();
     protocol.attachDeepLinkHandlers.mockReturnValue({ gotLock: true });
     vi.resetModules();
@@ -170,6 +188,19 @@ describe('desktop main entry point', () => {
         expect(webview.preventDefault).toHaveBeenCalledOnce();
     });
 
+    it('creates the main BrowserWindow with every renderer security control enabled', async () => {
+        const { createWindow } = await import('../../../packages/desktop/main/index.js');
+
+        const win = createWindow();
+
+        expect(win.options.webPreferences).toMatchObject({
+            contextIsolation: true,
+            sandbox: true,
+            nodeIntegration: false,
+            webSecurity: true,
+        });
+    });
+
     it('allows only the marked Trezor bridge in an isolated no-HID session', async () => {
         await import('../../../packages/desktop/main/index.js');
         let openHandler;
@@ -192,6 +223,7 @@ describe('desktop main entry point', () => {
             contextIsolation: true,
             nodeIntegration: false,
             sandbox: true,
+            webSecurity: true,
             devTools: false,
         });
         expect(result.overrideBrowserWindowOptions.webPreferences).not.toHaveProperty('preload');
