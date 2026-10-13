@@ -43,7 +43,7 @@ describe('Settings search', () => {
     it('uses action-oriented, one-sentence descriptions for inline sections', () => {
         mount();
 
-        expect(screen.getByText('Choose the theme, accent color, and motion preference.')).toBeTruthy();
+        expect(screen.getByText('Choose the theme and motion preference.')).toBeTruthy();
         expect(screen.getByText('Choose the interface language and fiat currency.')).toBeTruthy();
         expect(screen.getByText('Choose Mainnet or Testnet to control which chains the wallet queries and displays; changing the network reloads the page.')).toBeTruthy();
         expect(screen.getByText('Choose which wallet events trigger notifications, sounds, or price alerts.')).toBeTruthy();
@@ -109,7 +109,7 @@ describe('Settings search', () => {
     it('describes only the controls available in Appearance', () => {
         mount();
 
-        expect(screen.getByText('Theme and reduced motion.')).toBeTruthy();
+        expect(screen.getByText('Choose the theme and motion preference.')).toBeTruthy();
         expect(screen.queryByText(/accent color/i)).toBeNull();
     });
 

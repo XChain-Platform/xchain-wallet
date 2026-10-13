@@ -113,9 +113,10 @@ describe('Receive keyboard operation', () => {
         await user.keyboard('{Enter}');
         // Opening the list moves focus to the selected option.
         expect(document.activeElement).toBe(screen.getByRole('option', { name: /^All networks/ }));
-        await user.tab();
+        // The open list is a listbox: arrow keys move between options and Tab leaves it.
+        await user.keyboard('{ArrowDown}');
         expect(document.activeElement).toBe(screen.getByRole('option', { name: /^Bitcoin/ }));
-        await user.tab();
+        await user.keyboard('{ArrowDown}');
         const litecoin = screen.getByRole('option', { name: /^Litecoin/ });
         expect(document.activeElement).toBe(litecoin);
         await user.keyboard('{Enter}');

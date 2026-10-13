@@ -78,7 +78,7 @@ assert.deepEqual(
         { blockIndex: 0, action: 'SEND', txHash: 'abc', chainId: 'dogecoin-mainnet', pending: { rbf: true } },
         { descriptor: registry.get('dogecoin-mainnet') },
     ),
-    { ok: false, reason: "Fee bumping isn't supported on Dogecoin." },
+    { ok: false, reason: "Changing the network fee later isn't supported on Dogecoin." },
 );
 assert.equal(isEntryReplaceable({ blockIndex: 0, action: 'SEND', txHash: 'abc' }).ok, false);
 assert.equal(

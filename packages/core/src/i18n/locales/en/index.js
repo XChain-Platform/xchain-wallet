@@ -149,6 +149,8 @@ export const en = {
     'market.notFound.title': 'Market not found',
     'market.notFound.body': 'It may have been closed or not indexed yet.',
     'market.summary': 'Market summary',
+    'market.refreshPrices': 'Refresh prices',
+    'market.stalePrice': 'The latest trade is over 24 hours old. Check the price before placing an order.',
     'market.loading': 'Loading market',
     'market.panels': 'Market panels',
     'market.change24hLabel': '24-hour change. {change}',

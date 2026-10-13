@@ -249,7 +249,7 @@ describe('BottomTabBar modal sheet keyboard contract', () => {
         fireEvent.click(more);
         await act(async () => { await new Promise((resolve) => requestAnimationFrame(resolve)); });
         const first = screen.getByRole('button', { name: 'Close more navigation' });
-        const last = screen.getByRole('button', { name: 'Lock' });
+        const last = screen.getByRole('button', { name: 'Lock wallet' });
 
         expect(first).toHaveFocus();
         last.focus();

@@ -154,7 +154,7 @@ describe('320x568 modal renders', () => {
         expect(sheet.firstElementChild).toContainElement(
             screen.getByRole('button', { name: 'Close more navigation' }),
         );
-        expect(sheet.lastElementChild).toContainElement(screen.getByRole('button', { name: 'Lock' }));
+        expect(sheet.lastElementChild).toContainElement(screen.getByRole('button', { name: 'Lock wallet' }));
         fireEvent.click(screen.getByRole('button', { name: 'Close more navigation' }));
         expect(screen.queryByRole('dialog', { name: 'More' })).toBeNull();
     });

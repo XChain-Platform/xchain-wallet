@@ -35,7 +35,7 @@ function renderShell() {
 }
 
 async function expectPlainFailure(onShellAction, privateDetail) {
-    expect(await screen.findByRole('heading', { name: /wallet could not start/i })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: /wallet couldn't start/i })).toBeTruthy();
     expect(document.body.textContent).not.toContain(privateDetail);
     fireEvent.click(screen.getByRole('button', { name: 'Shell action' }));
     expect(onShellAction).toHaveBeenCalledOnce();

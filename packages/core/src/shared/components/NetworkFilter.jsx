@@ -98,12 +98,6 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange, ar
     const triggerIconUrl = value === 'all'
         ? null
         : branding.chainIconSmallUrl(entries.find((e) => e.coin === value)?.chainId || '');
-    const selectNetwork = (coin) => {
-        onChange(coin);
-        setOpen(false);
-        setQuery('');
-        triggerRef.current?.focus();
-    };
 
     useEffect(() => {
         if (!open) return;
@@ -222,7 +216,7 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange, ar
                                 aria-label="All networks"
                                 aria-selected={value === 'all' ? 'true' : 'false'}
                                 className={`${styles.item} ${value === 'all' ? styles.itemActive : ''}`}
-                                onClick={() => selectNetwork('all')}
+                                onClick={() => { onChange('all'); closeFilter(true); }}
                                 title="All networks"
                             >
                                 <span className={styles.itemIcon} aria-hidden="true">
@@ -243,7 +237,7 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange, ar
                                         aria-label={e.label}
                                         aria-selected={value === e.coin ? 'true' : 'false'}
                                         className={`${styles.item} ${value === e.coin ? styles.itemActive : ''}`}
-                                        onClick={() => selectNetwork(e.coin)}
+                                        onClick={() => { onChange(e.coin); closeFilter(true); }}
                                         title={e.label}
                                     >
                                         <span className={styles.itemIcon} aria-hidden="true">

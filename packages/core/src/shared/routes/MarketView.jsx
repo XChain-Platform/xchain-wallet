@@ -260,7 +260,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                                 variant="error"
                                 className={styles.error}
                                 recovery={{
-                                    label: 'Try again',
+                                    label: t('common.tryAgain'),
                                     onAction: () => setHistoryRetryKey((key) => key + 1),
                                 }}
                             >
@@ -269,11 +269,11 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                         ) : priceIsStale ? (
                             <StatusMessage
                                 recovery={{
-                                    label: 'Refresh prices',
+                                    label: t('market.refreshPrices'),
                                     onAction: () => setHistoryRetryKey((key) => key + 1),
                                 }}
                             >
-                                The latest trade is over 24 hours old. Check the price before placing an order.
+                                {t('market.stalePrice')}
                             </StatusMessage>
                         ) : null}
                     </>
