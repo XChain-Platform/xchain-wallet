@@ -35,6 +35,7 @@ import { AddAddressModal } from './AddAddressModal.jsx';
 import { WALLET_MODE_DEFAULT } from '../../schemas/settings.js';
 import { humanizeError } from '../utils/humanizeError.js';
 import { loadDisplayBalances } from '../utils/displayBalances.js';
+import { readBalanceCache, writeBalanceCache } from '../utils/balanceCache.js';
 import { explorerReadFailure, rateLimitedMessage } from '../../sdk/explorerErrors.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import styles from './Home.module.css';
@@ -206,24 +207,53 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // Unread-message count for the active wallet + account, surfaced as a Home
     // alert and a dot on the Messaging button (see useMessagingUnread).
     const messagingUnread = useMessagingUnread(activeWalletId, activeAccountId);
+    const initialBalanceCacheRef = useRef(/** @type {{ value: ReturnType<typeof readBalanceCache> } | undefined} */ (undefined));
+    if (!initialBalanceCacheRef.current) {
+        initialBalanceCacheRef.current = {
+            value: readBalanceCache(activeWalletId, activeAccountId),
+        };
+    }
+    const initialBalanceCache = initialBalanceCacheRef.current.value;
     const [balances, setBalances] = useState(
-        /** @type {Record<string, any[]> | null} */ (null),
+        /** @type {Record<string, any[]> | null} */ (initialBalanceCache?.balances || null),
     );
     const balancesRef = useRef(/** @type {Record<string, any[]> | null} */ (null));
     balancesRef.current = balances;
-    const balancesScopeRef = useRef(/** @type {string | null} */ (null));
+    // Which wallet:account pair the balances on screen belong to; saved rows count.
+    const balancesScopeRef = useRef(/** @type {string | null} */ (
+        initialBalanceCache ? `${activeWalletId}:${activeAccountId || ''}` : null
+    ));
     // Active (operating) address per chain. The headline balance per coin
     // reflects this address only (not the sum across all addresses).
     const [activeByChain, setActiveByChain] = useState(
-        /** @type {Record<string, { id: string, address: string }>} */ ({}),
+        /** @type {Record<string, { id: string, address: string }>} */ (initialBalanceCache?.activeByChain || {}),
     );
     // Cluster G FOLLOWUP 5: Unix-ms timestamp of the most recent
     // successful balance fetch; null until the first one completes.
     // Threaded into HomeTabs → StalenessLabel so the user can tell
     // when the balance view was last live.
     const [balancesFetchedAt, setBalancesFetchedAt] = useState(
-        /** @type {number | null} */ (null),
+        /** @type {number | null} */ (initialBalanceCache?.fetchedAt ?? null),
     );
+    // Cached rows stay visible while their live replacement is in flight.
+    // This flag distinguishes that refresh from a first load with no data.
+    const [cachedBalancesUpdating, setCachedBalancesUpdating] = useState(
+        Boolean(initialBalanceCache) && isNavigatorOnline(),
+    );
+    const balanceScopeRef = useRef({ walletId: activeWalletId, accountId: activeAccountId || null });
+    const balanceScopeChanged = balanceScopeRef.current.walletId !== activeWalletId
+        || balanceScopeRef.current.accountId !== (activeAccountId || null);
+    if (balanceScopeChanged) {
+        // React discards this render and retries with the next scope's state,
+        // so a wallet switch never commits one frame of the prior wallet.
+        balanceScopeRef.current = { walletId: activeWalletId, accountId: activeAccountId || null };
+        const scopedCache = readBalanceCache(activeWalletId, activeAccountId);
+        setBalances(scopedCache?.balances || null);
+        setActiveByChain(scopedCache?.activeByChain || {});
+        setBalancesFetchedAt(scopedCache?.fetchedAt ?? null);
+        setCachedBalancesUpdating(Boolean(scopedCache) && isNavigatorOnline());
+        balancesScopeRef.current = scopedCache ? `${activeWalletId}:${activeAccountId || ''}` : null;
+    }
     // What every row consumer reads: the balances plus each shown address's
     // open-offer escrow, so a token escrowed in full keeps its row.
     const balancesView = useEscrowedBalances({ balances, activeByChain, balancesFetchedAt, messaging });
@@ -566,11 +596,18 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         isCancelled,
         reportError = false,
     }) => {
+        // The saved copy of this pair's balances; only a clean fresh read
+        // replaces it. activeForCache starts from the saved active addresses.
+        let activeForCache = readBalanceCache(walletId, accountId)?.activeByChain || {};
+        let freshBalances = null;
+        let freshFetchedAt = null;
+        let freshBalancesCacheable = false;
         // A browser offline event is definitive enough to avoid starting work
         // that cannot finish. In particular, keep the last successful balance
         // state on screen instead of replacing it with a loading skeleton.
         if (!isNavigatorOnline()) {
             pollThrottleRef.current.fail();
+            if (!isCancelled()) setCachedBalancesUpdating(false);
             return;
         }
         if (reset) {
@@ -589,9 +626,12 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 setBalances(null);
                 setBalancesFetchedAt(null);
                 setActiveByChain({});
+                setCachedBalancesUpdating(false);
                 setMultisig(null);
                 setPendingAirdrops([]);
                 setConfirmSessions([]);
+            } else {
+                setCachedBalancesUpdating(isNavigatorOnline());
             }
             setLoadError(null);
         }
@@ -625,13 +665,17 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         variant: 'error',
                     });
                 } else {
+                    freshBalancesCacheable = !wait;
                     // Fresh balances restart the re-poll window, whichever
                     // path asks for them.
                     pollThrottleRef.current.succeed();
                     balancesScopeRef.current = `${walletId}:${accountId || ''}`;
+                    freshBalances = b;
+                    freshFetchedAt = Date.now();
                     setBalances(b);
-                    setBalancesFetchedAt(Date.now());
+                    setBalancesFetchedAt(freshFetchedAt);
                 }
+                setCachedBalancesUpdating(false);
                 if (wait && !refreshHasFailure) {
                     beginRateLimitWait(wait.seconds);
                 } else if (!refreshHasFailure) {
@@ -652,6 +696,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             // should not stomp a screen the user is already looking at
             // with an error banner; only surface it on the reset path.
             if (!isCancelled()) {
+                setCachedBalancesUpdating(false);
                 // The raw SDK message used to go straight on screen here, URL
                 // and all ("Explorer returned HTTP 429 for /RLTC/api/balances/
                 // bcrt1q..."). humanizeError owns the wording for every shape
@@ -676,8 +721,19 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         if (typeof messaging.getActiveAddresses === 'function') {
             try {
                 const active = await messaging.getActiveAddresses(walletId, accountId);
-                if (!isCancelled()) setActiveByChain(active || {});
+                if (!isCancelled()) {
+                    activeForCache = active || {};
+                    setActiveByChain(activeForCache);
+                }
             } catch { /* fall back to aggregate when unavailable */ }
+        }
+
+        if (!isCancelled() && freshBalances && freshBalancesCacheable) {
+            writeBalanceCache(walletId, accountId, {
+                balances: freshBalances,
+                activeByChain: activeForCache,
+                fetchedAt: freshFetchedAt,
+            });
         }
 
         if (typeof messaging.getMultisigReceiveAddress === 'function') {
@@ -1049,6 +1105,10 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 ) : null}
                 {loadErrorText ? (
                     <StatusMessage variant="error" className={styles.error}>{loadErrorText}</StatusMessage>
+                ) : null}
+
+                {cachedBalancesUpdating ? (
+                    <StatusMessage variant="status">Updating balances…</StatusMessage>
                 ) : null}
 
                 {balances === null && browserOnline && !loadErrorText ? (
