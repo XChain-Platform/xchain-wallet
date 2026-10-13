@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -259,21 +259,28 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
 
     if (error) {
         return wrap(
-            <>
+            <ListPage>
                 <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>
-            </>,
+            </ListPage>,
         );
     }
-    if (!rows) return wrap(<p>Loading your markets…</p>);
+    if (!rows) return wrap(<ListPage><p>Loading your markets…</p></ListPage>);
     if (rows.length === 0) {
-        return wrap(<p className={styles.hint}>You have not created any betting markets.</p>);
+        return wrap(
+            <ListPage>
+                <EmptyState
+                    title="No markets yet"
+                    body="You have not created any betting markets."
+                />
+            </ListPage>,
+        );
     }
 
     return wrap(
-        <>
+        <ListPage>
             {formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
             {result ? (
-                <div className={styles.card} data-testid="oracle-result">
+                <div className={styles.listCard} data-testid="oracle-result">
                     <p className={styles.summary}>
                         {/* leg (a): signed and NOT broadcast. An oracle told "result sent"
                             for a transaction still sitting in the queue would wait out its own
@@ -309,7 +316,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                         && String(f.source || '') === String(f.owner?.address || '');
                     const isActive = active && `${active.chainId}:${active.action_index}` === key;
                     return (
-                        <div key={key} className={styles.card}>
+                        <div key={key} className={styles.listCard}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                                 <strong>#{String(f.action_index)} {f.label || '(untitled)'}</strong>
                                 <span className={styles.hint}>{f.feed_status}</span>
@@ -462,6 +469,6 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                 Your record as an oracle is public and tied to this address. Leaving a market unresolved
                 refunds everyone, but it stays visible to anyone deciding whether to bet with you again.
             </p>
-        </>,
+        </ListPage>,
     );
 }

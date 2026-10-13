@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useGatedTickNotice, gatedTickWarningCopy } from '../hooks/useGatedTickNotice.js';
@@ -92,7 +92,6 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -471,7 +470,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            {children}
         </Screen>
     );
 
@@ -539,7 +538,43 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
             : 'Estimate unavailable';
 
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
+            <FormPage
+                label="Review swap"
+                onSubmit={handleSubmit}
+                status={(isWatcherMode || hw) && submitError ? (
+                    <p role="alert" style={{ margin: '0.25rem 0 0', color: 'var(--xc-danger)', fontSize: '0.75rem' }}>
+                        {submitError}
+                    </p>
+                ) : null}
+                actions={(
+                    <>
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            onClick={() => { setStage('form'); setSubmitError(null); }}
+                            disabled={stage === 'submitting'}
+                        >
+                            Edit
+                        </Button>
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            loading={stage === 'submitting'}
+                            disabled={
+                                isWatcherMode
+                                    ? false
+                                    : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)
+                            }
+                        >
+                            {isWatcherMode
+                                ? 'Create unsigned transaction'
+                                : hw
+                                    ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                    : 'Sign swap'}
+                        </Button>
+                    </>
+                )}
+            >
                 <p className={styles.summary}>
                     Swap {giveSide} for {getSide}
                     {descriptor ? ` on ${descriptor.displayName}` : ''}.
@@ -595,38 +630,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                         signerInfo={hwSignerInfo}
                     />
                 )}
-                {(isWatcherMode || hw) && submitError ? (
-                    <p role="alert" style={{ margin: '0.25rem 0 0', color: 'var(--xc-danger)', fontSize: '0.75rem' }}>
-                        {submitError}
-                    </p>
-                ) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="button"
-                        variant="secondary"
-                        onClick={() => { setStage('form'); setSubmitError(null); }}
-                        disabled={stage === 'submitting'}
-                    >
-                        Edit
-                    </Button>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={
-                            isWatcherMode
-                                ? false
-                                : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)
-                        }
-                    >
-                        {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : hw
-                                ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : 'Sign swap'}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -727,7 +731,36 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     }
 
     return wrap(
-        <form onSubmit={handleReview} noValidate>
+        <FormPage
+            label="Swap tokens"
+            onSubmit={handleReview}
+            status={validationError || formError ? (
+                <>
+                    {validationError ? (
+                        <p role="alert" className={styles.error} style={{ marginTop: '0.5rem' }}>
+                            {validationError}
+                        </p>
+                    ) : null}
+                    {formError ? (
+                        <p role="alert" className={styles.error} style={{ marginTop: '0.5rem' }}>
+                            {formError}
+                        </p>
+                    ) : null}
+                </>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={actionConfirm.composing}
+                    disabled={actionConfirm.composing}
+                >
+                    {actionConfirm.composing
+                        ? 'Preparing review…'
+                        : (singleEncode ? 'Swap' : 'Review')}
+                </Button>
+            )}
+        >
             <ChainPicker
                 label="Chain"
                 value={chainId}
@@ -901,32 +934,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 mandatory={nativeFeeMandatory}
             />
 
-            {validationError ? (
-                <p role="alert" className={styles.error} style={{ marginTop: '0.5rem' }}>
-                    {validationError}
-                </p>
-            ) : null}
-
-            {formError ? (
-                <p role="alert" className={styles.error} style={{ marginTop: '0.5rem' }}>
-                    {formError}
-                </p>
-            ) : null}
-
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    block
-                    loading={actionConfirm.composing}
-                    disabled={actionConfirm.composing}
-                >
-                    {actionConfirm.composing
-                        ? 'Preparing review…'
-                        : (singleEncode ? 'Swap' : 'Review')}
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }
 

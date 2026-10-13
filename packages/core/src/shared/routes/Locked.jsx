@@ -10,7 +10,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
-import { Button, Input, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, FormPage, Input, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import {
     getLockoutState,
@@ -63,7 +63,6 @@ export function Locked({ onUnlocked }) {
 
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [password, setPassword] = useState('');
     const [error, setError] = useState(/** @type {string | null} */ (null));
@@ -405,11 +404,11 @@ export function Locked({ onUnlocked }) {
     }, [inCaptureStep, captureIndex]);
 
     const hero = (
-        <div className={isFull ? styles.heroFull : styles.heroPopup}>
+        <div className={styles.hero}>
             <img
                 src={branding.logoUrl()}
                 alt={branding.PRODUCT_NAME}
-                className={isFull ? styles.logoFull : styles.logoPopup}
+                className={styles.logo}
             />
         </div>
     );
@@ -437,7 +436,38 @@ export function Locked({ onUnlocked }) {
     ) : null;
 
     const form = (
-        <form onSubmit={handleSubmit} noValidate>
+        <FormPage
+            label="Unlock wallet"
+            onSubmit={handleSubmit}
+            status={busy && !inCaptureStep ? (
+                <p className={styles.unlockingNote} aria-live="polite">
+                    Unlocking. On some phones this takes up to a minute.
+                </p>
+            ) : null}
+            actions={(
+                <>
+                    {biometricAvailable ? (
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            onClick={handleBiometric}
+                            disabled={busy || isLockedOut}
+                        >
+                            Use biometrics
+                        </Button>
+                    ) : null}
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={busy}
+                        disabled={password.length === 0 || isLockedOut}
+                    >
+                        {isLockedOut ? `Locked (${formatCountdown(remainingMs)})` : 'Unlock Wallet'}
+                    </Button>
+                </>
+            )}
+        >
+            {hero}
             {lockoutBanner}
             <Input
                 ref={inputRef}
@@ -452,31 +482,6 @@ export function Locked({ onUnlocked }) {
                 disabled={busy || isLockedOut}
                 error={error || undefined}
             />
-            <Button
-                type="submit"
-                variant="primary"
-                block
-                loading={busy}
-                disabled={password.length === 0 || isLockedOut}
-            >
-                {isLockedOut ? `Locked (${formatCountdown(remainingMs)})` : 'Unlock Wallet'}
-            </Button>
-            {busy && !inCaptureStep ? (
-                <p className={styles.unlockingNote} aria-live="polite">
-                    Unlocking. On some phones this takes up to a minute.
-                </p>
-            ) : null}
-            {biometricAvailable ? (
-                <Button
-                    type="button"
-                    variant="secondary"
-                    block
-                    onClick={handleBiometric}
-                    disabled={busy || isLockedOut}
-                >
-                    Use biometrics
-                </Button>
-            ) : null}
             {demoWalletId ? (
                 <div className={styles.demoExitBlock}>
                     <p className={styles.demoExitNote}>
@@ -485,7 +490,6 @@ export function Locked({ onUnlocked }) {
                     <Button
                         type="button"
                         variant="danger"
-                        block
                         onClick={handleExitDemo}
                         loading={demoWipeBusy}
                         disabled={demoWipeBusy}
@@ -533,7 +537,6 @@ export function Locked({ onUnlocked }) {
                             <Button
                                 type="button"
                                 variant="danger"
-                                block
                                 onClick={handleForgotPasswordWipe}
                                 loading={wipeBusy}
                                 disabled={wipeBusy || wipeConfirmText.trim().toUpperCase() !== 'WIPE'}
@@ -543,7 +546,6 @@ export function Locked({ onUnlocked }) {
                             <Button
                                 type="button"
                                 variant="secondary"
-                                block
                                 onClick={handleForgotPasswordCancel}
                                 disabled={wipeBusy}
                             >
@@ -556,13 +558,37 @@ export function Locked({ onUnlocked }) {
                     )}
                 </div>
             )}
-        </form>
+        </FormPage>
     );
 
     // §15.6 step 2, one wallet at a time. `Not now` on any of them
     // abandons the rest of the queue: the next unlock offers them again.
     const captureForm = captureWallet ? (
-        <form onSubmit={handleCapture} noValidate>
+        <FormPage
+            label="Save wallet passphrase"
+            onSubmit={handleCapture}
+            actions={(
+                <>
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={handleCaptureSkip}
+                        disabled={busy}
+                    >
+                        Not now
+                    </Button>
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={busy}
+                        disabled={captureValue.length === 0}
+                    >
+                        Continue
+                    </Button>
+                </>
+            )}
+        >
+            {hero}
             <p className={styles.captureCopy}>
                 <strong>{captureWallet.name} uses a passphrase.</strong>{' '}
                 Enter it once to finish setting up this device. It will be stored on this device, protected by your wallet password, so you are not asked again.
@@ -581,42 +607,14 @@ export function Locked({ onUnlocked }) {
                 disabled={busy}
                 error={captureError || undefined}
             />
-            <Button
-                type="submit"
-                variant="primary"
-                block
-                loading={busy}
-                disabled={captureValue.length === 0}
-            >
-                Continue
-            </Button>
-            <Button
-                type="button"
-                variant="secondary"
-                block
-                onClick={handleCaptureSkip}
-                disabled={busy}
-            >
-                Not now
-            </Button>
-        </form>
+        </FormPage>
     ) : null;
 
     const body = captureForm || form;
 
     return (
         <Screen variant={variant}>
-            {isFull ? (
-                <div className={styles.card}>
-                    {hero}
-                    {body}
-                </div>
-            ) : (
-                <>
-                    {hero}
-                    {body}
-                </>
-            )}
+            {body}
         </Screen>
     );
 }

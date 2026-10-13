@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Icon, IconSelect, Input, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, IconSelect, Input, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { chainIconSmallUrl } from '../../branding/branding.js';
 import { isValidAddressAnyNetwork, detectAddressCoin } from '../utils/addressValidation.js';
@@ -118,7 +118,6 @@ export function ComposeMessage({
 }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
     const signerReady = useSignerReady(walletId);
 
     const [addressesByChain, setAddressesByChain] = useState(
@@ -678,7 +677,7 @@ export function ComposeMessage({
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            {children}
         </Screen>
     );
 
@@ -738,7 +737,27 @@ export function ComposeMessage({
             ? 'Plain text'
             : (encryptionChoice === 'ecdh' && !hw ? 'ECDH' : 'ECIES');
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
+            <FormPage
+                label="Review message"
+                onSubmit={handleSubmit}
+                status={hw && submitError ? (
+                    <p role="alert" style={{ margin: '0.25rem 0 0', color: 'var(--xc-danger)', fontSize: '0.75rem' }}>
+                        {submitError}
+                    </p>
+                ) : null}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={stage === 'submitting'}
+                        disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
+                    >
+                        {hw
+                            ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                            : 'Confirm send'}
+                    </Button>
+                )}
+            >
                 <p className={styles.summary}>
                     Send an {unencrypted ? 'unencrypted' : 'encrypted'} message to this recipient.
                 </p>
@@ -783,26 +802,7 @@ export function ComposeMessage({
                     getSignerStatus={messaging.getSignerStatus}
                     signerInfo={hwSignerInfo}
                 />
-                {hw && submitError ? (
-                    <p role="alert" style={{ margin: '0.25rem 0 0', color: 'var(--xc-danger)', fontSize: '0.75rem' }}>
-                        {submitError}
-                    </p>
-                ) : null}
-
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        block
-                        loading={stage === 'submitting'}
-                        disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
-                    >
-                        {hw
-                            ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                            : 'Confirm send'}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -870,7 +870,26 @@ export function ComposeMessage({
     }
 
     return wrap(
-        <form onSubmit={handleReview} noValidate>
+        <FormPage
+            label="New message"
+            onSubmit={handleReview}
+            status={submitError ? (
+                <StatusMessage variant="error" className={styles.error} details={submitErrorDetails}>
+                    {submitError}
+                </StatusMessage>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    icon={<Icon.SendIcon />}
+                    loading={actionConfirm.composing}
+                    disabled={actionConfirm.composing}
+                >
+                    {actionConfirm.composing ? 'Preparing review…' : 'Send message'}
+                </Button>
+            )}
+        >
             {/* 1. Address (recipient), with an address-book shortcut */}
             <AddressField
                 label="Address"
@@ -893,9 +912,9 @@ export function ComposeMessage({
                     setMessage(e.target.value);
                     if (submitError) setSubmitError(null);
                 }}
-                rows={isFull ? 6 : 4}
+                rows={4}
                 placeholder="Write your message…"
-                style={{ minHeight: isFull ? '6rem' : '4rem' }}
+                style={{ minHeight: '4rem' }}
             />
 
             {/* 3. Encryption. Locked (still visible) for thread replies: a
@@ -999,25 +1018,7 @@ export function ComposeMessage({
                 nowhere to render: only the review stage read `submitError`, so
                 Send message looked like a button that does nothing. Cleared by
                 the next edit of the address, message or delivery network. */}
-            {submitError ? (
-                <StatusMessage variant="error" className={styles.error} details={submitErrorDetails}>
-                    {submitError}
-                </StatusMessage>
-            ) : null}
-
-            <div className={styles.actions} style={{ marginTop: '0.75rem' }}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    block
-                    icon={<Icon.SendIcon />}
-                    loading={actionConfirm.composing}
-                    disabled={actionConfirm.composing}
-                >
-                    {actionConfirm.composing ? 'Preparing review…' : 'Send message'}
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }
 
