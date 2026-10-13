@@ -27,7 +27,7 @@
 // noisy bug for a silent one.
 
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DispenserExplorer } from '../../../packages/core/src/shared/routes/DispenserExplorer.jsx';
 import { registry as registryLib } from '../../../packages/core/src/index.js';
@@ -65,6 +65,60 @@ async function searchFor(token) {
 }
 
 describe('DispenserExplorer network scoping (D-34b)', () => {
+    it('explains and disables search until the active network is loaded', async () => {
+        let resolveSettings;
+        const getDispensersForToken = vi.fn();
+        const messaging = {
+            getSettings: () => new Promise((resolve) => { resolveSettings = resolve; }),
+            updateSettings: async (p) => p,
+            getDispensersForToken,
+            getDispensersForAddress: vi.fn(),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <DispenserExplorer onOpenDispenser={() => {}} onBack={() => {}} />
+            </MessagingProvider>,
+        );
+
+        fireEvent.change(screen.getByRole('textbox'), { target: { value: 'XCHAIN' } });
+        expect(screen.getByText('Loading available networks…')).toBeTruthy();
+        expect(screen.getByRole('button', { name: /search/i })).toBeDisabled();
+        expect(getDispensersForToken).not.toHaveBeenCalled();
+
+        await act(async () => resolveSettings({ schemaVersion: 2, activeNetwork: 'mainnet' }));
+        await waitFor(() => expect(screen.getByRole('button', { name: /search/i })).not.toBeDisabled());
+    });
+
+    it('keeps a slower earlier search from replacing newer results', async () => {
+        const pending = new Map();
+        const getDispensersForToken = vi.fn(({ token }) => new Promise((resolve) => {
+            pending.set(token, resolve);
+        }));
+        renderExplorer({ activeNetwork: 'mainnet', getDispensersForToken });
+
+        const chain = chainIdsOn('mainnet')[0];
+        const select = await screen.findByRole('combobox');
+        fireEvent.change(select, { target: { value: chain } });
+        const input = screen.getByRole('textbox');
+        const form = input.closest('form');
+
+        fireEvent.change(input, { target: { value: 'FIRST' } });
+        fireEvent.submit(form);
+        await waitFor(() => expect(pending.has('FIRST')).toBe(true));
+
+        fireEvent.change(input, { target: { value: 'SECOND' } });
+        fireEvent.submit(form);
+        await waitFor(() => expect(pending.has('SECOND')).toBe(true));
+
+        pending.get('SECOND')({ rows: [{ action_index: 2, give_tick: 'SECOND', address: 'new-result' }] });
+        expect(await screen.findByText(/SECOND @/)).toBeTruthy();
+
+        pending.get('FIRST')({ rows: [{ action_index: 1, give_tick: 'FIRST', address: 'old-result' }] });
+        await Promise.resolve();
+        expect(screen.queryByText(/FIRST @/)).toBeNull();
+        expect(screen.getByText(/SECOND @/)).toBeTruthy();
+    });
+
     it('an "All chains" search on REGTEST queries only regtest chains', async () => {
         const regtest = chainIdsOn('regtest');
         expect(regtest.length, 'the registry has no regtest chains, so this test proves nothing').toBeGreaterThan(0);
