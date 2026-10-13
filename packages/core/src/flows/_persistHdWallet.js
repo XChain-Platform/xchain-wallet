@@ -96,6 +96,42 @@ export async function persistHdWallet({
     let walletRecord;
     let account;
     let signer;
+    let previousSettings;
+    let accountPutAttempted = false;
+    let walletPutAttempted = false;
+    let settingsPutAttempted = false;
+    const addressPutIds = [];
+    const rollback = async (error) => {
+        const rollbackErrors = [];
+        if (settingsPutAttempted) {
+            try {
+                if (previousSettings) await vault.settings.put(previousSettings);
+                else await vault.settings.clear();
+            } catch (e) {
+                rollbackErrors.push(e);
+            }
+        }
+        for (const id of addressPutIds.reverse()) {
+            try { await vault.addresses.delete(id); } catch (e) { rollbackErrors.push(e); }
+        }
+        if (walletPutAttempted && walletRecord) {
+            try { await vault.wallets.delete(walletRecord.id); } catch (e) { rollbackErrors.push(e); }
+        }
+        if (accountPutAttempted && account) {
+            try { await vault.accounts.delete(account.id); } catch (e) { rollbackErrors.push(e); }
+        }
+        if (rollbackErrors.length > 0) {
+            throw new AggregateError(
+                [error, ...rollbackErrors],
+                'persistHdWallet: persistence and rollback failed',
+                { cause: error },
+            );
+        }
+        throw error;
+    };
+
+    let setupFailed = false;
+    let setupError;
     try {
         // 2. Encrypt the mnemonic bytes.
         const mnemonicBytes = new TextEncoder().encode(mnemonic);
@@ -131,6 +167,7 @@ export async function persistHdWallet({
         if (await vault.wallets.get(walletRecord.id)) {
             throw new Error(`persistHdWallet: wallet "${walletRecord.id}" already exists; refusing to overwrite its stored secret`);
         }
+        previousSettings = await vault.settings.get();
 
         // 4. Build & persist the first Account. `validateAccount` checks
         //    only that walletId is a non-empty string, no foreign-key
@@ -141,6 +178,10 @@ export async function persistHdWallet({
             name: accountName,
             index: 0,
         });
+        if (await vault.accounts.get(account.id)) {
+            throw new Error(`persistHdWallet: account id collision "${account.id}"`);
+        }
+        accountPutAttempted = true;
         await vault.accounts.put(account);
 
         // 5. Unlock the in-memory wallet record via the shared primitive
@@ -157,9 +198,13 @@ export async function persistHdWallet({
             chainRegistry,
             sdkRegistry,
         });
+    } catch (error) {
+        setupFailed = true;
+        setupError = error;
     } finally {
         masterKey.fill(0);
     }
+    if (setupFailed) await rollback(setupError);
 
     try {
         // 6. Seal the BIP39 passphrase under this wallet's own master
@@ -176,6 +221,7 @@ export async function persistHdWallet({
         // 7. Persist the Wallet record, now in its final shape. One
         //    put instead of two: there is no window in which the
         //    record exists without its passphrase already sealed.
+        walletPutAttempted = true;
         await vault.wallets.put(walletRecord);
 
         // 8. First address per active chain.
@@ -208,6 +254,10 @@ export async function persistHdWallet({
                 label: initialAddressLabel ?? `${tickerForCoin(descriptor.coin)} Address #1`,
                 signerId: signer.id,
             });
+            if (await vault.addresses.get(record.id)) {
+                throw new Error(`persistHdWallet: address id collision "${record.id}"`);
+            }
+            addressPutIds.push(record.id);
             await vault.addresses.put(record);
             addresses.push({ chainId, address: record });
         }
@@ -216,9 +266,12 @@ export async function persistHdWallet({
         //    active chain not already configured. Idempotent: a user's
         //    customized fee strategy on an earlier wallet is preserved
         //    if they create a second wallet in the same vault.
+        settingsPutAttempted = true;
         await ensureSettings(vault, chainRegistry, activeChainIds, { activeNetwork });
 
         return { wallet: walletRecord, account, addresses };
+    } catch (error) {
+        await rollback(error);
     } finally {
         signer.lock();
     }

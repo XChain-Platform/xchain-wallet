@@ -62,6 +62,8 @@ import { InvalidMnemonicError, normalizeMnemonic } from './importMnemonic.js';
 export const DEFAULT_GAP_LIMIT = 20;
 export const DEFAULT_PER_QUERY_TIMEOUT_MS = 5000;
 export const DEFAULT_CHAIN_TIMEOUT_MS = 60000;
+const MAX_DERIVATION_INDEX = 0x7fffffff;
+const MAX_TIMEOUT_MS = 0x7fffffff;
 
 /**
  * @typedef {Object} DiscoveredAddress
@@ -124,6 +126,9 @@ export const DEFAULT_CHAIN_TIMEOUT_MS = 60000;
  * @returns {Promise<DiscoverUsedAddressesResult>}
  */
 export async function discoverUsedAddresses(opts) {
+    if (!opts || typeof opts !== 'object') {
+        throw new Error('discoverUsedAddresses: options are required');
+    }
     const {
         mnemonic,
         format = 'bip39',
@@ -143,13 +148,48 @@ export async function discoverUsedAddresses(opts) {
         signal,
     } = opts;
 
-    if (typeof mnemonic !== 'string' || !mnemonic.length) {
+    if (typeof mnemonic !== 'string' || !mnemonic.trim().length) {
         throw new Error('discoverUsedAddresses: mnemonic is required');
     }
     if (!chainRegistry) throw new Error('discoverUsedAddresses: chainRegistry is required');
     if (!sdkRegistry) throw new Error('discoverUsedAddresses: sdkRegistry is required');
+    if (typeof bip39Passphrase !== 'string') {
+        throw new Error('discoverUsedAddresses: bip39Passphrase must be a string');
+    }
+    if (chainIds !== undefined && (
+        !Array.isArray(chainIds)
+        || chainIds.length === 0
+        || chainIds.some((id) => typeof id !== 'string' || id.length === 0)
+    )) {
+        throw new Error('discoverUsedAddresses: chainIds must be a non-empty string array');
+    }
+    if (!Number.isInteger(accountIndex) || accountIndex < 0 || accountIndex > MAX_DERIVATION_INDEX) {
+        throw new Error(`discoverUsedAddresses: accountIndex must be an integer in [0, ${MAX_DERIVATION_INDEX}]`);
+    }
+    if (change !== 0 && change !== 1) {
+        throw new Error('discoverUsedAddresses: change must be 0 or 1');
+    }
+    if (!Number.isInteger(startIndex) || startIndex < 0 || startIndex > MAX_DERIVATION_INDEX) {
+        throw new Error(`discoverUsedAddresses: startIndex must be an integer in [0, ${MAX_DERIVATION_INDEX}]`);
+    }
     if (!Number.isInteger(gapLimit) || gapLimit < 1 || gapLimit > 200) {
         throw new Error('discoverUsedAddresses: gapLimit must be an integer in [1, 200]');
+    }
+    if (!Number.isInteger(perQueryTimeoutMs)
+        || perQueryTimeoutMs < 1
+        || perQueryTimeoutMs > MAX_TIMEOUT_MS) {
+        throw new Error(`discoverUsedAddresses: perQueryTimeoutMs must be an integer in [1, ${MAX_TIMEOUT_MS}]`);
+    }
+    if (!Number.isInteger(chainTimeoutMs)
+        || chainTimeoutMs < 1
+        || chainTimeoutMs > MAX_TIMEOUT_MS) {
+        throw new Error(`discoverUsedAddresses: chainTimeoutMs must be an integer in [1, ${MAX_TIMEOUT_MS}]`);
+    }
+    if (typeof isUsedProbe !== 'function') {
+        throw new Error('discoverUsedAddresses: isUsedProbe must be a function');
+    }
+    if (typeof onProgress !== 'function') {
+        throw new Error('discoverUsedAddresses: onProgress must be a function');
     }
     throwIfAborted(signal);
 
@@ -278,7 +318,7 @@ async function scanChainType({
 
     for (let index = startIndex; ; index++) {
         throwIfAborted(signal);
-        if (Date.now() > chainDeadline) {
+        if (Date.now() >= chainDeadline) {
             incomplete = true;
             error = `chain scan exceeded ${chainTimeoutMs}ms`;
             break;
@@ -311,10 +351,13 @@ async function scanChainType({
         try {
             const probeResult = await runWithTimeout(
                 () => isUsedProbe(sdk, address),
-                perQueryTimeoutMs,
+                Math.min(perQueryTimeoutMs, Math.max(1, chainDeadline - Date.now())),
                 signal,
             );
-            used = !!probeResult?.used;
+            if (typeof probeResult?.used !== 'boolean') {
+                throw new Error('probe returned an invalid result');
+            }
+            used = probeResult.used;
         } catch (e) {
             if (signal?.aborted) throw e;
             unknown = true;
