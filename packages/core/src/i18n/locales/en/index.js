@@ -39,17 +39,21 @@ export const en = {
     'common.back': 'Back',
     'common.backToHome': 'Back to home',
     'common.cancel': 'Cancel',
+    'common.clear': 'Clear',
     'common.tryAgain': 'Try again',
     'common.openNetworkSettings': 'Open Network settings',
     'common.done': 'Done',
     'common.loading': 'Loading…',
     'common.password': 'Password',
+    'common.contactName': 'Contact name',
 
     // --- home -----------------------------------------------------
     'home.receive': 'Receive',
 
     // --- send -----------------------------------------------------
     'send.title': 'Send',
+    'send.empty.title': 'This wallet has no coins to send yet.',
+    'send.empty.body': 'Receive funds on this chain before creating a send.',
     'send.review': 'Review and send',
     'send.backToEdit': 'Edit payment',
     'send.memoForbiddenChars': 'A memo cannot include a vertical bar (|) or semicolon (;).',
@@ -129,7 +133,6 @@ export const en = {
     'send.paste.checkLabel': 'Check pasted recipient',
     'send.paste.checkHint': 'Compare the first and last 6 characters.',
     'send.saveRecipient.open': 'Save recipient',
-    'send.saveRecipient.nameLabel': 'Contact name',
     'send.saveRecipient.save': 'Save contact',
     'send.saveRecipient.saving': 'Saving…',
     'send.saveRecipient.saved': 'Recipient saved to contacts.',
@@ -214,7 +217,7 @@ export const en = {
     'scan.error.unknownXchainIntent':
         'xchain: URI was scanned but the intent was not recognized. Try a clearer code.',
     'scan.error.paymentRequest':
-        'This payment request does not match a supported chain or valid address.',
+        "This payment request doesn't match a supported chain or valid address.",
     'scan.error.wif':
         'A private key (WIF) was scanned. Use Import Wallet → Import WIF to add it deliberately.',
     'scan.error.mnemonic':
@@ -222,18 +225,21 @@ export const en = {
     'scan.error.xcwChunk':
         'Part {n} of {total} of a multi-frame QR code was scanned. Open the screen that asked for this code and capture every frame there.',
     'scan.error.transactionHex':
-        'A signed transaction was scanned. This screen cannot broadcast raw transaction hex. Use a compatible broadcasting tool.',
+        "A signed transaction was scanned. This screen can't broadcast raw transaction hex. Use a compatible broadcasting tool.",
     'scan.error.backupPointer':
         'A backup pointer was scanned. Start Import Wallet, choose Restore from backup, and scan it there.',
     'scan.error.pairingCode':
         'A wallet pairing code was scanned. Start Pair a watcher or signer, and scan it there.',
     'scan.error.unknown':
-        'This QR code contains text the wallet does not know how to use.',
+        "This QR code contains text the wallet doesn't know how to use.",
 
     // --- history --------------------------------------------------
     'history.title': 'History',
     'history.refresh': 'Refresh history',
     'history.refreshing': 'Refreshing history',
+    'history.offline.cached': 'You are offline. Showing the last saved history. Network actions will be available when your connection returns.',
+    'history.offline.empty': 'You are offline. Connect to load history and use network actions.',
+    'history.offline.refreshFailed': "History didn't refresh. Showing the last saved history.",
     'history.showMore': 'Show more history',
     'history.itemsShown': '{shown} of {total} history items shown',
     'history.showMoreGroupEntries': 'Show more group entries ({shown} of {total} shown)',
@@ -245,6 +251,7 @@ export const en = {
     'history.empty.noAddressesTitle': 'No addresses yet',
     'history.empty.noAddressesBody': 'Generate a receive address to populate history.',
     'history.empty.noMatchesTitle': 'No results for these filters',
+    'history.empty.noSearchResultsTitle': 'No results for "{query}"',
     'history.empty.noMatchesBody': 'Reset the filters to see all history.',
     'history.empty.clearFilters': 'Reset filters',
     'history.empty.noCrossChainTitle': 'No cross-chain actions yet',
@@ -256,6 +263,7 @@ export const en = {
     'history.filters.label': 'History filters',
     'history.filters.searchPlaceholder': 'Search action, address, token, txid, memo…',
     'history.filters.searchLabel': 'Search history',
+    'history.filters.clearSearch': 'Clear history search',
     'history.filters.fromDate': 'From date',
     'history.filters.toDate': 'To date',
     'history.filters.additionalDetails': 'Additional details',
@@ -299,7 +307,6 @@ export const en = {
         'Peer chain not bundled in this wallet; open the block explorer for {ticker} to view {ticker} #{index}.',
     'history.detail.openNewWindow': 'Open in new window',
     'history.contact.saveAs': 'Save {address} as',
-    'history.contact.name': 'Contact name',
     'history.contact.save': 'Save',
     'history.copy.clipboard': 'Copy to clipboard',
     'history.copy.copied': 'Copied',
@@ -339,6 +346,10 @@ export const en = {
     'history.export.rowCount':
         '{count, plural, one {# filtered row will be exported.} other {# filtered rows will be exported.}}',
     'history.export.confirm': 'Export',
+    'history.export.preparing': 'Preparing…',
+    'history.export.progress': 'Preparing {completed} of {total} rows…',
+    'history.export.elapsed': '{seconds} seconds elapsed.',
+    'history.export.slow': 'Export is taking longer than expected. Cancel, narrow the history filters, and try again.',
 
     // --- pending (unconfirmed) transactions -----------------------
     // Terminology is fixed: "pending" in every string a user reads,
@@ -358,7 +369,6 @@ export const en = {
     'pending.row.dropped': 'no longer seen by network',
     'pending.row.replaced': 'replaced',
     'pending.row.confirmed': 'confirmed',
-    'pending.row.generic': 'pending',
     // The wallet gave up before the network took the send. Its own record is
     // the only trace, so the row says so plainly rather than "pending".
     'pending.row.failed': 'failed, never sent',
@@ -367,7 +377,7 @@ export const en = {
     'pending.detail.failedSectionLabel': 'Failed transaction',
     'pending.detail.failed': 'Failed before it reached the network',
     'pending.detail.failedHelp':
-        'This wallet could not complete the send. Nothing was broadcast, so no coins moved and no fee was paid. You can send again.',
+        "This wallet couldn't complete the send. Nothing was broadcast, so no coins moved and no fee was paid. You can send again.",
     'pending.detail.technicalDetails': 'Technical details',
     'pending.detail.dismissFailed': 'Remove from history',
     // A transaction this wallet proved into a block that no feed will ever
@@ -404,9 +414,9 @@ export const en = {
     'pending.detail.sendOutput': '{amount} {tick} to {destination}',
     'pending.detail.memo': 'Memo: {memo}',
     'pending.detail.undecodable':
-        'This wallet does not read {action} data. The fields below are shown exactly as the network carries them.',
+        "This wallet doesn't read {action} data. The fields below are shown exactly as the network carries them.",
     'pending.detail.localRecordNote':
-        'Taken from this wallet\'s own record of the send. The network has not reported the transaction data yet.',
+        "Taken from this wallet's own record of the send. The network hasn't reported the transaction data yet.",
     'pending.detail.noData': 'No action data has been reported for this transaction yet.',
 
     // M2.5: the amount annotation on a pending row. Verbs still in

@@ -61,6 +61,20 @@
     width: 100%;
 }
 
+@media (max-width: 360px) {
+    .btn {
+        white-space: normal;
+    }
+
+    .label {
+        display: block;
+        overflow: visible;
+        text-overflow: clip;
+        overflow-wrap: anywhere;
+        text-align: center;
+    }
+}
+
 /* Filled variants pair each semantic background with its contrast-tested
  * label token. Fixed slate and purple fills keep their white labels. */
 

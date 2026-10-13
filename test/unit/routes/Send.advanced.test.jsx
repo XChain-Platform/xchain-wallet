@@ -104,17 +104,31 @@ describe('Send advanced choices', () => {
         expect(screen.getAllByRole('checkbox', { checked: false })).toHaveLength(3);
     });
 
-    it('counts memo characters and refuses the network-invalid length before compose', async () => {
+    it('counts memo UTF-8 bytes and refuses the network-invalid length before compose', async () => {
         const messaging = mount();
         await fillSend();
-        const memo = screen.getByLabelText('Memo');
-        fireEvent.change(memo, { target: { value: 'm'.repeat(MAX_MEMO_LENGTH + 1) } });
+        const memo = screen.getByLabelText('Memo (optional)');
+        fireEvent.change(memo, { target: { value: `${'é'.repeat(123)}📦a` } });
 
-        expect(screen.getByText(`${MAX_MEMO_LENGTH + 1} / ${MAX_MEMO_LENGTH} characters.`, { exact: false }))
+        expect(screen.getByText(`${MAX_MEMO_LENGTH + 1} / ${MAX_MEMO_LENGTH} bytes`, { exact: false }))
             .toBeInTheDocument();
         expect(screen.getByText(/network accepts at most 250/)).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('passes a valid accented and emoji memo to compose unchanged', async () => {
+        const messaging = mount();
+        await fillSend();
+        const memo = 'café 📦';
+        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: memo } });
+
+        expect(screen.getByText(`10 / ${MAX_MEMO_LENGTH} bytes`, { exact: false }))
+            .toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+
+        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
+        expect(messaging.composeForConfirm.mock.calls[0][0].memo).toBe(memo);
     });
 
     it('composes selected inputs and change, then repeats every advanced choice on review', async () => {

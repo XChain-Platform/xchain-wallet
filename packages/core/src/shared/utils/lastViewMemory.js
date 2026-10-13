@@ -22,6 +22,8 @@
 // views below also persist a small, validated parameter object so their
 // React state can be primed before the shell renders them.
 
+import { clearHistoryCacheForWallet } from './historyCache.js';
+
 const NS = 'xc:lastView:';
 
 // View identifiers safe to resume without re-priming context state.
@@ -175,11 +177,12 @@ export function writeLastView(walletId, view, params = null) {
 }
 
 /**
- * Drop the saved view for a wallet (e.g., on remove-wallet).
+ * Drop route-owned local memory when a wallet is removed.
  *
  * @param {string | null | undefined} walletId
  */
 export function clearLastView(walletId) {
     if (typeof walletId !== 'string' || !walletId) return;
     safeRemove(walletId);
+    clearHistoryCacheForWallet(walletId);
 }

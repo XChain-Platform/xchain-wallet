@@ -37,6 +37,16 @@ function safeGet() {
     } catch { return null; }
 }
 
+function storedSelection() {
+    const value = safeGet();
+    if (typeof value !== 'string' || !value) return null;
+    try {
+        const parsed = JSON.parse(value);
+        if (typeof parsed?.id === 'string' && parsed.id) return parsed;
+    } catch { /* A legacy value is the wallet id itself. */ }
+    return { id: value, name: '' };
+}
+
 /**
  * Read the saved active-wallet id, or null when none is stored. The caller
  * must still check the id exists in the current wallet list.
@@ -44,20 +54,34 @@ function safeGet() {
  * @returns {string | null}
  */
 export function readActiveWallet() {
-    const v = safeGet();
-    return typeof v === 'string' && v ? v : null;
+    return storedSelection()?.id || null;
+}
+
+/**
+ * Read the active wallet's last known display name for the locked screen.
+ *
+ * @returns {string | null}
+ */
+export function readActiveWalletName() {
+    const name = storedSelection()?.name;
+    return typeof name === 'string' && name ? name : null;
 }
 
 /**
  * Persist the active-wallet id.
  *
  * @param {string | null | undefined} walletId
+ * @param {string | null | undefined} [walletName]
  */
-export function writeActiveWallet(walletId) {
+export function writeActiveWallet(walletId, walletName) {
     if (typeof walletId !== 'string' || !walletId) return;
     try {
         if (typeof localStorage === 'undefined') return;
-        localStorage.setItem(KEY, walletId);
+        const previous = storedSelection();
+        const name = typeof walletName === 'string' && walletName.trim()
+            ? walletName.trim()
+            : (previous?.id === walletId ? previous.name : '');
+        localStorage.setItem(KEY, name ? JSON.stringify({ id: walletId, name }) : walletId);
     } catch { /* noop */ }
 }
 
