@@ -76,7 +76,10 @@
     overflow: hidden;
 }
 
+/* The chain name gives way before the network tag: without min-width: 0
+   it cannot shrink, so a narrow form cut "regtest" off instead. */
 .triggerLabel {
+    min-width: 0;
     font-size: inherit;
     color: var(--xc-text);
     overflow: hidden;
