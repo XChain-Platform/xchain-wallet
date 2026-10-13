@@ -185,7 +185,7 @@ export function DesktopUpdateBanner() {
         <div role="status" aria-live="polite" style={WRAP}>
             <span aria-hidden="true">⬆</span>
             <div style={{ flex: 1 }}>
-                {state === 'checking' ? 'Checking for updates...' : null}
+                {state === 'checking' ? 'Checking for updates…' : null}
                 {state === 'current' ? 'XChain Wallet is up to date.' : null}
                 {state === 'available' ? (
                     version
@@ -193,9 +193,9 @@ export function DesktopUpdateBanner() {
                         : 'A newer version is available.'
                 ) : null}
                 {state === 'downloading' ? (
-                    progress == null ? 'Downloading update...' : `Downloading update... ${progress}%`
+                    progress == null ? 'Downloading update…' : `Downloading update… ${progress}%`
                 ) : null}
-                {state === 'verifying' ? 'Verifying the downloaded update...' : null}
+                {state === 'verifying' ? 'Verifying the downloaded update…' : null}
                 {state === 'ready' ? 'Update is ready to restart.' : null}
                 {state === 'restart-blocked' ? (
                     'Finish the current wallet operation before restarting.'
@@ -205,7 +205,7 @@ export function DesktopUpdateBanner() {
                 ) : null}
                 {state === 'error' && retryAction.current !== 'check' ? (
                     'This update could not be downloaded or verified, so it was not installed. '
-                    + 'Your wallet is untouched. Check docs.xchain.io for how to verify a release by hand.'
+                    + 'Your wallet is untouched. See docs.xchain.io for steps to verify a release.'
                 ) : null}
             </div>
             {state === 'available' ? (

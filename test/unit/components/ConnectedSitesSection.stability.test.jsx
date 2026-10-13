@@ -103,9 +103,9 @@ describe('ConnectedSitesSection settings controls', () => {
         expect(screen.getByRole('button', { name: 'Hide' }).getAttribute('aria-expanded')).toBe('true');
         expect(screen.getByText('bitcoin, litecoin')).toBeTruthy();
         expect(screen.getByText('account-1')).toBeTruthy();
-        expect(screen.getByText('ask every time')).toBeTruthy();
-        expect(screen.getByText('always allow').style.color).toBe('var(--xc-success, #2a8)');
-        expect(screen.getByText('never allow').style.color).toBe('var(--xc-danger-fg)');
+        expect(screen.getByText('Ask every time')).toBeTruthy();
+        expect(screen.getByText('Always allow').style.color).toBe('var(--xc-success, #2a8)');
+        expect(screen.getByText('Never allow').style.color).toBe('var(--xc-danger-fg)');
     });
 
     it('requires confirmation before disconnecting a site', async () => {
@@ -130,7 +130,7 @@ describe('ConnectedSitesSection settings controls', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'Disconnect' }));
         expect(messaging.deleteConnectedSite).not.toHaveBeenCalled();
         const dialog = screen.getByRole('dialog', { name: 'Disconnect Example dApp?' });
-        expect(dialog).toHaveTextContent('https://dapp.example will lose access to its shared accounts and signing permissions. You can reconnect the site later.');
+        expect(dialog).toHaveTextContent('https://dapp.example will lose access to the accounts you shared and will no longer be able to ask for signatures. You can reconnect the site later.');
         expect(screen.getByRole('button', { name: 'Disconnect site' })).toBeTruthy();
 
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
@@ -162,7 +162,7 @@ describe('ConnectedSitesSection settings controls', () => {
         expect(messaging.blockOrigin).not.toHaveBeenCalled();
 
         fireEvent.click(block);
-        fireEvent.click(screen.getByRole('button', { name: 'Block origin' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Block site' }));
         await waitFor(() => expect(messaging.blockOrigin).toHaveBeenCalledWith({
             origin: 'https://dapp.example',
         }));
@@ -177,13 +177,13 @@ describe('ConnectedSitesSection settings controls', () => {
         messaging.clearBlocklistAuditLog = vi.fn(async () => {});
         render(<ConnectedSitesSection />);
 
-        const clear = await screen.findByRole('button', { name: 'Clear log' });
+        const clear = await screen.findByRole('button', { name: 'Clear history' });
         expect(clear.className).toMatch(/danger/);
         fireEvent.click(clear);
 
         expect(messaging.clearBlocklistAuditLog).not.toHaveBeenCalled();
-        expect(screen.getByRole('dialog', { name: 'Clear blocklist audit log?' })).toBeTruthy();
-        fireEvent.click(screen.getAllByRole('button', { name: 'Clear log' }).at(-1));
+        expect(screen.getByRole('dialog', { name: 'Clear site block history?' })).toBeTruthy();
+        fireEvent.click(screen.getAllByRole('button', { name: 'Clear history' }).at(-1));
 
         await waitFor(() => expect(messaging.clearBlocklistAuditLog).toHaveBeenCalledTimes(1));
     });

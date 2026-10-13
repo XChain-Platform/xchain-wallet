@@ -199,7 +199,7 @@ export function AboutSection() {
             <Row label="Version">
                 <span style={ROW_VALUE}>{WALLET_VERSION}</span>
             </Row>
-            <Row label="Build hash">
+            <Row label="Build identifier">
                 <span style={diagnosticMeta?.buildHash ? ROW_VALUE : ROW_VALUE_MUTED}>
                     {diagnosticMeta?.buildHash || 'not available'}
                 </span>
