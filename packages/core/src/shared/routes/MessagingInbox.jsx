@@ -947,9 +947,6 @@ function SessionRequestRow({
                 </p>
             ) : (
                 <div className={local.requestActions}>
-                    <Button variant="primary" onClick={handleShare} loading={stage === 'sending'}>
-                        Share my key
-                    </Button>
                     <Button variant="ghost" onClick={onDecline} disabled={stage === 'sending'}>
                         Decline
                     </Button>
@@ -958,6 +955,9 @@ function SessionRequestRow({
                             Message
                         </Button>
                     ) : null}
+                    <Button variant="primary" onClick={handleShare} loading={stage === 'sending'}>
+                        Share my key
+                    </Button>
                 </div>
             )}
             {error ? (

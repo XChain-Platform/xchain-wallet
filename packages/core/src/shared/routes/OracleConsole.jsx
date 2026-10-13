@@ -223,6 +223,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
     // (create in CreateBetFeedForm, place in BetFeedDetail); adding it here would
     // ask a user to pay a fee the chain never charges.
     async function runOracleAction(feed, builder, submit, params) {
+        if (actionConfirm.composing) return;
         const from = sourceDescriptor(feed.owner);
         setFormError(null);
         setResult(null);
@@ -416,11 +417,11 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                             Edit lists
                                         </Button>
                                     ) : null}
+                                    {canCancel ? (
+                                        <Button variant="danger" onClick={() => { setActive({ ...f, mode: 'cancel' }); setOutcome(null); }}>Cancel and refund</Button>
+                                    ) : null}
                                     {canResolve ? (
                                         <Button variant="primary" onClick={() => { setActive({ ...f, mode: 'resolve' }); setOutcome(null); }}>Resolve</Button>
-                                    ) : null}
-                                    {canCancel ? (
-                                        <Button variant="ghost" onClick={() => { setActive({ ...f, mode: 'cancel' }); setOutcome(null); }}>Cancel and refund</Button>
                                     ) : null}
                                 </div>
                             ) : null}
@@ -450,6 +451,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                     ) : null}
                                     <Button
                                         variant="primary"
+                                        loading={actionConfirm.composing}
                                         disabled={!allowList.trim() && !blockList.trim()}
                                         onClick={() => runOracleAction(f, 'editFeedListsParams', submitEdit, {
                                             feedActionIndex: f.action_index,
@@ -482,6 +484,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                     </p>
                                     <Button
                                         variant="primary"
+                                        loading={actionConfirm.composing}
                                         disabled={outcome === null}
                                         onClick={() => runOracleAction(f, 'resolveMarketParams', submitResolve, {
                                             feedActionIndex: f.action_index, outcome,
@@ -502,7 +505,8 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                         exit for an event that was postponed or never happened.
                                     </p>
                                     <Button
-                                        variant="primary"
+                                        variant="danger"
+                                        loading={actionConfirm.composing}
                                         onClick={() => runOracleAction(f, 'cancelMarketParams', submitCancel, {
                                             feedActionIndex: f.action_index,
                                         })}

@@ -45,6 +45,34 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('ConnectedSitesSection settings controls', () => {
+    it('marks destructive site actions as danger and disables repeat disconnects', async () => {
+        let finishDelete;
+        messaging.listConnectedSites.mockResolvedValue([{
+            id: 'site-1',
+            origin: 'https://wallet.example',
+            appName: 'Wallet example',
+            permissions: {},
+        }]);
+        messaging.deleteConnectedSite = vi.fn(() => new Promise((resolve) => { finishDelete = resolve; }));
+        messaging.restoreConnectedSite = vi.fn();
+
+        render(<ConnectedSitesSection />);
+        const disconnect = await screen.findByRole('button', { name: 'Disconnect' });
+        const block = screen.getAllByRole('button', { name: 'Block' }).find((button) => !button.disabled);
+        expect(disconnect.className).toMatch(/danger/);
+        expect(block.className).toMatch(/danger/);
+
+        fireEvent.click(disconnect);
+        fireEvent.click(screen.getAllByRole('button', { name: 'Disconnect' }).at(-1));
+        await waitFor(() => expect(messaging.deleteConnectedSite).toHaveBeenCalledTimes(1));
+        fireEvent.click(disconnect);
+
+        expect(messaging.deleteConnectedSite).toHaveBeenCalledTimes(1);
+        expect(disconnect).toBeDisabled();
+        finishDelete();
+        await waitFor(() => expect(messaging.listConnectedSites).toHaveBeenCalledTimes(2));
+    });
+
     it('shows a structured empty state after connected sites load', async () => {
         render(<ConnectedSitesSection />);
 

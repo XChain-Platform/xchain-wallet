@@ -77,16 +77,21 @@ function PermissionRow() {
     const supported = typeof Notification !== 'undefined';
     const [permission, setPermission] = useState(supported ? Notification.permission : 'unsupported');
     const [requestError, setRequestError] = useState(/** @type {string | null} */ (null));
+    const [requesting, setRequesting] = useState(false);
 
     if (!supported) return null;
 
     const request = async () => {
+        if (requesting) return;
+        setRequesting(true);
         setRequestError(null);
         try {
             const result = await Notification.requestPermission();
             setPermission(result);
         } catch {
             setRequestError('Could not request notification permission. Check this app in your browser or system settings.');
+        } finally {
+            setRequesting(false);
         }
     };
 
@@ -98,8 +103,8 @@ function PermissionRow() {
         hint = 'Blocked by your browser or system settings. Allow notifications for this app there to enable them.';
     } else {
         action = (
-            <button type="button" onClick={request} style={PERMISSION_BUTTON}>
-                Request permission
+            <button type="button" onClick={request} disabled={requesting} aria-busy={requesting} style={PERMISSION_BUTTON}>
+                {requesting ? 'Requesting…' : 'Request permission'}
             </button>
         );
     }

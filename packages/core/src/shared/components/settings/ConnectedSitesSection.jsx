@@ -23,7 +23,7 @@
 // block an origin without it being connected first.
 //
 import { useEffect, useState } from 'react';
-import { EmptyState } from '@xchain-wallet/core/ui';
+import { Button, EmptyState } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
 import { useSettings } from '../../hooks/useSettings.js';
 import { useConfirmModal } from '../../hooks/useConfirmModal.js';
@@ -72,6 +72,7 @@ export function ConnectedSitesSection() {
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [expanded, setExpanded] = useState(/** @type {Set<string>} */ (new Set()));
     const [manualBlock, setManualBlock] = useState('');
+    const [pendingAction, setPendingAction] = useState(/** @type {string | null} */ (null));
 
     const blocklistWired = typeof messaging?.listBlockedOrigins === 'function'
         && typeof messaging?.blockOrigin === 'function'
@@ -102,6 +103,11 @@ export function ConnectedSitesSection() {
     useEffect(() => { reload(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
 
     const onDisconnect = async (id) => {
+        if (pendingAction) return;
+        // §37.2 / Cluster D FOLLOWUP 1: snapshot the full ConnectedSite
+        // record before tearing it down so the Undo toast can re-create
+        // it with the same permissions / lastUsedAt / appName instead
+        // of forcing the dApp to re-prompt.
         const snapshot = sites ? sites.find((s) => s.id === id) : null;
         if (!snapshot) return;
         const confirmed = await confirmDialog.confirm({
@@ -111,6 +117,7 @@ export function ConnectedSitesSection() {
             danger: true,
         });
         if (!confirmed) return;
+        setPendingAction(`disconnect:${id}`);
         try {
             await messaging.deleteConnectedSite({ id });
             await reload();
@@ -130,37 +137,50 @@ export function ConnectedSitesSection() {
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setPendingAction(null);
         }
     };
 
     const onBlock = async (origin) => {
+        if (pendingAction) return;
+        setPendingAction(`block:${origin}`);
         try {
             await messaging.blockOrigin({ origin });
             await reload();
         } catch (err) {
             setError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setPendingAction(null);
         }
     };
 
     const onUnblock = async (origin) => {
+        if (pendingAction) return;
+        setPendingAction(`unblock:${origin}`);
         try {
             await messaging.unblockOrigin({ origin });
             await reload();
         } catch (err) {
             setError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setPendingAction(null);
         }
     };
 
     const onManualBlockSubmit = async (e) => {
         e.preventDefault();
         const trimmed = manualBlock.trim();
-        if (!trimmed) return;
+        if (!trimmed || pendingAction) return;
+        setPendingAction('block:manual');
         try {
             await messaging.blockOrigin({ origin: trimmed });
             setManualBlock('');
             await reload();
         } catch (err) {
             setError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setPendingAction(null);
         }
     };
 
@@ -203,21 +223,25 @@ export function ConnectedSitesSection() {
                                     >
                                         {isOpen ? 'Hide' : 'Permissions'}
                                     </button>
-                                    <button
-                                        type="button"
+                                    <Button
+                                        size="sm"
+                                        variant="danger"
                                         onClick={() => onDisconnect(site.id)}
-                                        style={ACTION_BTN}
+                                        loading={pendingAction === `disconnect:${site.id}`}
+                                        disabled={pendingAction !== null}
                                     >
                                         Disconnect
-                                    </button>
+                                    </Button>
                                     {blocklistWired ? (
-                                        <button
-                                            type="button"
+                                        <Button
+                                            size="sm"
+                                            variant="danger"
                                             onClick={() => onBlock(site.origin)}
-                                            style={{ ...ACTION_BTN, color: 'var(--xc-danger-fg)', borderColor: 'var(--xc-danger-fg)' }}
+                                            loading={pendingAction === `block:${site.origin}`}
+                                            disabled={pendingAction !== null}
                                         >
                                             Block
-                                        </button>
+                                        </Button>
                                     ) : null}
                                 </div>
                             </div>
@@ -233,6 +257,7 @@ export function ConnectedSitesSection() {
                     setManualBlock={setManualBlock}
                     onSubmit={onManualBlockSubmit}
                     onUnblock={onUnblock}
+                    pendingAction={pendingAction}
                 />
             ) : null}
             {blocklistWired
@@ -273,6 +298,7 @@ function BlocklistAuditPanel() {
     useEffect(() => { reload(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
 
     const onClear = async () => {
+        if (clearing) return;
         setClearing(true);
         try {
             await messaging.clearBlocklistAuditLog();
@@ -384,6 +410,7 @@ function SignThrottlePanel() {
 
     const onApply = async (e) => {
         e.preventDefault();
+        if (submitting) return;
         setError(null);
         const patch = {};
         if (burstInput.trim() === '') {
@@ -509,7 +536,7 @@ function SignThrottlePanel() {
     );
 }
 
-function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, onUnblock }) {
+function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, onUnblock, pendingAction }) {
     return (
         <div style={{ ...SITE_BLOCK, borderColor: 'var(--xc-border)' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-2)' }}>
@@ -536,9 +563,16 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
                                 style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--xc-space-2)' }}
                             >
                                 <span style={{ color: 'var(--xc-text)', wordBreak: 'break-all' }}>{origin}</span>
-                                <button type="button" onClick={() => onUnblock(origin)} style={ACTION_BTN}>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="secondary"
+                                    onClick={() => onUnblock(origin)}
+                                    loading={pendingAction === `unblock:${origin}`}
+                                    disabled={pendingAction !== null}
+                                >
                                     Unblock
-                                </button>
+                                </Button>
                             </li>
                         ))}
                     </ul>
@@ -564,13 +598,15 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
                             fontSize: 'var(--xc-text-sm)',
                         }}
                     />
-                    <button
+                    <Button
                         type="submit"
-                        disabled={!manualBlock.trim()}
-                        style={{ ...ACTION_BTN, color: 'var(--xc-danger-fg)', borderColor: 'var(--xc-danger-fg)' }}
+                        size="sm"
+                        variant="danger"
+                        loading={pendingAction === 'block:manual'}
+                        disabled={!manualBlock.trim() || pendingAction !== null}
                     >
                         Block
-                    </button>
+                    </Button>
                 </form>
             </div>
         </div>

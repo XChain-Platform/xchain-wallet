@@ -1790,6 +1790,7 @@ function GatedGroupCard({
     /** @type {[{ name: string, declaredType: string | null, plaintextBase64: string } | null, Function]} */
     const [viewer, setViewer] = useState(null);
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const fileOpenBusyRef = useRef(false);
 
     const passwordOpen = pendingFile !== null;
 
@@ -1830,13 +1831,14 @@ function GatedGroupCard({
             openFile(plain, file);
             return;
         }
+        if (fileOpenBusyRef.current) return;
+        fileOpenBusyRef.current = true;
+        setSubmitting(true);
         // Demo content: the backend short-circuit (flows/gatedContent.js)
         // returns hardcoded plaintext for `demo:` action indices without
         // touching the vault, so we can unlock the whole group inline
         // without a password prompt or address picker.
         if (isDemoGatedActionIndex(file.actionIndex)) {
-            if (submitting) return;
-            setSubmitting(true);
             try {
                 const results = new Map(unlocked);
                 for (const f of group.files) {
@@ -1859,6 +1861,7 @@ function GatedGroupCard({
             } catch (err) {
                 setAccessError(err?.message || 'Failed to unlock demo content.');
             } finally {
+                fileOpenBusyRef.current = false;
                 setSubmitting(false);
             }
             return;
@@ -1904,6 +1907,7 @@ function GatedGroupCard({
                     // Vault row unusable (stale, explorer down, ...):
                     // fall through to the password-gated scan path.
                 } finally {
+                    fileOpenBusyRef.current = false;
                     setSubmitting(false);
                 }
             }
@@ -1912,6 +1916,8 @@ function GatedGroupCard({
         // automatically on submit (handleUnlock iterates the user's
         // addresses to find whichever one received the seller's key
         // handoff for this group's KEY_HASH).
+        fileOpenBusyRef.current = false;
+        setSubmitting(false);
         onRequestAddresses();
         setUnlockError(null);
         setPendingFile(file);
@@ -2051,6 +2057,8 @@ function GatedGroupCard({
                             <button
                                 type="button"
                                 onClick={() => handleFileClick(f)}
+                                disabled={submitting}
+                                aria-busy={submitting}
                                 className={styles.fileLink}
                                 style={{
                                     cursor: 'pointer',

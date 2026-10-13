@@ -151,6 +151,7 @@ export function DemoBanner({ activeWalletId, onExited }) {
                     size="sm"
                     variant="danger"
                     onClick={() => { setError(null); setConfirmOpen(true); }}
+                    disabled={busy}
                 >
                     Exit demo &amp; wipe
                 </Button>

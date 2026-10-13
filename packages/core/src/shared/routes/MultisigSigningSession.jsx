@@ -118,6 +118,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
     const [activeId, setActiveId] = useState(/** @type {string | null} */ (null));
     const [active, setActive] = useState(/** @type {any | null} */ (null));
     const [busy, setBusy] = useState(false);
+    const [canceling, setCanceling] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [view, setView] = useState(/** @type {'tracker' | 'export-qr' | 'paste-inbox' | 'sign-locally'} */ ('tracker'));
     const [pasteInput, setPasteInput] = useState('');
@@ -169,7 +170,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
     }, [activeId, refreshActive]);
 
     async function handleAggregate() {
-        if (!active) return;
+        if (!active || busy) return;
         setBusy(true);
         setError(null);
         try {
@@ -185,7 +186,8 @@ export function MultisigSigningSession({ walletId, onBack }) {
     }
 
     async function handleCancel() {
-        if (!active) return;
+        if (!active || busy) return;
+        setCanceling(true);
         setBusy(true);
         setError(null);
         try {
@@ -197,6 +199,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
             fail(userFacingMessage(err, 'Cancel failed.'), handleCancel);
         } finally {
             setBusy(false);
+            setCanceling(false);
         }
     }
 
@@ -331,7 +334,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
     }, [active, busy, collectorState, messaging, refreshActive, refreshList, fail]);
 
     async function handleSignLocally() {
-        if (!active || signPassword.length === 0) return;
+        if (!active || busy || signPassword.length === 0) return;
         setBusy(true);
         setError(null);
         setSignResult(null);
@@ -355,7 +358,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
     }
 
     async function handlePasteSubmit() {
-        if (!active) return;
+        if (!active || busy) return;
         setBusy(true);
         setError(null);
         setPasteResult(null);
@@ -638,11 +641,11 @@ export function MultisigSigningSession({ walletId, onBack }) {
                 {signResult ? <p className={styles.hint}>{signResult}</p> : null}
                 {error ? <StatusMessage variant="error" recovery={errorRecovery}>{error}</StatusMessage> : null}
                 <div className={styles.actions}>
-                    <Button onClick={handleSignLocally} disabled={busy || signPassword.length === 0}>
-                        {busy ? 'Signing…' : 'Sign with my key'}
-                    </Button>
                     <Button variant="ghost" onClick={() => { setSignPassword(''); setView('tracker'); }}>
                         Back to tracker
+                    </Button>
+                    <Button variant="primary" onClick={handleSignLocally} loading={busy} disabled={signPassword.length === 0}>
+                        Sign with my key
                     </Button>
                 </div>
             </>,
@@ -677,21 +680,21 @@ export function MultisigSigningSession({ walletId, onBack }) {
                 {pasteResult ? <p className={styles.hint}>{pasteResult}</p> : null}
                 {error ? <StatusMessage variant="error" recovery={errorRecovery}>{error}</StatusMessage> : null}
                 <div className={styles.actions}>
+                    <Button variant="ghost" onClick={() => { setScannerOpen(false); setView('tracker'); }} disabled={busy}>
+                        Back to tracker
+                    </Button>
+                    <Button variant="danger" onClick={resetCollector} disabled={busy}>
+                        Clear received reply
+                    </Button>
                     <Button
-                        variant={scannerOpen ? 'ghost' : 'primary'}
+                        variant="secondary"
                         onClick={() => setScannerOpen((v) => !v)}
                         disabled={busy}
                     >
                         {scannerOpen ? 'Stop scanner' : 'Scan with camera'}
                     </Button>
-                    <Button onClick={handlePasteSubmit} disabled={busy || pasteInput.trim().length === 0}>
-                        {busy ? 'Processing…' : 'Submit chunks'}
-                    </Button>
-                    <Button variant="ghost" onClick={resetCollector} disabled={busy}>
-                        Clear received reply
-                    </Button>
-                    <Button variant="ghost" onClick={() => { setScannerOpen(false); setView('tracker'); }}>
-                        Back to tracker
+                    <Button variant="primary" onClick={handlePasteSubmit} loading={busy} disabled={pasteInput.trim().length === 0}>
+                        Submit chunks
                     </Button>
                 </div>
             </>,
@@ -781,25 +784,23 @@ export function MultisigSigningSession({ walletId, onBack }) {
             ) : null}
             {error ? <StatusMessage variant="error" recovery={errorRecovery}>{error}</StatusMessage> : null}
             <div className={styles.actions}>
-                {canAggregate && !isTerminal ? (
-                    <Button onClick={handleAggregate} disabled={busy}>
-                        {busy ? 'Combining…' : 'Combine replies'}
-                    </Button>
-                ) : null}
+                <Button variant="ghost" onClick={() => setActiveId(null)} disabled={busy}>
+                    Back to sessions
+                </Button>
                 {!isTerminal && Array.isArray(exportFrames) ? (
-                    <Button variant="ghost" onClick={() => setView('export-qr')}>
+                    <Button variant="ghost" onClick={() => setView('export-qr')} disabled={busy}>
                         {active.status === 'finalized' ? 'Export signed transaction' : 'Export signing request'}
                     </Button>
                 ) : null}
                 {canCollect ? (
-                    <Button variant="ghost" onClick={() => { resetCollector(); setView('paste-inbox'); }}>
+                    <Button variant="ghost" onClick={() => { resetCollector(); setView('paste-inbox'); }} disabled={busy}>
                         {isMusig2 && active.status === 'collecting-sigs'
                             ? 'Import partial signature'
                             : 'Import cosigner reply'}
                     </Button>
                 ) : null}
                 {canCollect && !isWatcherMode ? (
-                    <Button variant="ghost" onClick={() => { setSignResult(null); setView('sign-locally'); }}>
+                    <Button variant="ghost" onClick={() => { setSignResult(null); setView('sign-locally'); }} disabled={busy}>
                         Sign with my key
                     </Button>
                 ) : null}
@@ -809,13 +810,15 @@ export function MultisigSigningSession({ walletId, onBack }) {
                     </p>
                 ) : null}
                 {!isTerminal ? (
-                    <Button variant="ghost" onClick={handleCancel} disabled={busy}>
+                    <Button variant="danger" onClick={handleCancel} loading={canceling} disabled={busy}>
                         Cancel session
                     </Button>
                 ) : null}
-                <Button variant="ghost" onClick={() => setActiveId(null)}>
-                    Back to sessions
-                </Button>
+                {canAggregate && !isTerminal ? (
+                    <Button variant="primary" onClick={handleAggregate} loading={busy && !canceling} disabled={busy}>
+                        Combine replies
+                    </Button>
+                ) : null}
             </div>
         </>,
     );

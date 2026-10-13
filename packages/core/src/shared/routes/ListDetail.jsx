@@ -268,6 +268,21 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
 
             <SectionHeader title="Actions" />
             <div className={styles.actions}>
+                {onShare ? (
+                    <Button variant="secondary" onClick={() => onShare({ chainId, actionIndex })}>
+                        Share list
+                    </Button>
+                ) : null}
+                {onTransfer ? (
+                    <Button variant="secondary" onClick={() => onTransfer({ chainId, actionIndex })}>
+                        Transfer list
+                    </Button>
+                ) : null}
+                {onRename && metaSupported ? (
+                    <Button variant="secondary" onClick={() => onRename({ chainId, actionIndex })}>
+                        Rename list
+                    </Button>
+                ) : null}
                 <Button
                     variant="primary"
                     onClick={() => onFork({
@@ -285,21 +300,6 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
                 >
                     Fork &amp; edit
                 </Button>
-                {onShare ? (
-                    <Button variant="secondary" onClick={() => onShare({ chainId, actionIndex })}>
-                        Share list
-                    </Button>
-                ) : null}
-                {onTransfer ? (
-                    <Button variant="secondary" onClick={() => onTransfer({ chainId, actionIndex })}>
-                        Transfer list
-                    </Button>
-                ) : null}
-                {onRename && metaSupported ? (
-                    <Button variant="secondary" onClick={() => onRename({ chainId, actionIndex })}>
-                        Rename list
-                    </Button>
-                ) : null}
             </div>
         </>,
     );

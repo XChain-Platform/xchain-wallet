@@ -203,6 +203,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         ('compose'),
     );
     const [submitting, setSubmitting] = useState(false);
+    const [clearingPending, setClearingPending] = useState(false);
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [pendingId, setPendingId] = useState(/** @type {string | null} */ (null));
@@ -1160,10 +1161,16 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     }
 
     async function handleClearPending() {
-        if (pendingId) {
-            try { await messaging.clearPendingAirdrop({ id: pendingId }); } catch (_) { /* */ }
+        if (clearingPending) return;
+        setClearingPending(true);
+        try {
+            if (pendingId) {
+                try { await messaging.clearPendingAirdrop({ id: pendingId }); } catch (_) { /* */ }
+            }
+            onBack();
+        } finally {
+            setClearingPending(false);
         }
-        onBack();
     }
 
         const header = (
@@ -1249,7 +1256,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 <p className={styles.successLabel}>Airdrop transaction</p>
                 <code className={styles.txid}>{airdropTxid}</code>
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={handleClearPending}>Done</Button>
+                    <Button variant="primary" onClick={handleClearPending} loading={clearingPending}>Done</Button>
                 </div>
             </>,
         );
@@ -1286,7 +1293,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 ) : null}
                 <div className={styles.actions}>
                     <Button variant="ghost" onClick={onBack}>Close (keep waiting)</Button>
-                    <Button variant="ghost" onClick={handleClearPending}>Cancel airdrop</Button>
+                    <Button variant="danger" onClick={handleClearPending} loading={clearingPending}>Cancel airdrop</Button>
                 </div>
             </>,
         );

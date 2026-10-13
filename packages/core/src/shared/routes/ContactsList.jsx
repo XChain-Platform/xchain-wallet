@@ -146,6 +146,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     );
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [submitting, setSubmitting] = useState(false);
+    const [deleting, setDeleting] = useState(/** @type {string | null} */ (null));
     // An error answers the last Save; once the user edits the form it no
     // longer describes it ("Name is required." stayed up under a typed name).
     useEffect(() => { setSubmitError(null); }, [formName, formNotes, formEntries]);
@@ -412,7 +413,12 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     }
 
     async function handleDelete(id) {
-        if (!(await confirmDialog.confirm({ title: 'Delete this contact?', confirmLabel: 'Delete', danger: true }))) return;
+        if (deleting) return;
+        setDeleting(`contact:${id}`);
+        if (!(await confirmDialog.confirm({ title: 'Delete this contact?', confirmLabel: 'Delete', danger: true }))) {
+            setDeleting(null);
+            return;
+        }
         // Snapshot the full record before deletion so the §37.2 Undo
         // toast can re-create it via saveContact. We freeze the
         // displayed name here so the toast text doesn't change if the
@@ -440,20 +446,28 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             }
         } catch (err) {
             setLoadError(err?.message || 'Delete failed.');
+        } finally {
+            setDeleting(null);
         }
     }
 
     // Remove a single address entry from the active contact, after a
     // confirmation that mirrors the delete-contact prompt.
     async function handleDeleteAddress(index) {
-        if (!active) return;
-        if (!(await confirmDialog.confirm({ title: 'Delete this address?', confirmLabel: 'Delete', danger: true }))) return;
+        if (!active || deleting) return;
+        setDeleting(`address:${index}`);
+        if (!(await confirmDialog.confirm({ title: 'Delete this address?', confirmLabel: 'Delete', danger: true }))) {
+            setDeleting(null);
+            return;
+        }
         const nextEntries = active.entries.filter((_, i) => i !== index);
         try {
             await messaging.saveContact({ record: { ...active, entries: nextEntries } });
             await loadContacts();
         } catch (err) {
             setLoadError(err?.message || 'Delete failed.');
+        } finally {
+            setDeleting(null);
         }
     }
 
@@ -725,9 +739,11 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                             type="button"
                             className={picker.quickAction}
                             onClick={() => handleDelete(active.id)}
+                            disabled={deleting !== null}
+                            aria-busy={deleting === `contact:${active.id}`}
                         >
                             <span className={picker.quickActionIcon} aria-hidden="true"><Icon.TrashIcon /></span>
-                            <span>Delete</span>
+                            <span>{deleting === `contact:${active.id}` ? 'Deleting…' : 'Delete'}</span>
                         </button>
                     </div>
                     {addrPicker ? (
@@ -779,6 +795,8 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                                     type="button"
                                     className={picker.addressDeleteBtn}
                                     onClick={() => handleDeleteAddress(i)}
+                                    disabled={deleting !== null}
+                                    aria-busy={deleting === `address:${i}`}
                                     aria-label="Delete address"
                                     title="Delete address"
                                 >
