@@ -9,8 +9,13 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 vi.mock('@xchain-wallet/core/ui', async () => {
     const React = await import('react');
     return {
-        Button: ({ variant, onClick, children }) =>
-            React.createElement('button', { 'data-variant': variant, onClick }, children),
+        Button: ({ variant, onClick, children, disabled, loading }) =>
+            React.createElement('button', {
+                'data-variant': variant,
+                'aria-busy': loading ? 'true' : 'false',
+                disabled: disabled || loading,
+                onClick,
+            }, children),
     };
 });
 
@@ -138,5 +143,15 @@ describe('ConfirmModal', () => {
         setup({ danger: true });
         expect(screen.getByText('Cancel').dataset.variant).toBe('secondary');
         expect(screen.getByText('Confirm').dataset.variant).toBe('danger');
+    });
+
+    it('shows an error and keeps both exits disabled while confirmation is busy', () => {
+        const { onCancel } = setup({ busy: true, error: 'Wipe failed' });
+        expect(screen.getByRole('dialog')).toHaveAttribute('aria-busy', 'true');
+        expect(screen.getByRole('alert')).toHaveTextContent('Wipe failed');
+        expect(screen.getByText('Cancel')).toBeDisabled();
+        expect(screen.getByText('Confirm')).toBeDisabled();
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(onCancel).not.toHaveBeenCalled();
     });
 });

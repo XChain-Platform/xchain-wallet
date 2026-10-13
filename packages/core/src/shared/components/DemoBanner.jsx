@@ -13,6 +13,7 @@ import { flows as flowsLib } from '@xchain-wallet/core';
 import { Button } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../useMessaging.js';
 import { exitDemoWallet } from '../utils/demoGraduation.js';
+import { DemoExitConfirm } from './DemoExitConfirm.jsx';
 import styles from './DemoBanner.module.css';
 
 /**
@@ -47,6 +48,7 @@ export function DemoBanner({ activeWalletId, onExited }) {
     const [isDemo, setIsDemo] = useState(false);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    const [confirmOpen, setConfirmOpen] = useState(false);
     const [expiry, setExpiry] = useState(/** @type {{ expiresAt: number } | null} */ (null));
     const [autoWiped, setAutoWiped] = useState(false);
 
@@ -70,6 +72,7 @@ export function DemoBanner({ activeWalletId, onExited }) {
                 walletId: activeWalletId,
             });
             if (reloaded) return;
+            setConfirmOpen(false);
             if (typeof onExited === 'function') onExited();
         } catch (err) {
             setError(err?.message || 'Could not exit demo mode.');
@@ -120,16 +123,22 @@ export function DemoBanner({ activeWalletId, onExited }) {
             <div className={styles.actions}>
                 <Button
                     size="sm"
-                    variant="secondary"
-                    onClick={handleExit}
-                    loading={busy}
-                    disabled={busy}
+                    variant="danger"
+                    onClick={() => { setError(null); setConfirmOpen(true); }}
                 >
                     Exit demo &amp; wipe
                 </Button>
             </div>
-            {error ? (
+            {error && !confirmOpen ? (
                 <p role="alert" className={styles.error}>{error}</p>
+            ) : null}
+            {confirmOpen ? (
+                <DemoExitConfirm
+                    busy={busy}
+                    error={error}
+                    onConfirm={handleExit}
+                    onCancel={() => { setConfirmOpen(false); setError(null); }}
+                />
             ) : null}
         </div>
     );

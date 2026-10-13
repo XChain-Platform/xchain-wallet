@@ -13,6 +13,7 @@ import { Button, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xcha
 import { isDemoWallet, getDemoWalletExpiry } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { exitDemoWallet } from '../utils/demoGraduation.js';
+import { DemoExitConfirm } from '../components/DemoExitConfirm.jsx';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
@@ -45,6 +46,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [exitBusy, setExitBusy] = useState(false);
     const [exitError, setExitError] = useState(/** @type {string | null} */ (null));
+    const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
 
     const isDemo = isDemoWallet(walletId);
     const demoExpiry = isDemo ? getDemoWalletExpiry() : null;
@@ -66,6 +68,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
             // Welcome instead, and only when nothing else is left.
             const { reloaded } = await exitDemoWallet({ messaging, walletId });
             if (reloaded) return;
+            setExitConfirmOpen(false);
             if (typeof onExited === 'function') onExited();
         } catch (err) {
             setExitError(err?.message || 'Could not exit demo mode.');
@@ -201,13 +204,11 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
                             type="button"
                             variant="danger"
                             block
-                            onClick={handleExitDemo}
-                            loading={exitBusy}
-                            disabled={exitBusy}
+                            onClick={() => { setExitError(null); setExitConfirmOpen(true); }}
                         >
                             Exit demo &amp; wipe
                         </Button>
-                        {exitError ? (
+                        {exitError && !exitConfirmOpen ? (
                             <p
                                 role="alert"
                                 style={{
@@ -218,6 +219,14 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
                             >
                                 {exitError}
                             </p>
+                        ) : null}
+                        {exitConfirmOpen ? (
+                            <DemoExitConfirm
+                                busy={exitBusy}
+                                error={exitError}
+                                onConfirm={handleExitDemo}
+                                onCancel={() => { setExitConfirmOpen(false); setExitError(null); }}
+                            />
                         ) : null}
                     </div>
                 ) : null}
