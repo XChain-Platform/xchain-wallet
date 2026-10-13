@@ -25,6 +25,7 @@ const { RenameAccountForm } = await import(
 function mount(overrides = {}) {
     const props = {
         accountId: 'account-1',
+        walletId: 'wallet-1',
         initialName: 'Primary account',
         onBack: vi.fn(),
         onRenamed: vi.fn(),
@@ -35,7 +36,10 @@ function mount(overrides = {}) {
 }
 
 beforeEach(() => {
-    messaging = { renameAccount: vi.fn().mockResolvedValue(undefined) };
+    messaging = {
+        listAccounts: vi.fn().mockResolvedValue([]),
+        renameAccount: vi.fn().mockResolvedValue(undefined),
+    };
 });
 
 afterEach(() => {
@@ -68,6 +72,23 @@ describe('RenameAccountForm name validation', () => {
         fireEvent.submit(input.closest('form'));
 
         expect(screen.getByText('Account name is required.')).toBeTruthy();
+        expect(messaging.renameAccount).not.toHaveBeenCalled();
+    });
+
+    it('rejects another account name case-insensitively', async () => {
+        messaging.listAccounts.mockResolvedValue([
+            { id: 'account-1', name: 'Primary account' },
+            { id: 'account-2', name: 'Savings' },
+        ]);
+        mount();
+        await waitFor(() => expect(messaging.listAccounts).toHaveBeenCalledWith('wallet-1'));
+        fireEvent.change(screen.getByLabelText('Account name'), {
+            target: { value: ' savings ' },
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+        expect(screen.getByText('An account named "savings" already exists.')).toBeTruthy();
         expect(messaging.renameAccount).not.toHaveBeenCalled();
     });
 });
@@ -126,5 +147,16 @@ describe('RenameAccountForm submission failures', () => {
         });
 
         expect(screen.queryByText('Rename refused')).toBeNull();
+    });
+
+    it('locks navigation and editing while the rename is pending', async () => {
+        messaging.renameAccount.mockReturnValue(new Promise(() => {}));
+        mount();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+        await waitFor(() => expect(screen.getByLabelText('Account name').disabled).toBe(true));
+        expect(screen.getByRole('button', { name: 'Back' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Save' }).disabled).toBe(true);
     });
 });

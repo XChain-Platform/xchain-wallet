@@ -210,7 +210,7 @@ const CARD_SUB_STYLE = {
 };
 
 const ERROR_STYLE = {
-    color: 'var(--xc-danger)',
+    color: 'var(--xc-danger-fg)',
     fontSize: 'var(--xc-text-sm)',
     margin: '0 0 var(--xc-space-3) 0',
 };

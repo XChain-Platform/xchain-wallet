@@ -95,13 +95,13 @@ assert.equal(
 const graduationSrc = read('packages', 'core', 'src', 'shared', 'utils', 'demoGraduation.js');
 assert.match(
     graduationSrc,
-    /const remaining = await readVaultOccupancy\(messaging\);\s*\n\s*if \(remaining !== 'empty'\) return/,
-    'the wipe fires only on a confirmed-empty vault (unreadable never wipes)',
+    /if \(remaining === 'unknown'\) \{[\s\S]*throw new Error[\s\S]*if \(remaining === 'occupied'\) \{[\s\S]*return \{ wiped: false/,
+    'the wipe fires only on a confirmed-empty vault and an unreadable vault reports failure',
 );
 assert.match(
     graduationSrc,
-    /if \(intent\) setPostDemoIntent\(intent\);\s*\n\s*await wipe\(\);/,
-    'the resume lane is recorded only on the wiping branch',
+    /await wipe\(\);[\s\S]*if \(intent\) setPostDemoIntent\(intent\);/,
+    'the resume lane is recorded only after the wipe succeeds',
 );
 
 for (const [label, path] of [

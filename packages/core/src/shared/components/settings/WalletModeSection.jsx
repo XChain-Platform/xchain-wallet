@@ -8,18 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// WalletModeSection: §20 wallet-mode selector (G039).
-//
-// Lets the user pick between three modes:
-//   - full    Sign + broadcast on this device. Default.
-//   - watcher Watch-only; builds unsigned PSBTs for an air-gapped signer.
-//   - signer  Air-gapped signer; accepts pasted PSBTs, returns signed.
-//
-// Step 1 of 3: this section ships the selector + persistence only.
-// Send.jsx watcher branch (G040) and Home.jsx signer variant (G041) read
-// the field in subsequent steps; until those land the field is stored
-// but doesn't yet alter behavior. The hint copy says so.
+// WalletModeSection: §20 wallet-mode selector. A mode change affects every
+// signing surface, so the choice stays pending until the user confirms it.
 
+import { useState } from 'react';
+import { Button } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { WALLET_MODES, WALLET_MODE_DEFAULT } from '../../../schemas/settings.js';
 import { ROW, ROW_HINT, STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
@@ -27,23 +20,29 @@ import { ROW, ROW_HINT, STACK, SettingsLoadError, Status } from './_settingsPrim
 const MODE_OPTIONS = /** @type {const} */ ([
     {
         value: 'full',
-        label: 'Full',
-        hint: 'Standard. Sign and broadcast transactions on this device.',
+        label: 'Normal',
+        hint: 'Sign and broadcast transactions on this device. Password and hardware-signing prompts are available.',
+        confirmation: 'Normal mode can use this device\'s private keys to sign and broadcast transactions.',
     },
     {
         value: 'watcher',
         label: 'Watcher (watch-only)',
-        hint: 'View balances and build unsigned transactions. Pair with a separate signer-mode wallet to sign.',
+        hint: 'View balances and build unsigned transactions. This device never asks for a signing password or signs them.',
+        confirmation: 'Watcher mode stops this device from signing. Transaction actions produce unsigned PSBTs to move to a separate signer.',
     },
     {
         value: 'signer',
         label: 'Signer (air-gapped)',
         hint: 'Sign transactions pasted in from a watcher wallet. Send / receive screens are hidden; this wallet does not broadcast.',
+        confirmation: 'Signer mode hides Send and Receive. This device signs imported PSBTs but does not broadcast them.',
     },
 ]);
 
 export function WalletModeSection() {
     const { settings, loading, error, update } = useSettings();
+    const [pending, setPending] = useState(/** @type {typeof WALLET_MODES[number] | null} */ (null));
+    const [saving, setSaving] = useState(false);
+    const [saveError, setSaveError] = useState(/** @type {string | null} */ (null));
 
     if (loading) return <Status text="Loading…" />;
     if (error) return <SettingsLoadError error={error} />;
@@ -53,14 +52,30 @@ export function WalletModeSection() {
         ? settings.walletMode
         : WALLET_MODE_DEFAULT;
 
-    const onChange = async (next) => {
+    const onChange = (next) => {
         if (!WALLET_MODES.includes(next)) return;
-        if (next === current) return;
-        try { await update({ walletMode: next }); } catch (err) {
+        setSaveError(null);
+        setPending(next === current ? null : next);
+    };
+
+    const confirmChange = async () => {
+        if (!pending || saving) return;
+        setSaving(true);
+        setSaveError(null);
+        try {
+            await update({ walletMode: pending });
+            setPending(null);
+        } catch (err) {
+            setSaveError(err?.message || 'Could not save the wallet mode.');
             // eslint-disable-next-line no-console
             console.error('walletMode update failed:', err);
+        } finally {
+            setSaving(false);
         }
     };
+
+    const selected = pending || current;
+    const pendingOption = MODE_OPTIONS.find((opt) => opt.value === pending);
 
     return (
         <fieldset
@@ -93,8 +108,9 @@ export function WalletModeSection() {
                         type="radio"
                         name="walletMode"
                         value={opt.value}
-                        checked={current === opt.value}
+                        checked={selected === opt.value}
                         onChange={() => onChange(opt.value)}
+                        disabled={saving}
                         aria-describedby={`walletMode-${opt.value}-hint`}
                         style={{
                             marginTop: 2,
@@ -111,6 +127,34 @@ export function WalletModeSection() {
                     </span>
                 </label>
             ))}
+            {pendingOption ? (
+                <div
+                    role="alertdialog"
+                    aria-labelledby="walletMode-confirm-title"
+                    aria-describedby="walletMode-confirm-copy"
+                    style={{
+                        ...STACK,
+                        padding: 'var(--xc-space-3)',
+                        border: '1px solid var(--xc-border)',
+                        borderRadius: 'var(--xc-radius-md)',
+                        background: 'var(--xc-surface-raised)',
+                    }}
+                >
+                    <strong id="walletMode-confirm-title" style={{ color: 'var(--xc-text)' }}>
+                        Switch to {pendingOption.label} mode?
+                    </strong>
+                    <span id="walletMode-confirm-copy" style={ROW_HINT}>
+                        {pendingOption.confirmation}
+                    </span>
+                    {saveError ? <span role="alert" style={{ color: 'var(--xc-danger)' }}>{saveError}</span> : null}
+                    <span style={{ ...ROW, justifyContent: 'flex-end' }}>
+                        <Button type="button" variant="secondary" onClick={() => setPending(null)} disabled={saving}>Cancel</Button>
+                        <Button type="button" variant="primary" onClick={confirmChange} disabled={saving}>
+                            {saving ? 'Saving…' : 'Confirm mode change'}
+                        </Button>
+                    </span>
+                </div>
+            ) : null}
         </fieldset>
     );
 }

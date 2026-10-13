@@ -8,17 +8,16 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// §37.2 / Cluster D FOLLOWUP 4 smoke: toast queue stacking limit.
+// Toast queue stacking limit.
 //
 // ToastHost caps the number of simultaneously visible toasts at 3.
-// Older queued toasts stay in state with their auto-dismiss timers
-// running; as those fire and the queue shrinks, hidden toasts surface
-// in arrival order. An overflow badge ("+N more") renders above the
-// visible stack when the cap is exceeded.
+// Newer queued toasts wait behind the first three and receive their full
+// auto-dismiss interval when they become visible. An overflow badge
+// ("+N more") renders above the visible stack when the cap is exceeded.
 //
 // Asserts:
 //   1. ToastHost declares a `VISIBLE_LIMIT = 3` constant.
-//   2. The render path slices the toasts list to the last `VISIBLE_LIMIT`.
+//   2. The render path slices the first `VISIBLE_LIMIT` entries.
 //   3. The overflow indicator renders only when `hiddenCount > 0`.
 //   4. The overflow badge has its own CSS class (.overflowBadge).
 //   5. The overflow badge is `aria-hidden` (queued toasts still
@@ -39,11 +38,11 @@ const src = readFileSync(join(components, 'ToastHost.jsx'), 'utf8');
 assert.ok(/const VISIBLE_LIMIT = 3;/.test(src),
     'ToastHost declares VISIBLE_LIMIT = 3');
 
-// --- 2. Slice to the last N --------------------------------------------
+// --- 2. Slice to the first N -------------------------------------------
 
 assert.ok(
-    /const visibleToasts = toasts\.slice\(-VISIBLE_LIMIT\);/.test(src),
-    'ToastHost renders only the last VISIBLE_LIMIT toasts',
+    /const visibleToasts = toasts\.slice\(0, VISIBLE_LIMIT\);/.test(src),
+    'ToastHost renders only the first VISIBLE_LIMIT toasts',
 );
 assert.ok(
     /\{visibleToasts\.map\(\(t\)\s*=>/.test(src),
@@ -75,5 +74,5 @@ assert.ok(
 );
 
 console.log(
-    'OK: toast-stacking-limit smoke (Cluster D FOLLOWUP 4: VISIBLE_LIMIT = 3 visible at once; toasts.slice(-VISIBLE_LIMIT) drives the render set; hiddenCount surfaces an aria-hidden "+N more" badge above the stack; queued toasts retain their auto-dismiss timers and surface in arrival order)',
+    'OK: toast-stacking-limit smoke (3 visible at once; queued toasts wait for a visible slot; hiddenCount surfaces an aria-hidden "+N more" badge)',
 );

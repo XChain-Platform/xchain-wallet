@@ -217,6 +217,7 @@ export async function dispatchPreHost(type, request, deps) {
                 chainRegistry: deps.chainRegistry,
                 sdkRegistry: deps.sdkRegistry,
                 resolveBackupContent: deps.resolveBackupContent,
+                signerPool: deps.signerPool,
                 onUnlocked: deps.onUnlocked,
             });
         case 'wallet.import':

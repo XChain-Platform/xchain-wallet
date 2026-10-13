@@ -29,7 +29,7 @@
 // blowing up MarketView.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button } from '@xchain-wallet/core/ui';
+import { StatusMessage } from '@xchain-wallet/core/ui';
 import { bucketizeMatches, PERIODS, DEFAULT_PERIOD_ID } from '../../market/bucketize.js';
 import { useMessaging } from '../useMessaging.js';
 import { sampleMatchesFor } from '../../market/sampleMarketData.js';
@@ -51,6 +51,7 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
 
     const [periodId, setPeriodId] = useState(DEFAULT_PERIOD_ID);
     const [rawRows, setRawRows] = useState(/** @type {any[]} */ ([]));
+    const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [chartReady, setChartReady] = useState(false);
     const [chartUnavailable, setChartUnavailable] = useState(false);
@@ -111,6 +112,7 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
 
     useEffect(() => {
         let cancelled = false;
+        setLoading(true);
         setLoadError(null);
         setRawRows([]);
         messaging.getMarketHistory({ chainId, tick1, tick2 })
@@ -121,11 +123,13 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
                 // history; real wallets chart real fills, or show the "No
                 // trades yet" empty state below.
                 setRawRows(real.length > 0 ? real : (demo ? sampleMatchesFor(tick1, tick2) : []));
+                setLoading(false);
             })
             .catch((err) => {
                 if (cancelled) return;
                 setRawRows(demo ? sampleMatchesFor(tick1, tick2) : []);
                 setLoadError(readFailureMessage(err, 'load the price chart'));
+                setLoading(false);
             });
         return () => { cancelled = true; };
     }, [messaging, chainId, tick1, tick2, demo]);
@@ -164,6 +168,7 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
 
     return (
         <div
+            aria-busy={loading || undefined}
             style={{
                 border: '1px solid var(--xc-border)',
                 borderRadius: '4px',
@@ -209,12 +214,13 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
                 </select>
             </div>
             <div ref={containerRef} style={{ width: '100%', height }} aria-label="Price chart" />
-            {loadError ? (
-                <p style={{ margin: '0.25rem 0 0', color: 'var(--xc-text-muted)', fontSize: '0.75rem' }}>
-                    {loadError}
-                </p>
+            {loading ? (
+                <StatusMessage variant="status">Loading price chart…</StatusMessage>
             ) : null}
-            {!loadError && rawRows.length === 0 ? (
+            {loadError ? (
+                <StatusMessage variant="error">{loadError}</StatusMessage>
+            ) : null}
+            {!loading && !loadError && rawRows.length === 0 ? (
                 <p style={{ margin: '0.25rem 0 0', color: 'var(--xc-text-muted)', fontSize: '0.75rem' }}>
                     No trades yet in this market.
                 </p>

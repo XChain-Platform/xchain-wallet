@@ -47,7 +47,7 @@
 }
 
 .error {
-    color: var(--xc-danger);
+    color: var(--xc-danger-fg);
     font-size: var(--xc-text-sm);
 }
 

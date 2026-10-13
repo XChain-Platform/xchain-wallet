@@ -37,6 +37,16 @@ describe('bottom tab bar footprint', () => {
             join(process.cwd(), 'packages', 'core', 'src', 'shared', 'components', 'ToastHost.module.css'),
             'utf8',
         );
-        expect(css).toMatch(/bottom:\s*calc\(var\(--xc-space-4\)\s*\+\s*var\(--xc-bottom-bar-h,\s*0px\)\)/);
+        expect(css).toMatch(
+            /bottom:\s*calc\([\s\S]*?var\(--xc-space-4\)[\s\S]*?\+\s*var\(--xc-bottom-bar-h,\s*0px\)[\s\S]*?\+\s*env\(safe-area-inset-bottom,\s*0px\)[\s\S]*?\)/,
+        );
+    });
+
+    it('moves above an overlay keyboard while the fitted viewport is active', () => {
+        const css = readFileSync(
+            join(process.cwd(), 'packages', 'core', 'src', 'shared', 'components', 'ToastHost.module.css'),
+            'utf8',
+        );
+        expect(css).toMatch(/html\[data-xc-keyboard='open'\][\s\S]*?100vh\s*-\s*var\(--xc-viewport-h/);
     });
 });

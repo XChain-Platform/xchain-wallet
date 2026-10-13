@@ -40,7 +40,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {() => void} props.onReject
  */
 export function ConnectApproval({ id, payload, onReject }) {
-    const origin = payload?.origin || '';
+    const origin = neutralizeControlText(payload?.origin || '', { maxLength: 2048 });
     const appName = neutralizeControlText(payload?.appName || '', { maxLength: 80 });
     const requestedChains = useMemo(
         () => (Array.isArray(payload?.requestedChains) ? payload.requestedChains : []),
@@ -170,7 +170,7 @@ export function ConnectApproval({ id, payload, onReject }) {
             }
         >
             <section className={styles.identity} aria-label="Requesting site">
-                <p className={styles.identityLabel}>Verified site</p>
+                <p className={styles.identityLabel}>Site origin</p>
                 <p className={styles.identityOrigin}>{origin}</p>
                 {appName ? (
                     <>

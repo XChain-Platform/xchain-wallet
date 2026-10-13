@@ -64,17 +64,20 @@ const COPY = {
         title: 'Your device needs to be unlocked',
         body: 'Your wallet is safe on this device. Its keys are held in the'
             + " device's secure storage, which stays locked until you unlock the"
-            + ' device itself. Unlock it, then try again.',
+            + ' device itself.',
+        nextStep: 'Unlock your device, then choose Try again.',
     },
     corrupt: {
         title: 'This device’s copy of your wallet is damaged',
         body: 'The wallet file stored here cannot be opened, and trying again'
             + ' will not repair it.',
+        nextStep: 'Restore your wallet from your recovery phrase or an encrypted backup.',
     },
     unavailable: {
         title: 'Your wallet could not be opened',
         body: "This device's secure storage could not be reached, so the wallet"
             + ' was not opened. This is usually temporary.',
+        nextStep: 'Choose Try again. If the problem continues, contact support before clearing any wallet data.',
     },
     evicted: {
         title: 'This browser removed your wallet’s data',
@@ -85,6 +88,7 @@ const COPY = {
             + ' clears it after seven days without a visit. Install the wallet'
             + ' app or add this site to your home screen to stop it happening'
             + ' again.',
+        nextStep: 'Choose Try again once. If the data is still missing, restore your wallet from your recovery phrase or an encrypted backup.',
     },
 };
 
@@ -100,7 +104,7 @@ const WIPE_COPY = {
             + ' the blockchain. Without your recovery phrase it cannot be'
             + ' undone.',
         button: 'Remove damaged data',
-        failed: 'Could not remove the damaged wallet data.',
+        failed: 'Could not remove the damaged wallet data. Try again, or contact support before clearing anything else.',
     },
     evicted: {
         region: 'Clear what is left of the old wallet',
@@ -109,23 +113,24 @@ const WIPE_COPY = {
             + ' phrase. It changes nothing on the blockchain. If you would'
             + ' rather check first whether the data comes back, use Try again.',
         button: 'Clear and start over',
-        failed: 'Could not clear the old wallet data.',
+        failed: 'Could not clear the old wallet data. Try again, or contact support before clearing anything else.',
     },
 };
 
 /**
  * @param {object} props
  * @param {'corrupt' | 'locked' | 'unavailable' | 'evicted'} props.kind
- * @param {string} [props.detail]      the raw error, kept for support
  * @param {() => void} [props.onRetry] defaults to reloading the app
  * @param {() => Promise<void>} [props.wipe] injectable for tests
  */
-export function VaultUnavailable({ kind, detail, onRetry, wipe = wipeWalletStorage }) {
+export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
     const { shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const copy = COPY[kind] || COPY.unavailable;
-    const offersEscape = OFFERS_ESCAPE.has(kind);
-    const wipeCopy = WIPE_COPY[kind] || WIPE_COPY.corrupt;
+    const resolvedKind = COPY[kind] ? kind : 'unavailable';
+    const copy = COPY[resolvedKind];
+    const offersRetry = resolvedKind !== 'corrupt';
+    const offersEscape = OFFERS_ESCAPE.has(resolvedKind);
+    const wipeCopy = WIPE_COPY[resolvedKind] || WIPE_COPY.corrupt;
 
     const [wipeOpen, setWipeOpen] = useState(false);
     const [confirmText, setConfirmText] = useState('');
@@ -144,9 +149,9 @@ export function VaultUnavailable({ kind, detail, onRetry, wipe = wipeWalletStora
         setWipeError(null);
         try {
             await wipe();
-            if (typeof window !== 'undefined') window.location.reload();
-        } catch (err) {
-            setWipeError(err?.message || wipeCopy.failed);
+            handleRetry();
+        } catch {
+            setWipeError(wipeCopy.failed);
             setBusy(false);
         }
     }
@@ -158,6 +163,7 @@ export function VaultUnavailable({ kind, detail, onRetry, wipe = wipeWalletStora
                     <div className={styles.wrap}>
                         <h1 className={styles.title}>{copy.title}</h1>
                         <p className={styles.body}>{copy.body}</p>
+                        <p className={styles.nextStep}>{copy.nextStep}</p>
 
                         {/* The fact the old screen withheld, and the reason none of
                             this is a catastrophe. Said on every kind, because a user
@@ -171,9 +177,11 @@ export function VaultUnavailable({ kind, detail, onRetry, wipe = wipeWalletStora
                             it on this device or any other.
                         </p>
 
-                        <Button type="button" variant="primary" block onClick={handleRetry}>
-                            Try again
-                        </Button>
+                        {offersRetry ? (
+                            <Button type="button" variant="primary" block onClick={handleRetry}>
+                                Try again
+                            </Button>
+                        ) : null}
 
                         {/* Offered for `corrupt` and `evicted` alone. On `locked` the
                             vault is perfectly intact and the user simply has not
@@ -189,7 +197,7 @@ export function VaultUnavailable({ kind, detail, onRetry, wipe = wipeWalletStora
                                 aria-expanded="false"
                                 aria-controls="vault-unavailable-wipe-panel"
                             >
-                                Start over from my recovery phrase
+                                Restore from recovery phrase or backup
                             </button>
                         ) : null}
 
@@ -239,12 +247,6 @@ export function VaultUnavailable({ kind, detail, onRetry, wipe = wipeWalletStora
                                     <StatusMessage variant="error" className={styles.wipeError}>{wipeError}</StatusMessage>
                                 ) : null}
                             </div>
-                        ) : null}
-
-                        {/* Last, small, and unstyled as prose: it is for a support
-                            conversation, not for the person reading the screen. */}
-                        {detail ? (
-                            <p className={styles.detail}>Technical detail: {detail}</p>
                         ) : null}
                     </div>
                 </FormPage>
