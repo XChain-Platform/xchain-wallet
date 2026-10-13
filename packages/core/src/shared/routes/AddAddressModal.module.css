@@ -5,6 +5,7 @@
     width: 100%;
     max-width: 22rem;
     background: var(--xc-surface-raised);
+    /* 1px keeps the modal boundary as a crisp hairline. */
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-lg);
     box-shadow: var(--xc-shadow-md);
@@ -44,6 +45,7 @@
     font-size: var(--xc-text-md);
     color: var(--xc-text);
     background: var(--xc-surface);
+    /* 1px keeps the native select boundary as a crisp hairline. */
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-md);
 }

@@ -7,6 +7,7 @@
 }
 
 .toolbarSearch {
+    /* 200px keeps search usable before the toolbar lets it shrink. */
     flex: 1 1 200px;
     min-width: 0;
     margin-bottom: calc(var(--xc-space-3) * -1);
@@ -54,7 +55,7 @@
     max-width: 100%;
     padding: var(--xc-space-2);
     font-family: var(--xc-font-mono);
-    font-size: 0.85rem;
+    font-size: var(--xc-text-md);
     overflow: auto;
     white-space: pre;
     resize: vertical;
