@@ -2332,7 +2332,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                             onChange={(e) => setContactName(e.target.value)}
                             autoFocus
                             maxLength={80}
-                            placeholder={t('history.contact.name')}
+                            placeholder={t('common.contactName')}
                         />
                     </label>
                     {contactSaveError ? (
@@ -3247,7 +3247,7 @@ function RecipientsBlock({ entry }) {
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         maxLength={120}
-                        aria-label={t('history.contact.name')}
+                        aria-label={t('common.contactName')}
                         disabled={stage === 'saving'}
                         style={{
                             flex: 1,
@@ -3393,7 +3393,7 @@ function nativeAmountFieldOf(entry) {
 function PendingRowLabel({ entry }) {
     const state = pendingStateOf(entry);
     const warning = state != null && PENDING_WARNING_STATES.has(state);
-    const label = state ? t(pendingCopyFor(state, entry).row) : t('pending.row.generic');
+    const label = state ? t(pendingCopyFor(state, entry).row) : t('pending.row.seen');
     return (
         <span
             className={`${styles.pendingLabel} ${warning ? styles.pendingLabelWarning : ''}`}

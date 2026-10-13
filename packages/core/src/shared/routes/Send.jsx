@@ -2566,7 +2566,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 {contactSaveStage === 'editing' || contactSaveStage === 'saving' ? (
                     <form className={styles.saveRecipient} onSubmit={saveRecipient}>
                         <Input
-                            label={t('send.saveRecipient.nameLabel')}
+                            label={t('common.contactName')}
                             value={contactName}
                             onChange={(event) => {
                                 setContactName(event.target.value);
