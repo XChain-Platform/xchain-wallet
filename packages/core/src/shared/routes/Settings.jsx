@@ -13,6 +13,7 @@ import { EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader } from '@
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { shellCapabilities } from '../shellCapabilities.js';
+import { resolveBindings } from '../keyboard/shortcuts.js';
 import { WALLET_VERSION } from '../../buildInfo.js';
 import { AboutSection } from '../components/settings/AboutSection.jsx';
 import { AdsSection } from '../components/settings/AdsSection.jsx';
@@ -32,7 +33,11 @@ import { PrivacySection } from '../components/settings/PrivacySection.jsx';
 import { SafetySection } from '../components/settings/SafetySection.jsx';
 import { ThisWalletSection } from '../components/settings/ThisWalletSection.jsx';
 import { WalletModeSection } from '../components/settings/WalletModeSection.jsx';
-import { WALLET_MODE_DEFAULT } from '../../schemas/settings.js';
+import {
+    NUMBER_FORMAT_DEFAULT,
+    SMALL_BALANCE_THRESHOLD_DEFAULT,
+    WALLET_MODE_DEFAULT,
+} from '../../schemas/settings.js';
 import {
     clearActiveWallet,
     writeActiveWallet,
@@ -158,8 +163,8 @@ export function Settings({
         {
             id: 'display',
             title: 'Display',
-            description: 'Pinned and hidden tokens: reorder pinned, bulk-unhide hidden.',
-            keywords: 'display pinned hidden tokens reorder unhide bulk star',
+            description: 'Balance thresholds, number formatting, pinned and hidden tokens.',
+            keywords: 'display balance threshold number format pinned hidden tokens reorder unhide bulk star',
             kind: 'internal-drill',
             Component: DisplaySection,
             summary: displaySummary(settings),
@@ -184,8 +189,8 @@ export function Settings({
         {
             id: 'privacy',
             title: 'Privacy',
-            description: 'Tor, change-address rotation, hide small balances, blur on blur, labels survive restore.',
-            keywords: 'privacy tor rotation hide balances labels blur',
+            description: 'Tor, change-address rotation, blur on blur, labels survive restore.',
+            keywords: 'privacy tor rotation labels blur',
             kind: 'internal-drill',
             Component: PrivacySection,
             summary: privacySummary(settings),
@@ -526,7 +531,7 @@ function privacySummary(settings) {
     // Mirrors the switches PrivacySection renders. Tor routing is counted
     // only where the shell can proxy; elsewhere its switch is inert.
     // Switches that default on read as on until stored false.
-    const offByDefault = ['changeAddressRotation', 'hideSmallBalances', 'blurOnBlur', 'labelsSurviveRestore', 'alwaysRequireHwExplicitConfirm'];
+    const offByDefault = ['changeAddressRotation', 'blurOnBlur', 'labelsSurviveRestore', 'alwaysRequireHwExplicitConfirm'];
     const onByDefault = ['hapticsEnabled', 'priceDataEnabled', 'metadataFetchEnabled'];
     if (shellCapabilities().socksProxy) offByDefault.unshift('torRouting');
     const onCount = offByDefault.filter((k) => p[k] === true).length
@@ -545,16 +550,23 @@ function displaySummary(settings) {
     if (!settings) return '-';
     const pinned = Array.isArray(settings.pinnedTokens) ? settings.pinnedTokens.length : 0;
     const hidden = Array.isArray(settings.hiddenTokens) ? settings.hiddenTokens.length : 0;
-    if (pinned === 0 && hidden === 0) return 'No customization';
     const parts = [];
     if (pinned > 0) parts.push(`${pinned} pinned`);
     if (hidden > 0) parts.push(`${hidden} hidden`);
+    if (settings.privacy?.hideSmallBalances === true) {
+        const threshold = settings.smallBalanceThreshold || SMALL_BALANCE_THRESHOLD_DEFAULT;
+        parts.push(threshold === 'dust' ? 'Dust hidden' : `<${threshold} hidden`);
+    }
+    if ((settings.numberFormat || NUMBER_FORMAT_DEFAULT) !== NUMBER_FORMAT_DEFAULT) {
+        parts.push(settings.numberFormat === 'trim' ? 'Trimmed numbers' : 'Plain numbers');
+    }
+    if (parts.length === 0) return 'No customization';
     return parts.join(' · ');
 }
 
 function keyboardSummary(settings) {
     if (!settings) return '-';
-    const n = Object.keys(settings.keyboard?.bindings || {}).length;
+    const n = resolveBindings(settings.keyboard?.bindings).filter((shortcut) => shortcut.overridden).length;
     return n === 0 ? 'Defaults' : `${n} custom`;
 }
 

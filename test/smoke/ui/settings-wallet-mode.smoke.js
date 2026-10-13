@@ -86,7 +86,7 @@ const settingsSrc = readFileSync(settingsPath, 'utf8');
 assert.match(settingsSrc, /import \{ WalletModeSection \}/, 'Settings.jsx imports WalletModeSection');
 assert.match(
     settingsSrc,
-    /import \{ WALLET_MODE_DEFAULT \} from '\.\.\/\.\.\/schemas\/settings\.js';/,
+    /import\s*\{[^}]*\bWALLET_MODE_DEFAULT\b[^}]*\}\s*from '\.\.\/\.\.\/schemas\/settings\.js';/,
     'Settings.jsx imports WALLET_MODE_DEFAULT for the summary helper',
 );
 const idx = settingsSrc.indexOf("id: 'wallet-mode'");
