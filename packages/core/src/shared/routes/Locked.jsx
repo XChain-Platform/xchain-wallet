@@ -462,7 +462,7 @@ export function Locked({ onUnlocked }) {
                 {isLockedOut ? `Locked (${formatCountdown(remainingMs)})` : 'Unlock Wallet'}
             </Button>
             {busy && !inCaptureStep ? (
-                <p className={styles.unlockingNote} role="status">
+                <p className={styles.unlockingNote} aria-live="polite">
                     Unlocking. On some phones this takes up to a minute.
                 </p>
             ) : null}
