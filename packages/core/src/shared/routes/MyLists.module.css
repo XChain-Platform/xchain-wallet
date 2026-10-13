@@ -5,9 +5,8 @@
 .wrapFull {
     display: flex;
     flex-direction: column;
-    max-width: 560px;
-    margin: var(--xc-space-6) auto 0;
-    padding: var(--xc-space-4);
+    margin: var(--xc-space-6) 0 0;
+    padding: var(--xc-space-4) 0;
 }
 
 .wrapPopup {

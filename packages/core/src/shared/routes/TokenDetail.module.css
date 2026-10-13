@@ -10,15 +10,13 @@
 
 
 /* Body sizing mirrors Home.module.css exactly so the two routes share
-   visual rhythm. `bodyFull` caps at 1080px and pads; `bodyPopup` fills
-   its parent and has no padding (Screen.body's space-4 is the only
-   horizontal padding). */
+   visual rhythm. Both fill the content area (lists run the full width,
+   operator ruling 2026-10-12), and Screen.body's padding is the only
+   horizontal padding. */
 .bodyFull {
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-3);
-    max-width: 1080px;
-    margin: 0 auto;
     width: 100%;
     box-sizing: border-box;
 }

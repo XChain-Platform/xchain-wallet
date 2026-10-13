@@ -4,13 +4,14 @@
     gap: var(--xc-space-2);
 }
 
+/* A list fills the content area on wide screens, the same as every other
+   list (operator ruling 2026-10-12); only forms keep a narrow column. */
 .listFull {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
     gap: var(--xc-space-3);
-    max-width: 1080px;
-    margin: var(--xc-space-6) auto 0;
-    padding: var(--xc-space-4);
+    margin: var(--xc-space-6) 0 0;
+    padding: var(--xc-space-4) 0;
 }
 
 .entry {
@@ -82,10 +83,6 @@
     justify-content: flex-end;
     gap: var(--xc-space-2);
     margin-top: var(--xc-space-4);
-    max-width: 1080px;
-    margin-inline-start: auto;
-    margin-inline-end: auto;
-    padding: 0 var(--xc-space-4);
 }
 
 /* Status pill idiom shared with History.module.css: a rounded, uppercase

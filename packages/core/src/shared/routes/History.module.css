@@ -1,11 +1,10 @@
-/* Match TokenDetail's body sizing. Screen.body provides the outer
-   space-4 padding; we just cap the inner column at 1080px and stack. */
+/* Match TokenDetail's body sizing: the timeline fills the content area
+   (operator ruling 2026-10-12: lists run the full width, forms keep a
+   narrow column), and Screen.body provides the gutter. */
 .body {
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-1);
-    max-width: 1080px;
-    margin: 0 auto;
     width: 100%;
     box-sizing: border-box;
 }
@@ -1115,10 +1114,6 @@
     justify-content: flex-end;
     gap: var(--xc-space-2);
     margin-top: var(--xc-space-4);
-    max-width: 1080px;
-    margin-inline-start: auto;
-    margin-inline-end: auto;
-    padding: 0 var(--xc-space-4);
 }
 
 .resultsHeader {
