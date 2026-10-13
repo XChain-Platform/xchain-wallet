@@ -12,7 +12,7 @@ body {
 }
 
 .sg-page {
-    max-width: 1080px;
+    max-width: 1120px;
     margin: 0 auto;
     padding: 32px 24px 96px;
 }
@@ -180,4 +180,111 @@ body {
     gap: 10px;
     flex-wrap: wrap;
     align-items: center;
+}
+
+/* Preview-width switch, pinned while scrolling so every section can be
+   judged per platform. */
+.sg-sticky {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 16px;
+    margin: 0 -24px 24px;
+    padding: 10px 24px;
+    background: var(--xc-bg);
+    border-bottom: 1px solid var(--xc-border);
+}
+
+.sg-view-switch {
+    display: inline-flex;
+    border: 1px solid var(--xc-border-strong);
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.sg-view-switch button {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: var(--xc-text);
+    font: 600 13px/1 var(--xc-font-sans);
+    padding: 9px 14px;
+    cursor: pointer;
+}
+
+.sg-view-switch button + button {
+    border-left: 1px solid var(--xc-border-strong);
+}
+
+.sg-view-switch button[aria-pressed="true"] {
+    background: var(--xc-accent-primary);
+    color: var(--xc-on-accent);
+}
+
+.sg-view-switch button:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: -2px;
+}
+
+.sg-view-width {
+    font-weight: 400;
+    opacity: 0.8;
+}
+
+.sg-jump {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--xc-text-muted);
+}
+
+/* Frames: each example is an iframe of a fixed CSS width. The scroll
+   wrapper lets a 1024px frame sit in a narrower window. */
+.sg-frame-wrap {
+    min-width: 0;
+}
+
+.sg-frame-scroll {
+    overflow-x: auto;
+}
+
+.sg-frame {
+    display: block;
+    border: 1px solid var(--xc-border-strong);
+    border-radius: 6px;
+    background: var(--xc-bg);
+}
+
+.sg-frame-label {
+    margin: 0 0 6px;
+    font-size: 11px;
+    color: var(--xc-text-muted);
+}
+
+/* Template triptych: breaks out of the text column to use the window's
+   width, and wraps the desktop frame below when all three do not fit. */
+.sg-example-wide {
+    width: calc(100vw - 64px);
+    max-width: 1880px;
+    position: relative;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.sg-triptych {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 16px;
+}
+
+.sg-triptych-cell {
+    margin: 0;
+    max-width: 100%;
+    overflow-x: auto;
 }
