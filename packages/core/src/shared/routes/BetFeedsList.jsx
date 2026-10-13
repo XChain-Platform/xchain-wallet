@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { Button, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, ListPage, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useChainIdsWithAction } from '../hooks/useSupportedChains.js';
@@ -155,23 +155,29 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
 
     if (noChain) {
         return wrap(
-            <>
-                <p className={styles.hint}>No address on a chain that supports betting. Use Receive to generate one first.</p>
-            </>,
+            <ListPage>
+                <EmptyState
+                    title="No betting address"
+                    body="No address on a chain that supports betting. Use Receive to generate one first."
+                />
+            </ListPage>,
         );
     }
-    if (!chainId && !error) return wrap(<p>Loading…</p>);
+    if (!chainId && !error) return wrap(<ListPage><p>Loading…</p></ListPage>);
 
     return wrap(
-        <>
-            <NetworkField value={chainId} onChange={setChainId} chainIds={betChains.length ? betChains : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
-
-            <div className={styles.actions} style={{ gap: '0.5rem' }}>
-                <Button variant={openOnly ? 'primary' : 'ghost'} onClick={() => setOpenOnly(true)}>Taking bets</Button>
-                <Button variant={openOnly ? 'ghost' : 'primary'} onClick={() => setOpenOnly(false)}>All markets</Button>
-                {onCreate ? <Button variant="ghost" onClick={() => onCreate(chainId)}>Create market</Button> : null}
-            </div>
-
+        <ListPage
+            toolbar={(
+                <>
+                    <NetworkField value={chainId} onChange={setChainId} chainIds={betChains.length ? betChains : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
+                    <div className={styles.actions} style={{ gap: '0.5rem' }}>
+                        <Button variant={openOnly ? 'primary' : 'ghost'} onClick={() => setOpenOnly(true)}>Taking bets</Button>
+                        <Button variant={openOnly ? 'ghost' : 'primary'} onClick={() => setOpenOnly(false)}>All markets</Button>
+                        {onCreate ? <Button variant="ghost" onClick={() => onCreate(chainId)}>Create market</Button> : null}
+                    </div>
+                </>
+            )}
+        >
             {/* This screen is the whole family's entry point (the GovernancePolls
                 pattern), so the two personal views hang off it rather than each
                 needing its own slot in the actions menu. */}
@@ -185,9 +191,10 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
             {error ? <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage> : null}
             {chainId && !rows && !error ? <p>Loading markets…</p> : null}
             {rows && rows.length === 0 ? (
-                <p className={styles.hint}>
-                    {openOnly ? 'No markets are taking bets on this chain right now.' : 'No markets on this chain yet.'}
-                </p>
+                <EmptyState
+                    title="No markets"
+                    body={openOnly ? 'No markets are taking bets on this chain right now.' : 'No markets on this chain yet.'}
+                />
             ) : null}
 
             {rows && rows.length > 0 ? (
@@ -219,6 +226,6 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
                     })}
                 </div>
             ) : null}
-        </>,
+        </ListPage>,
     );
 }

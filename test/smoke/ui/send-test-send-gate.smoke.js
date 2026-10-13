@@ -104,7 +104,7 @@ assert.match(
     /const testSendGateBanner = testSendGate \? \(/,
     'banner is a shared const, not inlined in one render branch',
 );
-const formRender = sendSrc.slice(sendSrc.indexOf('form id="send-form"'));
+const formRender = sendSrc.slice(sendSrc.indexOf('id="send-form"'));
 assert.ok(formRender.length > 0, 'compose form found');
 assert.match(
     formRender,
@@ -113,7 +113,7 @@ assert.match(
 );
 assert.match(
     formRender,
-    /form="send-form"[\s\S]{0,200}disabled=\{!!testSendGate\}/,
+    /type="submit"[\s\S]{0,200}disabled=\{!!testSendGate\}/,
     'compose-form Send button disabled while the gate is up',
 );
 assert.match(

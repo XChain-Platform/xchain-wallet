@@ -36,7 +36,7 @@
 // targets power users comfortable typing action params by hand.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, FeeSelector, FormPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -124,7 +124,6 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     const signerReady = useSignerReady(walletId);
     const { isWatcherMode } = useWalletMode();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -390,9 +389,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         <PageHeader onBack={onBack} title={stage === 'compose' ? 'Batch' : 'Review batch'} />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
-        </Screen>
+        <Screen variant={variant} header={header}>{children}</Screen>
     );
 
     if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
@@ -460,7 +457,25 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     if (stage === 'review' || stage === 'submitting') {
         const hw = isHwSource(fromAddress);
         return wrap(
-            <form onSubmit={handleSign} noValidate>
+            <FormPage
+                label="Review batch"
+                onSubmit={handleSign}
+                actions={(
+                    <>
+                        <Button type="button" variant="ghost" onClick={() => setStage('compose')} disabled={stage === 'submitting'}>
+                            Back
+                        </Button>
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            loading={stage === 'submitting'}
+                            disabled={!composed || (!isWatcherMode && (hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)))}
+                        >
+                            {isWatcherMode ? 'Create unsigned transaction' : hw ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}` : 'Sign batch'}
+                        </Button>
+                    </>
+                )}
+            >
                 <p className={styles.summary} style={{ textAlign: 'left' }}>
                     All {rows.length} action{rows.length === 1 ? '' : 's'} are bundled into one transaction and sent
                     together, but each still confirms on its own: if one runs out of what it needs (for example fee
@@ -516,34 +531,26 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                 ) : null}
                 {submitError && (hw || isWatcherMode) ? <StatusMessage variant="error" className={styles.error} details={submitErrorDetails || undefined}>{submitError}</StatusMessage> : null}
 
-                <div className={styles.actions}>
-                    <Button type="button" variant="ghost" onClick={() => setStage('compose')} disabled={stage === 'submitting'}>
-                        Back
-                    </Button>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={!composed || (!isWatcherMode && (hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)))}
-                    >
-                        {isWatcherMode ? 'Create unsigned transaction' : hw ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}` : 'Sign batch'}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
     // stage === 'compose'
     return wrap(
-        <>
-            <p className={styles.hint} style={{ textAlign: 'left' }}>
+        <FormPage
+            label="Batch composer"
+            intro={(
+                <>
                 Queue up to 250 actions to run together in one transaction from one address. You can issue one new
                 token plus as many of its sub-tokens (JDOG, then JDOG.1, JDOG.2, ...) as you like, and mint any
                 number of different tokens (once each). A contract deploy can be queued too, but only one per
                 batch, since each one runs expensive setup work. No batches inside a batch. FILE-gated content
                 uses the dedicated publisher instead.
-            </p>
-
+                </>
+            )}
+            status={composeError ? <StatusMessage variant="error" className={styles.error}>{composeError}</StatusMessage> : null}
+            actions={<Button type="button" variant="primary" onClick={goReview} disabled={Boolean(composeError)}>Review</Button>}
+        >
             <label className={styles.pickerLabel}>
                 <span>Chain</span>
                 <select
@@ -622,10 +629,6 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
             <div className={styles.actions} style={{ justifyContent: 'flex-start' }}>
                 <Button type="button" variant="secondary" onClick={addRow}>+ Add action</Button>
             </div>
-            {composeError ? <StatusMessage variant="error" className={styles.error}>{composeError}</StatusMessage> : null}
-            <div className={styles.actions}>
-                <Button type="button" variant="primary" onClick={goReview} disabled={Boolean(composeError)}>Review</Button>
-            </div>
-        </>,
+        </FormPage>,
     );
 }
