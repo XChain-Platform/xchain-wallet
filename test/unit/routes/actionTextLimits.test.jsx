@@ -18,6 +18,11 @@ import { CallbackForm } from '../../../packages/core/src/shared/routes/CallbackF
 import { ComposeMessage } from '../../../packages/core/src/shared/routes/ComposeMessage.jsx';
 import { LinkForm } from '../../../packages/core/src/shared/routes/LinkForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
+import {
+    MAX_MESSAGE_ATTACHMENT_BYTES,
+    parseMessageContent,
+    serializeMessageContent,
+} from '../../../packages/core/src/shared/utils/messageContent.js';
 
 const MAX_TEXT_LENGTH = 250;
 const MAX_MESSAGE_LENGTH = 1_048_576;
@@ -139,6 +144,68 @@ describe('ComposeMessage text limit', () => {
         expect(await screen.findByText('Enter a valid address')).toBeTruthy();
         expect(messaging.getRecipientPubkey).not.toHaveBeenCalled();
         expect(screen.queryByRole('button', { name: /Request encrypted session/i })).toBeNull();
+    });
+
+    it('refuses unsupported and oversized attachments with specific limits', async () => {
+        mount(ComposeMessage, { chainId: BTC, fixedEncryption: 'plaintext' });
+        const input = await screen.findByLabelText('Attachment (optional)');
+
+        fireEvent.change(input, {
+            target: { files: [new File(['#!/bin/sh'], 'run.sh', { type: 'application/x-sh' })] },
+        });
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Unsupported attachment type. Choose a PNG, JPEG, GIF, WebP, PDF, or plain-text file.',
+        );
+
+        fireEvent.change(input, {
+            target: {
+                files: [new File(
+                    [new Uint8Array(MAX_MESSAGE_ATTACHMENT_BYTES + 1)],
+                    'large.png',
+                    { type: 'image/png' },
+                )],
+            },
+        });
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            `Attachments can be at most ${MAX_MESSAGE_ATTACHMENT_BYTES.toLocaleString()} bytes.`,
+        );
+    });
+
+    it('accepts a supported attachment and reports its exact size', async () => {
+        mount(ComposeMessage, { chainId: BTC, fixedEncryption: 'plaintext' });
+        const input = await screen.findByLabelText('Attachment (optional)');
+
+        fireEvent.change(input, {
+            target: { files: [new File(['hello'], 'note.txt', { type: 'text/plain' })] },
+        });
+
+        expect(await screen.findByText(/Attached: note\.txt \(5 bytes\)/)).toBeTruthy();
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    it('round-trips supported attachment metadata without mixing it into visible text', () => {
+        const wire = serializeMessageContent('See the file', {
+            name: 'photo.png',
+            type: 'image/png',
+            dataUrl: 'data:image/png;base64,iVBORw0KGgo=',
+            size: 8,
+        });
+
+        expect(parseMessageContent(wire)).toEqual({
+            text: 'See the file',
+            attachment: {
+                name: 'photo.png',
+                type: 'image/png',
+                dataUrl: 'data:image/png;base64,iVBORw0KGgo=',
+                size: 8,
+            },
+        });
+        expect(parseMessageContent('javascript:alert(1)')).toEqual({
+            text: 'javascript:alert(1)',
+            attachment: null,
+        });
+        const falseSize = wire.replace('"size":8', '"size":7');
+        expect(parseMessageContent(falseSize)).toEqual({ text: falseSize, attachment: null });
     });
 });
 

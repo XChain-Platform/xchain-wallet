@@ -34,6 +34,11 @@ import { useFiatRate } from '../hooks/useFiatRate.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { formatFiat } from '../components/BalanceList.jsx';
 import { submitFailureMessage, submitFailureDetails } from '../utils/submitFailureMessage.js';
+import {
+    MAX_MESSAGE_ATTACHMENT_BYTES,
+    MESSAGE_ATTACHMENT_TYPES,
+    serializeMessageContent,
+} from '../utils/messageContent.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -143,6 +148,9 @@ export function ComposeMessage({
     );
     const [toAddress, setToAddress] = useState(initialToAddress || '');
     const [message, setMessage] = useState(initialMessage || '');
+    const [attachment, setAttachment] = useState(/** @type {{ name: string, type: string, dataUrl: string, size: number } | null} */ (null));
+    const [attachmentError, setAttachmentError] = useState(/** @type {string | null} */ (null));
+    const attachmentReadIdRef = useRef(0);
     const [password, setPassword] = useState('');
     // Network-fee tier picker (Low / Normal / Fast / Custom), mirroring Send.
     // Custom mode reveals a rate input. Defaults to Normal.
@@ -395,10 +403,56 @@ export function ComposeMessage({
         [toAddress],
     );
     const addressError = addressInvalid ? 'Enter a valid address' : undefined;
+    const wireMessage = useMemo(
+        () => serializeMessageContent(message, attachment),
+        [message, attachment],
+    );
     const messageLength = message.length;
-    const messageLengthError = messageLength > MAX_MESSAGE_LENGTH
-        ? `Message is ${messageLength.toLocaleString()} characters; the network accepts at most ${MAX_MESSAGE_LENGTH.toLocaleString()}.`
+    const wireMessageLength = wireMessage.length;
+    const messageLengthError = wireMessageLength > MAX_MESSAGE_LENGTH
+        ? `${attachment ? 'Message and attachment are' : 'Message is'} ${wireMessageLength.toLocaleString()} characters; the network accepts at most ${MAX_MESSAGE_LENGTH.toLocaleString()}.`
         : undefined;
+
+    function handleAttachmentPick(event) {
+        const file = event.target?.files?.[0];
+        if (!file) return;
+        const readId = ++attachmentReadIdRef.current;
+        setAttachment(null);
+        const type = String(file.type || '').toLowerCase();
+        if (!MESSAGE_ATTACHMENT_TYPES.includes(type)) {
+            setAttachmentError('Unsupported attachment type. Choose a PNG, JPEG, GIF, WebP, PDF, or plain-text file.');
+            event.target.value = '';
+            return;
+        }
+        if (file.size === 0) {
+            setAttachmentError('That attachment is empty.');
+            event.target.value = '';
+            return;
+        }
+        if (file.size > MAX_MESSAGE_ATTACHMENT_BYTES) {
+            setAttachmentError(`That attachment is ${file.size.toLocaleString()} bytes. Attachments can be at most ${MAX_MESSAGE_ATTACHMENT_BYTES.toLocaleString()} bytes.`);
+            event.target.value = '';
+            return;
+        }
+        setAttachmentError(null);
+        const reader = new FileReader();
+        reader.onload = () => {
+            if (readId !== attachmentReadIdRef.current) return;
+            const dataUrl = typeof reader.result === 'string' ? reader.result : '';
+            if (!dataUrl.startsWith(`data:${type};base64,`)) {
+                setAttachmentError('Could not read that attachment.');
+                return;
+            }
+            setAttachment({ name: file.name || 'attachment', type, dataUrl, size: file.size });
+        };
+        reader.onerror = () => {
+            if (readId === attachmentReadIdRef.current) {
+                setAttachmentError('Could not read that attachment.');
+            }
+        };
+        reader.readAsDataURL(file);
+        event.target.value = '';
+    }
 
     // The selected encryption, as a single dropdown value. 'plaintext' maps to
     // the unencrypted (v3) send; 'ecies'/'ecdh' are the encrypted methods.
@@ -462,7 +516,7 @@ export function ComposeMessage({
             broadcastChainId: chainId,
             from,
             destination: toAddress.trim(),
-            message,
+            message: wireMessage,
             method: sendUnencrypted ? null : (encryptionChoice === 'ecdh' && !hw ? 2 : 1),
             ...(feePerKb != null ? { feePerKb } : {}),
         };
@@ -518,13 +572,13 @@ export function ComposeMessage({
             setSubmitError('No signing address is available on this delivery network.');
             return;
         }
-        // Require the two fields that define the message.
+        // Require a recipient and either text or an attachment.
         if (!toAddress.trim()) {
             setSubmitError('Enter a recipient address.');
             return;
         }
-        if (!message.trim()) {
-            setSubmitError('Write a message to send.');
+        if (!message.trim() && !attachment) {
+            setSubmitError('Write a message to send, or attach a file.');
             return;
         }
         if (messageLengthError) return;
@@ -545,7 +599,7 @@ export function ComposeMessage({
     async function handleSubmit(event) {
         event.preventDefault();
         if (stage === 'submitting') return;
-        if (!fromAddress || !chainId || !toAddress.trim() || !message.trim()) return;
+        if (!fromAddress || !chainId || !toAddress.trim() || (!message.trim() && !attachment)) return;
         if (messageLengthError) return;
         if (addressInvalid) return;
         if (!sendUnencrypted && pubkeyState === 'missing') return;
@@ -582,7 +636,7 @@ export function ComposeMessage({
                     signerId: fromAddress.signerId,
                 },
                 destination: toAddress.trim(),
-                message: message,
+                message: wireMessage,
                 method: sendUnencrypted
                     ? null
                     : (encryptionChoice === 'ecdh' && !hw ? 2 : 1),
@@ -789,10 +843,16 @@ export function ComposeMessage({
                         label="Message"
                         value={(
                             <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                                {message}
+                                {message || '(attachment only)'}
                             </span>
                         )}
                     />
+                    {attachment ? (
+                        <DetailRow
+                            label="Attachment"
+                            value={`${attachment.name} (${attachment.size.toLocaleString()} bytes)`}
+                        />
+                    ) : null}
                 </dl>
 
                 <SignCredentials
@@ -931,6 +991,38 @@ export function ComposeMessage({
                 error={messageLengthError}
                 style={{ minHeight: '4rem' }}
             />
+
+            <div>
+                <label htmlFor="message-attachment" style={{ display: 'block', fontWeight: 600, marginBottom: '0.35rem' }}>
+                    Attachment (optional)
+                </label>
+                <input
+                    id="message-attachment"
+                    type="file"
+                    accept={MESSAGE_ATTACHMENT_TYPES.join(',')}
+                    onChange={handleAttachmentPick}
+                    aria-describedby="message-attachment-hint"
+                />
+                <p id="message-attachment-hint" className={styles.hint}>
+                    PNG, JPEG, GIF, WebP, PDF, or plain text, up to {MAX_MESSAGE_ATTACHMENT_BYTES.toLocaleString()} bytes.
+                </p>
+                {attachment ? (
+                    <p>
+                        Attached: {attachment.name} ({attachment.size.toLocaleString()} bytes){' '}
+                        <button
+                            type="button"
+                            onClick={() => {
+                                attachmentReadIdRef.current += 1;
+                                setAttachment(null);
+                                setAttachmentError(null);
+                            }}
+                        >
+                            Remove
+                        </button>
+                    </p>
+                ) : null}
+                {attachmentError ? <p role="alert" style={{ color: 'var(--xc-danger-fg)' }}>{attachmentError}</p> : null}
+            </div>
 
             {/* 3. Encryption. Locked (still visible) for thread replies: a
                 conversation keeps the method it started with. */}

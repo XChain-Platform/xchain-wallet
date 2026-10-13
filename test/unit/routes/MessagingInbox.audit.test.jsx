@@ -12,6 +12,7 @@ import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MessagingInbox } from '../../../packages/core/src/shared/routes/MessagingInbox.jsx';
+import { serializeMessageContent } from '../../../packages/core/src/shared/utils/messageContent.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const OWNER = Object.freeze({
@@ -64,6 +65,7 @@ function mount(messaging) {
 afterEach(() => {
     cleanup();
     localStorage.clear();
+    delete navigator.clipboard;
 });
 
 describe('MessagingInbox audit states', () => {
@@ -125,5 +127,60 @@ describe('MessagingInbox audit states', () => {
         await screen.findByText('No messages yet');
         expect(screen.queryByRole('button', { name: 'Share my key' })).toBeNull();
         expect(screen.queryByRole('button', { name: 'Decline' })).toBeNull();
+    });
+
+    it('wraps long text, links only HTTP(S), opens links safely, and copies the message', async () => {
+        const text = `A${'verylongword'.repeat(80)} https://example.com/path javascript:alert(1)`;
+        const writeText = vi.fn().mockResolvedValue(undefined);
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: { writeText },
+        });
+        mount(messagingFor({ messages: [{
+            format: 3,
+            chainId: CHAIN,
+            from: REQUEST.from,
+            to: OWNER.address,
+            txid: 'safe-link-tx',
+            timestamp: 2,
+            text,
+        }] }));
+
+        fireEvent.click(await screen.findByText(text));
+
+        const safeLink = await screen.findByRole('link', { name: 'https://example.com/path' });
+        expect(safeLink).toHaveAttribute('href', 'https://example.com/path');
+        expect(safeLink).toHaveAttribute('target', '_blank');
+        expect(safeLink.getAttribute('rel')).toContain('noopener');
+        expect(screen.queryByRole('link', { name: /javascript:/i })).toBeNull();
+        expect(getComputedStyle(safeLink.closest('div')).overflowWrap).toBe('anywhere');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Copy message' }));
+        await waitFor(() => expect(writeText).toHaveBeenCalledWith(text));
+    });
+
+    it('renders a validated attachment as a download and omits its envelope from the preview', async () => {
+        const text = serializeMessageContent('Quarterly notes', {
+            name: 'notes.txt',
+            type: 'text/plain',
+            dataUrl: 'data:text/plain;base64,aGVsbG8=',
+            size: 5,
+        });
+        mount(messagingFor({ messages: [{
+            format: 3,
+            chainId: CHAIN,
+            from: REQUEST.from,
+            to: OWNER.address,
+            txid: 'attachment-tx',
+            timestamp: 2,
+            text,
+        }] }));
+
+        fireEvent.click(await screen.findByText('Quarterly notes'));
+
+        const attachment = await screen.findByRole('link', { name: /notes\.txt \(5 bytes\)/ });
+        expect(attachment).toHaveAttribute('download', 'notes.txt');
+        expect(attachment.getAttribute('href')).toBe('data:text/plain;base64,aGVsbG8=');
+        expect(document.body.textContent).not.toContain('xchain-attachment:v1');
     });
 });
