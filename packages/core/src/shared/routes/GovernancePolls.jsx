@@ -15,6 +15,7 @@ import {
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useGovernanceChainIds } from '../hooks/useGovernanceAddressesPresent.js';
+import { t } from '../../i18n/index.js';
 import styles from './IssueTokenForm.module.css';
 import local from './GovernancePolls.module.css';
 
@@ -114,25 +115,25 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
         return () => { cancelled = true; };
     }, [chainId, messaging, pollsReload]);
 
-    const header = <PageHeader onBack={onBack} title="Governance" />;
+    const header = <PageHeader onBack={onBack} title={t('governance.title')} />;
     const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
 
     if (noChain) {
         return wrap(
             <EmptyState
-                title="No governance address"
-                body="Governance requires an address on a supported chain."
+                title={t('governance.noAddress.title')}
+                body={t('governance.noAddress.body')}
             />,
         );
     }
-    if (!chainId && !error) return wrap(<ListPage><p>Loading…</p></ListPage>);
+    if (!chainId && !error) return wrap(<ListPage><p>{t('common.loading')}</p></ListPage>);
     if (!chainId) {
         return wrap(
             <ListPage>
                 <StatusMessage
                     variant="error"
                     className={styles.error}
-                    recovery={{ label: 'Try again', onAction: () => setAddressesReload((value) => value + 1) }}
+                    recovery={{ label: t('common.tryAgain'), onAction: () => setAddressesReload((value) => value + 1) }}
                 >
                     {error}
                 </StatusMessage>
@@ -144,8 +145,8 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
         <ListPage toolbar={(
             <>
                 <NetworkField value={chainId} onChange={setChainId} chainIds={governChains.length ? governChains : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
-                <Button variant="primary" onClick={() => onCreate(chainId)}>Create poll</Button>
-                <Button variant="ghost" onClick={() => onDelegate(chainId)}>Delegate votes</Button>
+                <Button variant="primary" onClick={() => onCreate(chainId)}>{t('governance.createPoll')}</Button>
+                <Button variant="ghost" onClick={() => onDelegate(chainId)}>{t('governance.delegateVotes')}</Button>
             </>
         )}>
 
@@ -153,14 +154,14 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
                 <StatusMessage
                     variant="error"
                     className={styles.error}
-                    recovery={{ label: 'Try again', onAction: () => setPollsReload((value) => value + 1) }}
+                    recovery={{ label: t('common.tryAgain'), onAction: () => setPollsReload((value) => value + 1) }}
                 >
                     {error}
                 </StatusMessage>
             ) : null}
-            {chainId && !rows && !error ? <p>Loading polls…</p> : null}
+            {chainId && !rows && !error ? <p>{t('governance.loadingPolls')}</p> : null}
             {rows && rows.length === 0 ? (
-                <EmptyState title="No polls yet" body="Polls created on this chain appear here." />
+                <EmptyState title={t('governance.empty.title')} body={t('governance.empty.body')} />
             ) : null}
 
             {rows && rows.length > 0 ? (
@@ -176,11 +177,13 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
                                 className={local.pollCard}
                             >
                                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                                    <strong>#{String(id)} · {p.tick || 'n/a'}</strong>
+                                    <strong>#{String(id)} · {p.tick || t('common.notAvailable')}</strong>
                                     <StatusPill status={p.poll_status} />
                                 </div>
                                 {label ? <div className={styles.hint}>{String(label).slice(0, 100)}</div> : null}
-                                <div className={styles.hint}>Closes at block {String(p.end_block ?? 'n/a')}</div>
+                                <div className={styles.hint}>
+                                    {t('governance.closesAtBlock', { block: String(p.end_block ?? t('common.notAvailable')) })}
+                                </div>
                             </button>
                         );
                     })}

@@ -18,14 +18,15 @@ const sources = import.meta.glob(
     '../../packages/core/src/shared/**/*.jsx',
     { query: '?raw', import: 'default', eager: true },
 );
+const ROUTE_E_TO_K = /\/routes\/[E-K][^/]*\.jsx$/;
 
 describe('shared route localization', () => {
-    test('screens using t() keep user-facing JSX copy in the locale dictionary', () => {
+    test('translated screens and E-K routes keep user-facing JSX copy in the locale dictionary', () => {
         const violations = [];
         const missingKeys = [];
 
         for (const [file, source] of Object.entries(sources)) {
-            if (!/\bt\s*\(/.test(source)) continue;
+            if (!/\bt\s*\(/.test(source) && !ROUTE_E_TO_K.test(file)) continue;
             for (const match of source.matchAll(/\bt\(\s*'([^']+)'/g)) {
                 if (!(match[1] in en)) missingKeys.push(`${file}: ${match[1]}`);
             }
