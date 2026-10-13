@@ -58,6 +58,12 @@ const STACK = {
     flexDirection: 'column',
     gap: 'var(--xc-space-1)',
 };
+const PARAGRAPHS = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 'var(--xc-space-3)',
+};
+const PARAGRAPH = { margin: 0 };
 
 export function AboutSection() {
     const { messaging } = useMessaging();
@@ -181,21 +187,22 @@ export function AboutSection() {
             {/* Plain-language summary shown by default for the wallet's
                 non-technical audience; the full AGPL text is one tap away
                 via the "Show full text" toggle above. */}
-            <p
+            <LicenseParagraphs
+                text={LICENSE_SUMMARY}
                 style={{
+                    ...PARAGRAPHS,
                     margin: 'var(--xc-space-1) 0 0',
                     fontSize: 'var(--xc-text-xs)',
                     color: 'var(--xc-text-muted, var(--xc-text))',
-                    whiteSpace: 'pre-line',
                     lineHeight: 1.5,
                 }}
-            >
-                {LICENSE_SUMMARY}
-            </p>
+            />
             {licenseOpen ? (
-                <pre
+                <LicenseParagraphs
                     id="full-license-text"
+                    text={LICENSE_TEXT}
                     style={{
+                        ...PARAGRAPHS,
                         margin: 0,
                         padding: 'var(--xc-space-3)',
                         background: 'var(--xc-surface-sunken, var(--xc-surface-raised))',
@@ -204,12 +211,9 @@ export function AboutSection() {
                         fontSize: 'var(--xc-text-xs)',
                         fontFamily: 'var(--xc-font-mono, monospace)',
                         color: 'var(--xc-text)',
-                        whiteSpace: 'pre-wrap',
                         wordBreak: 'break-word',
                     }}
-                >
-                    {LICENSE_TEXT}
-                </pre>
+                />
             ) : null}
             <Row label="Notice">
                 <DocLink path={NOTICE_FILE} label={NOTICE_FILE} />
@@ -301,6 +305,16 @@ function Row({ label, children }) {
         <div style={ROW}>
             <span style={ROW_LABEL}>{label}</span>
             {children}
+        </div>
+    );
+}
+
+function LicenseParagraphs({ text, ...props }) {
+    return (
+        <div {...props}>
+            {text.trim().split('\n\n').map((paragraph, index) => (
+                <p key={index} style={PARAGRAPH}>{paragraph}</p>
+            ))}
         </div>
     );
 }

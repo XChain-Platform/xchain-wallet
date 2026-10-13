@@ -12,26 +12,27 @@
 // derivation index beside it, and the numbered name as a subtitle only when a
 // custom name would otherwise hide it.
 
-import { describe, it, expect, afterEach } from 'vitest';
-import { render, cleanup, act as domAct } from '@testing-library/react';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { render, cleanup, act as domAct, fireEvent, screen } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { AccountPicker } from '../../../packages/core/src/shared/routes/AccountPicker.jsx';
 
 afterEach(() => cleanup());
 
-async function mountWith(accounts) {
-    const messaging = { listAccounts: () => Promise.resolve(accounts) };
+async function mountWith(accounts, overrides = {}) {
+    const messaging = overrides.messaging || { listAccounts: () => Promise.resolve(accounts) };
     let utils;
     await domAct(async () => {
         utils = render(
             <MessagingProvider shell="web" messaging={messaging}>
                 <AccountPicker
                     walletId="w1"
-                    activeAccountId={null}
-                    onSwitch={() => {}}
+                    activeAccountId={overrides.activeAccountId ?? null}
+                    onSwitch={overrides.onSwitch || (() => {})}
                     onAddAccount={() => {}}
-                    onBack={() => {}}
+                    onRenameAccount={overrides.onRenameAccount}
+                    onBack={overrides.onBack || (() => {})}
                 />
             </MessagingProvider>,
         );
@@ -74,5 +75,38 @@ describe('AccountPicker row subtitle', () => {
             { id: 'a2', index: 1, name: 'Trading' },
         ]);
         expect(container.textContent).not.toMatch(/BIP44/);
+    });
+
+    it('passes the selected record to the rename route', async () => {
+        const account = { id: 'a3', index: 2, name: 'Savings' };
+        const onRenameAccount = vi.fn();
+        await mountWith([account], { onRenameAccount });
+
+        fireEvent.click(document.querySelector('[aria-label="Rename Savings"]'));
+
+        expect(onRenameAccount).toHaveBeenCalledWith(account);
+    });
+
+    it('switches an inactive account and returns through the supplied route', async () => {
+        const onSwitch = vi.fn();
+        const onBack = vi.fn();
+        const { container } = await mountWith(
+            [{ id: 'a2', index: 1, name: 'Savings' }],
+            { activeAccountId: 'a1', onSwitch, onBack },
+        );
+
+        fireEvent.click(rowFor(container, 'Savings'));
+
+        expect(onSwitch).toHaveBeenCalledWith('a2');
+        expect(onBack).toHaveBeenCalledOnce();
+    });
+
+    it('reports a list failure without rendering an empty account state', async () => {
+        await mountWith([], {
+            messaging: { listAccounts: () => Promise.reject(new Error('Accounts unavailable')) },
+        });
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('Accounts unavailable');
+        expect(screen.queryByText('No accounts yet.')).toBeNull();
     });
 });

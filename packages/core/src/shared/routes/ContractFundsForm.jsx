@@ -16,7 +16,7 @@ import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hook
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
-import { formatWithThousands } from '../utils/amountFormat.js';
+import { compareDecimalStrings, formatWithThousands } from '../utils/amountFormat.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
@@ -48,6 +48,11 @@ const PROTOCOL_COIN_TICKER = {
     litecoin: 'LTC',
     dogecoin: 'DOGE',
 };
+
+function isPositiveDecimal(value) {
+    const text = String(value).trim();
+    return /^\d+(?:\.\d+)?$/.test(text) && compareDecimalStrings(text, '0') === 1;
+}
 
 /**
  * DEPOSIT / WITHDRAW form (§42.5).
@@ -291,14 +296,21 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
             return;
         }
         const q = String(quantity).trim();
-        if (!q || Number.isNaN(Number(q)) || Number(q) <= 0) {
-            setFormError('Quantity must be a positive number.');
+        if (!isPositiveDecimal(q)) {
+            setFormError('Quantity must be a positive decimal.');
+            return;
+        }
+        if (isDeposit && tickAmtBalance != null && compareDecimalStrings(q, tickAmtBalance) === 1) {
+            setFormError(
+                `Only ${formatWithThousands(tickAmtBalance)} `
+                + `${String(tick).trim().toUpperCase()} is available to deposit.`,
+            );
             return;
         }
         // D-23: refuse a withdrawal the contract cannot cover, rather than
         // paying a fee to learn it on-chain. Only gates when the custody is
         // actually known (null = unread, so the chain stays the judge).
-        if (!isDeposit && heldByContract != null && Number(q) > Number(heldByContract)) {
+        if (!isDeposit && heldByContract != null && compareDecimalStrings(q, heldByContract) === 1) {
             setFormError(
                 `The contract only holds ${formatWithThousands(heldByContract)} `
                 + `${String(tick).trim().toUpperCase()}.`,
@@ -376,9 +388,12 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
         setStage('form');
     }
 
-        const header = (
+    const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={stage === 'review'
+                ? () => { setSubmitError(null); setStage('form'); }
+                : onBack}
+            backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
                     ? `Review ${verb.toLowerCase()}`
                     : `${verb} ${preposition} contract #${contractActionIndex}`}
@@ -446,11 +461,11 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
                         type="submit"
                         variant="primary"
                         loading={stage === 'submitting'}
-                        disabled={
+                        disabled={stage === 'submitting' || (
                             isWatcherMode
                                 ? false
                                 : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)
-                        }
+                        )}
                     >
                         {isWatcherMode
                             ? 'Create unsigned transaction'
@@ -677,7 +692,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
                     // next to a corrected 300 reads as a still-blocked form.
                     setFormError(null);
                 }}
-                onMax={spendableBalance && Number(spendableBalance) > 0
+                onMax={spendableBalance && compareDecimalStrings(spendableBalance, '0') === 1
                     ? () => setQuantity(spendableBalance)
                     : undefined}
                 maxDisabled={!spendableBalance}

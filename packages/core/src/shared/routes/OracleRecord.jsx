@@ -70,6 +70,7 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack }) {
 
     const [record, setRecord] = useState(/** @type {any} */ (null));
     const [markets, setMarkets] = useState(/** @type {any[] | null} */ (null));
+    const [marketsError, setMarketsError] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
 
     useEffect(() => {
@@ -91,10 +92,15 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack }) {
     useEffect(() => {
         let cancelled = false;
         setMarkets(null);
+        setMarketsError(false);
         if (typeof messaging.betFeeds !== 'function') { setMarkets([]); return undefined; }
         messaging.betFeeds({ chainId, query: address, type: 'source', opts: { limit: 50 } })
             .then((resp) => { if (!cancelled) setMarkets(extractRows(resp)); })
-            .catch(() => { if (!cancelled) setMarkets([]); });
+            .catch(() => {
+                if (cancelled) return;
+                setMarkets([]);
+                setMarketsError(true);
+            });
         return () => { cancelled = true; };
     }, [chainId, address, messaging]);
 
@@ -180,7 +186,11 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack }) {
 
             <SectionHeader title="Their markets" />
             {!markets ? <p className={styles.hint}>Loading markets…</p> : null}
-            {markets && markets.length === 0 ? (
+            {marketsError ? (
+                <StatusMessage variant="error" className={styles.error}>
+                    Could not load this address&apos;s markets.
+                </StatusMessage>
+            ) : markets && markets.length === 0 ? (
                 <EmptyState title="No markets from this address on this chain." titleAs="p" />
             ) : null}
             {markets && markets.length > 0 ? (

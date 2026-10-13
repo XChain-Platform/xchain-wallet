@@ -40,6 +40,8 @@ import {
 } from './CoSignerPolicyEditor.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { ConfirmModal } from '../components/ConfirmModal.jsx';
+import { useConfirmModal } from '../hooks/useConfirmModal.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -52,6 +54,7 @@ const chainRegistry = registryLib.defaultRegistry();
 export function CoSignerAccountDetail({ accountId, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
+    const confirmDialog = useConfirmModal();
 
     const [account, setAccount] = useState(/** @type {any | null} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
@@ -76,6 +79,12 @@ export function CoSignerAccountDetail({ accountId, onBack }) {
 
     async function toggleEnabled() {
         if (!account) return;
+        if (account.enabled && !(await confirmDialog.confirm({
+            title: 'Disable this agent account?',
+            message: 'This revokes the agent\'s signing access until you enable the account again. Funds already sent to the shared address are not moved.',
+            confirmLabel: 'Disable',
+            danger: true,
+        }))) return;
         setBusy(true);
         setError(null);
         try {
@@ -131,6 +140,13 @@ export function CoSignerAccountDetail({ accountId, onBack }) {
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
             {children}
+            {confirmDialog.request ? (
+                <ConfirmModal
+                    {...confirmDialog.request}
+                    onConfirm={confirmDialog.onConfirm}
+                    onCancel={confirmDialog.onCancel}
+                />
+            ) : null}
         </Screen>
     );
 

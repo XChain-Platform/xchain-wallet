@@ -55,6 +55,25 @@ function themeAttrValue(theme) {
     return theme === 'light' || theme === 'dark' ? theme : null;
 }
 
+/** Keep browser and native chrome legible against the selected palette. */
+function applyThemeChrome(theme) {
+    let osDark = false;
+    try {
+        osDark = globalThis.matchMedia?.('(prefers-color-scheme: dark)').matches === true;
+    } catch { /* engines without matchMedia use the light palette default */ }
+    const dark = theme === 'dark' || (theme !== 'light' && osDark);
+
+    try {
+        document.querySelector('meta[name="theme-color"]')
+            ?.setAttribute('content', dark ? '#0B0F17' : '#FFFFFF');
+    } catch { /* document chrome is optional outside a browser shell */ }
+
+    try {
+        const systemBars = globalThis.Capacitor?.Plugins?.SystemBars;
+        systemBars?.setStyle({ style: dark ? 'DARK' : 'LIGHT' })?.catch(() => {});
+    } catch { /* native chrome must never block a settings update */ }
+}
+
 /** Maps the setting's vocabulary onto the CSS media-query vocabulary. */
 function reducedMotionAttrValue(mode) {
     if (mode === 'always') return 'reduce';
@@ -70,6 +89,7 @@ function reducedMotionAttrValue(mode) {
  */
 export function applySettingsRootAttributes(prefs) {
     setAttr(THEME_ATTR, themeAttrValue(prefs?.theme));
+    applyThemeChrome(prefs?.theme);
     setAttr(REDUCED_MOTION_ATTR, reducedMotionAttrValue(prefs?.reducedMotion));
     setAttr(LEARN_MODE_ATTR, prefs?.learnMode ? 'on' : null);
 }

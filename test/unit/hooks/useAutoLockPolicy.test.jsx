@@ -174,6 +174,25 @@ describe('useAutoLockPolicy', () => {
         expect(messaging.lockWallet).toHaveBeenCalledTimes(1);
     });
 
+    it('applies a shorter timeout immediately without resetting prior idle time', async () => {
+        const messaging = makeMessaging({ autolockMinutes: 30 });
+        renderShell(<Shell messaging={messaging} />, { messaging });
+        await settle();
+
+        await idleFor(10 * MINUTE);
+        expect(messaging.lockWallet).not.toHaveBeenCalled();
+
+        await act(async () => {
+            window.dispatchEvent(new CustomEvent('xc:settings-changed', {
+                detail: { schemaVersion: 2, autolockMinutes: 5 },
+            }));
+            await Promise.resolve();
+        });
+        await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+
+        expect(messaging.lockWallet).toHaveBeenCalledTimes(1);
+    });
+
     it('never locks when the user picked "Never"', async () => {
         const messaging = makeMessaging({ autolockMinutes: 0 });
         renderShell(<Shell messaging={messaging} />, { messaging });

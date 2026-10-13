@@ -45,6 +45,74 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('ConnectedSitesSection settings controls', () => {
+    it('shows a structured empty state after connected sites load', async () => {
+        render(<ConnectedSitesSection />);
+
+        expect(await screen.findByText('No sites connected yet')).toBeTruthy();
+        expect(screen.getByText(/When a website asks to connect/)).toBeTruthy();
+    });
+
+    it('displays each site permission using the bridge policy semantics', async () => {
+        messaging.listConnectedSites = vi.fn(async () => [{
+            id: 'site-1',
+            origin: 'https://dapp.example',
+            appName: 'Example dApp',
+            permissions: {
+                chains: ['bitcoin', 'litecoin'],
+                accounts: ['account-1'],
+                canSignMessage: false,
+                canSignAction: {
+                    SEND: 'always',
+                    SWEEP: 'never',
+                },
+            },
+        }]);
+        render(<ConnectedSitesSection />);
+
+        const permissionsButton = await screen.findByRole('button', { name: 'Permissions' });
+        expect(permissionsButton.getAttribute('aria-expanded')).toBe('false');
+        fireEvent.click(permissionsButton);
+        expect(screen.getByRole('button', { name: 'Hide' }).getAttribute('aria-expanded')).toBe('true');
+        expect(screen.getByText('bitcoin, litecoin')).toBeTruthy();
+        expect(screen.getByText('account-1')).toBeTruthy();
+        expect(screen.getByText('ask every time')).toBeTruthy();
+        expect(screen.getByText('always allow').style.color).toBe('var(--xc-success, #2a8)');
+        expect(screen.getByText('never allow').style.color).toBe('var(--xc-danger-fg)');
+    });
+
+    it('requires confirmation before disconnecting a site', async () => {
+        const site = {
+            id: 'site-1',
+            origin: 'https://dapp.example',
+            appName: 'Example dApp',
+            permissions: {
+                chains: [],
+                accounts: [],
+                canSignMessage: false,
+                canSignAction: {},
+            },
+        };
+        let connected = [site];
+        messaging.listConnectedSites = vi.fn(async () => connected);
+        messaging.deleteConnectedSite = vi.fn(async ({ id }) => {
+            connected = connected.filter((entry) => entry.id !== id);
+        });
+        render(<ConnectedSitesSection />);
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Disconnect' }));
+        expect(messaging.deleteConnectedSite).not.toHaveBeenCalled();
+        expect(screen.getByRole('dialog', { name: 'Disconnect Example dApp?' })).toBeTruthy();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        expect(messaging.deleteConnectedSite).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }));
+        fireEvent.click(screen.getAllByRole('button', { name: 'Disconnect' }).at(-1));
+
+        await waitFor(() => expect(messaging.deleteConnectedSite).toHaveBeenCalledWith({ id: 'site-1' }));
+        expect(await screen.findByText('No sites connected yet')).toBeTruthy();
+    });
+
     it('writes effective defaults when both throttle fields are cleared', async () => {
         render(<ConnectedSitesSection />);
         const burst = await screen.findByLabelText('Sign-throttle burst (max requests per window)');
@@ -69,6 +137,22 @@ describe('ConnectedSitesSection settings controls', () => {
 
         expect(update).not.toHaveBeenCalled();
         expect(screen.getByText(/Burst must be an integer/)).toBeTruthy();
+    });
+
+    it('preserves millisecond throttle windows represented as fractional seconds', async () => {
+        settings.signThrottle.windowMs = 1001;
+        render(<ConnectedSitesSection />);
+
+        const windowSeconds = await screen.findByLabelText('Sign-throttle window in seconds');
+        expect(windowSeconds.value).toBe('1.001');
+        fireEvent.submit(windowSeconds.closest('form'));
+
+        await waitFor(() => expect(update).toHaveBeenCalledWith({
+            signThrottle: {
+                burst: 20,
+                windowMs: 1001,
+            },
+        }));
     });
 
     it('lets the page own scrolling for the audit log', async () => {

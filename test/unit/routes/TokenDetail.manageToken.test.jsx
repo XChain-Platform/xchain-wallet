@@ -73,10 +73,9 @@ describe('TokenDetail "Manage token" action', () => {
     it('renders and navigates for the issuing wallet', async () => {
         const { onManageToken } = renderDetail({ creator: MINE });
 
-        // The gate starts at null (owner-gate fetch in flight), so the
-        // "More" button stays disabled until it resolves true.
-        const moreButton = screen.getByRole('button', { name: 'More' });
-        await waitFor(() => expect(moreButton).not.toBeDisabled());
+        // The gate starts at null (owner-gate fetch in flight), so no
+        // destination is shown until ownership resolves true.
+        const moreButton = await screen.findByRole('button', { name: 'More' });
         fireEvent.click(moreButton);
         const entry = await screen.findByRole('menuitem', { name: 'Manage token' });
         fireEvent.click(entry);
@@ -88,11 +87,10 @@ describe('TokenDetail "Manage token" action', () => {
         const { messaging } = renderDetail({ creator: OTHER });
 
         // Let the owner-gate fetch settle (isOwner: null -> false) before
-        // asserting absence; with no other "More" entries wired in this
-        // test, the button itself stays disabled rather than opening an
-        // empty menu, so the absence check does not depend on a click.
+        // asserting absence. With no destination, no inert menu button is
+        // rendered.
         await waitFor(() => expect(messaging.getAddressesByChain).toHaveBeenCalled());
         expect(screen.queryByText('Manage token')).toBeNull();
-        expect(screen.getByRole('button', { name: 'More' })).toBeDisabled();
+        expect(screen.queryByRole('button', { name: 'More' })).toBeNull();
     });
 });
