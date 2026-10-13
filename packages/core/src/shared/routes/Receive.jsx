@@ -594,34 +594,17 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         }
     }, [activeChainId, addressType, generating, messaging, walletId, accountId]);
 
-    // QR image actions. The Copy button writes the rendered PNG to the
-    // clipboard as an image (not as text) so the user can paste it into
-    // chat / email like any other image. Share does the same write and
-    // then opens the platform share sheet. We feature-detect file-share
-    // support and hide the Share button on browsers that can't take a
-    // File via navigator.share (older Chromium on desktop, mainly).
+    // QR image actions. Copy writes the rendered PNG when the clipboard can
+    // accept images. Share always offers the payment request, and attaches
+    // the PNG only when the platform reports file-share support.
     //
-    // The PNG is decoded from the data URL in-process (dataUrlToBlob), not
-    // via `fetch(dataUrl)`: every shell's CSP pins connect-src to the
-    // wallet's own hosts, so the fetch was refused and both buttons
-    // failed with "Failed to fetch".
+    // Decode the PNG in-process because each shell's CSP limits connect-src
+    // to wallet hosts and therefore refuses `fetch(dataUrl)`.
     const canCopyImages = useMemo(() => (
         typeof navigator !== 'undefined'
         && typeof navigator.clipboard?.write === 'function'
         && typeof ClipboardItem === 'function'
     ), []);
-
-    const canShareFiles = useMemo(() => {
-        if (typeof navigator === 'undefined') return false;
-        if (typeof navigator.share !== 'function') return false;
-        if (typeof navigator.canShare !== 'function') return false;
-        try {
-            const probe = new File([new Uint8Array([0])], 'probe.png', { type: 'image/png' });
-            return navigator.canShare({ files: [probe] });
-        } catch {
-            return false;
-        }
-    }, []);
 
     const qrFileName = useMemo(() => {
         const addrPart = address?.address ? address.address.slice(0, 8) : 'address';
@@ -658,36 +641,43 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     }, [qrDataUrl, qrUri, address?.address, canCopyImages, showToast]);
 
     const shareQrImage = useCallback(async () => {
-        if (!qrDataUrl) return;
-        let blob;
-        try {
-            blob = dataUrlToBlob(qrDataUrl);
-        } catch (err) {
-            console.error('Receive QR share (read image) failed:', err); // eslint-disable-line no-console
-            showToast({ message: 'Share failed: could not read QR image', variant: 'error' });
-            return;
-        }
-        // Mirror the Copy action first so the user always ends up with
-        // the image on the clipboard, regardless of which share target
-        // they pick. Clipboard failures are non-fatal; proceed to share.
-        if (canCopyImages) {
+        if (!qrDataUrl || !qrUri) return;
+        const asset = reqTick.trim().toUpperCase() || nativeTicker || descriptor?.displayName || 'funds';
+        const amount = reqAmount.trim();
+        const shareData = {
+            title: `Receive ${asset} with XChain`,
+            text: amount
+                ? `Send ${amount} ${asset} to this XChain wallet.`
+                : `Send ${asset} to this XChain wallet.`,
+            url: qrUri,
+        };
+        const nav = typeof navigator === 'undefined' ? null : navigator;
+        if (typeof nav?.share === 'function') {
             try {
-                await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
-            } catch { /* keep going */ }
+                let data = shareData;
+                if (typeof nav.canShare === 'function') {
+                    try {
+                        const blob = dataUrlToBlob(qrDataUrl);
+                        const withFile = {
+                            ...shareData,
+                            files: [new File([blob], qrFileName, { type: blob.type })],
+                        };
+                        if (nav.canShare(withFile)) data = withFile;
+                    } catch { /* text and URL remain shareable without the QR image */ }
+                }
+                await nav.share(data);
+                return;
+            } catch (err) {
+                if (err?.name === 'AbortError') return;
+                console.error('Receive QR share failed:', err); // eslint-disable-line no-console
+            }
         }
-        try {
-            const file = new File([blob], qrFileName, { type: blob.type });
-            await navigator.share({
-                files: [file],
-                title: 'XChain receive QR',
-                text: address?.address || '',
-            });
-        } catch (err) {
-            if (err?.name === 'AbortError') return; // user dismissed sheet
-            console.error('Receive QR share failed:', err); // eslint-disable-line no-console
-            showToast({ message: 'Share failed: share unavailable', variant: 'error' });
-        }
-    }, [qrDataUrl, address?.address, qrFileName, canCopyImages, showToast]);
+
+        const { ok } = await copyText(qrUri);
+        showToast(ok
+            ? { message: 'Share unavailable. Payment request copied to clipboard.' }
+            : { message: 'Share failed: clipboard unavailable', variant: 'error' });
+    }, [qrDataUrl, qrUri, reqTick, nativeTicker, descriptor?.displayName, reqAmount, qrFileName, showToast]);
 
     // Single-tap request copy uses the exact payload rendered in the QR so a
     // pasted request cannot disagree with the amount or network a payer scans.
@@ -902,16 +892,14 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                         >
                             {canCopyImages ? 'Copy QR code' : 'Copy payment request'}
                         </Button>
-                        {canShareFiles ? (
-                            <Button
-                                variant="secondary"
-                                onClick={shareQrImage}
-                                disabled={!qrDataUrl}
-                                icon={<Icon.UploadIcon />}
-                            >
-                                Share QR
-                            </Button>
-                        ) : null}
+                        <Button
+                            variant="secondary"
+                            onClick={shareQrImage}
+                            disabled={!qrDataUrl}
+                            icon={<Icon.UploadIcon />}
+                        >
+                            Share QR
+                        </Button>
                         {addressExplorerUrl ? (
                             <a
                                 href={addressExplorerUrl}

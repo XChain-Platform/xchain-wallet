@@ -67,13 +67,18 @@ function renderReceive(overrides = {}) {
 }
 
 /** Install the clipboard and share surfaces the screen feature-detects. */
-function stubBrowser({ write, share }) {
+function stubBrowser({ write, writeText, share, canShare = () => true }) {
     globalThis.ClipboardItem = class ClipboardItem {
         constructor(items) { this.items = items; }
     };
-    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { write } });
-    Object.defineProperty(navigator, 'share', { configurable: true, value: share });
-    Object.defineProperty(navigator, 'canShare', { configurable: true, value: () => true });
+    Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: { ...(write ? { write } : {}), ...(writeText ? { writeText } : {}) },
+    });
+    if (share) {
+        Object.defineProperty(navigator, 'share', { configurable: true, value: share });
+    }
+    Object.defineProperty(navigator, 'canShare', { configurable: true, value: canShare });
 }
 
 async function clickWhenEnabled(name) {
@@ -242,9 +247,46 @@ describe('Receive QR copy and share toasts', () => {
         expect(consoleError.mock.calls.some(([, err]) => err?.message === BROWSER_TEXT)).toBe(true);
     });
 
-    it('shows plain share-failure text for a non-cancel share error', async () => {
+    it('shares a title, text, and the exact payment URL when Web Share is available', async () => {
+        const share = vi.fn(async () => {});
+        const writeText = vi.fn(async () => {});
+        stubBrowser({ writeText, share, canShare: () => false });
+        renderReceive();
+
+        const amount = await screen.findByRole('textbox', { name: /^Amount/ });
+        fireEvent.change(amount, { target: { value: '0.00000001' } });
+        await clickWhenEnabled(/Share QR/);
+
+        await waitFor(() => expect(share).toHaveBeenCalledTimes(1));
+        expect(share).toHaveBeenCalledWith({
+            title: 'Receive BTC with XChain',
+            text: 'Send 0.00000001 BTC to this XChain wallet.',
+            url: 'bitcoin:bcrt1qexample?chain=bitcoin-regtest&feePriority=normal&amount=0.00000001&label=Daily%20deposits',
+        });
+        expect(writeText).not.toHaveBeenCalled();
+        expect(showToast).not.toHaveBeenCalled();
+    });
+
+    it('keeps Share QR available and copies the payment URL when Web Share is absent', async () => {
+        const writeText = vi.fn(async () => {});
+        stubBrowser({ writeText });
+        renderReceive();
+
+        await clickWhenEnabled(/Share QR/);
+
+        await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+        expect(writeText).toHaveBeenCalledWith(
+            'bitcoin:bcrt1qexample?chain=bitcoin-regtest&feePriority=normal&label=Daily%20deposits',
+        );
+        expect(showToast).toHaveBeenCalledWith({
+            message: 'Share unavailable. Payment request copied to clipboard.',
+        });
+    });
+
+    it('copies with a toast when Web Share rejects for a non-cancel reason', async () => {
+        const writeText = vi.fn(async () => {});
         stubBrowser({
-            write: vi.fn(async () => {}),
+            writeText,
             share: vi.fn(async () => {
                 throw Object.assign(new Error('NotAllowedError: Permission denied by user agent.'), {
                     name: 'NotAllowedError',
@@ -255,27 +297,25 @@ describe('Receive QR copy and share toasts', () => {
 
         await clickWhenEnabled(/Share QR/);
 
-        await waitFor(() => expect(showToast).toHaveBeenCalled());
+        await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
         const messages = showToast.mock.calls.map(([t]) => t.message);
-        expect(messages).toEqual(['Share failed: share unavailable']);
-        expect(showToast).toHaveBeenCalledWith({
-            message: 'Share failed: share unavailable',
-            variant: 'error',
-        });
+        expect(messages).toEqual(['Share unavailable. Payment request copied to clipboard.']);
         expect(messages.join(' ')).not.toContain('Permission denied');
     });
 
     it('stays silent when the user closes the share sheet', async () => {
+        const writeText = vi.fn(async () => {});
         const share = vi.fn(async () => {
             throw Object.assign(new Error('Share canceled'), { name: 'AbortError' });
         });
-        stubBrowser({ write: vi.fn(async () => {}), share });
+        stubBrowser({ writeText, share });
         renderReceive();
 
         await clickWhenEnabled(/Share QR/);
 
         await waitFor(() => expect(share).toHaveBeenCalledTimes(1));
         await Promise.resolve();
+        expect(writeText).not.toHaveBeenCalled();
         expect(showToast).not.toHaveBeenCalled();
         expect(consoleError).not.toHaveBeenCalled();
     });
