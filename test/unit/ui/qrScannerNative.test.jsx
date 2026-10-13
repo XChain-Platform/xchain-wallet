@@ -16,7 +16,12 @@
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { QrScanner, cameraErrorText, nativeScanClosedText } from '../../../packages/core/src/ui/QrScanner.jsx';
+import {
+    MAX_SCANNED_QR_CHARS,
+    QrScanner,
+    cameraErrorText,
+    nativeScanClosedText,
+} from '../../../packages/core/src/ui/QrScanner.jsx';
 import { setNativeQrScanner } from '../../../packages/core/src/ui/nativeQrScanner.js';
 
 const savedMediaDevices = Object.getOwnPropertyDescriptor(navigator, 'mediaDevices');
@@ -145,6 +150,43 @@ describe('QrScanner with the native scanner', () => {
         });
         expect(onFrame.mock.calls.map((c) => c[0])).toEqual(['xcw:1/3:aa', 'xcw:2/3:bb', 'xcw:3/3:cc']);
         expect(scanner.start).toHaveBeenCalledTimes(1);
+    });
+
+    it('rejects oversized input before the payload handler and keeps scanning', async () => {
+        const { scanner, state } = fakeScanner();
+        setNativeQrScanner(scanner);
+        const onFrame = vi.fn();
+        render(<QrScanner onFrame={onFrame} />);
+        await openScanner(state);
+
+        act(() => { state.onValue('x'.repeat(MAX_SCANNED_QR_CHARS + 1)); });
+
+        expect(onFrame).not.toHaveBeenCalled();
+        expect(screen.getByRole('alert')).toHaveTextContent(/too large to read safely/i);
+        expect(screen.getByRole('alert')).not.toHaveTextContent(/8192|payload|parse/i);
+
+        act(() => { state.onValue('valid-next-frame'); });
+        expect(onFrame).toHaveBeenCalledWith('valid-next-frame');
+        expect(screen.queryByRole('alert')).toBeNull();
+        expect(screen.getByText(/Scanning/)).toBeInTheDocument();
+    });
+
+    it('turns malformed input and payload-handler failures into plain errors', async () => {
+        const { scanner, state } = fakeScanner();
+        setNativeQrScanner(scanner);
+        const rawError = 'SyntaxError: unexpected token at parser.js:42';
+        const onFrame = vi.fn(() => { throw new Error(rawError); });
+        render(<QrScanner onFrame={onFrame} />);
+        await openScanner(state);
+
+        expect(() => act(() => { state.onValue(null); })).not.toThrow();
+        expect(onFrame).not.toHaveBeenCalled();
+        expect(screen.getByRole('alert')).toHaveTextContent(/could not be read/i);
+
+        expect(() => act(() => { state.onValue('malformed-frame'); })).not.toThrow();
+        expect(onFrame).toHaveBeenCalledWith('malformed-frame');
+        expect(screen.getByRole('alert')).not.toHaveTextContent(rawError);
+        expect(screen.getByRole('button', { name: /Scan with camera/ })).toBeDisabled();
     });
 
     it('follows a new onFrame without reopening the camera', async () => {

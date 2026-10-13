@@ -12,6 +12,45 @@ import { useEffect, useRef, useState } from 'react';
 import { Button } from './Button.jsx';
 import { getNativeQrScanner } from './nativeQrScanner.js';
 
+export const MAX_SCANNED_QR_CHARS = 8 * 1024;
+
+const MALFORMED_QR_TEXT = 'That QR code could not be read. Try another code, or paste it instead.';
+const OVERSIZED_QR_TEXT = 'That QR code is too large to read safely. Try another code, or paste it instead.';
+
+/**
+ * Validate camera input before a format-specific parser receives it.
+ *
+ * @param {unknown} text
+ * @returns {string | null}
+ */
+export function scannedQrPayloadError(text) {
+    if (typeof text !== 'string' || text.length === 0) return MALFORMED_QR_TEXT;
+    if (text.length > MAX_SCANNED_QR_CHARS) return OVERSIZED_QR_TEXT;
+    if (text.trim().length === 0) return MALFORMED_QR_TEXT;
+    return null;
+}
+
+/**
+ * Deliver one bounded payload and turn parser failures into user-facing copy.
+ *
+ * @param {unknown} text
+ * @param {(value: string) => void} onFrame
+ * @param {(error: string | null) => void} setError
+ */
+function deliverFrame(text, onFrame, setError) {
+    const inputError = scannedQrPayloadError(text);
+    if (inputError) {
+        setError(inputError);
+        return;
+    }
+    try {
+        onFrame(text);
+        setError(null);
+    } catch {
+        setError(MALFORMED_QR_TEXT);
+    }
+}
+
 /**
  * Camera-based QR scanner. Wraps the browser's native
  * `BarcodeDetector` API against a live `<video>` + `MediaStream`,
@@ -23,11 +62,13 @@ import { getNativeQrScanner } from './nativeQrScanner.js';
  * supported on this browser" message so callers can prompt the user to
  * use the paste-chunk path.
  *
- * The component emits each scanned string through `onFrame`; it
- * deliberately does NOT de-duplicate across scans; callers that
+ * The component emits each bounded, non-empty scanned string through
+ * `onFrame`; it deliberately does NOT de-duplicate across scans; callers that
  * feed a chunked transport (XCW `addChunkToCollector`) already
  * no-op on duplicate chunks, and the scanner has no opinion about
- * what payload shape is being transported.
+ * what payload shape is being transported. Invalid input and parser failures
+ * stay on the scanner as plain error text so camera delivery cannot crash the
+ * surrounding screen.
  *
  * Lifecycle (BarcodeDetector path):
  *   - in the Android app, explain the camera use and wait for a tap.
@@ -38,8 +79,8 @@ import { getNativeQrScanner } from './nativeQrScanner.js';
  *
  * Lifecycle (native path): nothing opens until the button is pressed,
  * whatever `autoStart` says; the native view covers the whole screen,
- * so it opens on a deliberate tap. Every code the camera reads goes to
- * `onFrame`, and unmounting dismisses the native view.
+ * so it opens on a deliberate tap. Every accepted code the camera reads goes
+ * to `onFrame`, and unmounting dismisses the native view.
  *
  * @param {object} props
  * @param {(text: string) => void} props.onFrame
@@ -148,7 +189,9 @@ function NativeCameraScan({ scanner, onFrame, alt }) {
         try {
             stop = await scanner.start(
                 (text) => {
-                    if (mountedRef.current) onFrameRef.current(text);
+                    if (mountedRef.current) {
+                        deliverFrame(text, onFrameRef.current, setError);
+                    }
                 },
                 (reason) => {
                     closedEarly = true;
@@ -309,8 +352,18 @@ export function QrScanner({
                 try {
                     const results = await detector.detect(video);
                     for (const r of results || []) {
-                        if (!cancelled && r && typeof r.rawValue === 'string' && r.rawValue.length > 0) {
-                            onFrame(r.rawValue);
+                        if (!cancelled && r) {
+                            const inputError = scannedQrPayloadError(r.rawValue);
+                            if (inputError) {
+                                setError(inputError);
+                            } else {
+                                try {
+                                    onFrame(r.rawValue);
+                                    setError(null);
+                                } catch {
+                                    setError(MALFORMED_QR_TEXT);
+                                }
+                            }
                         }
                     }
                 } catch {

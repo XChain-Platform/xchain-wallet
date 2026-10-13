@@ -11,6 +11,8 @@ import {
     decodeXcwChunks,
     encodeXcwChunks,
     parseXcwChunk,
+    XCW_MAX_FRAME_CHARS,
+    XCW_MAX_FRAMES,
     XcwChunkError,
 } from '../../../packages/core/src/uri/psbtQr.js';
 
@@ -103,6 +105,52 @@ describe('XCW PSBT QR transport', () => {
         addChunkToCollector(state, other);
 
         expect(state.error).toMatch(/total mismatch/);
+        expect(state.complete).toBe(false);
+    });
+
+    it('rejects a frame count before allocating collector slots', () => {
+        const state = createXcwCollector();
+        addChunkToCollector(state, `XCW:1/${XCW_MAX_FRAMES + 1}:00000000:AA==`);
+
+        expect(state.error).toMatch(/frame count.*cap/);
+        expect(state.total).toBeNull();
+        expect(state.received).toEqual([]);
+    });
+
+    it('rejects an oversized frame before decoding its payload', () => {
+        const oversized = `XCW:1/1:00000000:${'A'.repeat(XCW_MAX_FRAME_CHARS)}`;
+        expect(() => parseXcwChunk(oversized)).toThrow(/frame is .* over the .* cap/);
+    });
+
+    it('does not encode frames that its parser must reject', () => {
+        const bytes = new Uint8Array(XCW_MAX_FRAME_CHARS).fill(1);
+        expect(() => encodeXcwChunks(bytes, { chunkBytes: XCW_MAX_FRAME_CHARS }))
+            .toThrow(/encoded frame.*over the .* cap/);
+    });
+
+    it.each([0, 1])('rejects conflicting repeats of animated frame %i', (index) => {
+        const firstSet = encodeXcwChunks(Uint8Array.from({ length: 160 }, () => 1), { chunkBytes: 48 });
+        const otherSet = encodeXcwChunks(Uint8Array.from({ length: 160 }, () => 2), { chunkBytes: 48 });
+        const state = createXcwCollector();
+
+        addChunkToCollector(state, firstSet[index]);
+        addChunkToCollector(state, otherSet[index]);
+        for (const frame of firstSet) addChunkToCollector(state, frame);
+
+        expect(state.error).toMatch(new RegExp(`conflicting content for chunk ${index + 1}`));
+        expect(state.receivedCount).toBe(1);
+        expect(state.complete).toBe(false);
+    });
+
+    it('rejects non-overlapping frames mixed from different animations', () => {
+        const firstSet = encodeXcwChunks(Uint8Array.from({ length: 160 }, () => 1), { chunkBytes: 48 });
+        const otherSet = encodeXcwChunks(Uint8Array.from({ length: 160 }, () => 2), { chunkBytes: 48 });
+        const state = createXcwCollector();
+
+        addChunkToCollector(state, firstSet[0]);
+        for (const frame of otherSet.slice(1)) addChunkToCollector(state, frame);
+
+        expect(state.error).toMatch(/SHA256.*does not match/);
         expect(state.complete).toBe(false);
     });
 });
