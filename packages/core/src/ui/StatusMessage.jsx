@@ -49,7 +49,7 @@ export function StatusMessage({ variant = 'status', id, children, className, det
             : styles.status;
     const classNames = [styles.row, variantClass, className].filter(Boolean).join(' ');
     return (
-        <div role={role} aria-live={live} id={id} className={classNames}>
+        <div role={role} aria-live={live} aria-atomic="true" id={id} className={classNames}>
             <div className={styles.text}>
                 <span>{children}</span>
                 {details ? (
