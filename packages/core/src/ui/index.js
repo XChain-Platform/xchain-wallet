@@ -25,6 +25,7 @@ export { EmptyState } from './EmptyState.jsx';
 export { SectionHeader } from './SectionHeader.jsx';
 export { StatusMessage } from './StatusMessage.jsx';
 export { Button } from './Button.jsx';
+export { ChoiceControl } from './ChoiceControl.jsx';
 export { Chip } from './Chip.jsx';
 export { Tabs } from './Tabs.jsx';
 export { Input } from './Input.jsx';
