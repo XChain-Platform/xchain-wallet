@@ -59,6 +59,25 @@ describe('signers/SignerPool', () => {
             expect(pool.get('w2').label).toBe('s2');
         });
 
+        it('does not restore a signer whose unlock finishes after lockAll', async () => {
+            const vault = { wallets: { list: async () => [{ id: 'w1' }] } };
+            const signer = fakeSigner('late');
+            let finishUnlock;
+            unlockWalletRecord.mockImplementation(() => new Promise((resolve) => {
+                finishUnlock = resolve;
+            }));
+            const pool = new SignerPool();
+            const pending = pool.populate({ vault, password: 'pw', ...REG });
+            await vi.waitFor(() => expect(unlockWalletRecord).toHaveBeenCalledOnce());
+
+            pool.lockAll();
+            finishUnlock(signer);
+            await pending;
+
+            expect(signer.locked).toBe(true);
+            expect(pool.size()).toBe(0);
+        });
+
         it('leaves a legacy passphrase wallet unpooled and names it as capture-needed', async () => {
             const vault = { wallets: { list: async () => [
                 { id: 'w1', name: 'Cold', passphraseEnabled: true, encryptedPassphrase: null },
@@ -414,6 +433,24 @@ describe('signers/SignerPool', () => {
             const pool = new SignerPool();
             await pool.unlockOne({ wallet: { id: 'w1' }, password: 'pw', ...REG });
             expect(pool.get('w1').label).toBe('s1');
+        });
+
+        it('does not restore an evicted wallet when its unlock finishes late', async () => {
+            const signer = fakeSigner('late');
+            let finishUnlock;
+            unlockWalletRecord.mockImplementation(() => new Promise((resolve) => {
+                finishUnlock = resolve;
+            }));
+            const pool = new SignerPool();
+            const pending = pool.unlockOne({ wallet: { id: 'w1' }, password: 'pw', ...REG });
+            await vi.waitFor(() => expect(unlockWalletRecord).toHaveBeenCalledOnce());
+
+            pool.evict('w1');
+            finishUnlock(signer);
+
+            await expect(pending).rejects.toThrow('signer unlock was cancelled');
+            expect(signer.locked).toBe(true);
+            expect(pool.has('w1')).toBe(false);
         });
 
         it('locks an existing signer before replacing it', async () => {
