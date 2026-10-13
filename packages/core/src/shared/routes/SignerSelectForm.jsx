@@ -36,6 +36,7 @@
 
 import { useEffect, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
+import { useWalletMode } from '../hooks/useWalletMode.js';
 
 const NOOP = () => {};
 
@@ -48,12 +49,15 @@ const NOOP = () => {};
  */
 export function SignerSelectForm({ walletId, value, onChange, disabled = false }) {
     const { messaging } = useMessaging();
+    const { isWatcherMode } = useWalletMode();
     const emitChange = typeof onChange === 'function' ? onChange : NOOP;
     const [signers, setSigners] = useState(/** @type {any[] | null} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
 
     useEffect(() => {
         let cancelled = false;
+        setSigners(null);
+        setError(null);
         if (typeof messaging.listSigners !== 'function') {
             // Shell hasn't wired listSigners; treat as zero HW signers.
             setSigners([]);
@@ -75,11 +79,9 @@ export function SignerSelectForm({ walletId, value, onChange, disabled = false }
         return () => { cancelled = true; };
     }, [walletId, messaging]);
 
-    // Once the list is in, auto-resolve to software when there are no
-    // HW signers. Avoids a render with stale selection when the list
-    // changes (e.g., a device was just unpaired).
+    // Resolve a missing selection to software after the signer registry loads.
     useEffect(() => {
-        if (signers && signers.length === 0 && value !== null) {
+        if (signers && value !== null && !signers.some((signer) => signer.id === value)) {
             emitChange(null);
         }
     }, [signers, value, emitChange]);
@@ -96,13 +98,13 @@ export function SignerSelectForm({ walletId, value, onChange, disabled = false }
         {
             id: null,
             label: 'Software wallet (this seed)',
-            sub: 'Derived from the wallet password. Fast, no device needed.',
+            sub: 'Uses this wallet\'s recovery phrase on this device. Unlock it with the wallet password.',
             kind: 'software',
         },
         ...signers.map((s) => ({
             id: s.id,
             label: s.label || `${s.vendor} ${s.model}`,
-            sub: `${s.vendor} · ${s.model}${s.firmwareVersion ? ` · firmware ${s.firmwareVersion}` : ''}`,
+            sub: `Hardware device: connect ${s.vendor} ${s.model} and approve there; the wallet password is not sent to it${s.firmwareVersion ? ` (firmware ${s.firmwareVersion})` : ''}.`,
             kind: s.kind,
         })),
     ];
@@ -110,6 +112,16 @@ export function SignerSelectForm({ walletId, value, onChange, disabled = false }
     return (
         <fieldset style={FIELDSET_STYLE} aria-label="Choose signer">
             <legend style={LEGEND_STYLE}>Signer</legend>
+            <p style={INTRO_STYLE}>
+                Choose where this operation derives its keys. This choice does not share
+                recovery words or hardware secrets.
+            </p>
+            {isWatcherMode ? (
+                <p role="note" style={WATCH_ONLY_STYLE}>
+                    Watch-only mode remains active. Selecting a key source here does not
+                    enable local transaction signing.
+                </p>
+            ) : null}
             <ul style={LIST_STYLE}>
                 {options.map((opt) => {
                     const checked = (value ?? null) === (opt.id ?? null);
@@ -165,6 +177,18 @@ const LIST_STYLE = {
     display: 'flex',
     flexDirection: 'column',
     gap: 'var(--xc-space-2)',
+};
+
+const INTRO_STYLE = {
+    color: 'var(--xc-text-muted)',
+    fontSize: 'var(--xc-text-xs)',
+    margin: '0 0 var(--xc-space-2)',
+};
+
+const WATCH_ONLY_STYLE = {
+    color: 'var(--xc-warning-fg, var(--xc-text))',
+    fontSize: 'var(--xc-text-xs)',
+    margin: '0 0 var(--xc-space-2)',
 };
 
 const CARD_STYLE = {

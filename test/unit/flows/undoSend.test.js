@@ -184,7 +184,11 @@ describe('Send route undo-send countdown toast', () => {
         expect(holdId).toMatch(/^undo-send:/);
         expect(undoSeconds).toBe(10);
 
-        expect(await screen.findByText(/Sending in \d+ s/)).toBeInTheDocument();
+        const countdown = await screen.findByText('Sending in 10 s');
+        expect(countdown).toBeInTheDocument();
+        expect(countdown).toHaveAttribute('role', 'status');
+        expect(countdown).toHaveAttribute('aria-live', 'polite');
+        expect(countdown).toHaveAttribute('aria-atomic', 'true');
         expect(messaging.sendHoldCancel).not.toHaveBeenCalled();
         fireEvent.click(screen.getByRole('button', { name: /^Cancel$/ }));
 
@@ -195,5 +199,37 @@ describe('Send route undo-send countdown toast', () => {
         rejectSend(err);
         await waitFor(() => expect(screen.queryByText(/Sending in \d+ s|Send cancelled/)).toBeNull());
         expect(await screen.findByLabelText(/^To$/)).toBeInTheDocument();
+    });
+
+    it('uses a fresh hold and one send dispatch when resending after undo', async () => {
+        const { messaging, rejectSend } = await mountAndApprove();
+        await waitFor(() => expect(messaging.sendToken).toHaveBeenCalledOnce());
+        const firstHoldId = messaging.sendToken.mock.calls[0][0].holdId;
+
+        fireEvent.click(await screen.findByRole('button', { name: /^Cancel$/ }));
+        const firstCancelled = new Error('send hold cancelled');
+        firstCancelled.name = 'SendHoldCancelledError';
+        rejectSend(firstCancelled);
+        await screen.findByLabelText(/^To$/);
+
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+        const approve = await screen.findByRole('button', { name: /^(Approve|Confirm|Sign)/i });
+        fireEvent.change(await screen.findByLabelText(/^Password/), { target: { value: 'pw' } });
+        await waitFor(() => expect(approve.disabled).toBe(false));
+        fireEvent.click(approve);
+        await waitFor(() => expect(messaging.sendToken).toHaveBeenCalledTimes(2));
+
+        const secondHoldId = messaging.sendToken.mock.calls[1][0].holdId;
+        expect(secondHoldId).toMatch(/^undo-send:/);
+        expect(secondHoldId).not.toBe(firstHoldId);
+        expect(messaging.sendHoldCancel).toHaveBeenCalledTimes(1);
+        expect(messaging.sendHoldCancel).toHaveBeenCalledWith(firstHoldId);
+
+        fireEvent.click(await screen.findByRole('button', { name: /^Cancel$/ }));
+        const secondCancelled = new Error('send hold cancelled');
+        secondCancelled.name = 'SendHoldCancelledError';
+        rejectSend(secondCancelled);
+        await waitFor(() => expect(screen.queryByText(/Sending in \d+ s|Send cancelled/)).toBeNull());
+        expect(messaging.sendToken).toHaveBeenCalledTimes(2);
     });
 });

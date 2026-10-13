@@ -46,6 +46,7 @@
     padding: var(--xc-space-2);
     overflow-y: auto;
     overflow-x: hidden;
+    scroll-padding-block: var(--xc-space-3);
     /* Content ends at the scrollbar and never runs under it, and a screen
        that scrolls is as wide as one that does not. */
     scrollbar-gutter: stable;

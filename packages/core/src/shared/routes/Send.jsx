@@ -31,14 +31,19 @@ import {
     uri as uriLib,
 } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
-import { coinFromChainId, formatFiat, tickerColor } from '../components/BalanceList.jsx';
+import {
+    coinFromChainId,
+    formatFiat,
+    isAssetImageSourceAllowed,
+    tickerColor,
+} from '../components/BalanceList.jsx';
 import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { buildRecentDestinations } from '../../flows/recentDestinations.js';
 import { detectAddressCoin, isValidAddressForChain } from '../utils/addressValidation.js';
-import { neutralizeControlText } from '../utils/textHardening.js';
+import { neutralizeControlText, ZERO_WIDTH } from '../utils/textHardening.js';
 import { findLookalike } from '../utils/lookalike.js';
 import { checkPasteIntegrity } from '../utils/pasteIntegrity.js';
 import { humanizeError } from '../utils/humanizeError.js';
@@ -62,6 +67,8 @@ import { checkRecipientNovelty } from '../../flows/recipientNovelty.js';
 import { classifySignRisk } from '../../flows/signRiskClassifier.js';
 import { MAX_SEND_LEGS, summarizeSendLegs, totalsByTick } from '../../flows/sendLegs.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
+import { findContactByName, withEntriesAdded } from '../utils/contactMerge.js';
+import { contactEntryChain } from '../utils/contactChain.js';
 
 // Exact decimal-string -> satoshi conversion for the send-risk gates (#2249).
 // The old Math.floor(parseFloat(x) * 1e8) accumulated IEEE-754 rounding error
@@ -150,6 +157,7 @@ import { useFormDraft } from '../hooks/useFormDraft.js';
 import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { useUndoSend } from '../hooks/useUndoSend.js';
+import { useFormLeaveGuard } from '../hooks/useFormLeaveGuard.js';
 import { useDispenserDestination, dispenserDestinationNotice } from '../hooks/useDispenserDestination.js';
 import {
     formatWithThousands,
@@ -202,6 +210,21 @@ function utxoAmount(utxo) {
     }
 }
 
+function utxoValueSats(utxo) {
+    try {
+        const value = BigInt(utxo?.value ?? 0);
+        return value >= 0n ? value : null;
+    } catch {
+        return null;
+    }
+}
+
+function utxoOutpoint(utxo) {
+    const txid = String(utxo?.txid || 'Unknown transaction');
+    const compactTxid = txid.length > 18 ? `${txid.slice(0, 8)}…${txid.slice(-8)}` : txid;
+    return `${compactTxid}:${utxo?.vout ?? '?'}`;
+}
+
 // Validate the destination against the chain the SEND will be broadcast on.
 // A SEND pays an on-chain output on that chain, so an address for another coin,
 // for the right coin on the wrong network, or simply mistyped, is unspendable:
@@ -227,6 +250,10 @@ function destinationAddressError(address, descriptor) {
         ? chainName
         : `${chainName} ${descriptor.networkKind}`;
     return `This is not a valid ${where} address. Check it for typos.`;
+}
+
+function normalizePastedRecipient(value) {
+    return String(value || '').replace(ZERO_WIDTH, '').trim();
 }
 
 /**
@@ -278,6 +305,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
     const variant = screenVariantFor(shell);
     const { developerMode } = useDeveloperMode();
     const { settings } = useSettings();
+    const allowRemoteImages = Boolean(settings)
+        && settings.privacy?.metadataFetchEnabled !== false;
     const { showToast } = useToast();
     const haptic = useHaptic();
     const [undoHoldActive, setUndoHoldActive] = useState(false);
@@ -419,7 +448,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         ? Number(settings.privacy.formDraftTtlMs)
         : undefined;
     const draft = useFormDraft({ view: 'send', walletId, ttlMs: formDraftTtlMs });
-    const [draftPending, setDraftPending] = useState(() => draft.hasDraft());
+    // A stored draft waits for an explicit Restore. A fresh form starts
+    // saving immediately so an auto-lock unmount cannot erase typed values.
+    const [draftPending, setDraftPending] = useState(() => !draft.hasDraft());
     useEffect(() => {
         if (stage !== 'form' || !draftPending) return;
         draft.save({ chainId, toAddress, tick, amount, memo });
@@ -436,8 +467,22 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
     }, [draft]);
     const dismissDraft = useCallback(() => {
         draft.clear();
-        setDraftPending(false);
+        setDraftPending(true);
     }, [draft]);
+    const hasRealInput = useMemo(() => (
+        [toAddress, amount, memo, fiatAmount, password]
+            .some((value) => String(value || '').trim().length > 0)
+        || (tick.trim().length > 0
+            && tick.trim().toUpperCase() !== nativeTickerFor(chainId ? chainRegistry.get(chainId) : null))
+        || extraLegs.some((leg) => [leg.to, leg.amount, leg.tick]
+            .some((value) => String(value || '').trim().length > 0))
+    ), [toAddress, amount, memo, fiatAmount, password, tick, chainId, extraLegs]);
+    const leaveGuard = useFormLeaveGuard({
+        dirty: stage !== 'done' && hasRealInput,
+        submitting: stage === 'submitting',
+        signedUnbroadcast: stage === 'done' && result?.queued === true && result?.unsaved === true,
+        onLeave: onBack,
+    });
 
     // The settings read rides the address load so the last-used chain is
     // known in the render that first shows the form. Best-effort: a host
@@ -498,9 +543,13 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         return () => { cancelled = true; };
     }, [messaging]);
 
-    // Contacts UX state: picker open/close, search query, and the
-    // "save as contact" inline form (idle → naming → saving).
+    // Contacts UX state: picker open/close and the post-send save form.
     const [contactsPickerOpen, setContactsPickerOpen] = useState(false);
+    const [contactSaveStage, setContactSaveStage] = useState(
+        /** @type {'idle' | 'editing' | 'saving' | 'saved'} */ ('idle'),
+    );
+    const [contactName, setContactName] = useState('');
+    const [contactSaveError, setContactSaveError] = useState(/** @type {string | null} */ (null));
 
     const [historyRows, setHistoryRows] = useState(/** @type {any[]} */ ([]));
     useEffect(() => {
@@ -515,7 +564,12 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         Promise.all(
             ownAddrs.map((addr) =>
                 messaging.getAddressHistory({ chainId, address: addr })
-                    .then((rows) => Array.isArray(rows) ? rows : [])
+                    .then((response) => {
+                        if (Array.isArray(response)) return response;
+                        if (Array.isArray(response?.data)) return response.data;
+                        if (Array.isArray(response?.rows)) return response.rows;
+                        return [];
+                    })
                     .catch(() => []),
             ),
         ).then((results) => {
@@ -547,7 +601,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         const out = [];
         for (const c of contacts) {
             for (const e of c?.entries || []) {
-                if (e?.chain === coin && e?.address) {
+                if (contactEntryChain(e) === coin && e?.address) {
                     out.push({ contact: c, entry: e });
                 }
             }
@@ -563,11 +617,17 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         return chainContacts.find(({ entry }) => entry.address === trimmed) || null;
     }, [toAddress, chainContacts]);
 
+    const handlePickRecipient = useCallback((entry) => {
+        const address = String(entry?.address || '');
+        const selectedDescriptor = chainId ? chainRegistry.get(chainId) : null;
+        setToAddress(address);
+        setToError(destinationAddressError(address, selectedDescriptor));
+    }, [chainId]);
+
     const handlePickContact = useCallback((entry) => {
-        setToAddress(entry.address);
-        setToError(null);
+        handlePickRecipient(entry);
         setContactsPickerOpen(false);
-    }, []);
+    }, [handlePickRecipient]);
 
 
     // §29.5 smart paste: BIP21 URI pre-fills amount/token/memo;
@@ -578,14 +638,21 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
     // clipboard rewrote itself between paste and re-read.
     const [pasteHint, setPasteHint] = useState(/** @type {string | null} */ (null));
     const [pasteWarning, setPasteWarning] = useState(/** @type {string | null} */ (null));
+    const [pastedRecipient, setPastedRecipient] = useState(/** @type {string | null} */ (null));
     const onAddressPaste = useCallback((e) => {
         const text = e?.clipboardData?.getData?.('text');
         if (typeof text !== 'string' || text.length === 0) return;
-        const trimmed = text.trim();
+        const trimmed = normalizePastedRecipient(text);
         const detected = uriLib.detectQrContent(trimmed, { chainRegistry });
+        const applyRecipient = (value, targetChainId = chainId) => {
+            const recipient = normalizePastedRecipient(value);
+            setToAddress(recipient);
+            setPastedRecipient(recipient || null);
+            const targetDescriptor = targetChainId ? chainRegistry.get(targetChainId) : null;
+            setToError(destinationAddressError(recipient, targetDescriptor));
+        };
         if (detected.type === 'bip21') {
             e.preventDefault();
-            setToAddress(detected.address);
             const parts = detected.parts;
             if (parts.amount) setAmount(parts.amount);
             const tickParam = parts.params?.tick;
@@ -600,6 +667,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             if (memoParam) setMemo(neutralizeControlText(memoParam));
             const requestChainId = uriLib.safeChainIdParam(parts.params?.chain);
             const requestDescriptor = requestChainId ? chainRegistry.get(requestChainId) : null;
+            applyRecipient(detected.address, requestChainId || chainId);
             if (requestDescriptor?.uriScheme === detected.scheme && requestChainId !== chainId) {
                 setChainId(requestChainId);
             }
@@ -610,7 +678,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             // (xchain:TBTC/send?to=…) yields intent.address rather than the
             // raw "TBTC/send" that the BIP21 fallback would surface.
             const intent = uriLib.hardenUriIntentText(uriLib.parseXchainUri(trimmed, { chainRegistry }));
-            if (intent.address) setToAddress(intent.address);
+            if (intent.address) applyRecipient(intent.address, intent.chainId || chainId);
             if (intent.tick) setTick(intent.tick.toUpperCase());
             if (intent.amount) setAmount(intent.amount);
             if (intent.memo) setMemo(intent.memo);
@@ -620,11 +688,13 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             setPasteHint('Filled from xchain: URI');
         } else if (detected.type === 'wif') {
             e.preventDefault();
+            setPastedRecipient(null);
             setPasteHint(
                 'That looks like a private key, not an address. Use Settings → Import private key to import it.',
             );
         } else {
-            // raw address / unknown; let the default paste happen.
+            e.preventDefault();
+            applyRecipient(trimmed);
             setPasteHint(null);
         }
         setPasteWarning(null);
@@ -1049,6 +1119,10 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         () => availableUtxos.filter((utxo) => selectedUtxoKeys.has(utxoKey(utxo))),
         [availableUtxos, selectedUtxoKeys],
     );
+    const selectedUtxoTotalSats = useMemo(
+        () => selectedUtxos.reduce((total, utxo) => total + (utxoValueSats(utxo) ?? 0n), 0n),
+        [selectedUtxos],
+    );
     const changeAddress = useMemo(
         () => (addressesByChain?.[chainId] || []).find((address) => address.id === changeAddressId) || null,
         [addressesByChain, chainId, changeAddressId],
@@ -1344,6 +1418,18 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         if (liveTier) return liveTier;
         return estimateNativeSendFee({ chainId, chainRegistry, speed: feePick.mode });
     }, [chainId, feePick, feeTiers]);
+
+    const coinControlChange = useMemo(() => {
+        const ticker = nativeTickerFor(descriptor) || '';
+        if (selectedUtxos.length === 0) return `0 ${ticker}`.trim();
+        if (!isNativeSend) return 'Calculated when composed';
+        const amountSats = exactSatsBigIntFromDecimalString(amount);
+        const feeSats = utxoValueSats({ value: feeEstimate?.sats });
+        if (amountSats === null || feeSats === null) return 'Enter an amount to estimate';
+        const changeSats = selectedUtxoTotalSats - amountSats - feeSats;
+        if (changeSats < 0n) return 'Not enough selected';
+        return `${decimalStringFromSats(changeSats)} ${ticker}`.trim();
+    }, [amount, descriptor, feeEstimate?.sats, isNativeSend, selectedUtxoTotalSats, selectedUtxos.length]);
 
     // The picked rate converted to the encoder's feePerKb unit (smallest-unit
     // per KB), so the tier/custom choice actually prices the broadcast tx (not
@@ -2019,10 +2105,10 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         <PageHeader
             onBack={stage === 'review'
                 ? () => { setSubmitError(null); setStage('form'); }
-                : onBack}
+                : leaveGuard.guardedOnBack}
             backDisabled={stage === 'submitting'}
-            backLabel={stage === 'review' ? 'Back to edit' : 'Back to home'}
-            title={stage === 'review' || stage === 'submitting' ? 'Review & Send' : 'Send'}
+            backLabel={stage === 'review' ? t('send.backToEdit') : t('common.backToHome')}
+            title={stage === 'review' || stage === 'submitting' ? t('send.review') : t('send.title')}
             titleIcon={<Icon.SendIcon />}
         />
     );
@@ -2031,6 +2117,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         <Screen variant={variant} header={header}>
             {children}
             {footer}
+            {leaveGuard.confirmation}
         </Screen>
     );
 
@@ -2045,12 +2132,13 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
     const testSendGateBanner = testSendGate ? (
         <div role="alert" className={styles.testSendGate}>
             <p className={styles.testSendTitle}>
-                First send to this address. Test it first?
+                {t('send.testGate.title')}
             </p>
             <p className={styles.testSendBody}>
-                You're sending {decimalStringFromSats(BigInt(testSendGate.amountSats))} {testSendGate.ticker} to
-                a new recipient. A small test send confirms the address
-                works before the full amount goes out.
+                {t('send.testGate.body', {
+                    amount: decimalStringFromSats(BigInt(testSendGate.amountSats)),
+                    ticker: testSendGate.ticker,
+                })}
             </p>
             <div className={styles.testSendActions}>
                 <Button
@@ -2058,14 +2146,14 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                     variant="secondary"
                     onClick={() => markTested(toAddress.trim())}
                 >
-                    I've verified, continue
+                    {t('send.testGate.continue')}
                 </Button>
                 <Button
                     type="button"
                     variant="primary"
                     onClick={onSendSmallTest}
                 >
-                    Send a small test first
+                    {t('send.testGate.sendSmall')}
                 </Button>
             </div>
         </div>
@@ -2079,9 +2167,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
     if (isSignerMode) {
         return wrap(
             <StatusMessage variant="status">
-                This wallet is in signer mode, so it does not send or broadcast.
-                It signs transactions passed in from a watcher wallet. Switch the
-                mode under Settings, Wallet Mode to send from this device.
+                {t('send.signerMode')}
             </StatusMessage>,
         );
     }
@@ -2089,7 +2175,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
     }
     if (!addressesByChain || !chainId) {
-        return wrap(<p className={styles.hint}>Loading…</p>);
+        return wrap(<p className={styles.hint}>{t('common.loading')}</p>);
     }
 
     // confirm page, rendered in place of the form (operator
@@ -2110,7 +2196,10 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                 chainLabel={descriptor?.displayName || chainId}
                 // Fallback only: the composed PSBT's exact fee wins (§5.2.5).
                 feeText={feeEstimate?.coinAmount
-                    ? `Network fee: ${feeEstimate.coinAmount} ${nativeTickerFor(descriptor) || ''}`.trim()
+                    ? t('send.networkFeeValue', {
+                        amount: feeEstimate.coinAmount,
+                        ticker: nativeTickerFor(descriptor) || '',
+                    }).trim()
                     : undefined}
                 signerReady={signerReady}
                 password={password}
@@ -2132,11 +2221,11 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                 extraCredentials={(
                     <>
                         {dispenserNoticeBlock}
-                        <dl className={styles.advancedReviewList} aria-label="Advanced send choices">
-                            <DetailRow label="Memo" value={trimmedMemo || 'None'} />
-                            <DetailRow label="Fee bumping" value={rbfForSend ? 'Allowed' : 'Not allowed'} />
-                            <DetailRow label="Coin control" value={coinControlLabel} />
-                            <DetailRow label="Change address" value={changeAddressLabel} />
+                        <dl className={styles.advancedReviewList} aria-label={t('send.advanced.label')}>
+                            <DetailRow label={t('send.memo')} value={trimmedMemo || t('send.advanced.none')} />
+                            <DetailRow label={t('send.advanced.feeBumping')} value={rbfForSend ? t('send.advanced.allowed') : t('send.advanced.notAllowed')} />
+                            <DetailRow label={t('send.advanced.coinControl')} value={coinControlLabel} />
+                            <DetailRow label={t('send.advanced.changeAddress')} value={changeAddressLabel} />
                         </dl>
                         <UndoSendToast
                             status={undoHoldActive ? undoSendStatus : 'idle'}
@@ -2173,6 +2262,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             setFiatAmount('');
             setToAddress('');
             setResult(null);
+            setContactSaveStage('idle');
+            setContactName('');
+            setContactSaveError(null);
             // previewResult is a derived useMemo (no setter): clearing the
             // amount/destination above already recomputes it. The old
             // setPreviewResult(null) call referenced a non-existent setter and
@@ -2186,12 +2278,39 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                 variant: ok ? 'default' : 'error',
             });
         };
+        const canSaveRecipient = Boolean(txid && toAddress && desc?.coin && !matchedContact);
+        const saveRecipient = async (event) => {
+            event.preventDefault();
+            const name = contactName.trim();
+            if (!name) {
+                setContactSaveError('Name is required.');
+                return;
+            }
+            setContactSaveStage('saving');
+            setContactSaveError(null);
+            const entry = { chain: desc.coin, address: toAddress.trim(), label: '' };
+            const existing = findContactByName(contacts, name);
+            try {
+                const saved = existing
+                    ? await messaging.saveContact({ record: withEntriesAdded(existing, [entry]) })
+                    : await messaging.saveContact({ input: { name, notes: '', entries: [entry] } });
+                if (saved) {
+                    setContacts((current) => existing
+                        ? current.map((contact) => contact.id === existing.id ? saved : contact)
+                        : [...current, saved]);
+                }
+                setContactSaveStage('saved');
+            } catch (err) {
+                setContactSaveError(err?.message || 'Save failed.');
+                setContactSaveStage('editing');
+            }
+        };
 
         // §20 / G040: watcher mode result. The submit returned an unsigned
         // PSBT instead of a broadcast txid; render the export UI (paste +
         // animated QR) so the user can transport it to a Signer-mode wallet.
         if (result?.psbtHex && !txid) {
-            return wrap(<WatcherResultPanel result={result} onSendAnother={sendAnother} onDone={onBack} />);
+            return wrap(<WatcherResultPanel result={result} onSendAnother={sendAnother} onDone={leaveGuard.guardedOnBack} />);
         }
 
         // §5.3.4 TRANSIENT broadcast failure: the transaction IS signed and
@@ -2213,14 +2332,11 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                         <div className={styles.successIcon} aria-hidden="true">⏳</div>
                         <h2 className={styles.successTitle}>{SIGNED_NOT_BROADCAST_TITLE}</h2>
                         <p className={styles.successHint}>
-                            Your transaction is signed but couldn&apos;t reach the network just now.
-                            It&apos;s waiting in the queued-transactions banner and won&apos;t go out
-                            until you broadcast it from there; the wallet reminds you when the
-                            network is back. Don&apos;t send this payment again.
+                            {t('send.queued.body')}
                         </p>
                     </div>
                     <div className={styles.actions}>
-                        <Button variant="primary" onClick={onBack}>Done</Button>
+                        <Button variant="primary" onClick={leaveGuard.guardedOnBack}>{t('common.done')}</Button>
                     </div>
                 </>,
             );
@@ -2230,28 +2346,27 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             <>
                 <div className={styles.successCard} role="status" aria-live="polite">
                     <div className={styles.successIcon} aria-hidden="true">✓</div>
-                    <h2 className={styles.successTitle}>Broadcast pending</h2>
+                    <h2 className={styles.successTitle}>{t('send.success.broadcastPending')}</h2>
                     <p className={styles.successHint}>
-                        Your transaction is on its way. It will confirm in the next
-                        few blocks; you can leave this screen at any time.
+                        {t('send.success.broadcastPendingBody')}
                     </p>
                     {sentAmount || recipient ? (
                         <dl className={styles.successSummary}>
                             {sentAmount ? (
                                 <div className={styles.successRow}>
-                                    <dt>Amount</dt>
+                                    <dt>{t('send.fields.amount')}</dt>
                                     <dd>{sentAmount}</dd>
                                 </div>
                             ) : null}
                             {recipient ? (
                                 <div className={styles.successRow}>
-                                    <dt>To</dt>
+                                    <dt>{t('send.fields.to')}</dt>
                                     <dd className={styles.successMono}>{recipient}</dd>
                                 </div>
                             ) : null}
                             {desc ? (
                                 <div className={styles.successRow}>
-                                    <dt>Chain</dt>
+                                    <dt>{t('send.fields.chain')}</dt>
                                     <dd>{desc.displayName}</dd>
                                 </div>
                             ) : null}
@@ -2259,16 +2374,16 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                     ) : null}
                     {txid ? (
                         <div className={styles.successTxidBlock}>
-                            <p className={styles.successLabel}>Transaction ID</p>
+                            <p className={styles.successLabel}>{t('send.txid')}</p>
                             <div className={styles.successTxidRow}>
                                 <code className={styles.txid}>{txid}</code>
                                 <button
                                     type="button"
                                     className={styles.successLink}
                                     onClick={copyTxid}
-                                    aria-label="Copy transaction id"
+                                    aria-label={t('send.success.copyTransactionId')}
                                 >
-                                    Copy
+                                    {t('send.success.copy')}
                                 </button>
                             </div>
                             {explorerUrl ? (
@@ -2278,7 +2393,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                                     target="_blank"
                                     rel="noopener noreferrer"
                                 >
-                                    View on explorer ↗
+                                    {t('send.success.viewOnExplorer')}
                                 </a>
                             ) : null}
                         </div>
@@ -2295,7 +2410,47 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                         <p className={styles.successHint}>{t('send.success.viewInHistoryHint')}</p>
                     ) : null}
                 </div>
+                {contactSaveStage === 'editing' || contactSaveStage === 'saving' ? (
+                    <form className={styles.saveRecipient} onSubmit={saveRecipient}>
+                        <Input
+                            label={t('send.saveRecipient.nameLabel')}
+                            value={contactName}
+                            onChange={(event) => {
+                                setContactName(event.target.value);
+                                if (contactSaveError) setContactSaveError(null);
+                            }}
+                            error={contactSaveError || undefined}
+                            autoComplete="off"
+                            disabled={contactSaveStage === 'saving'}
+                        />
+                        <div className={styles.saveRecipientActions}>
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                disabled={contactSaveStage === 'saving'}
+                                onClick={() => {
+                                    setContactSaveStage('idle');
+                                    setContactName('');
+                                    setContactSaveError(null);
+                                }}
+                            >
+                                {t('common.cancel')}
+                            </Button>
+                            <Button type="submit" variant="primary" disabled={contactSaveStage === 'saving'}>
+                                {contactSaveStage === 'saving' ? t('send.saveRecipient.saving') : t('send.saveRecipient.save')}
+                            </Button>
+                        </div>
+                    </form>
+                ) : null}
+                {contactSaveStage === 'saved' ? (
+                    <StatusMessage variant="status">{t('send.saveRecipient.saved')}</StatusMessage>
+                ) : null}
                 <div className={styles.actions}>
+                    {canSaveRecipient && contactSaveStage === 'idle' ? (
+                        <Button variant="secondary" onClick={() => setContactSaveStage('editing')}>
+                            {t('send.saveRecipient.open')}
+                        </Button>
+                    ) : null}
                     {onViewHistory && txid ? (
                         <Button
                             variant="secondary"
@@ -2305,9 +2460,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                         </Button>
                     ) : null}
                     <Button variant="secondary" onClick={sendAnother}>
-                        Send another
+                        {t('send.success.sendAnother')}
                     </Button>
-                    <Button variant="primary" onClick={onBack}>Done</Button>
+                    <Button variant="primary" onClick={leaveGuard.guardedOnBack}>{t('common.done')}</Button>
                 </div>
             </>,
         );
@@ -2315,12 +2470,12 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
 
     if (stage === 'review' || stage === 'submitting') {
         const softwareSignLabel = descriptor?.displayName
-            ? `Sign on ${descriptor.displayName}`
-            : 'Sign';
+            ? t('send.review.signOn', { device: descriptor.displayName })
+            : t('send.review.sign');
         return wrap(
             <FormPage
                 id="send-review-form"
-                label="Review send"
+                label={t('send.reviewLabel')}
                 onSubmit={handleSubmit}
                 status={submitError ? (
                     <StatusMessage
@@ -2328,7 +2483,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                         details={submitErrorDetail || undefined}
                         recovery={
                             submitErrorCause === 'insufficient_funds' && sourceBalance && parseFloat(sourceBalance.amount || '0') > 0
-                                ? { label: 'Use Max', onAction: () => { setStage('form'); onMax(); } }
+                                ? { label: t('send.useMax'), onAction: () => { setStage('form'); onMax(); } }
                                 : undefined
                         }
                     >
@@ -2351,10 +2506,16 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                         }
                     >
                         {isWatcherMode
-                            ? 'Create unsigned transaction: send'
+                            ? t('send.review.submitAction', { label: t('send.review.createUnsigned') })
                             : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: send`
-                                : `${softwareSignLabel}: send`}
+                                ? t('send.review.submitAction', {
+                                    label: t('send.review.signOn', {
+                                        device: fromAddress.source === 'trezor'
+                                            ? t('send.device.trezor')
+                                            : t('send.device.ledger'),
+                                    }),
+                                })
+                                : t('send.review.submitAction', { label: softwareSignLabel })}
                     </Button>
                 )}
             >
@@ -2364,24 +2525,26 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                     result={previewResult}
                     loading={previewBalances.loading}
                     error={previewBalances.error}
+                    chainCoin={descriptor?.coin}
+                    nativeTicker={nativeTickerFor(descriptor)}
+                    fiatCurrency={fiatCurrency}
+                    allowCoingeckoFallback={settings?.privacy?.priceDataEnabled !== false}
                 />
                 {multiTickPreviewGap ? (
                     <StatusMessage variant="status">
-                        This send moves more than one token, and the balance preview
-                        covers a single token at a time. Every recipient and amount is
-                        listed under Details below.
+                        {t('send.review.multiTokenPreview')}
                     </StatusMessage>
                 ) : null}
                 <details className={styles.details}>
                     <summary className={styles.detailsToggle}>
-                        Details ({6 + (decoded?.details?.length || 0)})
+                        {t('send.review.details', { count: 6 + (decoded?.details?.length || 0) })}
                     </summary>
                     <dl className={styles.detailsList}>
-                        <dt className={styles.detailsLabel}>Chain</dt>
+                        <dt className={styles.detailsLabel}>{t('send.fields.chain')}</dt>
                         <dd className={styles.detailsValue}>
                             {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
                         </dd>
-                        <dt className={styles.detailsLabel}>From</dt>
+                        <dt className={styles.detailsLabel}>{t('send.fields.from')}</dt>
                         <dd className={styles.detailsValue}>
                             <AddressText address={fromAddress.address} highlight />
                         </dd>
@@ -2396,10 +2559,10 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                                 }
                             />
                         ))}
-                        <DetailRow label="Memo" value={trimmedMemo || 'None'} />
-                        <DetailRow label="Fee bumping" value={rbfForSend ? 'Allowed' : 'Not allowed'} />
-                        <DetailRow label="Coin control" value={coinControlLabel} />
-                        <DetailRow label="Change address" value={changeAddressLabel} />
+                        <DetailRow label={t('send.memo')} value={trimmedMemo || t('send.advanced.none')} />
+                        <DetailRow label={t('send.advanced.feeBumping')} value={rbfForSend ? t('send.advanced.allowed') : t('send.advanced.notAllowed')} />
+                        <DetailRow label={t('send.advanced.coinControl')} value={coinControlLabel} />
+                        <DetailRow label={t('send.advanced.changeAddress')} value={changeAddressLabel} />
                     </dl>
                 </details>
                 {decoded && decoded.warnings.length > 0 ? (
@@ -2430,16 +2593,15 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                 {isWatcherMode ? (
                     <>
                         <p className={styles.hint}>
-                            Watcher mode: this wallet will build an unsigned transaction
-                            instead of signing and broadcasting. Bring the result
-                            to your Signer-mode wallet to sign.
+                            {t('send.watcherMode')}
                         </p>
                         {isHwSource ? (
                             <StatusMessage variant="status">
-                                Source address is paired to {fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'} on
-                                this wallet, but watcher mode does not sign here.
-                                Pair the same {fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'} on your
-                                Signer-mode wallet to sign the transaction this step produces.
+                                {t('send.watcherHardware', {
+                                    device: fromAddress.source === 'trezor'
+                                        ? t('send.device.trezor')
+                                        : t('send.device.ledger'),
+                                })}
                             </StatusMessage>
                         ) : null}
                     </>
@@ -2477,15 +2639,15 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                                 color: 'var(--xc-text-muted)',
                             }}
                         >
-                            <span aria-hidden="true">🔓</span> Wallet unlocked. No password needed.
+                            <span aria-hidden="true">🔓</span> {t('send.walletUnlocked')}
                         </p>
                     </SigningReadyNote>
                 ) : (
                     <Input
                         ref={passwordRef}
                         type="password"
-                        label="Password"
-                        hint="Required to sign."
+                        label={t('common.password')}
+                        hint={t('send.passwordHint')}
                         value={password}
                         onChange={(e) => {
                             setPassword(e.target.value);
@@ -2506,7 +2668,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title={t('send.fromAddress')}
                 walletId={walletId}
                 chainId={chainId}
                 onPick={(a) => {
@@ -2539,7 +2701,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             <TokenPicker
                 purpose="send"
                 walletId={walletId}
-                title={`Select token for recipient ${recipientIndex + 2}`}
+                title={t('send.recipient.selectToken', { number: recipientIndex + 2 })}
                 networkFilter={coinFromChainId(chainId)}
                 kindFilter="tokens"
                 kindLocked
@@ -2558,13 +2720,13 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
     const draftBanner = draft.hasDraft() && !draftPending ? (
         <StatusMessage
             variant="status"
-            recovery={{ label: 'Restore', onAction: restoreDraft }}
+            recovery={{ label: t('send.draft.restore'), onAction: restoreDraft }}
         >
-            You have an unfinished Send draft.
+            {t('send.draft.unfinished')}
             <button
                 type="button"
                 onClick={dismissDraft}
-                aria-label="Discard saved draft"
+                aria-label={t('send.draft.discardLabel')}
                 style={{
                     background: 'transparent',
                     border: 'none',
@@ -2576,7 +2738,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                     fontSize: 'var(--xc-text-xs)',
                 }}
             >
-                Discard
+                {t('send.draft.discard')}
             </button>
         </StatusMessage>
     ) : null;
@@ -2584,7 +2746,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
     return wrap(
         <FormPage
             id="send-form"
-            label="Send"
+            label={t('send.title')}
             onSubmit={handleReview}
             onChangeCapture={() => { if (formError) setFormError(null); }}
             status={formError ? (
@@ -2592,7 +2754,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                     variant="error"
                     recovery={
                         /amount/i.test(formError) && sourceBalance && parseFloat(sourceBalance.amount || '0') > 0
-                            ? { label: 'Use Max', onAction: onMax }
+                            ? { label: t('send.useMax'), onAction: onMax }
                             : undefined
                     }
                 >
@@ -2605,7 +2767,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                     variant="primary"
                     disabled={!!testSendGate}
                 >
-                    Send
+                    {t('send.title')}
                 </Button>
             )}
         >
@@ -2623,6 +2785,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                 tick={tick}
                 descriptor={descriptor}
                 prefill={prefill}
+                allowRemoteImages={allowRemoteImages}
                 onChangeAsset={onChangeAsset ? () => onChangeAsset({ address: toAddress, amount }) : undefined}
             />
             {/*
@@ -2644,40 +2807,49 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
               */}
             {fromAddress ? (
                 <AddressField
-                    label="From"
+                    label={t('send.fields.from')}
                     icon="addresses"
                     value={fromAddress.address}
                     readOnly
                     onChange={() => {}}
                     onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel="Choose source address"
-                    hint="Only what this address holds can be sent."
+                    iconLabel={t('send.source.choose')}
+                    hint={t('send.source.hint')}
                 />
             ) : (
                 <StatusMessage variant="error" className={styles.error}>
-                    No address on this chain. Use Receive to generate one first.
+                    {t('send.source.noAddress')}
                 </StatusMessage>
             )}
             <AddressCombobox
                 size="lg"
                 icon="contacts"
                 label={matchedContact
-                    ? <>To <span className={styles.toContactName}>{matchedContact.contact.name}</span></>
-                    : 'To'}
+                    ? <>{t('send.fields.to')} <span className={styles.toContactName}>{matchedContact.contact.name}</span></>
+                    : t('send.fields.to')}
                 value={toAddress}
                 onChange={(e) => {
                     setToAddress(e.target.value);
+                    setPastedRecipient(null);
                     if (toError) setToError(null);
                     if (pasteHint) setPasteHint(null);
                     if (pasteWarning) setPasteWarning(null);
                 }}
                 onPaste={onAddressPaste}
                 suggestions={suggestions}
+                onSuggestionSelect={handlePickRecipient}
                 hint={pasteHint || undefined}
                 onIconClick={() => setContactsPickerOpen(true)}
-                placeholder="Enter or paste an address or name..."
+                placeholder={t('send.destination.placeholder')}
                 error={toError || undefined}
             />
+            {pastedRecipient ? (
+                <div className={styles.pastedRecipient} aria-live="polite">
+                    <span className={styles.pastedRecipientLabel}>{t('send.paste.checkLabel')}</span>
+                    <AddressText address={pastedRecipient} highlight />
+                    <span className={styles.pastedRecipientHint}>{t('send.paste.checkHint')}</span>
+                </div>
+            ) : null}
             {pasteWarning ? (
                 <div role="alert" className={styles.warnings}>
                     <p className={styles.warning}>{pasteWarning}</p>
@@ -2690,14 +2862,14 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             ) : null}
             {onChangeAsset ? (
                 <TokenField
-                    label="Token"
+                    label={t('send.fields.token')}
                     value={hasTokenSelected ? { chainId, tick: tick.trim().toUpperCase() } : null}
                     onOpenPicker={() => onChangeAsset({ address: toAddress, amount })}
                 />
             ) : (
                 <Input
-                    label="Token"
-                    hint="Tick. Native coin by default."
+                    label={t('send.fields.token')}
+                    hint={t('send.token.hint')}
                     value={tick}
                     onChange={(e) => setTick(e.target.value)}
                     autoComplete="off"
@@ -2721,12 +2893,18 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                 maxBusy={maxBusy}
                 balanceText={
                     previewBalances.loading
-                        ? 'Loading…'
+                        ? t('common.loading')
                         : previewBalances.error
-                            ? `Balance unavailable (${previewBalances.error})`
+                            ? t('send.balance.unavailable', { error: previewBalances.error })
                             : sourceBalance
-                                ? `${formatWithThousands(sourceBalance.amount)} ${sourceBalance.tick} available`
-                                : `0 ${(tick.trim().toUpperCase()) || ''} available`.replace(/\s+/g, ' ').trim()
+                                ? t('send.balance.available', {
+                                    amount: formatWithThousands(sourceBalance.amount),
+                                    ticker: sourceBalance.tick,
+                                })
+                                : t('send.balance.available', {
+                                    amount: '0',
+                                    ticker: tick.trim().toUpperCase(),
+                                }).replace(/\s+/g, ' ').trim()
                 }
             />
             {/* PC-52: extra recipients. Each row is another leg of the SAME
@@ -2739,14 +2917,14 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                     {extraLegs.map((leg, i) => (
                         <div key={leg.id} className={styles.recipientRow}>
                             <div className={styles.recipientRowHead}>
-                                <span className={styles.recipientRowLabel}>Recipient {i + 2}</span>
+                                <span className={styles.recipientRowLabel}>{t('send.recipient.heading', { number: i + 2 })}</span>
                                 <Button
                                     type="button"
                                     variant="ghost"
                                     onClick={() => removeRecipient(leg.id)}
-                                    aria-label={`Remove recipient ${i + 2}`}
+                                    aria-label={t('send.recipient.removeLabel', { number: i + 2 })}
                                 >
-                                    Remove
+                                    {t('send.recipient.remove')}
                                 </Button>
                             </div>
                             {/* The visible labels stay "To" / "Token" / "Amount"
@@ -2756,12 +2934,12 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                                 fields with no way to tell which recipient is
                                 being edited. */}
                             <AddressCombobox
-                                label="To"
-                                aria-label={`Recipient ${i + 2} address`}
+                                label={t('send.fields.to')}
+                                aria-label={t('send.recipient.addressLabel', { number: i + 2 })}
                                 value={leg.to}
                                 onChange={(e) => updateRecipient(leg.id, { to: e.target.value })}
                                 suggestions={suggestions}
-                                placeholder="Enter or paste an address or name..."
+                                placeholder={t('send.destination.placeholder')}
                                 error={recipientErrors[leg.id]?.to
                                     || (leg.to.trim() && destinationAddressError(leg.to, descriptor)
                                         ? destinationAddressError(leg.to, descriptor)
@@ -2769,7 +2947,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                             />
                             {perRecipientToken ? (
                                 <TokenField
-                                    label={`Recipient ${i + 2} token`}
+                                    label={t('send.recipient.tokenLabel', { number: i + 2 })}
                                     value={chainId && (leg.tick.trim() || tick.trim()) ? {
                                         chainId,
                                         tick: (leg.tick.trim() || tick.trim()).toUpperCase(),
@@ -2779,8 +2957,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                                 />
                             ) : null}
                             <Input
-                                label="Amount"
-                                aria-label={`Recipient ${i + 2} amount`}
+                                label={t('send.fields.amount')}
+                                aria-label={t('send.recipient.amountLabel', { number: i + 2 })}
                                 inputMode="decimal"
                                 value={leg.amount}
                                 onChange={(e) => updateRecipient(leg.id, { amount: e.target.value })}
@@ -2791,23 +2969,27 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                     ))}
                     <label className={styles.rbfRow}>
                         <span className={styles.rbfLabel}>
-                            <span>Different token per recipient</span>
+                            <span>{t('send.recipient.differentToken')}</span>
                             <span className={styles.rbfHint}>
-                                Off: every recipient gets {tick.trim().toUpperCase() || 'the token above'}.
+                                {t('send.recipient.differentTokenOff', {
+                                    token: tick.trim().toUpperCase() || t('send.recipient.tokenAbove'),
+                                })}
                             </span>
                         </span>
                         <input
                             type="checkbox"
                             role="switch"
-                            aria-label="Different token per recipient"
+                            aria-label={t('send.recipient.differentToken')}
                             checked={perRecipientToken}
                             onChange={(e) => setPerRecipientToken(e.target.checked)}
                         />
                     </label>
                     {sendTotals.length > 0 && !nativeMultiSendBlock ? (
                         <p className={styles.hint}>
-                            Total: {sendTotals.map((t) => `${formatWithThousands(t.amount)} ${t.tick}`).join(' + ')}
-                            {' '}across {sendLegs.length} recipients, in one transaction and one network fee.
+                            {t('send.recipient.total', {
+                                total: sendTotals.map((item) => `${formatWithThousands(item.amount)} ${item.tick}`).join(' + '),
+                                count: sendLegs.length,
+                            })}
                         </p>
                     ) : null}
                 </div>
@@ -2843,55 +3025,46 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                     variant="secondary"
                     onClick={addRecipient}
                 >
-                    + Add recipient
+                    {t('send.recipient.add')}
                 </Button>
             ) : null}
             {extraLegs.length + 1 >= MAX_SEND_LEGS ? (
                 <p className={styles.hint}>
-                    {MAX_SEND_LEGS} recipients is the most one send carries. Use an
-                    airdrop to distribute to a longer list.
+                    {t('send.recipient.maximum', { count: MAX_SEND_LEGS })}
                 </p>
             ) : null}
             {gatedInfo && gatedInfo.state === 'ready' ? (
                 <StatusMessage variant="status">
-                    This token has gated content. The unlock key will be securely attached
-                    to this send so the recipient can open it. Gated tokens can only be sent
-                    to addresses that have made at least one transaction.
+                    {t('send.gated.ready')}
                 </StatusMessage>
             ) : null}
             {gatedInfo && gatedInfo.state === 'partial' ? (
                 <div role="alert" className={styles.warnings}>
                     <p className={styles.warning}>
-                        This token has {gatedInfo.groups.length} gated content packs and this wallet
-                        holds keys for only {gatedInfo.groups.filter((g) => g.haveKey).length} of them.
-                        The recipient will NOT be able to open the missing pack(s):{' '}
-                        {gatedInfo.groups.filter((g) => !g.haveKey).map((g) => g.keyHash.slice(0, 12)).join(', ')}…
-                        You can still send, or recover the missing keys first (unlock the content
-                        once from the address that received it).
+                        {t('send.gated.partial', {
+                            total: gatedInfo.groups.length,
+                            available: gatedInfo.groups.filter((g) => g.haveKey).length,
+                            missing: gatedInfo.groups.filter((g) => !g.haveKey)
+                                .map((g) => g.keyHash.slice(0, 12)).join(', '),
+                        })}
                     </p>
                 </div>
             ) : null}
             {gatedInfo && gatedInfo.state === 'blocked' ? (
                 <div role="alert" className={styles.warnings}>
                     <p className={styles.warning}>
-                        This token has gated content, and this wallet holds none of its unlock
-                        keys. Sending without the key attached would be rejected by the network,
-                        and the recipient could never open the content.
+                        {t('send.gated.blocked')}
                     </p>
                     {(isWatcherMode || isHwSource) ? (
                         <p className={styles.warning}>
-                            Key recovery needs a software signer (the scan decrypts messages with
-                            the address&apos;s private key, which this signer cannot do). If this
-                            wallet published the content, the key is already stored and this
-                            notice will not appear; otherwise recover the key from a software
-                            wallet holding this address.
+                            {t('send.gated.softwareSigner')}
                         </p>
                     ) : (
                         <div style={{ marginTop: 'var(--xc-space-2)' }}>
                             <Input
                                 type="password"
-                                label="Wallet password (scan for keys)"
-                                hint="Scans messages sent to your addresses for the unlock key and stores it in this wallet."
+                                label={t('send.gated.passwordLabel')}
+                                hint={t('send.gated.passwordHint')}
                                 value={gatedScanPassword}
                                 onChange={(e) => {
                                     setGatedScanPassword(e.target.value);
@@ -2909,7 +3082,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                                 disabled={gatedScanBusy || gatedScanPassword.length === 0}
                                 onClick={handleGatedScan}
                             >
-                                Recover keys
+                                {t('send.gated.recover')}
                             </Button>
                         </div>
                     )}
@@ -2917,7 +3090,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
             ) : null}
             {feeTiers ? (
                 <FeeSelector
-                    label="Network fee"
+                    label={t('send.networkFee')}
                     coinTicker={nativeTickerFor(descriptor)}
                     tiers={feeTiers}
                     value={feePick}
@@ -2936,7 +3109,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                 className={styles.details}
                 style={{ marginTop: 'var(--xc-space-6)' }}
             >
-                <summary className={styles.detailsToggle}>Advanced</summary>
+                <summary className={styles.detailsToggle}>{t('send.advanced')}</summary>
                 {/* No memo on a native-coin send. It only ever existed
                     as a field of an XChain SEND action, and the chain rejects
                     that action outright for a native tick (there is no BTC
@@ -2947,7 +3120,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                 {isNativeSend ? null : (
                     <>
                         <Input
-                            label="Memo"
+                            label={t('send.memo')}
                             value={memo}
                             onChange={(e) => setMemo(e.target.value)}
                             autoComplete="off"
@@ -2955,25 +3128,25 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                             error={memoTooLong || (/[|;]/.test(memo) ? t('send.memoForbiddenChars') : undefined)}
                         />
                         <p className={styles.balanceHint} aria-live="polite">
-                            {trimmedMemo.length} / {MAX_MEMO_LENGTH} characters.
+                            {t('send.memoCount', { used: trimmedMemo.length, max: MAX_MEMO_LENGTH })}
                         </p>
                     </>
                 )}
                 <label className={styles.rbfRow}>
                     <span className={styles.rbfLabel}>
-                        <span>Coin control</span>
+                        <span>{t('send.advanced.coinControl')}</span>
                         <span className={styles.rbfHint}>
                             {utxoLoadState === 'loading'
-                                ? 'Loading spendable inputs…'
+                                ? t('send.advanced.loadingInputs')
                                 : utxoLoadState === 'ready'
-                                    ? 'Choose exactly which unspent outputs fund this transaction.'
-                                    : 'Coin control is unavailable while spendable inputs cannot be loaded.'}
+                                    ? t('send.advanced.coinControlReady')
+                                    : t('send.advanced.coinControlUnavailable')}
                         </span>
                     </span>
                     <input
                         type="checkbox"
                         role="switch"
-                        aria-label="Coin control enabled"
+                        aria-label={t('send.advanced.coinControlEnabled')}
                         checked={coinControlEnabled}
                         disabled={utxoLoadState !== 'ready'}
                         onChange={(e) => setCoinControlEnabled(e.target.checked)}
@@ -2981,45 +3154,102 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                 </label>
                 {coinControlEnabled ? (
                     <fieldset className={styles.coinControlList}>
-                        <legend>Inputs</legend>
-                        {availableUtxos.length > 0 ? availableUtxos.map((utxo) => {
-                            const key = utxoKey(utxo);
-                            return (
-                                <label key={key} className={styles.coinControlRow}>
-                                    <input
-                                        type="checkbox"
-                                        checked={selectedUtxoKeys.has(key)}
-                                        onChange={(e) => setSelectedUtxoKeys((current) => {
-                                            const next = new Set(current);
-                                            if (e.target.checked) next.add(key);
-                                            else next.delete(key);
-                                            return next;
-                                        })}
-                                    />
-                                    <span>
-                                        {utxoAmount(utxo)} {nativeTickerFor(descriptor)}
-                                        <small>{String(utxo.txid).slice(0, 10)}…:{utxo.vout}</small>
-                                    </span>
-                                </label>
-                            );
-                        }) : <p className={styles.hint}>No spendable inputs found.</p>}
+                        <legend>{t('send.advanced.inputs')}</legend>
+                        <div className={styles.coinControlToolbar}>
+                            <span>{t('send.advanced.availableCount', { count: availableUtxos.length })}</span>
+                            <span className={styles.coinControlActions}>
+                                <button
+                                    type="button"
+                                    disabled={availableUtxos.length === 0
+                                        || selectedUtxos.length === availableUtxos.length}
+                                    onClick={() => setSelectedUtxoKeys(
+                                        new Set(availableUtxos.map((utxo) => utxoKey(utxo))),
+                                    )}
+                                >
+                                    {t('send.advanced.selectAll')}
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={selectedUtxos.length === 0}
+                                    onClick={() => setSelectedUtxoKeys(new Set())}
+                                >
+                                    {t('send.advanced.clearSelection')}
+                                </button>
+                            </span>
+                        </div>
+                        {availableUtxos.length > 0 ? (
+                            <div className={styles.coinControlRows}>
+                                {availableUtxos.map((utxo) => {
+                                    const key = utxoKey(utxo);
+                                    const valueSats = utxoValueSats(utxo);
+                                    const dustFloor = dustThresholdForCoin(descriptor?.coin);
+                                    const isDust = valueSats !== null && dustFloor !== null
+                                        && valueSats < BigInt(dustFloor);
+                                    return (
+                                        <label key={key} className={styles.coinControlRow}>
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedUtxoKeys.has(key)}
+                                                onChange={(e) => setSelectedUtxoKeys((current) => {
+                                                    const next = new Set(current);
+                                                    if (e.target.checked) next.add(key);
+                                                    else next.delete(key);
+                                                    return next;
+                                                })}
+                                            />
+                                            <span className={styles.coinControlValue}>
+                                                <span>
+                                                    {utxoAmount(utxo)} {nativeTickerFor(descriptor)}
+                                                    {isDust ? (
+                                                        <span
+                                                            className={styles.coinControlDust}
+                                                            title={t('send.advanced.dustTitle', { sats: formatWithThousands(String(dustFloor)) })}
+                                                        >
+                                                            {t('send.advanced.dust')}
+                                                        </span>
+                                                    ) : null}
+                                                </span>
+                                                <small>{utxoOutpoint(utxo)}</small>
+                                            </span>
+                                        </label>
+                                    );
+                                })}
+                            </div>
+                        ) : <p className={styles.hint}>{t('send.advanced.noInputs')}</p>}
+                        <dl
+                            className={styles.coinControlSummary}
+                            aria-label={t('send.advanced.summaryLabel')}
+                            aria-live="polite"
+                        >
+                            <div>
+                                <dt>{t('send.advanced.selectedTotal')}</dt>
+                                <dd>
+                                    {decimalStringFromSats(selectedUtxoTotalSats)}{' '}
+                                    {nativeTickerFor(descriptor)}
+                                </dd>
+                            </div>
+                            <div>
+                                <dt>{t('send.advanced.approxChange')}</dt>
+                                <dd>{coinControlChange}</dd>
+                            </div>
+                        </dl>
                     </fieldset>
                 ) : null}
                 <label className={styles.advancedSelectLabel}>
-                    <span>Change address</span>
+                    <span>{t('send.advanced.changeAddress')}</span>
                     <select
-                        aria-label="Change address"
+                        aria-label={t('send.advanced.changeAddress')}
                         value={changeAddressId}
                         onChange={(e) => setChangeAddressId(e.target.value)}
                     >
-                        <option value="">Automatic: {automaticChangeLabel}</option>
+                        <option value="">{t('send.advanced.automaticChange', { address: automaticChangeLabel })}</option>
                         {(addressesByChain?.[chainId] || []).map((address) => (
                             <option key={address.id} value={address.id}>
                                 {address.label ? `${address.label}: ` : ''}{address.address}
                             </option>
                         ))}
                     </select>
-                    <span className={styles.rbfHint}>Any leftover native coin returns here.</span>
+                    <span className={styles.rbfHint}>{t('send.advanced.changeHint')}</span>
                 </label>
                 {/* §44.3 per-send RBF toggle. Default seeds from
                     settings.fees[chainId].rbfByDefault (see the effect
@@ -3028,22 +3258,24 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                 <label className={styles.rbfRow}>
                     <span className={styles.rbfLabel}>
                         <span>
-                            Allow fee bumping (replace-by-fee)
+                            {t('send.rbf.label')}
                             <InfoTip
-                                aria="Replace-by-fee help"
-                                label="Allows this unconfirmed transaction to be replaced with one that pays a higher fee, so it can confirm sooner or be cancelled."
+                                aria={t('send.rbf.helpLabel')}
+                                label={t('send.rbf.help')}
                             />
                         </span>
                         <span className={styles.rbfHint}>
                             {rbfSupported
-                                ? 'Allows this transaction to be sped up or cancelled with a higher fee before confirmation.'
-                                : `Fee bumping is not supported on ${descriptor?.displayName ?? 'this chain'}.`}
+                                ? t('send.rbf.enabledHint')
+                                : t('send.rbf.unsupported', {
+                                    chain: descriptor?.displayName ?? t('send.rbf.thisChain'),
+                                })}
                         </span>
                     </span>
                     <input
                         type="checkbox"
                         role="switch"
-                        aria-label="Replace-by-fee enabled"
+                        aria-label={t('send.rbf.enabledLabel')}
                         checked={rbfForSend}
                         disabled={!rbfSupported}
                         onChange={(e) => setRbfEnabled(e.target.checked)}
@@ -3070,7 +3302,7 @@ function DetailRow({ label, value }) {
 // The prefill's imageUrl only applies when the form's current
 // (chainId, tick) still matches what the user picked; if they retype
 // the tick to something else, fall back to the letter-badge style.
-function SelectedTokenHero({ chainId, tick, descriptor, prefill, onChangeAsset }) {
+function SelectedTokenHero({ chainId, tick, descriptor, prefill, onChangeAsset, allowRemoteImages }) {
     const tickTrim = (tick || '').trim();
     if (!chainId || !tickTrim) return null;
     const nativeTicker = nativeTickerFor(descriptor);
@@ -3080,8 +3312,11 @@ function SelectedTokenHero({ chainId, tick, descriptor, prefill, onChangeAsset }
     const prefillMatches = prefill
         && prefill.chainId === chainId
         && (prefill.tick || '').trim().toUpperCase() === tickTrim.toUpperCase();
-    const imageUrl = prefillMatches && typeof prefill?.imageUrl === 'string' && prefill.imageUrl
+    const candidateImageUrl = prefillMatches && typeof prefill?.imageUrl === 'string' && prefill.imageUrl
         ? prefill.imageUrl
+        : null;
+    const imageUrl = isAssetImageSourceAllowed(candidateImageUrl, allowRemoteImages)
+        ? candidateImageUrl
         : null;
     const heroName = prefillMatches && typeof prefill?.displayName === 'string' && prefill.displayName
         ? prefill.displayName
@@ -3099,28 +3334,32 @@ function SelectedTokenHero({ chainId, tick, descriptor, prefill, onChangeAsset }
     return (
         <div className={styles.heroWrap}>
             <IconTag {...iconProps}>
+                <span
+                    className={styles.heroIconLetter}
+                    style={{ background: tickerColor(tickTrim), color: '#FFFFFF' }}
+                    aria-hidden="true"
+                >
+                    {tickTrim.slice(0, 1).toUpperCase()}
+                </span>
                 {isNative && chainIconLarge ? (
                     <img
                         src={chainIconLarge}
                         alt=""
+                        aria-hidden="true"
                         className={styles.heroIconImg}
+                        style={{ position: 'absolute', inset: 0 }}
                         onError={(e) => { e.currentTarget.style.display = 'none'; }}
                     />
                 ) : imageUrl ? (
                     <img
                         src={imageUrl}
                         alt=""
+                        aria-hidden="true"
                         className={styles.heroIconImg}
+                        style={{ position: 'absolute', inset: 0 }}
                         onError={(e) => { e.currentTarget.style.display = 'none'; }}
                     />
-                ) : (
-                    <span
-                        className={styles.heroIconLetter}
-                        style={{ background: tickerColor(tickTrim), color: '#FFFFFF' }}
-                    >
-                        {tickTrim.slice(0, 1).toUpperCase()}
-                    </span>
-                )}
+                ) : null}
                 {!isNative && chainIconUrl ? (
                     <img
                         src={chainIconUrl}

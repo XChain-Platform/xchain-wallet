@@ -22,6 +22,10 @@ const sectionSrc = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'settings', 'BackupSection.jsx'),
     'utf8',
 );
+const printStylesSrc = readFileSync(
+    join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'settings', 'BackupSection.module.css'),
+    'utf8',
+);
 const hostSrc = readFileSync(
     join(wsRoot, 'packages', 'extension', 'src', 'background', 'createBackgroundHost.js'),
     'utf8',
@@ -46,6 +50,19 @@ assert.match(sectionSrc, /mnemonicHidden/, 'tap-to-reveal toggle state');
 assert.match(sectionSrc, /filter: hidden \? 'blur\(8px\)'/, 'CSS blur when hidden');
 assert.match(sectionSrc, /Tap to reveal/, 'reveal hint copy');
 assert.match(sectionSrc, /Tap to hide again/, 'hide hint copy');
+assert.match(sectionSrc, /Print recovery sheet/, 'print action is present');
+assert.match(sectionSrc, /window\.print\(\)/, 'print action opens the platform print dialog');
+assert.match(printStylesSrc, /@media print/, 'recovery sheet has print styles');
+assert.match(
+    printStylesSrc,
+    /body\.xc-print-recovery-sheet \*\)[\s\S]*visibility: hidden !important/,
+    'print mode hides application chrome',
+);
+assert.match(
+    printStylesSrc,
+    /\.recoverySheet \*[\s\S]*visibility: visible !important/,
+    'print mode reveals the recovery sheet',
+);
 assert.match(
     sectionSrc,
     /NoMnemonicForWifOnlyError/,

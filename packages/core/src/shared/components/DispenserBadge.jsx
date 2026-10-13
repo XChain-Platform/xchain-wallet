@@ -97,24 +97,33 @@ export function DispenserBadge({ chainId, tick, label }) {
     }, [messaging, chainId, tick]);
 
     if (count === null || count === 0) return null;
+    const visibleLabel = label || `Dispenser · ${tick}`;
+    const description = `${count} open dispenser${count === 1 ? '' : 's'} for ${tick} on ${chainId}`;
     return (
         <span
-            title={`${count} open dispenser${count === 1 ? '' : 's'} for ${tick} on ${chainId}`}
+            role="status"
+            aria-label={description}
+            title={description}
             style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '0.25rem',
-                fontSize: '0.7rem',
-                padding: '0.05rem 0.35rem',
-                borderRadius: '2px',
-                background: 'var(--xc-accent-bg, rgba(25, 118, 210, 0.12))',
-                color: 'var(--xc-accent, #1976d2)',
-                fontWeight: 600,
+                minWidth: 0,
+                maxWidth: '100%',
+                padding: '2px var(--xc-space-2)',
+                border: '1px solid var(--xc-accent-primary)',
+                borderRadius: 'var(--xc-radius-pill)',
+                background: 'color-mix(in srgb, var(--xc-accent-primary) 10%, transparent)',
+                color: 'var(--xc-accent-text)',
+                fontSize: 'var(--xc-text-xs)',
+                fontWeight: 700,
+                lineHeight: 1.4,
                 textTransform: 'uppercase',
                 letterSpacing: '0.02em',
             }}
         >
-            {label || `Dispenser · ${tick}`}
+            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {visibleLabel}
+            </span>
         </span>
     );
 }

@@ -9,9 +9,8 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainPicker, EmptyState, FormPage, Icon, InfoTip, Input, ListPage, MultisigBadge, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, ChainPicker, EmptyState, FormPage, Icon, InfoTip, Input, ListPage, MultisigBadge, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
-import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { ConfirmModal } from '../components/ConfirmModal.jsx';
@@ -998,7 +997,7 @@ export function AddressList({
         const canSecret = !!(onShowPrivateKey && selected.record && !selected.multisig);
         const canDelete = !!selected.record?.id;
         const fields = [
-            { label: 'Network', value: d?.displayName || selected.chainId },
+            { label: 'Network', value: d ? <ChainBadge descriptor={d} size="sm" /> : selected.chainId },
             { label: 'Balance', value: amountTextFor(selected) },
             { label: 'Type', value: typeLabelFor(selected) },
         ];
@@ -1468,7 +1467,6 @@ export function AddressList({
             <ul className={local.addrList} aria-label="Addresses">
                 {listedRows.map((row) => {
                     const d = chainRegistry.get(row.chainId);
-                    const iconUrl = d ? branding.chainIconSmallUrl(d.id) : null;
                     return (
                         <li key={row.key}>
                             <button
@@ -1495,9 +1493,9 @@ export function AddressList({
                                     </div>
                                 ) : null}
                                 <div className={local.addrLine1}>
-                                    {iconUrl ? (
-                                        <img src={iconUrl} alt="" className={local.chainIcon} width={16} height={16} />
-                                    ) : null}
+                                    {d
+                                        ? <ChainBadge descriptor={d} size="sm" />
+                                        : <span>{row.chainId}</span>}
                                     <AddressText address={row.address} truncate={false} />
                                     {row.multisig ? (
                                         <MultisigBadge

@@ -108,13 +108,36 @@ export async function dividendAction(opts) {
  * List holders of a token. Used by DividendForm's cost preview so the
  * user sees "N holders / ~TOTAL distribution" before signing.
  *
- * @param {{ sdkRegistry: any, chainId: string, tick: string, opts?: object }} params
+ * @param {{ sdkRegistry: any, chainId: string, tick: string, opts?: object, all?: boolean }} params
  * @returns {Promise<unknown>}
  */
-export async function holdersFor({ sdkRegistry, chainId, tick, opts }) {
+export async function holdersFor({ sdkRegistry, chainId, tick, opts, all = false }) {
     if (!sdkRegistry) throw new Error('holdersFor: sdkRegistry is required');
     if (!chainId) throw new Error('holdersFor: chainId is required');
     if (!tick) throw new Error('holdersFor: tick is required');
     const sdk = sdkRegistry.get(chainId);
-    return sdk.getHolders(tick, opts);
+    if (!all) return sdk.getHolders(tick, opts);
+
+    // The explorer caps this endpoint at 500 rows. A dividend preview that
+    // reads only page one understates both the payout and the per-recipient
+    // fee, so the form asks this host-side read to assemble every page.
+    const limit = 500;
+    const first = await sdk.getHolders(tick, { ...(opts || {}), page: 1, limit });
+    if (Array.isArray(first)) return first;
+    const rows = Array.isArray(first?.data) ? first.data : [];
+    const total = Number(first?.total);
+    if (!Number.isFinite(total) || total <= rows.length) return first;
+
+    const pages = Math.ceil(total / limit);
+    const rest = await Promise.all(
+        Array.from({ length: pages - 1 }, (_unused, index) => (
+            sdk.getHolders(tick, { ...(opts || {}), page: index + 2, limit })
+        )),
+    );
+    return {
+        ...first,
+        data: rows.concat(...rest.map((page) => (
+            Array.isArray(page) ? page : (Array.isArray(page?.data) ? page.data : [])
+        ))),
+    };
 }

@@ -32,7 +32,7 @@ const address = (id, value, coinType) => ({
     signerId: 'signer-1',
 });
 
-function mountSleepForm() {
+function mountSleepForm(overrides = {}) {
     const addresses = {
         [BITCOIN]: [address('btc', BITCOIN_ADDRESS, 0)],
         [LITECOIN]: [address('ltc', LITECOIN_ADDRESS, 2)],
@@ -42,6 +42,9 @@ function mountSleepForm() {
         getActiveAddresses: vi.fn().mockResolvedValue({}),
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
+        getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 10_000 }),
+        sleepAction: vi.fn().mockResolvedValue({ txid: 'sleep-txid' }),
+        ...overrides,
     };
     render(
         <MessagingProvider shell="web" messaging={messaging}>
@@ -53,6 +56,7 @@ function mountSleepForm() {
             />
         </MessagingProvider>,
     );
+    return messaging;
 }
 
 afterEach(cleanup);
@@ -70,5 +74,56 @@ describe('SleepForm address lock chain selection', () => {
         });
         fireEvent.click(screen.getByRole('button', { name: 'Choose source address' }));
         expect(await screen.findByText(`Picker chain: ${LITECOIN}`)).toBeInTheDocument();
+    });
+
+    it('turns a block duration into the exact wake block shown and signed at review', async () => {
+        const messaging = mountSleepForm();
+
+        expect(await screen.findByText(/Duration starts from current block 10,000/)).toBeInTheDocument();
+        expect(screen.getByText(/native coins are not locked/i)).toBeInTheDocument();
+        fireEvent.change(screen.getByLabelText('Duration (blocks)'), { target: { value: '12' } });
+        expect(screen.getByText(/Wake block: 10,012/)).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+
+        expect(await screen.findByText(/until block 10012/)).toBeInTheDocument();
+        expect(screen.getByText('Automatically at block 10,012. The address cannot wake itself early.')).toBeInTheDocument();
+        expect(screen.getByText('12 blocks')).toBeInTheDocument();
+        fireEvent.change(screen.getByLabelText('Type LOCK to confirm'), { target: { value: 'LOCK' } });
+        fireEvent.click(screen.getByRole('button', { name: /Lock address on/ }));
+
+        await waitFor(() => {
+            expect(messaging.sleepAction).toHaveBeenCalledWith(expect.objectContaining({
+                params: { VERSION: '0', RESUME_BLOCK: '10012' },
+            }));
+        });
+    });
+
+    it('explains invalid and unavailable duration errors in user-facing terms', async () => {
+        mountSleepForm({ getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: null }) });
+
+        const duration = await screen.findByLabelText('Duration (blocks)');
+        fireEvent.change(duration, { target: { value: '0' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        expect(await screen.findByText('Duration must be at least 1 block.')).toBeInTheDocument();
+
+        fireEvent.change(duration, { target: { value: '12' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        expect(await screen.findByText(/current block is unavailable/)).toBeInTheDocument();
+    });
+
+    it('requires a fresh typed confirmation each time address-lock review opens', async () => {
+        mountSleepForm();
+
+        const duration = await screen.findByLabelText('Duration (blocks)');
+        await screen.findByText(/Duration starts from current block 10,000/);
+        fireEvent.change(duration, { target: { value: '1' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.change(await screen.findByLabelText('Type LOCK to confirm'), { target: { value: 'LOCK' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+
+        expect(await screen.findByLabelText('Type LOCK to confirm')).toHaveValue('');
+        expect(screen.getByRole('button', { name: /Lock address on/ })).toBeDisabled();
     });
 });
