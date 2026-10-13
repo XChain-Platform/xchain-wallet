@@ -246,7 +246,7 @@ export function DesktopUpdateBanner() {
             ) : null}
             {state === 'install-failed' && installCause !== 'read-only' ? (
                 <button type="button" onClick={() => runAction('restart')} style={LINK_BUTTON}>
-                    Retry
+                    {t('desktopUpdate.retry')}
                 </button>
             ) : null}
             {state === 'error' ? (
