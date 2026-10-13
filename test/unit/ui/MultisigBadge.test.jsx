@@ -3,6 +3,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MultisigBadge } from '../../../packages/core/src/ui/MultisigBadge.jsx';
@@ -32,9 +33,49 @@ describe('<MultisigBadge>', () => {
         const { rerender } = render(
             <MultisigBadge threshold={2} cosignerCount={3} scheme="p2wsh-multisig" size="sm" />,
         );
-        expect(screen.getByTestId('multisig-badge')).toHaveStyle({ fontSize: '0.7rem' });
+        expect(screen.getByTestId('multisig-badge')).toHaveStyle({
+            height: 'var(--xc-badge-height-sm)',
+            fontSize: 'var(--xc-badge-font-size-sm)',
+        });
         rerender(<MultisigBadge threshold={2} cosignerCount={3} scheme="p2wsh-multisig" size="md" />);
-        expect(screen.getByTestId('multisig-badge')).toHaveStyle({ fontSize: '0.78rem' });
+        expect(screen.getByTestId('multisig-badge')).toHaveStyle({
+            height: 'var(--xc-badge-height-md)',
+            fontSize: 'var(--xc-badge-font-size-md)',
+        });
+    });
+
+    it('keeps badge components and count pills on the shared geometry tokens', () => {
+        const files = [
+            'packages/core/src/ui/ChainBadge.module.css',
+            'packages/core/src/ui/VerifiedBadge.jsx',
+            'packages/core/src/ui/MultisigBadge.jsx',
+            'packages/core/src/shared/components/WatchOnlyBadge.jsx',
+            'packages/core/src/shared/components/DispenserBadge.jsx',
+            'packages/core/src/shared/components/LeftNav.module.css',
+            'packages/core/src/shared/components/BottomTabBar.module.css',
+        ];
+        const source = files.map((file) => readFileSync(file, 'utf8')).join('\n');
+        const tokens = readFileSync('packages/core/src/ui/tokens.css', 'utf8');
+
+        for (const token of [
+            '--xc-badge-height-sm',
+            '--xc-badge-height-md',
+            '--xc-badge-radius',
+            '--xc-badge-font-size-sm',
+            '--xc-badge-font-size-md',
+            '--xc-badge-font-weight',
+            '--xc-badge-icon-size-sm',
+            '--xc-badge-icon-size-md',
+            '--xc-badge-gap',
+        ]) {
+            expect(tokens).toContain(`${token}:`);
+            expect(source).toContain(`var(${token})`);
+        }
+
+        for (const tone of ['classic', 'segwit', 'taproot']) {
+            expect(tokens.match(new RegExp(`--xc-badge-multisig-${tone}-bg:`, 'g'))).toHaveLength(3);
+            expect(tokens.match(new RegExp(`--xc-badge-multisig-${tone}-fg:`, 'g'))).toHaveLength(3);
+        }
     });
 
     it.each([

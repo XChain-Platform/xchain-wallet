@@ -38,9 +38,9 @@ export function VerifiedBadge({ status, reason, size = 'sm' }) {
 
     const reasonPhrase = reason ? humanizeReason(reason) : null;
     const title = spec.title + (reasonPhrase ? ` (${reasonPhrase})` : '');
-    const padX = size === 'sm' ? '0.25rem' : '0.4rem';
-    const padY = size === 'sm' ? '0.05rem' : '0.1rem';
-    const fontSize = size === 'sm' ? '0.7rem' : '0.78rem';
+    const height = size === 'sm' ? 'var(--xc-badge-height-sm)' : 'var(--xc-badge-height-md)';
+    const padX = size === 'sm' ? 'var(--xc-badge-padding-inline-sm)' : 'var(--xc-badge-padding-inline-md)';
+    const fontSize = size === 'sm' ? 'var(--xc-badge-font-size-sm)' : 'var(--xc-badge-font-size-md)';
     return (
         <span style={{ display: 'inline-flex', alignItems: 'center' }}>
             <span
@@ -50,16 +50,18 @@ export function VerifiedBadge({ status, reason, size = 'sm' }) {
                 data-status={status}
                 style={{
                     display: 'inline-flex',
-                    gap: '0.2rem',
+                    boxSizing: 'border-box',
+                    gap: 'var(--xc-badge-gap)',
                     alignItems: 'center',
-                    padding: `${padY} ${padX}`,
+                    height,
+                    padding: `0 ${padX}`,
                     fontSize,
-                    fontWeight: 600,
-                    borderRadius: 4,
+                    fontWeight: 'var(--xc-badge-font-weight)',
+                    borderRadius: 'var(--xc-badge-radius)',
                     background: spec.bg,
                     color: spec.fg,
                     border: `1px solid ${spec.border}`,
-                    lineHeight: 1.2,
+                    lineHeight: 1,
                     whiteSpace: 'nowrap',
                 }}
             >
