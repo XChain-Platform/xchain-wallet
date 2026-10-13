@@ -74,6 +74,39 @@ describe('settings form validation', () => {
         expect(screen.queryByRole('switch', { name: 'Auto-arm panic mode' })).toBeNull();
     });
 
+    it('saves the test-send threshold as an exact normalized integer string', () => {
+        render(<SafetySection />);
+        const input = screen.getByLabelText('Test-send warning threshold (sats)');
+        fireEvent.change(input, { target: { value: '009007199254740993' } });
+        fireEvent.blur(input);
+
+        expect(update).toHaveBeenCalledWith({
+            grace: { testSendThresholdSats: '9007199254740993' },
+        });
+    });
+
+    it('explains the exact test-send gate and always-on recipient warnings', () => {
+        render(<SafetySection />);
+
+        const input = screen.getByLabelText('Test-send warning threshold (sats)');
+        const hint = document.getElementById(input.getAttribute('aria-describedby'));
+        expect(hint.textContent).toMatch(/native-coin sends above this amount/i);
+        expect(hint.textContent).toMatch(/outside your contacts and send history/i);
+        expect(hint.textContent).toMatch(/0 to turn this warning off/i);
+        expect(screen.getByText('Lookalike address warnings')).toBeTruthy();
+        expect(screen.getByText(/closely resembles a contact or a previous recipient/i)).toBeTruthy();
+        expect(screen.getByText('Always on')).toBeTruthy();
+    });
+
+    it('does not offer a backup cadence that the reminder engine ignores', () => {
+        render(<SafetySection />);
+
+        expect(screen.queryByLabelText('Backup reminders')).toBeNull();
+        expect(screen.getByText(/shown automatically for wallets without a verified recovery phrase/i))
+            .toBeTruthy();
+        expect(screen.getByText('Automatic')).toBeTruthy();
+    });
+
     it('does not save an empty custom fee rate as zero', () => {
         settings = {
             ...createDefaultSettings(),
