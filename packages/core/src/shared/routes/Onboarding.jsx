@@ -53,8 +53,8 @@ const EXPLAINER_FRAMES = [
     {
         id: 'multi-chain',
         icon: <Icon.TokenIcon />,
-        title: 'One place for several chains',
-        body: 'XChain Platform supports Bitcoin, Litecoin, and Dogecoin. Each chain has its own addresses, so choose the chain before you send or receive.',
+        title: 'Built for the XChain Platform',
+        body: 'Use the XChain Platform on Bitcoin, Litecoin, and Dogecoin, the chains supported today. Each chain has its own addresses here, kept separate so you always know where you are acting.',
     },
 ];
 

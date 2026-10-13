@@ -13,7 +13,11 @@
 // component as it's documented. Sections render in the order declared
 // in `SECTIONS` below; the TOC is generated from that list.
 import { VIEWS, ViewContext, ViewFrame, WidthTriptych, useViewState } from './frames.jsx';
-import { ColorPaletteSection } from './sections/ColorPaletteSection.jsx';
+import {
+    DesignTokensSection,
+    DOCUMENTED_TOKENS,
+    TOKEN_GROUPS,
+} from './sections/DesignTokensSection.jsx';
 import { TypographySection } from './sections/TypographySection.jsx';
 import { SpacingSection } from './sections/SpacingSection.jsx';
 import { IconsSection } from './sections/IconsSection.jsx';
@@ -43,6 +47,7 @@ import { StatesSection } from './sections/StatesSection.jsx';
 import { PrivacyModeSection } from './sections/PrivacyModeSection.jsx';
 import { PageTemplatesSection } from './sections/PageTemplatesSection.jsx';
 import { FormPageSection } from './sections/FormPageSection.jsx';
+import { FormErrorSummarySection } from './sections/FormErrorSummarySection.jsx';
 import { FormSectionSection } from './sections/FormSectionSection.jsx';
 import { ListPageSection } from './sections/ListPageSection.jsx';
 import { EmptyStateSection } from './sections/EmptyStateSection.jsx';
@@ -71,12 +76,13 @@ import {
 // canonical going forward.
 
 export const SECTIONS = [
-    { id: 'color-palette',         label: 'Color palette',          Component: ColorPaletteSection },
+    { id: 'design-tokens',         label: 'Design tokens',          Component: DesignTokensSection },
     { id: 'typography',            label: 'Typography',             Component: TypographySection },
     { id: 'spacing',               label: 'Spacing & radii',        Component: SpacingSection },
     { id: 'icons',                 label: 'Icon catalog',           Component: IconsSection, primitives: ['Icon'] },
     { id: 'page-templates',        label: 'Page templates',         Component: PageTemplatesSection, primitives: ['Screen'] },
     { id: 'form-page',             label: 'Form page',              Component: FormPageSection, primitives: ['FormPage'] },
+    { id: 'form-error-summary',    label: 'Form error summary',     Component: FormErrorSummarySection, primitives: ['FormErrorSummary'] },
     { id: 'form-section',          label: 'Form section',           Component: FormSectionSection, primitives: ['FormSection'] },
     { id: 'list-page',             label: 'List page',              Component: ListPageSection, primitives: ['ListPage'] },
     { id: 'empty-state',           label: 'Empty state',            Component: EmptyStateSection, primitives: ['EmptyState'] },
@@ -122,6 +128,8 @@ export const SECTIONS = [
 export const DOCUMENTED_PRIMITIVES = Object.freeze(
     SECTIONS.flatMap(({ primitives = [] }) => primitives),
 );
+
+export { DOCUMENTED_TOKENS, TOKEN_GROUPS };
 
 export function StyleGuidePage() {
     const [view, setView] = useViewState();
@@ -205,7 +213,23 @@ export function Section({ id, title, tag, kicker, children }) {
     );
 }
 
-export function Guidance({ what, when, whenNot, sizing, variants, doRule, dontRule, supersedes }) {
+const PAGE_TEMPLATE_USAGE = Object.freeze({
+    when: <>Use it inside the template that matches the screen: <code>FormPage</code> for input and submission, <code>ListPage</code> for browsing and read-only content.</>,
+    whenNot: <>Do not add a route-specific card or width wrapper; the page template owns the responsive layout.</>,
+    doRule: <>Keep forms bare below 600px and carded above it; let lists fill the content width to the scrollbar.</>,
+    dontRule: <>Do not box a list into the 560px form column or choose the layout in JavaScript.</>,
+});
+
+export function Guidance({
+    what,
+    when = PAGE_TEMPLATE_USAGE.when,
+    whenNot = PAGE_TEMPLATE_USAGE.whenNot,
+    sizing,
+    variants,
+    doRule = PAGE_TEMPLATE_USAGE.doRule,
+    dontRule = PAGE_TEMPLATE_USAGE.dontRule,
+    supersedes,
+}) {
     return (
         <div className="sg-guide">
             <dl>

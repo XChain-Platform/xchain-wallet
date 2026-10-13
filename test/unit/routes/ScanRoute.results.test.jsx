@@ -130,17 +130,17 @@ const EXPLANATION_CASES = [
     {
         name: 'address-shaped garbage',
         input: 'thisisnotavalidwalletaddress12345',
-        message: /contains text the wallet does not know how to use/i,
+        message: /contains text the wallet doesn't know how to use/i,
     },
     {
         name: 'signed transaction hex',
         input: RAW_TRANSACTION,
-        message: /signed transaction.*cannot broadcast raw transaction hex/i,
+        message: /signed transaction.*can't broadcast raw transaction hex/i,
     },
     {
         name: 'backup pointer',
         input: 'xchain-backup:1?loc=https%3A%2F%2Fexample.com%2Fwallet&name=Cold',
-        message: /backup pointer.*Import Wallet.*Restore from backup/i,
+        message: /backup pointer.*Import wallet.*Encrypted backup/i,
     },
     {
         name: 'pairing code',
@@ -165,12 +165,12 @@ const EXPLANATION_CASES = [
     {
         name: 'unknown text',
         input: 'hello from an unrelated QR code',
-        message: /contains text the wallet does not know how to use/i,
+        message: /contains text the wallet doesn't know how to use/i,
     },
     {
         name: 'unsupported URI',
         input: 'https://example.com/not-a-payment',
-        message: /contains text the wallet does not know how to use/i,
+        message: /contains text the wallet doesn't know how to use/i,
     },
 ];
 
