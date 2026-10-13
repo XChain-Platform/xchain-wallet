@@ -40,12 +40,13 @@ export function KeyQR({ value, size = 200, alt = 'QR code' }) {
             setDataUrl(null);
             return undefined;
         }
+        setDataUrl(null);
         let cancelled = false;
         QRCode.toDataURL(value, {
             errorCorrectionLevel: 'M',
-            margin: 2,
+            margin: 4,
             width: size,
-            color: { dark: '#0F172A', light: '#FFFFFF' },
+            color: { dark: '#000000', light: '#FFFFFF' },
         })
             .then((url) => { if (!cancelled) setDataUrl(url); })
             .catch(() => { if (!cancelled) setDataUrl(null); });
@@ -59,7 +60,15 @@ export function KeyQR({ value, size = 200, alt = 'QR code' }) {
             alt={alt}
             width={size}
             height={size}
-            style={{ borderRadius: 'var(--xc-radius-md)', display: 'block' }}
+            style={{
+                display: 'block',
+                width: '100%',
+                maxWidth: size,
+                height: 'auto',
+                aspectRatio: '1 / 1',
+                background: '#FFFFFF',
+                borderRadius: 'var(--xc-radius-md)',
+            }}
         />
     );
 }
