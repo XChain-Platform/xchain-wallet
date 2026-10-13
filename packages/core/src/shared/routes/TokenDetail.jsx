@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Button, ChainBadge, EmptyState, Icon, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, ChainBadge, EmptyState, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -36,9 +36,12 @@ import {
     multiplyDecimalStrings,
 } from '../utils/amountFormat.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
+import { extractHolderRows } from '../utils/holderRows.js';
+import { explorerPage, uniqueRows } from '../utils/pagedRows.js';
 import styles from './TokenDetail.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const HOLDERS_PAGE_SIZE = 25;
 
 /**
  * §27.6 token detail page (G071).
@@ -129,7 +132,13 @@ export function TokenDetail({
     const [holdersOpen, setHoldersOpen] = useState(false);
     const [holders, setHolders] = useState(/** @type {any[] | null} */ (null));
     const [holdersError, setHoldersError] = useState(/** @type {string | null} */ (null));
+    const [holdersMoreError, setHoldersMoreError] = useState(/** @type {string | null} */ (null));
     const [holdersLoading, setHoldersLoading] = useState(false);
+    const [holdersLoadingMore, setHoldersLoadingMore] = useState(false);
+    const [holdersPage, setHoldersPage] = useState(0);
+    const [holdersTotal, setHoldersTotal] = useState(/** @type {number | null} */ (null));
+    const [holdersHasMore, setHoldersHasMore] = useState(false);
+    const holdersRequestId = useRef(0);
     // Cluster G FOLLOWUP 5: Unix ms of the last holders fetch; drives a
     // staleness label inside the holders panel so the user can tell at
     // a glance whether the listing is live.
@@ -144,23 +153,35 @@ export function TokenDetail({
     const [gatedLoading, setGatedLoading] = useState(false);
 
     useEffect(() => {
-        if (!holdersOpen || holders !== null || isNative) return undefined;
+        if (!holdersOpen || isNative) return undefined;
         if (typeof messaging.getHoldersForToken !== 'function') {
             setHoldersError('Holders lookup is not available in this build.');
             return undefined;
         }
         let cancelled = false;
+        holdersRequestId.current += 1;
+        setHolders(null);
         setHoldersLoading(true);
+        setHoldersLoadingMore(false);
         setHoldersError(null);
-        messaging.getHoldersForToken({ chainId, tick: tick })
+        setHoldersMoreError(null);
+        setHoldersPage(0);
+        setHoldersTotal(null);
+        setHoldersHasMore(false);
+        messaging.getHoldersForToken({
+            chainId,
+            tick,
+            opts: { page: 1, limit: HOLDERS_PAGE_SIZE },
+        })
             .then((resp) => {
                 if (cancelled) return;
-                const list = Array.isArray(resp) ? resp
-                    : Array.isArray(resp?.data) ? resp.data
-                    : Array.isArray(resp?.rows) ? resp.rows
-                    : [];
+                const list = uniqueRows(extractHolderRows(resp), holderIdentity);
+                const page = explorerPage(resp, extractHolderRows(resp), 1, HOLDERS_PAGE_SIZE);
                 setHolders(list);
                 setHoldersFetchedAt(Date.now());
+                setHoldersPage(1);
+                setHoldersTotal(page.total);
+                setHoldersHasMore(page.hasMore);
             })
             .catch((err) => {
                 if (cancelled) return;
@@ -168,7 +189,36 @@ export function TokenDetail({
             })
             .finally(() => { if (!cancelled) setHoldersLoading(false); });
         return () => { cancelled = true; };
-    }, [holdersOpen, holders, isNative, tick, chainId, messaging]);
+    }, [holdersOpen, isNative, tick, chainId, messaging]);
+
+    const loadMoreHolders = useCallback(() => {
+        if (holdersLoading || holdersLoadingMore || !holdersHasMore) return;
+        const nextPage = holdersPage + 1;
+        const requestId = holdersRequestId.current;
+        const before = holders || [];
+        setHoldersLoadingMore(true);
+        setHoldersMoreError(null);
+        messaging.getHoldersForToken({
+            chainId,
+            tick,
+            opts: { page: nextPage, limit: HOLDERS_PAGE_SIZE },
+        }).then((resp) => {
+            if (requestId !== holdersRequestId.current) return;
+            const pageRows = extractHolderRows(resp);
+            const page = explorerPage(resp, pageRows, nextPage, HOLDERS_PAGE_SIZE);
+            const merged = uniqueRows([...before, ...pageRows], holderIdentity);
+            setHolders(merged);
+            setHoldersHasMore(page.hasMore && merged.length > before.length);
+            setHoldersPage(nextPage);
+            setHoldersTotal(page.total);
+            setHoldersFetchedAt(Date.now());
+        }).catch((err) => {
+            if (requestId !== holdersRequestId.current) return;
+            setHoldersMoreError(readFailureMessage(err, 'load more holders'));
+        }).finally(() => {
+            if (requestId === holdersRequestId.current) setHoldersLoadingMore(false);
+        });
+    }, [chainId, holders, holdersHasMore, holdersLoading, holdersLoadingMore, holdersPage, messaging, tick]);
 
     useEffect(() => {
         if (!holdersOpen || gatedGroups !== null || isNative) return undefined;
@@ -613,6 +663,11 @@ export function TokenDetail({
                                         holdersLoading={holdersLoading}
                                         holdersError={holdersError}
                                         holdersFetchedAt={holdersFetchedAt}
+                                        holdersHasMore={holdersHasMore}
+                                        holdersLoadingMore={holdersLoadingMore}
+                                        holdersMoreError={holdersMoreError}
+                                        holdersTotal={holdersTotal}
+                                        onLoadMore={loadMoreHolders}
                                         divisibility={divisibility}
                                     />
                                 </>
@@ -2081,31 +2136,58 @@ function UnlockedFileLink({ name, type, onOpen }) {
     );
 }
 
-function HoldersPanel({ holders, holdersLoading, holdersError, holdersFetchedAt, divisibility }) {
+function HoldersPanel({
+    holders,
+    holdersLoading,
+    holdersError,
+    holdersFetchedAt,
+    holdersHasMore,
+    holdersLoadingMore,
+    holdersMoreError,
+    holdersTotal,
+    onLoadMore,
+    divisibility,
+}) {
     if (holdersLoading) return <p className={styles.muted}>Loading holders…</p>;
     if (holdersError) return <StatusMessage variant="error" className={styles.error}>{holdersError}</StatusMessage>;
     if (!holders || holders.length === 0) return null;
+    const count = holdersTotal != null && holdersTotal > holders.length
+        ? `${holders.length} of ${holdersTotal}`
+        : String(holders.length);
     return (
         <>
+            <SectionHeader title={`Holders (${count})`} />
             {holdersFetchedAt ? (
                 <div className={styles.holdersStaleness}>
                     <StalenessLabel lastSyncedAt={holdersFetchedAt} warnAfterMs={10 * 60_000} />
                 </div>
             ) : null}
             <ol className={styles.holdersList}>
-                {holders.slice(0, 25).map((h, i) => (
-                    <li key={`${h.address || ''}:${i}`} className={styles.holdersRow}>
+                {holders.map((h, i) => (
+                    <li key={holderIdentity(h) || `holder:${i}`} className={styles.holdersRow}>
                         <span className={styles.holdersAddr}>
                             {shorten(h.address || h.ADDRESS || 'unknown')}
                         </span>
                         <span className={styles.holdersQty}>
-                            {formatAmount(String(h.quantity ?? h.QUANTITY ?? '0'), divisibility)}
+                            {formatAmount(String(h.quantity ?? h.QUANTITY ?? h.amount ?? h.AMOUNT ?? '0'), divisibility)}
                         </span>
                     </li>
                 ))}
             </ol>
+            {holdersMoreError ? (
+                <StatusMessage variant="error" className={styles.error}>{holdersMoreError}</StatusMessage>
+            ) : null}
+            {holdersHasMore ? (
+                <Button type="button" variant="secondary" loading={holdersLoadingMore} onClick={onLoadMore}>
+                    Load more holders
+                </Button>
+            ) : null}
         </>
     );
+}
+
+function holderIdentity(holder) {
+    return holder?.address ?? holder?.ADDRESS ?? null;
 }
 
 function StatCell({ label, value, tone }) {
