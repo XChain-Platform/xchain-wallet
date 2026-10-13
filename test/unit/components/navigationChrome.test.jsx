@@ -9,10 +9,14 @@
 // contact legal@dankest.llc.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { AppHeader } from '../../../packages/core/src/shared/components/AppHeader.jsx';
 import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
-import { isNavItemActive, LeftNav } from '../../../packages/core/src/shared/components/LeftNav.jsx';
+import {
+    isNavItemActive,
+    LeftNav,
+    LEFT_NAV_VIEW_GROUPS,
+} from '../../../packages/core/src/shared/components/LeftNav.jsx';
 import { Screen, ScrollRestoration } from '../../../packages/core/src/ui/Screen.jsx';
 
 afterEach(() => cleanup());
@@ -34,6 +38,29 @@ const NAV_ITEMS = [
 ];
 
 describe('navigation route highlighting', () => {
+    it('marks exactly one owning bottom tab for every grouped route', () => {
+        const tabByGroup = {
+            home: 'Home',
+            history: 'History',
+            send: 'Send',
+            scan: 'Scan',
+            settings: 'More',
+        };
+        const { rerender } = render(<BottomTabBar currentView="home" onSelect={() => {}} />);
+        const bottomNavigation = within(screen.getByRole('navigation', { name: 'Bottom navigation' }));
+
+        for (const [group, routes] of Object.entries(LEFT_NAV_VIEW_GROUPS)) {
+            for (const route of routes) {
+                rerender(<BottomTabBar currentView={route} onSelect={() => {}} />);
+                const activeTabs = bottomNavigation.getAllByRole('button')
+                    .filter((tab) => tab.getAttribute('aria-current') === 'page');
+
+                expect(activeTabs, route).toHaveLength(1);
+                expect(activeTabs[0], route).toHaveAccessibleName(tabByGroup[group] || 'Home');
+            }
+        }
+    });
+
     it.each([
         ['send-picker', 'send'],
         ['receive-picker', 'receive'],
@@ -55,7 +82,7 @@ describe('navigation route highlighting', () => {
         expect(screen.getByRole('button', { name: 'Home' })).not.toHaveAttribute('aria-current');
     });
 
-    it('marks More and its matching row for sheet destinations', () => {
+    it('marks Home and the matching row for sheet-only destinations', () => {
         render(
             <BottomTabBar
                 currentView="contract-stake"
@@ -64,15 +91,16 @@ describe('navigation route highlighting', () => {
             />,
         );
         const more = screen.getByRole('button', { name: 'More' });
-        expect(more).toHaveAttribute('aria-current', 'page');
+        expect(screen.getByRole('button', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
+        expect(more).not.toHaveAttribute('aria-current');
         fireEvent.click(more);
         expect(screen.getByRole('button', { name: 'Contracts' })).toHaveAttribute('aria-current', 'page');
     });
 
-    it('marks only More for the compact menu route', () => {
+    it('marks Home for the compact menu route in the shared Home group', () => {
         render(<BottomTabBar currentView="menu" onSelect={() => {}} />);
-        expect(screen.getByRole('button', { name: 'More' })).toHaveAttribute('aria-current', 'page');
-        expect(screen.getByRole('button', { name: 'Home' })).not.toHaveAttribute('aria-current');
+        expect(screen.getByRole('button', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
+        expect(screen.getByRole('button', { name: 'More' })).not.toHaveAttribute('aria-current');
     });
 });
 
