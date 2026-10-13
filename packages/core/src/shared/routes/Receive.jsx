@@ -992,6 +992,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                         </Button>
                         {addressExplorerUrl ? (
                             <a
+                                className={styles.explorerLink}
                                 href={addressExplorerUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
