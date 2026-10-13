@@ -110,6 +110,7 @@ export function WalletPicker({
                     <EmptyState title="No wallets yet" body="Wallets available to this app appear here." />
                 ) : wallets.map((w) => {
                     const active = w.id === activeWalletId;
+                    const walletName = w.name || 'Unnamed wallet';
                     return (
                         <div key={w.id} className={pickerStyles.rowWrap}>
                             <button
@@ -121,12 +122,15 @@ export function WalletPicker({
                                 aria-busy={switchingWalletId === w.id ? 'true' : undefined}
                             >
                                 <span className={`${styles.entryText} ${pickerStyles.rowText}`}>
-                                    <span className={styles.entryLabel}>
-                                        {active ? '● ' : '○ '}{w.name || 'Unnamed wallet'}
+                                    <span className={styles.entryLabel} title={walletName}>
+                                        {active ? '● ' : '○ '}{walletName}
                                     </span>
                                     {w.format ? (
                                         <span className={styles.entryDescription}>
-                                            {w.format === 'counterwallet-legacy' ? 'FreeWallet (legacy)' : 'BIP39'}
+                                            {w.origin === 'demo' ? 'Demo wallet · ' : ''}
+                                            {w.format === 'counterwallet-legacy'
+                                                ? 'FreeWallet (legacy)'
+                                                : w.format === 'wif-only' ? 'Imported key' : 'BIP39'}
                                             {/* A stored passphrase (passphraseStored) unlocks on the
                                                 password alone, so it earns no badge here; only a legacy
                                                 record still owed its one-time capture does, and the badge
@@ -140,7 +144,7 @@ export function WalletPicker({
                                 <button
                                     type="button"
                                     className={pickerStyles.rowMenuBtn}
-                                    aria-label={`Wallet details for ${w.name || 'wallet'}`}
+                                    aria-label={`Wallet details for ${walletName}`}
                                     title="Wallet details"
                                     disabled={switching}
                                     onClick={(e) => {

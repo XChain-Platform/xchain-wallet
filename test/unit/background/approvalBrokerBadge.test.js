@@ -6,11 +6,17 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
     ApprovalBroker,
     approvalBadgeText,
 } from '../../../packages/extension/src/background/approvalBroker.js';
+
+afterEach(() => {
+    vi.unstubAllGlobals();
+});
 
 function harness() {
     let nextWindowId = 1;
@@ -75,4 +81,45 @@ describe('ApprovalBroker action badge', () => {
         expect(approvalBadgeText(12)).toBe('12');
         expect(approvalBadgeText(100)).toBe('99+');
     });
+
+    it('cancels pending Chrome approvals and clears the badge on lock', async () => {
+        let resolveWindow;
+        const createWindow = new Promise((resolve) => { resolveWindow = resolve; });
+        const setBadgeText = vi.fn(async () => {});
+        const remove = vi.fn(async () => {});
+        vi.stubGlobal('chrome', {
+            action: { setBadgeText },
+            runtime: { getURL: (path) => `chrome-extension://wallet/${path}` },
+            windows: {
+                create: vi.fn(() => createWindow),
+                remove,
+                onRemoved: { addListener: vi.fn() },
+            },
+        });
+
+        const broker = new ApprovalBroker({ newId: () => 'locked-request' });
+        const pending = broker.signAction({ origin: 'https://one.test' });
+        await broker.cancelAll();
+
+        await expect(pending).resolves.toEqual({ approved: false });
+        await vi.waitFor(() => {
+            expect(setBadgeText).toHaveBeenLastCalledWith({ text: '' });
+        });
+        expect(broker._pendingSize()).toBe(0);
+
+        resolveWindow({ id: 9 });
+        await vi.waitFor(() => expect(remove).toHaveBeenCalledWith(9));
+    });
+
+    it('routes lock teardown through broker cancellation', () => {
+        const backgroundPath = resolve('packages/extension/src/background.js');
+        const background = readFileSync(backgroundPath, 'utf8');
+        const teardown = background.slice(
+            background.indexOf('function tearDownHost()'),
+            background.indexOf('async function sealBroadcastQueues()'),
+        );
+
+        expect(teardown).toContain('approvalBroker.cancelAll()');
+    });
+
 });

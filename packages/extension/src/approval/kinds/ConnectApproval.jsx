@@ -13,6 +13,7 @@ import { Screen, Button, ChainBadge } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useSupportedChains } from '@xchain-wallet/core/shared/hooks/useSupportedChains.js';
 import { neutralizeControlText } from '@xchain-wallet/core/shared/utils/textHardening.js';
+import { OriginIdentity } from '@xchain-wallet/core/shared/components/OriginIdentity.jsx';
 import { getSettings, resolveApproval } from '../messaging.js';
 import shared from '../approval.module.css';
 import styles from './ConnectApproval.module.css';
@@ -28,9 +29,8 @@ const chainRegistry = registryLib.defaultRegistry();
  *     an empty selection (user must opt in to each chain).
  *   - Accounts come from the wallet, never the page: only the primary
  *     account starts ticked, and the grant is exactly what the user ticks.
- *   - Message-signing permission defaults to OFF. dApps that want it
- *     can still request signMessage later, which triggers a per-request
- *     approval the first time (and a per-origin "always allow" opt-in).
+ *   - Message-signing permission starts OFF. A site must show the message
+ *     in a later approval before the user can remember that choice.
  *   - `canSignAction` starts empty. Action-kind permissions are gated
  *     inside the signAction flow with its own "always allow" toggle.
  *
@@ -40,8 +40,8 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {() => void} props.onReject
  */
 export function ConnectApproval({ id, payload, onReject }) {
-    const origin = neutralizeControlText(payload?.origin || '', { maxLength: 2048 });
     const appName = neutralizeControlText(payload?.appName || '', { maxLength: 80 });
+    const hasRequestedChains = Array.isArray(payload?.requestedChains);
     const requestedChains = useMemo(
         () => (Array.isArray(payload?.requestedChains) ? payload.requestedChains : []),
         [payload],
@@ -71,6 +71,12 @@ export function ConnectApproval({ id, payload, onReject }) {
     // a body-level supportedChains() read offers bundled chains only for the
     // life of the window; the hook re-renders on the registry's version bump.
     const supported = useSupportedChains(chainRegistry);
+    const offeredChains = useMemo(
+        () => (hasRequestedChains
+            ? supported.filter((descriptor) => requestedChains.includes(descriptor.id))
+            : supported),
+        [hasRequestedChains, requestedChains, supported],
+    );
 
     // Pre-select each requested chain the first time the registry knows it,
     // tracked per id so a chain the user unchecks stays unchecked while a
@@ -98,7 +104,6 @@ export function ConnectApproval({ id, payload, onReject }) {
     const [approvedAccounts, setApprovedAccounts] = useState(
         /** @type {() => string[]} */ (() => (accountOptions[0] ? [accountOptions[0].id] : [])),
     );
-    const [canSignMessage, setCanSignMessage] = useState(false);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
 
@@ -131,7 +136,7 @@ export function ConnectApproval({ id, payload, onReject }) {
                 approved: true,
                 chains: approvedChains,
                 accounts: approvedAccounts,
-                canSignMessage,
+                canSignMessage: false,
                 canSignAction: {},
             });
             // Broker closes the window on resolve; call window.close as a
@@ -149,12 +154,11 @@ export function ConnectApproval({ id, payload, onReject }) {
             header={
                 <div className={shared.header}>
                     <span className={shared.title}>Connection request</span>
-                    <span className={shared.origin}>{origin}</span>
                 </div>
             }
             footer={
                 <div className={shared.footer}>
-                    <Button variant="ghost" block onClick={onReject} disabled={busy}>
+                    <Button variant="danger" block onClick={onReject} disabled={busy}>
                         Reject
                     </Button>
                     <Button
@@ -169,27 +173,36 @@ export function ConnectApproval({ id, payload, onReject }) {
                 </div>
             }
         >
-            <section className={styles.identity} aria-label="Requesting site">
-                <p className={styles.identityLabel}>Site origin</p>
-                <p className={styles.identityOrigin}>{origin}</p>
+            <OriginIdentity origin={payload?.origin || ''} label="Requesting site">
                 {appName ? (
                     <>
                         <p className={styles.declaredNameLabel}>The site calls itself</p>
                         <p className={styles.declaredName}>{appName}</p>
                     </>
                 ) : null}
-            </section>
+            </OriginIdentity>
             <p className={styles.lede}>
                 This site wants to connect to your wallet.
             </p>
 
+            <section className={styles.permissions} aria-label="Requested permissions">
+                <p className={styles.permissionsTitle}>Requested permissions</p>
+                <ul className={styles.permissionsList}>
+                    <li>View the accounts you select, including their addresses and balances</li>
+                    <li>Use only the chains you select below</li>
+                    <li>Ask separately before signing any message or transaction</li>
+                </ul>
+            </section>
+
             <fieldset className={styles.fieldset}>
                 <legend className={styles.legend}>Chains</legend>
                 <p className={styles.hint}>
-                    Pick which chains this site can see. You can change this later.
+                    {hasRequestedChains
+                        ? 'Narrow the chains this site requested. You can change this later.'
+                        : 'Pick which chains this site can see. You can change this later.'}
                 </p>
                 <ul className={styles.chainList}>
-                    {supported.map((d) => {
+                    {offeredChains.map((d) => {
                         const checked = approvedChains.includes(d.id);
                         return (
                             <li key={d.id} className={styles.chainRow}>
@@ -240,15 +253,6 @@ export function ConnectApproval({ id, payload, onReject }) {
                     </p>
                 )}
             </fieldset>
-
-            <label className={shared.toggleRow}>
-                <input
-                    type="checkbox"
-                    checked={canSignMessage}
-                    onChange={(e) => setCanSignMessage(e.target.checked)}
-                />
-                <span>Allow this site to request message signatures</span>
-            </label>
 
             {error ? <div className={shared.error} role="alert">{error}</div> : null}
         </Screen>

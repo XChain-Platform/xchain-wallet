@@ -14,10 +14,9 @@
 // entries for these live in shortcuts.js with dispatch: false, so the help
 // modal lists them while dispatch stays local to the screen.
 //
-// Focus rules mirror useKeyboardShortcuts: single keys are suppressed while an
-// editable element has focus; 'mod+...' combos fire anywhere (that's the point
-// of Cmd/Ctrl+Enter inside a form). Handlers may return false to decline the
-// key (e.g. no row focused), letting the event proceed untouched.
+// Focus rules mirror useKeyboardShortcuts: every shortcut is suppressed while
+// an editable element has focus. Handlers may return false to decline the key
+// (e.g. no row focused), letting the event proceed untouched.
 
 import { useEffect, useRef } from 'react';
 import { isEditableTarget } from './shortcuts.js';
@@ -35,6 +34,7 @@ export function useScreenShortcuts({ enabled = true, keys }) {
     useEffect(() => {
         if (!enabled || typeof window === 'undefined') return undefined;
         const onKey = (e) => {
+            if (isEditableTarget(e.target)) return;
             const map = keysRef.current || {};
             const mod = e.metaKey || e.ctrlKey;
             if (mod && !e.altKey && !e.shiftKey) {
@@ -43,7 +43,6 @@ export function useScreenShortcuts({ enabled = true, keys }) {
                 return;
             }
             if (mod || e.altKey) return;
-            if (isEditableTarget(e.target)) return;
             // Shift only matches a binding that names the produced character,
             // such as '?'; it does not make Shift+E an alias for 'e'.
             const handler = map[e.key]
