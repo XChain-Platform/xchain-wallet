@@ -181,11 +181,12 @@ describe('UnionListForm', () => {
     });
 
     it('refuses Review when the known merged membership exceeds 10,000', async () => {
-        mount({ owned: [row(101, 1, Array.from({ length: 10001 }, (_, index) => `T${index}`))] });
+        const memberCount = 10001;
+        mount({ owned: [row(101, 1, Array.from({ length: memberCount }, (_, index) => `T${index}`))] });
 
         fireEvent.click(await screen.findByRole('checkbox', { name: 'Token list #101' }));
 
-        expect(screen.getByText('Estimated merged membership: 10,001')).toBeTruthy();
+        expect(screen.getByText(`Estimated merged membership: ${memberCount.toLocaleString()}`)).toBeTruthy();
         expect(screen.getByText('The estimated merged membership is over 10,000.')).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
     });
