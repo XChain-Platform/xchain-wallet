@@ -10,6 +10,7 @@
 
 import { NETWORKS, NETWORK_DEFAULT } from '../../schemas/settings.js';
 import { writeLastView } from './lastViewMemory.js';
+import { t } from '../../i18n/index.js';
 
 export const ACTIVE_NETWORK_OPTIONS = /** @type {const} */ ([
     { value: 'mainnet', label: 'Mainnet' },
@@ -60,8 +61,8 @@ export function activeNetworkSwitchCopy(current, next) {
     const from = activeNetworkLabel(current);
     const to = activeNetworkLabel(next);
     return {
-        title: `Switch to ${to}?`,
-        message: `The wallet will reload and show ${to} chains. Your ${from} balances and chain settings stay unchanged. Unlock the wallet again after it reloads.`,
+        title: t('settings.network.switchTitle', { network: to }),
+        message: t('settings.network.switchMessage', { nextNetwork: to, currentNetwork: from }),
     };
 }
 

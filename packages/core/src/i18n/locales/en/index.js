@@ -80,7 +80,7 @@ export const en = {
     'settings.network.activeLabel': 'Active network',
     'settings.network.switchTitle': 'Switch to {network}?',
     'settings.network.switchMessage':
-        'The wallet will reload and show {nextNetwork} chains. Your {currentNetwork} balances and chain settings stay unchanged.',
+        'The wallet will reload and show {nextNetwork} chains. Your {currentNetwork} balances and chain settings stay unchanged. Unlock the wallet again after it reloads.',
     'settings.network.switchConfirm': 'Switch network',
     'settings.network.switchError': "Couldn't switch networks. Try again.",
     'settings.undoSend.label': 'Hold signed sends before broadcast',
@@ -398,8 +398,6 @@ export const en = {
     'importWallet.recoveryPhrase': 'Recovery phrase',
     'importWallet.encryptedBackup': 'Encrypted backup',
     'importWallet.browse': 'Browse',
-    'importWallet.restoring': 'Restoring…',
-    'importWallet.importing': 'Importing…',
     'importWallet.import': 'Import',
     'importWallet.title': 'Import wallet',
     'importWallet.freeWallet.fullTitle': 'Import from FreeWallet',
