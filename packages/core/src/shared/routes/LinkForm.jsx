@@ -563,9 +563,7 @@ export function LinkForm({ walletId, onBack }) {
                 label="Review link"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || hw) && submitError ? (
-                    <p role="alert" style={{ margin: '0.25rem 0 0', color: 'var(--xc-danger)', fontSize: '0.75rem' }}>
-                        {submitError}
-                    </p>
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <>
@@ -676,6 +674,7 @@ export function LinkForm({ walletId, onBack }) {
         <FormPage
             label="Link two actions across chains"
             onSubmit={handleReview}
+            onChangeCapture={() => { if (formError) setFormError(null); }}
             status={validationError || formError ? (
                 <>
                     {validationError ? (

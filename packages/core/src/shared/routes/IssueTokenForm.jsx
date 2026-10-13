@@ -627,10 +627,20 @@ export function IssueTokenForm({ walletId, onBack }) {
     }
 
     if (stage === 'review' || stage === 'submitting') {
+        // Cluster P FOLLOWUP 4: hardware and watcher failures offer Edit
+        // because changing form inputs is the recovery path.
         return wrap(
             <FormPage
                 label="Review token issue"
                 onSubmit={handleSubmit}
+                status={(isWatcherMode || isHwSource) && submitError ? (
+                    <StatusMessage
+                        variant="error"
+                        recovery={{ label: 'Edit', onAction: () => { setSubmitError(null); setStage('form'); } }}
+                    >
+                        {submitError}
+                    </StatusMessage>
+                ) : null}
                 actions={(
                     <Button
                         type="submit"
@@ -707,25 +717,6 @@ export function IssueTokenForm({ walletId, onBack }) {
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 )}
-                {(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage
-                        variant="error"
-                        recovery={
-                            // Cluster P FOLLOWUP 4: the post-submit
-                            // error class is "encoder rejected /
-                            // network unreachable / device unplugged".
-                            // Returning to the form stage lets the
-                            // user adjust an input or re-stage the HW
-                            // device without retyping the password.
-                            // Wrong-password isn't reachable on this
-                            // branch (no password input in HW /
-                            // watcher modes).
-                            { label: 'Edit', onAction: () => { setSubmitError(null); setStage('form'); } }
-                        }
-                    >
-                        {submitError}
-                    </StatusMessage>
-                ) : null}
             </FormPage>,
         );
     }
@@ -817,6 +808,8 @@ export function IssueTokenForm({ walletId, onBack }) {
         <FormPage
             label="Issue token"
             onSubmit={handleReview}
+            onChangeCapture={() => { if (formError) setFormError(null); }}
+            status={formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
             actions={(
                 <Button
                     type="submit"
@@ -971,16 +964,6 @@ export function IssueTokenForm({ walletId, onBack }) {
                 coinTicker={coinTicker}
                 mandatory={nativeFeeMandatory}
             />
-            {formError ? (
-                // Cluster P FOLLOWUP 4: formError surfaces field-level
-                // validation ("Ticker is required", "Supply must be a
-                // positive number", "Pick a source address first").
-                // No one-click recovery affordance fits here; the user
-                // edits the offending field and re-submits. Auditable
-                // per-form decision: terminal-as-rendered, recovery is
-                // user-iteration via the Inputs above.
-                <StatusMessage variant="error">{formError}</StatusMessage>
-            ) : null}
         </FormPage>,
     );
 }

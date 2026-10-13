@@ -679,6 +679,7 @@ export function TokenWizard({ walletId, onBack }) {
                 warnings: advancedIssueWarnings(advanced),
             },
             formError,
+            onEdit: () => { if (formError) setFormError(null); },
             onBack: () => setStage('chain'),
             onSubmit: handleDetailsSubmit,
             submitLabel: 'Issue token',
@@ -719,6 +720,9 @@ export function TokenWizard({ walletId, onBack }) {
         <FormPage
             label="Review token creation"
             onSubmit={handleSign}
+            status={submitError ? (
+                <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+            ) : null}
             actions={(
                 <Button
                     type="submit"
@@ -772,7 +776,6 @@ export function TokenWizard({ walletId, onBack }) {
                 }}
                 autoComplete="current-password"
                 disabled={stage === 'sign'}
-                error={submitError || undefined}
             />
         </FormPage>,
     );
@@ -1159,7 +1162,7 @@ function renderDetailsStage({
     mintStopBlock, setMintStopBlock,
     payFeeInNativeCoin, setPayFeeInNativeCoin, coinTicker, nativeFeeMandatory,
     advancedPanel,
-    formError, onBack, onSubmit, submitLabel = 'Preview', submitLoading = false,
+    formError, onEdit, onBack, onSubmit, submitLabel = 'Preview', submitLoading = false,
 }) {
     const resolved = resolveTemplate(template);
     const show = TEMPLATE_FIELDS[resolved] || TEMPLATE_FIELDS.custom;
@@ -1168,6 +1171,7 @@ function renderDetailsStage({
         <FormPage
             label="Token details"
             onSubmit={onSubmit}
+            onChangeCapture={onEdit}
             intro={<>Template: <strong>{resolved}</strong></>}
             status={formError ? (
                 <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
