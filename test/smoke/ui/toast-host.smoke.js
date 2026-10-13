@@ -57,6 +57,12 @@ assert.ok(/position:\s*fixed/.test(thCssSrc),
     'ToastHost viewport is position: fixed');
 assert.ok(/pointer-events:\s*none/.test(thCssSrc),
     'ToastHost viewport sets pointer-events: none so it never traps clicks');
+// The card itself passes taps through as well (a toast floats over a phone
+// screen's bottom controls); only its buttons take them.
+assert.ok(/\.toast\s*\{[^}]*pointer-events:\s*none/.test(thCssSrc),
+    'a toast card passes taps through to the control beneath it');
+assert.ok(/\.controls\s*\{[^}]*pointer-events:\s*auto/.test(thCssSrc),
+    'the toast Undo / Dismiss buttons still take taps');
 
 // --- 3. ContactsList delete shows an Undo toast --------------------------
 

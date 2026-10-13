@@ -3,9 +3,11 @@
  * with a subtle fade. Animation collapses to an instantaneous swap
  * when the user prefers reduced motion.
  *
- * The viewport is `pointer-events: none` so it doesn't trap clicks
- * across the rest of the page; individual toasts re-enable pointer
- * events so their Undo / Dismiss buttons stay clickable.
+ * The viewport and the toast cards are `pointer-events: none`, so a
+ * toast never traps a tap on whatever it floats over: on a phone it sits
+ * just above the tab bar, over a screen's bottom controls (Receive's
+ * Share QR was untappable for the toast's lifetime). Only the Undo and
+ * Dismiss buttons take pointer events.
  */
 .viewport {
     position: fixed;
@@ -40,7 +42,7 @@
 }
 
 .toast {
-    pointer-events: auto;
+    pointer-events: none;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -78,6 +80,7 @@
 }
 
 .controls {
+    pointer-events: auto;
     display: inline-flex;
     align-items: center;
     gap: var(--xc-space-1);
