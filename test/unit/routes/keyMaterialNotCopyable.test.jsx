@@ -136,7 +136,7 @@ describe('private-key reveal security', () => {
         expect(screen.getByRole('button', { name: /Tap to reveal private key/i })).toBeTruthy();
     });
 
-    it('does not carry a revealed key into another address screen', async () => {
+    it('does not carry a revealed key into another wallet screen', async () => {
         const { messaging, rerender } = draw();
         await confirmPassword();
         fireEvent.click(screen.getByRole('button', { name: /Tap to reveal private key/i }));
@@ -145,8 +145,8 @@ describe('private-key reveal security', () => {
         rerender(
             <MessagingProvider shell="web" messaging={messaging}>
                 <ViewPrivateKey
-                    walletId="w1"
-                    address={{ ...ADDRESS, id: 'a2', address: 'bcrt1qsecondaddress' }}
+                    walletId="w2"
+                    address={ADDRESS}
                     onBack={() => {}}
                 />
             </MessagingProvider>,
@@ -154,6 +154,37 @@ describe('private-key reveal security', () => {
 
         expect(screen.queryByText(PRIVATE_KEY)).toBeNull();
         await waitFor(() => expect(screen.getByText('Before you continue')).toBeTruthy());
+    });
+
+    it('clears a revealed key when Done requests navigation', async () => {
+        const onBack = vi.fn();
+        draw(makeMessaging(), { onBack });
+        await confirmPassword();
+        fireEvent.click(screen.getByRole('button', { name: /Tap to reveal private key/i }));
+        expect(screen.getByText(PRIVATE_KEY)).toBeTruthy();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+
+        expect(onBack).toHaveBeenCalledOnce();
+        expect(screen.queryByText(PRIVATE_KEY)).toBeNull();
+        expect(screen.getByText('Before you continue')).toBeTruthy();
+    });
+
+    it('ignores a private-key response that arrives after navigation', async () => {
+        let finishExport;
+        const exportPrivateKey = vi.fn(() => new Promise((resolve) => { finishExport = resolve; }));
+        const onBack = vi.fn();
+        draw(makeMessaging({ exportPrivateKey }), { onBack });
+
+        continueToPassword();
+        fireEvent.change(screen.getByLabelText('Wallet password'), { target: { value: PASSWORD } });
+        fireEvent.click(screen.getByRole('button', { name: 'Confirm password' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+        await act(async () => { finishExport({ wif: PRIVATE_KEY }); });
+
+        expect(onBack).toHaveBeenCalledOnce();
+        expect(screen.queryByText(PRIVATE_KEY)).toBeNull();
+        expect(screen.getByText('Before you continue')).toBeTruthy();
     });
 
     it('routes copy through the sensitive clipboard with the selected expiry', async () => {
