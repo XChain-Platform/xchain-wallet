@@ -235,6 +235,20 @@ export async function exportBackupFile({
  *                                                          address ids so the restored wallet
  *                                                          coexists with what's already in
  *                                                          the vault. Cluster H FOLLOWUP 3.
+ * @property {DeviceKeyCallback} [onDeviceKey]              lends the re-key's new master key to the shell
+ *                                                          so its signer-pool unlock skips a second
+ *                                                          Argon2id round on identical inputs
+ */
+
+/**
+ * Receives the key the restored wallet is now sealed under (derived from
+ * `devicePassword` under `kdfParams`). The buffer is zeroed as soon as the
+ * callback returns, so a shell that needs it later copies it and zeroes its copy.
+ *
+ * @callback DeviceKeyCallback
+ * @param {Uint8Array} masterKey
+ * @param {import('../crypto/kdf.js').KdfParams} kdfParams   a copy of the new seal's params
+ * @returns {void | Promise<void>}
  */
 
 /**
@@ -260,6 +274,7 @@ export async function importBackupFile({
     devicePassword,
     onConflict = 'error',
     mode = 'fresh',
+    onDeviceKey,
 }) {
     if (!vault) throw new Error('importBackupFile: vault is required');
     if (typeof password !== 'string' || password.length === 0) {
@@ -306,7 +321,7 @@ export async function importBackupFile({
     // a message naming which password is wrong, instead of at the user's
     // first signature with no message at all. Nothing has touched the
     // vault yet at this point, so the throw leaves it untouched.
-    const rekeyed = await rekeyWalletRecord(decoded.wallet, { walletPassword, devicePassword });
+    const rekeyed = await rekeyWalletRecord(decoded.wallet, { walletPassword, devicePassword, onDeviceKey });
 
     // §19.4: 'add' mode re-mints wallet / account / address ids so a restored
     // wallet coexists even where both vaults derived equal ones (a same-device
@@ -417,6 +432,7 @@ export class BackupPointerUnresolvedError extends Error {
  *          FILE lookup).
  * @property {'overwrite' | 'preserve' | 'error'} [onConflict]   default 'error'
  * @property {'fresh' | 'add'} [mode]                       default 'fresh'
+ * @property {DeviceKeyCallback} [onDeviceKey]              passed through to `importBackupFile`
  */
 
 /**
@@ -444,6 +460,7 @@ export async function restoreFromBackupPointer({
     resolveBackupContent,
     onConflict = 'error',
     mode = 'fresh',
+    onDeviceKey,
 }) {
     if (!vault) throw new Error('restoreFromBackupPointer: vault is required');
     if (typeof password !== 'string' || password.length === 0) {
@@ -471,6 +488,7 @@ export async function restoreFromBackupPointer({
         devicePassword,
         onConflict,
         mode,
+        onDeviceKey,
     });
 
     return { ...result, pointer: parsed };
@@ -600,9 +618,15 @@ export function remintIdentifiers(decoded) {
  * @param {string} opts.walletPassword    what the backed-up wallet was sealed under
  * @param {string} opts.devicePassword    what it must open under from now on
  * @param {import('../crypto/kdf.js').KdfParams} [opts.kdfParams]  override for the new seal
+ * @param {DeviceKeyCallback} [opts.onDeviceKey]  shown the new key once the re-seal succeeds; never
+ *   called when nothing was re-sealed or the re-seal failed
  * @returns {Promise<boolean>}            true if anything was re-sealed
  */
-export async function rekeyWalletRecord(wallet, { walletPassword, devicePassword, kdfParams }) {
+export async function rekeyWalletRecord(wallet, { walletPassword, devicePassword, kdfParams, onDeviceKey }) {
+    // A caller that asked for the key must be able to receive it; checked before any derivation.
+    if (onDeviceKey !== undefined && typeof onDeviceKey !== 'function') {
+        throw new Error('rekeyWalletRecord: onDeviceKey must be a function');
+    }
     const hasSeed = typeof wallet?.encryptedSeed === 'string' && wallet.encryptedSeed.length > 0;
     const allKeys = Array.isArray(wallet?.importedKeys) ? wallet.importedKeys : [];
     const sealedKeys = allKeys.filter(
@@ -679,24 +703,31 @@ export async function rekeyWalletRecord(wallet, { walletPassword, devicePassword
     });
     const newKey = await deriveMasterKeyAsync(devicePassword, nextParams);
     try {
-        if (seed) wallet.encryptedSeed = bytesToBase64(await encrypt(newKey, seed));
-        for (let i = 0; i < sealedKeys.length; i += 1) {
-            sealedKeys[i].encryptedWif = bytesToBase64(await encrypt(newKey, wifs[i]));
+        try {
+            if (seed) wallet.encryptedSeed = bytesToBase64(await encrypt(newKey, seed));
+            for (let i = 0; i < sealedKeys.length; i += 1) {
+                sealedKeys[i].encryptedWif = bytesToBase64(await encrypt(newKey, wifs[i]));
+            }
+            if (passphrase) {
+                wallet.encryptedPassphrase = bytesToBase64(
+                    await encrypt(newKey, passphrase, PASSPHRASE_AAD),
+                );
+            }
+            wallet.kdfParams = nextParams;
+        } finally {
+            if (seed) seed.fill(0);
+            for (const w of wifs) w.fill(0);
+            if (passphrase) passphrase.fill(0);
+            seed = null;
+            wifs = [];
+            passphrase = null;
         }
-        if (passphrase) {
-            wallet.encryptedPassphrase = bytesToBase64(
-                await encrypt(newKey, passphrase, PASSPHRASE_AAD),
-            );
-        }
-        wallet.kdfParams = nextParams;
+        // Lend the key to the shell, whose signer-pool unlock would otherwise
+        // derive it again from the same password and params. The plaintext
+        // secrets are already zeroed; this buffer is zeroed right after.
+        if (onDeviceKey) await onDeviceKey(newKey, { ...nextParams });
     } finally {
         newKey.fill(0);
-        if (seed) seed.fill(0);
-        for (const w of wifs) w.fill(0);
-        if (passphrase) passphrase.fill(0);
-        seed = null;
-        wifs = [];
-        passphrase = null;
     }
     return true;
 }
