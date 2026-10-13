@@ -15,6 +15,8 @@ const sources = import.meta.glob([
     '../../packages/extension/src/**/*.{js,jsx,cjs,mjs}',
     '../../packages/desktop/**/*.{js,jsx,cjs,mjs}',
     '!../../packages/**/node_modules/**',
+    // Bundler output (gitignored) is minified, not merged source.
+    '!../../packages/**/dist/**',
 ], { query: '?raw', import: 'default', eager: true });
 
 const PARSER_PLUGINS = [
