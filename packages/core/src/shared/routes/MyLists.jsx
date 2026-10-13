@@ -230,6 +230,8 @@ export function MyLists({ walletId, activeAccountId, onOpenList, onCreateList, o
         <>
             <input
                 type="search"
+                enterKeyHint="search"
+                autoCapitalize="off"
                 className={local.search}
                 placeholder="Search"
                 value={query}

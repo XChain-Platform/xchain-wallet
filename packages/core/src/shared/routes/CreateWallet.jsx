@@ -307,7 +307,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                                     if (quizError) setQuizError(null);
                                 }}
                                 autoComplete="off"
-                                autoCapitalize="none"
+                                autoCapitalize="off"
                                 autoCorrect="off"
                                 spellCheck={false}
                                 disabled={stage === 'persisting'}

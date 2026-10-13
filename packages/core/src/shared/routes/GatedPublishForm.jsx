@@ -546,6 +546,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 Title (optional)
                 <input
                     type="text"
+                    enterKeyHint="next"
                     aria-label="Title"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
@@ -557,6 +558,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 Memo (optional)
                 <input
                     type="text"
+                    enterKeyHint={thresholdActive ? 'next' : 'go'}
                     aria-label="Memo"
                     value={memo}
                     onChange={(e) => setMemo(e.target.value)}
@@ -571,6 +573,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                     <input
                         type="text"
                         inputMode="decimal"
+                        enterKeyHint="go"
                         aria-label="Unlock threshold"
                         placeholder="No threshold"
                         value={gateMinAmount}

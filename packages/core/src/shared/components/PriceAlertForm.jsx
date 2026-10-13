@@ -129,6 +129,7 @@ export function PriceAlertForm({ onCreate, fiatCurrency = 'usd', lockedChainId, 
                 <input
                     type="text"
                     inputMode="decimal"
+                    enterKeyHint="go"
                     aria-label="Target price"
                     placeholder="Price"
                     value={targetStr}

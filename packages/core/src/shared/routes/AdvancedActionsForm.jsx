@@ -844,7 +844,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                                 onChange={(e) => handleFieldChange(base, e.target.value)}
                                 rows={4}
                                 spellCheck={false}
-                                autoCapitalize="none"
+                                autoCapitalize="off"
                                 autoCorrect="off"
                                 aria-label={`${base}: list values, one per line or comma-separated`}
                             />

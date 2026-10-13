@@ -853,7 +853,7 @@ export function ContractStakeForm({
                 value={signingPubkey}
                 onChange={(e) => setSigningPubkey(e.target.value.trim())}
                 autoComplete="off"
-                autoCapitalize="none"
+                autoCapitalize="off"
                 autoCorrect="off"
                 spellCheck={false}
             />

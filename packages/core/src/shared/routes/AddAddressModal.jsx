@@ -286,6 +286,7 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
                                 className={styles.select}
                                 type="number"
                                 inputMode="numeric"
+                                enterKeyHint="go"
                                 aria-label="Number of addresses"
                                 min={1}
                                 max={MAX_ADDRESSES}

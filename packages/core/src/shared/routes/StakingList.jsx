@@ -394,6 +394,8 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
         <>
             <input
                 type="search"
+                enterKeyHint="search"
+                autoCapitalize="off"
                 className={local.search}
                 placeholder="Search"
                 value={query}

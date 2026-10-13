@@ -163,6 +163,7 @@ export function BiometricRow() {
                 </div>
                 <input
                     type="password"
+                    enterKeyHint="go"
                     value={password}
                     onChange={(e) => { setPassword(e.target.value); if (error) setError(null); }}
                     placeholder="Wallet password"

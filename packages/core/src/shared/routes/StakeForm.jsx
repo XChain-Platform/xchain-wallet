@@ -763,7 +763,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                 value={signingPubkey}
                 onChange={(e) => setSigningPubkey(e.target.value)}
                 autoComplete="off"
-                autoCapitalize="none"
+                autoCapitalize="off"
                 autoCorrect="off"
                 spellCheck={false}
             />

@@ -388,12 +388,14 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                         value={allowList}
                                         placeholder={f.allow_list ? `Current: ${f.allow_list}` : 'No current allow list'}
                                         onChange={(e) => setAllowList(e.target.value)}
+                                        inputMode="numeric"
                                     />
                                     <Input
                                         label="New block-list index"
                                         value={blockList}
                                         placeholder={f.block_list ? `Current: ${f.block_list}` : 'No current block list'}
                                         onChange={(e) => setBlockList(e.target.value)}
+                                        inputMode="numeric"
                                     />
                                     {!isHw && !signerReady ? (
                                         <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />

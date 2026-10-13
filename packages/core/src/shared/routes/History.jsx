@@ -1238,6 +1238,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 <input
                     ref={searchInputRef}
                     type="search"
+                    enterKeyHint="search"
+                    autoCapitalize="off"
+                    autoCorrect="off"
+                    spellCheck={false}
                     className={styles.searchInput}
                     placeholder="Search action, address, token, txid, memo…"
                     aria-label="Search history"
@@ -1916,6 +1920,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                         Save {shortenAddress(contactPeer || '')} as
                         <input
                             type="text"
+                            enterKeyHint="go"
                             className={styles.saveContactInput}
                             value={contactName}
                             onChange={(e) => setContactName(e.target.value)}

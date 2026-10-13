@@ -468,6 +468,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                                     label="Max total per window"
                                     value={row.cap}
                                     onChange={(e) => patchRow('windowPerTick', i, { cap: e.target.value })}
+                                    inputMode="decimal"
                                     placeholder="1000"
                                 />
                                 <Button type="button" variant="ghost" onClick={() => removeRow('windowPerTick', i)}>Remove</Button>
@@ -499,6 +500,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                             label="Warn above"
                             value={row.amount}
                             onChange={(e) => patchRow('confirmAbove', i, { amount: e.target.value })}
+                            inputMode="decimal"
                             placeholder="500"
                         />
                         <Button type="button" variant="ghost" onClick={() => removeRow('confirmAbove', i)}>Remove</Button>

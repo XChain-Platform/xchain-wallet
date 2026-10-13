@@ -86,6 +86,8 @@ export function ContactsPickerScreen({ contacts, variant, onPick, onBack }) {
                 <>
                     <input
                         type="search"
+                        enterKeyHint="search"
+                        autoCapitalize="off"
                         role="textbox"
                         className={styles.abSearch}
                         placeholder="Search"

@@ -722,7 +722,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
                 value={feedName}
                 onChange={(e) => setFeedName(e.target.value)}
                 autoComplete="off"
-                autoCapitalize="none"
+                autoCapitalize="off"
                 autoCorrect="off"
                 spellCheck={false}
             />

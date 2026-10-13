@@ -625,7 +625,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                         }}
                         placeholder='{"version":1,"kdf":{"name":"argon2id"…'
                         spellCheck={false}
-                        autoCapitalize="none"
+                        autoCapitalize="off"
                         autoCorrect="off"
                         autoComplete="off"
                         rows={4}
@@ -742,7 +742,7 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                             : 'word word word…'
                     }
                     spellCheck={false}
-                    autoCapitalize="none"
+                    autoCapitalize="off"
                     autoCorrect="off"
                     autoComplete="off"
                     rows={3}
