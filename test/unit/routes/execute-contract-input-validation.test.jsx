@@ -71,14 +71,14 @@ describe('ExecuteContractForm argument validation', () => {
         fireEvent.change(input, { target: { value: '{"missing":' } });
 
         expect(await screen.findByText(/config contains invalid JSON:/)).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Execute' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Call contract' })).toBeDisabled();
     });
 
     it('shows blank positional arguments in manual mode', async () => {
         mount();
         fireEvent.click(await screen.findByRole('button', { name: 'Enter method manually' }));
         fireEvent.change(screen.getByLabelText('Params (optional)'), { target: { value: 'first||third' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Execute' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
 
         await waitFor(() => {
             expect(screen.getByRole('alert')).toHaveTextContent(

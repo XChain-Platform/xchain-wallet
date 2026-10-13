@@ -494,7 +494,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
         if (isUnstake) {
             const pk = signingPubkey.trim();
             if (!/^[0-9a-fA-F]{64}$/.test(pk)) {
-                setFormError('Signing pubkey must be exactly 64 hex characters.');
+                setFormError('Signing public key must be exactly 64 hexadecimal characters.');
                 return;
             }
         }
@@ -674,8 +674,8 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                 <p className={styles.summary}>
                     {isUnstake
                         ? (isPartial
-                            ? `Unstake ${formatWithThousands(actionParams?.AMOUNT)} XCHAIN from signing pubkey ${actionParams?.SIGNING_PUBKEY?.slice(0, 12)}. The rest stays staked; the unstaked amount is returned after the cooldown.`
-                            : `Unstake signing pubkey ${actionParams?.SIGNING_PUBKEY?.slice(0, 12)}. The full active balance for this pubkey is returned after the cooldown.`)
+                            ? `Unstake ${formatWithThousands(actionParams?.AMOUNT)} XCHAIN from signing public key ${actionParams?.SIGNING_PUBKEY?.slice(0, 12)}. The rest stays staked; the unstaked amount returns after the cooldown.`
+                            : `Unstake signing public key ${actionParams?.SIGNING_PUBKEY?.slice(0, 12)}. The full active balance for this public key returns after the cooldown.`)
                         : (isPartial
                             ? `Claim ${formatWithThousands(actionParams?.AMOUNT)} XCHAIN of the pending staking rewards for this address; the rest stays pending.`
                             : 'Claim all pending staking rewards for this address.')}
@@ -697,7 +697,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                     </dd>
                     {isUnstake ? (
                         <>
-                            <dt className={styles.detailsLabel}>Signing pubkey</dt>
+                            <dt className={styles.detailsLabel}>Signing public key</dt>
                             <dd className={styles.detailsValue} style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
                                 {actionParams?.SIGNING_PUBKEY}
                             </dd>
@@ -845,14 +845,14 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
             {isUnstake ? (
                 <>
                     <p style={{ fontSize: '0.85rem', margin: '0 0 0.5rem', color: 'var(--xc-text-muted)' }}>
-                        The amount you choose enters the cooldown and is returned after it; anything left stays staked under the signing key below.
+                        The amount you choose enters the cooldown and returns after it; anything left stays staked under the signing public key below.
                     </p>
                     {stakedKeys.length > 1 ? (
                         <Select
-                            label="Staked signing key"
+                            label="Staked signing public key"
                             value={stakedKeys.includes(signingPubkey) ? signingPubkey : ''}
                             onChange={(e) => { setSigningPubkey(e.target.value); setFormError(null); }}
-                            hint="This address has stakes under more than one signing key; pick which one to unstake."
+                            hint="This address has stakes under more than one signing public key. Choose which one to unstake."
                         >
                             {stakedKeys.map((k) => (
                                 <option key={k} value={k}>{`${k.slice(0, 10)}…${k.slice(-8)}`}</option>

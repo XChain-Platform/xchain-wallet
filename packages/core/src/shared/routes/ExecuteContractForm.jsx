@@ -175,7 +175,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 // operating address.
                 const sourceId = preferredSourceId(byChain?.[chainId] || [], active?.[chainId]);
                 if (!sourceId) {
-                    setLoadError('No address on this chain to execute from. Use Receive to generate one first.');
+                    setLoadError('No address on this chain can call the contract. Use Receive to generate one first.');
                     return;
                 }
                 setFromAddressId(sourceId);
@@ -410,7 +410,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 chainId,
                 coinTicker,
                 mandatory: nativeFee.mandatory,
-                fallback: err?.message || 'Execute failed.',
+                fallback: err?.message || 'Contract call failed.',
             }));
         }
     }
@@ -716,7 +716,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                             ? 'Create unsigned transaction'
                             : isHwSource
                                 ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : (descriptor ? `Execute on ${descriptor.displayName}` : 'Execute')}
+                                : (descriptor ? `Call on ${descriptor.displayName}` : 'Call contract')}
                     </Button>
                 )}
             >
@@ -886,7 +886,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                     loading={actionConfirm.composing}
                     disabled={!fromAddress || !method.trim() || (abiActive && abiIncomplete) || actionConfirm.composing}
                 >
-                    {singleEncode ? 'Execute' : 'Preview'}
+                    {singleEncode ? 'Call contract' : 'Preview'}
                 </Button>
             )}
         >
