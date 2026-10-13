@@ -314,6 +314,10 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const reviewInFlightRef = useRef(false);
+    const submitInFlightRef = useRef(false);
+    const routeIdentityRef = useRef('');
+    routeIdentityRef.current = `${walletId}\u0000${activeAccountId || ''}\u0000${chainId || ''}`;
 
     useEffect(() => {
         setFormError(null);
@@ -339,15 +343,17 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         draft.save({
             chainId, fromAddressId, ticker, giveAmount, escrow,
             triggerPrice, oracleAddress, fiatCode, fiatAmount,
-            showAdvanced, payFeeInNativeCoin, addressMode, existingAddressId,
-            outsideAddress,
+            showAdvanced, payWith, getTick, getTokenAmount,
+            expMode, expInput, allowListIdx, blockListIdx,
+            feePick, payFeeInNativeCoin, addressMode, existingAddressId, outsideAddress,
         });
     }, [
         stage, draftPending, draft,
         chainId, fromAddressId, ticker, giveAmount, escrow,
         triggerPrice, oracleAddress, fiatCode, fiatAmount,
-        showAdvanced, payFeeInNativeCoin, addressMode, existingAddressId,
-        outsideAddress,
+        showAdvanced, payWith, getTick, getTokenAmount,
+        expMode, expInput, allowListIdx, blockListIdx,
+        feePick, payFeeInNativeCoin, addressMode, existingAddressId, outsideAddress,
     ]);
     const restoreDraft = useCallback(() => {
         const v = draft.load();
@@ -362,6 +368,14 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         if (typeof v.fiatCode === 'string') setFiatCode(v.fiatCode);
         if (typeof v.fiatAmount === 'string') setFiatAmount(v.fiatAmount);
         if (typeof v.showAdvanced === 'boolean') setShowAdvanced(v.showAdvanced);
+        if (v.payWith === 'coin' || v.payWith === 'token') setPayWith(v.payWith);
+        if (typeof v.getTick === 'string') setGetTick(v.getTick);
+        if (typeof v.getTokenAmount === 'string') setGetTokenAmount(v.getTokenAmount);
+        if (v.expMode === 'default' || v.expMode === 'custom') setExpMode(v.expMode);
+        if (typeof v.expInput === 'string') setExpInput(v.expInput);
+        if (typeof v.allowListIdx === 'string') setAllowListIdx(v.allowListIdx);
+        if (typeof v.blockListIdx === 'string') setBlockListIdx(v.blockListIdx);
+        if (v.feePick && ['low', 'normal', 'fast', 'custom'].includes(v.feePick.mode)) setFeePick(v.feePick);
         if (typeof v.payFeeInNativeCoin === 'boolean') setPayFeeInNativeCoin(v.payFeeInNativeCoin);
         if (v.addressMode === 'new' || v.addressMode === 'current' || v.addressMode === 'existing'
             || v.addressMode === 'other') {
@@ -808,7 +822,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     async function handleReview(event) {
         event.preventDefault();
         setValidationAttempt((attempt) => attempt + 1);
-        if (derivingGetAddress || actionConfirm.composing) return;
+        if (reviewInFlightRef.current || derivingGetAddress || actionConfirm.composing) return;
         if (!chainId || !fromAddress) {
             setFormError('Pick a source address first.');
             return;
@@ -908,6 +922,8 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             if (!outsideVerdict.allowed) { setFormError(outsideVerdict.message); return; }
         }
         setFormError(null);
+        reviewInFlightRef.current = true;
+        const routeIdentity = routeIdentityRef.current;
         // §16: the dedicated dispenser sub-address (GET_ADDRESS) for mode
         // 'new': the one derived for an earlier unsigned preview while the
         // wallet still holds it, else a fresh derivation, after validation so
@@ -921,8 +937,8 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         // fold `dispenserGetAddress` in. Reading the memo here would submit
         // the dispenser self-open and orphan the address just derived.
         let params = actionParams;
-        if (addressMode === 'new' && !dispenserGetAddress && canDeriveGetAddress) {
-            try {
+        try {
+            if (addressMode === 'new' && !dispenserGetAddress && canDeriveGetAddress) {
                 setDerivingGetAddress(true);
                 const addr = recallUnusedDispenserAddress(dispenserAddressScope, addressesByChain?.[chainId])
                     || await messaging.generateDispenserAddress({
@@ -931,17 +947,23 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         chainId,
                     });
                 rememberUnusedDispenserAddress(dispenserAddressScope, addr);
+                if (routeIdentity !== routeIdentityRef.current || actionParams !== actionParamsRef.current) return;
                 setDispenserGetAddress(addr);
                 if (addr?.address) params = { ...actionParams, GET_ADDRESS: addr.address };
-            } catch (err) {
-                setFormError(err?.message || 'Could not derive a dispenser address.');
-                return;
-            } finally {
                 setDerivingGetAddress(false);
             }
+            if (singleEncode) { await openConfirmScreen(params, routeIdentity); return; }
+            if (routeIdentity === routeIdentityRef.current && actionParams === actionParamsRef.current) {
+                setStage('review');
+            }
+        } catch (err) {
+            if (routeIdentity === routeIdentityRef.current && actionParams === actionParamsRef.current) {
+                setFormError(err?.message || 'Could not derive a dispenser address.');
+            }
+        } finally {
+            setDerivingGetAddress(false);
+            reviewInFlightRef.current = false;
         }
-        if (singleEncode) { openConfirmScreen(params); return; }
-        setStage('review');
     }
 
     const hw = isHwSource(sourceAddress);
@@ -975,7 +997,10 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     // `params` is the wire param set to compose AND to sign on Approve; the
     // caller passes it explicitly when it holds a GET_ADDRESS newer than the
     // memoized `actionParams` (see handleReview).
-    async function openConfirmScreen(params = actionParams) {
+    const actionParamsRef = useRef(actionParams);
+    actionParamsRef.current = actionParams;
+
+    async function openConfirmScreen(params = actionParams, routeIdentity = routeIdentityRef.current) {
         const from = {
             address: sourceAddress.address,
             publicKey: sourceAddress.publicKey,
@@ -1004,6 +1029,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     prebuiltPsbt,
                 }),
             });
+            if (routeIdentity !== routeIdentityRef.current) return;
             setResult(res);
             setPassword('');
             setStage('done');
@@ -1011,6 +1037,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             draft.clear();
             setDraftPending(false);
         } catch (err) {
+            if (routeIdentity !== routeIdentityRef.current) return;
             if (isUserRejection(err)) return;
             // Same mapping the sign path already does: NativeFeeForfeitError's own message is
             // wire wording, and this confirm path is the one the flow actually takes.
@@ -1025,9 +1052,11 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
+        if (submitInFlightRef.current || stage === 'submitting') return;
         if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && hw && hwStatus !== 'available') return;
+        submitInFlightRef.current = true;
+        const routeIdentity = routeIdentityRef.current;
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -1062,6 +1091,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             } else {
                 res = await messaging.dispenserAction({ ...base, password });
             }
+            if (routeIdentity !== routeIdentityRef.current) return;
             setResult(res);
             setPassword('');
             setStage('done');
@@ -1069,6 +1099,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             draft.clear();
             setDraftPending(false);
         } catch (err) {
+            if (routeIdentity !== routeIdentityRef.current) return;
             const isBadPassword = err?.name === 'InvalidPasswordError';
             let submitMsg;
             if (isBadPassword) {
@@ -1087,6 +1118,8 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
             }
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 
