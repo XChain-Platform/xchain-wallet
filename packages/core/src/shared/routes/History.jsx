@@ -12,12 +12,14 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Button,
     ChainBadge,
+    CopyButton,
     EmptyState,
     Icon,
     Input,
     ListPage,
     PageHeader,
     Screen,
+    SectionHeader,
     Skeleton,
     StatusMessage,
     VerifiedBadge,
@@ -87,7 +89,6 @@ import {
 import { formatFiatAmountForSpeech } from '../utils/fiatAmountFormat.js';
 import { formatLocalDateTime } from '../utils/dateTime.js';
 import { RelativeTime } from '../components/RelativeTime.jsx';
-import { useHapticFeedback } from '../hooks/useHaptic.js';
 import { useReachability } from '../hooks/useReachability.js';
 import { useLongOperationStatus } from '../hooks/useLongOperationStatus.js';
 import { isNavigatorOnline, useOnlineStatus } from '../hooks/useOnlineStatus.js';
@@ -1617,9 +1618,14 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             backLabel={t('common.backToHome')}
             title={t('history.title')}
             trailing={(
-                <button
-                    type="button"
-                    className={refreshing ? styles.refreshing : undefined}
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={(
+                        <span className={refreshing ? styles.refreshing : undefined}>
+                            <Icon.RefreshIcon />
+                        </span>
+                    )}
                     aria-label={refreshing ? t('history.refreshing') : t('history.refresh')}
                     title={networkOffline
                         ? t('history.offline.refreshTitle')
@@ -1634,8 +1640,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         setRefreshTick((n) => n + 1);
                     }}
                 >
-                    <Icon.RefreshIcon />
-                </button>
+                    <span className={styles.visuallyHidden}>
+                        {refreshing ? t('history.refreshing') : t('history.refresh')}
+                    </span>
+                </Button>
             )}
         />
     );
@@ -1715,16 +1723,19 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     return wrap(
         <ListPage toolbar={entries.length > 0 ? (
             <>
-                <button
-                    type="button"
-                    className={styles.phoneFilterToggle}
-                    aria-expanded={phoneFiltersOpen}
-                    aria-controls="history-filter-panel"
-                    onClick={() => setPhoneFiltersOpen((open) => !open)}
-                >
-                    <Icon.FilterIcon />
-                    <span>{t('history.filters.toggle', { count: activeFilterCount })}</span>
-                </button>
+                <div className={styles.phoneFilterToggle}>
+                    <Button
+                        variant="secondary"
+                        size="sm"
+                        block
+                        icon={<Icon.FilterIcon />}
+                        aria-expanded={phoneFiltersOpen}
+                        aria-controls="history-filter-panel"
+                        onClick={() => setPhoneFiltersOpen((open) => !open)}
+                    >
+                        {t('history.filters.toggle', { count: activeFilterCount })}
+                    </Button>
+                </div>
                 <div
                     id="history-filter-panel"
                     className={`${styles.filterCard} ${phoneFiltersOpen ? styles.filterCardOpen : ''}`}
@@ -1732,7 +1743,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     aria-label={t('history.filters.label')}
                 >
                 <div className={styles.searchRow}>
-                    <input
+                    <Input
                         ref={searchInputRef}
                         type="search"
                         enterKeyHint="search"
@@ -1782,24 +1793,27 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 </div>
                 <div className={styles.dateTools}>
                     <div className={styles.datePresets} role="group" aria-label={t('history.filters.datePresets')}>
-                        <button
-                            type="button"
-                            className={`${styles.chip} ${activeDatePreset === '7' ? styles.chipActive : ''}`}
+                        <Button
+                            variant={activeDatePreset === '7' ? 'primary' : 'ghost'}
+                            size="sm"
+                            icon={null}
                             aria-pressed={activeDatePreset === '7'}
                             onClick={() => setDatePreset(7)}
-                        >{t('history.filters.last7Days')}</button>
-                        <button
-                            type="button"
-                            className={`${styles.chip} ${activeDatePreset === '30' ? styles.chipActive : ''}`}
+                        >{t('history.filters.last7Days')}</Button>
+                        <Button
+                            variant={activeDatePreset === '30' ? 'primary' : 'ghost'}
+                            size="sm"
+                            icon={null}
                             aria-pressed={activeDatePreset === '30'}
                             onClick={() => setDatePreset(30)}
-                        >{t('history.filters.last30Days')}</button>
-                        <button
-                            type="button"
-                            className={`${styles.chip} ${activeDatePreset === 'all' ? styles.chipActive : ''}`}
+                        >{t('history.filters.last30Days')}</Button>
+                        <Button
+                            variant={activeDatePreset === 'all' ? 'primary' : 'ghost'}
+                            size="sm"
+                            icon={null}
                             aria-pressed={activeDatePreset === 'all'}
                             onClick={() => setDatePreset(null)}
-                        >{t('history.filters.allDates')}</button>
+                        >{t('history.filters.allDates')}</Button>
                     </div>
                     <span className={styles.dateZone}>{t('history.filters.dateZone')}</span>
                 </div>
@@ -1809,14 +1823,22 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 {dateFrom || dateTo ? (
                     <div className={styles.activeDateRange}>
                         <span>{t('history.filters.activeRange', { from: dateFrom || t('history.filters.anyDate'), to: dateTo || t('history.filters.anyDate') })}</span>
-                        <button type="button" onClick={() => setDatePreset(null)}>{t('history.filters.clearDateRange')}</button>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            icon={null}
+                            onClick={() => setDatePreset(null)}
+                        >
+                            {t('history.filters.clearDateRange')}
+                        </Button>
                     </div>
                 ) : null}
 
                 <div className={styles.filterFooter}>
-                    <button
-                        type="button"
-                        className={`${styles.filterDisclosure} ${moreFiltersOpen ? styles.filterDisclosureActive : ''}`}
+                    <Button
+                        variant={moreFiltersOpen ? 'primary' : 'ghost'}
+                        size="sm"
+                        icon={null}
                         onClick={() => setMoreFiltersOpen((v) => !v)}
                         aria-expanded={moreFiltersOpen}
                         aria-controls="history-more-filters"
@@ -1825,10 +1847,11 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         {moreFiltersOpen
                             ? <DoubleChevron direction="up" />
                             : <DoubleChevron direction="down" />}
-                    </button>
-                    <button
-                        type="button"
-                        className={`${styles.filterDisclosure} ${showFiatInHistory ? styles.filterDisclosureActive : ''}`}
+                    </Button>
+                    <Button
+                        variant={showFiatInHistory ? 'primary' : 'ghost'}
+                        size="sm"
+                        icon={null}
                         aria-pressed={showFiatInHistory}
                         onClick={toggleShowFiatInHistory}
                         disabled={fiatToggleBusy}
@@ -1838,8 +1861,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         {showFiatInHistory
                             ? t('history.filters.fiatCurrency', { currency: fiatCurrency })
                             : t('history.filters.showFiat')}
-                    </button>
+                    </Button>
                     <div className={styles.segGroup} role="radiogroup" aria-label={t('history.filters.groupingMode')}>
+                        {/* Native buttons preserve the segmented control's composite radio role. */}
                         <button
                             type="button"
                             role="radio"
@@ -1847,6 +1871,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             onClick={() => setGroupingMode('grouped')}
                             className={`${styles.segBtn} ${groupingMode === 'grouped' ? styles.segBtnActive : ''}`}
                         >{t('history.filters.grouped')}</button>
+                        {/* Native buttons preserve the segmented control's composite radio role. */}
                         <button
                             type="button"
                             role="radio"
@@ -1910,14 +1935,15 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         />
 
                         {multisigAddress ? (
-                            <button
-                                type="button"
-                                className={`${styles.chip} ${multisigOnly ? styles.chipActive : ''}`}
+                            <Button
+                                variant={multisigOnly ? 'primary' : 'ghost'}
+                                size="sm"
+                                icon={null}
                                 aria-pressed={multisigOnly}
                                 onClick={() => setMultisigOnly((v) => !v)}
                             >
                                 {t('history.filters.multisigOnly')}
-                            </button>
+                            </Button>
                         ) : null}
 
                     </div>
@@ -1999,9 +2025,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                                     {t('history.export.noMatchingRows')}
                                 </span>
                             ) : null}
-                            <button
-                                type="button"
-                                className={styles.exportTrigger}
+                            <Button
+                                variant="secondary"
+                                size="sm"
+                                icon={null}
                                 aria-haspopup="dialog"
                                 aria-expanded={exportModalOpen}
                                 aria-describedby={visibleEntries.length === 0 ? 'history-export-disabled-reason' : undefined}
@@ -2009,7 +2036,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                                 disabled={visibleEntries.length === 0}
                             >
                                 {t('history.export.open')}
-                            </button>
+                            </Button>
                         </div>
                     ) : null}
                 </div>
@@ -2467,42 +2494,41 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                             <span>{link.label} <span aria-hidden="true">↗</span></span>
                         </a>
                     ) : (
-                        <button
+                        <Button
                             key={link.id}
-                            type="button"
-                            className={styles.detailAction}
-                            disabled
-                            title={OFFLINE_ACTION_REASON}
-                            aria-describedby="history-offline-action-reason"
-                        >
-                            {link.iconImg ? (
+                            variant="secondary"
+                            block
+                            icon={link.iconImg ? (
                                 <img
                                     src={link.iconImg}
                                     alt=""
                                     aria-hidden="true"
                                     className={styles.detailActionFavicon}
                                 />
-                            ) : (
-                                <span className={styles.detailActionIcon} aria-hidden="true">{link.icon}</span>
-                            )}
-                            <span>{link.label}</span>
-                        </button>
+                            ) : link.icon}
+                            disabled
+                            title={OFFLINE_ACTION_REASON}
+                            aria-describedby="history-offline-action-reason"
+                        >
+                            {link.label}
+                        </Button>
                     ))}
                     <div className={styles.detailActionMoreWrap} ref={moreWrapRef}>
-                        <button
-                            type="button"
-                            className={styles.detailAction}
+                        <Button
+                            variant="secondary"
+                            block
+                            icon={<Icon.MoreIcon />}
                             aria-haspopup="menu"
                             aria-expanded={moreOpen}
                             onClick={() => setMoreOpen((o) => !o)}
                         >
-                            <span className={styles.detailActionIcon} aria-hidden="true"><Icon.MoreIcon /></span>
-                            <span>{t('history.detail.more')}</span>
-                        </button>
+                            {t('history.detail.more')}
+                        </Button>
                         {moreOpen ? (
                             <div className={styles.moreMenu} role="menu">
                                 {moreOptions.length > 0 ? (
                                     moreOptions.map((opt) => (
+                                        /* Native menu items keep the menu role and its custom focus model. */
                                         <button
                                             key={opt.id}
                                             type="button"
@@ -2522,6 +2548,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                                         </button>
                                     ))
                                 ) : (
+                                    /* Native menu items keep the menu role and its custom focus model. */
                                     <button
                                         type="button"
                                         role="menuitem"
@@ -2555,19 +2582,16 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                 did. */}
             {contactSaveStage === 'editing' || contactSaveStage === 'saving' ? (
                 <form className={styles.saveContactForm} onSubmit={handleSaveContact}>
-                    <label className={styles.saveContactLabel}>
-                        {t('history.contact.saveAs', { address: shortenAddress(contactPeer || '') })}
-                        <input
-                            type="text"
-                            enterKeyHint="go"
-                            className={styles.saveContactInput}
-                            value={contactName}
-                            onChange={(e) => setContactName(e.target.value)}
-                            autoFocus
-                            maxLength={80}
-                            placeholder={t('common.contactName')}
-                        />
-                    </label>
+                    <Input
+                        type="text"
+                        label={t('history.contact.saveAs', { address: shortenAddress(contactPeer || '') })}
+                        enterKeyHint="go"
+                        value={contactName}
+                        onChange={(e) => setContactName(e.target.value)}
+                        autoFocus
+                        maxLength={80}
+                        placeholder={t('common.contactName')}
+                    />
                     {contactSaveError ? (
                         <StatusMessage variant="error" className={styles.saveContactError}>{contactSaveError}</StatusMessage>
                     ) : null}
@@ -2600,6 +2624,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
             {/* Tab strip: matches Home's HomeTabs visual rhythm. */}
             <div className={styles.detailTabs} role="tablist" aria-label={t('history.detail.view')}>
                 {detailTabs.map((t) => (
+                    /* Native buttons preserve the tablist's roving tab semantics. */
                     <button
                         key={t.id}
                         type="button"
@@ -2641,7 +2666,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                     <>
                         <div className={styles.rawJsonWrap}>
                             <span className={styles.rawJsonCopy}>
-                                <CopyIconButton
+                                <HistoryCopyButton
                                     value={decodeActionToText(rawForDisplay)}
                                     label={t('history.detail.copyRawJson')}
                                 />
@@ -2652,20 +2677,23 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                         </div>
                         {isLinked ? (
                             <div className={styles.detailPeerBlock}>
-                                <h2 className={styles.detailSectionHeading}>
-                                    {t('history.detail.peerHeading', {
+                                <SectionHeader
+                                    title={t('history.detail.peerHeading', {
                                         ticker: entry.link.peerCoinTicker,
                                         index: entry.link.peerActionIndex,
                                     })}
-                                </h2>
+                                    className={styles.detailSectionHeading}
+                                />
                                 {peer?.loading ? (
-                                    <p className={styles.empty}>{t('history.detail.loadingPeer')}</p>
+                                    <StatusMessage>{t('history.detail.loadingPeer')}</StatusMessage>
                                 ) : peer?.error ? (
-                                    <p className={styles.error}>{t('history.detail.peerError', { error: peer.error })}</p>
+                                    <StatusMessage variant="error">
+                                        {t('history.detail.peerError', { error: peer.error })}
+                                    </StatusMessage>
                                 ) : peer?.action ? (
                                     <div className={styles.rawJsonWrap}>
                                         <span className={styles.rawJsonCopy}>
-                                            <CopyIconButton
+                                            <HistoryCopyButton
                                                 value={decodeActionToText(balancesHidden ? redactAmountFields(peer.action) : peer.action)}
                                                 label={t('history.detail.copyPeerRawJson')}
                                             />
@@ -2675,10 +2703,13 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                                         </pre>
                                     </div>
                                 ) : (
-                                    <p className={styles.empty}>{t('history.detail.peerUnavailable', {
-                                        ticker: entry.link.peerCoinTicker,
-                                        index: entry.link.peerActionIndex,
-                                    })}</p>
+                                    <EmptyState
+                                        title={t('history.detail.peerUnavailable', {
+                                            ticker: entry.link.peerCoinTicker,
+                                            index: entry.link.peerActionIndex,
+                                        })}
+                                        titleAs="h3"
+                                    />
                                 )}
                             </div>
                         ) : null}
@@ -2845,7 +2876,10 @@ function PendingDetailPanel({ entry, balancesHidden = false, onDismissFailed }) 
                 promise under this heading: "not reported yet" would say
                 more data is coming, and none is. */}
             {settled && desc.kind === 'none' ? null : (
-                <h2 className={styles.detailSectionHeading}>{t('pending.detail.decodedHeading')}</h2>
+                <SectionHeader
+                    title={t('pending.detail.decodedHeading')}
+                    className={styles.detailSectionHeading}
+                />
             )}
             {desc.kind === 'send' || desc.kind === 'local' ? (
                 <ul className={styles.pendingOutputs}>
@@ -2982,8 +3016,33 @@ function basicDetailRows(entry, chainTip, nativeAmount, nativeFiatValue, balance
 function CopyableValue({ display, fullValue, ariaLabel }) {
     return (
         <span className={styles.copyableValue}>
-            <CopyIconButton value={fullValue} label={ariaLabel} />
+            <HistoryCopyButton value={String(fullValue ?? '')} label={ariaLabel} />
             <span className={styles.copyableText}>{display}</span>
+        </span>
+    );
+}
+
+function HistoryCopyButton({ value, label = t('history.copy.clipboard') }) {
+    const [copied, setCopied] = useState(false);
+    const onCopied = () => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+    };
+    return (
+        <span
+            role="status"
+            aria-live="polite"
+            title={copied ? t('history.copy.copiedTitle') : label}
+        >
+            <CopyButton
+                value={value}
+                label={label}
+                ariaLabel={label}
+                onCopied={onCopied}
+            />
+            <span className={styles.visuallyHidden}>
+                {copied ? t('history.copy.copied') : ''}
+            </span>
         </span>
     );
 }
@@ -3032,36 +3091,6 @@ function copyLabelForDetailField(key) {
     if (normalized === 'destination' || normalized === 'to') return 'Copy to address';
     if (normalized.includes('address')) return `Copy ${detailFieldLabel(key).toLowerCase()}`;
     return null;
-}
-
-function CopyIconButton({ value, label = t('history.copy.clipboard') }) {
-    const [copied, setCopied] = useState(false);
-    const { showToast, announce } = useToast();
-    const haptic = useHapticFeedback();
-    const handleClick = async (event) => {
-        event.stopPropagation();
-        const text = String(value ?? '');
-        const { ok } = await copyText(text);
-        if (ok) {
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
-            haptic.tap();
-            announce(t('history.copy.copied'));
-            return;
-        }
-        showToast({ message: 'Copy failed: clipboard unavailable', variant: 'error' });
-    };
-    return (
-        <button
-            type="button"
-            onClick={handleClick}
-            className={styles.copyIconButton}
-            aria-label={copied ? t('history.copy.copied') : label}
-            title={copied ? t('history.copy.copiedTitle') : label}
-        >
-            {copied ? <Icon.CheckIcon /> : <Icon.CopyIcon />}
-        </button>
-    );
 }
 
 /**
@@ -3440,24 +3469,14 @@ function RecipientsBlock({ entry }) {
                 />
             )}
             {recipients.length > 0 ? (
-                <div style={{ display: 'flex', gap: 'var(--xc-space-1)', alignItems: 'center', flexWrap: 'wrap' }}>
-                    <input
+                <div className={styles.recipientContactActions}>
+                    <Input
                         type="text"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         maxLength={120}
                         aria-label={t('common.contactName')}
                         disabled={stage === 'saving'}
-                        style={{
-                            flex: 1,
-                            minWidth: 200,
-                            background: 'var(--xc-bg)',
-                            color: 'var(--xc-text)',
-                            border: '1px solid var(--xc-border)',
-                            borderRadius: 'var(--xc-radius-sm)',
-                            padding: 'var(--xc-space-1) var(--xc-space-2)',
-                            fontSize: 'var(--xc-text-sm)',
-                        }}
                     />
                     <Button
                         type="button"
@@ -3689,6 +3708,7 @@ export const EntryRow = memo(function EntryRow({ entry, selected, showConnector,
         : '';
     return (
         <li data-history-key={entry.key}>
+            {/* A native button supplies the interactive list-row contract absent from the kit. */}
             <button
                 type="button"
                 onClick={() => onClick(entry)}
@@ -3810,6 +3830,7 @@ function GroupCard({ item, expanded, onToggle }) {
         ? stripSupplyParenthetical(item.summary)
         : item.summary;
     return (
+        /* A native button supplies the expandable list-row contract absent from the kit. */
         <button
             type="button"
             onClick={onToggle}
@@ -4138,6 +4159,7 @@ function CheckboxPicker({ options, selected, onToggle, allLabel, summaryNoun, ic
 
     return (
         <div ref={wrapRef} className={styles.chainPickerWrap}>
+            {/* A native trigger retains the ref-driven focus handoff for this custom listbox. */}
             <button
                 ref={triggerRef}
                 type="button"
@@ -4173,6 +4195,7 @@ function CheckboxPicker({ options, selected, onToggle, allLabel, summaryNoun, ic
                         const icon = typeof iconForId === 'function' ? iconForId(opt.id) : null;
                         return (
                             <li key={opt.id}>
+                                {/* Native options preserve the custom multiselect listbox keyboard model. */}
                                 <button
                                     type="button"
                                     className={`${styles.chainPickerOption} ${active ? styles.chainPickerOptionActive : ''}`}
@@ -4341,6 +4364,7 @@ function ChainPicker({ activeChainIds, chainRegistry, enabledChains, onChange })
 
     return (
         <div ref={wrapRef} className={styles.chainPickerWrap}>
+            {/* A native trigger retains the ref-driven focus handoff for this rich custom listbox. */}
             <button
                 ref={triggerRef}
                 type="button"
@@ -4378,6 +4402,7 @@ function ChainPicker({ activeChainIds, chainRegistry, enabledChains, onChange })
                     onKeyDown={(event) => handleListboxKeyDown(event, menuRef, close)}
                 >
                     <li>
+                        {/* Native options preserve the rich listbox keyboard model. */}
                         <button
                             type="button"
                             role="option"
@@ -4394,6 +4419,7 @@ function ChainPicker({ activeChainIds, chainRegistry, enabledChains, onChange })
                         const isSel = selectedId === cid;
                         return (
                             <li key={cid}>
+                                {/* Native options preserve the rich listbox keyboard model. */}
                                 <button
                                     type="button"
                                     role="option"
@@ -4579,11 +4605,12 @@ function ExportModal({
                 aria-modal="true"
                 aria-labelledby="xc-history-export-title"
             >
-                <h2 id="xc-history-export-title" style={{ margin: 0, fontSize: 'var(--xc-text-base)' }}>{t('history.export.title')}</h2>
+                <SectionHeader id="xc-history-export-title" title={t('history.export.title')} />
 
                 <fieldset style={MODAL_FIELDSET}>
                     <legend style={MODAL_LEGEND}>{t('history.export.format')}</legend>
                     <label style={MODAL_LABEL}>
+                        {/* The kit has no radio control, so the native input preserves selection semantics. */}
                         <input
                             type="radio"
                             name="export-format"
@@ -4595,6 +4622,7 @@ function ExportModal({
                         {t('history.export.csv')}
                     </label>
                     <label style={MODAL_LABEL}>
+                        {/* The kit has no radio control, so the native input preserves selection semantics. */}
                         <input
                             type="radio"
                             name="export-format"
@@ -4616,6 +4644,7 @@ function ExportModal({
                             : detail.label;
                         return (
                             <label key={col} style={MODAL_LABEL} title={detail.description}>
+                                {/* The kit has no checkbox control, so the native input preserves selection semantics. */}
                                 <input
                                     type="checkbox"
                                     checked={columns.has(col)}
@@ -4656,15 +4685,17 @@ function ExportModal({
                 {error ? <p role="alert" style={{ margin: 0, color: 'var(--xc-danger)' }}>{error}</p> : null}
 
                 <div style={MODAL_ACTIONS}>
-                    <button type="button" className={styles.chip} onClick={onClose}>{t('common.cancel')}</button>
-                    <button
-                        type="button"
-                        className={styles.chip}
+                    <Button variant="ghost" size="sm" onClick={onClose}>
+                        {t('common.cancel')}
+                    </Button>
+                    <Button
+                        variant="primary"
+                        size="sm"
                         onClick={onConfirm}
                         disabled={exporting || visibleCount === 0 || columns.size === 0}
                     >
                         {exporting ? t('history.export.preparing') : t('history.export.confirm')}
-                    </button>
+                    </Button>
                 </div>
             </div>
         </div>

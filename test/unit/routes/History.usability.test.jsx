@@ -231,14 +231,12 @@ describe('History usability', () => {
 
         fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
         fireEvent.click(screen.getByRole('button', { name: 'Copy transaction ID' }));
-        expect(await screen.findByText('Copy failed: clipboard unavailable')).toBeInTheDocument();
+        expect(await screen.findByText('Copy failed: the clipboard is unavailable.')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'More' }));
         fireEvent.click(await screen.findByRole('menuitem', { name: 'Copy receipt' }));
         expect(document.execCommand).toHaveBeenCalledTimes(2);
-        await waitFor(() => {
-            expect(screen.getAllByText('Copy failed: clipboard unavailable')).toHaveLength(2);
-        });
+        expect(await screen.findByText('Copy failed: clipboard unavailable')).toBeInTheDocument();
     });
 
     it('copies the full transaction hash and builds working explorer destinations', async () => {

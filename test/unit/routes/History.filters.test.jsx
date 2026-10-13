@@ -123,6 +123,24 @@ afterEach(() => {
 });
 
 describe('History filters', () => {
+    it('renders ordinary history controls through the shared field and button contracts', async () => {
+        mountHistory({
+            [LTC]: [historyRow({
+                actionIndex: 1,
+                timestamp: secondsAt(0),
+                tick: 'LTC',
+                source: LTC_ADDRESS,
+            })],
+        }, { [LTC]: [{ address: LTC_ADDRESS }] });
+
+        const search = await screen.findByRole('searchbox', { name: 'Search history' });
+        expect(search).toHaveAttribute('id');
+        expect(screen.getByRole('button', { name: '7 days' }))
+            .toHaveAttribute('aria-busy', 'false');
+        expect(screen.getByRole('button', { name: 'Refresh history' }))
+            .toHaveAttribute('aria-busy', 'false');
+    });
+
     it('searches txid prefixes, counterparties, contacts, tickers, and amounts within date filters', async () => {
         const clientAddress = 'mClientCounterparty1111111111111111111';
         const { view } = mountHistory({
@@ -385,7 +403,7 @@ describe('History filters', () => {
             fireEvent.click(screen.getByRole('button', { name: 'All' }));
             expect(screen.getByRole('button', { name: 'Filters (0)' })).toBeInTheDocument();
 
-            fireEvent.click(view.container.querySelector('[data-history-key] > button'));
+            fireEvent.click(screen.getByRole('button', { name: /Litecoin.*Send.*Confirmed/i }));
             expect(screen.getByRole('rowheader', { name: 'Time' })).toBeInTheDocument();
             fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
             expect(screen.getByRole('rowheader', { name: 'Amount' })).toBeInTheDocument();
