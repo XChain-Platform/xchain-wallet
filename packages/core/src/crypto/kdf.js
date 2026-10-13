@@ -136,6 +136,23 @@ export function deriveMasterKey(password, params) {
 }
 
 /**
+ * Take a private copy of a caller's already-derived master key. The
+ * caller keeps ownership of its buffer and zeroes it; the receiver zeroes
+ * the copy. The type check runs first because `new Uint8Array(32)` turns
+ * a stray number into an all-zero key that would still pass the AEAD
+ * length check.
+ *
+ * @param {Uint8Array} masterKey  KDF_KEY_LENGTH bytes, owned by the caller
+ * @returns {Uint8Array} a fresh copy the receiver must zero
+ */
+export function copyMasterKey(masterKey) {
+    if (!(masterKey instanceof Uint8Array) || masterKey.length !== KDF_KEY_LENGTH) {
+        throw new Error(`masterKey must be a ${KDF_KEY_LENGTH}-byte Uint8Array`);
+    }
+    return new Uint8Array(masterKey);
+}
+
+/**
  * Build a fresh KdfParams with a random 16-byte salt and the floor
  * tuning. Callers can override `iterations` / `memory` after measuring
  * a calibration run on the user's device.

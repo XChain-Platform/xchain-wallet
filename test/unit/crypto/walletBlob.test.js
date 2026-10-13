@@ -22,7 +22,8 @@ import {
     decryptWalletPassphrase,
     PASSPHRASE_AAD,
 } from '../../../packages/core/src/crypto/walletBlob.js';
-import { encrypt } from '../../../packages/core/src/crypto/aead.js';
+import { AeadAuthError, encrypt } from '../../../packages/core/src/crypto/aead.js';
+import { deriveMasterKey } from '../../../packages/core/src/crypto/kdf.js';
 
 // password -> KDF -> AES-256-GCM: every case pays a real Argon2id derivation.
 vi.setConfig({ testTimeout: ARGON2ID_TEST_TIMEOUT_MS });
@@ -64,6 +65,40 @@ describe('crypto/walletBlob', () => {
             encryptedSeed,
             kdfParams,
         })).rejects.toThrow();
+    });
+
+    it('a wrong supplied master key fails with the same error class as a wrong password', async () => {
+        const { encryptedSeed, kdfParams } = await encryptWalletSeed({
+            password: 'right',
+            seed: SEED,
+            kdfParams: KDF_PARAMS,
+        });
+        let passwordError;
+        try {
+            await decryptWalletSeed({ password: 'wrong', encryptedSeed, kdfParams });
+        } catch (error) {
+            passwordError = error;
+        }
+
+        const wrongMasterKey = deriveMasterKey('wrong', kdfParams);
+        let keyError;
+        try {
+            await decryptWalletSeed({
+                password: 'right',
+                masterKey: wrongMasterKey,
+                encryptedSeed,
+                kdfParams,
+            });
+        } catch (error) {
+            keyError = error;
+        } finally {
+            wrongMasterKey.fill(0);
+        }
+
+        expect(passwordError).toBeInstanceOf(AeadAuthError);
+        expect(keyError).toBeInstanceOf(AeadAuthError);
+        expect(keyError.constructor).toBe(passwordError.constructor);
+        expect(keyError.message).toBe(passwordError.message);
     });
 
     it('AAD binding: omitting AAD on decrypt fails when AAD was supplied on encrypt', async () => {

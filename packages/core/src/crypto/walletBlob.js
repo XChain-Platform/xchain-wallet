@@ -19,6 +19,7 @@
 
 import { decrypt, encrypt } from './aead.js';
 import {
+    copyMasterKey,
     deriveMasterKey,
     makeFreshKdfParams,
     bytesToBase64,
@@ -40,16 +41,19 @@ export const PASSPHRASE_AAD = new TextEncoder().encode('xchain-wallet:bip39-pass
  * @param {Uint8Array} input.seed
  * @param {import('./kdf.js').KdfParams} [input.kdfParams]  override (e.g. calibrated)
  * @param {Uint8Array} [input.aad]                          extra authenticated data
+ * @param {Uint8Array} [input.masterKey]                    already-derived key for these kdfParams, used instead of deriving from the password; copied on receipt, the copy is zeroed here, the caller zeroes its own buffer
  * @returns {Promise<{ encryptedSeed: string, kdfParams: import('./kdf.js').KdfParams }>}
  */
-export async function encryptWalletSeed({ password, seed, kdfParams, aad }) {
+export async function encryptWalletSeed({ password, seed, kdfParams, aad, masterKey }) {
     const params = kdfParams ?? makeFreshKdfParams();
-    const masterKey = deriveMasterKey(password, params);
+    const workingKey = masterKey === undefined
+        ? deriveMasterKey(password, params)
+        : copyMasterKey(masterKey);
     try {
-        const blob = await encrypt(masterKey, seed, aad);
+        const blob = await encrypt(workingKey, seed, aad);
         return { encryptedSeed: bytesToBase64(blob), kdfParams: params };
     } finally {
-        masterKey.fill(0);
+        workingKey.fill(0);
     }
 }
 
@@ -61,20 +65,31 @@ export async function encryptWalletSeed({ password, seed, kdfParams, aad }) {
  * @param {string} input.encryptedSeed
  * @param {import('./kdf.js').KdfParams} input.kdfParams
  * @param {Uint8Array} [input.aad]
+ * @param {Uint8Array} [input.masterKey]       already-derived key, used instead of deriving from the password; copied on receipt, the copy is zeroed here, the caller zeroes its own buffer. The AEAD check still runs, so a wrong key fails as a wrong password does
+ * @param {(key: Uint8Array) => void} [input.retainMasterKey] receives its own key copy and owns zeroing it
  * @returns {Promise<Uint8Array>}
  */
-export async function decryptWalletSeed({ password, encryptedSeed, kdfParams, aad, retainMasterKey }) {
-    const masterKey = deriveMasterKey(password, kdfParams);
+export async function decryptWalletSeed({
+    password,
+    encryptedSeed,
+    kdfParams,
+    aad,
+    masterKey,
+    retainMasterKey,
+}) {
+    const workingKey = masterKey === undefined
+        ? deriveMasterKey(password, kdfParams)
+        : copyMasterKey(masterKey);
     try {
         const blob = base64ToBytes(encryptedSeed);
-        const plaintext = await decrypt(masterKey, blob, aad);
+        const plaintext = await decrypt(workingKey, blob, aad);
         // Session retention (§15.5 password-less WIF import): hand the
         // caller its own copy of the derived key instead of re-running
         // the KDF. The caller owns zeroing it.
-        if (typeof retainMasterKey === 'function') retainMasterKey(new Uint8Array(masterKey));
+        if (typeof retainMasterKey === 'function') retainMasterKey(new Uint8Array(workingKey));
         return plaintext;
     } finally {
-        masterKey.fill(0);
+        workingKey.fill(0);
     }
 }
 

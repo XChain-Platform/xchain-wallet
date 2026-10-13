@@ -77,6 +77,7 @@ export class PassphraseMismatchError extends Error {
  * @typedef {Object} UnlockRecordOpts
  * @property {import('../schemas/wallet.js').Wallet} wallet
  * @property {string} password
+ * @property {Uint8Array} [masterKey]      already-derived key, forwarded to SoftwareSigner.unlock, which copies it; never zeroed here, the caller zeroes its own buffer
  * @property {string} [bip39Passphrase]   honoured ONLY for a legacy record (§15.6 capture); a stored `encryptedPassphrase` always wins
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
@@ -93,6 +94,7 @@ export class PassphraseMismatchError extends Error {
 export async function unlockWalletRecord({
     wallet,
     password,
+    masterKey,
     bip39Passphrase = '',
     chainRegistry,
     sdkRegistry,
@@ -135,6 +137,7 @@ export async function unlockWalletRecord({
     try {
         await signer.unlock({
             password,
+            masterKey,
             bip39Passphrase: wallet.passphraseEnabled ? bip39Passphrase : '',
         });
     } catch (e) {
