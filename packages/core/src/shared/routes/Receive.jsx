@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
-import { AddressField, AddressText, Button, ChainBadge, CopyButton, FeeSelector, Icon, MultisigBadge, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, CopyButton, EmptyState, FeeSelector, FormPage, Icon, MultisigBadge, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     uri as uriLib,
@@ -76,7 +76,6 @@ function nativeTickerFor(descriptor) {
 export function Receive({ walletId, accountId, prefill = null, onBack, onChangeAsset }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
     const { showToast } = useToast();
     const { settings } = useSettings();
     // The Wallet Mode screen promises the receive screen is hidden in
@@ -625,19 +624,12 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             ) : null}
 
             {noAddresses ? (
-                <div className={styles.emptyState}>
-                    <p className={styles.hint}>
-                        No addresses yet on any chain. Generate one to start receiving.
-                    </p>
-                    <Button
-                        variant="primary"
-                        size="md"
-                        onClick={() => setAddAddressOpen(true)}
-                        icon={<Icon.PlusIcon />}
-                    >
-                        Generate an address
-                    </Button>
-                </div>
+                <EmptyState
+                    title="No addresses yet on any chain. Generate one to start receiving."
+                    actionLabel="Generate an address"
+                    onAction={() => setAddAddressOpen(true)}
+                    actionIcon={<Icon.PlusIcon />}
+                />
             ) : null}
 
             {address && qrDataUrl ? (
@@ -829,7 +821,9 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
 
     return (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{body}</div> : body}
+            <FormPage label="Receive request" onSubmit={(event) => event.preventDefault()}>
+                {body}
+            </FormPage>
         </Screen>
     );
 }
