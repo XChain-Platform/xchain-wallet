@@ -18,9 +18,19 @@ styles); that lives in Playwright at `test/e2e/`.
 
 ```
 test/a11y/
-├── ui/         primitive components: Button, Input, ChainPicker
-├── routes/    full route renders: Onboarding, Locked
+├── helpers/    shared axe assertions
+├── ui/         primitive components
+└── routes/     full route renders and the route coverage inventory
 ```
+
+The route inventory treats every JSX module discovered by the shared route
+render registry as either axe-rendered or explicitly missing. This makes a new
+route fail the accessibility suite until its coverage status is recorded.
+
+The runtime route suite renders Send, Receive, History's ActionDetail,
+TokenDetail, Settings and its drilldown sections, and Onboarding's license,
+explainer, and welcome steps. `coverage.a11y.test.js` contains the complete,
+machine-checked list of route modules that remain unrendered by axe.
 
 ## Run
 
