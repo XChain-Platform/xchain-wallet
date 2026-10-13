@@ -23,6 +23,10 @@ import {
 } from './platform/webviewFloor.js';
 import { BROKEN_SHELL_MESSAGE, nativeShellIsBroken } from './storage/nativeVault.js';
 import { installKeyboardViewport } from './platform/keyboardViewport.js';
+import { installShellErrorCapture } from './errorCapture.js';
+
+// Register the crash hook before anything else can throw.
+installShellErrorCapture();
 
 // §9.7 / G007: refresh chain descriptors from the hub's signed public
 // registry snapshot. Fire-and-forget soft enhancement: the signature must

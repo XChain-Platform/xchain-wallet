@@ -32,6 +32,10 @@ import {
     buildEditFeedListsParams,
     editBetFeedListsAction,
 } from '@xchain-wallet/core/flows/betActions.js';
+import {
+    createErrorRingBuffer,
+    installShellErrorCapture,
+} from '@xchain-wallet/core/flows/diagnosticDump.js';
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import { MessageHost } from './MessageHost.js';
 import { registerBridgeHandlers } from '../bridge/handlers.js';
@@ -1002,6 +1006,10 @@ export function createBackgroundHost(deps) {
     // ledger with chrome.storage.session makes the reservations survive that
     // restart; the store returns null outside an extension (Node tests, web
     // and desktop shells), where the ledger stays in-memory.
+    // Crash hook: uncaught errors and rejections feed the dump's recent_errors.
+    const errorBuffer = createErrorRingBuffer();
+    installShellErrorCapture(globalThis, errorBuffer);
+
     const confirmSessionStorage = createConfirmActionSessionStorage();
     const reservationLedger = createReservationLedger(
         confirmSessionStorage ? { store: reservationStoreFrom(confirmSessionStorage) } : undefined,
@@ -1739,6 +1747,7 @@ export function createBackgroundHost(deps) {
             env: ctx.env,
             build: ctx.build,
             signers,
+            recentErrors: errorBuffer.list(),
             recentLogs,
         });
     });

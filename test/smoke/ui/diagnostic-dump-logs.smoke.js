@@ -85,4 +85,12 @@ assert.ok(/let recentLogs = \[\];[\s\S]{0,300}try \{[\s\S]{0,200}recentLogs = lo
 assert.ok(/diagnosticDump\(\{[\s\S]{0,500}recentLogs,[\s\S]{0,200}\}\)/.test(hostSrc),
     'diagnostic.dump handler passes recentLogs into diagnosticDump');
 
+// 6. Crash hook registration: every wallet shell entry point installs the
+//    global error capture, and the background dump passes the buffer in.
+for (const m of ['packages/web/src/main.jsx', 'packages/desktop/renderer/main.jsx', 'packages/extension/src/popup/main.jsx']) {
+    assert.ok(read(m).includes('installShellErrorCapture()'), `${m} installs the crash hook`);
+}
+assert.ok(/installShellErrorCapture\(globalThis/.test(hostSrc), 'background installs the crash hook');
+assert.ok(/recentErrors: errorBuffer\.list\(\)/.test(hostSrc), 'diagnostic.dump passes recentErrors');
+
 console.log('OK: logConsole.snapshot + diagnostic-dump integration');

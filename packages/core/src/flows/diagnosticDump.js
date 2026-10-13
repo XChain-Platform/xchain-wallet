@@ -254,6 +254,33 @@ export function createErrorRingBuffer(opts = {}) {
     };
 }
 
+/**
+ * Register the global 'error' and 'unhandledrejection' listeners on a
+ * shell realm so crashes land in `buffer`. Safe on targets without
+ * `addEventListener`. Returns an uninstall function.
+ *
+ * @param {{ addEventListener?: Function, removeEventListener?: Function } | null | undefined} target
+ * @param {{ record: (err: unknown, phase?: string) => void }} buffer
+ * @returns {() => void}
+ */
+export function installShellErrorCapture(target, buffer) {
+    if (!target || typeof target.addEventListener !== 'function' || !buffer) {
+        return () => {};
+    }
+    const onError = (ev) => {
+        try { buffer.record(ev?.error ?? ev?.message ?? 'Error', 'error'); } catch { /* never throw from a crash hook */ }
+    };
+    const onRejection = (ev) => {
+        try { buffer.record(ev?.reason ?? 'unhandledrejection', 'unhandledrejection'); } catch { /* never throw from a crash hook */ }
+    };
+    target.addEventListener('error', onError);
+    target.addEventListener('unhandledrejection', onRejection);
+    return () => {
+        target.removeEventListener?.('error', onError);
+        target.removeEventListener?.('unhandledrejection', onRejection);
+    };
+}
+
 function sanitizeSigner(s) {
     if (!s || typeof s !== 'object') return null;
     /** @type {DiagnosticSignerSummary} */
