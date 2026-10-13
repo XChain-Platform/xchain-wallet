@@ -220,22 +220,6 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
         if (error) setError(null);
     }
 
-    function handleBackupFile(event) {
-        const file = event.target?.files?.[0];
-        if (!file) return;
-        setBackupFileName(file.name);
-        const reader = new FileReader();
-        reader.onload = () => {
-            const text = typeof reader.result === 'string' ? reader.result : '';
-            setBackupContent(text);
-            if (error) setError(null);
-        };
-        reader.onerror = () => {
-            setError('Could not read the selected file.');
-        };
-        reader.readAsText(file);
-    }
-
     // Encrypted-backup drop zone (same .xchain-wallet / JSON / text MIME
     // set the file picker accepts; reads the content as text and seeds
     // the existing backupContent state so the rest of the lane behaves
@@ -246,6 +230,8 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
         disabled: busy,
         onError: setError,
         onFile: ({ file, content }) => {
+            setBackupPointer(null);
+            setBackupScanning(false);
             setBackupFileName(file.name);
             setBackupContent(typeof content === 'string' ? content : '');
             if (error) setError(null);
@@ -260,6 +246,8 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
         if (typeof text !== 'string' || text.trim().length === 0) return;
         const detected = detectQrContent(text.trim());
         if (detected.type === 'backup-pointer') {
+            setBackupContent('');
+            setBackupFileName(null);
             setBackupPointer(detected.pointer);
             setBackupScanning(false);
             if (error) setError(null);
@@ -508,6 +496,13 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
     const subtitleClass = isFull ? styles.subtitleFull : styles.subtitlePopup;
     const mnemonicClass = isFull ? styles.mnemonicFull : styles.mnemonicPopup;
     const actionsClass = isFull ? styles.actionsFull : styles.actionsPopup;
+    const backupSourceMessage = backupDrop.isDragOver
+        ? 'Drop the backup file here.'
+        : backupFileName
+            ? `Loaded ${backupFileName} (${backupContent.length.toLocaleString()} bytes).`
+            : backupContent.trim().length > 0
+                ? `Backup contents pasted (${backupContent.length.toLocaleString()} bytes).`
+                : 'Choose or drop a backup file onto the box below, paste its contents, or scan a backup pointer.';
     const normalizedMnemonic = normalizePhraseEntry(mnemonic);
     const mnemonicWordCount = normalizedMnemonic.length === 0
         ? 0
@@ -661,12 +656,14 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                             }}
                             disabled={busy}
                             aria-pressed={backupScanning}
+                            aria-expanded={backupScanning}
+                            aria-controls="xc-backup-scanner"
                         >
                             {backupScanning ? 'Cancel scan' : 'Scan pointer QR'}
                         </button>
                     </div>
                     {backupScanning ? (
-                        <div className={styles.scannerBox}>
+                        <div id="xc-backup-scanner" className={styles.scannerBox}>
                             <QrScanner onFrame={handleBackupQrFrame} alt="Backup-pointer QR scanner" />
                         </div>
                     ) : null}
@@ -688,25 +685,27 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                     ) : (
                         <>
                     <input
+                        {...backupDrop.pickerProps}
                         id="xc-backup-file"
-                        type="file"
-                        accept=".xchain-wallet,application/json,text/plain"
-                        onChange={handleBackupFile}
+                        aria-label="Backup file"
                         disabled={busy}
-                        className={styles.backupFileInput}
                     />
-                    {backupFileName ? (
-                        <p className={styles.backupHint}>Loaded {backupFileName} ({backupContent.length.toLocaleString()} bytes).</p>
-                    ) : (
-                        <p className={styles.backupHint}>Or drop a backup file onto the box below, paste its contents, or scan a backup pointer.</p>
-                    )}
+                    <button
+                        type="button"
+                        className={styles.backupFileButton}
+                        onClick={backupDrop.openFilePicker}
+                        disabled={busy}
+                    >
+                        Choose backup file
+                    </button>
+                    <p className={styles.backupHint} aria-live="polite">{backupSourceMessage}</p>
                     <label className={styles.mnemonicLabel} htmlFor="xc-backup-content">
                         Backup file contents
                     </label>
                     <textarea
                         id="xc-backup-content"
                         {...backupDrop.rootProps}
-                        className={mnemonicClass}
+                        className={`${mnemonicClass}${backupDrop.isDragOver ? ` ${styles.dropZoneActive}` : ''}`}
                         value={backupContent}
                         onChange={(e) => {
                             setBackupContent(e.target.value);
@@ -720,10 +719,6 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                         autoComplete="off"
                         rows={4}
                         disabled={busy}
-                        style={{
-                            outline: backupDrop.isDragOver ? '2px dashed var(--xc-accent)' : undefined,
-                            outlineOffset: backupDrop.isDragOver ? 2 : undefined,
-                        }}
                     />
                         </>
                     )}
