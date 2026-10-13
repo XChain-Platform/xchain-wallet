@@ -17,6 +17,7 @@ import {
     buildPlatformTokenRow,
     sortByChainThenAsset,
     coinFromChainId,
+    fiatValue,
     tickerColor,
 } from './BalanceList.jsx';
 import balanceStyles from './BalanceList.module.css';
@@ -79,8 +80,10 @@ import styles from './HomeTabs.module.css';
  * @param {() => void} [props.onAddAddress] opens address generation for an account with no addresses
  * @param {() => void} [props.onHistory]   opens the complete chronological feed from the non-demo Activity placeholder
  * @param {boolean} [props.hideSmallBalances]: `settings.privacy.hideSmallBalances`, forwarded to the Coins and Tokens lists so dust rows collapse into their own section
+ * @param {() => void} [props.onRefresh]    manually refreshes portfolio balances and expired prices
+ * @param {boolean} [props.refreshing]      whether a manual portfolio refresh is running
  */
-export function HomeTabs({ chainRegistry, balances, activeByChain = null, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', coinFamilies, onNetworkFilterChange, onTokenQueryChange, multisig, multisigChainId, actions, onReceive, onBuy, hasAddresses = true, onAddAddress, onHistory, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide, verifyMap, hideSmallBalances = false, onCommandPalette, onOpenSettings, onLockWallet }) {
+export function HomeTabs({ chainRegistry, balances, activeByChain = null, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', coinFamilies, onNetworkFilterChange, onTokenQueryChange, multisig, multisigChainId, actions, onReceive, onBuy, hasAddresses = true, onAddAddress, onHistory, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide, verifyMap, hideSmallBalances = false, onRefresh, refreshing = false, onCommandPalette, onOpenSettings, onLockWallet }) {
     const [active, setActive] = useState('coins');
     const isDemo = isDemoWallet(walletId);
     // Inline filter row (search + network dropdown) is collapsed by
@@ -177,6 +180,24 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
             return tick.includes(tokenQueryTrim) || name.includes(tokenQueryTrim);
         });
     }, [tokens, tokenQueryTrim]);
+    const pricedTokens = useMemo(
+        () => filteredTokens.filter((row) => fiatValue(row.quantity, row.divisibility, row.fiatRate) !== null),
+        [filteredTokens],
+    );
+    const unpricedTokens = useMemo(
+        () => filteredTokens.filter((row) => fiatValue(row.quantity, row.divisibility, row.fiatRate) === null),
+        [filteredTokens],
+    );
+    const pricesFetchedAt = useMemo(() => {
+        let oldest = null;
+        for (const row of filteredRows) {
+            if (!hasNonZeroQuantity(row) || fiatValue(row.quantity, row.divisibility, row.fiatRate) === null) continue;
+            const fetchedAt = Date.parse(row.fiatRateFetchedAt);
+            if (!Number.isFinite(fetchedAt)) continue;
+            oldest = oldest === null ? fetchedAt : Math.min(oldest, fetchedAt);
+        }
+        return oldest;
+    }, [filteredRows]);
     const hasHoldings = allRows.some((row) => hasNonZeroQuantity(row));
     const showFirstFunding = networkFilter === 'all' && !tokenQueryTrim && !hasHoldings;
     // NFTs = tokens matching the canonical NFT pattern (NFT_Standard.md:
@@ -213,6 +234,9 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                 walletId={walletId}
                 networkFilter={networkFilter}
                 lastSyncedAt={balancesFetchedAt}
+                pricesFetchedAt={pricesFetchedAt}
+                onRefresh={onRefresh}
+                refreshing={refreshing}
                 filterOpen={filterOpen}
                 onToggleFilter={canFilter ? () => setFilterOpen((v) => !v) : undefined}
                 onCommandPalette={onCommandPalette}
@@ -310,29 +334,54 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
 
                 {active === 'tokens' ? (
                     <>
-                    <BalanceList
-                        rows={filteredTokens}
-                        fiatCurrency={settings?.fiatCurrency || 'USD'}
-                        emptyTitle={tokenQueryTrim
-                            ? 'No matching tokens'
-                            : (networkFilter === 'all' ? 'No tokens yet' : 'No tokens on this network')}
-                        emptyBody={tokenQueryTrim
-                            ? `No held tokens match "${tokenQuery.trim()}".`
-                            : (networkFilter === 'all'
-                                ? 'Browse markets or accept a token transfer to populate this view.'
-                                : 'Tokens on this network appear here after this wallet receives them.')}
-                        emptyActionLabel={tokenQueryTrim && canFilter ? 'Clear filter' : undefined}
-                        onEmptyAction={tokenQueryTrim && canFilter ? () => onTokenQueryChange('') : undefined}
-                        onSelectToken={onSelectToken}
-                        pinnedKeys={pinnedKeys}
-                        onTogglePin={onTogglePin}
-                        hiddenKeys={hiddenKeys}
-                        onToggleHide={onToggleHide}
-                        verifyMap={verifyMap}
-                        hideSmallBalances={hideSmallBalances}
-                        smallBalanceThreshold={settings?.smallBalanceThreshold}
-                        numberFormat={settings?.numberFormat}
-                    />
+                    {filteredTokens.length === 0 ? (
+                        <BalanceList
+                            rows={[]}
+                            emptyTitle={tokenQueryTrim
+                                ? 'No matching tokens'
+                                : (networkFilter === 'all' ? 'No tokens yet' : 'No tokens on this network')}
+                            emptyBody={tokenQueryTrim
+                                ? `No held tokens match "${tokenQuery.trim()}".`
+                                : (networkFilter === 'all'
+                                    ? 'Browse markets or accept a token transfer to populate this view.'
+                                    : 'Tokens on this network appear here after this wallet receives them.')}
+                            emptyActionLabel={tokenQueryTrim && canFilter ? 'Clear filter' : undefined}
+                            onEmptyAction={tokenQueryTrim && canFilter ? () => onTokenQueryChange('') : undefined}
+                        />
+                    ) : null}
+                    {pricedTokens.length > 0 ? (
+                        <BalanceList
+                            rows={pricedTokens}
+                            fiatCurrency={settings?.fiatCurrency || 'USD'}
+                            onSelectToken={onSelectToken}
+                            pinnedKeys={pinnedKeys}
+                            onTogglePin={onTogglePin}
+                            hiddenKeys={hiddenKeys}
+                            onToggleHide={onToggleHide}
+                            verifyMap={verifyMap}
+                            hideSmallBalances={hideSmallBalances}
+                            smallBalanceThreshold={settings?.smallBalanceThreshold}
+                            numberFormat={settings?.numberFormat}
+                        />
+                    ) : null}
+                    {unpricedTokens.length > 0 ? (
+                        <section aria-label="Unpriced tokens">
+                            <p className={styles.tabNote}>Unpriced tokens</p>
+                            <BalanceList
+                                rows={unpricedTokens}
+                                fiatCurrency={settings?.fiatCurrency || 'USD'}
+                                onSelectToken={onSelectToken}
+                                pinnedKeys={pinnedKeys}
+                                onTogglePin={onTogglePin}
+                                hiddenKeys={hiddenKeys}
+                                onToggleHide={onToggleHide}
+                                verifyMap={verifyMap}
+                                hideSmallBalances={hideSmallBalances}
+                                smallBalanceThreshold={settings?.smallBalanceThreshold}
+                                numberFormat={settings?.numberFormat}
+                            />
+                        </section>
+                    ) : null}
                     {issuedUnheld.length > 0 ? (
                         <section aria-label="Issued by you" data-testid="issued-unheld">
                             <p className={styles.tabNote}>Issued by you</p>

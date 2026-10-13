@@ -36,12 +36,15 @@ import { formatFiatAmount as formatFiatValue } from '../utils/fiatAmountFormat.j
  * @param {string | null} [props.walletId]       the wallet these rows belong to; only used to tell a demo wallet apart, which prices itself from its own fixtures instead of the live oracle
  * @param {'all' | string} props.networkFilter
  * @param {number | null} [props.lastSyncedAt]   Unix ms of the last successful balance fetch. Drives the staleness label rendered on the right of the note row.
+ * @param {number | null} [props.pricesFetchedAt] Unix ms of the oldest live price used by the total.
+ * @param {() => void} [props.onRefresh]          refreshes balances and any expired prices.
+ * @param {boolean} [props.refreshing]            whether a manual refresh is running.
  * @param {boolean} [props.filterOpen]           whether the inline filter row is currently shown; drives the filter button's pressed state
  * @param {() => void} [props.onToggleFilter]    when provided, renders a filter toggle button next to the chart toggle
  * @param {() => void} [props.onCommandPalette]  when provided, renders a search button that opens the §33 command palette. The extension popup passes it (no AppHeader/LeftNav to host a trigger there); web + desktop leave it unset.
  * @param {() => void} [props.onLockWallet]      when provided, renders a lock button. Same reason: the popup and side panel have no header, so without it the only ways to lock were a shortcut and the palette.
  */
-export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, filterOpen, onToggleFilter, onCommandPalette, onOpenSettings, onLockWallet }) {
+export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, pricesFetchedAt, onRefresh, refreshing = false, filterOpen, onToggleFilter, onCommandPalette, onOpenSettings, onLockWallet }) {
     const { total, unpriced } = useMemo(() => {
         const sum = sumFiatValue(rows);
         const meaningfulUnpriced = sumFiatValue((rows || []).filter(hasNonZeroQuantity)).unpriced;
@@ -92,7 +95,7 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
             return undefined;
         }
         let cancelled = false;
-        messaging.getNativePricesRequest({ chainIds: nativeChainIds })
+        messaging.getNativePricesRequest({ chainIds: nativeChainIds, fiatCurrency })
             .then((result) => {
                 if (cancelled) return;
                 if (result?.disabled) { setPriceMap({}); return; }
@@ -100,7 +103,7 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
             })
             .catch(() => { if (!cancelled) setPriceMap({}); });
         return () => { cancelled = true; };
-    }, [messaging, nativeChainKey, isDemo]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [messaging, nativeChainKey, isDemo, fiatCurrency]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Compute 24h delta: for each native row with a known change pct,
     // back-derive the 24h-ago fiat value and accumulate the difference.
@@ -131,11 +134,12 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
     const filterLabel = networkFilter === 'all' ? null : networkFilter.toUpperCase();
     const hasUnpriced = unpriced > 0;
     const hasSync = typeof lastSyncedAt === 'number' && lastSyncedAt > 0;
+    const hasPriceSync = typeof pricesFetchedAt === 'number' && pricesFetchedAt > 0;
     const hasChange = !hidden
         && change24h
         && Number.isFinite(change24h.delta)
         && Number.isFinite(change24h.pct);
-    const showMeta = !hidden && (hasChange || hasUnpriced || hasSync);
+    const showMeta = !hidden && (hasChange || hasUnpriced || hasSync || hasPriceSync);
 
     return (
         // Home's rows hold only the ACTIVE address on each chain (Home.jsx), so
@@ -151,6 +155,18 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                     ) : null}
                 </span>
                 <div className={styles.actions}>
+                    {typeof onRefresh === 'function' ? (
+                        <button
+                            type="button"
+                            className={`${styles.eye} ${refreshing ? styles.refreshing : ''}`}
+                            onClick={onRefresh}
+                            disabled={refreshing}
+                            aria-label={refreshing ? 'Refreshing portfolio' : 'Refresh portfolio'}
+                            title={refreshing ? 'Refreshing portfolio' : 'Refresh portfolio'}
+                        >
+                            <Icon.RefreshIcon />
+                        </button>
+                    ) : null}
                     {/* Shells with no navigation surface need a
                         VISIBLE way into Settings. Only the MV3 popup passes
                         this (web and desktop reach Settings from the nav
@@ -261,6 +277,14 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                     {hasSync ? (
                         <StalenessLabel
                             lastSyncedAt={lastSyncedAt}
+                            warnAfterMs={5 * 60_000}
+                            className={styles.metaRight}
+                        />
+                    ) : null}
+                    {hasPriceSync ? (
+                        <StalenessLabel
+                            lastSyncedAt={pricesFetchedAt}
+                            prefix="Prices updated"
                             warnAfterMs={5 * 60_000}
                             className={styles.metaRight}
                         />
