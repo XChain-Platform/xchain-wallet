@@ -219,6 +219,32 @@ describe('MarketsList narrow layout', () => {
         expect(await screen.findByText('FFF')).toBeInTheDocument();
     });
 
+    it('assigns unique keys when the explorer repeats a market pair', async () => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const messaging = {
+            getMarkets: vi.fn().mockResolvedValue([
+                { tick1: 'BTC', tick2: 'PEPE', depth: 9 },
+                { tick1: 'BTC', tick2: 'PEPE', depth: 8 },
+            ]),
+            getDispensersForToken: vi.fn().mockResolvedValue([]),
+            listWatchlistForWallet: vi.fn().mockResolvedValue([]),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <MarketsList
+                    walletId="w"
+                    selectedAsset={{ chainId: 'bitcoin-mainnet', tick: 'BTC' }}
+                    onChangeAsset={() => {}}
+                    onOpenMarket={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        expect(await screen.findAllByRole('button', { name: 'Open PEPE market' })).toHaveLength(2);
+        expect(consoleError.mock.calls.flat().join(' ')).not.toContain('same key');
+        consoleError.mockRestore();
+    });
+
     it('debounces case-insensitive ticker and name search, clears it, and opens the result from the keyboard', async () => {
         const onOpenMarket = vi.fn();
         const messaging = {
