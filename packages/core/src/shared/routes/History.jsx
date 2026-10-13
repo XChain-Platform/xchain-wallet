@@ -58,6 +58,7 @@ import { StalenessLabel } from '../components/StalenessLabel.jsx';
 import { flows as flowsLib } from '@xchain-wallet/core';
 import {
     applyHistoryFilters,
+    classifyEntryAction,
     classifyEntryStatus,
     ACTION_TYPE_OPTIONS,
     STATUS_OPTIONS,
@@ -699,6 +700,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     tasks.push(Promise.resolve({
                         chainId: cid,
                         address: a.address,
+                        addressLabel: a.label || '',
                         history: flowsLib.synthesizeDemoHistory(cid, a.address),
                         links: flowsLib.synthesizeDemoLinks(),
                     }));
@@ -727,7 +729,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                                 .catch(() => [])
                             : Promise.resolve([]),
                     ]).then(([history, links, mempool, pendingTxs]) => (
-                        { chainId: cid, address: a.address, history, links, mempool, pendingTxs }
+                        { chainId: cid, address: a.address, addressLabel: a.label || '', history, links, mempool, pendingTxs }
                     )),
                 );
             }
@@ -792,7 +794,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         address: r.address,
                         link: linkMap.get(keyFor(r.chainId, aIdx)) || null,
                     });
-                    if (entry) all.push(entry);
+                    if (entry) all.push({ ...entry, receiveLabel: r.addressLabel });
                 }
             }
             // M2.1: build the pending side, then reconcile it against the
@@ -813,13 +815,13 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     const hash = String(row?.tx_hash ?? row?.txHash ?? '');
                     if (!hash) continue;
                     lastMempoolSeenRef.current.set(`${r.chainId}:${hash.toLowerCase()}`, nowMs);
-                    pendingCandidates.push(mempoolRowToEntry({
+                    pendingCandidates.push({ ...mempoolRowToEntry({
                         chainId: r.chainId,
                         address: r.address,
                         row,
                         ownAddresses,
                         observedAtMs: rememberObservedAt(r.chainId, hash, nowMs),
-                    }));
+                    }), receiveLabel: r.addressLabel });
                 }
                 for (const record of (r.pendingTxs || [])) {
                     // A failed record may have no txid (it died before
@@ -831,14 +833,14 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     // its sighting from; the host's own read of the UTXO set
                     // is that sighting, on the same clock.
                     if (record.networkSeenNow) lastMempoolSeenRef.current.set(key, nowMs);
-                    pendingCandidates.push(pendingTxToEntry({
+                    pendingCandidates.push({ ...pendingTxToEntry({
                         chainId: r.chainId,
                         address: r.address,
                         pendingTx: record,
                         ownAddresses,
                         observedAtMs: rememberObservedAt(r.chainId, identity, nowMs),
                         lastMempoolSeenMs: lastMempoolSeenRef.current.get(key) ?? null,
-                    }));
+                    }), receiveLabel: r.addressLabel });
                 }
             }
             const merged = mergePendingEntries({ confirmed: all, pending: pendingCandidates });
@@ -1648,6 +1650,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                                                     verify={actionVerifyMap[entry.key]}
                                                     showFiatInHistory={showFiatInHistory}
                                                     fiatCurrency={fiatCurrency}
+                                                    walletAddresses={walletAddressSet}
                                                     onDismissFailed={dismissFailedPending}
                                                 />
                                             ))}
@@ -1692,6 +1695,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             verify={actionVerifyMap[entry.key]}
                             showFiatInHistory={showFiatInHistory}
                             fiatCurrency={fiatCurrency}
+                            walletAddresses={walletAddressSet}
                             onDismissFailed={dismissFailedPending}
                         />
                     );
@@ -3261,8 +3265,12 @@ function contractRowLabel(entry) {
     return contractDisplayLabel(raw, { chainId: entry.chainId, actionIndex: idx });
 }
 
-export function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, chainTip, indexerWatermark, walletId, verify, showFiatInHistory, fiatCurrency, onDismissFailed }) {
+export function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, chainTip, indexerWatermark, walletId, verify, showFiatInHistory, fiatCurrency, walletAddresses, onDismissFailed }) {
     const d = chainRegistry.get(entry.chainId);
+    const receiveLabel = entry.receiveLabel
+        && classifyEntryAction(entry, walletAddresses) === 'receive'
+        ? entry.receiveLabel
+        : '';
     return (
         <li data-history-key={entry.key}>
             <button
@@ -3305,6 +3313,9 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
                 <span className={styles.rowSourceAddress} title={entry.source || undefined}>
                     {entry.source || '-'}
                 </span>
+                {receiveLabel ? (
+                    <span className={styles.rowReceiveLabel}>Received at {receiveLabel}</span>
+                ) : null}
                 {contractRowLabel(entry) ? (
                     <span className={styles.rowContractLabel}>
                         {contractRowLabel(entry)}

@@ -507,6 +507,13 @@
     white-space: nowrap;
 }
 
+.rowReceiveLabel {
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    color: var(--xc-text);
+    word-break: break-word;
+}
+
 /* Which contract a DEPLOY / EXECUTE / DEPOSIT / WITHDRAW row touched, named
    the way every other surface names one: "Escrow v1.0.0 (C:BTC:12)". Not
    monospaced like the address line above, because the leading half is a
