@@ -645,7 +645,10 @@ export async function switchToTestnet(page, password) {
  */
 export async function readTestnetReceiveAddress(page) {
     await gotoSection(page, 'Receive');
-    const field = page.getByLabel('Address', { exact: true });
+    const field = page.getByRole('textbox', {
+        name: 'Copy payment link for receive address',
+        exact: true,
+    });
     await expect(field).toBeVisible({ timeout: 30_000 });
     await expect(field, 'Receive never showed a Bitcoin testnet address')
         .toHaveValue(TESTNET_ADDRESS_RE, { timeout: 30_000 });

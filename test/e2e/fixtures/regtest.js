@@ -1763,7 +1763,10 @@ export async function unlockAfterReload(page, password) {
 export async function readReceiveAddress(page) {
     await gotoSection(page, 'Receive');
 
-    const field = page.getByLabel('Address', { exact: true });
+    const field = page.getByRole('textbox', {
+        name: 'Copy payment link for receive address',
+        exact: true,
+    });
     await expect(field).toBeVisible({ timeout: 30_000 });
 
     if (!REGTEST_ADDRESS_RE.test(await field.inputValue())) {
