@@ -143,6 +143,18 @@
     border-color: var(--xc-border-strong);
 }
 
+.link {
+    --xc-button-height: var(--xc-tap-min);
+    min-height: var(--xc-tap-min);
+    padding: 0 var(--xc-space-1);
+    background: transparent;
+    border-color: transparent;
+    color: var(--xc-accent-text);
+    font-weight: inherit;
+    text-decoration: underline;
+    text-underline-offset: 0.15em;
+}
+
 /* Ghost gets a neutral slate fill so white text reads clearly in both
  * light and dark modes. Used for less-prominent actions ("Back",
  * "Coming from FreeWallet") that should still look obviously

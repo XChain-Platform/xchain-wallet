@@ -748,7 +748,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                     />
                 ) : null}
 
-                <Button type="button" className={styles.linkButton} onClick={() => setShowAdvanced((v) => !v)}>
+                <Button type="button" variant="link" icon={null} onClick={() => setShowAdvanced((v) => !v)}>
                     {showAdvanced ? 'Hide advanced options' : 'Advanced options (lists, memo)'}
                 </Button>
                 {showAdvanced ? (

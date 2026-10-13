@@ -987,7 +987,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     {typeof onOpenBackup === 'function' ? (
                         <>
                             {' '}
-                            <Button type="button" className={picker.linkButton} onClick={() => setNudgeDismissed(true)}>
+                            <Button type="button" variant="link" size="sm" icon={null} onClick={() => setNudgeDismissed(true)}>
                                 Not now
                             </Button>
                         </>

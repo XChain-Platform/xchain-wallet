@@ -8,17 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import styles from './DraftDiscardButton.module.css';
+import { Button } from '@xchain-wallet/core/ui';
 
 /**
  * The inline "Discard" link inside a form's saved-draft banner.
  *
- * Send, Create dispenser, Issue token and Sign message each carried their
- * own inline-styled copy of this button with `padding: 0` and an extra-small
- * font, which rendered it 12px tall: half the 24px pointer-target floor
- * (WCAG 2.2 AA 2.5.8). Inline styles are also invisible to the stylesheet
- * tap-target sweep, so the miss only showed up in the browser walk. One
- * component with a CSS module keeps the floor stated where the sweep reads it.
+ * The shared link variant keeps this action visually consistent with inline
+ * links while retaining the 24px pointer-target floor in the kit stylesheet.
  *
  * @param {object} props
  * @param {() => void} props.onClick
@@ -27,13 +23,15 @@ import styles from './DraftDiscardButton.module.css';
  */
 export function DraftDiscardButton({ onClick, label, children }) {
     return (
-        <button
+        <Button
             type="button"
-            className={styles.discard}
+            variant="link"
+            size="sm"
+            icon={null}
             onClick={onClick}
             aria-label={label}
         >
             {children}
-        </button>
+        </Button>
     );
 }
