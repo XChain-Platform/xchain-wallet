@@ -210,12 +210,6 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     );
     const balancesRef = useRef(/** @type {Record<string, any[]> | null} */ (null));
     balancesRef.current = balances;
-    const [balancesRefreshing, setBalancesRefreshing] = useState(false);
-    const manualRefreshGenerationRef = useRef(0);
-    useEffect(() => () => { manualRefreshGenerationRef.current += 1; }, [
-        activeWalletId,
-        activeAccountId,
-    ]);
     const balancesScopeRef = useRef(/** @type {string | null} */ (null));
     // Active (operating) address per chain. The headline balance per coin
     // reflects this address only (not the sum across all addresses).
@@ -603,9 +597,6 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 setConfirmSessions([]);
             }
             setLoadError(null);
-            setBalancesRefreshing(false);
-        } else {
-            setBalancesRefreshing(true);
         }
 
         try {
@@ -738,24 +729,16 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 if (!isCancelled()) setConfirmSessions(resp?.sessions || []);
             } catch { /* non-fatal */ }
         }
-        if (!reset && !isCancelled()) setBalancesRefreshing(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [messaging]);
 
-    const refreshBalances = useCallback(() => {
-        if (!activeWalletId || !browserOnline || pollThrottleRef.current.isInFlight()) return;
-        const generation = manualRefreshGenerationRef.current;
-        pollThrottleRef.current.reset();
-        pollThrottleRef.current.start();
-        loadHomeData(activeWalletId, activeAccountId || undefined, {
-            reset: false,
-            reportError: true,
-            isCancelled: () => manualRefreshGenerationRef.current !== generation,
-        });
-    }, [activeWalletId, activeAccountId, browserOnline, loadHomeData]);
-
+    // The one manual refresh on Home (the hero's button): reloads balances,
+    // and with them the prices, quietly over what is on screen. A failure is a
+    // toast, never a skeleton or a banner over balances that are still good.
+    // A load already in flight (a poll, a focus refresh) is not doubled up.
     const refreshPortfolio = useCallback(async () => {
-        if (!activeWalletId || portfolioRefreshing || !isNavigatorOnline()) return;
+        if (!activeWalletId || portfolioRefreshing || !browserOnline || !isNavigatorOnline()) return;
+        if (pollThrottleRef.current.isInFlight()) return;
         const refreshId = portfolioRefreshIdRef.current + 1;
         portfolioRefreshIdRef.current = refreshId;
         setPortfolioRefreshing(true);
@@ -764,12 +747,13 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         try {
             await loadHomeData(activeWalletId, activeAccountId || undefined, {
                 reset: false,
+                reportError: true,
                 isCancelled: () => portfolioRefreshIdRef.current !== refreshId,
             });
         } finally {
             if (portfolioRefreshIdRef.current === refreshId) setPortfolioRefreshing(false);
         }
-    }, [activeWalletId, activeAccountId, loadHomeData, portfolioRefreshing]);
+    }, [activeWalletId, activeAccountId, browserOnline, loadHomeData, portfolioRefreshing]);
 
     // Reruns when the active wallet OR active BIP44 account changes.
     // Switching either flushes stale state and refetches. When
@@ -1059,17 +1043,6 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             <ListPage className={isFull ? styles.bodyFull : undefined}>
                 {/* Home has no PageHeader, so its one h1 is visually hidden. */}
                 <h1 className="sr-only">Home</h1>
-                <div className={styles.refreshRow}>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        loading={balancesRefreshing}
-                        disabled={!browserOnline || balances === null}
-                        onClick={refreshBalances}
-                    >
-                        {balancesRefreshing ? 'Refreshing balances…' : 'Refresh balances'}
-                    </Button>
-                </div>
                 {!browserOnline ? (
                     <StatusMessage variant="warning">
                         {balances

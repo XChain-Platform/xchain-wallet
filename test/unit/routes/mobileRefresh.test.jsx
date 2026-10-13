@@ -61,9 +61,9 @@ describe('mobile refresh', () => {
         ));
 
         expect(await screen.findByText('BTC · Bitcoin')).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Refresh balances' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Refresh portfolio' }));
 
-        const refreshing = screen.getByRole('button', { name: 'Refreshing balances…' });
+        const refreshing = screen.getByRole('button', { name: 'Refreshing portfolio' });
         expect(refreshing).toBeDisabled();
         fireEvent.click(refreshing);
         expect(messaging.getWalletBalances).toHaveBeenCalledTimes(2);
@@ -73,6 +73,41 @@ describe('mobile refresh', () => {
         expect(await screen.findByText(/Couldn't refresh balances/)).toBeInTheDocument();
         expect(screen.getByText('BTC · Bitcoin')).toBeInTheDocument();
         expect(screen.queryByLabelText('Loading balances')).toBeNull();
+    });
+
+    it('offers one Home refresh control, in the hero', async () => {
+        const balances = {
+            [HOME_CHAIN]: [{
+                address: ADDRESS,
+                balances: {
+                    native: { tick: 'BTC', quantity: '100000000', divisibility: 8 },
+                    tokens: [],
+                },
+            }],
+        };
+        const messaging = {
+            listWallets: vi.fn().mockResolvedValue([WALLET]),
+            listAccounts: vi.fn().mockResolvedValue([ACCOUNT]),
+            getWalletBalances: vi.fn().mockResolvedValue(balances),
+            getAddressesByChain: vi.fn().mockResolvedValue({}),
+            getActiveAddresses: vi.fn().mockResolvedValue({}),
+            getSettings: vi.fn().mockResolvedValue({}),
+        };
+        render(provider(
+            messaging,
+            <Home activeWalletId={WALLET.id} activeAccountId={ACCOUNT.id} />,
+        ));
+
+        expect(await screen.findByText('BTC · Bitcoin')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Refresh(ing)? balances/ })).toBeNull();
+        const hero = screen.getByRole('region', { name: 'Active address balance' });
+        const refresh = screen.getByRole('button', { name: 'Refresh portfolio' });
+        expect(hero.contains(refresh)).toBe(true);
+        expect(screen.getAllByRole('button', { name: /Refresh(ing)? portfolio/ })).toHaveLength(1);
+
+        fireEvent.click(refresh);
+        await waitFor(() => expect(messaging.getWalletBalances).toHaveBeenCalledTimes(2));
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh portfolio' })).not.toBeDisabled());
     });
 
     it('treats a resolved per-address balance error as a failed refresh', async () => {
@@ -110,7 +145,7 @@ describe('mobile refresh', () => {
         ));
 
         expect(await screen.findByText('BTC · Bitcoin')).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Refresh balances' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Refresh portfolio' }));
 
         expect(await screen.findByText(/Couldn't refresh balances/)).toBeInTheDocument();
         expect(screen.getByText('BTC · Bitcoin')).toBeInTheDocument();
