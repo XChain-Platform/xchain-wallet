@@ -104,6 +104,7 @@ import styles from './History.module.css';
 const HISTORY_CHAIN_FILTER_KEY = 'history';
 const GROUPING_MODE_STORAGE_KEY = 'xc:historyGroupingMode';
 const HISTORY_PAGE_SIZE = 100;
+const EMPTY_PEER_CACHE = Object.freeze({});
 const OFFLINE_ACTION_REASON = 'This action needs a network connection.';
 
 function historyChainFilterKey(walletId) {
@@ -544,6 +545,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const exportTime = useLongOperationStatus(exporting);
     useEffect(() => () => exportAbortRef.current?.abort(), []);
     const [selectedKey, setSelectedKey] = useState(/** @type {string | null} */ (null));
+    const selectedKeyRef = useRef(selectedKey);
+    selectedKeyRef.current = selectedKey;
     // M2.3: the open row is remembered by TRANSACTION as well as by key.
     // A pending entry is keyed on its hash and a confirmed one on its
     // action index, so the key of the row the user is reading changes at
@@ -554,6 +557,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const [peerCache, setPeerCache] = useState(
         /** @type {Record<string, { loading: boolean, action: any | null, error: string | null }>} */ ({}),
     );
+    const peerCacheRef = useRef(peerCache);
+    peerCacheRef.current = peerCache;
     // §24.6 / Cluster Y FOLLOWUP 4; once a detached-window's initial
     // route resolves, ref-flag this so we don't re-select on every
     // re-render or after the user manually navigates away from the row.
@@ -1550,46 +1555,63 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             onSelectEntry(entry);
             return;
         }
-        const closing = selectedKey === entry.key;
+        const closing = selectedKeyRef.current === entry.key;
+        selectedKeyRef.current = closing ? null : entry.key;
         selectedTxRef.current = closing ? null : rememberedSelection(entry);
         setSelectedKey(closing ? null : entry.key);
         if (entry.link?.peerChainId && entry.link.peerActionIndex) {
             const pKey = peerCacheKey(entry.link.peerChainId, entry.link.peerActionIndex);
-            if (!peerCache[pKey]) {
+            if (!peerCacheRef.current[pKey]) {
                 if (!browserOnline) {
-                    setPeerCache((prev) => ({
-                        ...prev,
-                        [pKey]: { loading: false, action: null, error: OFFLINE_ACTION_REASON },
-                    }));
+                    setPeerCache((prev) => {
+                        const next = {
+                            ...prev,
+                            [pKey]: { loading: false, action: null, error: OFFLINE_ACTION_REASON },
+                        };
+                        peerCacheRef.current = next;
+                        return next;
+                    });
                     return;
                 }
-                setPeerCache((prev) => ({
-                    ...prev,
-                    [pKey]: { loading: true, action: null, error: null },
-                }));
+                setPeerCache((prev) => {
+                    const next = {
+                        ...prev,
+                        [pKey]: { loading: true, action: null, error: null },
+                    };
+                    peerCacheRef.current = next;
+                    return next;
+                });
                 messaging.getActionByIndex({
                     chainId: entry.link.peerChainId,
                     actionIndex: entry.link.peerActionIndex,
                 })
                     .then((action) => {
-                        setPeerCache((prev) => ({
-                            ...prev,
-                            [pKey]: { loading: false, action, error: null },
-                        }));
+                        setPeerCache((prev) => {
+                            const next = {
+                                ...prev,
+                                [pKey]: { loading: false, action, error: null },
+                            };
+                            peerCacheRef.current = next;
+                            return next;
+                        });
                     })
                     .catch((err) => {
-                        setPeerCache((prev) => ({
-                            ...prev,
-                            [pKey]: {
-                                loading: false,
-                                action: null,
-                                error: err?.message || String(err),
-                            },
-                        }));
+                        setPeerCache((prev) => {
+                            const next = {
+                                ...prev,
+                                [pKey]: {
+                                    loading: false,
+                                    action: null,
+                                    error: err?.message || String(err),
+                                },
+                            };
+                            peerCacheRef.current = next;
+                            return next;
+                        });
                     });
             }
         }
-    }, [messaging, onSelectEntry, peerCache, selectedKey]);
+    }, [browserOnline, messaging, onSelectEntry]);
 
     const onTimelineKeyDown = (event) => {
         if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
@@ -2029,7 +2051,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                                                             : connectorByKey.has(entry.key)
                                                     }
                                                     onClick={onRowClick}
-                                                    peerCache={peerCache}
+                                                    peerCache={selectedKey === entry.key ? peerCache : EMPTY_PEER_CACHE}
                                                     isFull={isFull}
                                                     chainTip={chainTipByChainId[entry.chainId]}
                                                     indexerWatermark={indexerWatermarkByChainId[entry.chainId]}
@@ -2075,7 +2097,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             selected={selectedKey === entry.key}
                             showConnector={connectorByKey.has(entry.key)}
                             onClick={onRowClick}
-                            peerCache={peerCache}
+                            peerCache={selectedKey === entry.key ? peerCache : EMPTY_PEER_CACHE}
                             isFull={isFull}
                             chainTip={chainTipByChainId[entry.chainId]}
                             indexerWatermark={indexerWatermarkByChainId[entry.chainId]}

@@ -6,6 +6,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
+
+const renderMetrics = vi.hoisted(() => ({ blockLabels: vi.fn() }));
+
+vi.mock('../../../packages/core/src/i18n/index.js', async (importOriginal) => {
+    const actual = await importOriginal();
+    return {
+        ...actual,
+        t: (key, values) => {
+            if (key === 'history.row.block') renderMetrics.blockLabels();
+            return actual.t(key, values);
+        },
+    };
+});
+
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
 import { slowTimeout } from '../../helpers/testEnvSpeed.js';
@@ -43,6 +57,7 @@ function mountHistory(rows) {
         getAddressMempool: vi.fn().mockResolvedValue([]),
         getPendingTxsForAddress: vi.fn().mockResolvedValue([]),
         getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: null }),
+        listContacts: vi.fn().mockResolvedValue([]),
         getMultisigReceiveAddress: vi.fn().mockRejectedValue(new Error('none')),
         getSettings: vi.fn().mockResolvedValue({ verifyProofs: false }),
     };
@@ -55,6 +70,7 @@ function mountHistory(rows) {
 
 beforeEach(() => {
     globalThis.localStorage?.setItem('xc:historyGroupingMode', 'flat');
+    renderMetrics.blockLabels.mockClear();
 });
 
 afterEach(() => {
@@ -76,6 +92,14 @@ describe('History large-list performance', () => {
         expect(elapsedMs).toBeLessThan(slowTimeout(1_800));
         expect(renderedRows).toHaveLength(100);
         expect(screen.getByText('100 of 5,000 history items shown')).toBeInTheDocument();
+
+        const initialBlockLabels = renderMetrics.blockLabels.mock.calls.length;
+        fireEvent.click(renderedRows[0].querySelector('button[data-history-row]'));
+        await waitFor(() => {
+            expect(renderedRows[0].querySelector('button[data-history-row]'))
+                .toHaveAttribute('aria-expanded', 'true');
+        });
+        expect(renderMetrics.blockLabels.mock.calls.length - initialBlockLabels).toBe(1);
 
         fireEvent.click(screen.getByRole('button', { name: 'Export…' }));
         expect(screen.getByText(`${ENTRY_COUNT.toLocaleString()} filtered rows will be exported.`))
