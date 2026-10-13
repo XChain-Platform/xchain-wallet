@@ -51,8 +51,8 @@ describe('large text layout styles', () => {
         expect(`${appHeader}\n${pageHeader}`)
             .not.toMatch(/font-size:\s*\d*\.?\d+px/);
         expect(rule(appHeader, '.left')).toMatch(/overflow:\s*hidden/);
-        expect(rule(pageHeader, '.title')).toMatch(/text-overflow:\s*ellipsis/);
-        expect(rule(pageHeader, '.title')).toMatch(/white-space:\s*nowrap/);
+        expect(rule(pageHeader, '.title')).toMatch(/overflow-wrap:\s*anywhere/);
+        expect(rule(pageHeader, '.title')).toMatch(/white-space:\s*normal/);
         expect(rule(networkButton, '.networkSelectLabel')).toMatch(/text-overflow:\s*ellipsis/);
     });
 
