@@ -947,6 +947,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         return (
             <Screen variant={variant}>
                 <ListPage className={isFull ? styles.bodyFull : undefined}>
+                    <h1 className="sr-only">Home</h1>
                     {loadErrorText ? (
                         <StatusMessage variant="error" className={styles.error}>{loadErrorText}</StatusMessage>
                     ) : null}

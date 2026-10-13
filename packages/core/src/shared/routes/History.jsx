@@ -2197,9 +2197,9 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                         </div>
                         {isLinked ? (
                             <div className={styles.detailPeerBlock}>
-                                <h4 className={styles.detailSectionHeading}>
+                                <h2 className={styles.detailSectionHeading}>
                                     Peer · {entry.link.peerCoinTicker} #{entry.link.peerActionIndex}
-                                </h4>
+                                </h2>
                                 {peer?.loading ? (
                                     <p className={styles.empty}>Loading the linked transaction…</p>
                                 ) : peer?.error ? (
@@ -2375,7 +2375,7 @@ function PendingDetailPanel({ entry, balancesHidden = false, onDismissFailed }) 
                 promise under this heading: "not reported yet" would say
                 more data is coming, and none is. */}
             {settled && desc.kind === 'none' ? null : (
-                <h4 className={styles.detailSectionHeading}>{t('pending.detail.decodedHeading')}</h4>
+                <h2 className={styles.detailSectionHeading}>{t('pending.detail.decodedHeading')}</h2>
             )}
             {desc.kind === 'send' || desc.kind === 'local' ? (
                 <ul className={styles.pendingOutputs}>
