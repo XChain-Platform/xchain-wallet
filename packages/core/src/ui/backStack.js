@@ -8,24 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The system Back gesture, wired to whatever back action is on screen.
-//
-// The wallet navigates by view state, not by URL, so the browser's session
-// history never grew: there was nothing for a Back press to go back TO. On
-// Android that meant the Back key left the app from every inner screen
-// (measured on an LG K51, 2026-10-12: Receive -> Back -> launcher), and on
-// the web it meant the browser's Back button left the wallet.
-//
-// The fix keeps exactly one invariant: THERE IS ONE SENTINEL HISTORY ENTRY ON
-// TOP IF AND ONLY IF SOME SCREEN HAS A BACK ACTION. A Back press pops the
-// sentinel, which fires `popstate`, which runs the top screen's own back
-// action - the same function its on-screen chevron calls, so the two can
-// never disagree about where "back" goes. With no back action registered
-// there is no sentinel, so a Back press does what the platform would have
-// done anyway: leave.
-//
-// The shell needs no knowledge of any of this. Android only has to ask the
-// WebView whether it can go back (`MainActivity.routeBackKeyToTheWebView`).
+// The system Back gesture runs the same action as the visible back control.
+// Android's narrow App plugin dispatches directly to the top handler and
+// minimizes when the stack is empty. Browsers use a sentinel history entry
+// when route snapshots do not already own history. Overlay handlers register
+// above route handlers, so a modal or sheet always closes first.
 
 import { useEffect, useRef } from 'react';
 
@@ -38,8 +25,31 @@ let ignoreNextPop = false;
 let syncScheduled = false;
 let listening = false;
 let routeHistoryManaged = false;
+let nativeListener = null;
 
 const hasHistory = () => typeof window !== 'undefined' && Boolean(window.history?.pushState);
+
+const capacitorApp = () => globalThis.Capacitor?.Plugins?.App;
+
+function onNativeBack() {
+    const top = handlers[handlers.length - 1];
+    if (top) {
+        top.run();
+        return;
+    }
+    capacitorApp()?.minimizeApp?.();
+}
+
+/** Keep one Capacitor listener alive so Back on a root screen can minimize. */
+function ensureNativeListener() {
+    const app = capacitorApp();
+    if (nativeListener || typeof app?.addListener !== 'function') return;
+    nativeListener = Promise.resolve(app.addListener('backButton', onNativeBack))
+        .catch(() => {
+            nativeListener = null;
+            return null;
+        });
+}
 
 /** Bring the sentinel in line with whether anything can go back. */
 function sync() {
@@ -96,6 +106,7 @@ function onPopState() {
  * @returns {() => void} unregister
  */
 export function registerBackHandler(run, kind = 'overlay') {
+    ensureNativeListener();
     if (!listening && typeof window !== 'undefined') {
         window.addEventListener('popstate', onPopState);
         listening = true;
@@ -129,6 +140,7 @@ export function useBackHandler(onBack, disabled = false, kind = 'overlay') {
     latest.current = { onBack, disabled };
     const present = typeof onBack === 'function';
     useEffect(() => {
+        ensureNativeListener();
         if (!present) return undefined;
         return registerBackHandler(() => {
             const { onBack: run, disabled: off } = latest.current;
@@ -156,4 +168,7 @@ export function resetBackStackForTests() {
     if (listening && typeof window !== 'undefined') window.removeEventListener('popstate', onPopState);
     listening = false;
     routeHistoryManaged = false;
+    const listener = nativeListener;
+    nativeListener = null;
+    Promise.resolve(listener).then((handle) => handle?.remove?.());
 }
