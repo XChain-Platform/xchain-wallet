@@ -6,18 +6,35 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// Create multisig requires a master fingerprint for the local cosigner,
-// and nothing in the UI showed one, so no multisig could be created. This
-// drives the real form: picking one of the wallet's addresses must fill the
-// fingerprint from the host, a failed read must leave the field editable
-// with a reason, and "Share this wallet as a cosigner" must show the values
-// the other party pastes in.
+// The create flow validates every cosigner before presenting an explicit
+// review. Local key material stays tied to the selected Bitcoin network, and
+// external xpubs must derive the public key shown in the review.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import React from 'react';
+import { HDKey } from '@scure/bip32';
 import { MultisigCreate } from '../../../packages/core/src/shared/routes/MultisigCreate.jsx';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+
+const MAINNET_VERSIONS = { private: 0x0488ade4, public: 0x0488b21e };
+const TESTNET_VERSIONS = { private: 0x04358394, public: 0x043587cf };
+
+function externalKey(versions = TESTNET_VERSIONS, fill = 7) {
+    const account = HDKey.fromMasterSeed(new Uint8Array(32).fill(fill), versions)
+        .derive("m/48'/0'/0'");
+    const child = account.derive('m/0/0');
+    return {
+        xpub: account.publicExtendedKey,
+        pubkey: Array.from(child.publicKey, (byte) => byte.toString(16).padStart(2, '0')).join(''),
+        path: "m/48'/0'/0'/0/0",
+    };
+}
+
+const EXTERNAL = externalKey();
+const MAINNET_EXTERNAL = externalKey(MAINNET_VERSIONS);
+const OWN_OTHER = externalKey(TESTNET_VERSIONS, 9);
+const UNRELATED_EXTERNAL = externalKey(TESTNET_VERSIONS, 11);
 
 const ADDRESS = {
     id: 'addr-1',
@@ -26,6 +43,22 @@ const ADDRESS = {
     publicKey: '02'.padEnd(66, 'a'),
     derivationPath: "m/84'/1'/0'/0/0",
     signerId: null,
+};
+
+const OTHER_OWN_ADDRESS = {
+    id: 'addr-2',
+    address: 'tb1qotherlocalcosigner',
+    label: '',
+    publicKey: OWN_OTHER.pubkey,
+    derivationPath: OWN_OTHER.path,
+    signerId: null,
+};
+
+const MAINNET_ADDRESS = {
+    ...ADDRESS,
+    id: 'addr-mainnet',
+    address: 'bc1qlocalcosigner',
+    derivationPath: "m/84'/0'/0'/0/0",
 };
 
 const INFO = {
@@ -61,6 +94,24 @@ async function pickLocalAddress() {
     await act(async () => {
         fireEvent.change(screen.getByLabelText(/Use one of this wallet's addresses/i), { target: { value: 'addr-1' } });
     });
+}
+
+async function fillExternalCosigner(key = EXTERNAL) {
+    const publicKeys = screen.getAllByLabelText(/Public key \(hex/i);
+    const fingerprints = screen.getAllByLabelText(/Master fingerprint/i);
+    const paths = screen.getAllByLabelText(/^Derivation path/i);
+    await act(async () => {
+        fireEvent.change(screen.getByLabelText(/^xpub$/i), { target: { value: key.xpub } });
+        fireEvent.change(publicKeys[1], { target: { value: key.pubkey } });
+        fireEvent.change(fingerprints[1], { target: { value: '11223344' } });
+        fireEvent.change(paths[1], { target: { value: key.path } });
+    });
+}
+
+async function fillValidDraft(messaging) {
+    await mount(messaging);
+    await pickLocalAddress();
+    await fillExternalCosigner();
 }
 
 afterEach(() => cleanup());
@@ -103,6 +154,136 @@ describe('MultisigCreate local cosigner', () => {
             fireEvent.change(origins[1], { target: { value: 'local' } });
         });
         expect(screen.getByText(/Only one cosigner can be this wallet's own key/)).toBeTruthy();
+    });
+
+    it('rejects a local address left over from another selected network', async () => {
+        const messaging = mkMessaging({
+            getAddressesByChain: vi.fn(async () => ({
+                'bitcoin-mainnet': [MAINNET_ADDRESS],
+                'bitcoin-testnet': [ADDRESS],
+            })),
+        });
+        await mount(messaging);
+        await act(async () => {
+            fireEvent.change(screen.getByLabelText(/Use one of this wallet's addresses/i), {
+                target: { value: 'addr-mainnet' },
+            });
+        });
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /^Network:/i }));
+        });
+        await act(async () => {
+            fireEvent.click(screen.getByRole('option', { name: /Bitcoin BTC.*testnet/i }));
+        });
+
+        expect(screen.getByText(/select a local address on the chosen network/i)).toBeTruthy();
+    });
+});
+
+describe('MultisigCreate key validation', () => {
+    it('rejects a compressed-looking value that is not a secp256k1 point', async () => {
+        await mount(mkMessaging());
+        await pickLocalAddress();
+        await fillExternalCosigner({ ...EXTERNAL, pubkey: '03'.padEnd(66, 'b') });
+
+        expect(screen.getByText(/public key must be a 33-byte compressed key/i)).toBeTruthy();
+    });
+
+    it('rejects duplicate public keys before review', async () => {
+        await mount(mkMessaging());
+        await pickLocalAddress();
+        await fillExternalCosigner({ ...EXTERNAL, pubkey: ADDRESS.publicKey });
+
+        expect(screen.getByText(/Two cosigners share the same public key/i)).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
+    });
+
+    it('rejects another key owned by the current wallet as external', async () => {
+        const messaging = mkMessaging({
+            getAddressesByChain: vi.fn(async () => ({
+                'bitcoin-testnet': [ADDRESS, OTHER_OWN_ADDRESS],
+            })),
+        });
+        await mount(messaging);
+        await pickLocalAddress();
+        await fillExternalCosigner({ ...EXTERNAL, pubkey: OTHER_OWN_ADDRESS.publicKey });
+
+        expect(screen.getByText(/one of the current wallet's own keys/i)).toBeTruthy();
+    });
+
+    it('rejects a mainnet xpub on the selected test network', async () => {
+        await mount(mkMessaging());
+        await pickLocalAddress();
+        await fillExternalCosigner(MAINNET_EXTERNAL);
+
+        expect(screen.getByText(/xpub is for Bitcoin mainnet, not this test network/i)).toBeTruthy();
+    });
+
+    it('rejects a public key that the entered xpub does not derive', async () => {
+        await mount(mkMessaging());
+        await pickLocalAddress();
+        await fillExternalCosigner({ ...EXTERNAL, pubkey: UNRELATED_EXTERNAL.pubkey });
+
+        expect(screen.getByText(/Public key does not match the xpub and derivation path/i)).toBeTruthy();
+    });
+
+    it('enforces M no greater than N', async () => {
+        await mount(mkMessaging());
+        await act(async () => {
+            fireEvent.change(screen.getByLabelText(/Threshold/i), { target: { value: '3' } });
+        });
+
+        expect(screen.getByText(/Threshold must be ≤ cosigner count/i)).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
+    });
+
+    it('enforces the classic script limit on N', async () => {
+        await mount(mkMessaging());
+        const add = screen.getByRole('button', { name: /Add cosigner/i });
+        await act(async () => {
+            for (let i = 0; i < 14; i += 1) fireEvent.click(add);
+            fireEvent.click(screen.getByRole('radio', { name: /^Classic multi-signature/i }));
+        });
+
+        expect(screen.getByText(/supports at most 15 cosigners/i)).toBeTruthy();
+        expect(screen.getByRole('button', { name: /Add cosigner/i }).disabled).toBe(true);
+    });
+});
+
+describe('MultisigCreate review', () => {
+    it('reviews the complete policy before creating it and wraps long keys', async () => {
+        const messaging = mkMessaging({
+            createMultisigConfig: vi.fn(async (request) => ({
+                wallet: { name: 'Shared wallet' },
+                config: {
+                    scheme: request.scheme,
+                    threshold: request.threshold,
+                    cosigners: request.cosigners,
+                },
+            })),
+        });
+        await fillValidDraft(messaging);
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        });
+
+        expect(messaging.createMultisigConfig).not.toHaveBeenCalled();
+        expect(screen.getByText(/2-of-2 SegWit multi-signature/i)).toBeTruthy();
+        const reviewedXpub = screen.getByText(EXTERNAL.xpub);
+        expect(reviewedXpub.style.overflowWrap).toBe('anywhere');
+        expect(screen.getByText(EXTERNAL.pubkey)).toBeTruthy();
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'Confirm multisig' }));
+        });
+
+        expect(messaging.createMultisigConfig).toHaveBeenCalledTimes(1);
+        expect(messaging.createMultisigConfig).toHaveBeenCalledWith(expect.objectContaining({
+            chainId: 'bitcoin-testnet',
+            scheme: 'p2wsh-multisig',
+            threshold: 2,
+        }));
     });
 });
 

@@ -97,4 +97,13 @@ describe('useHaptic', () => {
 
         expect(feedback.tap).toHaveBeenCalledOnce();
     });
+
+    it('reports support and passes a custom pattern through', () => {
+        const { result } = renderHook(() => useHaptic());
+
+        expect(result.current.supported).toBe(true);
+        act(() => result.current.vibrate([1, 2, 3]));
+
+        expect(vibrate).toHaveBeenCalledWith([1, 2, 3]);
+    });
 });

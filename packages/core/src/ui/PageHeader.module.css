@@ -14,7 +14,7 @@
     justify-self: start;
     background: transparent;
     border: none;
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     font-size: var(--xc-text-sm);
     cursor: pointer;
     /* Align the chevron's point with the AppHeader logo's left edge.
@@ -76,7 +76,7 @@
     justify-content: center;
     width: 1.25rem;
     height: 1.25rem;
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     flex: 0 0 auto;
 }
 

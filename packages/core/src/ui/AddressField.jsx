@@ -19,8 +19,8 @@ const ICONS = {
 };
 
 /**
- * AddressField: an address input with a single trailing icon action
- * inside the field. The two canonical uses:
+ * AddressField: an address input with an optional trailing icon action
+ * inside the field. The two canonical icon uses:
  *
  *   - To ("contacts"): outbound destination. The field accepts typed or
  *     pasted addresses; the address-book icon navigates to the user's
@@ -40,22 +40,54 @@ const ICONS = {
  *   - icon          'contacts' | 'addresses'
  *   - onIconClick   () => void   navigate to the picker screen
  *   - iconLabel     accessible label override for the icon button
+ *   - onPaste       host callback for URI handling; unconsumed plain text
+ *                     with surrounding whitespace is trimmed before insertion
  *
  * @typedef {object} AddressFieldOwnProps
- * @property {'contacts' | 'addresses'} icon
- * @property {() => void} onIconClick
+ * @property {'contacts' | 'addresses'} [icon]
+ * @property {() => void} [onIconClick]
  * @property {string} [iconLabel]
  */
 export const AddressField = forwardRef(function AddressField(
-    { icon, onIconClick, iconLabel, size = 'md', label, disabled, style, ...rest },
+    {
+        icon,
+        onIconClick,
+        iconLabel,
+        size = 'md',
+        label,
+        disabled,
+        style,
+        value,
+        onChange,
+        onPaste,
+        ...rest
+    },
     ref,
 ) {
-    const { Component: IconComponent, defaultLabel } = ICONS[icon] || ICONS.contacts;
+    const { Component: IconComponent, defaultLabel } = ICONS[icon] || {};
     const wrapClass = [
         styles.wrap,
         size === 'lg' ? styles.lg : '',
         label ? '' : styles.noLabel,
     ].filter(Boolean).join(' ');
+
+    const handlePaste = (event) => {
+        onPaste?.(event);
+        if (event.defaultPrevented || typeof onChange !== 'function') return;
+
+        const pasted = event.clipboardData?.getData?.('text');
+        if (typeof pasted !== 'string' || pasted === pasted.trim()) return;
+
+        const input = event.currentTarget;
+        const current = String(value ?? input.value ?? '');
+        const start = input.selectionStart ?? current.length;
+        const end = input.selectionEnd ?? start;
+        event.preventDefault();
+        onChange({
+            target: { value: `${current.slice(0, start)}${pasted.trim()}${current.slice(end)}` },
+        });
+    };
+
     return (
         <div className={wrapClass}>
             <Input
@@ -67,19 +99,24 @@ export const AddressField = forwardRef(function AddressField(
                 autoCapitalize="none"
                 autoCorrect="off"
                 spellCheck={false}
-                style={{ paddingInlineEnd: '48px', ...style }}
+                style={IconComponent ? { paddingInlineEnd: '48px', ...style } : style}
+                value={value}
+                onChange={onChange}
+                onPaste={handlePaste}
                 {...rest}
             />
-            <button
-                type="button"
-                className={styles.iconButton}
-                onClick={onIconClick}
-                disabled={disabled}
-                aria-label={iconLabel || defaultLabel}
-                title={iconLabel || defaultLabel}
-            >
-                <IconComponent />
-            </button>
+            {IconComponent ? (
+                <button
+                    type="button"
+                    className={styles.iconButton}
+                    onClick={onIconClick}
+                    disabled={disabled}
+                    aria-label={iconLabel || defaultLabel}
+                    title={iconLabel || defaultLabel}
+                >
+                    <IconComponent />
+                </button>
+            ) : null}
         </div>
     );
 });

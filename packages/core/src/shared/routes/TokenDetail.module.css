@@ -7,6 +7,28 @@
     flex: 0 0 auto;
 }
 
+.headerTitle {
+    display: block;
+    max-width: min(60vw, 32rem);
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.2;
+}
+
+.headerIconFallback {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 6px;
+    background: var(--xc-accent-primary);
+    color: var(--xc-on-accent);
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    flex: 0 0 auto;
+}
+
 
 
 /* Body sizing mirrors Home.module.css exactly so the two routes share
@@ -32,7 +54,7 @@
     appearance: none;
     background: transparent;
     border: none;
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     font-size: var(--xc-text-sm);
     font-weight: 600;
     cursor: pointer;
@@ -141,6 +163,19 @@
     height: 4.5rem;
     flex: 0 0 auto;
     object-fit: contain;
+}
+
+.balanceHeroIconFallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 4.5rem;
+    height: 4.5rem;
+    border-radius: var(--xc-radius-sm);
+    background: rgba(255, 255, 255, 0.2);
+    color: #FFFFFF;
+    font-size: var(--xc-text-xl);
+    font-weight: 800;
 }
 
 .balanceHeroChainOverlay {
@@ -278,7 +313,7 @@
     height: 32px;
     border-radius: 50%;
     background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -341,7 +376,7 @@
     justify-content: center;
     width: 16px;
     height: 16px;
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
 }
 
 /* ───── Tabs - matches HomeTabs ───── */
@@ -382,7 +417,7 @@
     outline-offset: -2px;
 }
 .tabActive {
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     border-bottom-color: var(--xc-accent-primary);
 }
 
@@ -489,7 +524,7 @@
 }
 
 .statValuePositive { color: var(--xc-success, #14b86c); }
-.statValueNegative { color: var(--xc-danger, #d93838); }
+.statValueNegative { color: var(--xc-danger-fg, #d93838); }
 
 .chart {
     padding: 0;
@@ -618,7 +653,7 @@
    reads as dark blue on dark backgrounds. Force the accent color so
    they stay legible in both themes. */
 .metaTable a {
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     text-decoration: none;
     word-break: break-word;
 }
@@ -748,6 +783,21 @@
     transition: transform var(--xc-transition);
 }
 
+.heroImageFallback {
+    min-height: 12rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--xc-space-4);
+    box-sizing: border-box;
+    border: 1px dashed var(--xc-border-strong);
+    border-radius: var(--xc-radius-sm);
+    background: var(--xc-bg-muted);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    text-align: center;
+}
+
 .heroImageLink:hover .heroImage,
 .heroImageLink:focus-visible .heroImage {
     transform: scale(1.01);
@@ -838,6 +888,7 @@
     font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
     font-weight: 600;
+    overflow-wrap: anywhere;
 }
 
 .galleryVideo {
@@ -898,7 +949,7 @@
 
 .socialChip:hover,
 .socialChip:focus-visible {
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     border-color: var(--xc-accent-primary);
 }
 
@@ -919,7 +970,7 @@
     border-radius: var(--xc-radius-sm);
     border: 1px solid var(--xc-accent-primary);
     background: transparent;
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     text-decoration: none;
     font-size: var(--xc-text-sm);
     font-weight: 600;
@@ -959,6 +1010,17 @@
 
 .creatorCell {
     font-family: var(--xc-font-mono, monospace);
+    overflow-wrap: anywhere;
+}
+
+.copyableValue,
+.holdersAddrWrap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: var(--xc-space-2);
+    min-width: 0;
 }
 
 .lockedFlag {
@@ -997,11 +1059,14 @@
     justify-content: space-between;
     gap: var(--xc-space-2);
     font-size: var(--xc-text-sm);
+    align-items: center;
+    flex-wrap: wrap;
 }
 
 .holdersAddr {
     font-family: var(--xc-font-mono, monospace);
     color: var(--xc-text);
+    overflow-wrap: anywhere;
 }
 
 .holdersQty {
@@ -1016,7 +1081,7 @@
 
 .error {
     margin: 0;
-    color: var(--xc-error, #b00);
+    color: var(--xc-danger-fg);
     font-size: var(--xc-text-sm);
 }
 

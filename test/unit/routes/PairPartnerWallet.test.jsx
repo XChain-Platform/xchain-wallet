@@ -25,9 +25,27 @@ import { PairPartnerWallet } from '../../../packages/core/src/shared/routes/Pair
 import { Onboarding } from '../../../packages/core/src/shared/routes/Onboarding.jsx';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { LICENSE_VERSION } from '../../../packages/core/src/buildInfo.js';
+import {
+    buildPairingPayload,
+    encodePairingPayload,
+} from '../../../packages/core/src/flows/pairPartner.js';
+import { encodeXcwChunks } from '../../../packages/core/src/uri/psbtQr.js';
+import { setNativeQrScanner } from '../../../packages/core/src/ui/nativeQrScanner.js';
 
 const PHRASE = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 const PASSWORD = 'correct-horse-battery';
+const PARTNER_CODE = encodePairingPayload(buildPairingPayload({
+    walletMode: 'signer',
+    label: 'Cold signer',
+    keys: [{
+        chainId: 'bitcoin-mainnet',
+        addressType: 'p2wpkh',
+        path: "m/84'/0'/0'",
+        publicKey: `02${'11'.repeat(32)}`,
+        chainCode: '22'.repeat(32),
+        xpub: null,
+    }],
+}));
 
 function mkMessaging(overrides = {}) {
     return {
@@ -80,8 +98,28 @@ beforeEach(() => {
 
 afterEach(() => {
     cleanup();
+    setNativeQrScanner(null);
     vi.restoreAllMocks();
 });
+
+function fakeNativeScanner() {
+    const state = { onValue: null, stop: vi.fn() };
+    const scanner = {
+        start: vi.fn(async (onValue) => {
+            state.onValue = onValue;
+            return state.stop;
+        }),
+    };
+    setNativeQrScanner(scanner);
+    return state;
+}
+
+async function openPartnerScanner() {
+    fireEvent.click(screen.getByRole('button', { name: /Scan the other wallet's QR/i }));
+    await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /Scan with camera/i }));
+    });
+}
 
 describe('PairPartnerWallet: role stage', () => {
     it('offers both halves of the pair', () => {
@@ -94,6 +132,25 @@ describe('PairPartnerWallet: role stage', () => {
         mount(mkMessaging());
         fireEvent.click(screen.getByRole('button', { name: /pair a watcher/i }));
         expect(screen.getByText('Pair a watcher')).toBeInTheDocument();
+    });
+
+    it('reports progress through the pairing steps', () => {
+        mount(mkMessaging());
+        expect(screen.getByText('Step 1 of 4')).toHaveAttribute('aria-current', 'step');
+        fireEvent.click(screen.getByRole('button', { name: /pair a signer/i }));
+        expect(screen.getByText('Step 2 of 4')).toBeInTheDocument();
+    });
+
+    it('skips seed entry for an existing wallet with a preselected role', async () => {
+        const messaging = mkMessaging();
+        await act(async () => {
+            mount(messaging, { walletId: 'w-existing', initialMode: 'watcher' });
+        });
+        expect(screen.queryByLabelText(/Shared recovery phrase/i)).not.toBeInTheDocument();
+        expect(screen.getByText('Step 1 of 2')).toBeInTheDocument();
+        expect(messaging.pairingPayloadRequest).toHaveBeenCalledWith(
+            expect.objectContaining({ walletId: 'w-existing', walletMode: 'watcher' }),
+        );
     });
 });
 
@@ -193,10 +250,73 @@ describe('PairPartnerWallet: exchange stage', () => {
         expect(messaging.pairPartnerRequest).not.toHaveBeenCalled();
     });
 
+    it('rejects malformed pasted input before calling the host', async () => {
+        const messaging = mkMessaging();
+        await reachExchange(messaging);
+        fill(/Paste the other wallet's code/i, 'https://example.test/not-a-pairing-code');
+        fireEvent.click(screen.getByRole('button', { name: 'Pair a signer' }));
+        expect(screen.getByRole('alert')).toHaveTextContent(/invalid or incomplete/i);
+        expect(screen.getByLabelText(/Paste the other wallet's code/i)).toHaveAttribute('aria-invalid', 'true');
+        expect(messaging.pairPartnerRequest).not.toHaveBeenCalled();
+    });
+
+    it('keeps scanning after an unrelated code and accepts a valid code', async () => {
+        const state = fakeNativeScanner();
+        await reachExchange(mkMessaging());
+        await openPartnerScanner();
+
+        act(() => { state.onValue('https://example.test/not-a-pairing-code'); });
+        expect(screen.getByRole('alert')).toHaveTextContent(/invalid or incomplete/i);
+        expect(screen.getByRole('button', { name: /Scan with camera/i })).toBeInTheDocument();
+
+        act(() => { state.onValue(PARTNER_CODE); });
+        expect(screen.getByLabelText(/Paste the other wallet's code/i)).toHaveValue(PARTNER_CODE);
+        expect(screen.queryByText(/invalid or incomplete/i)).not.toBeInTheDocument();
+    });
+
+    it('updates multi-frame scan progress and fills the verified result', async () => {
+        const state = fakeNativeScanner();
+        const frames = encodeXcwChunks(new TextEncoder().encode(PARTNER_CODE), { chunkBytes: 64 });
+        await reachExchange(mkMessaging());
+        await openPartnerScanner();
+
+        act(() => { state.onValue(frames[0]); });
+        expect(screen.getByText(`Pairing frames received: 1 of ${frames.length}`)).toBeInTheDocument();
+
+        for (const frame of frames.slice(1)) {
+            act(() => { state.onValue(frame); });
+        }
+        expect(screen.getByLabelText(/Paste the other wallet's code/i)).toHaveValue(PARTNER_CODE);
+        expect(screen.queryByText(/Pairing frames received:/i)).not.toBeInTheDocument();
+    });
+
+    it('accepts a complete multi-frame capture pasted as lines', async () => {
+        const messaging = mkMessaging();
+        const frames = encodeXcwChunks(new TextEncoder().encode(PARTNER_CODE), { chunkBytes: 64 });
+        await reachExchange(messaging);
+        fill(/Paste the other wallet's code/i, frames.join('\n'));
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'Pair a signer' }));
+        });
+        expect(messaging.pairPartnerRequest).toHaveBeenCalledWith(
+            expect.objectContaining({ partner: PARTNER_CODE }),
+        );
+    });
+
+    it('reports how many pasted frames are missing', async () => {
+        const messaging = mkMessaging();
+        const frames = encodeXcwChunks(new TextEncoder().encode(PARTNER_CODE), { chunkBytes: 64 });
+        await reachExchange(messaging);
+        fill(/Paste the other wallet's code/i, frames[0]);
+        fireEvent.click(screen.getByRole('button', { name: 'Pair a signer' }));
+        expect(screen.getByRole('alert')).toHaveTextContent(`received 1 of ${frames.length} frames`);
+        expect(messaging.pairPartnerRequest).not.toHaveBeenCalled();
+    });
+
     it('pairs and reports which chains matched', async () => {
         const messaging = mkMessaging();
         await reachExchange(messaging);
-        fill(/Paste the other wallet's code/i, '  XCW-PAIR:cGFydG5lcg  ');
+        fill(/Paste the other wallet's code/i, `  ${PARTNER_CODE}  `);
         await act(async () => {
             fireEvent.click(screen.getByRole('button', { name: 'Pair a signer' }));
         });
@@ -204,7 +324,7 @@ describe('PairPartnerWallet: exchange stage', () => {
             expect.objectContaining({
                 walletId: 'w-1',
                 walletMode: 'watcher',
-                partner: 'XCW-PAIR:cGFydG5lcg',
+                partner: PARTNER_CODE,
             }),
         );
         expect(screen.getByRole('status')).toHaveTextContent(/same recovery phrase/i);
@@ -218,7 +338,7 @@ describe('PairPartnerWallet: exchange stage', () => {
             }),
         });
         await reachExchange(messaging);
-        fill(/Paste the other wallet's code/i, 'XCW-PAIR:cGFydG5lcg');
+        fill(/Paste the other wallet's code/i, PARTNER_CODE);
         await act(async () => {
             fireEvent.click(screen.getByRole('button', { name: 'Pair a signer' }));
         });
@@ -243,7 +363,7 @@ describe('PairPartnerWallet: exchange stage', () => {
         await act(async () => {
             fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
         });
-        fill(/Paste the other wallet's code/i, 'XCW-PAIR:cGFydG5lcg');
+        fill(/Paste the other wallet's code/i, PARTNER_CODE);
         await act(async () => {
             fireEvent.click(screen.getByRole('button', { name: 'Pair a signer' }));
         });
@@ -262,7 +382,7 @@ describe('PairPartnerWallet: exchange stage', () => {
         await act(async () => {
             fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
         });
-        fill(/Paste the other wallet's code/i, 'XCW-PAIR:cGFydG5lcg');
+        fill(/Paste the other wallet's code/i, PARTNER_CODE);
         await act(async () => {
             fireEvent.click(screen.getByRole('button', { name: 'Pair a signer' }));
         });
