@@ -123,7 +123,7 @@ afterEach(() => {
 });
 
 describe('History filters', () => {
-    it('renders ordinary history controls through the shared field and button contracts', async () => {
+    it('renders ordinary history controls through the shared field, chip, and button contracts', async () => {
         mountHistory({
             [LTC]: [historyRow({
                 actionIndex: 1,
@@ -136,7 +136,7 @@ describe('History filters', () => {
         const search = await screen.findByRole('searchbox', { name: 'Search history' });
         expect(search).toHaveAttribute('id');
         expect(screen.getByRole('button', { name: '7 days' }))
-            .toHaveAttribute('aria-busy', 'false');
+            .toHaveAttribute('aria-pressed', 'false');
         expect(screen.getByRole('button', { name: 'Refresh history' }))
             .toHaveAttribute('aria-busy', 'false');
     });

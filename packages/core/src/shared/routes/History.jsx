@@ -12,6 +12,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Button,
     ChainBadge,
+    Chip,
     CopyButton,
     EmptyState,
     Icon,
@@ -1808,27 +1809,18 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 </div>
                 <div className={styles.dateTools}>
                     <div className={styles.datePresets} role="group" aria-label={t('history.filters.datePresets')}>
-                        <Button
-                            variant={activeDatePreset === '7' ? 'primary' : 'ghost'}
-                            size="sm"
-                            icon={null}
-                            aria-pressed={activeDatePreset === '7'}
-                            onClick={() => setDatePreset(7)}
-                        >{t('history.filters.last7Days')}</Button>
-                        <Button
-                            variant={activeDatePreset === '30' ? 'primary' : 'ghost'}
-                            size="sm"
-                            icon={null}
-                            aria-pressed={activeDatePreset === '30'}
-                            onClick={() => setDatePreset(30)}
-                        >{t('history.filters.last30Days')}</Button>
-                        <Button
-                            variant={activeDatePreset === 'all' ? 'primary' : 'ghost'}
-                            size="sm"
-                            icon={null}
-                            aria-pressed={activeDatePreset === 'all'}
-                            onClick={() => setDatePreset(null)}
-                        >{t('history.filters.allDates')}</Button>
+                        <Chip
+                            pressed={activeDatePreset === '7'}
+                            onPressedChange={() => setDatePreset(7)}
+                        >{t('history.filters.last7Days')}</Chip>
+                        <Chip
+                            pressed={activeDatePreset === '30'}
+                            onPressedChange={() => setDatePreset(30)}
+                        >{t('history.filters.last30Days')}</Chip>
+                        <Chip
+                            pressed={activeDatePreset === 'all'}
+                            onPressedChange={() => setDatePreset(null)}
+                        >{t('history.filters.allDates')}</Chip>
                     </div>
                     <span className={styles.dateZone}>{t('history.filters.dateZone')}</span>
                 </div>
