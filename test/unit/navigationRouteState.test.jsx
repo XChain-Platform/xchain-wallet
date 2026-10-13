@@ -64,6 +64,34 @@ function RouteHarness() {
     );
 }
 
+function LockCycleHarness() {
+    const [sessionState, setSessionState] = useState('unlocked');
+    const [view, setView] = useState('home');
+    useLastView({
+        walletId: WALLET,
+        sessionActive: sessionState === 'unlocked',
+        currentView: view,
+        onResume: setView,
+    });
+    return (
+        <>
+            <output>{sessionState}:{view}</output>
+            <button type="button" onClick={() => setView('history')}>History</button>
+            <button type="button" onClick={() => setView('send')}>Send</button>
+            <button
+                type="button"
+                onClick={() => {
+                    setSessionState('locked');
+                    setView('home');
+                }}
+            >
+                Auto-lock
+            </button>
+            <button type="button" onClick={() => setSessionState('unlocked')}>Unlock</button>
+        </>
+    );
+}
+
 beforeEach(() => {
     localStorage.clear();
     resetBackStackForTests();
@@ -78,6 +106,27 @@ afterEach(() => {
 });
 
 describe('contextual route state', () => {
+    it('restores the screen at lock only when it is safe to resume', async () => {
+        render(<LockCycleHarness />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'History' }));
+        await waitFor(() => expect(readLastViewRoute(WALLET)).toEqual({
+            view: 'history',
+            params: null,
+        }));
+        fireEvent.click(screen.getByRole('button', { name: 'Auto-lock' }));
+        expect(screen.getByText('locked:home')).toBeInTheDocument();
+        expect(readLastViewRoute(WALLET)?.view).toBe('history');
+        fireEvent.click(screen.getByRole('button', { name: 'Unlock' }));
+        expect(await screen.findByText('unlocked:history')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(readLastViewRoute(WALLET)).toBeNull());
+        fireEvent.click(screen.getByRole('button', { name: 'Auto-lock' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Unlock' }));
+        expect(await screen.findByText('unlocked:home')).toBeInTheDocument();
+    });
+
     it('round-trips validated deep params and rejects an incomplete saved route', () => {
         writeLastView(WALLET, 'token-detail', {
             chainId: 'bitcoin-mainnet',
