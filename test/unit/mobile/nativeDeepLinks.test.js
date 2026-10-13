@@ -181,4 +181,23 @@ describe('subscribeToNativeDeepLinks', () => {
         await Promise.resolve();
         expect(onLink).not.toHaveBeenCalled();
     });
+
+    it('contains synchronous cold-start failures and rejected listener registration', async () => {
+        const plugin = fakeLinks({
+            overrides: {
+                takePendingLink: vi.fn(() => { throw new Error('plugin mismatch'); }),
+                addListener: vi.fn(async () => { throw new Error('listener unavailable'); }),
+            },
+        });
+        __setLinksPluginForTests(plugin);
+        const onLink = vi.fn();
+
+        const off = subscribeToNativeDeepLinks(onLink);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(() => off()).not.toThrow();
+
+        expect(plugin.takePendingLink).toHaveBeenCalledTimes(1);
+        expect(plugin.addListener).toHaveBeenCalledTimes(1);
+        expect(onLink).not.toHaveBeenCalled();
+    });
 });

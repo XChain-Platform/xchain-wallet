@@ -120,13 +120,19 @@ export function subscribeToNativeDeepLinks(onLink) {
 
     // The cold-start link first. A tap that launches the app is the common
     // case on mobile, and it is exactly the one an event-only design drops.
-    Promise.resolve(plugin.takePendingLink())
-        .then((reply) => { if (reply?.url) deliver(reply.url); })
-        .catch(() => { /* no queued link, or an older shell build */ });
+    try {
+        Promise.resolve(plugin.takePendingLink())
+            .then((reply) => { if (reply?.url) deliver(reply.url); })
+            .catch(() => { /* no queued link, or an older shell build */ });
+    } catch (_err) {
+        // A mismatched native plugin can throw before returning its promise.
+    }
 
     let handle;
     try {
-        handle = plugin.addListener?.('xchainUrlOpen', (event) => deliver(event?.url));
+        handle = Promise.resolve(
+            plugin.addListener?.('xchainUrlOpen', (event) => deliver(event?.url)),
+        ).catch(() => null);
     } catch (_err) {
         handle = null;
     }
