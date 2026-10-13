@@ -35,6 +35,7 @@ import { createContext } from 'react';
  *   own the wallet's stored addresses, and stores nothing in that case.
  * @property {() => Promise<any>} [lockWallet]
  * @property {() => Promise<any>} [listWallets]
+ * @property {(opts: { walletId: string, currentPassword: string, newPassword: string }) => Promise<{ changed: true }>} [changePassword]
  * @property {(walletId: string, accountId?: string) => Promise<any>} [getWalletBalances]
  * @property {(walletId: string, accountId?: string) => Promise<any>} [getAddressesByChain]
  * @property {(walletId: string, chainId: string, accountId?: string) => Promise<any>} [getNewestAddress]

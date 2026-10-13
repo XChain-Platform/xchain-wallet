@@ -293,6 +293,7 @@ export function TokenDetail({
         return null;
     }, [assetInfo, rowImageUrl, isNative, chainId]);
 
+    const pageTitle = displayName || bridgeDisplayTick(tick, coinFromChainId(chainId)).label;
     const header = (
         <PageHeader
             onBack={onBack}
@@ -300,8 +301,8 @@ export function TokenDetail({
             // and the origin chain are both on the Details panel below, so the
             // page never hides which asset this really is.
             title={(
-                <span className={styles.headerTitle}>
-                    {displayName || bridgeDisplayTick(tick, coinFromChainId(chainId)).label}
+                <span className={styles.headerTitle} title={pageTitle}>
+                    {pageTitle}
                 </span>
             )}
             titleIcon={headerIconUrl ? (
@@ -1100,7 +1101,7 @@ function DetailsPanel({
                     {!isNative ? (
                         <tr className={styles.metaRow}>
                             <th scope="row">Divisibility</th>
-                            <td>{divisibility}</td>
+                            <td>{detailText(divisibility)}</td>
                         </tr>
                     ) : null}
                     <tr className={styles.metaRow}>
@@ -1117,7 +1118,7 @@ function DetailsPanel({
                             {balanceHidden
                                 ? '•••••'
                                 : fiat == null
-                                    ? 'N/A'
+                                    ? '-'
                                     : `${formatFiatNumber(fiat, fiatCurrency)} ${(fiatCurrency || 'USD').toUpperCase()}`}
                         </td>
                     </tr>
@@ -1144,11 +1145,13 @@ function DetailsPanel({
                             <td>
                                 {loading ? (
                                     <Skeleton shape="text" width="40%" height={20} />
-                                ) : assetInfo?.locked ? (
+                                ) : assetInfo?.locked == null ? (
+                                    '-'
+                                ) : assetInfo.locked ? (
                                     <span className={styles.lockedFlag}>Locked</span>
-                                ) : assetInfo ? (
+                                ) : (
                                     <span className={styles.unlockedFlag}>Mutable</span>
-                                ) : 'N/A'}
+                                )}
                             </td>
                         </tr>
                     ) : null}
@@ -1439,6 +1442,7 @@ function MediaSubpanel({ kind, images, audio, video, files }) {
                             {f.type ? (
                                 <span className={styles.fileLinkType}>{f.type}</span>
                             ) : null}
+                            <span aria-hidden="true">↗</span>
                         </a>
                     </li>
                 ))}
@@ -1504,7 +1508,9 @@ function ContactsBlock({ contacts }) {
                             display = <a href={`tel:${c.value.replace(/[^+\d]/g, '')}`}>{c.value}</a>;
                         } else if (isUrl) {
                             display = (
-                                <a href={c.value} target="_blank" rel="noreferrer noopener">{c.value}</a>
+                                <a href={c.value} target="_blank" rel="noreferrer noopener">
+                                    {c.value} <span aria-hidden="true">↗</span>
+                                </a>
                             );
                         }
                         return (
@@ -1574,6 +1580,7 @@ function ImageHero({ img }) {
                 className={styles.heroImage}
                 onError={() => setFailedImageUrl(img.url)}
             />
+            <span aria-hidden="true">↗</span>
         </a>
     );
     if (img.name) {
@@ -1718,6 +1725,7 @@ function LinksAndFiles({ assetInfo }) {
                         >
                             <SocialIcon platform={s.platform} />
                             {socialLabel(s.platform)} · {s.host}
+                            <span aria-hidden="true">↗</span>
                         </a>
                     ))}
                 </div>
@@ -1739,10 +1747,16 @@ function formatTotalSupply(isNative, chainId, assetInfo) {
         const coin = chainId.split('-')[0];
         return NATIVE_SUPPLY_BY_COIN[coin] || 'N/A';
     }
-    if (assetInfo?.totalSupply == null) return 'N/A';
-    return assetInfo.maxSupply
-        ? `${assetInfo.totalSupply} / ${assetInfo.maxSupply}`
-        : String(assetInfo.totalSupply);
+    const totalSupply = detailText(assetInfo?.totalSupply);
+    if (totalSupply === '-') return totalSupply;
+    const maxSupply = detailText(assetInfo?.maxSupply);
+    return maxSupply === '-' ? totalSupply : `${totalSupply} / ${maxSupply}`;
+}
+
+function detailText(value) {
+    if (value == null || value === '' || (typeof value === 'number' && !Number.isFinite(value))) return '-';
+    const text = String(value).trim();
+    return !text || /^(?:undefined|null|nan)$/i.test(text) ? '-' : text;
 }
 
 // Token-gated content panel: renders the list of gated FILEs published

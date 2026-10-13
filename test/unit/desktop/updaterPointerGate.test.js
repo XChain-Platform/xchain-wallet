@@ -15,7 +15,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The channel pointer, checked by the real `downloadAndInstall()`.
+// The channel pointer, checked by the real `downloadUpdate()`.
 //
 // `updateVerify.test.js` holds the gate's own logic. This file holds the
 // WIRING, because that is where this defect lived: every piece needed to
@@ -24,7 +24,8 @@
 //
 // So every case here drives `attachUpdater` end to end against a fake
 // electron-updater and a fake feed, with a real signed manifest and a
-// real file on disk, and asserts on whether `quitAndInstall` was reached.
+// real file on disk, and asserts that only a prepared update can reach
+// `quitAndInstall` through a separate restart request.
 // The feed is hostile in the way §7.2 describes: it serves
 // whatever it likes, and every hash it publishes is correct.
 
@@ -173,7 +174,7 @@ describe('the channel pointer is fetched at all', () => {
         const base = feed();
         await (await attach(mod, {
             fetchImpl: async (url, opts) => { seen.push(url); return base(url, opts); },
-        })).downloadAndInstall();
+        })).downloadUpdate();
 
         expect(seen).toContain(`${FEED}desktop/stable-linux.yml`);
         // And the pointer name came from the build, never from the feed:
@@ -183,9 +184,23 @@ describe('the channel pointer is fetched at all', () => {
 
     it('installs the release whose pointer and artifact K1 both cover', async () => {
         const { mod, calls } = fakeModule();
-        const result = await (await attach(mod, { fetchImpl: feed() })).downloadAndInstall();
+        let walletIdle = false;
+        const updater = await attach(mod, {
+            fetchImpl: feed(),
+            canRestart: () => walletIdle,
+        });
+        const result = await updater.downloadUpdate();
 
         expect(result).toEqual({ ok: true });
+        expect(calls).not.toContain('quitAndInstall');
+        expect(await updater.restartAndInstall()).toEqual({
+            ok: false,
+            reason: 'wallet operation in progress',
+            retryable: true,
+        });
+        expect(calls).not.toContain('quitAndInstall');
+        walletIdle = true;
+        await updater.restartAndInstall();
         expect(calls).toContain('quitAndInstall');
     });
 });
@@ -206,7 +221,7 @@ describe('a validly-hashed but unsigned pointer', () => {
         const { mod, calls } = fakeModule({ name: EVIL, bytes: EVIL_BYTES });
         const result = await (await attach(mod, {
             fetchImpl: feed({ pointerText: pointer({ files: [[EVIL, EVIL_SHA512]] }) }),
-        })).downloadAndInstall();
+        })).downloadUpdate();
 
         expect(result.ok).toBe(false);
         expect(result.reason).toMatch(/not covered by the signed manifest/);
@@ -229,7 +244,7 @@ describe('a validly-hashed but unsigned pointer', () => {
                     files: [[ARTIFACT, ARTIFACT_SHA512], [EVIL, EVIL_SHA512]],
                 }),
             }),
-        })).downloadAndInstall();
+        })).downloadUpdate();
 
         expect(result.ok).toBe(false);
         expect(result.reason).toMatch(/evil\.AppImage, which the signed manifest does not cover/);
@@ -240,7 +255,7 @@ describe('a validly-hashed but unsigned pointer', () => {
         const { mod, path } = fakeModule({ name: EVIL, bytes: EVIL_BYTES });
         await (await attach(mod, {
             fetchImpl: feed({ pointerText: pointer({ files: [[EVIL, EVIL_SHA512]] }) }),
-        })).downloadAndInstall();
+        })).downloadUpdate();
 
         expect(existsSync(path)).toBe(false);
     });
@@ -251,7 +266,7 @@ describe('a validly-hashed but unsigned pointer', () => {
         await (await attach(mod, {
             onEvent: (e) => events.push(e.type),
             fetchImpl: feed({ pointerText: pointer({ files: [[EVIL, EVIL_SHA512]] }) }),
-        })).downloadAndInstall();
+        })).downloadUpdate();
 
         expect(events).toContain('verifying');
         expect(events).toContain('rejected');
@@ -274,7 +289,7 @@ describe('a feed that answers the verifier differently', () => {
         const { mod, calls } = fakeModule();
         const result = await (await attach(mod, {
             fetchImpl: feed({ pointerText: pointer({ files: [[DEB, DEB_SHA512]] }) }),
-        })).downloadAndInstall();
+        })).downloadUpdate();
 
         expect(result.ok).toBe(false);
         expect(result.reason).toMatch(/does not name xchain-wallet-9\.9\.9-x86_64\.AppImage/);
@@ -285,7 +300,7 @@ describe('a feed that answers the verifier differently', () => {
         const { mod, calls } = fakeModule();
         const result = await (await attach(mod, {
             fetchImpl: feed({ pointerText: pointer({ version: '9.9.8' }) }),
-        })).downloadAndInstall();
+        })).downloadUpdate();
 
         expect(result.ok).toBe(false);
         expect(result.reason).toMatch(/channel pointer describes 9\.9\.8/);
@@ -296,7 +311,7 @@ describe('a feed that answers the verifier differently', () => {
         const { mod, calls } = fakeModule();
         const result = await (await attach(mod, {
             fetchImpl: feed({ pointerText: pointer({ files: [[ARTIFACT, DEB_SHA512]] }) }),
-        })).downloadAndInstall();
+        })).downloadUpdate();
 
         expect(result.ok).toBe(false);
         expect(result.reason).toMatch(/is not the file that arrived/);
@@ -309,7 +324,7 @@ describe('fail closed', () => {
         const { mod, calls } = fakeModule();
         const result = await (await attach(mod, {
             fetchImpl: feed({ pointerText: null }),
-        })).downloadAndInstall();
+        })).downloadUpdate();
 
         expect(result.ok).toBe(false);
         expect(result.reason).toMatch(/channel pointer fetch failed \(404\)/);
@@ -323,7 +338,7 @@ describe('fail closed', () => {
         const { mod, calls } = fakeModule();
         const result = await (await attach(mod, {
             pointerName: null, fetchImpl: feed(),
-        })).downloadAndInstall();
+        })).downloadUpdate();
 
         expect(result.ok).toBe(false);
         expect(calls).not.toContain('quitAndInstall');
@@ -342,7 +357,7 @@ describe('fail closed', () => {
         const { mod, calls } = fakeModule();
         const result = await (await attach(mod, {
             fetchImpl: feed({ signWithKey: await openpgp.readPrivateKey({ armoredKey: privateKey }) }),
-        })).downloadAndInstall();
+        })).downloadUpdate();
 
         expect(result.ok).toBe(false);
         expect(result.reason).toMatch(/signature does not verify/);
@@ -354,7 +369,7 @@ describe('fail closed', () => {
 //
 // windows is NOT-SHIPPED in shipped-lanes.txt, so a desktop release is
 // signed `--lane mac,linux` and its manifest carries `# lanes: mac linux`.
-// These cases drive that manifest through the REAL downloadAndInstall, so
+// These cases drive that manifest through the real download path, so
 // they fail if the install's lane stops reaching the gate - which a full
 // manifest can never show, because it is covered whatever the lane says.
 const PARTIAL_MANIFEST = Buffer.from(
@@ -367,11 +382,14 @@ const PARTIAL_MANIFEST = Buffer.from(
 describe('a partial release covering this install', () => {
     it('installs when the manifest names this install\'s lane', async () => {
         const { mod, calls } = fakeModule();
-        const result = await (await attach(mod, {
+        const updater = await attach(mod, {
             fetchImpl: feed({ manifest: PARTIAL_MANIFEST }), laneName: 'linux',
-        })).downloadAndInstall();
+        });
+        const result = await updater.downloadUpdate();
 
         expect(result).toEqual({ ok: true });
+        expect(calls).not.toContain('quitAndInstall');
+        await updater.restartAndInstall();
         expect(calls).toContain('quitAndInstall');
     });
 
@@ -379,7 +397,7 @@ describe('a partial release covering this install', () => {
         const { mod, calls } = fakeModule();
         const result = await (await attach(mod, {
             fetchImpl: feed({ manifest: PARTIAL_MANIFEST }), laneName: 'android',
-        })).downloadAndInstall();
+        })).downloadUpdate();
 
         expect(result.ok).toBe(false);
         expect(result.reason).toMatch(/not android/);
@@ -390,7 +408,7 @@ describe('a partial release covering this install', () => {
         const { mod, calls } = fakeModule();
         const result = await (await attach(mod, {
             fetchImpl: feed({ manifest: PARTIAL_MANIFEST }), laneName: null,
-        })).downloadAndInstall();
+        })).downloadUpdate();
 
         expect(result.ok).toBe(false);
         expect(result.reason).toMatch(/cannot name its own/);

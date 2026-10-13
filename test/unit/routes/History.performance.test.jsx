@@ -78,7 +78,8 @@ describe('History large-list performance', () => {
         expect(screen.getByText('100 of 5,000 history items shown')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'Export…' }));
-        expect(screen.getByText('5,000 filtered rows will be exported.')).toBeInTheDocument();
+        expect(screen.getByText(`${ENTRY_COUNT.toLocaleString()} filtered rows will be exported.`))
+            .toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
         const showMore = screen.getByRole('button', { name: 'Show more history' });

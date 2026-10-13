@@ -32,6 +32,8 @@
 //     lastSentAt?: number       // unix ms; present for history rows
 //   }
 
+import { contactEntryChain } from '../shared/utils/contactChain.js';
+
 const HISTORY_ADDR_FIELDS = ['destination', 'DESTINATION', 'recipient'];
 
 const COIN_LABEL = { bitcoin: 'Bitcoin', litecoin: 'Litecoin', dogecoin: 'Dogecoin' };
@@ -75,7 +77,8 @@ export function buildRecentDestinations({
         seen.add(addr);
         const name = (c?.name || '').trim();
         const entryLabel = (e?.label || '').trim();
-        const networkLabel = isCurrentChain ? '' : (COIN_LABEL[e?.chain] || e?.chain || '');
+        const entryChain = contactEntryChain(e);
+        const networkLabel = isCurrentChain ? '' : (COIN_LABEL[entryChain] || entryChain || '');
         let sublabel;
         if (networkLabel) {
             sublabel = entryLabel && entryLabel !== name ? `${networkLabel} · ${entryLabel}` : networkLabel;
@@ -94,7 +97,7 @@ export function buildRecentDestinations({
     if (typeof chainCoin === 'string' && chainCoin.length > 0) {
         for (const c of contacts) {
             for (const e of c?.entries || []) {
-                if (e?.chain === chainCoin) addContactEntry(c, e, true);
+                if (contactEntryChain(e) === chainCoin) addContactEntry(c, e, true);
             }
         }
     }
@@ -102,7 +105,7 @@ export function buildRecentDestinations({
     // not just the ones with an address on the current chain.
     for (const c of contacts) {
         for (const e of c?.entries || []) {
-            if (!chainCoin || e?.chain !== chainCoin) addContactEntry(c, e, false);
+            if (!chainCoin || contactEntryChain(e) !== chainCoin) addContactEntry(c, e, false);
         }
     }
 

@@ -110,6 +110,7 @@ export const DEFAULT_CHAIN_TIMEOUT_MS = 60000;
  * @property {number} [chainTimeoutMs]        default {@link DEFAULT_CHAIN_TIMEOUT_MS}
  * @property {IsUsedProbe} [isUsedProbe]      default uses `sdk.explorer.getHistory(address, 'address')`
  * @property {DiscoverProgressCallback} [onProgress]
+ * @property {AbortSignal} [signal]            cancels the scan with an AbortError
  */
 
 /**
@@ -139,6 +140,7 @@ export async function discoverUsedAddresses(opts) {
         chainTimeoutMs = DEFAULT_CHAIN_TIMEOUT_MS,
         isUsedProbe = defaultIsUsedProbe,
         onProgress = () => {},
+        signal,
     } = opts;
 
     if (typeof mnemonic !== 'string' || !mnemonic.length) {
@@ -149,6 +151,7 @@ export async function discoverUsedAddresses(opts) {
     if (!Number.isInteger(gapLimit) || gapLimit < 1 || gapLimit > 200) {
         throw new Error('discoverUsedAddresses: gapLimit must be an integer in [1, 200]');
     }
+    throwIfAborted(signal);
 
     // Seed derivation, mirrors dryRunRestore.
     const normalized = normalizeMnemonic(mnemonic);
@@ -173,6 +176,7 @@ export async function discoverUsedAddresses(opts) {
     }
 
     try {
+        throwIfAborted(signal);
         const hdRoot = hdKeyFromSeed(seed);
         const chains = chainIds ?? chainRegistry.supportedChains().map((d) => d.id);
 
@@ -181,6 +185,7 @@ export async function discoverUsedAddresses(opts) {
         let totalUsedFound = 0;
 
         for (const chainId of chains) {
+            throwIfAborted(signal);
             const descriptor = chainRegistry.get(chainId);
             if (!descriptor) {
                 throw new Error(`discoverUsedAddresses: unknown chain "${chainId}"`);
@@ -205,8 +210,10 @@ export async function discoverUsedAddresses(opts) {
                         chainTimeoutMs,
                         isUsedProbe,
                         onProgress,
+                        signal,
                     });
                 } catch (e) {
+                    if (signal?.aborted) throw e;
                     // Type-level failure (e.g. SDK doesn't support this
                     // address type, derivation returned no path, etc.).
                     // Record an incomplete result for this type and move
@@ -253,9 +260,11 @@ async function scanChainType({
     chainTimeoutMs,
     isUsedProbe,
     onProgress,
+    signal,
 }) {
     const sdk = sdkRegistry.get(chainId);
     safeCallback(onProgress, { phase: 'chain-start', chainId, addressType });
+    throwIfAborted(signal);
 
     /** @type {DiscoveredAddress[]} */
     const addresses = [];
@@ -268,6 +277,7 @@ async function scanChainType({
     const chainDeadline = Date.now() + chainTimeoutMs;
 
     for (let index = startIndex; ; index++) {
+        throwIfAborted(signal);
         if (Date.now() > chainDeadline) {
             incomplete = true;
             error = `chain scan exceeded ${chainTimeoutMs}ms`;
@@ -302,9 +312,11 @@ async function scanChainType({
             const probeResult = await runWithTimeout(
                 () => isUsedProbe(sdk, address),
                 perQueryTimeoutMs,
+                signal,
             );
             used = !!probeResult?.used;
         } catch (e) {
+            if (signal?.aborted) throw e;
             unknown = true;
             // A single probe failure doesn't fail the whole chain:
             // record the address as `unknown` (doesn't reset gap count
@@ -333,6 +345,7 @@ async function scanChainType({
             index,
             data: { used, unknown, consecutiveUnused },
         });
+        throwIfAborted(signal);
 
         if (consecutiveUnused >= gapLimit) break;
     }
@@ -390,32 +403,44 @@ function safeCallback(fn, event) {
     try { fn(event); } catch { /* caller bugs do not derail the scan */ }
 }
 
-function runWithTimeout(fn, timeoutMs) {
+function runWithTimeout(fn, timeoutMs, signal) {
     return new Promise((resolve, reject) => {
         let settled = false;
+        const finish = (callback, value) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            signal?.removeEventListener('abort', onAbort);
+            callback(value);
+        };
+        const onAbort = () => finish(reject, abortError(signal));
         const timer = setTimeout(() => {
-            if (!settled) {
-                settled = true;
-                reject(new Error(`probe timed out after ${timeoutMs}ms`));
-            }
+            finish(reject, new Error(`probe timed out after ${timeoutMs}ms`));
         }, timeoutMs);
+        if (signal?.aborted) {
+            onAbort();
+            return;
+        }
+        signal?.addEventListener('abort', onAbort, { once: true });
         Promise.resolve()
             .then(fn)
-            .then((v) => {
-                if (!settled) {
-                    settled = true;
-                    clearTimeout(timer);
-                    resolve(v);
-                }
-            })
-            .catch((e) => {
-                if (!settled) {
-                    settled = true;
-                    clearTimeout(timer);
-                    reject(e);
-                }
-            });
+            .then((value) => finish(resolve, value))
+            .catch((error) => finish(reject, error));
     });
+}
+
+function throwIfAborted(signal) {
+    if (signal?.aborted) throw abortError(signal);
+}
+
+function abortError(signal) {
+    if (signal?.reason?.name === 'AbortError') return signal.reason;
+    const message = typeof signal?.reason === 'string'
+        ? signal.reason
+        : 'Address discovery cancelled.';
+    const error = new Error(message);
+    error.name = 'AbortError';
+    return error;
 }
 
 /** @type {IsUsedProbe} */

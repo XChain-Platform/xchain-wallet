@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, Skeleton } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -89,6 +89,8 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
     const [selected, setSelected] = useState(FEATURED_MARKET);
     const [picking, setPicking] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
+    const [reload, setReload] = useState(0);
     const [offers, setOffers] = useState(/** @type {Array<{chainId: string, row: any}> | null} */ (null));
     const [sales, setSales] = useState(/** @type {Array<{chainId: string, row: any}> | null} */ (null));
     const [dexOrders, setDexOrders] = useState(/** @type {Array<{chainId: string, row: any}> | null} */ (null));
@@ -112,6 +114,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
         const marketKey = `${walletId || ''}:${tick}:${chains.join(',')}`;
         const hasCachedRows = loadedMarketKeyRef.current === marketKey;
         setLoading(true);
+        setLoadError(false);
         if (!hasCachedRows) {
             setOffers(null);
             setSales(null);
@@ -138,6 +141,11 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
             return () => { cancelled = true; };
         }
 
+        let failed = false;
+        const markFailed = () => {
+            failed = true;
+            return [];
+        };
         const offersByChain = chains.map((cid) =>
             messaging.getDispensersForToken({ chainId: cid, token: tick })
                 // The explorer's status is a string label ('valid'), which
@@ -145,7 +153,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                 .then((resp) => extractRows(resp)
                     .filter((d) => isOpenDispenserSelling(d, tick))
                     .map((row) => ({ chainId: cid, row })))
-                .catch(() => []),
+                .catch(markFailed),
         );
         const salesByChain = chains.map((cid) =>
             typeof messaging.getDispenses === 'function'
@@ -155,7 +163,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                     .then((resp) => extractRows(resp)
                         .filter((row) => flowsLib.dispenseIsValid(row))
                         .map((row) => ({ chainId: cid, row })))
-                    .catch(() => [])
+                    .catch(markFailed)
                 : Promise.resolve([]),
         );
         const ordersByChain = chains.map((cid) =>
@@ -167,7 +175,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                             : null))
                     .then((rows) => rows.filter((row) => isOpenOffer(row))
                         .map((row) => ({ chainId: cid, row })))
-                    .catch(() => [])
+                    .catch(markFailed)
                 : Promise.resolve([]),
         );
         const swapsByChain = chains.map((cid) =>
@@ -179,7 +187,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                             : null))
                     .then((rows) => rows.filter((row) => isCompleteSwap(row))
                         .map((row) => ({ chainId: cid, row })))
-                    .catch(() => [])
+                    .catch(markFailed)
                 : Promise.resolve([]),
         );
 
@@ -194,11 +202,12 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
             setSales(uniqueRows(salesBatches.flat().sort(byTimeDesc), marketRowIdentity));
             setDexOrders(uniqueRows(ordersBatches.flat(), marketRowIdentity));
             setDexSwaps(uniqueRows(swapsBatches.flat().sort(byTimeDesc), marketRowIdentity));
-            loadedMarketKeyRef.current = marketKey;
+            if (!failed) loadedMarketKeyRef.current = marketKey;
+            setLoadError(failed);
             setLoading(false);
         });
         return () => { cancelled = true; };
-    }, [tick, walletId, messaging, chains]);
+    }, [tick, walletId, messaging, chains, reload]);
 
     // A Mode B offer carries no price on this lane; it comes from its oracle.
     const oracleFeedsFor = useOracleFeeds(messaging, offers);
@@ -267,6 +276,15 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                         </div>
                     ) : null}
 
+                {loadError ? (
+                    <StatusMessage
+                        variant="error"
+                        recovery={{ label: 'Try again', onAction: () => setReload((value) => value + 1) }}
+                    >
+                        Some marketplace activity could not be loaded.
+                    </StatusMessage>
+                ) : null}
+
                 {offers !== null ? (
                     <section className={styles.section} aria-label="Open dispensers">
                         <SectionHeader
@@ -278,8 +296,9 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                             )}
                         />
                         {offers.length === 0 ? (
-                            <EmptyState title="No open dispensers" body={<>Open dispensers selling {tick} appear here.</>} titleAs="p" />
+                            loadError ? null : <EmptyState title="No open dispensers" body={<>Open dispensers selling {tick} appear here.</>} titleAs="p" />
                         ) : (
+                            /* Safari needs an explicit list role because this class removes list styling. */
                             <ul className={styles.list} role="list">
                                 {offers.slice(0, visibleCounts.offers).map(({ chainId, row }, index) => {
                                     // Explorer fields: GIVE_AMOUNT per fill, GET_AMOUNT
@@ -339,8 +358,9 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                             )}
                         />
                         {dexOrders.length === 0 ? (
-                            <EmptyState title="No open DEX orders" body={<>Open orders involving {tick} appear here.</>} titleAs="p" />
+                            loadError ? null : <EmptyState title="No open DEX orders" body={<>Open orders involving {tick} appear here.</>} titleAs="p" />
                         ) : (
+                            /* Safari needs an explicit list role because this class removes list styling. */
                             <ul className={styles.list} role="list">
                                 {dexOrders.slice(0, visibleCounts.orders).map(({ chainId, row }, i) => {
                                     const giveTick = row.give_tick || row.give_coin || row.giveTick || row.giveCoin || '';
@@ -387,8 +407,9 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                             )}
                         />
                         {sales.length === 0 ? (
-                            <EmptyState title="No recent dispenses" body={<>Recent dispenses of {tick} appear here.</>} titleAs="p" />
+                            loadError ? null : <EmptyState title="No recent dispenses" body={<>Recent dispenses of {tick} appear here.</>} titleAs="p" />
                         ) : (
+                            /* Safari needs an explicit list role because this class removes list styling. */
                             <ul className={styles.list} role="list">
                                 {sales.slice(0, visibleCounts.sales).map(({ chainId, row }, i) => {
                                     // A dispense row's GET_AMOUNT is what the buyer actually
@@ -440,8 +461,9 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                             )}
                         />
                         {dexSwaps.length === 0 ? (
-                            <EmptyState title="No recent DEX swaps" body={<>Recent swaps involving {tick} appear here.</>} titleAs="p" />
+                            loadError ? null : <EmptyState title="No recent DEX swaps" body={<>Recent swaps involving {tick} appear here.</>} titleAs="p" />
                         ) : (
+                            /* Safari needs an explicit list role because this class removes list styling. */
                             <ul className={styles.list} role="list">
                                 {dexSwaps.slice(0, visibleCounts.swaps).map(({ chainId, row }, i) => {
                                     const giveTick = row.give_tick || row.give_coin || row.giveTick || row.giveCoin || '';

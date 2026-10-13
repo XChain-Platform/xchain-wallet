@@ -23,7 +23,8 @@
 // controls when it is absent. Direct callers still receive a typed error
 // instead of pretending success.
 //
-// Output shape: `{ replacementTxHash, broadcastedAt, feeIncrease }`.
+// Output shape: `{ replacementTxHash, broadcastedAt, originalFee,
+// replacementFee, feeIncrease }`.
 // matches what the eventual handler will return; UI written against
 // this contract today won't change when the engine ships.
 
@@ -59,12 +60,15 @@ export function isReplaceCallAvailable(messaging) {
  * @property {string} [restoreTxHash]         'restore' only: the spend being re-issued
  * @property {string} [feeRate]                explicit fee rate; when omitted, host picks a sensible bump
  * @property {string} [walletId]
+ * @property {boolean} [preview]                return the fee quote without signing or broadcasting
  */
 
 /**
  * @typedef {object} RbfResult
- * @property {string} replacementTxHash
- * @property {string} broadcastedAt           ISO timestamp
+ * @property {string} [replacementTxHash]
+ * @property {string} [broadcastedAt]         ISO timestamp
+ * @property {string} [originalFee]            original fee in native coin
+ * @property {string} [replacementFee]         replacement fee in native coin
  * @property {string} [feeIncrease]           coin-denominated decimal string
  */
 
@@ -80,6 +84,8 @@ export function isReplaceCallAvailable(messaging) {
  *     (Dogecoin declares false, and the same cap governs Send and
  *     Settings); a missing descriptor refuses, since nothing then says
  *     the transaction could signal replaceability
+ *   - the pending record says the signed transaction enabled RBF; a missing
+ *     flag refuses because the wallet cannot prove the transaction signalled
  *
  * Phase 4 adds support for additional action kinds; the kind list is
  * deliberately conservative for now.
@@ -116,6 +122,9 @@ export function isEntryReplaceable(entry, { descriptor } = {}) {
     if (descriptor?.feeStrategy?.rbfSupported !== true) {
         const chain = descriptor?.displayName || entry.chainId || 'this chain';
         return { ok: false, reason: `Fee bumping is not supported on ${chain}.` };
+    }
+    if ((entry.pending?.rbf ?? entry.rbf) !== true) {
+        return { ok: false, reason: 'This transaction did not allow fee replacement.' };
     }
     return { ok: true };
 }
@@ -171,23 +180,25 @@ export async function sendRbfRequest({ messaging, request } = {}) {
 /**
  * Convenience wrapper: validate the entry, build the request, send it.
  *
- * @param {{ messaging: any, entry: any, strategy: 'speedup' | 'cancel', walletId?: string, feeRate?: string, descriptor?: object | null }} opts
+ * @param {{ messaging: any, entry: any, strategy: 'speedup' | 'cancel', walletId?: string, feeRate?: string, descriptor?: object | null, preview?: boolean }} opts
  *   `descriptor` is the registry descriptor of `entry.chainId`, as `isEntryReplaceable` takes it
  * @returns {Promise<RbfResult>}
  */
-export async function replaceFromHistoryEntry({ messaging, entry, strategy, walletId, feeRate, descriptor } = {}) {
+export async function replaceFromHistoryEntry({ messaging, entry, strategy, walletId, feeRate, descriptor, preview } = {}) {
+    const request = {
+        chainId: entry?.chainId,
+        originalTxHash: entry?.txHash,
+        strategy,
+        walletId,
+        feeRate,
+        ...(preview === true && { preview: true }),
+    };
+    // Report a missing host capability before entry eligibility because no
+    // replacement can run in this shell, even for an otherwise valid entry.
+    if (!isReplaceCallAvailable(messaging)) return sendRbfRequest({ messaging, request });
     const check = isEntryReplaceable(entry, { descriptor });
     if (!check.ok) throw new RbfInvalidEntryError(check.reason);
-    return sendRbfRequest({
-        messaging,
-        request: {
-            chainId: entry.chainId,
-            originalTxHash: entry.txHash,
-            strategy,
-            walletId,
-            feeRate,
-        },
-    });
+    return sendRbfRequest({ messaging, request });
 }
 
 // ── Cancel undo (§37.2 / Cluster D FOLLOWUP 3) ──────────────────────

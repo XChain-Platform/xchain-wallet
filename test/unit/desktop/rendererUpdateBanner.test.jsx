@@ -66,7 +66,7 @@ describe('desktop update banner lifecycle', () => {
         bridge.emit({ type: 'available', info: { version: '1.2.3' } });
 
         await act(async () => {
-            screen.getByRole('button', { name: /install and restart/i }).click();
+            screen.getByRole('button', { name: /download update/i }).click();
             await Promise.resolve();
         });
 

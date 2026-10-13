@@ -1,17 +1,23 @@
 .overlay {
     position: fixed;
     inset: 0;
-    z-index: 1000;
+    z-index: var(--xc-z-modal);
     background: rgba(15, 23, 42, 0.55);
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: var(--xc-space-4);
+    padding: calc(var(--xc-space-4) + env(safe-area-inset-top, 0px))
+        calc(var(--xc-space-4) + env(safe-area-inset-right, 0px))
+        calc(var(--xc-space-4) + env(safe-area-inset-bottom, 0px))
+        calc(var(--xc-space-4) + env(safe-area-inset-left, 0px));
 }
 
 .panel {
     width: 100%;
     max-width: 320px;
+    max-height: calc(var(--xc-viewport-h, 100vh) - var(--xc-space-4) - var(--xc-space-4));
+    overflow-y: auto;
+    overscroll-behavior: contain;
     background: var(--xc-surface);
     color: var(--xc-text);
     border: 1px solid var(--xc-border);
@@ -29,6 +35,17 @@
 
 @media (prefers-reduced-motion: reduce) {
     .panel { animation: none; }
+}
+
+@media (orientation: landscape) and (max-height: 480px) {
+    .overlay {
+        padding: var(--xc-space-2);
+    }
+
+    .panel {
+        max-height: calc(100% - var(--xc-space-2) - var(--xc-space-2));
+        padding: var(--xc-space-3);
+    }
 }
 
 .title {

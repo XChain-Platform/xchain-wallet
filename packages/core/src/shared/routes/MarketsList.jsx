@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { EmptyState, Icon, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, branding as brandingLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { DispenserBadge } from '../components/DispenserBadge.jsx';
@@ -21,6 +21,7 @@ import receivePickerStyles from './TokenPicker.module.css';
 import marketsStyles from './MarketsList.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const MARKETS_PAGE_SIZE = 25;
 const NATIVE_TICKER_BY_COIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 function nativeTickerFor(descriptor) {
     if (!descriptor?.coin) return null;
@@ -61,6 +62,7 @@ export function MarketsList({
     const [marketsReload, setMarketsReload] = useState(0);
     const [tab, setTab] = useState(/** @type {'all' | 'popular' | 'watchlist'} */ ('popular'));
     const [search, setSearch] = useState('');
+    const [visibleMarketCount, setVisibleMarketCount] = useState(MARKETS_PAGE_SIZE);
 
     const loadWatchlist = useCallback(async () => {
         try {
@@ -87,6 +89,7 @@ export function MarketsList({
         const assetKey = `${selectedAsset.chainId}:${selectedAsset.tick}`;
         setLoading(true);
         setLoadError(null);
+        setVisibleMarketCount(MARKETS_PAGE_SIZE);
         const applyResult = (rows) => {
             if (cancelled) return;
             const tick = selectedAsset.tick.toUpperCase();
@@ -167,6 +170,14 @@ export function MarketsList({
         });
         return applySearch(rows);
     }, [tab, markets, watchlist, selectedAsset, search]);
+
+    const filtersHideResults = Boolean(search.trim())
+        || (tab !== 'all' && markets.length > displayMarkets.length);
+    const resetFilters = () => {
+        setSearch('');
+        setTab('all');
+        setVisibleMarketCount(MARKETS_PAGE_SIZE);
+    };
 
     const toggleStar = useCallback(async (chainId, tick1, tick2) => {
         const key = `${chainId}::${tick1}::${tick2}`;
@@ -282,7 +293,10 @@ export function MarketsList({
                                     autoCorrect="off"
                                     spellCheck={false}
                                     value={search}
-                                    onChange={(e) => setSearch(e.target.value)}
+                                    onChange={(e) => {
+                                        setSearch(e.target.value);
+                                        setVisibleMarketCount(MARKETS_PAGE_SIZE);
+                                    }}
                                     placeholder="Search"
                                     aria-label="Search markets"
                                     style={{
@@ -316,7 +330,10 @@ export function MarketsList({
                                                 role="tab"
                                                 aria-selected={active}
                                                 className={`${receivePickerStyles.kindSegment} ${active ? receivePickerStyles.kindSegmentActive : ''}`}
-                                                onClick={() => setTab(opt.id)}
+                                                onClick={() => {
+                                                    setTab(opt.id);
+                                                    setVisibleMarketCount(MARKETS_PAGE_SIZE);
+                                                }}
                                             >
                                                 {opt.label}
                                             </button>
@@ -366,11 +383,13 @@ export function MarketsList({
                                 : tab === 'watchlist'
                                     ? `Starred markets for ${selectedAsset.tick} appear here.`
                                     : 'No pairs found involving this asset on its chain.'}
+                            actionLabel={filtersHideResults ? 'Reset filters' : undefined}
+                            onAction={filtersHideResults ? resetFilters : undefined}
                         />
                     ) : (
                     <div className={receiveStyles.assetCard} style={{ display: 'block', padding: 0, marginBottom: 'var(--xc-space-3)' }}>
                         <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                            {displayMarkets.map((m, idx) => (
+                            {displayMarkets.slice(0, visibleMarketCount).map((m, idx) => (
                                 <MarketRow
                                     key={`${m.tick1}::${m.tick2}`}
                                     chainId={selectedAsset.chainId}
@@ -387,6 +406,15 @@ export function MarketsList({
                                 />
                             ))}
                         </ul>
+                        {displayMarkets.length > visibleMarketCount ? (
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                onClick={() => setVisibleMarketCount((count) => count + MARKETS_PAGE_SIZE)}
+                            >
+                                Load more markets
+                            </Button>
+                        ) : null}
                     </div>
                     )}
                 </div>
