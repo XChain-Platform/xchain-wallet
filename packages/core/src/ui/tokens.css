@@ -76,19 +76,22 @@
     --xc-bg-muted: #F5F6F8;
     --xc-surface: #FFFFFF;
     --xc-surface-raised: #FFFFFF;
-    --xc-border: #E4E7EB;
-    --xc-border-strong: #C7CCD4;
+    /* Borders identify controls and regions against every theme surface, so
+     * both tiers clear the 3:1 non-text contrast floor. */
+    --xc-border: #818B9B;
+    --xc-border-strong: #727D8E;
     --xc-text: #0F172A;
     /* Darkened from #64748B (4.40:1 on --xc-bg-muted) to clear AA. */
     --xc-text-muted: #5F7086;
     --xc-text-inverted: #FFFFFF;
 
-    /* Labels sitting on an accent or danger fill. In the normal palettes both
-     * are white; the forced-colors block re-pairs them with the system color
-     * of the fill they sit on (Canvas on LinkText, MarkText on Mark), which is
-     * what keeps button labels readable in Windows high-contrast mode. */
+    /* Labels sitting on semantic fills. Accent and danger use white; success
+     * uses dark text when its dark-theme fill is bright. The forced-colors
+     * block re-pairs accent and danger with the system color of their fills
+     * (Canvas on LinkText, MarkText on Mark). */
     --xc-on-accent: #FFFFFF;
     --xc-on-danger: #FFFFFF;
+    --xc-on-success: #FFFFFF;
     --xc-danger: #DC2626;
     --xc-danger-bg: rgba(220, 38, 38, 0.10);
     --xc-danger-text: #7F1D1D;
@@ -102,7 +105,12 @@
      * (--xc-success-bg over --xc-bg-muted, not pure white), just under
      * 4.5:1, so it is darkened one more step here. */
     --xc-success: #146F34;
-    --xc-focus-ring: rgba(26, 123, 172, 0.45);
+    /* The translucent ring clears 3:1 after compositing on every surface. */
+    --xc-focus-ring: rgba(26, 123, 172, 0.80);
+    /* Saturation communicates inactivity without blending labels and borders
+     * into their backgrounds. */
+    --xc-disabled-opacity: 1;
+    --xc-disabled-saturation: 0.35;
     --xc-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
     --xc-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
 
@@ -157,11 +165,12 @@
         --xc-bg-muted: #121824;
         --xc-surface: #151B28;
         --xc-surface-raised: #1B2231;
-        --xc-border: #243044;
-        --xc-border-strong: #364257;
+        --xc-border: #5F6D83;
+        --xc-border-strong: #718096;
         --xc-text: #E5EAF2;
         --xc-text-muted: #94A3B8;
         --xc-text-inverted: #0B0F17;
+        --xc-on-success: #0B0F17;
         --xc-danger-bg: rgba(252, 165, 165, 0.14);
         --xc-danger-text: #FCA5A5;
         --xc-warning-bg: rgba(252, 211, 77, 0.14);
@@ -171,7 +180,7 @@
         --xc-danger-fg: #F87171;
         --xc-warning: #F59E0B;
         --xc-success: #4ADE80;
-        --xc-focus-ring: rgba(30, 144, 199, 0.6);
+        --xc-focus-ring: rgba(74, 168, 216, 0.75);
         --xc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
         --xc-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
     }
@@ -182,11 +191,12 @@
     --xc-bg-muted: #121824;
     --xc-surface: #151B28;
     --xc-surface-raised: #1B2231;
-    --xc-border: #243044;
-    --xc-border-strong: #364257;
+    --xc-border: #5F6D83;
+    --xc-border-strong: #718096;
     --xc-text: #E5EAF2;
     --xc-text-muted: #94A3B8;
     --xc-text-inverted: #0B0F17;
+    --xc-on-success: #0B0F17;
     --xc-danger-bg: rgba(252, 165, 165, 0.14);
     --xc-danger-text: #FCA5A5;
     --xc-warning-bg: rgba(252, 211, 77, 0.14);
@@ -196,7 +206,7 @@
     --xc-danger-fg: #F87171;
     --xc-warning: #F59E0B;
     --xc-success: #4ADE80;
-    --xc-focus-ring: rgba(30, 144, 199, 0.6);
+    --xc-focus-ring: rgba(74, 168, 216, 0.75);
     --xc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
     --xc-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
 }
@@ -442,6 +452,13 @@ fieldset {
     outline-offset: 2px;
 }
 
+/* Disabled controls retain the contrast of their semantic color pairs.
+ * Reduced saturation supplies the visual state without alpha compositing. */
+:where(input, select, textarea, button):disabled {
+    opacity: var(--xc-disabled-opacity) !important;
+    filter: saturate(var(--xc-disabled-saturation));
+}
+
 :where(select:not([class])):focus {
     outline: none;
     border-color: var(--xc-accent-primary);
@@ -449,6 +466,10 @@ fieldset {
 }
 
 @media (forced-colors: active) {
+    :where(input, select, textarea, button):disabled {
+        filter: none;
+    }
+
     :where(select:not([class])):focus {
         outline: 2px solid Highlight;
         outline-offset: 2px;

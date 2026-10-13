@@ -51,8 +51,8 @@
     inset-inline-end: 0;
     z-index: 50;
     margin-top: 4px;
-    background: var(--surface, #fff);
-    border: 1px solid var(--border, #d0d4da);
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border-strong);
     border-radius: 8px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
     max-height: 280px;
@@ -75,17 +75,17 @@
 
 .option:hover,
 .option[aria-selected="true"] {
-    background: var(--surface-hover, #eef2f7);
+    background: var(--xc-bg-muted);
 }
 
 .label {
     font-size: 0.95em;
-    color: var(--text, #1a1f25);
+    color: var(--xc-text);
 }
 
 .sublabel {
     font-size: 0.78em;
-    color: var(--text-muted, #6b7180);
+    color: var(--xc-text-muted);
 }
 
 .badge {
@@ -96,13 +96,13 @@
     font-size: 0.7em;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    background: var(--badge-bg, #e6ecf3);
-    color: var(--badge-fg, #3a4250);
+    background: var(--xc-bg-muted);
+    color: var(--xc-text);
 }
 
 .empty {
     padding: 10px 12px;
     font-size: 0.85em;
-    color: var(--text-muted, #6b7180);
+    color: var(--xc-text-muted);
     list-style: none;
 }
