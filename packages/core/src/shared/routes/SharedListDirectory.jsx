@@ -180,11 +180,12 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
 
             {matchingLists.length === 0 ? (
                 <EmptyState
-                    title={query.trim()
-                        ? 'No shared lists match your search.'
+                    title={query.trim() || mode === 'pick' ? 'No matching shared lists' : 'No shared lists yet'}
+                    body={query.trim()
+                        ? 'Try a different search.'
                         : mode === 'pick'
-                            ? `No shared ${filteredType ? `${filteredType} ` : ''}lists are available on this chain.`
-                            : 'No shared lists are available.'}
+                            ? `Shared ${filteredType ? `${filteredType} ` : ''}lists available on this chain appear here.`
+                            : 'Published shared lists appear here.'}
                 />
             ) : (
                 <>

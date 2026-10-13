@@ -1435,9 +1435,12 @@ export function AddressList({
                 </ul>
             ) : null}
             {listedRows.length === 0 ? (
-                <EmptyState title={hiddenRows.length > 0
-                    ? 'All matching addresses are hidden.'
-                    : 'No addresses match the current filter.'} />
+                <EmptyState
+                    title={hiddenRows.length > 0 ? 'Matching addresses hidden' : 'No matching addresses'}
+                    body={hiddenRows.length > 0
+                        ? 'Show hidden addresses to see them.'
+                        : 'Try a different search or network filter.'}
+                />
             ) : (
             <ul className={local.addrList} aria-label="Wallet addresses">
                 {listedRows.map((row) => {

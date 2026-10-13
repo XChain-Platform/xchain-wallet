@@ -2137,7 +2137,7 @@ function HoldersPanel({ holders, holdersLoading, holdersError, holdersFetchedAt,
     if (holdersLoading) return <p className={styles.muted}>Loading holders…</p>;
     if (holdersError) return <StatusMessage variant="error" className={styles.error}>{holdersError}</StatusMessage>;
     if (!holders || holders.length === 0) {
-        return <EmptyState title="No holders yet." body="Mint or distribute supply to populate this list." titleAs="p" />;
+        return <EmptyState title="No holders yet" body="Mint or distribute supply to populate this list." titleAs="p" />;
     }
     return (
         <section className={styles.infoCard} aria-label="Holders">
