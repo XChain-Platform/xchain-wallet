@@ -83,8 +83,9 @@ describe('private-key reveal security', () => {
     it('warns before requesting a password and does not export early', () => {
         const { messaging } = draw();
 
-        expect(screen.getByText(/Anyone with it can spend the funds/i)).toBeTruthy();
-        expect(screen.getByText(/Never share it with anyone, including XChain support/i)).toBeTruthy();
+        expect(screen.getByText(/Never share this private key/)).toHaveTextContent(
+            'Never share this private key. Anyone with it can spend funds from this address.',
+        );
         expect(screen.getByText(/screen-sharing or recording/i)).toBeTruthy();
         expect(screen.queryByLabelText('Wallet password')).toBeNull();
         expect(messaging.exportPrivateKey).not.toHaveBeenCalled();

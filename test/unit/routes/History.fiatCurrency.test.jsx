@@ -30,6 +30,7 @@ describe('History fiat currency', () => {
             blockIndex: 100,
             txHash: 'abc',
             source: 'bc1qsource',
+            address: 'bc1qsource',
             raw: { tick: 'BTC', amount: '2' },
         };
         const messaging = {
@@ -52,5 +53,6 @@ describe('History fiat currency', () => {
 
         expect(await screen.findByText(/\(≈ €20\.00\)/)).toBeInTheDocument();
         expect(screen.queryByText(/\$20\.00/)).toBeNull();
+        expect(screen.getByLabelText('Sent 2 BTC, approximately 20.00 euros')).toBeInTheDocument();
     });
 });

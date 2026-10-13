@@ -245,7 +245,7 @@ export async function contributeMultisigSignature({ vault, sessionId, pubkey, si
     if (!vault) throw new Error('contributeMultisigSignature: vault is required');
     if (typeof sessionId !== 'string') throw new Error('contributeMultisigSignature: sessionId is required');
     if (typeof signatureHex !== 'string' || signatureHex.length === 0
-        || !HEX_RE.test(signatureHex.toLowerCase())) {
+        || signatureHex.length % 2 !== 0 || !HEX_RE.test(signatureHex.toLowerCase())) {
         throw new Error('contributeMultisigSignature: signatureHex must be hex');
     }
     const session = ensureSession(await vault.multisigSigningSessions.get(sessionId), sessionId);
@@ -404,7 +404,7 @@ export async function finalizeMultisigSigningSession({
 }) {
     if (!vault) throw new Error('finalizeMultisigSigningSession: vault is required');
     if (typeof finalizedTxHex !== 'string' || finalizedTxHex.length === 0
-        || !HEX_RE.test(finalizedTxHex.toLowerCase())) {
+        || finalizedTxHex.length % 2 !== 0 || !HEX_RE.test(finalizedTxHex.toLowerCase())) {
         throw new Error('finalizeMultisigSigningSession: finalizedTxHex must be hex');
     }
     const session = ensureSession(await vault.multisigSigningSessions.get(sessionId), sessionId);

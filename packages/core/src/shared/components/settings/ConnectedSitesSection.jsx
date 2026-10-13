@@ -23,7 +23,7 @@
 // block an origin without it being connected first.
 //
 import { useEffect, useState } from 'react';
-import { Button, EmptyState } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, FormErrorSummary } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
 import { useSettings } from '../../hooks/useSettings.js';
 import { useConfirmModal } from '../../hooks/useConfirmModal.js';
@@ -398,6 +398,7 @@ function SignThrottlePanel() {
     const { settings, update } = useSettings();
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    const [validationAttempt, setValidationAttempt] = useState(0);
 
     const currentBurst = settings?.signThrottle?.burst;
     const currentWindowMs = settings?.signThrottle?.windowMs;
@@ -418,6 +419,7 @@ function SignThrottlePanel() {
 
     const onApply = async (e) => {
         e.preventDefault();
+        setValidationAttempt((attempt) => attempt + 1);
         if (submitting) return;
         setError(null);
         const patch = {};
@@ -464,6 +466,12 @@ function SignThrottlePanel() {
         : SIGN_THROTTLE_DEFAULT_WINDOW_MS / 1000;
 
     const FIELD = { ...INPUT, width: '5rem' };
+    const throttleErrorTarget = /^Burst /i.test(error || '')
+        ? { id: 'sign-throttle-burst', label: 'Burst' }
+        : /^Window /i.test(error || '')
+            ? { id: 'sign-throttle-window', label: 'Window' }
+            : undefined;
+    const throttleErrors = error ? [{ ...throttleErrorTarget, message: error }] : [];
     return (
         <div style={SITE_BLOCK}>
             <span style={ROW_VALUE}>Sign-request throttle</span>
@@ -492,6 +500,7 @@ function SignThrottlePanel() {
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 'var(--xc-text-xs)' }}>
                     <span style={{ color: 'var(--xc-text-muted)' }}>Burst</span>
                     <input
+                        id="sign-throttle-burst"
                         type="number"
                         inputMode="numeric"
                         enterKeyHint="next"
@@ -499,7 +508,10 @@ function SignThrottlePanel() {
                         max={SIGN_THROTTLE_BURST_MAX}
                         step={1}
                         value={burstInput}
-                        onChange={(e) => setBurstInput(e.target.value)}
+                        onChange={(e) => {
+                            setBurstInput(e.target.value);
+                            if (error) setError(null);
+                        }}
                         placeholder={String(SIGN_THROTTLE_DEFAULT_BURST)}
                         aria-label="Sign-throttle burst (max requests per window)"
                         style={FIELD}
@@ -508,6 +520,7 @@ function SignThrottlePanel() {
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 'var(--xc-text-xs)' }}>
                     <span style={{ color: 'var(--xc-text-muted)' }}>Window (seconds)</span>
                     <input
+                        id="sign-throttle-window"
                         type="number"
                         inputMode="numeric"
                         enterKeyHint="go"
@@ -515,7 +528,10 @@ function SignThrottlePanel() {
                         max={SIGN_THROTTLE_WINDOW_MS_MAX / 1000}
                         step={0.001}
                         value={windowSecondsInput}
-                        onChange={(e) => setWindowSecondsInput(e.target.value)}
+                        onChange={(e) => {
+                            setWindowSecondsInput(e.target.value);
+                            if (error) setError(null);
+                        }}
                         placeholder={String(SIGN_THROTTLE_DEFAULT_WINDOW_MS / 1000)}
                         aria-label="Sign-throttle window in seconds"
                         style={FIELD}
@@ -529,9 +545,7 @@ function SignThrottlePanel() {
                     {submitting ? 'Applying…' : 'Apply'}
                 </button>
             </form>
-            {error ? (
-                <Status text={error} tone="error" />
-            ) : null}
+            <FormErrorSummary errors={throttleErrors} focusKey={validationAttempt} />
         </div>
     );
 }

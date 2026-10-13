@@ -46,6 +46,26 @@ describe('AppHeader settings gear', () => {
         expect(gear()).not.toBeNull();
     });
 
+    it('opens full settings from the bottom row of the popover', () => {
+        const onOpenSettings = vi.fn();
+        render(
+            <AppHeader
+                activeWallet={{ id: 'w1', name: 'Savings' }}
+                onOpenWalletPicker={() => {}}
+                onOpenSettings={onOpenSettings}
+            />,
+        );
+        fireEvent.click(gear());
+
+        const dialog = screen.getByRole('dialog', { name: 'Wallet settings' });
+        const buttons = within(dialog).getAllByRole('button');
+        expect(buttons.at(-1)).toHaveTextContent('All settings');
+
+        fireEvent.click(buttons.at(-1));
+        expect(onOpenSettings).toHaveBeenCalledOnce();
+        expect(screen.queryByRole('dialog', { name: 'Wallet settings' })).toBeNull();
+    });
+
     it('keeps the watch-only badge in the persistent header', () => {
         render(<AppHeader isWatcherMode />);
         expect(screen.getByRole('status', { name: 'Watch-only wallet' })).toBeTruthy();
