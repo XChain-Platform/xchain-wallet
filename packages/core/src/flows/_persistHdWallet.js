@@ -15,8 +15,8 @@
 // Not exported from the flows barrel. Flow modules import it directly.
 
 import {
-    calibrateKdfParams,
-    deriveMasterKey,
+    calibrateKdfParamsAsync,
+    deriveMasterKeyAsync,
     encryptWalletSeed,
     encryptWalletPassphrase,
     COUNTERWALLET_DEFAULT_ADDRESS_TYPE,
@@ -68,10 +68,10 @@ export async function persistHdWallet({
     activeNetwork,
 }) {
     // 1. Pick KDF params; shells/tests override to skip calibration.
-    const effectiveKdfParams = kdfParams ?? calibrateKdfParams();
+    const effectiveKdfParams = kdfParams ?? await calibrateKdfParamsAsync();
     // Derive once and hand the same key to the encrypt (step 2) and the
     // unlock (step 5); each copies it, and this flow zeroes its own.
-    const masterKey = deriveMasterKey(password, effectiveKdfParams);
+    const masterKey = await deriveMasterKeyAsync(password, effectiveKdfParams);
     let walletRecord;
     let account;
     let signer;

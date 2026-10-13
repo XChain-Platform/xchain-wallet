@@ -20,7 +20,7 @@
 import { decrypt, encrypt } from './aead.js';
 import {
     copyMasterKey,
-    deriveMasterKey,
+    deriveMasterKeyAsync,
     makeFreshKdfParams,
     bytesToBase64,
     base64ToBytes,
@@ -52,7 +52,7 @@ export async function encryptWalletSeed({ password, seed, kdfParams, aad, master
     }
     const params = kdfParams ?? makeFreshKdfParams();
     const workingKey = masterKey === undefined
-        ? deriveMasterKey(password, params)
+        ? await deriveMasterKeyAsync(password, params)
         : copyMasterKey(masterKey);
     try {
         const blob = await encrypt(workingKey, seed, aad);
@@ -83,7 +83,7 @@ export async function decryptWalletSeed({
     retainMasterKey,
 }) {
     const workingKey = masterKey === undefined
-        ? deriveMasterKey(password, kdfParams)
+        ? await deriveMasterKeyAsync(password, kdfParams)
         : copyMasterKey(masterKey);
     try {
         const blob = base64ToBytes(encryptedSeed);

@@ -29,6 +29,7 @@ vi.mock('../../../packages/core/src/crypto/kdf.js', async (importOriginal) => {
     return {
         ...actual,
         deriveMasterKey: vi.fn(actual.deriveMasterKey),
+        deriveMasterKeyAsync: vi.fn(actual.deriveMasterKeyAsync),
     };
 });
 
@@ -37,7 +38,7 @@ import { persistHdWallet } from '../../../packages/core/src/flows/_persistHdWall
 import { unlockWalletRecord } from '../../../packages/core/src/flows/unlockWallet.js';
 import { decryptWalletPassphrase } from '../../../packages/core/src/crypto/walletBlob.js';
 import { generateBip39Mnemonic } from '../../../packages/core/src/crypto/mnemonic.js';
-import { deriveMasterKey } from '../../../packages/core/src/crypto/kdf.js';
+import { deriveMasterKey, deriveMasterKeyAsync } from '../../../packages/core/src/crypto/kdf.js';
 import { Vault } from '../../../packages/core/src/storage/Vault.js';
 import { InMemoryBackend } from '../../../packages/core/src/storage/backend.js';
 
@@ -92,10 +93,11 @@ async function persist(vault, overrides = {}) {
 describe('flows/_persistHdWallet passphrase capture (§15.6)', () => {
     it('derives once while persisting and still supports a later password unlock', async () => {
         const vault = await openVault();
+        vi.mocked(deriveMasterKeyAsync).mockClear();
         vi.mocked(deriveMasterKey).mockClear();
 
         const { wallet } = await persist(vault);
-        expect(deriveMasterKey).toHaveBeenCalledTimes(1);
+        expect(deriveMasterKeyAsync).toHaveBeenCalledTimes(1);
 
         const signer = await unlockWalletRecord({
             wallet,
@@ -104,7 +106,8 @@ describe('flows/_persistHdWallet passphrase capture (§15.6)', () => {
         });
         try {
             expect(await signer.getStatus()).toBe('available');
-            expect(deriveMasterKey).toHaveBeenCalledTimes(2);
+            expect(deriveMasterKeyAsync).toHaveBeenCalledTimes(2);
+            expect(deriveMasterKey).not.toHaveBeenCalled();
         } finally {
             signer.lock();
         }

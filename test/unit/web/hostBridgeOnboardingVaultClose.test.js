@@ -48,7 +48,7 @@ vi.mock('@xchain-wallet/core', async (importOriginal) => {
         crypto: {
             ...actual.crypto,
             makeFreshKdfParams: () => ({ algorithm: 'argon2id' }),
-            deriveMasterKey: () => new Uint8Array(32).fill(9),
+            deriveMasterKeyAsync: async () => new Uint8Array(32).fill(9),
         },
         storage: { ...actual.storage, Vault: RecordingVault },
         signers: { ...actual.signers, SignerPool: FakeSignerPool },

@@ -29,13 +29,13 @@ vi.mock('../../../packages/core/src/crypto/kdf.js', async (importOriginal) => {
     const actual = await importOriginal();
     return {
         ...actual,
-        deriveMasterKey: vi.fn(actual.deriveMasterKey),
+        deriveMasterKeyAsync: vi.fn(actual.deriveMasterKeyAsync),
     };
 });
 
 import { encryptWalletSeed, decryptWalletSeed } from '../../../packages/core/src/crypto/walletBlob.js';
 import { encrypt, decrypt } from '../../../packages/core/src/crypto/aead.js';
-import { deriveMasterKey, copyMasterKey } from '../../../packages/core/src/crypto/kdf.js';
+import { deriveMasterKeyAsync, copyMasterKey } from '../../../packages/core/src/crypto/kdf.js';
 
 const SEED = new Uint8Array(64).map((_, i) => i);
 
@@ -59,7 +59,7 @@ const isElevens = (bytes) => bytes.every((b) => b === 11);
 beforeEach(() => {
     vi.mocked(encrypt).mockClear();
     vi.mocked(decrypt).mockClear();
-    vi.mocked(deriveMasterKey).mockClear();
+    vi.mocked(deriveMasterKeyAsync).mockClear();
 });
 
 describe('crypto/walletBlob with a supplied master key', () => {
@@ -67,7 +67,7 @@ describe('crypto/walletBlob with a supplied master key', () => {
         const key = callerKey();
         await encryptWalletSeed({ password: 'unused', seed: SEED, kdfParams: KDF_PARAMS, masterKey: key });
 
-        expect(deriveMasterKey).not.toHaveBeenCalled();
+        expect(deriveMasterKeyAsync).not.toHaveBeenCalled();
         expect(encrypt).toHaveBeenCalledTimes(1);
         const used = vi.mocked(encrypt).mock.calls[0][0];
         expect(used).not.toBe(key);
@@ -93,7 +93,7 @@ describe('crypto/walletBlob with a supplied master key', () => {
         });
 
         expect(plaintext).toEqual(SEED);
-        expect(deriveMasterKey).not.toHaveBeenCalled();
+        expect(deriveMasterKeyAsync).not.toHaveBeenCalled();
         const used = vi.mocked(decrypt).mock.calls[0][0];
         expect(used).not.toBe(key);
         expect(isZero(used)).toBe(true);
@@ -132,7 +132,7 @@ describe('crypto/walletBlob with a supplied master key', () => {
         })).rejects.toThrow(/masterKey must be a 32-byte Uint8Array/);
         expect(encrypt).not.toHaveBeenCalled();
         expect(decrypt).not.toHaveBeenCalled();
-        expect(deriveMasterKey).not.toHaveBeenCalled();
+        expect(deriveMasterKeyAsync).not.toHaveBeenCalled();
     });
 
     it('refuses a supplied key without the kdfParams it was derived with', async () => {

@@ -15,10 +15,23 @@
 
 import { describe, it, expect, vi } from 'vitest';
 
+vi.mock('../../../packages/core/src/crypto/kdf.js', async (importOriginal) => {
+    const actual = await importOriginal();
+    return {
+        ...actual,
+        deriveMasterKey: vi.fn(actual.deriveMasterKey),
+        deriveMasterKeyAsync: vi.fn(actual.deriveMasterKeyAsync),
+    };
+});
+
 import { ARGON2ID_TEST_TIMEOUT_MS } from '../../helpers/argon2idTimeout.js';
 import { SoftwareSigner } from '../../../packages/core/src/signers/SoftwareSigner.js';
 import { encrypt } from '../../../packages/core/src/crypto/aead.js';
-import { bytesToBase64, deriveMasterKey } from '../../../packages/core/src/crypto/kdf.js';
+import {
+    bytesToBase64,
+    deriveMasterKey,
+    deriveMasterKeyAsync,
+} from '../../../packages/core/src/crypto/kdf.js';
 
 // The wrong-password comparison pays one real Argon2id derivation.
 vi.setConfig({ testTimeout: ARGON2ID_TEST_TIMEOUT_MS });
@@ -98,5 +111,19 @@ describe('SoftwareSigner.unlock wif-only with a supplied master key', () => {
         expect(keyError.message).toBe(passwordError.message);
         expect(await signer.getStatus()).toBe('locked');
         expect(wrongKey.every((b) => b === 5)).toBe(true);
+    });
+
+    it('a password unlock derives once, through the async KDF', async () => {
+        const key = deriveMasterKey(PASSWORD, KDF_PARAMS);
+        const signer = await wifOnlySigner(key);
+        key.fill(0);
+        vi.mocked(deriveMasterKey).mockClear();
+        vi.mocked(deriveMasterKeyAsync).mockClear();
+
+        await signer.unlock({ password: PASSWORD });
+        expect(deriveMasterKeyAsync).toHaveBeenCalledTimes(1);
+        expect(deriveMasterKey).not.toHaveBeenCalled();
+        expect(await signer.getStatus()).not.toBe('locked');
+        signer.lock();
     });
 });

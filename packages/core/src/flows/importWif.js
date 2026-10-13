@@ -19,7 +19,7 @@
 // warning before invoking this flow.
 
 import {
-    deriveMasterKey,
+    deriveMasterKeyAsync,
     encrypt,
     decrypt,
     bytesToBase64,
@@ -160,7 +160,7 @@ export async function importWif({
     // a session-supplied key belongs to the signer and is left alone.
     const masterKey = hasSessionKey
         ? sessionMasterKey
-        : deriveMasterKey(password, walletRecord.kdfParams);
+        : await deriveMasterKeyAsync(password, walletRecord.kdfParams);
     let encryptedWif;
     try {
         try {

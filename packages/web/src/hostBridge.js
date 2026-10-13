@@ -117,6 +117,7 @@ import {
 } from './storage/backends.js';
 import { requestPersistentStorage } from './storage/storagePersistence.js';
 import { installNativeBiometricProvider } from './storage/nativeBiometricProvider.js';
+import { installNativeKdfProvider } from './storage/nativeKdfProvider.js';
 import { installNativeGuardPersistence } from './storage/nativeGuards.js';
 import { installDirectUpdateProvider } from './update/directUpdateProvider.js';
 import { resolveSdkFactory } from './sdkFactory.js';
@@ -1065,6 +1066,8 @@ export async function getSessionStatus() {
     // the biometric enrollment flag honest after the user enrolls, disables,
     // or re-registers a fingerprint in system settings. No-op in a browser.
     try {
+        // First, so the unlock and onboarding derivations run natively.
+        installNativeKdfProvider();
         if (!installNativeWipeHook({ afterWipe: sealPageBroadcastQueue })) installPageWipeSeal();
         installNativeScreenGuard();
         await installNativeBiometricProvider();
@@ -1344,7 +1347,7 @@ export async function createWalletLocal(req) {
     try {
         await assertFreshVault({ metaBackend: meta, storageBackend: createStorageBackend() });
         const kdfParams = cryptoLib.makeFreshKdfParams();
-        masterKey = cryptoLib.deriveMasterKey(password, kdfParams);
+        masterKey = await cryptoLib.deriveMasterKeyAsync(password, kdfParams);
         const storage = createStorageBackend();
         const v = new storageLib.Vault({ backend: storage, masterKey });
         openedVault = v;
@@ -1444,7 +1447,7 @@ export async function importMnemonicLocal(req) {
     try {
         await assertFreshVault({ metaBackend: meta, storageBackend: createStorageBackend() });
         const kdfParams = cryptoLib.makeFreshKdfParams();
-        masterKey = cryptoLib.deriveMasterKey(password, kdfParams);
+        masterKey = await cryptoLib.deriveMasterKeyAsync(password, kdfParams);
         const storage = createStorageBackend();
         const v = new storageLib.Vault({ backend: storage, masterKey });
         openedVault = v;
@@ -1601,7 +1604,7 @@ export async function importBackupLocal(req) {
         await assertFreshVault({ metaBackend: meta, storageBackend: createStorageBackend() });
         const flowsNs = await getFlows();
         const kdfParams = cryptoLib.makeFreshKdfParams();
-        masterKey = cryptoLib.deriveMasterKey(password, kdfParams);
+        masterKey = await cryptoLib.deriveMasterKeyAsync(password, kdfParams);
         const storage = createStorageBackend();
         const v = new storageLib.Vault({ backend: storage, masterKey });
         openedVault = v;
@@ -1717,7 +1720,7 @@ export async function unlockWalletLocal(req) {
     let ownPool = null;
     let ownHost = null;
     try {
-        masterKey = cryptoLib.deriveMasterKey(password, meta.kdfParams);
+        masterKey = await cryptoLib.deriveMasterKeyAsync(password, meta.kdfParams);
         const storage = createStorageBackend();
         const v = new storageLib.Vault({ backend: storage, masterKey });
         try {
