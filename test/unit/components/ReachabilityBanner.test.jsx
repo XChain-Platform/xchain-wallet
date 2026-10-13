@@ -14,7 +14,7 @@
 // has to name where the data stops and why, not "may be out of date".
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import React from 'react';
 
 const useReachability = vi.hoisted(() => vi.fn());
@@ -29,14 +29,42 @@ const chain = (over = {}) => ({
     ...over,
 });
 
-function mount(state) {
-    useReachability.mockReturnValue({ overall: 'degraded', perChain: [], refresh: () => {}, lastChecked: null, ...state });
+function mount(state = {}) {
+    useReachability.mockReturnValue({ loading: false, overall: 'degraded', perChain: [], refresh: () => {}, lastChecked: null, ...state });
     return render(<ReachabilityBanner />);
 }
 
 afterEach(() => { cleanup(); useReachability.mockReset(); });
 
 describe('ReachabilityBanner delayed-data copy', () => {
+    it('uses plain state wording and exposes one atomic polite announcement', () => {
+        mount();
+        const status = screen.getByRole('status');
+        expect(status).toHaveTextContent('Some wallet information is unavailable');
+        expect(status).not.toHaveTextContent('degraded mode');
+        expect(status).toHaveAttribute('aria-live', 'polite');
+        expect(status).toHaveAttribute('aria-atomic', 'true');
+        expect(screen.queryByRole('button', { name: /dismiss|close/i })).toBeNull();
+    });
+
+    it('runs the retry action and reports when a check is already running', () => {
+        const refresh = vi.fn();
+        const view = mount({ refresh });
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        expect(refresh).toHaveBeenCalledOnce();
+
+        useReachability.mockReturnValue({
+            loading: true,
+            overall: 'offline',
+            perChain: [],
+            refresh,
+            lastChecked: null,
+        });
+        view.rerender(<ReachabilityBanner />);
+        expect(screen.getByRole('button', { name: 'Checking…' })).toBeDisabled();
+        expect(screen.getByRole('status')).toHaveTextContent('Wallet is offline');
+    });
+
     it('names the last confirmed block and its age for a stale explorer', () => {
         mount({ perChain: [chain({ freshness: { explorer: { stale: true, tipBlock: 4876327, tipAgeSeconds: 215254, replicaHalted: false } } })] });
         const text = screen.getByRole('status').textContent;

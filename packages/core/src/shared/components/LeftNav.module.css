@@ -71,6 +71,13 @@
     flex: 0 0 auto;
 }
 
+/* Keep stacked notices from consuming the route on phone-sized layouts. */
+.layout[data-xc-tier='compact'] .header {
+    max-height: 45%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
 .mainBody {
     flex: 1 1 auto;
     min-height: 0;
