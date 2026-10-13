@@ -115,11 +115,15 @@ describe('Home native rows on a real wallet', () => {
         expect(calls.some((u) => u.includes('/BTC/api/price_snapshots/FINALIZED/status'))).toBe(true);
     });
 
-    it('sums a funded coin at the oracle rate', async () => {
+    it('shows price unavailable instead of zero while a funded coin price loads', async () => {
         const { release } = venue();
         mount({ balances: balancesOf({ 'bitcoin-mainnet': ['BTC', '50000000'] }) });
+
+        expect(within(hero()).getByText('Price unavailable')).toBeInTheDocument();
+        expect(within(hero()).queryByText('$0.00')).toBeNull();
         release();
         await waitFor(() => expect(within(hero()).getByText('$40,000.00')).toBeInTheDocument());
+        expect(within(hero()).queryByText('Price unavailable')).toBeNull();
         expect(within(hero()).queryByText(/not priced/)).toBeNull();
     });
 });

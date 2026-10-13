@@ -45,10 +45,15 @@ import { formatFiatAmount as formatFiatValue } from '../utils/fiatAmountFormat.j
  * @param {() => void} [props.onLockWallet]      when provided, renders a lock button. Same reason: the popup and side panel have no header, so without it the only ways to lock were a shortcut and the palette.
  */
 export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, pricesFetchedAt, onRefresh, refreshing = false, filterOpen, onToggleFilter, onCommandPalette, onOpenSettings, onLockWallet }) {
-    const { total, unpriced } = useMemo(() => {
+    const { total, unpriced, priceUnavailable } = useMemo(() => {
         const sum = sumFiatValue(rows);
-        const meaningfulUnpriced = sumFiatValue((rows || []).filter(hasNonZeroQuantity)).unpriced;
-        return { ...sum, unpriced: meaningfulUnpriced };
+        const meaningful = (rows || []).filter(hasNonZeroQuantity);
+        const meaningfulSum = sumFiatValue(meaningful);
+        return {
+            ...sum,
+            unpriced: meaningfulSum.unpriced,
+            priceUnavailable: meaningful.length > 0 && meaningfulSum.priced === 0,
+        };
     }, [rows]);
     const { settings } = useSettings();
     const { messaging } = useMessaging();
@@ -246,9 +251,11 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                 ) : (
                     <>
                         <span className={styles.amountValue}>
-                            {formatFiatAmount(total, fiatCurrency, fiatLocale, true)}
+                            {priceUnavailable
+                                ? 'Price unavailable'
+                                : formatFiatAmount(total, fiatCurrency, fiatLocale, true)}
                         </span>
-                        <span className={styles.amountCode}>{fiatCurrency}</span>
+                        {!priceUnavailable ? <span className={styles.amountCode}>{fiatCurrency}</span> : null}
                     </>
                 )}
             </div>
