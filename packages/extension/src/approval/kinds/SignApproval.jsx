@@ -711,7 +711,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                                     disabled={busy}
                                 />
                                 {d ? <ChainBadge descriptor={d} size="sm" /> : null}
-                                <span>{neutralizeControlText(c.address, { maxLength: 120 })}</span>
+                                <span dir="ltr">{neutralizeControlText(c.address, { maxLength: 120 })}</span>
                             </label>
                         );
                     })}
@@ -889,7 +889,7 @@ function SignSummary({ kind, payload, decoded, intentLoading, sourceAddress = nu
                     {inner.address ? (
                         <>
                             <p className={shared.summaryLabel} style={{ marginTop: 8 }}>{t('signerSelect.title')}</p>
-                            <pre className={shared.summaryValue}>{inner.address}</pre>
+                            <pre className={shared.summaryValue} dir="ltr">{inner.address}</pre>
                         </>
                     ) : null}
                 </div>
@@ -941,7 +941,7 @@ function SignSummary({ kind, payload, decoded, intentLoading, sourceAddress = nu
                         {sourceAddress ? (
                             <>
                                 <p className={shared.summaryLabel} style={{ marginTop: 8 }}>{t('send.fields.from')}</p>
-                                <pre className={shared.summaryValue} data-testid="sign-approval-source">{sourceAddress}</pre>
+                                <pre className={shared.summaryValue} data-testid="sign-approval-source" dir="ltr">{sourceAddress}</pre>
                             </>
                         ) : null}
                         {decoded.details.length > 0 ? (

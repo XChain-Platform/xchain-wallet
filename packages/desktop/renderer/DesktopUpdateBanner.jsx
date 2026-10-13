@@ -44,12 +44,11 @@ const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 const WRAP = {
     position: 'fixed',
     // Fixed content does not inherit the body's safe-area padding, so each
-    // inset is the larger of the normal margin and the device inset.
-    top: 'max(var(--xc-space-3), env(safe-area-inset-top, 0px))',
-    left: 'max(var(--xc-space-3), env(safe-area-inset-left, 0px))',
-    right: 'max(var(--xc-space-3), env(safe-area-inset-right, 0px))',
+    // logical inset is the largest normal or physical safe-area margin.
+    insetBlockStart: 'max(var(--xc-space-3), env(safe-area-inset-top, 0px))',
+    insetInline: 'max(var(--xc-space-3), env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px))',
     zIndex: 1000,
-    maxWidth: '480px',
+    maxInlineSize: '480px',
     margin: '0 auto',
     boxShadow: '0 4px 16px rgba(0, 0, 0, 0.25)',
     display: 'flex',
