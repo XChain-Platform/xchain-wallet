@@ -8,9 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { useEffect, useRef } from 'react';
 import { Icon } from '@xchain-wallet/core/ui';
 import { showsBottomBar, showsSidebar } from '../styles/breakpoints.js';
 import { useLayoutTier } from '../styles/useLayoutTier.js';
+import { ROUTE_NAV_GROUPS } from '../routeRegistry.js';
 import styles from './LeftNav.module.css';
 
 /**
@@ -37,44 +39,7 @@ import styles from './LeftNav.module.css';
  * resolves to Home, matching the shell's Home fallback.
  */
 
-export const LEFT_NAV_VIEW_GROUPS = {
-    home: [
-        'home', 'menu', 'alerts', 'actions', 'resume-confirm',
-        'token-detail', 'my-tokens', 'manage-token', 'wizard', 'issue',
-        'mint', 'destroy', 'sweep', 'lock', 'mint-settings',
-        'callback-settings', 'bridge-settings', 'description', 'transfer',
-        'bridge-move', 'execute-callback', 'pause-token', 'lock-address',
-        'broadcast', 'oracle', 'controller-bind', 'dividend', 'airdrop',
-        'advanced', 'pair-signer', 'sign-message', 'verify-signature',
-        'link-form', 'attach-content', 'gated-publish', 'publish-file',
-        'project-roster', 'parallel-compose', 'batch-compose', 'sell-name',
-        'multisig-create', 'multisig-sign', 'governance-polls',
-        'governance-create-poll', 'governance-poll-detail',
-        'governance-delegate', 'cosigner-accounts', 'cosigner-provision',
-        'cosigner-detail', 'addresses', 'view-private-key',
-        'address-preferences', 'wallet-picker', 'account-picker',
-        'wallet-details', 'wallet-rename', 'account-rename', 'add-account',
-        'add-wallet', 'migrate-bip39',
-    ],
-    history: ['history', 'action-detail'],
-    send: ['send', 'send-picker'],
-    receive: ['receive', 'receive-picker'],
-    scan: ['scan', 'sign-psbt'],
-    markets: [
-        'markets', 'market', 'markets-picker', 'market-activity', 'swap',
-        'create-order', 'my-orders', 'my-swaps', 'cross-chain-swap',
-        'cross-chain-order', 'cross-chain-templates', 'bet-markets',
-        'bet-market-detail', 'bet-oracle-record', 'bet-create', 'my-bets',
-        'bet-oracle-console',
-    ],
-    'dispensers-list': ['dispensers-list', 'dispenser-detail', 'dispenser-explorer', 'dispenser'],
-    'contracts-list': ['contracts-list', 'contract-detail', 'contract-deploy', 'contract-execute', 'contract-deposit', 'contract-withdraw', 'contract-stake', 'staking-dashboard', 'stake-detail', 'stake-new', 'stake-form', 'staking-unstake', 'staking-claim', 'staking-delegate', 'staking-revoke', 'operator-dashboard'],
-    messaging: ['messaging', 'compose-message'],
-    contacts: ['contacts'],
-    lists: ['lists', 'list-detail', 'list-create', 'list-fork', 'list-share', 'list-transfer', 'list-rename', 'list-union', 'shared-lists', 'access-lists'],
-    obligations: ['obligations', 'coinpay'],
-    settings: ['settings', 'connected-sites'],
-};
+export const LEFT_NAV_VIEW_GROUPS = ROUTE_NAV_GROUPS;
 
 export function activeLeftNavItem(currentView) {
     return Object.entries(LEFT_NAV_VIEW_GROUPS)
@@ -201,6 +166,7 @@ export function LeftNav({
                     <span className={styles.label}>Search</span>
                 </button>
             ) : null}
+            {/* Safari needs an explicit list role because this class removes list styling. */}
             <ul className={styles.list} role="list">
                 {primary.map((item) => {
                     const active = activeItem === item.id;
@@ -228,6 +194,7 @@ export function LeftNav({
                 })}
             </ul>
             <hr className={styles.divider} />
+            {/* Safari needs an explicit list role because this class removes list styling. */}
             <ul className={styles.list} role="list">
                 {secondary.map((item) => {
                     const active = activeItem === item.id;
@@ -340,12 +307,37 @@ function skipToMain(e) {
  * @param {import('react').ReactNode} props.nav
  * @param {import('react').ReactNode} [props.bottomBar]
  * @param {import('react').ReactNode} [props.header]
+ * @param {string} [props.routeKey]
  * @param {import('react').ReactNode} props.children
  */
 export function FullLayoutWithNav({ nav, bottomBar, header, children }) {
+    const { routeKey } = arguments[0];
     const [layoutRef, tier] = useLayoutTier();
+    const previousRouteKeyRef = useRef(routeKey);
     const sidebar = showsSidebar(tier) ? nav : null;
     const bar = showsBottomBar(tier) ? bottomBar : null;
+
+    useEffect(() => {
+        if (previousRouteKeyRef.current === routeKey) return;
+        previousRouteKeyRef.current = routeKey;
+        const routeBody = document.querySelector(`.${styles.mainBody}`);
+        if (!routeBody) return undefined;
+        const focusHeading = () => {
+            const heading = routeBody.querySelector('h1');
+            if (!heading) return false;
+            heading.tabIndex = -1;
+            heading.classList.add(styles.routeFocusTarget);
+            heading.focus({ preventScroll: true });
+            return true;
+        };
+        if (focusHeading()) return undefined;
+        const observer = new MutationObserver(() => {
+            if (focusHeading()) observer.disconnect();
+        });
+        observer.observe(routeBody, { childList: true, subtree: true });
+        return () => observer.disconnect();
+    }, [routeKey]);
+
     return (
         <div
             ref={layoutRef}

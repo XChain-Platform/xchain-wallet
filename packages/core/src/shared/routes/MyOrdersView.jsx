@@ -439,11 +439,13 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
         <>
             <SectionHeader title="Open" />
             {openItems.length > 0 ? (
+                /* Safari needs an explicit list role because this class removes list styling. */
                 <ul className={L.list} role="list" aria-label="Open orders">{openItems.map(renderRow)}</ul>
             ) : <EmptyState title="No open orders" body="Open DEX orders appear here." titleAs="p" />}
             {closedItems.length > 0 ? (
                 <>
                     <SectionHeader title="Closed" />
+                    {/* Safari needs an explicit list role because this class removes list styling. */}
                     <ul className={L.list} role="list" aria-label="Closed orders">{closedItems.map(renderRow)}</ul>
                 </>
             ) : null}

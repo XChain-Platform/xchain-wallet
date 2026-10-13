@@ -164,9 +164,9 @@ export class CapacitorGuardBackend {
 function assertWriteAccepted(reply, method) {
     if (reply?.status === VaultStatus.OK) return;
     if (reply?.status === VaultStatus.LOCKED) {
-        throw new coreStorage.VaultLockedError(reply.detail || `${method} refused: keystore locked`);
+        // A native detail is untrusted and may echo the payload supplied to
+        // the method, so the JS boundary reports only the safe operation name.
+        throw new coreStorage.VaultLockedError(`${method} refused: keystore locked`);
     }
-    throw new VaultUnavailableError(
-        `${method} did not confirm the write (status ${JSON.stringify(reply?.status)})`,
-    );
+    throw new VaultUnavailableError(`${method} did not confirm the write`);
 }

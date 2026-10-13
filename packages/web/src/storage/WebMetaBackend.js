@@ -27,6 +27,14 @@
 
 export const DEFAULT_META_KEY = 'xchain-wallet:vault-meta';
 
+function defaultStorage() {
+    try {
+        return /** @type {StorageLike | null} */ (globalThis.localStorage ?? null);
+    } catch (_err) {
+        return null;
+    }
+}
+
 /**
  * @typedef {Object} StorageLike
  * @property {(key: string) => string | null} getItem
@@ -40,35 +48,36 @@ export class WebMetaBackend {
      */
     constructor(opts = {}) {
         this._key = opts.key ?? DEFAULT_META_KEY;
-        this._storage =
-            opts.storage ??
-            /** @type {StorageLike | undefined} */ (globalThis.localStorage);
-        if (!this._storage) {
-            throw new Error(
-                'WebMetaBackend: localStorage is not available; pass { storage } for non-browser contexts',
-            );
-        }
+        this._storage = opts.storage ?? defaultStorage();
     }
 
     /** @returns {Promise<unknown | null>} */
     async load() {
-        const raw = this._storage.getItem(this._key);
-        if (raw == null) return null;
         try {
+            const raw = this._storage?.getItem(this._key);
+            if (raw == null) return null;
             return JSON.parse(raw);
-        } catch (err) {
-            throw new Error(
-                `WebMetaBackend.load: invalid JSON at key "${this._key}": ${err?.message || err}`,
-            );
+        } catch (_err) {
+            return null;
         }
     }
 
     /** @param {unknown} obj */
     async save(obj) {
-        this._storage.setItem(this._key, JSON.stringify(obj));
+        try {
+            if (!this._storage) throw new Error('localStorage is not available');
+            this._storage.setItem(this._key, JSON.stringify(obj));
+        } catch (err) {
+            throw new Error(`WebMetaBackend.save: metadata could not be persisted: ${err?.message || err}`);
+        }
     }
 
     async clear() {
-        this._storage.removeItem(this._key);
+        try {
+            if (!this._storage) return;
+            this._storage.removeItem(this._key);
+        } catch (_err) {
+            // A failed cleanup leaves the existing wallet metadata intact.
+        }
     }
 }

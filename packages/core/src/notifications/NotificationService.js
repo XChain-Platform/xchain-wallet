@@ -50,6 +50,7 @@
 // the user can identify the transfer without opening the wallet.
 
 import { isWithinQuietHours } from './quietHours.js';
+import { taggedLogger } from './taggedLogger.js';
 
 const DEDUP_TTL_MS = 30_000;
 const DEDUP_CAP = 200;
@@ -62,8 +63,6 @@ const SUB_WARN_THRESHOLD = 20; // explorer caps a connection at 25 subscriptions
 
 /** Fund movement kinds that must not double up per transaction. */
 const TX_DEDUP_KINDS = new Set(['incoming-pending', 'incoming-receipt', 'tx-confirmed']);
-
-const NOOP_LOGGER = { debug() {}, warn() {}, error() {} };
 
 // Mirrors the SDK SEND layouts. Exact tuple pairing matters for v1-v3: an
 // amount from one output must never be shown beside another output's asset.
@@ -184,7 +183,7 @@ export class NotificationService {
         this._onTxConfirmed = typeof onTxConfirmed === 'function' ? onTxConfirmed : null;
         this._onMempoolSeen = typeof onMempoolSeen === 'function' ? onMempoolSeen : null;
         this._now = typeof now === 'function' ? now : () => Date.now();
-        this._log = logger || NOOP_LOGGER;
+        this._log = taggedLogger(logger, 'notify');
 
         this._started = false;
         /** @type {Map<string, { unsub: () => void, chainId: string }>} subKey -> entry */
@@ -274,7 +273,7 @@ export class NotificationService {
                 const unsub = sdk.onAddress(a.address, this._makeHandler(a));
                 this._subs.set(key, { unsub, chainId: a.chainId });
             } catch (e) {
-                this._log.error(`NotificationService: subscribe failed for ${a.address}`, e);
+                this._log.error(`NotificationService: subscribe failed on ${a.chainId}`, e);
             }
         }
 

@@ -37,6 +37,7 @@ import {
     StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
+import { countdownText } from '../../market/obligationStatus.js';
 import { formatLocalDateTime } from '../utils/dateTime.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
@@ -108,8 +109,8 @@ async function readSwapStates(messaging, candidates) {
 export function deriveStatus(item, cancelledKeys, nowSec) {
     if (cancelledKeys.has(item.key)) return 'cancelled';
     if (String(item.row.status || 'valid') !== 'valid') return 'invalid';
-    const swapStatus = String(item.row.swap_status || item.live?.status || '').toLowerCase().trim();
-    if (swapStatus === 'complete') return 'settled';
+    const swapStatus = String(item.live?.status || item.row.swap_status || '').toLowerCase().trim();
+    if (swapStatus === 'complete' || swapStatus === 'filled' || swapStatus === 'settled') return 'settled';
     if (swapStatus === 'cancelled') return 'cancelled';
     if (swapStatus === 'expired') return 'expired';
     const exp = Number(item.live?.expiration ?? item.row.expiration);
@@ -138,6 +139,19 @@ function fmtDate(unixSec) {
     // otherwise renders as a plausible date tens of thousands of years away.
     if (!Number.isFinite(n) || n <= 0 || n >= 10_000_000_000) return null;
     return formatLocalDateTime(n);
+}
+
+export function swapExpiryLabel(unixSec, nowSec) {
+    const absolute = fmtDate(unixSec);
+    if (!absolute) return null;
+    const secondsLeft = Math.floor(Number(unixSec) - Number(nowSec));
+    if (!Number.isFinite(secondsLeft)) return `Expires ${absolute}`;
+    if (secondsLeft <= 0) return `Expired ${absolute}`;
+    const days = Math.floor(secondsLeft / 86400);
+    const countdown = days > 0
+        ? `${days}d ${Math.floor((secondsLeft % 86400) / 3600)}h`
+        : countdownText(secondsLeft);
+    return countdown ? `Expires ${absolute} (${countdown} left)` : `Expires ${absolute}`;
 }
 
 function withFormattedExpiration(confirmAction) {
@@ -292,7 +306,7 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
         const descriptor = chainRegistry.get(it.chainId);
         const give = sideLabel(it.row.give_tick, it.row.give_coin, it.row.give_amount, it.row.give_ownership);
         const get = sideLabel(it.row.get_tick, it.row.get_coin, it.row.get_amount, it.row.get_ownership);
-        const expText = fmtDate(it.live?.expiration ?? it.row.expiration);
+        const expText = swapExpiryLabel(it.live?.expiration ?? it.row.expiration, nowSec);
         const allowList = boundListIndex(it.row.allow_list ?? it.row.allowList);
         const blockList = boundListIndex(it.row.block_list ?? it.row.blockList);
         const chip = status === 'open'
@@ -310,7 +324,7 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
                         {' · #'}{it.row.action_index}
                         {' · '}<AddressText address={it.owner.address} />
                     </div>
-                    {expText ? <div className={L.rowDetail}>Expires {expText}</div> : null}
+                    {expText ? <div className={L.rowDetail}>{expText}</div> : null}
                     <div className={L.rowDetail}>
                         Allow list {allowList ? `#${allowList}` : 'none'} · Block list {blockList ? `#${blockList}` : 'none'}
                     </div>
@@ -350,12 +364,14 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
             {openItems.length > 0 ? (
                 <section>
                     <SectionHeader title="Open" />
+                    {/* Safari needs an explicit list role because this class removes list styling. */}
                     <ul className={L.list} role="list" aria-label="Open swaps">{openItems.map(renderRow)}</ul>
                 </section>
             ) : <EmptyState title="No open swaps" body="Open atomic swaps appear here." titleAs="p" />}
             {closedItems.length > 0 ? (
                 <section>
                     <SectionHeader title="Closed" />
+                    {/* Safari needs an explicit list role because this class removes list styling. */}
                     <ul className={L.list} role="list" aria-label="Closed swaps">{closedItems.map(renderRow)}</ul>
                 </section>
             ) : null}

@@ -30,12 +30,13 @@
 // (Send.jsx still passes `onSendAnother` for back-compat; the prop is
 // accepted under either name.)
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatedQrFrames, Button, StatusMessage } from '../../ui/index.js';
 import { copyText } from '../clipboard.js';
 import { encodeXcwChunks } from '../../uri/psbtQr.js';
 import { encodeBbqrPsbtFrames } from '../../uri/bbqrPsbt.js';
 import { useHapticFeedback } from '../hooks/useHaptic.js';
+import { useToast } from './ToastHost.jsx';
 import styles from './WatcherResultPanel.module.css';
 
 /**
@@ -57,6 +58,10 @@ export function WatcherResultPanel({
     const [qrFormat, setQrFormat] = useState('xcw');
     const [copyState, setCopyState] = useState(/** @type {'idle' | 'copied' | 'failed'} */ ('idle'));
     const haptic = useHapticFeedback();
+    const { announce } = useToast();
+    useEffect(() => {
+        announce(title);
+    }, [announce, title]);
     const exportFrames = useMemo(() => {
         if (!psbtHex) return null;
         try {
@@ -71,15 +76,16 @@ export function WatcherResultPanel({
         if (!psbtHex) return;
         const { ok } = await copyText(psbtHex);
         setCopyState(ok ? 'copied' : 'failed');
+        announce(ok ? 'Copied' : 'Copy failed: clipboard unavailable');
         if (ok) haptic.tap();
         else haptic.error();
         setTimeout(() => setCopyState('idle'), 1500);
-    }, [haptic, psbtHex]);
+    }, [announce, haptic, psbtHex]);
     const formatLabel = qrFormat === 'bbqr' ? 'BBQr (hex)' : 'XCW chunks';
     const buildAnother = onBuildAnother || onSendAnother;
     return (
         <>
-            <div className={styles.successCard} role="status" aria-live="polite">
+            <div className={styles.successCard}>
                 <h2 className={styles.successTitle}>{title}</h2>
                 <p className={styles.successHint}>
                     Take this transaction to your Signer-mode wallet. Paste the hex,
@@ -117,7 +123,6 @@ export function WatcherResultPanel({
                             className={styles.successLink}
                             onClick={copyHex}
                             aria-label="Copy unsigned transaction hex"
-                            aria-live="polite"
                         >
                             {copyState === 'copied'
                                 ? 'Copied'
@@ -160,6 +165,7 @@ export function WatcherResultPanel({
                         <AnimatedQrFrames
                             frames={exportFrames}
                             alt="Unsigned transaction animated QR"
+                            announceLoading={false}
                         />
                         <details>
                             <summary className={styles.hint}>Plain-text chunks</summary>

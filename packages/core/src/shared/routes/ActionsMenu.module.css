@@ -2,6 +2,9 @@
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
 }
 
 /* A list fills the content area on wide screens, the same as every other
@@ -10,8 +13,13 @@
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
     gap: var(--xc-space-3);
-    margin: var(--xc-space-6) 0 0;
-    padding: var(--xc-space-4) 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.listItem {
+    display: flex;
 }
 
 .entry {
@@ -27,6 +35,7 @@
     cursor: pointer;
     color: var(--xc-text);
     font-family: inherit;
+    width: 100%;
 }
 
 .entryIcon {
@@ -52,12 +61,12 @@
     min-width: 0;
 }
 
-.entry:hover:not(:disabled) {
+.entry:hover:not([aria-disabled="true"]) {
     background: var(--xc-bg-muted);
     border-color: var(--xc-accent-primary);
 }
 
-.entry:disabled {
+.entry[aria-disabled="true"] {
     opacity: 0.5;
     cursor: not-allowed;
 }
@@ -77,6 +86,14 @@
 .entryDescription {
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
+    line-height: 1.3;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.entryReason {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-warning, #d99000);
     line-height: 1.3;
     min-width: 0;
     overflow-wrap: anywhere;

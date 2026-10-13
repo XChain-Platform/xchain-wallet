@@ -83,6 +83,17 @@ export function ChainPickerSection() {
                     chainRegistry={chainRegistry}
                 />
             </LiveExample>
+
+            <LiveExample label="Scoped context: hide the network-kind suffix only when the surrounding screen already names it.">
+                <ChainPicker
+                    label="Chain"
+                    value={kindVal}
+                    onChange={setKindVal}
+                    chainIds={WITH_TESTNET}
+                    chainRegistry={chainRegistry}
+                    hideNetworkKind
+                />
+            </LiveExample>
         </Section>
     );
 }
