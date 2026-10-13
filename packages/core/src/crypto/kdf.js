@@ -13,6 +13,10 @@
 // Parameters are tuned per-device at wallet creation to target ~1s of
 // work on the user's machine. The tuning helper is exported; callers
 // store the resulting params alongside the ciphertext (per Wallet.kdfParams).
+//
+// The mobile shells register a native Argon2id (setNativeArgon2id) that
+// computes the same bytes many times faster; the JS implementation below
+// stays the reference and the fallback for every failure.
 
 import { argon2id } from '@noble/hashes/argon2';
 
@@ -111,17 +115,28 @@ export function validateKdfParams(params) {
 /**
  * Derive a 32-byte master key from a password and the stored KDF params.
  * Returns a Uint8Array the caller is responsible for zeroing after use.
+ * Synchronous and JS-only; async callers use `deriveMasterKeyAsync`.
  *
  * @param {string} password
  * @param {KdfParams} params
  * @returns {Uint8Array}
  */
 export function deriveMasterKey(password, params) {
+    return deriveWithJs(password, checkedSalt(params), params);
+}
+
+/** Validate params (the DoS ceilings) and return the decoded salt bytes. */
+function checkedSalt(params) {
     validateKdfParams(params);
     const salt = base64ToBytes(params.salt);
     if (salt.length < KDF_MIN_SALT_BYTES) {
         throw new KdfParamError(`salt must be at least ${KDF_MIN_SALT_BYTES} bytes`);
     }
+    return salt;
+}
+
+/** The reference derivation every stored wallet was encrypted with. */
+function deriveWithJs(password, salt, params) {
     const passwordBytes = new TextEncoder().encode(password);
     try {
         return argon2id(passwordBytes, salt, {
@@ -133,6 +148,130 @@ export function deriveMasterKey(password, params) {
     } finally {
         passwordBytes.fill(0);
     }
+}
+
+/**
+ * A native Argon2id, or null for the JS one. Called with
+ * { password, salt: base64, iterations, memoryKib, parallelism, length } and
+ * resolving the derived key as standard base64 (the XChainVault contract).
+ * @typedef {(req: {password: string, salt: string, iterations: number, memoryKib: number, parallelism: number, length: number}) => Promise<string>} NativeArgon2id
+ */
+
+/** @type {NativeArgon2id | null} */
+let nativeArgon2id = null;
+/** @type {{ provider: NativeArgon2id, verdict: Promise<boolean> } | null} */
+let nativeCheck = null;
+
+// Known answer the JS implementation produces for these inputs. A native
+// build must reproduce it before any wallet key goes through it: a wrong
+// 32-byte key would seal a wallet no other device can open. Small params
+// keep the check cheap; the non-ASCII password and p=2 cover the risky parts.
+const NATIVE_KNOWN_ANSWER = Object.freeze({
+    password: 'kat-p\u00e4ss \u2713 \u9375',
+    salt: 'a2RmLWthdDE=',
+    iterations: 2,
+    memoryKib: 8192,
+    parallelism: 2,
+    length: KDF_KEY_LENGTH,
+    keyBase64: '7OeLFLzPZZlGH7yt0gWieO0LVGA7YCWRFqfI14qQgk4=',
+});
+
+/**
+ * Register (or with null, remove) the native Argon2id. Only the native mobile
+ * shell registers one; every other runtime keeps the JS implementation.
+ *
+ * @param {NativeArgon2id | null} fn
+ */
+export function setNativeArgon2id(fn) {
+    if (fn !== null && typeof fn !== 'function') {
+        throw new TypeError('setNativeArgon2id: expected a function or null');
+    }
+    nativeArgon2id = fn;
+}
+
+/** @returns {boolean} true when a native Argon2id is registered. */
+export function hasNativeArgon2id() {
+    return nativeArgon2id !== null;
+}
+
+/**
+ * One provider call, reduced to "exactly `length` key bytes or null". Any
+ * rejection, non-string reply or wrong length is null, so the caller falls
+ * back. The reply string cannot be zeroed (a JS string); the bytes can.
+ */
+async function callNative(provider, request) {
+    let reply;
+    try {
+        reply = await provider(request);
+    } catch {
+        return null;
+    }
+    if (typeof reply !== 'string') return null;
+    let bytes;
+    try {
+        bytes = base64ToBytes(reply);
+    } catch {
+        return null;
+    }
+    if (bytes.length !== request.length) {
+        bytes.fill(0);
+        return null;
+    }
+    return bytes;
+}
+
+/**
+ * Has this provider reproduced the known answer? Asked once per provider
+ * function and remembered, so an older plugin without the method costs one rejected
+ * call per session rather than one per derivation.
+ */
+function nativeVerified(provider) {
+    if (nativeCheck === null || nativeCheck.provider !== provider) {
+        const { keyBase64, ...request } = NATIVE_KNOWN_ANSWER;
+        const verdict = callNative(provider, request).then((bytes) => {
+            if (bytes === null) return false;
+            const ok = bytesToBase64(bytes) === keyBase64;
+            bytes.fill(0);
+            return ok;
+        });
+        nativeCheck = { provider, verdict };
+    }
+    return nativeCheck.verdict;
+}
+
+/** The registered provider once it has passed the known answer, else null. */
+async function verifiedNative() {
+    const provider = nativeArgon2id;
+    if (provider === null) return null;
+    return (await nativeVerified(provider)) ? provider : null;
+}
+
+/**
+ * Async `deriveMasterKey`: same validation, same bytes, native speed where
+ * the shell registered a provider. Params are validated BEFORE the provider
+ * sees them, so the load-time ceilings guard the native side too. Any
+ * provider failure falls back to the JS derivation, so the result never
+ * depends on which implementation ran. Caller zeroes the returned key.
+ *
+ * @param {string} password
+ * @param {KdfParams} params
+ * @returns {Promise<Uint8Array>}
+ */
+export async function deriveMasterKeyAsync(password, params) {
+    const salt = checkedSalt(params);
+    const provider = typeof password === 'string' ? await verifiedNative() : null;
+    if (provider !== null) {
+        const key = await callNative(provider, {
+            password,
+            salt: bytesToBase64(salt),
+            iterations: params.iterations,
+            memoryKib: params.memory,
+            parallelism: params.parallelism,
+            length: KDF_KEY_LENGTH,
+        });
+        if (key !== null) return key;
+    }
+    return deriveWithJs(password, salt, params);
 }
 
 /**
@@ -211,13 +350,81 @@ export function calibrateKdfParams(opts = {}) {
     });
     const msPerPass = performance.now() - start;
 
+    return calibratedParams(
+        sizeIterations(msPerPass, targetMs, minIterations, maxIterations),
+        memory,
+        parallelism,
+    );
+}
+
+// Most passes a native-timed calibration may choose. The stored params must
+// stay openable by the JS fallback wherever the wallet travels (a backup
+// restored on desktop, web or the extension, which have no provider). JS
+// runs about 0.64 s per pass at 64 MiB on a fast desktop (measured
+// 2026-10-12), so 4 passes cost about 2.6 s there: inside 3x the 1 s target.
+// A phone's own JS fallback already exceeds that bound at the floor (an
+// LG K51 runs about 13 s per pass), so no ceiling can bound it; the floor
+// rules there, and this ceiling only stops native speed from adding passes
+// the JS side would pay for.
+export const KDF_NATIVE_CALIBRATION_MAX_ITERATIONS = 4;
+
+/**
+ * `calibrateKdfParams` timed against the native Argon2id when one is
+ * registered, so a phone sizes the work against the code that will run it.
+ * Same single-pass probe; the result is capped at
+ * KDF_NATIVE_CALIBRATION_MAX_ITERATIONS (see above). With no provider, or a
+ * provider that fails its check or the probe, this is `calibrateKdfParams`.
+ *
+ * @param {Parameters<typeof calibrateKdfParams>[0]} [opts]
+ * @returns {Promise<KdfParams>}
+ */
+export async function calibrateKdfParamsAsync(opts = {}) {
+    const provider = await verifiedNative();
+    if (provider === null) return calibrateKdfParams(opts);
+    const targetMs = opts.targetMs ?? 1000;
+    const memory = opts.memory ?? KDF_MIN_MEMORY_KIB;
+    const parallelism = opts.parallelism ?? KDF_DEFAULT_PARALLELISM;
+    const minIterations = opts.minIterations ?? KDF_MIN_ITERATIONS;
+    const maxIterations = opts.maxIterations ?? 32;
+    const ceiling = Math.max(
+        minIterations,
+        Math.min(maxIterations, KDF_NATIVE_CALIBRATION_MAX_ITERATIONS),
+    );
+
+    const probeSalt = new Uint8Array(16);
+    crypto.getRandomValues(probeSalt);
+    const start = performance.now();
+    const probeKey = await callNative(provider, {
+        password: 'calibration-probe',
+        salt: bytesToBase64(probeSalt),
+        iterations: 1,
+        memoryKib: memory,
+        parallelism,
+        length: KDF_KEY_LENGTH,
+    });
+    const msPerPass = performance.now() - start;
+    if (probeKey === null) return calibrateKdfParams(opts);
+    probeKey.fill(0);
+
+    return calibratedParams(
+        sizeIterations(msPerPass, targetMs, minIterations, ceiling),
+        memory,
+        parallelism,
+    );
+}
+
+/** Passes that meet `targetMs` at `msPerPass`, clamped to [min, max]. */
+function sizeIterations(msPerPass, targetMs, minIterations, maxIterations) {
     // A probe too fast for the clock to see says nothing about scale: it
     // meets a zero target and can never meet a positive one.
     let iterations;
     if (msPerPass > 0) iterations = Math.ceil(targetMs / msPerPass);
     else iterations = targetMs > 0 ? maxIterations : minIterations;
-    iterations = Math.min(maxIterations, Math.max(minIterations, iterations));
+    return Math.min(maxIterations, Math.max(minIterations, iterations));
+}
 
+/** Fresh-salted params at the calibrated cost. */
+function calibratedParams(iterations, memory, parallelism) {
     const saltOut = new Uint8Array(16);
     crypto.getRandomValues(saltOut);
     return {
