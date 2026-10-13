@@ -41,7 +41,7 @@ export function registrableDomainForHostname(hostname) {
     return labels.slice(-(suffixLength + 1)).join('.');
 }
 
-export function originIdentityDetails(origin) {
+function originIdentityDetails(origin) {
     try {
         const parsed = new URL(String(origin));
         const hostname = parsed.hostname.toLowerCase().replace(/\.$/, '');
@@ -145,9 +145,4 @@ export function OriginIdentity({
             {children}
         </Root>
     );
-}
-
-/** Compatibility helper for callers that display a three-label hostname ending. */
-export function originHostEnding(origin) {
-    return neutralizeControlText(originIdentityDetails(origin).hostEnding, { maxLength: 255 });
 }

@@ -21,7 +21,7 @@ const ROUTE_SEGMENTS = Object.freeze({
  * follows the same override rules as SDKRegistry so reads and browser links
  * always reach the same operator-selected explorer.
  */
-export function explorerBaseUrl(chainId, settings, chainRegistry = defaultRegistry()) {
+function explorerBaseUrl(chainId, settings, chainRegistry = defaultRegistry()) {
     const descriptor = chainRegistry?.get?.(chainId);
     if (!descriptor) return null;
     const override = endpointOverridesFromSettings(settings, chainRegistry)[chainId]?.explorerUrl;
