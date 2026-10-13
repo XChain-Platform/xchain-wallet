@@ -1313,14 +1313,11 @@
 
     .filterCard {
         display: none;
+        min-width: 0;
     }
 
     .filterCard.filterCardOpen {
         display: flex;
-    }
-
-    .filterCard {
-        min-width: 0;
     }
 
     .dateRow {

@@ -434,7 +434,10 @@
 .priceAlertCard {
     display: flex;
     flex-direction: column;
+    justify-content: center;
     gap: var(--xc-space-2);
+    min-height: 54px;
+    box-sizing: border-box;
 }
 
 .priceAlertCard > button {
@@ -468,15 +471,6 @@
 
 .officialBannerSlot {
     min-height: 38px;
-}
-
-.priceAlertCard {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: var(--xc-space-2);
-    min-height: 54px;
-    box-sizing: border-box;
 }
 
 .supplyCard {
