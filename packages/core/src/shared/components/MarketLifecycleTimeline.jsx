@@ -67,7 +67,11 @@ export function MarketLifecycleTimeline({ messaging, kind, chainId, address, act
         let cancelled = false;
         const fetchLifecycle = kind === 'order' ? messaging?.getOrderLifecycle : messaging?.getSwapLifecycle;
         if (typeof fetchLifecycle !== 'function') {
-            setState({ loading: false, events: [], error: null });
+            setState({
+                loading: false,
+                events: [{ kind: 'created', row: { action_index: String(actionIndex), block_index: createdBlock } }],
+                error: null,
+            });
             return undefined;
         }
         const idx = String(actionIndex);
