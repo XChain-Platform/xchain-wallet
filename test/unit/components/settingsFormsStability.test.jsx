@@ -63,7 +63,10 @@ describe('settings form validation', () => {
         fireEvent.blur(input);
 
         expect(update).not.toHaveBeenCalled();
-        expect(screen.getByText(/three-letter ISO currency code/)).toBeTruthy();
+        const error = screen.getByRole('alert');
+        expect(error).toHaveTextContent(/three-letter ISO currency code/);
+        expect(input).toHaveAttribute('aria-invalid', 'true');
+        expect(input.getAttribute('aria-describedby').split(' ')).toContain(error.id);
     });
 
     it('does not turn an empty test-send threshold into zero', () => {
@@ -73,7 +76,11 @@ describe('settings form validation', () => {
         fireEvent.blur(input);
 
         expect(update).not.toHaveBeenCalled();
-        expect(screen.getByText(/whole number of sats/)).toBeTruthy();
+        const error = screen.getByRole('alert');
+        expect(error).toHaveTextContent(/whole number of sats/);
+        expect(input).toHaveAttribute('aria-invalid', 'true');
+        expect(input.getAttribute('aria-describedby').split(' ')).toContain(error.id);
+        expect(input.getAttribute('aria-describedby').split(' ')).toContain('test-send-threshold-hint');
         expect(screen.queryByRole('switch', { name: 'Auto-arm panic mode' })).toBeNull();
     });
 
@@ -127,7 +134,10 @@ describe('settings form validation', () => {
         fireEvent.blur(input);
 
         expect(update).not.toHaveBeenCalled();
-        expect(screen.getByRole('alert').textContent).toMatch(/non-negative custom fee rate/);
+        const error = screen.getByRole('alert');
+        expect(error).toHaveTextContent(/non-negative custom fee rate/);
+        expect(input).toHaveAttribute('aria-invalid', 'true');
+        expect(input.getAttribute('aria-describedby').split(' ')).toContain(error.id);
     });
 
     it('allows shared settings rows to wrap on narrow screens', () => {

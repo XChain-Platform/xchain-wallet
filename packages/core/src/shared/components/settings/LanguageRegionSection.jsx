@@ -185,6 +185,10 @@ export function LanguageRegionSection() {
                         value={selectorValue}
                         onChange={(e) => onCurrencyChange(e.target.value)}
                         aria-label="Fiat currency"
+                        aria-invalid={currencyError && selectorValue !== CUSTOM_CURRENCY_VALUE ? 'true' : undefined}
+                        aria-describedby={currencyError && selectorValue !== CUSTOM_CURRENCY_VALUE
+                            ? 'fiat-currency-error'
+                            : undefined}
                         style={SELECT}
                     >
                         {FIAT_CURRENCIES.map((c) => (
@@ -208,20 +212,22 @@ export function LanguageRegionSection() {
                             }}
                             placeholder="ISO code"
                             aria-label="Custom currency code"
+                            aria-invalid={currencyError ? 'true' : undefined}
+                            aria-describedby={currencyError ? 'fiat-currency-error' : undefined}
                             maxLength={6}
                             style={INPUT}
                         />
                     ) : null}
                 </div>
             </div>
-            {currencyError ? <Status text={currencyError} tone="error" /> : null}
+            {currencyError ? <Status id="fiat-currency-error" text={currencyError} tone="error" /> : null}
         </div>
     );
 }
 
-function Status({ text, tone }) {
+function Status({ text, tone, id }) {
     return (
-        <div style={{
+        <div id={id} role={tone === 'error' ? 'alert' : undefined} style={{
             padding: 'var(--xc-space-3) var(--xc-space-4)',
             background: 'var(--xc-surface-raised)',
             border: tone === 'error'
