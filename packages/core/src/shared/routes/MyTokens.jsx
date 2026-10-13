@@ -162,7 +162,7 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
     const isLoading = tokens === null && loadError === null;
     const isEmpty = tokens !== null && tokens.length === 0 && tokensError === null;
     const isFilteredEmpty = tokens !== null && tokens.length > 0
-        && filteredTokens !== null && filteredTokens.length === 0 && tokensError === null;
+        && filteredTokens !== null && filteredTokens.length === 0;
 
     const header = (
         <PageHeader
@@ -244,7 +244,15 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                 ) : null}
 
                 {isFilteredEmpty ? (
-                    <EmptyState title="No matching tokens" body="Try a different search or network filter." />
+                    <EmptyState
+                        title="No results for these filters"
+                        body="Reset the filters to see all tokens."
+                        actionLabel="Reset filters"
+                        onAction={() => {
+                            setQuery('');
+                            setMode('all');
+                        }}
+                    />
                 ) : null}
 
                 {filteredTokens && filteredTokens.length > 0 ? (

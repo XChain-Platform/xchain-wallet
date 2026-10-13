@@ -1559,9 +1559,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             {historyLoaded && visibleEntries.length === 0 && loadingChains.size === 0 ? (
                 filtersActive && entries.length > 0 ? (
                     <EmptyState
-                        title="No matches for the current filters"
-                        body="Adjust or clear the filters to see more history."
-                        actionLabel="Clear filters"
+                        title="No results for these filters"
+                        body="Reset the filters to see all history."
+                        actionLabel="Reset filters"
                         onAction={clearAllFilters}
                     />
                 ) : (

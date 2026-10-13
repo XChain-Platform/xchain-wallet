@@ -942,7 +942,15 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     body="Saved contacts label addresses across the inbox and history."
                 />
             ) : filteredContacts.length === 0 ? (
-                <EmptyState title="No matching contacts" body="Try a different search or network filter." />
+                <EmptyState
+                    title="No results for these filters"
+                    body="Reset the filters to see all contacts."
+                    actionLabel="Reset filters"
+                    onAction={() => {
+                        setQuery('');
+                        setNetworkFilter('all');
+                    }}
+                />
             ) : (
                 <div className={picker.list} role="list" aria-label="Contacts">
                     {filteredContacts.map((c) => {
