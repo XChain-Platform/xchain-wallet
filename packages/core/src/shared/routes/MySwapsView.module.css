@@ -1,0 +1,87 @@
+.rowHead {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) max-content;
+    align-items: start;
+}
+
+.amounts {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--xc-space-1) var(--xc-space-2);
+    min-width: 0;
+}
+
+.side {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+
+.side + .side::before {
+    content: '→';
+    margin-inline-end: var(--xc-space-2);
+    color: var(--xc-text-muted);
+}
+
+.sideLabel {
+    font-weight: 600;
+}
+
+.rowMeta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--xc-space-1) var(--xc-space-2);
+}
+
+.metaItem {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.metaItem + .metaItem::before {
+    content: '·';
+    margin-inline-end: var(--xc-space-2);
+}
+
+.statusBadge {
+    justify-self: start;
+    max-width: 100%;
+}
+
+.detailAmounts {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--xc-space-1);
+}
+
+.detailAmounts .side + .side::before {
+    content: none;
+}
+
+@media (max-width: 420px) {
+    .rowHead {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .amounts {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .side + .side::before {
+        content: none;
+    }
+
+    .rowActions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        width: 100%;
+    }
+
+    .rowActions > * {
+        width: 100%;
+        min-width: 0;
+    }
+}
