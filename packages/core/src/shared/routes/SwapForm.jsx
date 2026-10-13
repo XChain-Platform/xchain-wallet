@@ -158,6 +158,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const [hwStatus, setHwStatus] = useState('idle');
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const submitPendingRef = useRef(false);
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
     useEffect(() => {
@@ -293,8 +294,11 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     const rate = !giveOwnership && !getOwnership
         ? divideDecimalStrings(getAmount, giveAmount, 8)
         : null;
-    const rateText = rate
-        ? `1 ${giveTick.trim().toUpperCase()} = ${rate} ${getTick.trim().toUpperCase()}`
+    const displayedRate = rate === '0' && isPlainPositive(getAmount) && isPlainPositive(giveAmount)
+        ? '< 0.00000001'
+        : rate;
+    const rateText = displayedRate
+        ? `1 ${giveTick.trim().toUpperCase()} = ${displayedRate} ${getTick.trim().toUpperCase()}`
         : 'Enter both amounts to see the rate';
 
     // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
@@ -417,6 +421,8 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 mandatory: nativeFeeMandatory,
                 fallback: err?.message || 'Swap failed.',
             }));
+        } finally {
+            submitPendingRef.current = false;
         }
     }
 
@@ -437,18 +443,24 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
             return;
         }
         setFormError(null);
-        if (singleEncode) { openConfirmScreen(); return; }
+        if (singleEncode) {
+            if (submitPendingRef.current) return;
+            submitPendingRef.current = true;
+            void openConfirmScreen();
+            return;
+        }
         setStage('review');
     }
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
+        if (stage === 'submitting' || submitPendingRef.current) return;
         if (!fromAddress || !chainId) return;
         if (validationError || expError) return;
         if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && hw && hwStatus !== 'available') return;
 
+        submitPendingRef.current = true;
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -506,6 +518,8 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
             }
+        } finally {
+            submitPendingRef.current = false;
         }
     }
 
@@ -804,6 +818,8 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
             label="Swap tokens"
             onSubmit={handleReview}
             sectioned
+            inert={actionConfirm.composing ? '' : undefined}
+            aria-busy={actionConfirm.composing ? 'true' : undefined}
             onChangeCapture={() => { if (formError) setFormError(null); }}
             status={validationError || formError ? (
                 <>
