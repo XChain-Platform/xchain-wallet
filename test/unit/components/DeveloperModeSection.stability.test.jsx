@@ -41,6 +41,9 @@ afterEach(() => cleanup());
 describe('DeveloperModeSection unavailable actions', () => {
     it('does not render the unimplemented Raw PSBT control', () => {
         render(<DeveloperModeSection />);
+        expect(screen.getByRole('group', { name: 'Developer mode settings' })).toBeTruthy();
+        expect(screen.getByRole('region', { name: 'Developer options' })).toBeTruthy();
+        expect(screen.getByRole('region', { name: 'Local dApp controls' })).toBeTruthy();
         expect(screen.queryByRole('switch', { name: 'Raw PSBT inspector' })).toBeNull();
         expect(screen.queryByText(/Coming soon/)).toBeNull();
     });

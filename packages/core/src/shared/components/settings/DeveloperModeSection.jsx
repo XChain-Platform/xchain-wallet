@@ -48,6 +48,7 @@ import { DEFAULT_MINER_URL } from '../../../branding/branding.js';
 import {
     Button,
     EmptyState,
+    FormPage,
     FormSection,
     Input,
     SectionHeader,
@@ -61,7 +62,6 @@ import { LogConsole } from '../LogConsole.jsx';
 import { DiagnosticDetails } from '../DiagnosticDetails.jsx';
 import { SignerSelectForm } from '../../routes/SignerSelectForm.jsx';
 import {
-    STACK,
     SettingsFieldRow,
     SettingsLoadError,
     Status,
@@ -102,26 +102,31 @@ export function DeveloperModeSection({ onNavigateToMint } = {}) {
     };
 
     return (
-        <div style={STACK}>
-            <ToggleRow
-                label="Developer Mode"
-                hint="Unlocks test networks, custom chains, preview tools, local app controls, and diagnostics."
-                checked={Boolean(settings.developerMode)}
-                onChange={(v) => onToggle('developerMode', v)}
-            />
-            <ToggleRow
-                label="Learn Mode"
-                hint="Adds plain-language explanations to confirmation screens."
-                checked={Boolean(settings.learnMode)}
-                onChange={(v) => onToggle('learnMode', v)}
-            />
-            <ToggleRow
-                label="Show variant popover"
-                hint="In the web app, display a floating switcher for previewing each wallet layout when Developer Mode is enabled."
-                checked={Boolean(settings.showVariantBadge)}
-                disabled={!settings.developerMode}
-                onChange={(v) => onToggle('showVariantBadge', v)}
-            />
+        <FormPage as="div" sectioned label="Developer mode settings">
+            <FormSection title="Developer options">
+                <ToggleRow
+                    label="Developer Mode"
+                    hint="Unlocks test networks, custom chains, preview tools, local app controls, and diagnostics."
+                    checked={Boolean(settings.developerMode)}
+                    onChange={(v) => onToggle('developerMode', v)}
+                    embedded
+                />
+                <ToggleRow
+                    label="Learn Mode"
+                    hint="Adds plain-language explanations to confirmation screens."
+                    checked={Boolean(settings.learnMode)}
+                    onChange={(v) => onToggle('learnMode', v)}
+                    embedded
+                />
+                <ToggleRow
+                    label="Show variant popover"
+                    hint="In the web app, display a floating switcher for previewing each wallet layout when Developer Mode is enabled."
+                    checked={Boolean(settings.showVariantBadge)}
+                    disabled={!settings.developerMode}
+                    onChange={(v) => onToggle('showVariantBadge', v)}
+                    embedded
+                />
+            </FormSection>
             <RegtestNetworksRow developerMode={Boolean(settings.developerMode)} fees={settings.fees} />
             <RegtestFaucetRow
                 developerMode={Boolean(settings.developerMode)}
@@ -129,20 +134,23 @@ export function DeveloperModeSection({ onNavigateToMint } = {}) {
                 onNavigateToMint={onNavigateToMint}
             />
             <CustomChainsRow developerMode={Boolean(settings.developerMode)} />
-            <ToggleRow
-                label="Auto-approve localhost dApps"
-                hint="Let local development apps connect without asking while continuing to require the signing setting below."
-                checked={Boolean(settings.autoApproveLocalhost)}
-                disabled={!settings.developerMode}
-                onChange={(v) => onToggle('autoApproveLocalhost', v)}
-            />
-            <AutoSignLocalhostRow
-                developerMode={Boolean(settings.developerMode)}
-                value={settings.autoSignLocalhostMs}
-                onChange={(v) => onToggle('autoSignLocalhostMs', v)}
-            />
+            <FormSection title="Local dApp controls">
+                <ToggleRow
+                    label="Auto-approve localhost dApps"
+                    hint="Let local development apps connect without asking while continuing to require the signing setting below."
+                    checked={Boolean(settings.autoApproveLocalhost)}
+                    disabled={!settings.developerMode}
+                    onChange={(v) => onToggle('autoApproveLocalhost', v)}
+                    embedded
+                />
+                <AutoSignLocalhostRow
+                    developerMode={Boolean(settings.developerMode)}
+                    value={settings.autoSignLocalhostMs}
+                    onChange={(v) => onToggle('autoSignLocalhostMs', v)}
+                />
+            </FormSection>
             <LogConsoleRow developerMode={Boolean(settings.developerMode)} />
-        </div>
+        </FormPage>
     );
 }
 
@@ -155,6 +163,7 @@ function AutoSignLocalhostRow({ developerMode, value, onChange }) {
         <SettingsFieldRow
             label="Cache password for localhost auto-sign"
             hint="In Developer Mode, keep an approved localhost dApp password in memory for the selected time so later sign requests do not prompt again, then clear it when the browser closes."
+            embedded
         >
             <Select
                 value={current}
@@ -174,32 +183,31 @@ function AutoSignLocalhostRow({ developerMode, value, onChange }) {
 function LogConsoleRow({ developerMode }) {
     const [open, setOpen] = useState(false);
     return (
-        <section className={styles.panel}>
-            <SectionHeader
-                title="Logs and diagnostics console"
-                description={(
-                    <>
-                        Process-wide ring buffer of console.* output. Useful when DevTools isn't available (popup, packaged desktop). Captures from now on; already-emitted entries are not replayed.
-                        {!developerMode ? ' Turn Developer Mode on to view.' : ''}
-                    </>
-                )}
-                trailing={(
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        icon={null}
-                        onClick={() => setOpen((v) => !v)}
-                        disabled={!developerMode}
-                        aria-expanded={open && developerMode}
-                        aria-controls="settings-log-console"
-                    >
-                        {open ? 'Hide' : 'Show'}
-                    </Button>
-                )}
-            />
+        <FormSection
+            title="Logs and diagnostics console"
+            description={(
+                <>
+                    Process-wide ring buffer of console.* output. Useful when DevTools isn't available (popup, packaged desktop). Captures from now on; already-emitted entries are not replayed.
+                    {!developerMode ? ' Turn Developer Mode on to view.' : ''}
+                </>
+            )}
+        >
+            <div className={styles.actions}>
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    icon={null}
+                    onClick={() => setOpen((v) => !v)}
+                    disabled={!developerMode}
+                    aria-expanded={open && developerMode}
+                    aria-controls="settings-log-console"
+                >
+                    {open ? 'Hide' : 'Show'}
+                </Button>
+            </div>
             {open && developerMode ? <div id="settings-log-console"><LogConsole /></div> : null}
-        </section>
+        </FormSection>
     );
 }
 
@@ -217,7 +225,6 @@ function RegtestNetworksRow({ developerMode, fees }) {
                     {!developerMode ? ' Turn Developer Mode on to enable activation.' : ''}
                 </>
             )}
-            className={styles.panel}
         >
             {/* The style guide has no compact embedded list for network activation rows. */}
             <ul className={styles.list}>
@@ -467,7 +474,6 @@ function RegtestFaucetRow({ developerMode, fees, onNavigateToMint }) {
                     {!developerMode ? ' Turn Developer Mode on to use these.' : ''}
                 </>
             )}
-            className={styles.panel}
         >
             <form onSubmit={onGetFunds} className={styles.form}>
                 <Input
@@ -668,7 +674,6 @@ function CustomChainsRow({ developerMode }) {
                     {!developerMode ? ' Turn Developer Mode on to manage custom chains.' : ''}
                 </>
             )}
-            className={styles.panel}
         >
             {loadError ? <Status text={loadError} tone="error" /> : null}
             {!loading && chains.length === 0 && !loadError ? (

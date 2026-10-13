@@ -69,7 +69,7 @@ export const ROW_COPY = {
     flex: '1 1 280px',
     minWidth: 'min(100%, 280px)',
 };
-const EMBEDDED_ROW = {
+export const EMBEDDED_ROW = {
     ...ROW,
     padding: 'var(--xc-space-1) 0',
     background: 'transparent',

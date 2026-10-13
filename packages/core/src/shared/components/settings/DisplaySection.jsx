@@ -27,6 +27,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Button,
     EmptyState,
+    FormPage,
+    FormSection,
     Icon,
     Input,
     SectionHeader,
@@ -47,7 +49,7 @@ import {
 } from '../../../schemas/settings.js';
 import { clearAllChainFilters } from '../../utils/chainFilterMemory.js';
 import { readActiveWallet } from '../../utils/activeWalletMemory.js';
-import { ROW, ROW_COPY, ROW_HINT, ROW_LABEL, STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
+import { EMBEDDED_ROW, ROW_COPY, ROW_HINT, ROW_LABEL, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 const SEARCH_DEBOUNCE_MS = 200;
@@ -306,16 +308,18 @@ export function DisplaySection() {
     };
 
     return (
-        <div style={STACK}>
+        <FormPage as="div" sectioned label="Display settings">
+            <FormSection title="Display options">
             <SectionHeader as="h3" title="Balance display" />
             <ToggleRow
                 label="Hide small balances"
                 hint="Collapse balances below the selected threshold into an expandable section while keeping pinned and escrowed balances visible."
                 checked={settings.privacy?.hideSmallBalances === true}
                 onChange={(next) => updateDisplay('hideSmallBalances', { privacy: { hideSmallBalances: next } })}
+                embedded
             />
             <DisplaySaveError error={saveError} controlKey="hideSmallBalances" />
-            <div style={ROW}>
+            <div style={EMBEDDED_ROW}>
                 <div style={ROW_COPY}>
                     <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Small-balance threshold</span>
                     <span style={ROW_HINT}>Use each network&apos;s relay limit for dust and 0.0001 units for divisible tokens, while applying other choices in whole asset units.</span>
@@ -333,7 +337,7 @@ export function DisplaySection() {
                 </Select>
                 <DisplaySaveError error={saveError} controlKey="smallBalanceThreshold" />
             </div>
-            <div style={ROW}>
+            <div style={EMBEDDED_ROW}>
                 <div style={ROW_COPY}>
                     <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Balance number format</span>
                     <span style={ROW_HINT}>Change displayed formatting without changing stored or submitted values.</span>
@@ -361,6 +365,7 @@ export function DisplaySection() {
                 hint="Display a star on each balance row for pinning or unpinning the token on Home."
                 checked={showPinAffordance}
                 onChange={setPinAffordance}
+                embedded
             />
             <DisplaySaveError error={saveError} controlKey="showPinAffordance" />
             <ToggleRow
@@ -368,6 +373,7 @@ export function DisplaySection() {
                 hint="Display a hide affordance on each balance row to collapse the token into the Hidden section."
                 checked={showHideAffordance}
                 onChange={setHideAffordance}
+                embedded
             />
             <DisplaySaveError error={saveError} controlKey="showHideAffordance" />
 
@@ -376,7 +382,7 @@ export function DisplaySection() {
                 title={`Watched tokens (${watched.length})`}
                 description="Add a token by chain and ticker to keep it in Balances even when its balance is zero."
             />
-            <form style={ROW} onSubmit={addWatchedToken}>
+            <form style={EMBEDDED_ROW} onSubmit={addWatchedToken}>
                 <Select
                     aria-label="Token chain"
                     value={watchChainId}
@@ -403,7 +409,7 @@ export function DisplaySection() {
             </form>
             {watchMessage ? <span role="status" aria-live="polite" style={ROW_HINT}>{watchMessage}</span> : null}
             {watched.map((key) => (
-                <div key={key} style={ROW}>
+                <div key={key} style={EMBEDDED_ROW}>
                     <span style={KEY_TEXT} title={key}>{key}</span>
                     <Button
                         size="sm"
@@ -462,7 +468,7 @@ export function DisplaySection() {
                     filteredPinned.map((key) => {
                         const idx = pinned.indexOf(key);
                         return (
-                            <div key={key} style={ROW} data-token-setting-result="true">
+                            <div key={key} style={EMBEDDED_ROW} data-token-setting-result="true">
                                 <span style={KEY_TEXT} title={key}>{key}</span>
                                 <div style={ACTIONS}>
                                     <Button
@@ -519,7 +525,7 @@ export function DisplaySection() {
                 ) : (
                     <>
                         {filteredHidden.map((key) => (
-                            <div key={key} style={ROW} data-token-setting-result="true">
+                            <div key={key} style={EMBEDDED_ROW} data-token-setting-result="true">
                                 <span style={KEY_TEXT} title={key}>{key}</span>
                                 <div style={ACTIONS}>
                                     <Button
@@ -534,7 +540,7 @@ export function DisplaySection() {
                                 </div>
                             </div>
                         ))}
-                        <div style={ROW}>
+                        <div style={EMBEDDED_ROW}>
                             <span style={ROW_LABEL}>{hidden.length} hidden</span>
                             <Button size="sm" variant="secondary" icon={null} onClick={unhideAll}>
                                 Unhide all
@@ -549,7 +555,7 @@ export function DisplaySection() {
                 title="List preferences"
                 description={'Remember the last selected chain filter for each balance and history list until you reset every list to "show all."'}
             />
-            <div style={ROW}>
+            <div style={EMBEDDED_ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={ROW_LABEL}>Saved chain filters</span>
                     {resetMessage ? (
@@ -562,7 +568,7 @@ export function DisplaySection() {
             </div>
 
             <SectionHeader as="h3" title="Defaults" />
-            <div style={ROW}>
+            <div style={EMBEDDED_ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={ROW_LABEL}>Reset display settings</span>
                     <span style={ROW_HINT}>Restores balance display options and clears watched, pinned, hidden, and saved list preferences.</span>
@@ -580,7 +586,8 @@ export function DisplaySection() {
                     onCancel={confirmDialog.onCancel}
                 />
             ) : null}
-        </div>
+            </FormSection>
+        </FormPage>
     );
 }
 
