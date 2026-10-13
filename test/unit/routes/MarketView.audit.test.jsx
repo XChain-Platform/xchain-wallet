@@ -6,6 +6,7 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useTablistKeys } from '../../../packages/core/src/shared/keyboard/useTablistKeys.js';
 
 let messaging;
 const widgetFailure = vi.hoisted(() => ({ current: null }));
@@ -71,6 +72,12 @@ vi.mock('../../../packages/core/src/shared/components/TickerIcon.jsx', () => ({
 }));
 
 import { MarketView } from '../../../packages/core/src/shared/routes/MarketView.jsx';
+import { MarketsList } from '../../../packages/core/src/shared/routes/MarketsList.jsx';
+
+function KeyboardHarness({ children }) {
+    useTablistKeys();
+    return children;
+}
 
 function deferred() {
     let resolve;
@@ -203,6 +210,74 @@ describe('MarketView market state', () => {
         expect(container).not.toHaveTextContent('NaN');
         expect(container).not.toHaveTextContent('undefined');
         expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    it('switches market panels with arrow, Home, and End keys', async () => {
+        render(
+            <KeyboardHarness>
+                <MarketView
+                    walletId="wallet-1"
+                    chainId="bitcoin-mainnet"
+                    tick1="XCHAIN"
+                    tick2="BTC"
+                    onBack={() => {}}
+                />
+            </KeyboardHarness>,
+        );
+
+        const book = screen.getByRole('tab', { name: 'Book' });
+        book.focus();
+        fireEvent.keyDown(book, { key: 'ArrowRight' });
+        expect(screen.getByText('Recent trades panel')).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: 'Trades' })).toHaveFocus();
+
+        fireEvent.keyDown(document.activeElement, { key: 'End' });
+        expect(screen.getByText('Trade history panel')).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: 'History' })).toHaveFocus();
+
+        fireEvent.keyDown(document.activeElement, { key: 'Home' });
+        expect(screen.getByRole('button', { name: 'Pick exact price' })).toBeInTheDocument();
+        expect(book).toHaveFocus();
+    });
+
+    it('operates market filters and reaches result rows from the keyboard', async () => {
+        messaging = {
+            getMarkets: vi.fn().mockResolvedValue([
+                { tick1: 'BTC', tick2: 'AAA', depth: 10 },
+                { tick1: 'BTC', tick2: 'BBB', depth: 9 },
+                { tick1: 'BTC', tick2: 'CCC', depth: 8 },
+                { tick1: 'BTC', tick2: 'DDD', depth: 7 },
+                { tick1: 'BTC', tick2: 'EEE', depth: 6 },
+                { tick1: 'BTC', tick2: 'FFF', depth: 5 },
+            ]),
+            listWatchlistForWallet: vi.fn().mockResolvedValue([]),
+            getDispensersForToken: vi.fn().mockResolvedValue([]),
+        };
+        render(
+            <KeyboardHarness>
+                <MarketsList
+                    walletId="wallet-1"
+                    selectedAsset={{ chainId: 'bitcoin-mainnet', tick: 'BTC' }}
+                    onChangeAsset={() => {}}
+                    onOpenMarket={() => {}}
+                />
+            </KeyboardHarness>,
+        );
+
+        await screen.findByRole('button', { name: 'Open AAA market' });
+        expect(screen.queryByRole('button', { name: 'Open FFF market' })).toBeNull();
+
+        const popular = screen.getByRole('tab', { name: 'Popular' });
+        popular.focus();
+        fireEvent.keyDown(popular, { key: 'ArrowLeft' });
+        const all = screen.getByRole('tab', { name: 'All' });
+        expect(all).toHaveFocus();
+        expect(all).toHaveAttribute('aria-selected', 'true');
+
+        const lastRow = await screen.findByRole('button', { name: 'Open FFF market' });
+        lastRow.focus();
+        expect(lastRow).toHaveFocus();
+        expect(lastRow.tabIndex).toBe(0);
     });
 
     it.each([
