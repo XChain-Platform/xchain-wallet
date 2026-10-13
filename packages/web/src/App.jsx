@@ -60,6 +60,7 @@ import { Home } from '@xchain-wallet/core/shared/routes/Home.jsx';
 import { Settings } from '@xchain-wallet/core/shared/routes/Settings.jsx';
 import { TokenDetail } from '@xchain-wallet/core/shared/routes/TokenDetail.jsx';
 import { ToastHost, useToast } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
+import { RouteErrorBoundary } from '@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx';
 import { NOTIFICATION_EVENT } from './notifications/webNotifyAdapter.js';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
 // §6 / D4. Renders nothing unless a shell installed a direct-update
@@ -224,7 +225,9 @@ export function App() {
                 <div className={wrapper.frame}>
                     <ToastHost>
                         <ExtensionBanner />
-                        <AppInner />
+                        <RouteErrorBoundary>
+                            <AppInner />
+                        </RouteErrorBoundary>
                     </ToastHost>
                 </div>
                 <GatedDevVariantBadge state={variantState} />
@@ -2798,9 +2801,14 @@ function AppInner() {
                         ) : null
                     }
                 >
-                    <Suspense fallback={<Skeleton.List rows={5} />}>
-                        <Fragment key={palette.navigationKey}>{routeNode}</Fragment>
-                    </Suspense>
+                    <RouteErrorBoundary
+                        resetKey={`${unlockedView}:${palette.navigationKey}`}
+                        onHome={() => setUnlockedView('home')}
+                    >
+                        <Suspense fallback={<Skeleton.List rows={5} />}>
+                            <Fragment key={palette.navigationKey}>{routeNode}</Fragment>
+                        </Suspense>
+                    </RouteErrorBoundary>
                     {messageSentNotice ? (
                         <NoticeModal
                             title="Message sent"
