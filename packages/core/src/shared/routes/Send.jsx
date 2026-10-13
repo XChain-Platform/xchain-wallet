@@ -356,6 +356,11 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     const { messaging, shell } = useMessaging();
     const { overall: reachabilityOverall } = useReachability({});
     const networkOffline = reachabilityOverall === 'offline';
+    const mountedRef = useRef(true);
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => { mountedRef.current = false; };
+    }, []);
     // Unlocked software session signs without a password.
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
@@ -406,6 +411,10 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     // hardware onto it; watcher sends stay on the legacy review->submit
     // stage machine below (they encode, they never sign).
     const confirmAction = useConfirmAction();
+    const confirmBusy = ['composing', 'preflighting', 'ready', 'signing', 'rechecking']
+        .includes(confirmAction.phase);
+    const confirmLaunchRef = useRef(false);
+    const submitInFlightRef = useRef(false);
 
     // §34.2: Cmd/Ctrl+Enter submits the visible stage's form (compose ->
     // review, review -> sign). requestSubmit (not submit()) so the form's
@@ -624,6 +633,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     );
     const [contactName, setContactName] = useState('');
     const [contactSaveError, setContactSaveError] = useState(/** @type {string | null} */ (null));
+    const contactSaveBusyRef = useRef(false);
 
     const [historyRows, setHistoryRows] = useState(/** @type {any[]} */ ([]));
     useEffect(() => {
@@ -713,6 +723,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     const [pasteHint, setPasteHint] = useState(/** @type {string | null} */ (null));
     const [pasteWarning, setPasteWarning] = useState(/** @type {string | null} */ (null));
     const [pastedRecipient, setPastedRecipient] = useState(/** @type {string | null} */ (null));
+    const pasteIntegritySeqRef = useRef(0);
+    useEffect(() => () => { pasteIntegritySeqRef.current += 1; }, []);
     const onAddressPaste = useCallback((e) => {
         const text = e?.clipboardData?.getData?.('text');
         if (typeof text !== 'string' || text.length === 0) return;
@@ -827,8 +839,13 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         // Defer the integrity check so the paste event finishes first.
         // navigator.clipboard.readText is async and permission-gated;
         // skipped + ok results are silent.
+        const integritySeq = pasteIntegritySeqRef.current + 1;
+        pasteIntegritySeqRef.current = integritySeq;
         Promise.resolve().then(() => checkPasteIntegrity({ pastedText: text }))
-            .then((res) => { if (!res.ok) setPasteWarning(res.reason || 'The clipboard changed after you pasted. Check the address before sending.'); })
+            .then((res) => {
+                if (!mountedRef.current || pasteIntegritySeqRef.current !== integritySeq) return;
+                if (!res.ok) setPasteWarning(res.reason || 'The clipboard changed after you pasted. Check the address before sending.');
+            })
             .catch(() => { /* silent */ });
     }, [chainId, perRecipientToken, tick, cancelMax]);
 
@@ -1171,7 +1188,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     const tickRef = useRef(tick);
     tickRef.current = tick;
     useEffect(() => {
-        if (!chainId || !addressesByChain) return;
+        if (stage !== 'form' || confirmBusy || !chainId || !addressesByChain) return;
         const all = addressesByChain[chainId] || [];
         // A source the user picked on THIS chain wins over the default.
         // The tick default below still runs either way, so only the
@@ -1207,7 +1224,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             const nativeTicker = nativeTickerFor(descriptor);
             if (nativeTicker) setTick(nativeTicker);
         }
-    }, [chainId, addressesByChain, activeByChain, pickedSourceChain]);
+    }, [stage, confirmBusy, chainId, addressesByChain, activeByChain, pickedSourceChain]);
 
     useEffect(() => {
         if (stage === 'review') {
@@ -1408,13 +1425,17 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     const [gatedScanBusy, setGatedScanBusy] = useState(false);
     const [gatedScanError, setGatedScanError] = useState(/** @type {string | null} */ (null));
     const gatedProbeSeq = useRef(0);
+    const gatedScanBusyRef = useRef(false);
     useEffect(() => {
+        const seq = gatedProbeSeq.current + 1;
+        gatedProbeSeq.current = seq;
+        gatedScanBusyRef.current = false;
+        setGatedScanBusy(false);
+        setGatedScanPassword('');
         setGatedInfo(null);
         setGatedScanError(null);
         if (!walletId || !chainId || !tick.trim()) return undefined;
         if (typeof messaging.gatedSendReadiness !== 'function') return undefined; // older host build
-        const seq = gatedProbeSeq.current + 1;
-        gatedProbeSeq.current = seq;
         // Debounced: `tick` changes per keystroke when typed by hand.
         const timer = setTimeout(() => {
             messaging.gatedSendReadiness({
@@ -1436,7 +1457,10 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     // guard (and ultimately the indexer) still protects the send.
                 });
         }, 400);
-        return () => { clearTimeout(timer); };
+        return () => {
+            clearTimeout(timer);
+            if (gatedProbeSeq.current === seq) gatedProbeSeq.current += 1;
+        };
     }, [walletId, chainId, tick, toAddress, amount, fromAddress?.address, messaging]);
 
     // PC-52 + PC-26: a gated tick's SEND is only valid inside
@@ -1477,7 +1501,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
 
     async function handleGatedScan(event) {
         event.preventDefault();
-        if (gatedScanBusy || gatedScanPassword.length === 0) return;
+        if (gatedScanBusyRef.current || gatedScanPassword.length === 0) return;
+        const seq = gatedProbeSeq.current;
+        gatedScanBusyRef.current = true;
         setGatedScanBusy(true);
         setGatedScanError(null);
         try {
@@ -1487,6 +1513,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 chainId,
                 tick: tick.trim(),
             });
+            if (!mountedRef.current || gatedProbeSeq.current !== seq) return;
             setGatedScanPassword('');
             if (!res || res.recoveredKeyHashes?.length === 0) {
                 setGatedScanError(
@@ -1499,12 +1526,15 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 walletId, chainId, tick: tick.trim(), sourceAddress: fromAddress?.address,
                 to: toAddress.trim() || undefined, amount: amount || undefined,
             });
+            if (!mountedRef.current || gatedProbeSeq.current !== seq) return;
             setGatedInfo(resp && resp.state !== 'ungated' ? resp : null);
         } catch (err) {
+            if (!mountedRef.current || gatedProbeSeq.current !== seq) return;
             const bad = err?.name === 'WrongPasswordError' || err?.name === 'InvalidPasswordError';
             setGatedScanError(bad ? 'Incorrect password.' : (err?.message || 'Could not recover unlock keys. Try again.'));
         } finally {
-            setGatedScanBusy(false);
+            if (gatedProbeSeq.current === seq) gatedScanBusyRef.current = false;
+            if (mountedRef.current && gatedProbeSeq.current === seq) setGatedScanBusy(false);
         }
     }
 
@@ -1840,7 +1870,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             }
             let maxSats = balanceSats;
             const quoted = await quoteMaxSats();
-            if (requestId !== maxRequestRef.current) return;
+            if (!mountedRef.current || requestId !== maxRequestRef.current) return;
             if (quoted != null) {
                 maxSats = quoted.maxSats;
             } else if (feeEstimate) {
@@ -2061,7 +2091,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         // single-encode confirm modal instead of the legacy review stage.
         // brought hardware in with them; watcher still branches.
         if (!isWatcherMode) {
-            openConfirmModal();
+            void openConfirmModal();
             return;
         }
         setStage('review');
@@ -2135,37 +2165,38 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     // preflight over messaging); Approve signs the byte-identical prebuilt
     // PSBT via sendToken.prebuiltPsbt. Resolves with sendToken's result.
     const openConfirmModal = useCallback(async () => {
-        if (!chainId || !fromAddress) return;
-        const from = {
-            address: fromAddress.address,
-            publicKey: fromAddress.publicKey,
-            derivationPath: fromAddress.derivationPath,
-            addressId: fromAddress.id,
-            source: fromAddress.source,
-            signerId: fromAddress.signerId,
-        };
-        const sendBase = {
-            walletId,
-            chainId,
-            from,
-            to: toAddress.trim(),
-            tick: tick.trim(),
-            amount: String(amount).trim(),
-            memo: isNativeSend ? undefined : (memo.trim() || undefined),
-            rbf: rbfForSend,
-            ...(changeAddress ? { change: changeAddress.address } : {}),
-            ...(coinControlEnabled ? { utxos: selectedUtxos } : {}),
-            ...(feePerKb != null ? { feePerKb } : {}),
-            // PC-52: `legs` supersedes to/tick/amount host-side. Sent only for a
-            // real multi-recipient send so a single send composes the identical
-            // v0 bytes it always has.
-            ...(isMultiSend ? { legs: sendLegs } : {}),
-            ...(createUndoSendRequest(settings) || {}),
-        };
-        setSubmitError(null);
-        setSubmitErrorDetail(null);
-        setSubmitErrorCause(null);
+        if (!chainId || !fromAddress || confirmLaunchRef.current) return;
+        confirmLaunchRef.current = true;
         try {
+            const from = {
+                address: fromAddress.address,
+                publicKey: fromAddress.publicKey,
+                derivationPath: fromAddress.derivationPath,
+                addressId: fromAddress.id,
+                source: fromAddress.source,
+                signerId: fromAddress.signerId,
+            };
+            const sendBase = {
+                walletId,
+                chainId,
+                from,
+                to: toAddress.trim(),
+                tick: tick.trim(),
+                amount: String(amount).trim(),
+                memo: isNativeSend ? undefined : (memo.trim() || undefined),
+                rbf: rbfForSend,
+                ...(changeAddress ? { change: changeAddress.address } : {}),
+                ...(coinControlEnabled ? { utxos: selectedUtxos } : {}),
+                ...(feePerKb != null ? { feePerKb } : {}),
+                // PC-52: `legs` supersedes to/tick/amount host-side. Sent only for a
+                // real multi-recipient send so a single send composes the identical
+                // v0 bytes it always has.
+                ...(isMultiSend ? { legs: sendLegs } : {}),
+                ...(createUndoSendRequest(settings) || {}),
+            };
+            setSubmitError(null);
+            setSubmitErrorDetail(null);
+            setSubmitErrorCause(null);
             const res = await confirmAction.confirm({
                 chainId,
                 source: from.address,
@@ -2242,15 +2273,17 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                         });
                 },
             });
+            recordLastUsedChain(messaging, chainId);
+            draft.clear();
+            if (!mountedRef.current) return;
+            setStage('done');
+            haptic.success();
             setResult(res);
             clearUndoHold();
             setPassword('');
-            draft.clear();
             setDraftPending(false);
-            setStage('done');
-            haptic.success();
-            recordLastUsedChain(messaging, chainId);
         } catch (err) {
+            if (!mountedRef.current) return;
             if (isUndoSendCancellation(err)) {
                 clearUndoHold();
                 setFormError(null);
@@ -2270,17 +2303,19 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             const h = humanizeError(err, 'send');
             setFormError(h.message);
             haptic.error();
+        } finally {
+            confirmLaunchRef.current = false;
         }
     }, [
         chainId, fromAddress, walletId, toAddress, tick, amount, memo, rbfForSend,
-        feePerKb, password, settings, messaging, confirmAction, draft, haptic,
-        isHwSource, isMultiSend, sendLegs, sendTotals, startUndoSend,
+        feePerKb, settings, messaging, confirmAction, draft, haptic,
+        isNativeSend, isHwSource, isMultiSend, sendLegs, sendTotals, startUndoSend,
         clearUndoHold, showToast, changeAddress, coinControlEnabled, selectedUtxos,
     ]);
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (networkOffline || stage === 'submitting') return;
+        if (networkOffline || stage === 'submitting' || submitInFlightRef.current) return;
         if (!isWatcherMode) {
             if (!isHwSource && !signerReady && password.length === 0) return;
             if (isHwSource && hwStatus !== 'available') return;
@@ -2289,6 +2324,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             // hasn't checked the box.
             if (isHwSource && signRisk.requireExplicitConfirm && !hwExplicitConfirmed) return;
         }
+        submitInFlightRef.current = true;
         setStage('submitting');
         setSubmitError(null);
         setSubmitErrorDetail(null);
@@ -2334,17 +2370,19 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             } else {
                 res = await messaging.sendToken({ ...base, password });
             }
-            setResult(res);
-            setPassword('');
+            recordLastUsedChain(messaging, chainId);
             draft.clear();
-            setDraftPending(false);
+            if (!mountedRef.current) return;
             setStage('done');
             haptic.success();
-            recordLastUsedChain(messaging, chainId);
+            setResult(res);
+            setPassword('');
+            setDraftPending(false);
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
             const rawMsg = err?.message || '';
             const isUserCancel = !isBadPassword && USER_CANCEL_RE.test(rawMsg);
+            if (!mountedRef.current) return;
             if (isUserCancel) {
                 // §30.5: user-initiated cancel returns to the composing
                 // form with a dismissible "Transaction cancelled." toast.
@@ -2376,6 +2414,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
             }
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 
@@ -2604,6 +2644,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         const copyTxid = async () => {
             if (!txid) return;
             const { ok } = await copyText(txid);
+            if (!mountedRef.current) return;
             showToast({
                 message: ok ? 'Transaction ID copied to clipboard.' : 'Copy failed: clipboard unavailable',
                 variant: ok ? 'default' : 'error',
@@ -2612,11 +2653,13 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         const canSaveRecipient = Boolean(txid && toAddress && desc?.coin && !matchedContact);
         const saveRecipient = async (event) => {
             event.preventDefault();
+            if (contactSaveBusyRef.current) return;
             const name = contactName.trim();
             if (!name) {
                 setContactSaveError('Enter a contact name.');
                 return;
             }
+            contactSaveBusyRef.current = true;
             setContactSaveStage('saving');
             setContactSaveError(null);
             const entry = { chain: desc.coin, address: toAddress.trim(), label: '' };
@@ -2625,6 +2668,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 const saved = existing
                     ? await messaging.saveContact({ record: withEntriesAdded(existing, [entry]) })
                     : await messaging.saveContact({ input: { name, notes: '', entries: [entry] } });
+                if (!mountedRef.current) return;
                 if (saved) {
                     setContacts((current) => existing
                         ? current.map((contact) => contact.id === existing.id ? saved : contact)
@@ -2632,8 +2676,11 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 }
                 setContactSaveStage('saved');
             } catch (err) {
+                if (!mountedRef.current) return;
                 setContactSaveError(err?.message || 'Could not save this contact. Try again.');
                 setContactSaveStage('editing');
+            } finally {
+                contactSaveBusyRef.current = false;
             }
         };
 
@@ -3131,6 +3178,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 <Button
                     type="submit"
                     variant="primary"
+                    loading={confirmAction.composing}
                     disabled={networkOffline || !!testSendGate}
                     title={networkOffline ? t('send.offline.title') : undefined}
                 >

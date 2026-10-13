@@ -65,6 +65,7 @@ function mount({
     history = [],
     networkFeeSats = 1234,
     encoding,
+    overrides = {},
 } = {}) {
     const base = {
         getAddressesByChain: vi.fn().mockResolvedValue({
@@ -120,6 +121,7 @@ function mount({
             fromAddress: FROM,
             chainId: CHAIN_ID,
         }),
+        ...overrides,
     };
     // Send's supporting lookups are not part of this flow contract. Empty
     // host responses keep the test focused on the compose and submit messages.
@@ -133,13 +135,14 @@ function mount({
         },
     });
 
-    render(
+    const view = render(
         <MessagingProvider shell="web" messaging={messaging}>
             <ToastHost>
                 <Send walletId={WALLET_ID} onBack={onBack} onDone={onDone} />
             </ToastHost>
         </MessagingProvider>,
     );
+    messaging.unmountView = view.unmount;
     return messaging;
 }
 
@@ -186,6 +189,13 @@ function sdkBroadcastHarness(broadcastAnswer) {
     return { send, signPsbt, broadcastTx, pendingTxs, queued };
 }
 
+function deferred() {
+    let resolve;
+    let reject;
+    const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
+    return { promise, resolve, reject };
+}
+
 async function fillSendForm(sendAmount = AMOUNT) {
     fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: TO } });
     fireEvent.change(await screen.findByLabelText(/^Amount \(/), { target: { value: sendAmount } });
@@ -210,6 +220,7 @@ afterEach(() => {
     cleanup();
     localStorage.clear();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
 });
 
 describe('Send flow with mocked messaging', () => {
@@ -314,6 +325,57 @@ describe('Send flow with mocked messaging', () => {
         await screen.findByTestId('confirm-modal');
         await approveWithPassword(messaging);
         expect(messaging.sendToken).toHaveBeenCalledWith(expect.objectContaining({ to: TO }));
+    });
+
+    it('ignores an older clipboard check after a newer recipient is pasted', async () => {
+        const firstRead = deferred();
+        const secondRead = deferred();
+        const readText = vi.fn()
+            .mockReturnValueOnce(firstRead.promise)
+            .mockReturnValueOnce(secondRead.promise);
+        vi.stubGlobal('navigator', { ...navigator, clipboard: { readText } });
+        mount();
+        const toField = await screen.findByLabelText(/^To$/);
+
+        fireEvent.paste(toField, { clipboardData: { getData: () => TO } });
+        await waitFor(() => expect(readText).toHaveBeenCalledTimes(1));
+        fireEvent.paste(toField, { clipboardData: { getData: () => FROM } });
+        await waitFor(() => expect(readText).toHaveBeenCalledTimes(2));
+        secondRead.resolve(FROM);
+        await waitFor(() => expect(toField).toHaveValue(FROM));
+        firstRead.resolve('clipboard malware replacement');
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(screen.queryByText(/Clipboard changed after paste/i)).not.toBeInTheDocument();
+    });
+
+    it('discards a key-recovery result after the selected asset changes', async () => {
+        const scan = deferred();
+        const readiness = vi.fn(async ({ tick }) => (
+            tick === 'PEPE'
+                ? { state: 'blocked', groups: [{ keyHash: 'aa', haveKey: false }] }
+                : { state: 'ungated', groups: [] }
+        ));
+        mount({
+            overrides: {
+                gatedSendReadiness: readiness,
+                gatedContentScan: vi.fn(() => scan.promise),
+            },
+        });
+        await screen.findByLabelText(/^To$/);
+        fireEvent.change(screen.getByLabelText('Token'), { target: { value: 'PEPE' } });
+        const password = await screen.findByLabelText('Wallet password', {}, { timeout: 1500 });
+        fireEvent.change(password, { target: { value: PASSWORD } });
+        fireEvent.click(screen.getByRole('button', { name: 'Recover keys' }));
+
+        fireEvent.change(screen.getByLabelText('Token'), { target: { value: 'BTC' } });
+        expect(screen.queryByLabelText('Wallet password')).not.toBeInTheDocument();
+        scan.resolve({ recoveredKeyHashes: ['aa'] });
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(screen.queryByText(/wallet holds none of its unlock keys/i)).not.toBeInTheDocument();
     });
 
     it('plainly refuses a pasted address from another chain', async () => {
@@ -504,6 +566,25 @@ describe('Send flow with mocked messaging', () => {
         expect(onBack).not.toHaveBeenCalled();
     });
 
+    it('launches only one confirmation when the compose form submits twice', async () => {
+        const compose = deferred();
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const messaging = mount({
+            overrides: { composeForConfirm: vi.fn(() => compose.promise) },
+        });
+        fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: TO } });
+        fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: AMOUNT } });
+        const form = screen.getByRole('form', { name: 'Send' });
+
+        fireEvent.submit(form);
+        fireEvent.submit(form);
+        expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1);
+        expect(consoleError).not.toHaveBeenCalled();
+
+        compose.resolve(composedSend());
+        expect(await screen.findByTestId('confirm-modal')).toBeInTheDocument();
+    });
+
     it('saves a new recipient as a contact after broadcast', async () => {
         const messaging = mount();
         await openPasswordConfirm(messaging);
@@ -523,6 +604,26 @@ describe('Send flow with mocked messaging', () => {
         }));
         expect(await screen.findByText('Recipient saved to contacts.')).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Save recipient' })).not.toBeInTheDocument();
+    });
+
+    it('submits only one contact save when the post-send form submits twice', async () => {
+        const save = deferred();
+        const messaging = mount({
+            overrides: { saveContact: vi.fn(() => save.promise) },
+        });
+        await openPasswordConfirm(messaging);
+        await approveWithPassword(messaging);
+        await screen.findByRole('heading', { name: 'Broadcast pending' });
+        fireEvent.click(screen.getByRole('button', { name: 'Save recipient' }));
+        fireEvent.change(screen.getByLabelText('Contact name'), { target: { value: 'Alice' } });
+        const saveForm = screen.getByLabelText('Contact name').closest('form');
+
+        fireEvent.submit(saveForm);
+        fireEvent.submit(saveForm);
+        expect(messaging.saveContact).toHaveBeenCalledTimes(1);
+
+        save.resolve({ id: 'alice', name: 'Alice', entries: [] });
+        expect(await screen.findByText('Recipient saved to contacts.')).toBeInTheDocument();
     });
 
     it('ends on the signed-not-broadcast screen when the signed transaction is queued', async () => {
@@ -638,5 +739,72 @@ describe('Send flow with mocked messaging', () => {
         expect(await screen.findByRole('heading', { name: 'Unsigned transaction, ready for signing' }))
             .toBeInTheDocument();
         expect(screen.getByLabelText('Unsigned transaction hex')).toHaveValue(PSBT);
+    });
+
+    it('submits only one watcher build when the review form submits twice', async () => {
+        const build = deferred();
+        const messaging = mount({
+            walletMode: 'watcher',
+            overrides: { buildSendPsbtRequest: vi.fn(() => build.promise) },
+        });
+        await fillSendForm();
+        const review = await screen.findByRole('form', { name: 'Review payment' });
+
+        fireEvent.submit(review);
+        fireEvent.submit(review);
+        expect(messaging.buildSendPsbtRequest).toHaveBeenCalledTimes(1);
+
+        build.resolve({ psbtHex: PSBT, fromAddress: FROM, chainId: CHAIN_ID });
+        expect(await screen.findByRole('heading', { name: 'Unsigned transaction, ready for signing' }))
+            .toBeInTheDocument();
+    });
+
+    it('keeps the reviewed source fixed when the active-address lookup settles late', async () => {
+        const active = deferred();
+        const messaging = mount({
+            walletMode: 'watcher',
+            overrides: {
+                getAddressesByChain: vi.fn().mockResolvedValue({
+                    [CHAIN_ID]: [
+                        { id: 'active', address: FROM, publicKey: '02ab', derivationPath: "m/84'/0'/0'/0/0", source: 'hd' },
+                        { id: 'fallback', address: SAVED_LOOKALIKE, publicKey: '02cd', derivationPath: "m/84'/0'/0'/0/1", source: 'hd' },
+                    ],
+                }),
+                getActiveAddresses: vi.fn(() => active.promise),
+            },
+        });
+        await waitFor(() => expect(screen.getByLabelText('From')).toHaveValue(SAVED_LOOKALIKE));
+        await fillSendForm();
+        const review = await screen.findByRole('form', { name: 'Review payment' });
+        expect(review).toHaveTextContent('bc1q11…abcdef');
+
+        active.resolve({ [CHAIN_ID]: { id: 'active', address: FROM } });
+        await Promise.resolve();
+        expect(review).toHaveTextContent('bc1q11…abcdef');
+        fireEvent.click(within(review).getByRole('button', { name: 'Create transaction for signing' }));
+
+        await waitFor(() => expect(messaging.buildSendPsbtRequest).toHaveBeenCalledWith(
+            expect.objectContaining({ from: expect.objectContaining({ address: SAVED_LOOKALIKE }) }),
+        ));
+    });
+
+    it('does not fire completion UI effects after an in-flight send unmounts', async () => {
+        const build = deferred();
+        const vibrate = vi.fn();
+        vi.stubGlobal('navigator', { ...navigator, vibrate });
+        const messaging = mount({
+            walletMode: 'watcher',
+            overrides: { buildSendPsbtRequest: vi.fn(() => build.promise) },
+        });
+        await fillSendForm();
+        fireEvent.click(await screen.findByRole('button', { name: 'Create transaction for signing' }));
+        await waitFor(() => expect(messaging.buildSendPsbtRequest).toHaveBeenCalledTimes(1));
+
+        messaging.unmountView();
+        build.resolve({ psbtHex: PSBT, fromAddress: FROM, chainId: CHAIN_ID });
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(vibrate).not.toHaveBeenCalled();
     });
 });
