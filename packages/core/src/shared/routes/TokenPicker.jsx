@@ -22,6 +22,7 @@ import {
 import { NetworkFilter } from '../components/NetworkFilter.jsx';
 import { bridgeDisplayTick } from './BridgeTick.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useSettings } from '../hooks/useSettings.js';
 import styles from './TokenPicker.module.css';
 
 const PLATFORM_QUERY_MIN_CHARS = 3;
@@ -107,6 +108,9 @@ export function TokenPicker({
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isReceive = purpose === 'receive';
+    const { settings } = useSettings();
+    const allowRemoteImages = Boolean(settings)
+        && settings.privacy?.metadataFetchEnabled !== false;
 
     const [balances, setBalances] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -498,6 +502,7 @@ export function TokenPicker({
                             getRowActionLabel={tokenSelectionLabel}
                             hiddenKeys={hiddenSet}
                             pinnedKeys={pinnedSet}
+                            allowRemoteImages={allowRemoteImages}
                             // The held-balance list is cross-chain too
                             // whenever the caller has not pinned a network, so
                             // a user holding the same tick on two chains would
@@ -544,6 +549,7 @@ export function TokenPicker({
                                     // rows are identical, and picking one
                                     // re-targets the calling form's network.
                                     showChain
+                                    allowRemoteImages={allowRemoteImages}
                                 />
                             ) : null}
                         </div>

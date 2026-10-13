@@ -23,6 +23,12 @@ import {
 } from '../utils/amountFormat.js';
 import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
 
+export function isAssetImageSourceAllowed(src, allowRemoteImages = true) {
+    if (typeof src !== 'string' || src.length === 0) return false;
+    if (allowRemoteImages) return true;
+    return /^(?:data:|blob:)/i.test(src);
+}
+
 /**
  * Renders a flat list of balance rows. Filtering, tab selection, and
  * sectioning live in the parent (typically `<HomeTabs>`); this is a
@@ -50,6 +56,7 @@ import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
  * @param {'dust'|'0.0001'|'0.01'|'1'} [props.smallBalanceThreshold] threshold in whole asset units, or the chain-aware dust heuristic
  * @param {'full'|'trim'|'plain'} [props.numberFormat] exact balance amount presentation
  * @param {boolean} [props.showChain]: name each row's chain in the subtitle. Off by default, because in a single-chain list the network is already set globally and repeating it is noise. Turn it on for any CROSS-CHAIN list, where the same tick appears once per chain and the rows are otherwise indistinguishable.
+ * @param {boolean} [props.allowRemoteImages] permits issuer-selected image URLs. Privacy-sensitive callers pass false until settings explicitly allow them.
  */
 export function BalanceList({
     rows,
@@ -72,6 +79,7 @@ export function BalanceList({
     numberFormat = 'full',
     showChain = false,
     fiatCurrency = 'USD',
+    allowRemoteImages = true,
 }) {
     const [hiddenExpanded, setHiddenExpanded] = useState(false);
     const [smallExpanded, setSmallExpanded] = useState(false);
@@ -135,6 +143,7 @@ export function BalanceList({
                         onToggleHide={onToggleHide}
                         verify={verifyMap ? verifyMap[key] : null}
                         showChain={showChain}
+                        allowRemoteImages={allowRemoteImages}
                     />
                 );
             })}
@@ -168,6 +177,7 @@ export function BalanceList({
                                 onToggleHide={onToggleHide}
                                 verify={verifyMap ? verifyMap[key] : null}
                                 showChain={showChain}
+                                allowRemoteImages={allowRemoteImages}
                             />
                         );
                     }) : null}
@@ -203,6 +213,7 @@ export function BalanceList({
                                 onToggleHide={onToggleHide}
                                 verify={verifyMap ? verifyMap[key] : null}
                                 showChain={showChain}
+                                allowRemoteImages={allowRemoteImages}
                             />
                         );
                     }) : null}
@@ -212,9 +223,12 @@ export function BalanceList({
     );
 }
 
-function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onTogglePin, hidden, onToggleHide, verify, showChain, fiatCurrency = 'USD', numberFormat = 'full' }) {
+function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onTogglePin, hidden, onToggleHide, verify, showChain, allowRemoteImages, fiatCurrency = 'USD', numberFormat = 'full' }) {
     const isNative = row.kind === 'native';
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
+    const tokenImageUrl = isAssetImageSourceAllowed(row.imageUrl, allowRemoteImages)
+        ? row.imageUrl
+        : null;
     // App-wide privacy toggle: when on, replace the per-row qty and
     // fiat values with dots so navigating to / from the row leaks
     // nothing. Distinct from the per-row `hidden` prop above, which
@@ -265,7 +279,7 @@ function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onToggl
             fiatRate: row.fiatRate,
             fiatRateSource: row.fiatRateSource,
             quantity: row.quantity,
-            imageUrl: row.imageUrl,
+            imageUrl: tokenImageUrl,
         })
         : undefined;
     const showPin = typeof onTogglePin === 'function';
@@ -289,31 +303,34 @@ function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onToggl
                 aria-label={clickable ? actionLabel : undefined}
             >
                 <div className={styles.iconWrap}>
+                    <span
+                        className={styles.iconLetter}
+                        style={{ background: tickerColor(row.tick), color: 'var(--xc-on-accent)' }}
+                        aria-hidden="true"
+                    >
+                        {row.tick.slice(0, 1) || '?'}
+                    </span>
                     {isNative && chainIconUrl ? (
-                        <img src={chainIconUrl} alt="" aria-hidden="true" className={styles.iconImg} />
-                    ) : row.imageUrl ? (
                         <img
-                            src={row.imageUrl}
+                            src={chainIconUrl}
                             alt=""
                             aria-hidden="true"
                             className={styles.iconImg}
+                            style={{ position: 'absolute', inset: 0 }}
+                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        />
+                    ) : tokenImageUrl ? (
+                        <img
+                            src={tokenImageUrl}
+                            alt=""
+                            aria-hidden="true"
+                            className={styles.iconImg}
+                            style={{ position: 'absolute', inset: 0 }}
                             onError={(e) => {
-                                // If the published image 404s, fall back to
-                                // the letter chip by hiding the broken img;
-                                // the next render still has imageUrl set, so
-                                // we can't swap to <span>, so just hide.
                                 e.currentTarget.style.display = 'none';
                             }}
                         />
-                    ) : (
-                        <span
-                            className={styles.iconLetter}
-                            style={{ background: tickerColor(row.tick), color: 'var(--xc-on-accent)' }}
-                            aria-hidden="true"
-                        >
-                            {row.tick.slice(0, 1)}
-                        </span>
-                    )}
+                    ) : null}
                     {!isNative && chainIconUrl ? (
                         <img
                             src={chainIconUrl}

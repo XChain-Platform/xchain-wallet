@@ -103,4 +103,35 @@ describe('BalanceList ordering and visibility', () => {
         expect(screen.getByTitle(displayName)).toHaveTextContent(displayName);
         expect(screen.getByRole('button', { name: `Open ${displayName} details` })).toBeInTheDocument();
     });
+
+    it('keeps a decorative avatar under slow or broken token artwork', () => {
+        const imageUrl = 'https://issuer.example/slow.png';
+        render(<BalanceList rows={[row('ART', { imageUrl })]} />);
+
+        const image = document.querySelector(`img[src="${imageUrl}"]`);
+        expect(image).toHaveAttribute('alt', '');
+        expect(image).toHaveAttribute('aria-hidden', 'true');
+        expect(image).toHaveStyle({ position: 'absolute', inset: '0' });
+        expect(screen.getByText('A')).toBeInTheDocument();
+
+        fireEvent.error(image);
+        expect(image).toHaveStyle({ display: 'none' });
+        expect(screen.getByText('A')).toBeInTheDocument();
+    });
+
+    it('does not mount or forward a remote image when metadata privacy is enabled', () => {
+        const imageUrl = 'https://issuer.example/private.png';
+        const onSelectToken = vi.fn();
+        render(
+            <BalanceList
+                rows={[row('PRIVATE', { imageUrl })]}
+                onSelectToken={onSelectToken}
+                allowRemoteImages={false}
+            />,
+        );
+
+        expect(document.querySelector(`img[src="${imageUrl}"]`)).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Open PRIVATE token details' }));
+        expect(onSelectToken).toHaveBeenCalledWith(expect.objectContaining({ imageUrl: null }));
+    });
 });
