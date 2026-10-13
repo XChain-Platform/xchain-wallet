@@ -172,6 +172,13 @@ function harness(overrides = {}) {
             calls.push({ method: 'resolveMarketAction', args });
             return Promise.resolve({ txid: 'f00d' });
         },
+        buildBetActionPsbtRequest: (args) => {
+            calls.push({ method: 'buildBetActionPsbtRequest', args });
+            return Promise.resolve({
+                psbtHex: '70736274ff00', chainId: args.chainId,
+                fromAddress: args.from?.address, encoding: 'op_return',
+            });
+        },
         betFeed: (args) => {
             calls.push({ method: 'betFeed', args });
             return Promise.resolve({ data: [FEED] });
@@ -272,6 +279,39 @@ describe('CreateBetFeedForm: the live market-cost quote', () => {
 });
 
 describe('CreateBetFeedForm: compose and submit', () => {
+    it('builds an unsigned market in watcher mode without asking for a password', async () => {
+        const { messaging, calls } = harness({
+            getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+        });
+        let utils;
+        await domAct(async () => {
+            utils = mount(CreateBetFeedForm, messaging, { chainId: CHAIN, presetTick: 'PEPECREATURE' });
+            await drain();
+        });
+        await fillMarket(utils);
+
+        expect(utils.queryByLabelText('Password')).toBeNull();
+        await domAct(async () => {
+            fireEvent.click(button(utils, /Create unsigned transaction/i));
+            await drain();
+        });
+
+        const build = calls.find((c) => c.method === 'buildBetActionPsbtRequest');
+        expect(build.args).toMatchObject({
+            chainId: CHAIN,
+            builder: 'createMarketParams',
+            params: {
+                label: 'Who wins the final?',
+                outcomes: ['Home', 'Away'],
+                tick: 'PEPECREATURE',
+            },
+        });
+        expect(calls.some((c) => c.method === 'composeBetForConfirm')).toBe(false);
+        expect(calls.some((c) => c.method === 'createMarketAction')).toBe(false);
+        expect(utils.getByLabelText('Unsigned transaction hex')).toBeTruthy();
+        expect(utils.queryByLabelText('Password')).toBeNull();
+    });
+
     it('composes through the SDK createMarketParams builder and signs the SAME params', async () => {
         const { messaging, calls } = harness();
         let utils;
@@ -388,6 +428,50 @@ describe('CreateBetFeedForm: compose and submit', () => {
         expect(utils.container.textContent).toMatch(/comma/i);
     });
 
+    it('refuses an empty added outcome instead of silently changing outcome indexes', async () => {
+        const { messaging, calls } = harness();
+        let utils;
+        await domAct(async () => {
+            utils = mount(CreateBetFeedForm, messaging, { chainId: CHAIN, presetTick: 'PEPECREATURE' });
+            await drain();
+        });
+        await fillMarket(utils);
+        await domAct(async () => {
+            fireEvent.click(button(utils, /Add outcome/i));
+            await drain();
+        });
+        await domAct(async () => {
+            fireEvent.click(button(utils, /Review market/i));
+            await drain();
+        });
+        expect(calls.some((c) => c.method === 'composeBetForConfirm')).toBe(false);
+        expect(utils.container.textContent).toMatch(/fill in every outcome/i);
+    });
+
+    it('refuses refund windows outside the protocol range before composing', async () => {
+        const { messaging, calls } = harness();
+        let utils;
+        await domAct(async () => {
+            utils = mount(CreateBetFeedForm, messaging, { chainId: CHAIN, presetTick: 'PEPECREATURE' });
+            await drain();
+        });
+        await fillMarket(utils);
+        await domAct(async () => {
+            fireEvent.change(utils.getByLabelText('Time to publish the result'), { target: { value: 'custom' } });
+            await drain();
+        });
+        await domAct(async () => {
+            typeIn(utils, 'Days to publish the result', '0.01');
+            await drain();
+        });
+        await domAct(async () => {
+            fireEvent.click(button(utils, /Review market/i));
+            await drain();
+        });
+        expect(calls.some((c) => c.method === 'composeBetForConfirm')).toBe(false);
+        expect(utils.container.textContent).toMatch(/between one hour and one year/i);
+    });
+
     it('accepts an ordinary multi-word outcome label (the separator check is not a space check)', async () => {
         const { messaging, calls } = harness();
         let utils;
@@ -454,7 +538,7 @@ describe('BetFeedDetail states what a win would pay', () => {
         // lone winner takes the whole 14.85 pot.
         const shown = utils.getByTestId('bet-projection').textContent;
         expect(shown).toMatch(/If\s+Away\s+wins/);
-        expect(shown).toContain('14.85000000 PEPECREATURE');
+        expect(shown).toContain('14.85 PEPECREATURE');
         expect(shown).toMatch(/profit of 9\.85/);
         expect(shown).toMatch(/2\.97x your stake/);
         // Never presented as a price: the pot is re-divided by every later bet.
@@ -467,7 +551,7 @@ describe('BetFeedDetail states what a win would pay', () => {
         await stakeOn(utils, 'Home', '5');
         const shown = utils.getByTestId('bet-projection').textContent;
         expect(shown).toMatch(/If\s+Home\s+wins/);
-        expect(shown).toContain('4.95000000 PEPECREATURE');
+        expect(shown).toContain('4.95 PEPECREATURE');
         // Backing the favourite at a 1% fee LOSES money if nobody joins the
         // other side. Saying so is the entire point of showing the number.
         expect(shown).toMatch(/0\.05 less than you staked/);
@@ -518,6 +602,38 @@ describe('BetFeedDetail states what a win would pay', () => {
         await stakeOn(utils, 'Away', '5');
         expect(utils.queryByTestId('bet-projection')).toBeNull();
         expect(button(utils, /Review bet/i)).toBeTruthy();
+    });
+
+    it('does not project or compose a stake below the market minimum', async () => {
+        const { messaging, calls } = harness({
+            betFeed: () => Promise.resolve({ data: [{ ...FEED, min_amount: '10' }] }),
+        });
+        const utils = await openMarket(messaging);
+        await stakeOn(utils, 'Away', '9.999');
+        expect(utils.queryByTestId('bet-projection')).toBeNull();
+        expect(calls.some((c) => c.method === 'betProjectPayout')).toBe(false);
+
+        await domAct(async () => {
+            fireEvent.click(button(utils, /Review bet/i));
+            await drain();
+        });
+        expect(calls.some((c) => c.method === 'composeBetForConfirm')).toBe(false);
+        expect(utils.container.textContent).toMatch(/minimum bet of 10/i);
+    });
+
+    it('refuses exponent notation before projection or compose', async () => {
+        const { messaging, calls } = harness();
+        const utils = await openMarket(messaging);
+        await stakeOn(utils, 'Away', '1e3');
+        expect(utils.queryByTestId('bet-projection')).toBeNull();
+        expect(calls.some((c) => c.method === 'betProjectPayout')).toBe(false);
+
+        await domAct(async () => {
+            fireEvent.click(button(utils, /Review bet/i));
+            await drain();
+        });
+        expect(calls.some((c) => c.method === 'composeBetForConfirm')).toBe(false);
+        expect(utils.container.textContent).toMatch(/digits and an optional decimal point/i);
     });
 });
 

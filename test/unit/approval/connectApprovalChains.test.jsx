@@ -60,7 +60,7 @@ afterEach(() => {
 });
 
 describe('ConnectApproval chain checklist', () => {
-    it('shows the verified origin before a safely labeled dApp name', () => {
+    it('shows the site origin before a safely labeled dApp name', () => {
         const { container } = render(
             <ConnectApproval
                 id="identity"
@@ -78,6 +78,24 @@ describe('ConnectApproval chain checklist', () => {
         expect(screen.getByText('XChain Wallet␦security')).toBeTruthy();
         expect(screen.queryByText('XChain Wallet\u202Esecurity')).toBeNull();
         expect(screen.getByText('The site calls itself')).toBeTruthy();
+        expect(screen.getByText('Site origin')).toBeTruthy();
+        expect(screen.queryByText('Verified site')).toBeNull();
+    });
+
+    it('neutralizes control characters in the trusted origin display', () => {
+        render(
+            <ConnectApproval
+                id="identity-origin"
+                payload={{
+                    origin: 'https://safe.test\u202E.example',
+                    requestedChains: [bundled.id],
+                }}
+                onReject={() => {}}
+            />,
+        );
+
+        expect(screen.getAllByText('https://safe.test␦.example')).toHaveLength(2);
+        expect(screen.queryByText('https://safe.test\u202E.example')).toBeNull();
     });
 
     it('offers and pre-selects a user-added chain that arrives with the settings read', async () => {

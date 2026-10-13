@@ -34,7 +34,7 @@ const DESTRUCTIVE = /lock|remove|delete|reset|wipe|erase|sign ?out|log ?out|forg
  * Runs inside the page. Returns what is wrong with the current screen.
  * Plain function body: no closures over Node values.
  */
-export function measureInPage() {
+export function measureInPage(opts = {}) {
     const vw = document.documentElement.clientWidth;
     const vh = document.documentElement.clientHeight;
     const se = document.scrollingElement || document.documentElement;
@@ -60,6 +60,7 @@ export function measureInPage() {
         xScrollers: [],
         yScrollers: [],
     };
+    if (opts.contrast) { res.lowContrast = []; res.lightSurfaces = []; }
     const seen = new Set();
     const push = (list, item) => {
         const key = `${list}|${item.el}`;
@@ -116,7 +117,101 @@ export function measureInPage() {
         }
     }
     res.narrow = measureNarrowLists();
+    if (opts.contrast) measureContrast();
     return res;
+
+    // Dark-mode legibility. WCAG 2.x contrast of each visible text element's
+    // computed colour against the nearest opaque ancestor background (alpha
+    // layers are composited down to it), and any painted surface that is
+    // still light inside a dark app, which is how a hard-coded #fff panel
+    // shows up. Backgrounds drawn as images or gradients cannot be sampled,
+    // so text over one is skipped rather than guessed at.
+    function measureContrast() {
+        const ctx = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+        ctx.canvas.width = 1; ctx.canvas.height = 1;
+        // Any CSS colour syntax to [r, g, b, a], via the canvas so that
+        // color(srgb ...) and named colours resolve like rgb().
+        const rgba = (c) => {
+            const m = /^rgba?\(([^)]+)\)$/.exec(c);
+            if (m && !m[1].includes('/')) {
+                const p = m[1].split(',').map((x) => parseFloat(x));
+                if (p.length >= 3 && p.every((x) => !Number.isNaN(x))) return [p[0], p[1], p[2], p.length > 3 ? p[3] : 1];
+            }
+            ctx.clearRect(0, 0, 1, 1); ctx.fillStyle = '#000'; ctx.fillStyle = c; ctx.fillRect(0, 0, 1, 1);
+            const d = ctx.getImageData(0, 0, 1, 1).data;
+            return [d[0], d[1], d[2], d[3] / 255];
+        };
+        const over = (top, bot) => {
+            const a = top[3];
+            return [0, 1, 2].map((i) => top[i] * a + bot[i] * (1 - a)).concat(1);
+        };
+        const lum = ([r, g, b]) => {
+            const f = (v) => { const x = v / 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; };
+            return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+        };
+        const ratio = (a, b) => {
+            const la = lum(a); const lb = lum(b);
+            return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+        };
+        // The effective backdrop of an element, or null when an ancestor
+        // paints an image or gradient over it.
+        const backdrop = (el) => {
+            const layers = [];
+            for (let a = el; a; a = a.parentElement) {
+                const acs = getComputedStyle(a);
+                if (acs.backgroundImage !== 'none') return null;
+                const c = rgba(acs.backgroundColor);
+                if (c[3] > 0) layers.push(c);
+                if (c[3] >= 1) break;
+            }
+            let base = [255, 255, 255, 1];
+            const root = rgba(getComputedStyle(document.documentElement).backgroundColor);
+            if (root[3] > 0) base = over(root, base);
+            const body = rgba(getComputedStyle(document.body).backgroundColor);
+            if (body[3] > 0) base = over(body, base);
+            for (let i = layers.length - 1; i >= 0; i -= 1) base = over(layers[i], base);
+            return base;
+        };
+        const seenText = new Set();
+        const seenSurf = new Set();
+        for (const el of document.querySelectorAll('body *')) {
+            const cs = getComputedStyle(el);
+            if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) === 0) continue;
+            const r = el.getBoundingClientRect();
+            if (r.width < 1 || r.height < 1) continue;
+            const bgc = rgba(cs.backgroundColor);
+            // Images, canvases and SVG are painted by their own pixels (a QR code
+            // keeps a white quiet zone on purpose); only CSS fills count.
+            if (!/^(IMG|CANVAS|SVG|VIDEO|PICTURE)$/i.test(el.tagName) && bgc[3] > 0.5 && r.width >= 16 && r.height >= 16 && cs.backgroundImage === 'none'
+                && lum(bgc) > 0.8 && res.lightSurfaces.length < 25) {
+                const key = desc(el);
+                if (!seenSurf.has(key)) {
+                    seenSurf.add(key);
+                    res.lightSurfaces.push({ el: key, bg: cs.backgroundColor, lum: Number(lum(bgc).toFixed(2)) });
+                }
+            }
+            const hasText = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
+            if (!hasText) continue;
+            if (el.closest('svg, canvas, [aria-hidden="true"]')) continue;
+            const disabled = el.matches(':disabled') || el.closest('[aria-disabled="true"], :disabled');
+            if (disabled) continue; // WCAG exempts inactive controls
+            const bg = backdrop(el);
+            if (!bg) continue;
+            const fg = rgba(cs.color);
+            const eff = over(fg, bg);
+            const cr = ratio(eff, bg);
+            const px = parseFloat(cs.fontSize);
+            const bold = Number(cs.fontWeight) >= 700;
+            const large = px >= 24 || (px >= 18.66 && bold);
+            const need = large ? 3 : 4.5;
+            if (cr < need && res.lowContrast.length < 40) {
+                const key = desc(el);
+                if (seenText.has(key)) continue;
+                seenText.add(key);
+                res.lowContrast.push({ el: key, ratio: Number(cr.toFixed(2)), need, color: cs.color, bg: `rgb(${bg.slice(0, 3).map(Math.round).join(', ')})` });
+            }
+        }
+    }
 
     // Lists, cards and tables fill the content area's usable width, up to
     // the scrollbar (operator ruling 2026-10-12); forms keep their own
@@ -219,7 +314,7 @@ export function measureInPage() {
 }
 
 /** A sweep bound to one page, one venue and one output directory. */
-export function createSweep(page, { venue, outDir, restart = () => page.goto('/') }) {
+export function createSweep(page, { venue, outDir, restart = () => page.goto('/'), onScreen = null, contrast = false }) {
     mkdirSync(outDir, { recursive: true });
     const linesPath = join(outDir, 'results.jsonl');
     writeFileSync(linesPath, '');
@@ -231,9 +326,14 @@ export function createSweep(page, { venue, outDir, restart = () => page.goto('/'
         const slug = `${String(n).padStart(3, '0')}-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 60)}`;
         let result;
         try {
-            result = await page.evaluate(measureInPage);
+            result = await page.evaluate(measureInPage, { contrast });
         } catch (err) {
             result = { error: String(err?.message || err) };
+        }
+        // Extra per-screen audits (the axe sweep) hook in here; a failure in one
+        // is reported on the screen's line, never thrown into the walk.
+        if (onScreen) {
+            try { result = { ...result, ...(await onScreen(page, label)) }; } catch (err) { result = { ...result, onScreenError: String(err?.message || err) }; }
         }
         try {
             await page.screenshot({ path: join(outDir, `${slug}.png`) });

@@ -13,6 +13,8 @@ import {
     buildCommands,
     contactsToCommands,
     parseFreeformCommands,
+    settingsSectionsToCommands,
+    helpToCommands,
     COMMAND_CATEGORIES,
 } from '../../../packages/core/src/shared/commandPalette/commandRegistry.js';
 import { filterCommands } from '../../../packages/core/src/shared/commandPalette/fuzzyMatch.js';
@@ -57,6 +59,22 @@ describe('buildCommands', () => {
 
         expect(findById(buildCommands({ navigate, hasDexSurface: false }), 'nav-marketplace'))
             .toBeUndefined();
+    });
+
+    it('ranks the direct destination first for common palette searches', () => {
+        const commands = [
+            ...buildCommands({ navigate() {} }),
+            ...settingsSectionsToCommands({ openSettings() {} }),
+            ...helpToCommands({ openSettings() {} }),
+        ];
+        for (const [query, expectedId] of [
+            ['send', 'nav-send'],
+            ['receive', 'nav-receive'],
+            ['settings', 'nav-settings'],
+            ['backup', 'settings-backup'],
+        ]) {
+            expect(filterCommands(commands, query)[0]?.id, query).toBe(expectedId);
+        }
     });
 
     it('gates BTC-only and governance surfaces behind the context flags', () => {

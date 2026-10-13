@@ -58,7 +58,7 @@
 }
 
 .tabActive {
-    color: var(--xc-accent-primary, var(--xc-text));
+    color: var(--xc-accent-text, var(--xc-text));
     font-weight: 600;
 }
 
@@ -155,7 +155,7 @@
 }
 
 .sheetItemActive {
-    color: var(--xc-accent-primary, var(--xc-text));
+    color: var(--xc-accent-text, var(--xc-text));
     font-weight: 600;
 }
 

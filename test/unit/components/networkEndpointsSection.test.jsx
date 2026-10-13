@@ -20,6 +20,7 @@ import { render, screen, fireEvent, cleanup, within, waitFor } from '@testing-li
 
 const updateSpy = vi.fn();
 let settingsRecord;
+let messagingRecord;
 
 vi.mock('../../../packages/core/src/shared/hooks/useSettings.js', () => ({
     useSettings: () => ({
@@ -30,7 +31,7 @@ vi.mock('../../../packages/core/src/shared/hooks/useSettings.js', () => ({
     }),
 }));
 vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
-    useMessaging: () => ({ messaging: null }),
+    useMessaging: () => ({ messaging: messagingRecord }),
 }));
 
 const { NetworkEndpointsSection } = await import(
@@ -53,9 +54,14 @@ function ltcRegtestBlock() {
     return encoder.parentElement.parentElement;
 }
 
+function bitcoinMainnetBlock() {
+    return screen.getByText('Bitcoin').parentElement.parentElement;
+}
+
 beforeEach(() => {
     updateSpy.mockReset();
     settingsRecord = { developerMode: true, sdkEndpoints: {} };
+    messagingRecord = null;
 });
 afterEach(() => cleanup());
 
@@ -99,6 +105,58 @@ describe('NetworkEndpointsSection', () => {
 
         expect(updateSpy).not.toHaveBeenCalled();
         expect(within(block).getByRole('alert').textContent).toMatch(/Hub URL/);
+    });
+
+    it('requires https for a remote host outside regtest', () => {
+        render(<NetworkEndpointsSection />);
+        const block = bitcoinMainnetBlock();
+        fireEvent.change(within(block).getByLabelText('Explorer URL'), {
+            target: { value: 'http://node.example.com' },
+        });
+        fireEvent.click(within(block).getByText('Save'));
+
+        expect(updateSpy).not.toHaveBeenCalled();
+        expect(within(block).getByRole('alert')).toHaveTextContent(
+            'Explorer URL: Use https:// for remote hosts.',
+        );
+    });
+
+    it('removes trailing slashes before saving an override', () => {
+        render(<NetworkEndpointsSection />);
+        const block = bitcoinMainnetBlock();
+        fireEvent.change(within(block).getByLabelText('Hub URL'), {
+            target: { value: 'https://private.example.com/BTC///' },
+        });
+        fireEvent.click(within(block).getByText('Save'));
+
+        expect(updateSpy.mock.calls[0][0].sdkEndpoints['bitcoin-mainnet'].hubUrl)
+            .toBe('https://private.example.com/BTC');
+    });
+
+    it('does not mark a default URL with a trailing slash as custom', () => {
+        render(<NetworkEndpointsSection />);
+        const block = bitcoinMainnetBlock();
+        fireEvent.change(within(block).getByLabelText('Explorer URL'), {
+            target: { value: 'https://explorer.xchain.io/' },
+        });
+        fireEvent.click(within(block).getByText('Save'));
+
+        expect(updateSpy.mock.calls[0][0].sdkEndpoints['bitcoin-mainnet']).toMatchObject({
+            explorerUrl: 'https://explorer.xchain.io',
+            custom: false,
+        });
+    });
+
+    it('explains the consequence of saving an unreachable custom host', () => {
+        render(<NetworkEndpointsSection />);
+        const block = bitcoinMainnetBlock();
+        fireEvent.change(within(block).getByLabelText('Hub URL'), {
+            target: { value: 'https://private.example.com/BTC' },
+        });
+
+        expect(within(block).getByText(/host is not contacted/)).toHaveTextContent(
+            /If it is unreachable, this chain's balances, history and transactions may be unavailable\./,
+        );
     });
 
     it('treats an emptied field as "use the default", not as no endpoint', () => {
@@ -145,5 +203,61 @@ describe('NetworkEndpointsSection', () => {
 
         expect(await within(block).findByRole('alert')).toHaveTextContent('Storage is unavailable.');
         await waitFor(() => expect(within(block).getByRole('button', { name: 'Save' })).toBeEnabled());
+    });
+
+    it('resets only the selected chain to its defaults', async () => {
+        settingsRecord = {
+            developerMode: true,
+            sdkEndpoints: {
+                'litecoin-regtest': {
+                    explorerUrl: 'http://10.0.0.9:18080',
+                    encoderUrl: LTC_REGTEST.encoder,
+                    hubUrl: LTC_REGTEST.hub,
+                    custom: true,
+                },
+            },
+        };
+        render(<NetworkEndpointsSection />);
+        fireEvent.click(within(ltcRegtestBlock()).getByText('Reset to default'));
+
+        await waitFor(() => expect(updateSpy).toHaveBeenCalledWith({
+            sdkEndpoints: {
+                'litecoin-regtest': {
+                    explorerUrl: LTC_REGTEST.explorer,
+                    encoderUrl: LTC_REGTEST.encoder,
+                    hubUrl: LTC_REGTEST.hub,
+                    custom: false,
+                },
+            },
+        }));
+    });
+
+    it('reports a successful manual registry refresh as complete', async () => {
+        messagingRecord = {
+            getChainRegistryStatus: vi.fn(async () => null),
+            refreshChainRegistry: vi.fn(async () => ({
+                ok: true,
+                descriptorCount: 6,
+                lastRefreshedAt: new Date().toISOString(),
+            })),
+        };
+        render(<NetworkEndpointsSection />);
+        fireEvent.click(screen.getByRole('button', { name: 'Refresh now' }));
+
+        expect(await screen.findByText('Refresh complete: 6 networks available from the registry.'))
+            .toBeInTheDocument();
+    });
+
+    it('explains an unreachable registry host and preserves the bundled fallback', async () => {
+        messagingRecord = {
+            getChainRegistryStatus: vi.fn(async () => null),
+            refreshChainRegistry: vi.fn(async () => ({ ok: false, error: 'fetch failed' })),
+        };
+        render(<NetworkEndpointsSection />);
+        fireEvent.click(screen.getByRole('button', { name: 'Refresh now' }));
+
+        expect(await screen.findByText(/registry host could not be reached/)).toHaveTextContent(
+            'The networks bundled with this wallet remain active.',
+        );
     });
 });

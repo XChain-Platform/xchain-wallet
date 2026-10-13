@@ -70,6 +70,7 @@ import { CommandPalette } from '@xchain-wallet/core/shared/commandPalette/Comman
 import { useCommandPalette } from '@xchain-wallet/core/shared/commandPalette/useCommandPalette.js';
 import { buildCommands, contactsToCommands, parseFreeformCommands, balancesToCommands, helpToCommands, settingsSectionsToCommands, sitesToCommands } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
 import { buildBalanceRows } from '@xchain-wallet/core/shared/components/BalanceList.jsx';
+import { loadDisplayBalances } from '@xchain-wallet/core/shared/utils/displayBalances.js';
 import { useSettings } from '@xchain-wallet/core/shared/hooks/useSettings.js';
 import { useWalletMode } from '@xchain-wallet/core/shared/hooks/useWalletMode.js';
 import { useKeyboardShortcuts } from '@xchain-wallet/core/shared/keyboard/useKeyboardShortcuts.js';
@@ -78,6 +79,8 @@ import { TokenDetail } from '@xchain-wallet/core/shared/routes/TokenDetail.jsx';
 import { ToastHost } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
+import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
+import { FullLayoutWithNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
 import { Receive } from '@xchain-wallet/core/shared/routes/Receive.jsx';
 import { Send } from '@xchain-wallet/core/shared/routes/Send.jsx';
 import { SendPicker } from '@xchain-wallet/core/shared/routes/SendPicker.jsx';
@@ -146,6 +149,7 @@ import { AddressList } from '@xchain-wallet/core/shared/routes/AddressList.jsx';
 import { AddressPreferencesForm } from '@xchain-wallet/core/shared/routes/AddressPreferencesForm.jsx';
 import { useBtcAddressesPresent } from '@xchain-wallet/core/shared/hooks/useBtcAddressesPresent.js';
 import { useVmAddressesPresent } from '@xchain-wallet/core/shared/hooks/useVmAddressesPresent.js';
+import { useAccountList } from '@xchain-wallet/core/shared/hooks/useAccountList.js';
 import { useGovernanceAddressesPresent } from '@xchain-wallet/core/shared/hooks/useGovernanceAddressesPresent.js';
 // Trezor is intentionally NOT offered in the extension shell: MV3 bans
 // remotely-hosted code, so the only way to bundle Trezor Connect here
@@ -157,6 +161,7 @@ import { useGovernanceAddressesPresent } from '@xchain-wallet/core/shared/hooks/
 import { registerSigner as registerLocalSigner } from './signerBridge.js';
 import * as messaging from './messaging.js';
 import { getSessionStatus, listWallets, listAccounts } from './messaging.js';
+import { createLaunchRouteState, shellForExtensionView } from './launchState.js';
 
 const lazyRoute = (load, name) => lazy(() => load().then((module) => ({ default: module[name] })));
 
@@ -199,8 +204,9 @@ const pairLedgerSigner = (...args) => import('../signers/ledgerFactory.js')
     .then((module) => module.pairLedgerSigner(...args));
 
 export function App() {
+    const shell = shellForExtensionView();
     return (
-        <MessagingProvider shell="popup" messaging={messaging}>
+        <MessagingProvider shell={shell} messaging={messaging}>
             <ToastHost>
                 <ReachabilityBanner />
                 <AppInner />
@@ -284,6 +290,9 @@ function AppInner() {
     const [accountRenameTarget, setAccountRenameTarget] = useState(
         /** @type {{ id: string, name: string } | null} */ (null),
     );
+    const [accountPickerBackTo, setAccountPickerBackTo] = useState(
+        /** @type {'home' | 'settings'} */ ('home'),
+    );
     const [migrateLegacyWalletId, setMigrateLegacyWalletId] = useState(/** @type {string | null} */ (null));
     // PC-34: SweepForm context. Free-entry sweeps leave it null (form
     // defaults to the active wallet); the migrate lane prefills the
@@ -321,7 +330,7 @@ function AppInner() {
     // {chainId, actionIndex, type, items} handed from ListDetail's
     // "Fork & edit" button into ListForkForm.
     const [listRef, setListRef] = useState(
-        /** @type {{ chainId: string, actionIndex: string } | null} */ (null),
+        /** @type {{ chainId: string, actionIndex: string, origin?: 'shared', directoryChainId?: string } | null} */ (null),
     );
     const [listForkRef, setListForkRef] = useState(
         /** @type {{ chainId: string, actionIndex: string, type: string, items: string[] } | null} */ (null),
@@ -379,9 +388,18 @@ function AppInner() {
     const [settingsInitialSection, setSettingsInitialSection] = useState(
         /** @type {string | null} */ (null),
     );
+    const [walletPickerReturnView, setWalletPickerReturnView] = useState(
+        /** @type {'home' | 'settings'} */ ('home'),
+    );
+    const openWalletPicker = (returnView = /** @type {'home' | 'settings'} */ ('home')) => {
+        setWalletPickerReturnView(returnView);
+        if (returnView === 'settings') setSettingsInitialSection('this-wallet');
+        setUnlockedView('wallet-picker');
+    };
     const [activeAccountId, setActiveAccountId] = useState(
         /** @type {string | null} */ (null),
     );
+    const headerAccounts = useAccountList(activeWalletId, activeAccountId);
     const [dispenserRef, setDispenserRef] = useState(
         /** @type {{ chainId: string, actionIndex: string } | null} */ (null),
     );
@@ -429,14 +447,9 @@ function AppInner() {
         }),
     );
 
-    // Deep-link view that must survive the unlock cycle. The `?uri=` boot
-    // handler routes immediately, but `refresh()` (fired by Locked's
-    // onUnlocked) resets the view to 'home', which stomped the route
-    // whenever the popup opened locked. Re-applied once the session
-    // reports unlocked, then cleared.
-    const pendingUriView = useRef(
-        /** @type {'send' | 'receive' | 'contract-execute' | null} */ (null),
-    );
+    // The route guard remains armed until the wallet becomes active because
+    // per-wallet last-view restoration runs after the unlock refresh.
+    const launchRouteState = useRef(createLaunchRouteState());
 
     const refresh = useCallback(() => {
         setStatus({ state: 'loading' });
@@ -445,10 +458,8 @@ function AppInner() {
         getSessionStatus()
             .then((next) => {
                 setStatus(next);
-                if (next?.state === 'unlocked' && pendingUriView.current) {
-                    setUnlockedView(pendingUriView.current);
-                    pendingUriView.current = null;
-                }
+                const launchView = launchRouteState.current.takeForSession(next);
+                if (launchView) setUnlockedView(launchView);
             })
             .catch((err) =>
                 setStatus({
@@ -498,10 +509,10 @@ function AppInner() {
                     memo: intent.memo,
                 });
                 setUnlockedView('send');
-                pendingUriView.current = 'send';
+                launchRouteState.current.remember('send');
             } else if (intent && intent.kind === 'receive') {
                 setUnlockedView('receive');
-                pendingUriView.current = 'receive';
+                launchRouteState.current.remember('receive');
             } else if (intent && intent.kind === 'execute' && intent.contractActionIndex && intent.chainId) {
                 // Explorer Write-tab deep link: land on the EXECUTE form
                 // prefilled. Unroutable without a contract index and a
@@ -512,7 +523,7 @@ function AppInner() {
                     paramsText: intent.executeParams || '',
                 });
                 setUnlockedView('contract-execute');
-                pendingUriView.current = 'contract-execute';
+                launchRouteState.current.remember('contract-execute');
             }
         } catch {
             // Parser surfaces unknown via kind === 'unknown'; defensive
@@ -639,7 +650,11 @@ function AppInner() {
         walletId: activeWalletId,
         currentView: unlockedView,
         onResume: setUnlockedView,
+        skip: launchRouteState.current.shouldSkipLastViewResume(),
     });
+    useEffect(() => {
+        if (activeWalletId) launchRouteState.current.walletActivated();
+    }, [activeWalletId]);
 
     // §33 command palette: Cmd/Ctrl+K opens a launcher over every action and
     // destination. Inert unless unlocked; contacts feed its fuzzy search and
@@ -667,7 +682,9 @@ function AppInner() {
         messaging.listContacts()
             .then((rows) => { if (!cancelled) setPaletteContacts(Array.isArray(rows) ? rows : []); })
             .catch(() => { /* palette still works without contacts */ });
-        messaging.getWalletBalances(activeWalletId, activeAccountId)
+        // The balances Home shows, so a coin opened from here matches
+        // Home's figure (a demo wallet's are synthesized, not read).
+        loadDisplayBalances(messaging, activeWalletId, activeAccountId)
             .then((balances) => {
                 if (cancelled) return;
                 setPaletteTokenRows(buildBalanceRows(balances, APP_CHAIN_REGISTRY, null));
@@ -693,7 +710,7 @@ function AppInner() {
 
     // Shared catalogue + lazily-loaded contacts; each run() uses the palette
     // navigator so the destination receives a fresh route mount. The
-    // popup locks via messaging.lockWallet (Home owns the visible Lock button).
+    // popup locks via messaging.lockWallet, the same call as Home's lock button.
     const paletteCommands = [
         ...buildCommands({
             navigate: palette.navigate,
@@ -1133,11 +1150,11 @@ function AppInner() {
                     <ListDetail
                         chainId={listRef.chainId}
                         actionIndex={listRef.actionIndex}
-                        onBack={() => setUnlockedView('lists')}
+                        onBack={() => setUnlockedView(listRef.origin === 'shared' ? 'shared-lists' : 'lists')}
                         onFork={(ref) => { setListForkRef(ref); setUnlockedView('list-fork'); }}
-                        onShare={(ref) => { setListRef(ref); setUnlockedView('list-share'); }}
-                        onTransfer={(ref) => { setListRef(ref); setUnlockedView('list-transfer'); }}
-                        onRename={(ref) => { setListRef(ref); setUnlockedView('list-rename'); }}
+                        onShare={listRef.origin === 'shared' ? undefined : (ref) => { setListRef(ref); setUnlockedView('list-share'); }}
+                        onTransfer={listRef.origin === 'shared' ? undefined : (ref) => { setListRef(ref); setUnlockedView('list-transfer'); }}
+                        onRename={listRef.origin === 'shared' ? undefined : (ref) => { setListRef(ref); setUnlockedView('list-rename'); }}
                     />
                 );
             }
@@ -1209,8 +1226,17 @@ function AppInner() {
                 return (
                     <SharedListDirectory
                         walletId={activeWalletId}
-                        chainId={listRef?.chainId || 'bitcoin-mainnet'}
+                        chainId={listRef?.directoryChainId || listRef?.chainId || 'bitcoin-mainnet'}
                         mode="browse"
+                        onOpenList={(chainId, actionIndex) => {
+                            setListRef({
+                                chainId,
+                                actionIndex,
+                                origin: 'shared',
+                                directoryChainId: listRef?.directoryChainId || listRef?.chainId || 'bitcoin-mainnet',
+                            });
+                            setUnlockedView('list-detail');
+                        }}
                         onBack={() => setUnlockedView('lists')}
                     />
                 );
@@ -1225,7 +1251,10 @@ function AppInner() {
                             setDispenserRef({ chainId, actionIndex, origin: 'list' });
                             setUnlockedView('dispenser-detail');
                         }}
-                        onCreateDispenser={() => setUnlockedView('dispenser')}
+                        onCreateDispenser={() => {
+                            setFormReturnView('dispensers-list');
+                            setUnlockedView('dispenser');
+                        }}
                         onBack={() => setUnlockedView(dispensersBackTo || 'home')}
                     />
                 );
@@ -2378,7 +2407,7 @@ function AppInner() {
                             setWalletDetailsId(id);
                             setUnlockedView('wallet-details');
                         }}
-                        onBack={() => setUnlockedView('home')}
+                        onBack={() => setUnlockedView(walletPickerReturnView)}
                     />
                 );
             }
@@ -2388,10 +2417,13 @@ function AppInner() {
                         key={settingsInitialSection || 'root'}
                         onBack={() => { setSettingsInitialSection(null); setUnlockedView('home'); }}
                         activeWallet={activeWallet}
-                        activeAccount={null}
-                        onOpenWalletPicker={() => setUnlockedView('wallet-picker')}
+                        activeAccount={headerAccounts.find((account) => account.id === activeAccountId) || null}
+                        onOpenWalletPicker={() => openWalletPicker('settings')}
                         onOpenAccountPicker={
-                            activeWalletId ? () => setUnlockedView('account-picker') : undefined
+                            activeWalletId ? () => {
+                                setAccountPickerBackTo('settings');
+                                setUnlockedView('account-picker');
+                            } : undefined
                         }
                         initialSubpageId={settingsInitialSection}
                         onNavigateToMint={handleFaucetMint}
@@ -2413,10 +2445,11 @@ function AppInner() {
                             setWalletDetailsId(null);
                             setUnlockedView('wallet-picker');
                         }}
-                        onRename={() => {
-                            setWalletRenameTarget({ id: walletDetailsId, name: '' });
+                        onRename={(wallet) => {
+                            setWalletRenameTarget({ id: wallet.id, name: wallet.name });
                             setUnlockedView('wallet-rename');
                         }}
+                        onExited={refresh}
                         onMigrateToBip39={() => {
                             setMigrateLegacyWalletId(walletDetailsId);
                             setUnlockedView('migrate-bip39');
@@ -2431,11 +2464,11 @@ function AppInner() {
                         initialName={walletRenameTarget.name}
                         onBack={() => {
                             setWalletRenameTarget(null);
-                            setUnlockedView('wallet-picker');
+                            setUnlockedView('wallet-details');
                         }}
                         onRenamed={() => {
                             setWalletRenameTarget(null);
-                            setUnlockedView('wallet-picker');
+                            setUnlockedView('wallet-details');
                         }}
                     />
                 );
@@ -2447,11 +2480,11 @@ function AppInner() {
                         activeAccountId={activeAccountId}
                         onSwitch={handleSwitchAccount}
                         onAddAccount={() => setUnlockedView('add-account')}
-                        onRenameAccount={(id) => {
-                            setAccountRenameTarget({ id, name: '' });
+                        onRenameAccount={(account) => {
+                            setAccountRenameTarget(account);
                             setUnlockedView('account-rename');
                         }}
-                        onBack={() => setUnlockedView('home')}
+                        onBack={() => setUnlockedView(accountPickerBackTo)}
                     />
                 );
             }
@@ -2459,6 +2492,7 @@ function AppInner() {
                 return (
                     <RenameAccountForm
                         accountId={accountRenameTarget.id}
+                        walletId={activeWalletId}
                         initialName={accountRenameTarget.name}
                         onBack={() => {
                             setAccountRenameTarget(null);
@@ -2475,8 +2509,11 @@ function AppInner() {
                 return (
                     <AddAccountForm
                         walletId={activeWalletId}
-                        onBack={() => setUnlockedView('home')}
-                        onCreated={() => setUnlockedView('home')}
+                        onBack={() => setUnlockedView('account-picker')}
+                        onCreated={(account) => {
+                            if (account?.id) handleSwitchAccount(account.id);
+                            setUnlockedView('home');
+                        }}
                     />
                 );
             }
@@ -2574,8 +2611,11 @@ function AppInner() {
                             setActionDetailReturnTo('home');
                             setUnlockedView('action-detail');
                         } : undefined}
-                        onOpenWalletPicker={() => setUnlockedView('wallet-picker')}
-                        onOpenAccountPicker={activeWalletId ? () => setUnlockedView('account-picker') : undefined}
+                        onOpenWalletPicker={() => openWalletPicker()}
+                        onOpenAccountPicker={activeWalletId ? () => {
+                            setAccountPickerBackTo('home');
+                            setUnlockedView('account-picker');
+                        } : undefined}
                         onSignPsbt={activeWalletId ? () => setUnlockedView('sign-psbt') : undefined}
                         onSignMessage={activeWalletId ? () => setUnlockedView('sign-message') : undefined}
                         onVerifySignature={activeWalletId ? () => setUnlockedView('verify-signature') : undefined}
@@ -2587,12 +2627,28 @@ function AppInner() {
                         // reach Settings from the nav rail, and a second entry
                         // in the hero would be duplicate chrome.
                         onOpenSettings={() => openSettingsSection(null)}
+                        // No header here either, so Home shows the lock
+                        // button that web and desktop keep in their header.
+                        onLockWallet={() => { messaging.lockWallet().then(refresh).catch(refresh); }}
                     />
                 </>
             );
             })();
             return (
-                <>
+                <FullLayoutWithNav
+                    bottomBar={(
+                        <BottomTabBar
+                            currentView={unlockedView}
+                            onSelect={setUnlockedView}
+                            onLock={() => { messaging.lockWallet().then(refresh).catch(refresh); }}
+                            onOpenWalletPicker={() => setUnlockedView('wallet-picker')}
+                            onOpenSettings={() => openSettingsSection(null)}
+                            hasVmAddress={hasVmAddress}
+                            hasDexSurface
+                            isSignerMode={isSignerMode}
+                        />
+                    )}
+                >
                     <Suspense fallback={<Skeleton.List rows={5} />}>
                         <Fragment key={palette.navigationKey}>{routeNode}</Fragment>
                     </Suspense>
@@ -2609,7 +2665,7 @@ function AppInner() {
                         parseQuery={paletteParseQuery}
                     />
                     <ShortcutHelp open={shortcutHelpOpen} onClose={() => setShortcutHelpOpen(false)} overrides={settings?.keyboard?.bindings} />
-                </>
+                </FullLayoutWithNav>
             );
         }
         default:

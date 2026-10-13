@@ -115,9 +115,11 @@ const home = readFileSync(
 // Locking is not in this list: a later change moved both the idle timer and the
 // manual Lock entry out of Home and into the shell, because a route
 // unmounts on navigation and cancelled the auto-lock timer with it.
+// Balances go through loadDisplayBalances, which calls
+// messaging.getWalletBalances for every wallet but the demo one.
 for (const call of [
     'messaging.listWallets',
-    'messaging.getWalletBalances',
+    'loadDisplayBalances(messaging',
 ]) {
     assert.ok(home.includes(call), `shared Home.jsx wires ${call}`);
 }

@@ -56,17 +56,24 @@ export function useAutoLock(
     onLockRef.current = onLock;
 
     useEffect(() => {
+        if (enabled) lastActivity.current = Date.now();
+    }, [enabled]);
+
+    useEffect(() => {
         if (!enabled) return undefined;
-        // Start every arm with a full idle window: while disabled the listeners
-        // are detached, so the clock still holds the moment of the last lock.
-        lastActivity.current = Date.now();
         const bump = () => { lastActivity.current = Date.now(); };
         const events = ['mousemove', 'keydown', 'scroll', 'click', 'touchstart'];
         for (const ev of events) {
             window.addEventListener(ev, bump, { passive: true });
         }
         let cancelled = false;
-        const tick = () => {
+        let handle;
+        function schedule() {
+            const elapsed = Date.now() - lastActivity.current;
+            const remaining = Math.max(0, idleMs - elapsed);
+            handle = window.setTimeout(tick, Math.min(tickMs, remaining));
+        }
+        function tick() {
             if (cancelled) return;
             if (Date.now() - lastActivity.current >= idleMs) {
                 try { onLockRef.current?.(); } catch (_err) { /* ignore */ }
@@ -77,9 +84,9 @@ export function useAutoLock(
                 // flips to `locked` and passes `enabled: false`.
                 lastActivity.current = Date.now();
             }
-            window.setTimeout(tick, tickMs);
-        };
-        const handle = window.setTimeout(tick, tickMs);
+            schedule();
+        }
+        schedule();
         return () => {
             cancelled = true;
             clearTimeout(handle);

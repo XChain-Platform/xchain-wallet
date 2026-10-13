@@ -99,7 +99,7 @@
 .atRiskNote {
     margin-top: var(--xc-space-2);
     font-size: var(--xc-text-xs);
-    color: var(--xc-danger);
+    color: var(--xc-danger-fg);
 }
 
 .chip {
@@ -123,7 +123,7 @@
 
 .chipExpired {
     background: color-mix(in srgb, var(--xc-danger) 14%, transparent);
-    color: var(--xc-danger);
+    color: var(--xc-danger-fg);
 }
 
 /* Popup shells (extension) are narrow: stack the action button under
