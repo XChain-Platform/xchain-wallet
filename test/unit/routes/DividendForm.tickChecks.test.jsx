@@ -15,8 +15,8 @@
 // now catch them earlier, with the field's own message and the submit
 // button disabled.
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DividendForm } from '../../../packages/core/src/shared/routes/DividendForm.jsx';
@@ -95,29 +95,42 @@ function mountDividend(verdictByTick = {}) {
 }
 
 async function openPicker(fieldLabel) {
-    fireEvent.click(await screen.findByRole('button', { name: new RegExp(fieldLabel, 'i') }));
+    await flushTimers();
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(fieldLabel, 'i') }));
+    await flushTimers();
 }
 
 async function pickRow(tick) {
-    const row = await waitFor(() => {
-        const hit = Array.from(document.querySelectorAll('button'))
-            .find((b) => (b.textContent || '').includes(tick));
-        if (!hit) throw new Error(`no ${tick} row in the token picker`);
-        return hit;
-    }, { timeout: 3000 });
+    const row = Array.from(document.querySelectorAll('button'))
+        .find((button) => (button.textContent || '').includes(tick));
+    if (!row) throw new Error(`no ${tick} row in the token picker`);
     fireEvent.click(row);
 }
 
-const amountField = () => screen.findByLabelText(/^Per-unit amount/);
+const amountField = () => screen.getByLabelText(/^Per-unit amount/);
 const submitButton = () => screen.getByRole('button', { name: /^(Pay dividend|Preview)$/ });
-const expectText = (re, timeout = 3000) => waitFor(
-    () => expect(document.body.textContent).toMatch(re),
-    { timeout },
-);
+
+async function flushTimers() {
+    for (let pass = 0; pass < 3; pass += 1) {
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(400);
+        });
+    }
+}
+
+const expectText = async (re) => {
+    await flushTimers();
+    expect(document.body.textContent).toMatch(re);
+};
+
+beforeEach(() => {
+    vi.useFakeTimers();
+});
 
 afterEach(() => {
     cleanup();
     __clearTokenInfoCache();
+    vi.useRealTimers();
 });
 
 describe('DividendForm TICK / DIVIDEND_TICK existence checks', () => {
@@ -127,7 +140,7 @@ describe('DividendForm TICK / DIVIDEND_TICK existence checks', () => {
         await pickRow('BTC');
         await openPicker('Dividend token');
         await pickRow('GOODPAY');
-        fireEvent.change(await amountField(), { target: { value: '1' } });
+        fireEvent.change(amountField(), { target: { value: '1' } });
         await expectText(/BTC is Bitcoin itself, not an XChain token/);
         expect(submitButton().disabled).toBe(true);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
@@ -139,9 +152,9 @@ describe('DividendForm TICK / DIVIDEND_TICK existence checks', () => {
         await pickRow('GHOSTTOK');
         await openPicker('Dividend token');
         await pickRow('GOODPAY');
-        fireEvent.change(await amountField(), { target: { value: '1' } });
+        fireEvent.change(amountField(), { target: { value: '1' } });
         await expectText(/No token named GHOSTTOK exists on Bitcoin\./);
-        await waitFor(() => expect(submitButton().disabled).toBe(true));
+        expect(submitButton().disabled).toBe(true);
     });
 
     it('names an unknown dividend ticker and disables submit', async () => {
@@ -150,9 +163,9 @@ describe('DividendForm TICK / DIVIDEND_TICK existence checks', () => {
         await pickRow('GOODTOK');
         await openPicker('Dividend token');
         await pickRow('GHOSTPAY');
-        fireEvent.change(await amountField(), { target: { value: '1' } });
+        fireEvent.change(amountField(), { target: { value: '1' } });
         await expectText(/No token named GHOSTPAY exists on Bitcoin\./);
-        await waitFor(() => expect(submitButton().disabled).toBe(true));
+        expect(submitButton().disabled).toBe(true);
     });
 
     it('enables submit once both tickers resolve to real tokens', async () => {
@@ -161,10 +174,12 @@ describe('DividendForm TICK / DIVIDEND_TICK existence checks', () => {
         await pickRow('GOODTOK');
         await openPicker('Dividend token');
         await pickRow('GOODPAY');
-        fireEvent.change(await amountField(), { target: { value: '1' } });
-        await waitFor(() => expect(submitButton().disabled).toBe(false), { timeout: 3000 });
+        fireEvent.change(amountField(), { target: { value: '1' } });
+        await flushTimers();
+        expect(submitButton().disabled).toBe(false);
         fireEvent.click(submitButton());
-        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalled(), { timeout: 3000 });
+        await flushTimers();
+        expect(messaging.composeForConfirm).toHaveBeenCalled();
     });
 
     it('a lookup error shows the non-blocking style and leaves the dry run as the final check', async () => {
@@ -173,10 +188,11 @@ describe('DividendForm TICK / DIVIDEND_TICK existence checks', () => {
         await pickRow('GOODTOK');
         await openPicker('Dividend token');
         await pickRow('GOODPAY');
-        fireEvent.change(await amountField(), { target: { value: '1' } });
+        fireEvent.change(amountField(), { target: { value: '1' } });
         await expectText(/Couldn't verify this token: explorer unreachable/);
-        await waitFor(() => expect(submitButton().disabled).toBe(false), { timeout: 3000 });
+        expect(submitButton().disabled).toBe(false);
         fireEvent.click(submitButton());
-        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalled(), { timeout: 3000 });
+        await flushTimers();
+        expect(messaging.composeForConfirm).toHaveBeenCalled();
     });
 });
