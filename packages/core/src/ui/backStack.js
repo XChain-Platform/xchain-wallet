@@ -138,6 +138,12 @@ export function registerBackHandler(run, kind = 'overlay') {
     };
 }
 
+/** Dismiss every transient overlay while leaving route navigation untouched. */
+export function dismissAllOverlays() {
+    const overlays = handlers.filter((entry) => entry.kind === 'overlay').reverse();
+    for (const entry of overlays) entry.run();
+}
+
 /**
  * Make the system Back gesture run `onBack` while the calling component is
  * mounted.
