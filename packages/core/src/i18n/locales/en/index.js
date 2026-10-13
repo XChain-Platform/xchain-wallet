@@ -51,7 +51,7 @@ export const en = {
     'send.title': 'Send',
     'send.review': 'Review & Send',
     'send.backToEdit': 'Back to edit',
-    'send.memoForbiddenChars': 'Memo cannot contain | or ; characters.',
+    'send.memoForbiddenChars': "Memo can't contain | or ; characters.",
     'send.passwordHint': 'Required to sign.',
     'send.txid': 'Transaction ID',
     'send.testGate.title': 'First send to this address. Test it first?',
@@ -60,7 +60,7 @@ export const en = {
     'send.testGate.sendSmall': 'Send a small test first',
     'send.testGate.continue': "I've verified, continue",
     'send.signerMode':
-        'This wallet is in signer mode, so it does not send or broadcast. It signs transactions passed in from a watcher wallet. Switch the mode under Settings, Wallet Mode to send from this device.',
+        "This wallet is in signer mode, so it doesn't send or broadcast. It signs transactions passed in from a watcher wallet. Switch the mode under Settings, Wallet Mode to send from this device.",
     'send.networkFeeValue': 'Network fee: {amount} {ticker}',
     'send.queued.body':
         "Your transaction is signed but couldn't reach the network just now. It's waiting in the queued-transactions banner and won't go out until you broadcast it from there; the wallet reminds you when the network is back. Don't send this payment again.",
@@ -81,7 +81,7 @@ export const en = {
     'send.review.signOn': 'Sign on {device}',
     'send.review.sign': 'Sign',
     'send.review.submitAction': '{label}: send',
-    'send.memoCount': '{used} / {max} characters.',
+    'send.memoCount': '{used} / {max} characters',
     'send.advanced.label': 'Advanced send choices',
     'send.advanced.none': 'None',
     'send.advanced.feeBumping': 'Fee bumping',
@@ -90,7 +90,7 @@ export const en = {
     'send.advanced.coinControl': 'Coin control',
     'send.advanced.coinControlEnabled': 'Coin control enabled',
     'send.advanced.coinControlReady': 'Choose exactly which unspent outputs fund this transaction.',
-    'send.advanced.coinControlUnavailable': 'Coin control is unavailable while spendable inputs cannot be loaded.',
+    'send.advanced.coinControlUnavailable': "Coin control is unavailable while spendable inputs can't be loaded.",
     'send.advanced.loadingInputs': 'Loading spendable inputs…',
     'send.advanced.inputs': 'Inputs',
     'send.advanced.noInputs': 'No spendable inputs found.',
@@ -113,7 +113,7 @@ export const en = {
     'send.watcherMode':
         'Watcher mode: this wallet will build an unsigned transaction instead of signing and broadcasting. Bring the result to your Signer-mode wallet to sign.',
     'send.watcherHardware':
-        'Source address is paired to {device} on this wallet, but watcher mode does not sign here. Pair the same {device} on your Signer-mode wallet to sign the transaction this step produces.',
+        "Source address is paired to {device} on this wallet, but watcher mode doesn't sign here. Pair the same {device} on your Signer-mode wallet to sign the transaction this step produces.",
     'send.walletUnlocked': 'Wallet unlocked. No password needed.',
     'send.useMax': 'Use Max',
     'send.fromAddress': 'From address',
@@ -124,7 +124,7 @@ export const en = {
     'send.source.choose': 'Choose source address',
     'send.source.hint': 'Only what this address holds can be sent.',
     'send.source.noAddress': 'No address on this chain. Use Receive to generate one first.',
-    'send.destination.placeholder': 'Enter or paste an address or name...',
+    'send.destination.placeholder': 'Enter or paste an address or name…',
     'send.paste.checkLabel': 'Check pasted recipient',
     'send.paste.checkHint': 'Compare the first and last 6 characters.',
     'send.saveRecipient.open': 'Save recipient',
@@ -153,11 +153,11 @@ export const en = {
     'send.gated.ready':
         'This token has gated content. The unlock key will be securely attached to this send so the recipient can open it. Gated tokens can only be sent to addresses that have made at least one transaction.',
     'send.gated.partial':
-        'This token has {total} gated content packs and this wallet holds keys for only {available} of them. The recipient will NOT be able to open the missing pack(s): {missing}… You can still send, or recover the missing keys first (unlock the content once from the address that received it).',
+        "This token has {total} gated content packs and this wallet holds keys for only {available} of them. The recipient won't be able to open the missing pack(s): {missing}… You can still send, or recover the missing keys first (unlock the content once from the address that received it).",
     'send.gated.blocked':
         'This token has gated content, and this wallet holds none of its unlock keys. Sending without the key attached would be rejected by the network, and the recipient could never open the content.',
     'send.gated.softwareSigner':
-        "Key recovery needs a software signer (the scan decrypts messages with the address's private key, which this signer cannot do). If this wallet published the content, the key is already stored and this notice will not appear; otherwise recover the key from a software wallet holding this address.",
+        "Key recovery needs a software signer (the scan decrypts messages with the address's private key, which this signer can't do). If this wallet published the content, the key is already stored and this notice won't appear; otherwise recover the key from a software wallet holding this address.",
     'send.gated.passwordLabel': 'Wallet password (scan for keys)',
     'send.gated.passwordHint':
         'Scans messages sent to your addresses for the unlock key and stores it in this wallet.',
@@ -171,7 +171,7 @@ export const en = {
         'Allows this unconfirmed transaction to be replaced with one that pays a higher fee, so it can confirm sooner or be cancelled.',
     'send.rbf.enabledHint':
         'Allows this transaction to be sped up or cancelled with a higher fee before confirmation.',
-    'send.rbf.unsupported': 'Fee bumping is not supported on {chain}.',
+    'send.rbf.unsupported': "Fee bumping isn't supported on {chain}.",
     'send.rbf.thisChain': 'this chain',
     'send.rbf.enabledLabel': 'Replace-by-fee enabled',
     // M2.4: the success card's in-wallet link to the merged History entry.
@@ -181,7 +181,7 @@ export const en = {
     // "awaiting network" row read as broken.
     'send.success.viewInHistory': 'View in history',
     'send.success.viewInHistoryHint':
-        'It is already in your history. It may still read "Broadcast, '
+        'It\'s already in your history. It may still read "Broadcast, '
         + 'awaiting network" for up to a minute before the network reports it.',
 
     // --- extension banner ----------------------------------------
@@ -214,7 +214,7 @@ export const en = {
     'scan.error.unknownXchainIntent':
         'xchain: URI was scanned but the intent was not recognized. Try a clearer code.',
     'scan.error.paymentRequest':
-        'This payment request does not match a supported chain or valid address.',
+        "This payment request doesn't match a supported chain or valid address.",
     'scan.error.wif':
         'A private key (WIF) was scanned. Use Import Wallet → Import WIF to add it deliberately.',
     'scan.error.mnemonic':
@@ -222,13 +222,13 @@ export const en = {
     'scan.error.xcwChunk':
         'Part {n} of {total} of a multi-frame QR code was scanned. Open the screen that asked for this code and capture every frame there.',
     'scan.error.transactionHex':
-        'A signed transaction was scanned. This screen cannot broadcast raw transaction hex. Use a compatible broadcasting tool.',
+        "A signed transaction was scanned. This screen can't broadcast raw transaction hex. Use a compatible broadcasting tool.",
     'scan.error.backupPointer':
         'A backup pointer was scanned. Start Import Wallet, choose Restore from backup, and scan it there.',
     'scan.error.pairingCode':
         'A wallet pairing code was scanned. Start Pair a watcher or signer, and scan it there.',
     'scan.error.unknown':
-        'This QR code contains text the wallet does not know how to use.',
+        "This QR code contains text the wallet doesn't know how to use.",
 
     // --- history --------------------------------------------------
     'history.title': 'History',
@@ -359,7 +359,7 @@ export const en = {
     'pending.detail.failedSectionLabel': 'Failed transaction',
     'pending.detail.failed': 'Failed before it reached the network',
     'pending.detail.failedHelp':
-        'This wallet could not complete the send. Nothing was broadcast, so no coins moved and no fee was paid. You can send again.',
+        "This wallet couldn't complete the send. Nothing was broadcast, so no coins moved and no fee was paid. You can send again.",
     'pending.detail.technicalDetails': 'Technical details',
     'pending.detail.dismissFailed': 'Remove from history',
     // A transaction this wallet proved into a block that no feed will ever
@@ -396,9 +396,9 @@ export const en = {
     'pending.detail.sendOutput': '{amount} {tick} to {destination}',
     'pending.detail.memo': 'Memo: {memo}',
     'pending.detail.undecodable':
-        'This wallet does not read {action} data. The fields below are shown exactly as the network carries them.',
+        "This wallet doesn't read {action} data. The fields below are shown exactly as the network carries them.",
     'pending.detail.localRecordNote':
-        'Taken from this wallet\'s own record of the send. The network has not reported the transaction data yet.',
+        "Taken from this wallet's own record of the send. The network hasn't reported the transaction data yet.",
     'pending.detail.noData': 'No action data has been reported for this transaction yet.',
 
     // M2.5: the amount annotation on a pending row. Verbs still in
