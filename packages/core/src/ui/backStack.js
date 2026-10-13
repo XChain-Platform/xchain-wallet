@@ -26,6 +26,7 @@ let syncScheduled = false;
 let listening = false;
 let routeHistoryManaged = false;
 let nativeListener = null;
+let nativeBackRootOwners = 0;
 
 const hasHistory = () => typeof window !== 'undefined' && Boolean(window.history?.pushState);
 
@@ -39,7 +40,7 @@ function onNativeBack() {
         top.run();
         return;
     }
-    capacitorApp()?.minimizeApp?.();
+    if (nativeBackRootOwners > 0) capacitorApp()?.minimizeApp?.();
 }
 
 /** iOS edge Back belongs only to in-app navigation and never exits the app. */
@@ -180,6 +181,17 @@ export function useBackHandler(onBack, disabled = false, kind = 'overlay') {
     }, [present, kind]);
 }
 
+/** Marks the mounted screen as the only native Back root that may background the app. */
+export function useNativeBackRoot() {
+    useEffect(() => {
+        ensureNativeListener();
+        nativeBackRootOwners += 1;
+        return () => {
+            nativeBackRootOwners = Math.max(0, nativeBackRootOwners - 1);
+        };
+    }, []);
+}
+
 /** Let the shell's route snapshots own browser Back while keeping overlay
  * handlers on the sentinel stack. */
 export function setRouteHistoryManaged(managed) {
@@ -203,6 +215,7 @@ export function resetBackStackForTests() {
     }
     listening = false;
     routeHistoryManaged = false;
+    nativeBackRootOwners = 0;
     const listener = nativeListener;
     nativeListener = null;
     Promise.resolve(listener).then((handle) => handle?.remove?.());
