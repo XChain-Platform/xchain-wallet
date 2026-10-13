@@ -176,6 +176,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const submitInFlightRef = useRef(false);
 
     const { settings } = useSettings();
     const confirmAction = useConfirmAction();
@@ -252,10 +253,12 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
     });
 
     async function openConfirmModal() {
-        const from = buildFrom();
-        if (!giveChainId || !from) return;
-        setSubmitError(null);
+        if (submitInFlightRef.current) return;
+        submitInFlightRef.current = true;
         try {
+            const from = buildFrom();
+            if (!giveChainId || !from) return;
+            setSubmitError(null);
             const res = await confirmAction.confirm({
                 chainId: giveChainId,
                 source: from.address,
@@ -305,6 +308,8 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                 mandatory: nativeFee.mandatory,
                 fallback: humanizeError(err, 'order').message,
             }));
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 
@@ -312,7 +317,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
         event.preventDefault();
         if (!guardBeforeSign()) return;
         setFormError(null);
-        if (singleEncode) { openConfirmModal(); return; }
+        if (singleEncode) { void openConfirmModal(); return; }
         setStage('review');
     }
 
@@ -320,9 +325,10 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
+        if (stage === 'submitting' || submitInFlightRef.current) return;
         if (!isWatcherMode && !isHwSource && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && isHwSource && hwStatus !== 'available') return;
+        submitInFlightRef.current = true;
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -346,7 +352,34 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
             }));
             setStage('review');
             if (!isWatcherMode && !isHwSource) { passwordRef.current?.focus(); passwordRef.current?.select(); }
+        } finally {
+            submitInFlightRef.current = false;
         }
+    }
+
+    function clearGiveAsset() {
+        setGiveTick('');
+        setGiveAmount('');
+        setGiveOwnership(false);
+    }
+
+    function clearGetAsset() {
+        setGetTick('');
+        setGetAmount('');
+        setGetOwnership(false);
+    }
+
+    function handleGiveChainChange(nextChainId) {
+        if (nextChainId === giveChainId) return;
+        setGiveChainId(nextChainId);
+        clearGiveAsset();
+    }
+
+    function handleGetChainChange(nextChainId) {
+        if (nextChainId === getChainId) return;
+        setGetChainId(nextChainId);
+        resetGetAddress();
+        clearGetAsset();
     }
 
     function handleBuildAnother() { setResult(null); setSubmitError(null); setStage('form'); }
@@ -540,7 +573,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                     <ChainPicker
                         label="Give chain"
                         value={giveChainId || ''}
-                        onChange={setGiveChainId}
+                        onChange={handleGiveChainChange}
                         chainIds={chainIds}
                         chainRegistry={chainRegistry}
                     />
@@ -560,13 +593,24 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                     <Input
                         label="Give token"
                         value={giveTick}
-                        onChange={(e) => setGiveTick(e.target.value.toUpperCase())}
+                        onChange={(e) => {
+                            const nextTick = e.target.value.toUpperCase();
+                            if (nextTick !== giveTick) setGiveAmount('');
+                            setGiveTick(nextTick);
+                        }}
                         autoComplete="off"
                         autoCorrect="off"
                         spellCheck={false}
                     />
                     <label className={styles.checkRow}>
-                        <input type="checkbox" checked={giveOwnership} onChange={(e) => setGiveOwnership(e.target.checked)} />
+                        <input
+                            type="checkbox"
+                            checked={giveOwnership}
+                            onChange={(e) => {
+                                if (e.target.checked !== giveOwnership) setGiveAmount('');
+                                setGiveOwnership(e.target.checked);
+                            }}
+                        />
                         {' '}Give this token&apos;s ownership (not a balance)
                     </label>
                     {!giveOwnership ? (
@@ -592,7 +636,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                     <ChainPicker
                         label="Get chain"
                         value={getChainId || ''}
-                        onChange={(cid) => { setGetChainId(cid); resetGetAddress(); }}
+                        onChange={handleGetChainChange}
                         chainIds={chainIds}
                         chainRegistry={chainRegistry}
                     />
@@ -609,13 +653,24 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                     <Input
                         label="Get token"
                         value={getTick}
-                        onChange={(e) => setGetTick(e.target.value.toUpperCase())}
+                        onChange={(e) => {
+                            const nextTick = e.target.value.toUpperCase();
+                            if (nextTick !== getTick) setGetAmount('');
+                            setGetTick(nextTick);
+                        }}
                         autoComplete="off"
                         autoCorrect="off"
                         spellCheck={false}
                     />
                     <label className={styles.checkRow}>
-                        <input type="checkbox" checked={getOwnership} onChange={(e) => setGetOwnership(e.target.checked)} />
+                        <input
+                            type="checkbox"
+                            checked={getOwnership}
+                            onChange={(e) => {
+                                if (e.target.checked !== getOwnership) setGetAmount('');
+                                setGetOwnership(e.target.checked);
+                            }}
+                        />
                         {' '}Require the matcher to give that token&apos;s ownership
                     </label>
                     {!getOwnership ? (

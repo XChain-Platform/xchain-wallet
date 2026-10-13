@@ -186,6 +186,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const submitInFlightRef = useRef(false);
 
     const { settings } = useSettings();
     const confirmAction = useConfirmAction();
@@ -295,10 +296,12 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
     });
 
     async function openConfirmModal() {
-        const from = buildFrom();
-        if (!chainId || !from) return;
-        setSubmitError(null);
+        if (submitInFlightRef.current) return;
+        submitInFlightRef.current = true;
         try {
+            const from = buildFrom();
+            if (!chainId || !from) return;
+            setSubmitError(null);
             const res = await confirmAction.confirm({
                 chainId,
                 source: from.address,
@@ -351,6 +354,8 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 mandatory: nativeFee.mandatory,
                 fallback: humanizeError(err, 'order').message,
             }));
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 
@@ -358,7 +363,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         event.preventDefault();
         if (!guardBeforeSign()) return;
         setFormError(null);
-        if (singleEncode) { openConfirmModal(); return; }
+        if (singleEncode) { void openConfirmModal(); return; }
         setStage('review');
     }
 
@@ -366,9 +371,10 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
+        if (stage === 'submitting' || submitInFlightRef.current) return;
         if (!isWatcherMode && !isHwSource && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && isHwSource && hwStatus !== 'available') return;
+        submitInFlightRef.current = true;
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -393,7 +399,40 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
             }));
             setStage('review');
             if (!isWatcherMode && !isHwSource) { passwordRef.current?.focus(); passwordRef.current?.select(); }
+        } finally {
+            submitInFlightRef.current = false;
         }
+    }
+
+    function clearGiveAsset() {
+        setGiveTick('');
+        setGiveAmount('');
+        setGiveOwnership(false);
+    }
+
+    function clearGetAsset() {
+        setGetTick('');
+        setGetAmount('');
+        setGetOwnership(false);
+    }
+
+    function handleChainChange(nextChainId) {
+        if (nextChainId === chainId) return;
+        setChainId(nextChainId);
+        clearGiveAsset();
+        clearGetAsset();
+    }
+
+    function handleGiveTypeChange(nextType) {
+        if (nextType === giveType) return;
+        setGiveType(nextType);
+        clearGiveAsset();
+    }
+
+    function handleGetTypeChange(nextType) {
+        if (nextType === getType) return;
+        setGetType(nextType);
+        clearGetAsset();
     }
 
     function handleBuildAnother() { setResult(null); setSubmitError(null); setStage('form'); }
@@ -605,7 +644,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                   */}
                 <NetworkField
                     value={chainId}
-                    onChange={setChainId}
+                    onChange={handleChainChange}
                     chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])}
                     chainRegistry={chainRegistry}
                 />
@@ -630,13 +669,19 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 <SideEditor
                     heading="You give"
                     type={giveType}
-                    onType={setGiveType}
+                    onType={handleGiveTypeChange}
                     tick={giveTick}
-                    onTick={setGiveTick}
+                    onTick={(nextTick) => {
+                        if (nextTick !== giveTick) setGiveAmount('');
+                        setGiveTick(nextTick);
+                    }}
                     amount={giveAmount}
                     onAmount={setGiveAmount}
                     ownership={giveOwnership}
-                    onOwnership={setGiveOwnership}
+                    onOwnership={(nextOwnership) => {
+                        if (nextOwnership !== giveOwnership) setGiveAmount('');
+                        setGiveOwnership(nextOwnership);
+                    }}
                     coinTicker={coinTicker}
                     styles={styles}
                     showHeading={false}
@@ -647,13 +692,19 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 <SideEditor
                     heading="You get"
                     type={getType}
-                    onType={setGetType}
+                    onType={handleGetTypeChange}
                     tick={getTick}
-                    onTick={setGetTick}
+                    onTick={(nextTick) => {
+                        if (nextTick !== getTick) setGetAmount('');
+                        setGetTick(nextTick);
+                    }}
                     amount={getAmount}
                     onAmount={setGetAmount}
                     ownership={getOwnership}
-                    onOwnership={setGetOwnership}
+                    onOwnership={(nextOwnership) => {
+                        if (nextOwnership !== getOwnership) setGetAmount('');
+                        setGetOwnership(nextOwnership);
+                    }}
                     coinTicker={coinTicker}
                     styles={styles}
                     showHeading={false}
