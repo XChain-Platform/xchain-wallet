@@ -231,17 +231,15 @@ describe('OracleRecord (P8)', () => {
 
 describe('BetFeedDetail reaches the oracle record (the prop that had no caller)', () => {
 
-    it('turns the oracle address into a link that hands back chain + address', async () => {
+    it('turns the oracle address into an action button that hands back chain + address', async () => {
         const { messaging } = harness();
         const seen = [];
         const utils = await mount(BetFeedDetail, messaging, {
             walletId: 'w', chainId: CHAIN, feedIndex: '2308',
             onOpenOracle: (c, a) => seen.push([c, a]),
         });
-        const link = Array.from(utils.container.querySelectorAll('a'))
-            .find((a) => (a.textContent || '').includes(ORACLE));
-        expect(link, 'the market page shows no link to the oracle').toBeTruthy();
-        await domAct(async () => { fireEvent.click(link); await drain(); });
+        const button = utils.getByRole('button', { name: ORACLE });
+        await domAct(async () => { fireEvent.click(button); await drain(); });
         expect(seen).toEqual([[CHAIN, ORACLE]]);
     });
 
@@ -252,5 +250,6 @@ describe('BetFeedDetail reaches the oracle record (the prop that had no caller)'
         });
         expect(text(utils)).toMatch(new RegExp(ORACLE));
         expect(utils.container.querySelector(`a[href="#"]`)).toBeNull();
+        expect(utils.queryByRole('button', { name: ORACLE })).toBeNull();
     });
 });

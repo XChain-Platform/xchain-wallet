@@ -159,7 +159,7 @@ describe('WalletDetails passphrase row reads passphraseStored', () => {
         fireEvent.click(within(dialog).getByRole('button', { name: 'Exit demo & wipe' }));
 
         const hidden = { hidden: true };
-        expect(utils.getByRole('button', { name: 'Back', ...hidden }).disabled).toBe(true);
+        expect(utils.getByRole('button', { name: 'Back to previous screen', ...hidden }).disabled).toBe(true);
         expect(utils.getByRole('button', { name: /Rename wallet/, ...hidden }).disabled).toBe(true);
         expect(within(dialog).getByRole('button', { name: 'Exit demo & wipe' }).disabled).toBe(true);
 

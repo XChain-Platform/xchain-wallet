@@ -25,9 +25,8 @@
 //   - `subscribeFiatRates(fn)` notifies UI code when the cache
 //     changes (used by the `useFiatRate` hook).
 //
-// The returned shape `{ rate, source, fiatCurrency, fetchedAt }` is
-// unchanged from the placeholder era; only `source` values moved from
-// 'static-placeholder' to 'oracle' / 'coingecko'.
+// The core returned shape remains `{ rate, source, fiatCurrency, fetchedAt }`;
+// token market rates can also carry their published 24-hour change.
 
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { defaultRegistry } from '../registry/index.js';
@@ -65,6 +64,7 @@ const COINGECKO_ID_BY_COIN = {
  * @property {string} fiatCurrency   ISO-style currency code (USD, EUR, …)
  * @property {'oracle' | 'coingecko' | 'market'} source
  * @property {string} fetchedAt      ISO timestamp of when the rate was obtained
+ * @property {number | null} [change24hPct] signed 24-hour change when the source provides it
  */
 
 // Each entry holds a frozen public FiatRate object plus its ms
@@ -482,10 +482,23 @@ function marketPriceOf(row, tick, quote) {
     return NaN;
 }
 
+function marketChange24hOf(row, tick, quote) {
+    const t1 = normalizeTick(row?.tick1);
+    const t2 = normalizeTick(row?.tick2);
+    const raw = t1 === tick && t2 === quote
+        ? (row?.tick1_24hr_change ?? row?.change_24h ?? row?.change24h)
+        : t2 === tick && t1 === quote
+            ? (row?.tick2_24hr_change ?? row?.change_24h ?? row?.change24h)
+            : null;
+    if (raw === null || raw === undefined || String(raw).trim() === '') return null;
+    const value = Number(String(raw).replace('%', '').trim());
+    return Number.isFinite(value) ? value : null;
+}
+
 /**
  * Secondary source: the token's last DEX fill price against the native
- * coin. Returns coin units per 1 token, or null when the market has no
- * usable price. Throws on transport errors (caller gives up).
+ * coin. Returns the coin price and optional 24-hour change, or null when
+ * the market has no usable price. Throws on transport errors (caller gives up).
  */
 async function fetchMarketPriceInCoin(fetchImpl, chainCoin, tick, nativeTicker, nowMs) {
     const base = explorerUrlForCoin(chainCoin);
@@ -504,7 +517,7 @@ async function fetchMarketPriceInCoin(fetchImpl, chainCoin, tick, nativeTicker, 
         // still the only freshness signal this endpoint gives us.
         const tsMs = Number(row.last_updated) * 1000;
         if (Number.isFinite(tsMs) && tsMs > 0 && nowMs - tsMs > MARKET_STALE_MS) continue;
-        return price;
+        return { price, change24hPct: marketChange24hOf(row, tick, nativeTicker) };
     }
     return null;
 }
@@ -593,7 +606,7 @@ async function refreshTokenFiatRateUncached({
         tokenRateCache.set(key, { rate: hit?.rate ?? null, fetchedAtMs: nowMs });
         return { updated: false };
     };
-    const put = (rate, source) => {
+    const put = (rate, source, change24hPct = null) => {
         tokenRateCache.set(key, {
             rate: Object.freeze({
                 rate,
@@ -602,6 +615,7 @@ async function refreshTokenFiatRateUncached({
                 fiatCurrency,
                 source,
                 fetchedAt: new Date(nowMs).toISOString(),
+                change24hPct,
             }),
             fetchedAtMs: nowMs,
         });
@@ -625,9 +639,11 @@ async function refreshTokenFiatRateUncached({
     const coinRate = getFiatRate({ chainCoin, fiatCurrency });
     if (!coinRate) return miss();
     try {
-        const inCoin = await fetchMarketPriceInCoin(fetchImpl, chainCoin, t, n, nowMs);
-        const fiat = inCoin == null ? null : inCoin * coinRate.rate;
-        if (fiat != null && Number.isFinite(fiat) && fiat > 0) return put(fiat, 'market');
+        const market = await fetchMarketPriceInCoin(fetchImpl, chainCoin, t, n, nowMs);
+        const fiat = market == null ? null : market.price * coinRate.rate;
+        if (fiat != null && Number.isFinite(fiat) && fiat > 0) {
+            return put(fiat, 'market', market.change24hPct);
+        }
     } catch { /* keep whatever the cache already holds */ }
     return miss();
 }

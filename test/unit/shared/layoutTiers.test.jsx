@@ -37,6 +37,9 @@ describe('layout tiers', () => {
             expect(tierForWidth(320)).toBe('compact');
             expect(tierForWidth(360)).toBe('compact');
             expect(tierForWidth(390)).toBe('compact');   // iPhone portrait
+            expect(tierForWidth(507)).toBe('compact');   // iPad split view
+            expect(tierForWidth(600)).toBe('compact');   // carded form, bottom navigation
+            expect(tierForWidth(694)).toBe('rail');      // iPad split view
             expect(tierForWidth(768)).toBe('rail');      // tablet portrait
             expect(tierForWidth(1024)).toBe('full');     // tablet landscape
             expect(tierForWidth(1440)).toBe('full');     // desktop
@@ -104,6 +107,21 @@ describe('layout tiers', () => {
             expect(container.firstChild.getAttribute('data-xc-tier')).toBe('rail');
             expect(screen.getByTestId('sidebar-nav')).toBeInTheDocument();
             expect(screen.queryByTestId('bottom-bar')).toBeNull();
+        });
+
+        it('switches split-view navigation on the shared 640px boundary', () => {
+            for (const [width, expectedTier, bottomBarVisible] of [
+                [507, 'compact', true],
+                [600, 'compact', true],
+                [640, 'rail', false],
+                [694, 'rail', false],
+            ]) {
+                const view = renderAt(width);
+                expect(view.container.firstChild.getAttribute('data-xc-tier')).toBe(expectedTier);
+                expect(screen.queryByTestId('bottom-bar') !== null).toBe(bottomBarVisible);
+                expect(screen.queryByTestId('sidebar-nav') !== null).toBe(!bottomBarVisible);
+                cleanup();
+            }
         });
 
         it('gives a desktop window the sidebar and no bottom bar', () => {

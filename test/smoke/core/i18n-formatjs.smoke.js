@@ -44,7 +44,7 @@ assert.match(
     'i18n/index.js imports IntlMessageFormat',
 );
 
-const { format, t } = await import(
+const { format, registerLocale, setLocale, t } = await import(
     join(root, 'packages/core/src/i18n/index.js')
 );
 
@@ -137,7 +137,12 @@ assert.strictEqual(
     format('{k, select, mainnet {Live} other {Other}}', { k: 'mainnet' }, 'en'),
     'Live',
 );
-assert.strictEqual(t('home.addressCount', { count: 7 }), '7 addresses');
+registerLocale('formatjs-smoke', {
+    'test.addressCount': '{count, plural, one {# address} other {# addresses}}',
+});
+await setLocale('formatjs-smoke');
+assert.strictEqual(t('test.addressCount', { count: 7 }), '7 addresses');
+await setLocale('en');
 
 // ─── 4. Every ICU-bearing en key renders with its OWN args ────────
 

@@ -129,17 +129,24 @@ describe('TokenPicker asset visibility and filtering', () => {
         await screen.findByText(LONG_NAME);
 
         fireEvent.change(search, { target: { value: 'wrp123' } });
+        expect(screen.getByRole('button', { name: /^Select Bitcoin\b/ })).toBeInTheDocument();
+        await waitFor(() => {
+            expect(screen.queryByRole('button', { name: /^Select Bitcoin\b/ })).toBeNull();
+        });
         expect(screen.getByText(LONG_NAME)).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: /^Select Bitcoin\b/ })).toBeNull();
 
         fireEvent.change(search, { target: { value: 'wrap cleanly' } });
-        expect(screen.getByText(LONG_NAME)).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: /^Select Bitcoin\b/ })).toBeNull();
+        await waitFor(() => expect(screen.getByText(LONG_NAME)).toBeInTheDocument());
 
         fireEvent.change(search, { target: { value: 'missing asset' } });
-        expect(screen.getByText('No matching balances')).toBeInTheDocument();
+        expect(await screen.findByText('No matching balances')).toBeInTheDocument();
         expect(screen.getByText('No balances match "missing asset".'))
             .toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Clear token search' }));
+        expect(search).toHaveValue('');
+        expect(screen.queryByRole('button', { name: 'Clear token search' })).toBeNull();
+        expect(screen.getByRole('button', { name: /^Select Bitcoin\b/ })).toBeInTheDocument();
     });
 
     it('keeps long names on one line and ellipsizes them', () => {
@@ -177,9 +184,9 @@ describe('TokenPicker asset visibility and filtering', () => {
         await screen.findByText(LONG_NAME);
         fireEvent.change(search, { target: { value: 'missing asset' } });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Reset filters' }));
         expect(search).toHaveValue('');
-        expect(screen.getByText(LONG_NAME)).toBeInTheDocument();
+        expect(await screen.findByText(LONG_NAME)).toBeInTheDocument();
     });
 
     it('retries balance and platform-search failures', async () => {
@@ -219,10 +226,17 @@ describe('TokenPicker keyboard and return behavior', () => {
         const onBack = vi.fn();
         mount({ onSelect, onBack, backLabel: 'Back to send' });
         const row = await screen.findByRole('button', { name: new RegExp('^Select ' + LONG_NAME) });
+        const search = screen.getByRole('searchbox', { name: 'Search coins or tokens' });
 
-        row.focus();
+        fireEvent.change(search, { target: { value: 'wrp123' } });
+        await waitFor(() => {
+            expect(screen.queryByRole('button', { name: /^Select Bitcoin\b/ })).toBeNull();
+        });
+        search.focus();
+        fireEvent.keyDown(search, { key: 'ArrowDown' });
         expect(document.activeElement).toBe(row);
-        await act(async () => row.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 })));
+        search.focus();
+        await act(async () => fireEvent.keyDown(search, { key: 'Enter' }));
         expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({
             chainId: 'bitcoin-mainnet',
             tick: 'WRP123',
