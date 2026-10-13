@@ -377,6 +377,9 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         }
         return out;
     }, [isDemoActive, onSwap, runNetworkAction]);
+    const quickActionCount = (isDemoActive ? 0 : 2)
+        + (onExchange ? 1 : 0)
+        + (homeMoreActions.length > 0 ? 1 : 0);
     // Cluster H FOLLOWUP 7: when "Back up now" lands the user in
     // Settings, this captures which subpage to deep-link into so the
     // user doesn't land on the Settings root + have to re-find Backup.
@@ -1040,7 +1043,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 </p>
             ) : null}
             <div
-                className={styles.quickActions}
+                className={`${styles.quickActions} ${quickActionCount === 1 ? styles.quickActionsSingle : ''}`}
                 role="group"
                 aria-label="Quick actions"
                 aria-describedby={quickActionsReason ? 'home-quick-actions-reason' : undefined}
@@ -1123,7 +1126,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         </div>
     ), [
         homeMoreActions, homeMoreOpen, isDemoActive, networkActionsAvailable, onExchange,
-        onReceive, onSend, quickActionsReason, runNetworkAction,
+        onReceive, onSend, quickActionCount, quickActionsReason, runNetworkAction,
     ]);
 
     const accountList = Array.isArray(accounts) ? [...accounts].sort((a, b) => a.index - b.index) : [];

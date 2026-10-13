@@ -80,6 +80,14 @@
     margin-top: calc(var(--xc-space-2) - var(--xc-space-3));
 }
 
+/* Demo mode exposes one read-only action. Keep that single card at the
+   canonical quick-action measure instead of stretching it like a list row. */
+@media (min-width: 48rem) {
+    .quickActionsSingle {
+        grid-template-columns: minmax(76px, 10rem);
+    }
+}
+
 .quickActionsReason {
     margin: calc(var(--xc-space-2) - var(--xc-space-3)) 0 var(--xc-space-2);
     color: var(--xc-text-muted);
