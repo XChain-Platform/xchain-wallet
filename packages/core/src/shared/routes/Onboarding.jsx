@@ -389,7 +389,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
     if (!licenseSatisfied) {
         return (
             <Screen variant={variant} header={null}>
-                <FormPage label="License agreement" fill>
+                <FormPage label="License agreement" fill fullWidth>
                     <div className={styles.licenseGate}>
                         <div className={styles.licenseHero}>
                             <img

@@ -128,4 +128,16 @@
         border-radius: 0;
         box-shadow: none;
     }
+
+    /* Full width: a reading page (license terms) uses the whole content
+       area instead of the 560px card, so long text needs less scrolling. */
+    .form.fullWidth {
+        max-width: none;
+        margin: 0;
+        padding: 0;
+        background: transparent;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+    }
 }

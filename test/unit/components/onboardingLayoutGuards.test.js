@@ -77,7 +77,7 @@ describe('onboarding and Home layout guards', () => {
         expect(onboardingCss).not.toMatch(/\.heroFull\s*\{[^}]*(?:max-width|margin):/s);
         expect(onboardingCss).not.toMatch(/\.licenseGate\s*\{[^}]*max-width:/s);
         expect(carouselCss).not.toMatch(/\.stack\s*\{[^}]*padding:/s);
-        expect(onboardingSource).toContain('<FormPage label="License agreement" fill>');
+        expect(onboardingSource).toContain('<FormPage label="License agreement" fill fullWidth>');
         // The terms panel fills the free height; it never caps itself at a fraction of the screen.
         expect(onboardingCss).not.toMatch(/\.licenseScroll\s*\{[^}]*max-height:/s);
         expect(onboardingCss).toMatch(/\.licenseScroll\s*\{[^}]*flex:\s*1 1 auto/s);

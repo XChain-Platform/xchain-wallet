@@ -200,9 +200,7 @@
     background: var(--xc-bg-muted);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-md);
-    margin: 0 auto;
     width: 100%;
-    max-width: 560px;
     color: var(--xc-text);
     font-size: var(--xc-text-sm);
     line-height: 1.45;
@@ -242,7 +240,6 @@
     gap: var(--xc-space-2);
     margin: 0;
     width: 100%;
-    max-width: 560px;
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
     line-height: 1.4;
