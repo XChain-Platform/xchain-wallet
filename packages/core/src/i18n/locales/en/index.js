@@ -45,6 +45,7 @@ export const en = {
     'common.loading': 'Loading…',
     'common.password': 'Password',
     'common.confirmPassword': 'Confirm password',
+    'common.contactName': 'Contact name',
 
     // --- branding -------------------------------------------------
     'brand.productName': 'XChain Wallet',
@@ -178,7 +179,6 @@ export const en = {
     'send.paste.checkLabel': 'Check pasted recipient',
     'send.paste.checkHint': 'Compare the first and last 6 characters.',
     'send.saveRecipient.open': 'Save recipient',
-    'send.saveRecipient.nameLabel': 'Contact name',
     'send.saveRecipient.save': 'Save contact',
     'send.saveRecipient.saving': 'Saving…',
     'send.saveRecipient.saved': 'Recipient saved to contacts.',
@@ -346,7 +346,6 @@ export const en = {
         'Peer chain not bundled in this wallet; open the block explorer for {ticker} to view {ticker} #{index}.',
     'history.detail.openNewWindow': 'Open in new window',
     'history.contact.saveAs': 'Save {address} as',
-    'history.contact.name': 'Contact name',
     'history.contact.save': 'Save',
     'history.copy.clipboard': 'Copy to clipboard',
     'history.copy.copied': 'Copied',
@@ -407,7 +406,6 @@ export const en = {
     'pending.row.dropped': 'no longer seen by network',
     'pending.row.replaced': 'replaced',
     'pending.row.confirmed': 'confirmed',
-    'pending.row.generic': 'pending',
     // The wallet gave up before the network took the send. Its own record is
     // the only trace, so the row says so plainly rather than "pending".
     'pending.row.failed': 'failed, never sent',

@@ -89,6 +89,25 @@ describe('translations', () => {
         expect(t('home.addressCount', { count: 2 })).toBe('2 addresses');
     });
 
+    it('keeps duplicate English text only when translation context differs', () => {
+        const keysByText = Object.entries(en).reduce((groups, [key, text]) => {
+            const keys = groups.get(text) ?? [];
+            keys.push(key);
+            groups.set(text, keys);
+            return groups;
+        }, new Map());
+        const duplicateKeyGroups = [...keysByText.values()]
+            .filter((keys) => keys.length > 1)
+            .map((keys) => keys.sort())
+            .sort((a, b) => a[0].localeCompare(b[0]));
+
+        expect(duplicateKeyGroups).toEqual([
+            ['create.title', 'onboarding.create'],
+            ['home.receive', 'uri.intent.receive'],
+            ['home.send', 'send.title', 'uri.intent.send'],
+        ]);
+    });
+
     it('finds table-driven translation keys', () => {
         const source = `
             import { t } from '../../i18n/index.js';
