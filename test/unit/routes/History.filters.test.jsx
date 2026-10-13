@@ -87,8 +87,8 @@ function chooseOption(triggerName, optionName) {
 beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(FIXED_NOW);
-    globalThis.localStorage?.removeItem('xc:chainFilter:history');
-    globalThis.localStorage?.removeItem('xc:historyGroupingMode');
+    globalThis.localStorage?.removeItem('xc:chainFilter:history:w1');
+    globalThis.localStorage?.removeItem('xc:historyGroupingMode:w1');
 });
 
 afterEach(() => {
@@ -202,7 +202,7 @@ describe('History filters', () => {
         chooseOption(/^All chains$/, 'Dogecoin');
 
         expect(await screen.findByText('No matches for the current filters')).toBeInTheDocument();
-        expect(globalThis.localStorage?.getItem('xc:chainFilter:history')).toContain(DOGE);
+        expect(globalThis.localStorage?.getItem('xc:chainFilter:history:w1')).toContain(DOGE);
 
         fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
         await waitFor(() => expect(rowKeys(view)).toEqual([`${LTC}:20:${LTC_ADDRESS}`]));
@@ -210,13 +210,13 @@ describe('History filters', () => {
         expect(screen.getByRole('button', { name: 'No special filters' })).toBeInTheDocument();
         expect(screen.getByLabelText('From date')).toHaveValue('');
         expect(screen.getByLabelText('To date')).toHaveValue('');
-        expect(globalThis.localStorage?.getItem('xc:chainFilter:history')).toBeNull();
+        expect(globalThis.localStorage?.getItem('xc:chainFilter:history:w1')).toBeNull();
 
         fireEvent.click(await screen.findByRole('button', { name: 'Undo' }));
         expect(await screen.findByText('No matches for the current filters')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Dogecoin' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Cross-chain only' })).toBeInTheDocument();
-        expect(globalThis.localStorage?.getItem('xc:chainFilter:history')).toContain(DOGE);
+        expect(globalThis.localStorage?.getItem('xc:chainFilter:history:w1')).toContain(DOGE);
 
         fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
         await waitFor(() => expect(rowKeys(view)).toHaveLength(1));
