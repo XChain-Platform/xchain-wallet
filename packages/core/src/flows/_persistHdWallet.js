@@ -20,6 +20,7 @@ import {
     deriveMasterKeyAsync,
     encryptWalletSeed,
     encryptWalletPassphrase,
+    makeFreshKdfParams,
     COUNTERWALLET_DEFAULT_ADDRESS_TYPE,
 } from '../crypto/index.js';
 import { createWallet as createWalletRecord } from '../schemas/wallet.js';
@@ -75,8 +76,17 @@ export async function persistHdWallet({
     if (suppliedMasterKey !== undefined && kdfParams === undefined) {
         throw new Error('persistHdWallet: a supplied masterKey needs the kdfParams it was derived with');
     }
-    // 1. Pick KDF params; shells/tests override to skip calibration.
-    const effectiveKdfParams = kdfParams ?? await calibrateKdfParamsAsync();
+    // 1. Pick KDF params; shells/tests override to skip calibration. The timed
+    // probe only tunes above the supported floor, so a probe failure uses a
+    // freshly salted set of the existing minimum parameters.
+    let effectiveKdfParams = kdfParams;
+    if (effectiveKdfParams === undefined) {
+        try {
+            effectiveKdfParams = await calibrateKdfParamsAsync();
+        } catch {
+            effectiveKdfParams = makeFreshKdfParams();
+        }
+    }
     // Derive once (or copy the caller's key for these same params) and hand
     // it to the encrypt (step 2) and the unlock (step 5); each copies it, and
     // this flow zeroes its own.
