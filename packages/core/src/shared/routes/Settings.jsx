@@ -383,7 +383,14 @@ export function Settings({
                     backLabel="Back to settings"
                     title={section.title}
                     trailing={section.id === 'backup' && onOpenBackupInTab ? (
-                        <Button variant="ghost" size="sm" onClick={onOpenBackupInTab}>Open in tab</Button>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            icon={<Icon.ExternalLinkIcon />}
+                            onClick={onOpenBackupInTab}
+                            aria-label="Open in tab"
+                            title="Open in tab"
+                        />
                     ) : null}
                 />
             );

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef, useState } from 'react';
-import { Button, FormPage, Icon, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, FormPage, Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { LICENSE_NAME, LICENSE_FILE, LICENSE_VERSION } from '../../buildInfo.js';
 import { crypto as cryptoLib, flows as flowsLib } from '@xchain-wallet/core';
@@ -17,7 +17,6 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { demoOwnsVaultPassword, exitDemoWallet } from '../utils/demoGraduation.js';
 import { OnboardingCarousel } from './OnboardingCarousel.jsx';
 import styles from './Onboarding.module.css';
-import pickerStyles from './WalletPicker.module.css';
 
 const LICENSE_STORAGE_KEY = 'xc:licenseAcceptedAt';
 const LICENSE_VERSION_KEY = 'xc:licenseAcceptedVersion';
@@ -340,21 +339,13 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
         }
     }
 
-    const header = onBack ? (
-        <div className={pickerStyles.header}>
-            <button
-                type="button"
-                onClick={onBack}
-                className={pickerStyles.iconBtn}
-                aria-label="Back to wallets"
-                title="Back to wallets"
-            >
-                <Icon.BackIcon />
-            </button>
-            <span />
-            <span />
-        </div>
-    ) : null;
+    const header = (
+        <PageHeader
+            onBack={onBack}
+            backLabel="Back to wallets"
+            title={mustGraduate ? 'Leave the demo' : 'Wallet setup'}
+        />
+    );
 
     // First-launch + version-bump gate. The Add-Wallet shortcut (when
     // `onBack` is supplied) skips the gate ONLY when the user has
@@ -428,9 +419,9 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                             alt={branding.PRODUCT_NAME}
                             className={isFull ? styles.logoFull : styles.logoPopup}
                         />
-                        <h1 className={isFull ? styles.nameFull : styles.namePopup}>
+                        <h2 className={isFull ? styles.nameFull : styles.namePopup}>
                             Leave the demo first
-                        </h1>
+                        </h2>
                     </div>
                     <div className={styles.demoGraduateNotice}>
                         <p>
@@ -521,9 +512,9 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                         alt={branding.PRODUCT_NAME}
                         className={isFull ? styles.logoFull : styles.logoPopup}
                     />
-                    <h1 className={isFull ? styles.nameFull : styles.namePopup}>
+                    <h2 className={isFull ? styles.nameFull : styles.namePopup}>
                         {branding.PRODUCT_NAME}
-                    </h1>
+                    </h2>
                     <p className={isFull ? styles.taglineFull : styles.taglinePopup}>
                         {branding.TAGLINE}
                     </p>

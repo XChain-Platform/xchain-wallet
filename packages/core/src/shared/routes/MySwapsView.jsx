@@ -29,6 +29,7 @@ import {
     ChainBadge,
     EmptyState,
     FormPage,
+    Icon,
     Input,
     ListPage,
     PageHeader,
@@ -265,7 +266,16 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
         <PageHeader
             onBack={onBack}
             title="My swaps"
-            trailing={onCreateSwap ? <Button variant="secondary" size="sm" onClick={onCreateSwap}>New swap</Button> : undefined}
+            trailing={onCreateSwap ? (
+                <Button
+                    variant="secondary"
+                    size="sm"
+                    icon={<Icon.PlusIcon />}
+                    onClick={onCreateSwap}
+                    aria-label="New swap"
+                    title="New swap"
+                />
+            ) : undefined}
         />
     );
     const wrap = (children) => (

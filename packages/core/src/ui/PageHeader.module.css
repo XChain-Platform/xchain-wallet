@@ -71,6 +71,11 @@
     font-weight: var(--xc-type-page-title-weight);
     color: var(--xc-text);
     text-align: center;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+    overflow: hidden;
     overflow-wrap: anywhere;
     white-space: normal;
     min-width: 0;
@@ -92,6 +97,7 @@
    whose item buttons also live inside this slot (AddressList's + menu);
    those are full-width rows, not 38px circles. */
 .trailing button:not([role="menuitem"]) {
+    --xc-icon-size: var(--xc-icon-md);
     appearance: none;
     width: var(--xc-page-header-side);
     height: var(--xc-page-header-side);

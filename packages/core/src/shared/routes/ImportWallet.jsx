@@ -19,6 +19,7 @@ import {
     Textarea,
     Icon,
     ListPage,
+    PageHeader,
     QrScanner,
     StatusMessage,
     InfoTip,
@@ -55,7 +56,6 @@ import {
     restorePasswordRequiredMessage,
 } from '../../flows/restorePasswordCopy.js';
 import styles from './ImportWallet.module.css';
-import pickerStyles from './WalletPicker.module.css';
 import { t } from '../../i18n/index.js';
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -231,7 +231,7 @@ export function ImportWallet({
 
     useEffect(() => {
         headingRef.current?.focus();
-    }, [lane]);
+    }, [lane, adsNotice]);
 
     useEffect(() => {
         mountedRef.current = true;
@@ -666,7 +666,6 @@ export function ImportWallet({
     }
 
     const headClass = isFull ? styles.headFull : styles.headPopup;
-    const titleClass = isFull ? styles.titleFull : styles.titlePopup;
     const subtitleClass = isFull ? styles.subtitleFull : styles.subtitlePopup;
     const actionsClass = isFull ? styles.actionsFull : styles.actionsPopup;
     const backupSourceMessage = backupDrop.isDragOver
@@ -846,6 +845,16 @@ export function ImportWallet({
         </Button>
     );
 
+    const pageTitle = adsNotice
+        ? t('adsNotice.title')
+        : isFreeWallet
+            ? (isFull ? t('importWallet.freeWallet.fullTitle') : t('importWallet.freeWallet.title'))
+            : lane === 'backup'
+                ? (isFull ? t('importWallet.backup.fullTitle') : t('importWallet.backup.title'))
+                : lane === 'wif'
+                    ? (isFull ? t('importWallet.wif.fullTitle') : t('importWallet.wif.title'))
+                    : (isFull ? t('importWallet.existing.fullTitle') : t('importWallet.title'));
+
     const form = (
         <FormPage
             label={t('importWallet.title')}
@@ -857,16 +866,7 @@ export function ImportWallet({
             status={formStatus}
             actions={formActions}
         >
-            <header className={headClass}>
-                <h1 ref={headingRef} tabIndex={-1} className={titleClass}>
-                    {isFreeWallet
-                        ? (isFull ? t('importWallet.freeWallet.fullTitle') : t('importWallet.freeWallet.title'))
-                        : lane === 'backup'
-                            ? (isFull ? t('importWallet.backup.fullTitle') : t('importWallet.backup.title'))
-                            : lane === 'wif'
-                                ? (isFull ? t('importWallet.wif.fullTitle') : t('importWallet.wif.title'))
-                            : (isFull ? t('importWallet.existing.fullTitle') : t('importWallet.title'))}
-                </h1>
+            <div className={headClass}>
                 <p className={subtitleClass}>
                     {isFreeWallet
                         ? (isFull
@@ -889,7 +889,7 @@ export function ImportWallet({
                                 ? t('importWallet.phrase.fullSubtitle')
                                 : t('importWallet.phrase.subtitle'))}
                 </p>
-            </header>
+            </div>
             {laneSwitcher}
             {lane === 'backup' ? (
                 <>
@@ -1306,29 +1306,24 @@ export function ImportWallet({
     );
 
     const screenHeader = (
-        <div className={pickerStyles.header}>
-            <Button
-                type="button"
-                onClick={handleBack}
-                className={pickerStyles.iconBtn}
-                aria-label={t('importWallet.backToSetup')}
-                title={t('importWallet.backToSetup')}
-                disabled={busy}
-            >
-                <Icon.BackIcon />
-            </Button>
-            <span />
-            {onOpenInTab ? (
+        <PageHeader
+            onBack={handleBack}
+            backLabel={t('importWallet.backToSetup')}
+            backDisabled={busy}
+            title={pageTitle}
+            titleRef={headingRef}
+            trailing={onOpenInTab && !adsNotice ? (
                 <Button
                     variant="ghost"
                     size="sm"
+                    icon={<Icon.ExternalLinkIcon />}
                     onClick={() => onOpenInTab({ lane })}
                     disabled={busy}
-                >
-                    {t('importWallet.openInTab')}
-                </Button>
-            ) : <span />}
-        </div>
+                    aria-label={t('importWallet.openInTab')}
+                    title={t('importWallet.openInTab')}
+                />
+            ) : null}
+        />
     );
 
     const continueAfterNotice = () => {
@@ -1374,7 +1369,6 @@ export function ImportWallet({
                     onContinue={continueAfterNotice}
                     isFull={isFull}
                     headClass={headClass}
-                    titleClass={titleClass}
                     subtitleClass={subtitleClass}
                     actionsClass={actionsClass}
                     busy={continuing}
@@ -1383,7 +1377,7 @@ export function ImportWallet({
             </>
         );
         return (
-            <Screen variant={variant}>
+            <Screen variant={variant} header={screenHeader}>
                 <ListPage>{noticeBody}</ListPage>
             </Screen>
         );

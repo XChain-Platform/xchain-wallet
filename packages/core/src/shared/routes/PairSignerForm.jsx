@@ -241,7 +241,14 @@ export function PairSignerForm({
             backDisabled={stage === 'saving'}
             title="Pair hardware signer"
             trailing={onOpenInTab && (stage === 'vendor' || stage === 'error') ? (
-                <Button variant="ghost" size="sm" onClick={onOpenInTab}>Open in tab</Button>
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={<Icon.ExternalLinkIcon />}
+                    onClick={onOpenInTab}
+                    aria-label="Open in tab"
+                    title="Open in tab"
+                />
             ) : null}
         />
     );
