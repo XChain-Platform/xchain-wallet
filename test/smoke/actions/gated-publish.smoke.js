@@ -80,7 +80,10 @@ for (const [label, ...p] of [
 const form = read('packages', 'core', 'src', 'shared', 'routes', 'GatedPublishForm.jsx');
 assert.match(form, /listGatedKeys\(\{ walletId, chainId, gateTicker: tick \}\)/, 'pack picker lists vault packs');
 assert.match(form, /existingKeyHash: packChoice/, 'pack reuse threads existingKeyHash');
-assert.match(form, /published on-chain forever/, 'irreversibility acknowledgment copy');
+// User-facing copy lives in the English locale; the form renders it through t().
+const { en } = await import(join(wsRoot, 'packages', 'core', 'src', 'i18n', 'locales', 'en', 'index.js'));
+assert.match(form, /t\('gatedPublish\.ackForever'\)/, 'acknowledgment renders through t()');
+assert.match(en['gatedPublish.ackForever'], /published on-chain forever/, 'irreversibility acknowledgment copy');
 assert.match(form, /ackForever/, 'publish blocked until acknowledged');
 assert.match(form, /buildGatedPublishPsbtRequest\(base\)/, 'watcher branch uses the encode-only path');
 assert.match(form, /useActionConfirmFlow\(\{ messaging, walletId \}\)/, 'full wallets use the shared confirm flow');
@@ -88,7 +91,8 @@ assert.match(form, /composeGatedPublishForConfirm\(base\)/, 'confirm compose pre
 assert.match(form, /prebuiltActionData: composed\.gatedPublish\.actionData/, 'approve signs the prepared action bytes');
 assert.match(form, /<ActionConfirmScreen/, 'form swaps to the shared confirm page');
 assert.match(form, /ownerMissing/, 'blocks when the wallet lacks the owner address');
-assert.match(form, /Pack key hash/, 'done screen surfaces KEY_HASH');
+assert.match(form, /t\('gatedPublish\.packKeyHash'\)/, 'done screen labels KEY_HASH through t()');
+assert.match(en['gatedPublish.packKeyHash'], /Pack key hash/, 'done screen surfaces KEY_HASH');
 assert.match(form, /QueuedResultPanel/, 'signed but unbroadcast publishes use the queued-result state');
 
 // ---- ManageToken entry + 3-shell wiring ---------------------------------
