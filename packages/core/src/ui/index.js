@@ -49,7 +49,5 @@ export * as Icon from './icons/index.jsx';
 export {
     useReducedMotion,
     resolveReducedMotion,
-    subscribeReducedMotion,
-    osPrefersReducedMotion,
     REDUCED_MOTION_ATTR,
 } from './reducedMotion.js';

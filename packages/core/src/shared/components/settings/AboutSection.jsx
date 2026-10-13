@@ -71,7 +71,7 @@ const PARAGRAPHS = {
 const PARAGRAPH = { margin: 0 };
 const PROBLEM_REPORT_URL = 'https://github.com/XChain-Platform/xchain-wallet/issues/new';
 
-export function buildProblemReportUrl(diagnostics) {
+function buildProblemReportUrl(diagnostics) {
     const url = new URL(PROBLEM_REPORT_URL);
     url.searchParams.set('body', `### Redacted diagnostics\n\n\`\`\`json\n${diagnostics}\n\`\`\``);
     return url.toString();
