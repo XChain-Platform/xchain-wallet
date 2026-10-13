@@ -128,6 +128,7 @@ describe('shared/amountFormat formatWithThousands', () => {
         ['fr-FR', '1234.56', '1\u202f234,56'],
         ['de-DE', '1234.', '1.234,'],
         ['fr-FR', '.5', ',5'],
+        ['hi-IN', '1234567.89', '12,34,567.89'],
     ])('formats canonical %s input without changing precision', (locale, input, expected) => {
         expect(formatWithThousands(input, locale)).toBe(expected);
     });
@@ -146,6 +147,9 @@ describe('shared/amountFormat normalizeLocalizedDecimal', () => {
         ['de-DE', '1,25', '1.25'],
         ['en-US', '1,234', '1234'],
         ['en-US', '1,25', '1.25'],
+        ['hi-IN', '12,34,567.89', '1234567.89'],
+        ['de-DE', '12,34,567.89', '1234567.89'],
+        ['hi-IN', '1\u202f234\u202f567,89', '1234567.89'],
     ])('normalizes %s input %s to the wire decimal', (locale, input, expected) => {
         expect(normalizeLocalizedDecimal(input, locale)).toBe(expected);
     });
@@ -158,6 +162,7 @@ describe('shared/amountFormat normalizeLocalizedDecimal', () => {
         ['en-US', '12 34.56'],
         ['en-US', '1\n234'],
         ['de-DE', '12 EUR'],
+        ['hi-IN', '1,234,56.78'],
     ])('rejects malformed %s input %s instead of guessing', (locale, input) => {
         expect(normalizeLocalizedDecimal(input, locale)).toBeNull();
     });
