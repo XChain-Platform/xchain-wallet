@@ -526,6 +526,45 @@ describe('the signing methods answer their published success shapes', () => {
             expect(flowMocks.signPsbtFlow.mock.calls[0][0].walletId).toBe('wallet-1');
         });
 
+        it('signs an add-mode restored address with its account wallet when signerId names a wallet this vault lacks', async () => {
+            // An add-mode restore re-mints the wallet id but leaves each
+            // address's signerId on the source device's wallet id.
+            const vault = makeVault({ site: connectedSite() });
+            const [restored] = await vault.addresses.list();
+            vault.addresses.list = async () => [{ ...restored, source: 'hd', signerId: 'wallet-on-old-device' }];
+            const host = buildHost(vault);
+
+            const message = await host.handle({
+                type: 'bridge.signMessage',
+                request: { origin: ORIGIN, chainId: CHAIN, address: FROM, message: 'hello' },
+            });
+            const action = await host.handle({
+                type: 'bridge.signAction',
+                request: {
+                    origin: ORIGIN,
+                    chainId: CHAIN,
+                    action: 'SEND',
+                    params: { fromAddress: FROM, toAddress: 'bcrt1qto', asset: 'BTC', amount: '1' },
+                },
+            });
+            const psbt = await host.handle({
+                type: 'bridge.signPsbt',
+                request: {
+                    origin: ORIGIN,
+                    chainId: CHAIN,
+                    psbtHex: '70736274',
+                    signingPaths: [{ inputIndex: 0, address: FROM }],
+                },
+            });
+
+            expect(message.ok).toBe(true);
+            expect(action.ok).toBe(true);
+            expect(psbt.ok).toBe(true);
+            expect(flowMocks.signMessageFlow.mock.calls.at(-1)[0].walletId).toBe('wallet-1');
+            expect(flowMocks.sendToken.mock.calls.at(-1)[0].walletId).toBe('wallet-1');
+            expect(flowMocks.signPsbtFlow.mock.calls.at(-1)[0].walletId).toBe('wallet-1');
+        });
+
         it('refuses signing paths that span wallets', async () => {
             const vault = makeVault({ site: connectedSite({ accounts: [] }) });
             const originalAddresses = await vault.addresses.list();
