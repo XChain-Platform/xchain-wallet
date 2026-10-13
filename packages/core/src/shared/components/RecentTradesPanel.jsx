@@ -94,9 +94,9 @@ export function RecentTradesPanel({ chainId, tick1, tick2, demo = false, onOpenT
                         </tr>
                     </thead>
                     <tbody>
-                        {summaries.map(({ row, summary }) => {
+                        {summaries.map(({ row, summary }, index) => {
                             const sideColor = summary.side === 'buy' ? 'var(--xc-success)' : 'var(--xc-danger)';
-                            const key = String(row.action_index ?? `${summary.timeLabel}-${summary.price}-${summary.size}`);
+                            const key = `${String(row.action_index ?? row.tx_hash ?? 'trade')}-${index}`;
                             return (
                                 <tr key={key}>
                                     <td className={`${tableStyles.cell} ${tableStyles.numeric}`} data-label="Time" style={{ color: 'var(--xc-fg-muted)' }}>
