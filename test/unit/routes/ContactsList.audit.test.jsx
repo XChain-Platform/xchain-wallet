@@ -130,7 +130,7 @@ describe('ContactsList audited behavior', () => {
     it('stores an ambiguous valid address under the chain the user selects', async () => {
         const messaging = makeMessaging([]);
         mount(messaging);
-        await screen.findByText('No contacts yet.');
+        await screen.findByText('No contacts yet');
 
         fireEvent.click(screen.getByRole('button', { name: 'Add contact' }));
         fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Testnet friend' } });

@@ -144,7 +144,7 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
         return wrap(<StatusMessage variant="status">Loading list…</StatusMessage>);
     }
     if (data === null) {
-        return wrap(<EmptyState title="List not found." />);
+        return wrap(<EmptyState title="List not found" body="It may have been removed or not indexed yet." />);
     }
 
     return wrap(

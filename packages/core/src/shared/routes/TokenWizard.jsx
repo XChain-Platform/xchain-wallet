@@ -760,7 +760,7 @@ export function TokenWizard({ walletId, onBack }) {
                 ) : null}
                 actions={(
                     <Button type="submit" variant="primary" loading={actionConfirm.composing}>
-                        Continue to confirmation
+                        {isWatcherMode ? 'Create unsigned transaction' : 'Continue to confirmation'}
                     </Button>
                 )}
             >

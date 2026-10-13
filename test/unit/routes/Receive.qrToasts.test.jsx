@@ -118,7 +118,7 @@ describe('Receive QR copy and share toasts', () => {
                     color: { dark: '#0F172A', light: '#FFFFFF' },
                 }),
             ));
-            const address = await screen.findByRole('textbox', { name: ADDRESS.label });
+            const address = await screen.findByRole('textbox', { name: 'Copy payment request for receive address' });
             expect(address.readOnly).toBe(true);
             expect(address.style.userSelect).toBe('text');
         } finally {
