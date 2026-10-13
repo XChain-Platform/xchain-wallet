@@ -461,6 +461,7 @@ export function Locked({ onUnlocked }) {
                 value="xchain-wallet"
                 autoComplete="username"
                 readOnly
+                aria-label="Wallet username"
                 hidden
             />
             <Input

@@ -11,7 +11,7 @@
         + var(--xc-bottom-bar-h, 0px)
         + env(safe-area-inset-bottom, 0px)
     );
-    z-index: 9999;
+    z-index: var(--xc-z-toast);
     box-sizing: border-box;
     display: flex;
     align-items: center;

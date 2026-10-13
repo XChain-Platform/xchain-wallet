@@ -29,7 +29,12 @@
     letter-spacing: 0.04em;
 }
 
+/* Inline link-style button; the flex box lets it meet the 24px pointer
+   target floor without padding that would push the text out of line. */
 .dismiss {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--xc-tap-min);
     padding: 0;
     border: 0;
     background: none;

@@ -64,7 +64,7 @@ for (const [shell, path, ref] of SHELLS) {
     const shellSrc = read(path);
     const r = ref.replace('.', '\\.');
     assert.ok(
-        new RegExp(`${r} = new notificationsLib\\.DispenserEscrowWatcher\\(`).test(shellSrc),
+        new RegExp(`${r} = new (?:notificationsLib\\.)?DispenserEscrowWatcher\\(`).test(shellSrc),
         `${shell}: constructs the DispenserEscrowWatcher`,
     );
     assert.ok(new RegExp(`${r}\\.start\\(\\)`).test(shellSrc), `${shell}: starts it`);
