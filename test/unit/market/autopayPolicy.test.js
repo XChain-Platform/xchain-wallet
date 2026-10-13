@@ -123,6 +123,23 @@ describe('paidBase / remainingGiveBase', () => {
         expect(remainingGiveBase(consent)).toBe(0n);
         expect(remainingGiveBase({ ...consent, giveCoinAmount: 'zzz' })).toBe(null);
     });
+
+    it('fails closed when a persisted payment ledger is incomplete or malformed', () => {
+        const consent = scenario().consent;
+        expect(paidBase({ ...consent, payments: undefined })).toBe(null);
+        expect(paidBase({
+            ...consent,
+            payments: [{ orderMatchActionIndex: '1', txid: 't' }],
+        })).toBe(null);
+        expect(paidBase({
+            ...consent,
+            payments: [{ coinAmountBase: '500000', txid: 't' }],
+        })).toBe(null);
+        expect(remainingGiveBase({
+            ...consent,
+            payments: [{ orderMatchActionIndex: '1', coinAmountBase: 'not-an-amount' }],
+        })).toBe(null);
+    });
 });
 
 describe('orientMatch', () => {
@@ -327,6 +344,20 @@ describe('evaluateObligation - trust-anchor caps', () => {
             },
         }));
         expect(d).toEqual({ action: 'notify-manual', reason: 'exceeds-give-budget' });
+    });
+
+    it('never treats a malformed payment ledger as unused budget', () => {
+        const d = evaluateObligation(scenario({
+            consent: {
+                payments: [{
+                    orderMatchActionIndex: '1',
+                    coinAmountBase: '',
+                    txid: 't',
+                    at: new Date(0).toISOString(),
+                }],
+            },
+        }));
+        expect(d).toEqual({ action: 'notify-manual', reason: 'terms-unparseable' });
     });
 
     it('holds the caps in exact integer math past 2^53 (DOGE-scale)', () => {
