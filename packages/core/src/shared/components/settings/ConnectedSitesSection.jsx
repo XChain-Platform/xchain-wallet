@@ -22,7 +22,7 @@
 // origins with Unblock buttons, plus an inline form to manually
 // block an origin without it being connected first.
 //
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, EmptyState, FormErrorSummary } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
 import { useSettings } from '../../hooks/useSettings.js';
@@ -70,13 +70,17 @@ export function ConnectedSitesSection() {
     const [expanded, setExpanded] = useState(/** @type {Set<string>} */ (new Set()));
     const [manualBlock, setManualBlock] = useState('');
     const [pendingAction, setPendingAction] = useState(/** @type {string | null} */ (null));
+    const loadSequence = useRef(0);
+    const loadedFrom = useRef(null);
 
     const blocklistWired = typeof messaging?.listBlockedOrigins === 'function'
         && typeof messaging?.blockOrigin === 'function'
         && typeof messaging?.unblockOrigin === 'function';
 
-    const reload = async () => {
+    const reload = useCallback(async () => {
+        const sequence = ++loadSequence.current;
         if (typeof messaging?.listConnectedSites !== 'function') {
+            loadedFrom.current = messaging;
             setError('Connected sites are unavailable in this app.');
             setLoading(false);
             return;
@@ -87,17 +91,24 @@ export function ConnectedSitesSection() {
                 messaging.listConnectedSites(),
                 blocklistWired ? messaging.listBlockedOrigins() : Promise.resolve([]),
             ]);
+            if (sequence !== loadSequence.current) return;
+            loadedFrom.current = messaging;
             setSites(Array.isArray(siteList) ? siteList : []);
             setBlocked(Array.isArray(blockedList) ? blockedList : []);
             setError(null);
         } catch (err) {
+            if (sequence !== loadSequence.current) return;
+            loadedFrom.current = messaging;
             setError(err instanceof Error ? err.message : String(err));
         } finally {
-            setLoading(false);
+            if (sequence === loadSequence.current) setLoading(false);
         }
-    };
+    }, [blocklistWired, messaging]);
 
-    useEffect(() => { reload(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+    useEffect(() => {
+        reload();
+        return () => { loadSequence.current += 1; };
+    }, [reload]);
 
     const onDisconnect = async (id) => {
         if (pendingAction) return;
@@ -184,7 +195,7 @@ export function ConnectedSitesSection() {
         }
     };
 
-    if (loading) return <Status text="Loading…" />;
+    if (loading || loadedFrom.current !== messaging) return <Status text="Loading…" />;
     if (error) return <Status text={`Connected sites unavailable: ${error}`} tone="error" />;
 
     return (

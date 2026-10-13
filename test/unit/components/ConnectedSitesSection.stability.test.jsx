@@ -3,7 +3,7 @@
 
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
 import {
     SIGN_THROTTLE_DEFAULT_BURST,
@@ -106,6 +106,50 @@ describe('ConnectedSitesSection settings controls', () => {
         expect(screen.getByText('Ask every time')).toBeTruthy();
         expect(screen.getByText('Always allow').style.color).toBe('var(--xc-success, #2a8)');
         expect(screen.getByText('Never allow').style.color).toBe('var(--xc-danger-fg)');
+    });
+
+    it('ignores an obsolete permission load when the messaging client changes', async () => {
+        let resolveObsolete;
+        const obsoleteMessaging = {
+            ...messaging,
+            listConnectedSites: vi.fn(() => new Promise((resolve) => { resolveObsolete = resolve; })),
+            deleteConnectedSite: vi.fn(async () => {}),
+        };
+        messaging = obsoleteMessaging;
+        const view = render(<ConnectedSitesSection />);
+
+        const currentMessaging = {
+            ...messaging,
+            listConnectedSites: vi.fn(async () => [{
+                id: 'current-site',
+                origin: 'https://current.example',
+                appName: 'Current site',
+                permissions: { chains: ['bitcoin'], accounts: [], canSignMessage: false, canSignAction: {} },
+            }]),
+            deleteConnectedSite: vi.fn(async () => {}),
+        };
+        messaging = currentMessaging;
+        view.rerender(<ConnectedSitesSection />);
+
+        expect(await screen.findByText('Current site')).toBeTruthy();
+        await act(async () => {
+            resolveObsolete([{
+                id: 'obsolete-site',
+                origin: 'https://obsolete.example',
+                appName: 'Obsolete site',
+                permissions: { chains: ['litecoin'], accounts: [], canSignMessage: false, canSignAction: {} },
+            }]);
+            await Promise.resolve();
+        });
+
+        expect(screen.queryByText('Obsolete site')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Disconnect site' }));
+
+        await waitFor(() => expect(currentMessaging.deleteConnectedSite).toHaveBeenCalledWith({
+            id: 'current-site',
+        }));
+        expect(obsoleteMessaging.deleteConnectedSite).not.toHaveBeenCalled();
     });
 
     it('requires confirmation before disconnecting a site', async () => {
