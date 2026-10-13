@@ -77,6 +77,12 @@ class MainViewController: CAPBridgeViewController {
         // handler as the visible Back control instead.
         webView?.allowsBackForwardNavigationGestures = false
 
+        // Route bodies own vertical scrolling. Keep the document scroll view
+        // from rubber-banding far enough to expose WKWebView's native backing.
+        webView?.scrollView.bounces = false
+        webView?.scrollView.alwaysBounceVertical = false
+        webView?.scrollView.alwaysBounceHorizontal = false
+
         disableUnusedCapacitorPlugins()
         blockNativeHttpProxy()
     }
