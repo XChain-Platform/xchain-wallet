@@ -17,7 +17,7 @@
 }
 
 @keyframes slideIn {
-    from { transform: translateX(20px); opacity: 0.4; }
+    from { transform: translateX(var(--xc-space-5)); opacity: 0.4; }
     to   { transform: translateX(0); opacity: 1; }
 }
 
@@ -47,8 +47,8 @@
     background: transparent;
     border: none;
     color: var(--xc-text-muted);
-    width: 32px;
-    height: 32px;
+    width: var(--xc-control-h-sm);
+    height: var(--xc-control-h-sm);
     border-radius: 50%;
     cursor: pointer;
     display: inline-flex;
@@ -129,8 +129,8 @@
 
 .rowIcon {
     flex: 0 0 auto;
-    width: 24px;
-    height: 24px;
+    width: var(--xc-icon-xl);
+    height: var(--xc-icon-xl);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -146,8 +146,8 @@
 .rowChevron {
     flex: 0 0 auto;
     color: var(--xc-text-muted);
-    width: 16px;
-    height: 16px;
+    width: var(--xc-icon-sm);
+    height: var(--xc-icon-sm);
     display: inline-flex;
     align-items: center;
     justify-content: center;
