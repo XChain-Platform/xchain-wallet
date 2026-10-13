@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { memo, useEffect, useId, useMemo, useState } from 'react';
-import { Button, ChainBadge, Icon } from '@xchain-wallet/core/ui';
+import { Button, ChainBadge, Icon, Tabs } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import {
     BalanceList,
@@ -410,40 +410,14 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
             ) : null}
 
             <div className={styles.tabsRow}>
-                {/* Only the active tab is in the Tab order, so the arrow keys, Home and End move between tabs. */}
-                <div
-                    className={styles.tabs}
-                    role="tablist"
+                <Tabs
+                    id={tabsId}
+                    items={tabs}
+                    value={active}
+                    onChange={setActive}
+                    panelId={`${tabsId}-panel`}
                     aria-label="Wallet view"
-                    onKeyDown={(event) => {
-                        const index = tabs.findIndex((t) => t.id === active);
-                        const last = tabs.length - 1;
-                        const nextIndex = event.key === 'ArrowRight' ? (index + 1) % tabs.length
-                            : event.key === 'ArrowLeft' ? (index - 1 + tabs.length) % tabs.length
-                                : event.key === 'Home' ? 0
-                                    : event.key === 'End' ? last : -1;
-                        if (nextIndex < 0 || index < 0) return;
-                        event.preventDefault();
-                        setActive(tabs[nextIndex].id);
-                        document.getElementById(`${tabsId}-tab-${tabs[nextIndex].id}`)?.focus();
-                    }}
-                >
-                    {tabs.map((t) => (
-                        <button
-                            key={t.id}
-                            id={`${tabsId}-tab-${t.id}`}
-                            type="button"
-                            role="tab"
-                            aria-selected={active === t.id ? 'true' : 'false'}
-                            aria-controls={`${tabsId}-panel`}
-                            tabIndex={active === t.id ? 0 : -1}
-                            className={`${styles.tab} ${active === t.id ? styles.tabActive : ''}`}
-                            onClick={() => setActive(t.id)}
-                        >
-                            {t.label}
-                        </button>
-                    ))}
-                </div>
+                />
 
                 {showBalanceSort ? (
                     <label className={styles.sortControl}>
