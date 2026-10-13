@@ -8,11 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { readFileSync } from 'node:fs';
-import { basename, resolve } from 'node:path';
+import { basename } from 'node:path';
 import { parse } from '@babel/parser';
 import _traverse from '@babel/traverse';
 import { describe, expect, it } from 'vitest';
+
+import { cachedSource } from '../../helpers/sourceScan.js';
 
 const traverse = _traverse.default || _traverse;
 
@@ -48,7 +49,7 @@ function exportedBinding(binding, scopePath) {
 }
 
 function unusedBindings(relativePath) {
-    const source = readFileSync(resolve(process.cwd(), relativePath), 'utf8');
+    const source = cachedSource(relativePath);
     const ast = parse(source, { sourceType: 'module', plugins: ['jsx'] });
     const unused = [];
 
