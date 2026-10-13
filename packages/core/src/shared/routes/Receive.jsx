@@ -65,6 +65,14 @@ function nativeTickerFor(descriptor) {
     return NATIVE_TICKER_BY_COIN[descriptor.coin] || descriptor.coin.toUpperCase();
 }
 
+function requestTickFor(prefill) {
+    if (!prefill?.tick || !prefill?.chainId) return '';
+    const descriptor = chainRegistry.get(prefill.chainId);
+    const nativeTicker = nativeTickerFor(descriptor);
+    if (nativeTicker && prefill.tick.toUpperCase() === nativeTicker) return '';
+    return prefill.tick.toUpperCase();
+}
+
 function newestAddressOfType(addresses, addressType) {
     let newest = null;
     let newestIndex = -1;
@@ -121,7 +129,8 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     const [activeChainId, setActiveChainId] = useState(
         /** @type {string | null} */ (prefill?.chainId || null),
     );
-    const [address, setAddress] = useState(/** @type {any | null} */ (null));
+    const [loadedAddress, setAddress] = useState(/** @type {any | null} */ (null));
+    const [addressContextKey, setAddressContextKey] = useState('');
     const [addressType, setAddressType] = useState('');
     // Receive-address picker: the QR icon on the Address field opens the
     // wallet's own address list for the active chain; picking one becomes
@@ -129,8 +138,12 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     // newest-address effect and resets the pick, which is the right
     // default for a new chain.
     const [addressPickerOpen, setAddressPickerOpen] = useState(false);
-    const [labelDraft, setLabelDraft] = useState('');
-    const [labelSaving, setLabelSaving] = useState(false);
+    const [labelDraft, setLabelDraft] = useState(
+        /** @type {{ addressId: string | null, value: string }} */ ({ addressId: null, value: '' }),
+    );
+    const [labelSave, setLabelSave] = useState(
+        /** @type {{ request: number, addressId: string } | null} */ (null),
+    );
     const [labelError, setLabelError] = useState(/** @type {string | null} */ (null));
     const [qrPixelSize, setQrPixelSize] = useState(QR_FALLBACK_PIXEL_SIZE);
     const qrSurfaceRef = useRef(/** @type {HTMLDivElement | null} */ (null));
@@ -140,6 +153,22 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [generating, setGenerating] = useState(false);
     const [generateError, setGenerateError] = useState(/** @type {string | null} */ (null));
+    const generateRequestRef = useRef(0);
+    const generateBusyRef = useRef(false);
+    const labelRequestRef = useRef(0);
+    const verifyRequestRef = useRef(0);
+
+    const requestedChainId = prefill?.chainId || activeChainId;
+    const receiveContextKey = JSON.stringify([walletId, accountId || '', activeChainId || '', requestedChainId || '']);
+    const receiveContextRef = useRef(receiveContextKey);
+    receiveContextRef.current = receiveContextKey;
+    const address = addressContextKey === receiveContextKey ? loadedAddress : null;
+    const currentAddressIdRef = useRef(address?.id || null);
+    currentAddressIdRef.current = address?.id || null;
+    const labelDraftValue = labelDraft.addressId === address?.id
+        ? labelDraft.value
+        : address?.label || '';
+    const labelSaving = labelSave?.addressId === address?.id;
 
     // "the account holds no address anywhere" is a state, not an
     // error. It used to render as a red alert string and nothing else, so
@@ -180,6 +209,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         setChainsByWallet(null);
         setActiveChainId(prefill?.chainId || null);
         setAddress(null);
+        setAddressContextKey('');
         setAddressType('');
         setRenderedQr(null);
         setLoadError(null);
@@ -190,6 +220,21 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         setAddressPickerOpen(false);
         setAddAddressOpen(false);
     }, [walletId, accountId, prefill?.chainId]);
+
+    useEffect(() => {
+        generateRequestRef.current += 1;
+        generateBusyRef.current = false;
+        labelRequestRef.current += 1;
+        verifyRequestRef.current += 1;
+        setGenerating(false);
+        setLabelSave(null);
+    }, [receiveContextKey]);
+
+    useEffect(() => () => {
+        generateRequestRef.current += 1;
+        labelRequestRef.current += 1;
+        verifyRequestRef.current += 1;
+    }, []);
 
     useEffect(() => {
         let cancelled = false;
@@ -232,6 +277,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         if (!activeChainId) return undefined;
         let cancelled = false;
         setAddress(null);
+        setAddressContextKey('');
         setAddressType('');
         setLoadError(null);
         (async () => {
@@ -243,6 +289,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 );
                 if (!cancelled) {
                     setAddress(newest);
+                    setAddressContextKey(receiveContextKey);
                     const nextDescriptor = chainRegistry.get(activeChainId);
                     setAddressType(newest?.addressType || nextDescriptor?.defaultAddressType || '');
                 }
@@ -256,7 +303,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         // reloadKey: a generate lands a new newest-index address on the
         // chain already selected, which the chain-list effect alone would
         // not pick up.
-    }, [walletId, accountId, activeChainId, messaging, reloadKey]);
+    }, [walletId, accountId, activeChainId, messaging, reloadKey, receiveContextKey]);
 
     // §17.6: is the shown address backed by a hardware signer? Only those
     // need (and support) on-device confirmation. Reset the verify state
@@ -270,7 +317,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     }, [address?.id]);
 
     useEffect(() => {
-        setLabelDraft(address?.label || '');
+        setLabelDraft({ addressId: address?.id || null, value: address?.label || '' });
         setLabelError(null);
     }, [address?.id, address?.label]);
 
@@ -307,6 +354,14 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             setHwVerify({ status: 'error', message: 'This app cannot verify the address on your hardware wallet.' });
             return;
         }
+        const request = ++verifyRequestRef.current;
+        const contextKey = receiveContextKey;
+        const addressId = address.id;
+        const isCurrentRequest = () => (
+            verifyRequestRef.current === request
+            && receiveContextRef.current === contextKey
+            && currentAddressIdRef.current === addressId
+        );
         setHwVerify({ status: 'checking', message: '' });
         try {
             const res = await messaging.verifyReceiveAddress({
@@ -315,19 +370,21 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 addressId: address.id,
                 signerId: address.signerId,
             });
+            if (!isCurrentRequest()) return;
             if (res?.confirmed) {
                 setHwVerify({ status: 'confirmed', message: '' });
             } else {
                 setHwVerify({ status: 'mismatch', message: '' });
             }
         } catch (err) {
+            if (!isCurrentRequest()) return;
             if (err?.name === 'HardwareAddressMismatchError') {
                 setHwVerify({ status: 'mismatch', message: '' });
             } else {
                 setHwVerify({ status: 'error', message: err?.message || 'Could not verify the address. Try again.' });
             }
         }
-    }, [address, activeChainId, walletId, messaging]);
+    }, [address, activeChainId, walletId, messaging, receiveContextKey]);
 
     // Derive the multisig output address whenever chain changes, if
     // this wallet has a MultisigConfig. Failures are non-fatal; we
@@ -371,10 +428,10 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         const descriptor = chainRegistry.get(activeChainId ?? '');
         let cancelled = false;
         Promise.all(multisigs.map(async (m) => {
-            const uri = descriptor
-                ? uriLib.encodeBip21Uri({ scheme: descriptor.uriScheme, address: m.address })
-                : m.address;
             try {
+                const uri = descriptor
+                    ? uriLib.encodeBip21Uri({ scheme: descriptor.uriScheme, address: m.address })
+                    : m.address;
                 const dataUrl = await QRCode.toDataURL(uri, {
                     errorCorrectionLevel: 'M',
                     margin: 4,
@@ -411,13 +468,8 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     // so the QR encodes the requested token without manual entry.
     const [reqAmount, setReqAmount] = useState('');
     const [amountError, setAmountError] = useState(/** @type {string | null} */ (null));
-    const [reqTick] = useState(() => {
-        if (!prefill?.tick || !prefill?.chainId) return '';
-        const desc = chainRegistry.get(prefill.chainId);
-        const nativeTicker = nativeTickerFor(desc);
-        if (nativeTicker && prefill.tick.toUpperCase() === nativeTicker) return '';
-        return prefill.tick.toUpperCase();
-    });
+    const reqTick = requestTickFor(prefill);
+
     // Fiat-aware amount entry, mirrors Send. Canonical `reqAmount` stays
     // coin-scale (it's what the QR/URI encodes); when the user toggles
     // to fiat mode we edit `fiatAmount` and derive the coin value via
@@ -552,70 +604,92 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         setAddressType(nextType);
         setGenerateError(null);
         setAddress(newestAddressOfType(chainsByWallet?.[activeChainId] || [], nextType));
-    }, [chainsByWallet, activeChainId]);
+        setAddressContextKey(receiveContextKey);
+    }, [chainsByWallet, activeChainId, receiveContextKey]);
 
     const generateNewAddress = useCallback(async () => {
-        if (!activeChainId || !addressType || generating) return;
+        if (!activeChainId || !addressType || generateBusyRef.current) return;
         if (typeof messaging.generateReceiveAddress !== 'function') {
             setGenerateError('This app cannot create a new receive address.');
             return;
         }
+        const request = ++generateRequestRef.current;
+        const contextKey = receiveContextKey;
+        const chainId = activeChainId;
+        const requestedAddressType = addressType;
+        generateBusyRef.current = true;
         setGenerating(true);
         setGenerateError(null);
         try {
             const generated = await messaging.generateReceiveAddress({
                 walletId,
                 accountId,
-                chainId: activeChainId,
-                addressType,
+                chainId,
+                addressType: requestedAddressType,
             });
+            if (generateRequestRef.current !== request || receiveContextRef.current !== contextKey) return;
             setAddress(generated);
-            setAddressType(generated?.addressType || addressType);
+            setAddressContextKey(contextKey);
+            setAddressType(generated?.addressType || requestedAddressType);
             setChainsByWallet((current) => {
-                const chainAddresses = current?.[activeChainId] || [];
+                const chainAddresses = current?.[chainId] || [];
                 const withoutDuplicate = chainAddresses.filter((item) => item.id !== generated?.id);
                 return {
                     ...(current || {}),
-                    [activeChainId]: [...withoutDuplicate, generated],
+                    [chainId]: [...withoutDuplicate, generated],
                 };
             });
         } catch (err) {
+            if (generateRequestRef.current !== request || receiveContextRef.current !== contextKey) return;
             setGenerateError(err?.message || 'Could not create a new receive address. Try again.');
         } finally {
-            setGenerating(false);
+            if (generateRequestRef.current === request) {
+                generateBusyRef.current = false;
+                setGenerating(false);
+            }
         }
-    }, [activeChainId, addressType, generating, messaging, walletId, accountId]);
+    }, [activeChainId, addressType, messaging, walletId, accountId, receiveContextKey]);
 
     const saveAddressLabel = useCallback(async () => {
-        if (!address?.id || labelSaving || labelDraft.trim() === (address.label || '')) return;
+        if (!address?.id || labelSaving || labelDraftValue.trim() === (address.label || '')) return;
         if (typeof messaging.setAddressLabel !== 'function') {
             setLabelError('This app cannot save a label for this address.');
             return;
         }
-        const next = labelDraft.trim();
-        setLabelSaving(true);
+        const addressId = address.id;
+        const contextKey = receiveContextKey;
+        const next = labelDraftValue.trim();
+        const request = ++labelRequestRef.current;
+        setLabelSave({ request, addressId });
         setLabelError(null);
         try {
-            await messaging.setAddressLabel(address.id, next);
+            await messaging.setAddressLabel(addressId, next);
+            if (labelRequestRef.current !== request || receiveContextRef.current !== contextKey) return;
             setAddress((current) => (
-                current?.id === address.id ? { ...current, label: next } : current
+                current?.id === addressId ? { ...current, label: next } : current
             ));
             setChainsByWallet((current) => Object.fromEntries(
                 Object.entries(current || {}).map(([chainId, records]) => [
                     chainId,
                     Array.isArray(records)
-                        ? records.map((record) => record?.id === address.id
+                        ? records.map((record) => record?.id === addressId
                             ? { ...record, label: next }
                             : record)
                         : records,
                 ]),
             ));
         } catch {
-            setLabelError('Could not save the address label. Try again.');
+            if (
+                labelRequestRef.current === request
+                && receiveContextRef.current === contextKey
+                && currentAddressIdRef.current === addressId
+            ) {
+                setLabelError('Could not save the address label. Try again.');
+            }
         } finally {
-            setLabelSaving(false);
+            if (labelRequestRef.current === request) setLabelSave(null);
         }
-    }, [address?.id, address?.label, labelDraft, labelSaving, messaging]);
+    }, [address?.id, labelDraftValue, labelSaving, messaging, receiveContextKey]);
 
     const onLabelKeyDown = useCallback((event) => {
         if (event.key === 'Enter') {
@@ -623,10 +697,10 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             saveAddressLabel();
         } else if (event.key === 'Escape') {
             event.preventDefault();
-            setLabelDraft(address?.label || '');
+            setLabelDraft({ addressId: address?.id || null, value: address?.label || '' });
             setLabelError(null);
         }
-    }, [address?.label, saveAddressLabel]);
+    }, [address?.id, address?.label, saveAddressLabel]);
 
     // QR image actions. Copy writes the rendered PNG when the clipboard can
     // accept images. Share always offers the payment request, and attaches
@@ -783,6 +857,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 chainId={activeChainId}
                 onPick={(a) => {
                     setAddress(a);
+                    setAddressContextKey(receiveContextKey);
                     setAddressType(a?.addressType || addressType);
                     setAddressPickerOpen(false);
                 }}
@@ -899,8 +974,11 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 <div className={styles.labelEditor}>
                     <Input
                         label="Address label"
-                        value={labelDraft}
-                        onChange={(event) => setLabelDraft(event.target.value)}
+                        value={labelDraftValue}
+                        onChange={(event) => setLabelDraft({
+                            addressId: address.id,
+                            value: event.target.value,
+                        })}
                         onKeyDown={onLabelKeyDown}
                         placeholder="Add a label"
                         autoComplete="off"
@@ -910,7 +988,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                         type="button"
                         variant="secondary"
                         loading={labelSaving}
-                        disabled={labelSaving || labelDraft.trim() === (address.label || '')}
+                        disabled={labelSaving || labelDraftValue.trim() === (address.label || '')}
                         onClick={saveAddressLabel}
                     >
                         Save label
