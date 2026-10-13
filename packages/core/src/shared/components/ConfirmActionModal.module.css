@@ -8,6 +8,8 @@
 .page {
     display: flex;
     flex-direction: column;
+    min-width: 0;
+    padding-bottom: var(--xc-bottom-bar-h, 0px);
 }
 
 /* --- intent header row (under the "Confirm" page header) --- */
@@ -25,6 +27,7 @@
 .actionLabel {
     font-size: var(--xc-text-md);
     font-weight: 700;
+    min-width: 0;
     overflow-wrap: anywhere;
 }
 
@@ -85,6 +88,7 @@
     font-weight: 700;
     color: var(--xc-text);
     font-variant-numeric: tabular-nums;
+    text-align: end;
     overflow-wrap: anywhere;
 }
 
@@ -199,4 +203,10 @@
 .footer > * {
     flex: 1 1 0;
     min-width: 0;
+}
+
+@media (max-width: 399px) {
+    .footer {
+        flex-direction: column;
+    }
 }
