@@ -81,6 +81,7 @@ describe('Back closes overlays first', () => {
         expect(more.getAttribute('aria-expanded')).toBe('true');
         await pressBack();
         expect(more.getAttribute('aria-expanded')).toBe('false');
+        expect(more).toHaveFocus();
         expect(onBack).not.toHaveBeenCalled();
         await pressBack();
         expect(onBack).toHaveBeenCalledTimes(1);

@@ -35,7 +35,7 @@ export const DEFAULT_ACTIVE_CHAIN_IDS = registry.DEFAULT_ONBOARDING_CHAIN_IDS;
  * @property {import('../storage/ChromeMetaBackend.js').ChromeMetaBackend} metaBackend
  * @property {import('@xchain-wallet/core').registry.ChainRegistry} chainRegistry
  * @property {import('@xchain-wallet/core').sdk.SDKRegistry} sdkRegistry
- * @property {import('@xchain-wallet/core').signers.SignerPool} [signerPool]
+ * @property {import('@xchain-wallet/core').signers.SignerPool} [signerPool]   filled by the create and fresh-restore lanes while their keys are in scope
  * @property {() => Promise<void> | void} [onUnlocked]
  * @property {(opts: { walletId: string, password: string, bip39Passphrase: string, chainIds: string[], sdkRegistry: any }) => string} [startLabelSyncRestore]
  */
@@ -60,6 +60,7 @@ export async function handleWalletCreateWithMnemonic(request, deps) {
     const kdfParams = cryptoLib.makeFreshKdfParams();
     const masterKey = cryptoLib.deriveMasterKey(password, kdfParams);
     let mnemonic;
+    let pooled = false;
     try {
         const vault = new storageLib.Vault({
             backend: deps.storageBackend,
@@ -84,6 +85,7 @@ export async function handleWalletCreateWithMnemonic(request, deps) {
             await vault.save();
             mnemonic = result.mnemonic;
             if (deps.signerPool) {
+                pooled = true;
                 await deps.signerPool.populate({
                     vault,
                     password,
@@ -102,6 +104,13 @@ export async function handleWalletCreateWithMnemonic(request, deps) {
         await deps.metaBackend.save({ kdfParams });
         await deps.sessionBackend.save(masterKey);
         await saveSigningSecret(deps.signingSecretBackend, password);
+    } catch (err) {
+        // A create that fails after pooling opens no session, so no unlocked
+        // signer may stay behind in the background's pool.
+        if (pooled) {
+            try { deps.signerPool.lockAll(); } catch { /* best-effort */ }
+        }
+        throw err;
     } finally {
         masterKey.fill(0);
     }
@@ -261,6 +270,10 @@ export async function handleWalletImportBackup(request, deps) {
 
     const kdfParams = cryptoLib.makeFreshKdfParams();
     const masterKey = cryptoLib.deriveMasterKey(password, kdfParams);
+    // This call's own copy of the key the restored wallet is now sealed under.
+    let deviceKey = null;
+    let deviceKdfParams = null;
+    let pooled = false;
     let result;
     try {
         const vault = new storageLib.Vault({
@@ -275,6 +288,13 @@ export async function handleWalletImportBackup(request, deps) {
                 walletPassword,
                 devicePassword: password,
                 mode: 'fresh',
+                // Core zeroes the lent buffer when this returns, so keep a copy;
+                // the outer finally zeroes it whether or not the restore succeeds.
+                onDeviceKey: (key, params) => {
+                    if (deviceKey) deviceKey.fill(0);
+                    deviceKey = key.slice();
+                    deviceKdfParams = params;
+                },
             };
             // A failed restore must leave NOTHING behind: the vault is only saved
             // and the session only opened once the merge has actually succeeded,
@@ -288,6 +308,22 @@ export async function handleWalletImportBackup(request, deps) {
                 })
                 : await flows.importBackupFile({ ...common, fileContent: req.fileContent });
             await vault.save();
+            // Pool the restored wallet with the re-key's key while the vault is
+            // open, so the host build need not re-derive it from the cached password.
+            // Best-effort, as at unlock: on failure the host build re-pools as before.
+            if (deps.signerPool && deps.chainRegistry && deps.sdkRegistry) {
+                try {
+                    pooled = true;
+                    await deps.signerPool.populate({
+                        vault,
+                        password,
+                        chainRegistry: deps.chainRegistry,
+                        sdkRegistry: deps.sdkRegistry,
+                        masterKey: deviceKey ?? masterKey,
+                        masterKeyKdfParams: deviceKey ? deviceKdfParams : kdfParams,
+                    });
+                } catch { /* best-effort, see above */ }
+            }
         } finally {
             // Vault kept its own copy of the key; close zeros that copy.
             vault.close();
@@ -296,8 +332,16 @@ export async function handleWalletImportBackup(request, deps) {
         await deps.metaBackend.save({ kdfParams });
         await deps.sessionBackend.save(masterKey);
         await saveSigningSecret(deps.signingSecretBackend, password);
+    } catch (err) {
+        // A restore that fails after pooling opens no session, so no unlocked
+        // signer may stay behind in the background's pool.
+        if (pooled) {
+            try { deps.signerPool.lockAll(); } catch { /* best-effort */ }
+        }
+        throw err;
     } finally {
         masterKey.fill(0);
+        if (deviceKey) deviceKey.fill(0);
     }
     if (typeof deps.onUnlocked === 'function') {
         await deps.onUnlocked();

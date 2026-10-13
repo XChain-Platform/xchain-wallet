@@ -215,7 +215,7 @@ assert.ok(/Step 2.{0,2}Collect signatures/.test(route),
     'route uses §22.3 "Step 2: Collect signatures" label for MuSig2 partial step');
 assert.ok(/Collect signatures/.test(route),
     'route uses single-step "Collect signatures" label for P2SH/P2WSH');
-assert.ok(/Export transaction QR|Scan cosigner reply/.test(route),
+assert.ok(/Export transaction QR|Export signing request|Export signed transaction|Scan cosigner reply|Import cosigner reply/.test(route),
     'route surfaces both export + paste-inbox controls');
 assert.ok(/buildRequestEnvelope|buildFinalizedEnvelope/.test(route),
     'route builds outbound multisig envelopes');

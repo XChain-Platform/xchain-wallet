@@ -20,6 +20,7 @@ import { isDemoWallet } from '../../flows/demoMode.js';
 import { synthesizeDemoNativePrices } from '../../flows/demoFixtures.js';
 import styles from './TotalBalanceHero.module.css';
 import { compareDecimalStrings } from '../utils/amountFormat.js';
+import { formatFiatAmount as formatFiatValue } from '../utils/fiatAmountFormat.js';
 
 /**
  * Hero block at the top of Home: total fiat value across every
@@ -298,6 +299,9 @@ function fiatValueOf(row) {
 // formatter "symbol" that is itself the code without affecting change lines.
 function formatFiatAmount(value, currency, locale, omitCodeSymbol = false) {
     if (value === null || value === undefined) return '-';
+    // Change lines use the shared localized formatter; only the main total needs
+    // the code-symbol suppression below.
+    if (!omitCodeSymbol) return formatFiatValue(value, currency, locale);
     const code = String(currency || 'USD').toUpperCase();
     try {
         let fmt;

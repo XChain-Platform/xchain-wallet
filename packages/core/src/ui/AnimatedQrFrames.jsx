@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { useReducedMotion } from './reducedMotion.js';
 
@@ -37,16 +37,25 @@ import { useReducedMotion } from './reducedMotion.js';
  */
 export function AnimatedQrFrames({ frames, fps = 3, size = 240, alt = 'Animated QR' }) {
     const [index, setIndex] = useState(0);
-    const [urls, setUrls] = useState(/** @type {Record<number, string>} */ ({}));
+    const [urls, setUrls] = useState(/** @type {Record<string, string>} */ ({}));
     // The OS media query AND the in-app Settings → Appearance
     // override, resolved in one place. The auto-advance below is a JS timer,
     // so no CSS rule can stop it on the user's behalf.
     const reducedMotion = useReducedMotion();
+    const frameCount = Array.isArray(frames) ? frames.length : 0;
+    const activeIndex = frameCount > 0 ? index % frameCount : 0;
+    const framesSignature = JSON.stringify(frames || []);
+
+    useLayoutEffect(() => {
+        setIndex(0);
+    }, [framesSignature]);
 
     useEffect(() => {
+        if (frameCount === 0) return undefined;
         let cancelled = false;
         async function renderFrame(i) {
-            if (urls[i]) return;
+            const cacheKey = JSON.stringify([size, frames[i]]);
+            if (urls[cacheKey]) return;
             try {
                 const dataUrl = await QRCode.toDataURL(frames[i], {
                     errorCorrectionLevel: 'M',
@@ -55,31 +64,32 @@ export function AnimatedQrFrames({ frames, fps = 3, size = 240, alt = 'Animated 
                     color: { dark: '#0F172A', light: '#FFFFFF' },
                 });
                 if (!cancelled) {
-                    setUrls((prev) => ({ ...prev, [i]: dataUrl }));
+                    setUrls((prev) => ({ ...prev, [cacheKey]: dataUrl }));
                 }
             } catch {
                 // Leave the slot empty; the prior frame stays visible.
             }
         }
-        renderFrame(index);
-        renderFrame((index + 1) % frames.length);
+        renderFrame(activeIndex);
+        renderFrame((activeIndex + 1) % frameCount);
         return () => { cancelled = true; };
-    }, [frames, index, size, urls]);
+    }, [activeIndex, frameCount, frames, size, urls]);
 
     useEffect(() => {
-        if (frames.length <= 1) return undefined;
+        if (frameCount <= 1) return undefined;
         if (reducedMotion) return undefined;
         const intervalMs = Math.max(50, Math.floor(1000 / fps));
         const id = setInterval(() => {
-            setIndex((i) => (i + 1) % frames.length);
+            setIndex((i) => (i + 1) % frameCount);
         }, intervalMs);
         return () => clearInterval(id);
-    }, [frames, fps, reducedMotion]);
+    }, [fps, frameCount, reducedMotion]);
 
-    if (!Array.isArray(frames) || frames.length === 0) return null;
+    if (frameCount === 0) return null;
 
-    const dataUrl = urls[index] || urls[0] || null;
-    const multiFrame = frames.length > 1;
+    const activeCacheKey = JSON.stringify([size, frames[activeIndex]]);
+    const dataUrl = urls[activeCacheKey] || null;
+    const multiFrame = frameCount > 1;
     const cadenceLabel = !multiFrame
         ? null
         : reducedMotion
@@ -89,7 +99,7 @@ export function AnimatedQrFrames({ frames, fps = 3, size = 240, alt = 'Animated 
     return (
         <div
             role="img"
-            aria-label={`${alt} (frame ${index + 1} of ${frames.length}${
+            aria-label={`${alt} (frame ${activeIndex + 1} of ${frameCount}${
                 reducedMotion && multiFrame ? '; advance manually' : ''
             })`}
             data-testid="animated-qr-frames"
@@ -107,6 +117,7 @@ export function AnimatedQrFrames({ frames, fps = 3, size = 240, alt = 'Animated 
                     alt=""
                     width={size}
                     height={size}
+                    // Stays white in every theme: a QR needs a light quiet zone to scan.
                     style={{ background: '#FFFFFF', borderRadius: 4 }}
                 />
             ) : (
@@ -114,13 +125,13 @@ export function AnimatedQrFrames({ frames, fps = 3, size = 240, alt = 'Animated 
                     style={{
                         width: size,
                         height: size,
-                        background: '#F1F5F9',
+                        background: 'var(--xc-bg-muted)',
                         borderRadius: 4,
                     }}
                 />
             )}
-            <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
-                Frame {index + 1} / {frames.length}
+            <span style={{ fontSize: '0.75rem', color: 'var(--xc-text-muted)' }}>
+                Frame {activeIndex + 1} / {frameCount}
                 {cadenceLabel ? ` · ${cadenceLabel}` : ''}
             </span>
             {reducedMotion && multiFrame ? (
@@ -128,7 +139,7 @@ export function AnimatedQrFrames({ frames, fps = 3, size = 240, alt = 'Animated 
                     <button
                         type="button"
                         aria-label="Previous frame"
-                        onClick={() => setIndex((i) => (i - 1 + frames.length) % frames.length)}
+                        onClick={() => setIndex((i) => (i - 1 + frameCount) % frameCount)}
                         style={{
                             padding: '0.25rem 0.75rem',
                             fontSize: '0.75rem',
@@ -143,7 +154,7 @@ export function AnimatedQrFrames({ frames, fps = 3, size = 240, alt = 'Animated 
                     <button
                         type="button"
                         aria-label="Next frame"
-                        onClick={() => setIndex((i) => (i + 1) % frames.length)}
+                        onClick={() => setIndex((i) => (i + 1) % frameCount)}
                         style={{
                             padding: '0.25rem 0.75rem',
                             fontSize: '0.75rem',

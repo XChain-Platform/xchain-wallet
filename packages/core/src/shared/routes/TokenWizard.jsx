@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FormPage, Input, ListPage, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -17,7 +17,9 @@ import {
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { useWalletMode } from '../hooks/useWalletMode.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
@@ -40,6 +42,9 @@ import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { listLabel } from '../utils/listLabel.js';
 import { compareDecimalStrings } from '../utils/amountFormat.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
+import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
+import { useFeeFiat } from '../hooks/useFeeFiat.js';
+import { useSettings } from '../hooks/useSettings.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -51,6 +56,11 @@ function isPositiveDecimal(value) {
     return /^\d+(?:\.\d+)?$/.test(text) && compareDecimalStrings(text, '0') === 1;
 }
 
+function hasAmountPrecision(value, decimals) {
+    const [, fraction = ''] = String(value || '').trim().split('.');
+    return fraction.length <= decimals;
+}
+
 function isValidIssueAddress(value, descriptor) {
     return !!descriptor?.coin && !!descriptor?.networkKind
         && isValidAddressForChain(String(value).trim(), descriptor.coin, descriptor.networkKind);
@@ -59,12 +69,12 @@ function isValidIssueAddress(value, descriptor) {
 /**
  * Token Creation Wizard (§40.1).
  *
- * Five-stage flow: template → chain → details → preview → sign.
+ * Four guided stages: template, network, details, and review. The shared
+ * confirmation page follows review and signs the host-composed transaction.
  *
  *   template:  pick one of six templates (§40.1), each with its own
- *              detail form. A seventh, "Community", was retired in
- *              it composed the same ISSUE as Utility and
- *              advertised dividends, which every token supports.
+ *              detail form. Utility also covers dividend use because
+ *              every token supports dividends.
  *   chain:     pick the chain to create the token on. Filtered to
  *              chains the wallet already has an address on (needs a
  *              fee-paying address). Defaults to the chain's active
@@ -72,11 +82,10 @@ function isValidIssueAddress(value, descriptor) {
  *   details:   template-specific fields. Custom exposes all ISSUE v0
  *              fields (ticker, supply, max-mint, decimals, description,
  *              lock flags, transfer-ownership).
- *   preview:   plain-English summary from `decoder.decodeAction` for
- *              the composed ISSUE params.
- *   sign:      TODO: `messaging.issueToken` lands in Step 5 (piece
- *              2c). Today the sign button surfaces the "not yet
- *              wired" error through the shared submit path.
+ *   review:    plain-English summary from `decoder.decodeAction`, including
+ *              the template, source, fee choice, and every ISSUE parameter.
+ *   confirm:   host composition, pre-flight, and signing through the shared
+ *              confirmation page.
  *
  * @param {object} props
  * @param {string} props.walletId
@@ -85,6 +94,8 @@ function isValidIssueAddress(value, descriptor) {
 export function TokenWizard({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
+    const { isWatcherMode } = useWalletMode();
+    const { settings } = useSettings();
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -97,7 +108,7 @@ export function TokenWizard({ walletId, onBack }) {
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
     const [stage, setStage] = useState(
-        /** @type {'template' | 'chain' | 'details' | 'preview' | 'sign' | 'done' | 'error'} */ ('template'),
+        /** @type {'template' | 'chain' | 'details' | 'preview' | 'done'} */ ('template'),
     );
     const [template, setTemplate] = useState(
         /** @type {null | 'meme' | 'utility' | 'collectible' | 'edition' | 'subtoken' | 'custom'} */ (null),
@@ -165,9 +176,7 @@ export function TokenWizard({ walletId, onBack }) {
 
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [password, setPassword] = useState('');
-    const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
-    const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
     // The active map and the settings read are best-effort: a host without
     // `getActiveAddresses` / `getSettings`, or one whose call fails, still
@@ -222,12 +231,6 @@ export function TokenWizard({ walletId, onBack }) {
         setFromAddressId(preferredSourceId(funding, activeByChain[chainId]));
     }, [chainId, addressesByChain, activeByChain, sourceChosenFor]);
 
-    useEffect(() => {
-        if (stage === 'preview') {
-            setTimeout(() => passwordRef.current?.focus(), 0);
-        }
-    }, [stage]);
-
     // PC-06: chain tip, for the callback block's future-block rail and
     // its date estimate. Only fetched once the advanced panel is open.
     useEffect(() => {
@@ -265,6 +268,16 @@ export function TokenWizard({ walletId, onBack }) {
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
+    const feeEstimate = useMemo(
+        () => estimateNativeSendFee({ chainId, chainRegistry, speed: 'normal' }),
+        [chainId],
+    );
+    const { formatNativeFee, formatProtocolFee } = useFeeFiat({
+        chainCoin: descriptor?.coin,
+        nativeTicker: coinTicker,
+        settings,
+    });
+    const feeFiat = feeEstimate ? formatNativeFee(feeEstimate.coinAmount) : null;
     const fromAddress = useMemo(() => {
         if (!chainId || !fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
@@ -272,9 +285,8 @@ export function TokenWizard({ walletId, onBack }) {
 
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
 
-    // (§5.6 slice 2): the wizard is software-only, so the
-    // slice flag alone decides between the shared confirm page and the
-    // legacy preview + sign stages.
+    // Host composition and signing use the shared confirmation page after the
+    // wizard's review step, keeping the reviewed and signed transaction equal.
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
     // An already-unlocked wallet does not re-prompt on the confirm page.
     const signerReady = useSignerReady(walletId);
@@ -323,7 +335,7 @@ export function TokenWizard({ walletId, onBack }) {
     );
 
     const decoded = useMemo(() => {
-        if (stage !== 'preview' && stage !== 'sign') return null;
+        if (stage !== 'preview') return null;
         return decoderLib.decodeAction({
             action: 'ISSUE',
             params: actionParams,
@@ -334,6 +346,10 @@ export function TokenWizard({ walletId, onBack }) {
 
     function handleDetailsSubmit(event) {
         event.preventDefault();
+        if (!chainId || !fromAddress) {
+            setFormError('Pick a source address first.');
+            return;
+        }
         // The grammar is the chain's own allowlist minus the caret, and it
         // lives in one module both authoring surfaces read: a plain
         // `/^[A-Za-z0-9]+$/` here would refuse names the chain admits.
@@ -377,14 +393,49 @@ export function TokenWizard({ walletId, onBack }) {
                 setFormError('Supply must be a positive number.');
                 return;
             }
+            const decimals = divisible && ['utility', 'subtoken', 'custom'].includes(template)
+                ? 8
+                : 0;
+            if (!hasAmountPrecision(supply, decimals)) {
+                setFormError(decimals === 0
+                    ? 'Supply must be a whole number for an indivisible token.'
+                    : 'Supply can have at most 8 decimal places.');
+                return;
+            }
+        }
+        if ((template === 'utility' || template === 'custom') && maxMint.trim()) {
+            if (!isPositiveDecimal(maxMint)) {
+                setFormError('Max mint per transaction must be a positive number, or left blank for no limit.');
+                return;
+            }
+            const decimals = divisible ? 8 : 0;
+            if (!hasAmountPrecision(maxMint, decimals)) {
+                setFormError(decimals === 0
+                    ? 'Max mint per transaction must be a whole number for an indivisible token.'
+                    : 'Max mint per transaction can have at most 8 decimal places.');
+                return;
+            }
         }
         if (template === 'edition') {
             if (!isPositiveDecimal(maxMint)) {
                 setFormError('Copies per mint must be a positive number.');
                 return;
             }
+            if (!hasAmountPrecision(maxMint, 0)) {
+                setFormError('Copies per mint must be a whole number.');
+                return;
+            }
             if (perAddressMax.trim() && !isPositiveDecimal(perAddressMax)) {
                 setFormError('Limit per address must be a positive number, or left blank for no limit.');
+                return;
+            }
+            if (perAddressMax.trim() && !hasAmountPrecision(perAddressMax, 0)) {
+                setFormError('Limit per address must be a whole number.');
+                return;
+            }
+            if (perAddressMax.trim()
+                && compareDecimalStrings(perAddressMax, maxMint) === -1) {
+                setFormError('Limit per address must be at least the copies per mint.');
                 return;
             }
             if (mintStartBlock.trim() && !/^\d+$/.test(mintStartBlock.trim())) {
@@ -396,7 +447,7 @@ export function TokenWizard({ walletId, onBack }) {
                 return;
             }
             if (mintStartBlock && mintStopBlock
-                && Number(mintStopBlock) <= Number(mintStartBlock)) {
+                && compareDecimalStrings(mintStopBlock, mintStartBlock) !== 1) {
                 setFormError('Minting must close after it opens. Check the block numbers.');
                 return;
             }
@@ -416,24 +467,22 @@ export function TokenWizard({ walletId, onBack }) {
                 return;
             }
         }
-        if (transferTo.trim() && !isValidIssueAddress(transferTo, descriptor)) {
+        if (template === 'custom'
+            && transferTo.trim() && !isValidIssueAddress(transferTo, descriptor)) {
             setFormError(`Transfer ownership address is not valid for ${descriptor?.displayName || 'this chain'}.`);
             return;
         }
-        if (transferSupplyTo.trim() && !isValidIssueAddress(transferSupplyTo, descriptor)) {
+        if (template === 'custom'
+            && transferSupplyTo.trim() && !isValidIssueAddress(transferSupplyTo, descriptor)) {
             setFormError(`Initial mint destination is not valid for ${descriptor?.displayName || 'this chain'}.`);
             return;
         }
         setFormError(null);
-        openConfirmScreen();
-        return;
         setStage('preview');
     }
 
-    // (§5.6 slice 2): the wizard's details step goes straight
-    // to the shared confirm page, skipping its own preview + sign stages.
-    // Compose + tamper-check + pre-flight run HOST-side; Approve signs the
-    // byte-identical prebuilt PSBT via issueToken.prebuiltPsbt.
+    // Compose, tamper-check, and pre-flight run host-side after review.
+    // Approve signs the byte-identical prebuilt PSBT via issueToken.prebuiltPsbt.
     async function openConfirmScreen() {
         const from = fromAddress ? {
             address: fromAddress.address,
@@ -444,8 +493,19 @@ export function TokenWizard({ walletId, onBack }) {
             signerId: fromAddress.signerId,
         } : null;
         if (!from) { setFormError('No source address available.'); return; }
-        setSubmitError(null);
+        setFormError(null);
         try {
+            if (isWatcherMode) {
+                const res = await messaging.buildActionPsbtRequest({
+                    chainId,
+                    from,
+                    actionData: { action: 'ISSUE', params: actionParams },
+                    encoderOpts: { payFeeInNativeCoin: payFeeInNativeCoin || undefined },
+                });
+                setResult(res);
+                setStage('done');
+                return;
+            }
             const res = await actionConfirm.run({
                 chainId,
                 from,
@@ -479,54 +539,17 @@ export function TokenWizard({ walletId, onBack }) {
         }
     }
 
-    async function handleSign(event) {
-        event.preventDefault();
-        if (stage === 'sign' || password.length === 0) return;
-        setStage('sign');
-        setSubmitError(null);
-        try {
-            // messaging.issueToken lands in Phase 2 Step 5 (piece 2c).
-            // Until then the call surfaces the host's
-            // "unknown-message-type" error cleanly so the user sees
-            // why the sign step is gated.
-            const res = await messaging.issueToken({
-                walletId,
-                password,
-                chainId,
-                from: fromAddress ? {
-                    address: fromAddress.address,
-                    publicKey: fromAddress.publicKey,
-                    derivationPath: fromAddress.derivationPath,
-                    addressId: fromAddress.id,
-                } : null,
-                params: actionParams,
-                payFeeInNativeCoin: payFeeInNativeCoin || undefined,
-            });
-            setResult(res);
-            setPassword('');
-            setStage('done');
-        } catch (err) {
-            const isBadPassword = err?.name === 'InvalidPasswordError';
-            setSubmitError(
-                isBadPassword
-                    ? 'Incorrect password.'
-                    : submitFailureMessage(err, {
-                        chainId,
-                        coinTicker,
-                        mandatory: nativeFeeMandatory,
-                        fallback: err?.message || 'Sign failed.',
-                    }),
-            );
-            setStage('preview');
-            passwordRef.current?.focus();
-            passwordRef.current?.select();
-        }
-    }
-
-        const header = (
+    const stageBack = stage === 'chain'
+        ? () => setStage('template')
+        : stage === 'details'
+            ? () => setStage('chain')
+            : stage === 'preview'
+                ? () => setStage('details')
+                : onBack;
+    const header = (
         <PageHeader
-            onBack={onBack}
-            backLabel="Back to home"
+            onBack={stageBack}
+            backLabel={stage === 'template' || stage === 'done' ? 'Back to home' : 'Back'}
             title="Create a token"
         />
     );
@@ -543,17 +566,23 @@ export function TokenWizard({ walletId, onBack }) {
         return wrap(<ListPage><p className={styles.hint}>Loading…</p></ListPage>);
     }
 
-    // confirm page, rendered in place of the wizard step (the overlay
-    // modal didn't fit small/mobile viewports); wizard state stays intact.
+    // The confirmation page replaces the wizard step while keeping wizard
+    // state intact for Reject and host errors.
     if (actionConfirm.open) {
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
+                feeText={feeEstimate?.coinAmount
+                    ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
+                        + (feeFiat ? ` (${feeFiat})` : '')
+                    : 'Network fee estimate unavailable.'}
                 signerReady={signerReady}
                 password={password}
                 onPasswordChange={setPassword}
+                formatNativeFee={formatNativeFee}
+                formatProtocolFee={formatProtocolFee}
                 hintClassName={styles.hint}
             />
         );
@@ -612,27 +641,38 @@ export function TokenWizard({ walletId, onBack }) {
     }
 
     if (stage === 'template') {
-        return wrap(renderTemplateStage({
-            onPick: (t) => { setTemplate(resolveTemplate(t)); setStage('chain'); },
-        }));
+        return wrap(
+            <>
+                <WizardProgress stage={stage} />
+                {renderTemplateStage({
+                    onPick: (t) => { setTemplate(resolveTemplate(t)); setStage('chain'); },
+                })}
+            </>,
+        );
     }
 
     if (stage === 'chain') {
-        return wrap(renderChainStage({
-            chainsWithAddresses,
-            chainId,
-            setChainId,
-            descriptor,
-            fromAddress,
-            subtoken: template === 'subtoken',
-            onPickSource: () => setSourcePickerOpen(true),
-            onBack: () => setStage('template'),
-            onNext: () => setStage('details'),
-        }));
+        return wrap(
+            <>
+                <WizardProgress stage={stage} />
+                {renderChainStage({
+                    chainsWithAddresses,
+                    chainId,
+                    setChainId,
+                    descriptor,
+                    fromAddress,
+                    subtoken: template === 'subtoken',
+                    onPickSource: () => setSourcePickerOpen(true),
+                    onNext: () => setStage('details'),
+                })}
+            </>,
+        );
     }
 
     if (stage === 'details') {
-        return wrap(renderDetailsStage({
+        return wrap(<>
+            <WizardProgress stage={stage} />
+            {renderDetailsStage({
             template,
             name, setName,
             displayName, setDisplayName,
@@ -679,15 +719,24 @@ export function TokenWizard({ walletId, onBack }) {
                 warnings: advancedIssueWarnings(advanced),
             },
             formError,
-            onBack: () => setStage('chain'),
+            onEdit: () => { if (formError) setFormError(null); },
             onSubmit: handleDetailsSubmit,
-            submitLabel: 'Issue token',
-            submitLoading: actionConfirm.composing,
-        }));
+            submitLabel: 'Review token',
+        })}
+        </>);
     }
 
     if (stage === 'done') {
         const txid = result?.txid || result?.broadcast?.txid;
+        if (result?.psbtHex && !txid) {
+            return wrap(
+                <WatcherResultPanel
+                    result={result}
+                    onBuildAnother={() => { setResult(null); setStage('details'); }}
+                    onDone={onBack}
+                />,
+            );
+        }
         // Signed but not broadcast, so the token does not exist yet.
         if (result?.queued) {
             return wrap(
@@ -714,68 +763,97 @@ export function TokenWizard({ walletId, onBack }) {
         );
     }
 
-    // stage === 'preview' or 'sign'
+    // The review is the final wizard step. Host-side composition begins only
+    // after this form is submitted, so Back can still edit every value without
+    // holding encoder inputs or changing the transaction being reviewed.
     return wrap(
-        <FormPage
-            label="Review token creation"
-            onSubmit={handleSign}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="primary"
-                    loading={stage === 'sign'}
-                    disabled={password.length === 0}
-                >
-                    Create token
-                </Button>
-            )}
-        >
-            <p className={styles.summary}>{decoded?.summary}</p>
-            <dl className={styles.detailsList}>
-                <dt className={styles.detailsLabel}>Chain</dt>
-                <dd className={styles.detailsValue}>
-                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                </dd>
-                {fromAddress ? (
-                    <>
-                        <dt className={styles.detailsLabel}>From</dt>
-                        <dd className={styles.detailsValue}>
-                            <AddressText address={fromAddress.address} />
-                        </dd>
-                    </>
-                ) : null}
-                {(decoded?.details || []).map((d) => (
-                    <DetailRow key={d.label} label={d.label} value={d.value} />
-                ))}
-            </dl>
-            {payFeeInNativeCoin ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>{NATIVE_FEE_WARNING}</p>
-                </div>
-            ) : null}
-            {decoded && decoded.warnings.length > 0 ? (
-                <div role="alert" className={styles.warnings}>
-                    {decoded.warnings.map((w, i) => (
-                        <p key={i} className={styles.warning}>{w}</p>
-                    ))}
-                </div>
-            ) : null}
-            <Input
-                ref={passwordRef}
-                type="password"
-                label="Password"
-                hint="Required to sign."
-                value={password}
-                onChange={(e) => {
-                    setPassword(e.target.value);
-                    if (submitError) setSubmitError(null);
+        <>
+            <WizardProgress stage={stage} />
+            <FormPage
+                label="Review token creation"
+                onSubmit={(event) => {
+                    event.preventDefault();
+                    openConfirmScreen();
                 }}
-                autoComplete="current-password"
-                disabled={stage === 'sign'}
-                error={submitError || undefined}
-            />
-        </FormPage>,
+                status={formError ? (
+                    <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <Button type="submit" variant="primary" loading={actionConfirm.composing}>
+                        Continue to confirmation
+                    </Button>
+                )}
+            >
+                <p className={styles.summary}>{decoded?.summary}</p>
+                <dl className={styles.detailsList}>
+                    <DetailRow label="Template" value={templateLabel(template)} />
+                    {displayName.trim() ? (
+                        <DetailRow label="Display name (not in transaction)" value={displayName.trim()} />
+                    ) : null}
+                    <dt className={styles.detailsLabel}>Chain</dt>
+                    <dd className={styles.detailsValue}>
+                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
+                    </dd>
+                    {fromAddress ? (
+                        <>
+                            <dt className={styles.detailsLabel}>From</dt>
+                            <dd className={styles.detailsValue}>
+                                <AddressText address={fromAddress.address} />
+                            </dd>
+                        </>
+                    ) : null}
+                    {(decoded?.details || []).map((d) => (
+                        <DetailRow key={d.label} label={d.label} value={d.value} />
+                    ))}
+                    <DetailRow
+                        label="Network fee"
+                        value={feeEstimate
+                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
+                                + (feeFiat ? ` (${feeFiat})` : '')
+                            : 'Fee estimate unavailable for this chain.'}
+                    />
+                    <DetailRow
+                        label="Protocol fee paid in"
+                        value={payFeeInNativeCoin ? coinTicker : 'XCHAIN'}
+                    />
+                </dl>
+                {payFeeInNativeCoin ? (
+                    <div role="alert" className={styles.warnings}>
+                        <p className={styles.warning}>{NATIVE_FEE_WARNING}</p>
+                    </div>
+                ) : null}
+                {decoded && decoded.warnings.length > 0 ? (
+                    <div role="alert" className={styles.warnings}>
+                        {decoded.warnings.map((w, i) => (
+                            <p key={i} className={styles.warning}>{w}</p>
+                        ))}
+                    </div>
+                ) : null}
+            </FormPage>
+        </>,
     );
+}
+
+const WIZARD_STEPS = ['template', 'chain', 'details', 'preview'];
+const WIZARD_STEP_LABELS = {
+    template: 'Template',
+    chain: 'Network',
+    details: 'Details',
+    preview: 'Review',
+};
+
+function WizardProgress({ stage }) {
+    const index = WIZARD_STEPS.indexOf(stage);
+    if (index === -1) return null;
+    return (
+        <p className={styles.progress} aria-current="step">
+            Step {index + 1} of {WIZARD_STEPS.length}: {WIZARD_STEP_LABELS[stage]}
+        </p>
+    );
+}
+
+function templateLabel(template) {
+    return TEMPLATES.find((item) => item.id === resolveTemplate(template))?.name || 'Custom';
 }
 
 /**
@@ -1066,18 +1144,20 @@ function renderTemplateStage({ onPick }) {
 
 function renderChainStage({
     chainsWithAddresses, chainId, setChainId, descriptor, fromAddress,
-    subtoken, onPickSource, onBack, onNext,
+    subtoken, onPickSource, onNext,
 }) {
     return (
         <FormPage
             label="Choose token chain"
-            onSubmit={(event) => event.preventDefault()}
+            onSubmit={(event) => {
+                event.preventDefault();
+                if (fromAddress) onNext();
+            }}
             intro="Which chain should this token live on?"
             actions={(
                 <Button
-                    type="button"
+                    type="submit"
                     variant="primary"
-                    onClick={onNext}
                     disabled={!fromAddress}
                 >
                     Next
@@ -1159,7 +1239,7 @@ function renderDetailsStage({
     mintStopBlock, setMintStopBlock,
     payFeeInNativeCoin, setPayFeeInNativeCoin, coinTicker, nativeFeeMandatory,
     advancedPanel,
-    formError, onBack, onSubmit, submitLabel = 'Preview', submitLoading = false,
+    formError, onEdit, onSubmit, submitLabel = 'Preview', submitLoading = false,
 }) {
     const resolved = resolveTemplate(template);
     const show = TEMPLATE_FIELDS[resolved] || TEMPLATE_FIELDS.custom;
@@ -1168,6 +1248,7 @@ function renderDetailsStage({
         <FormPage
             label="Token details"
             onSubmit={onSubmit}
+            onChangeCapture={onEdit}
             intro={<>Template: <strong>{resolved}</strong></>}
             status={formError ? (
                 <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
@@ -1253,7 +1334,7 @@ function renderDetailsStage({
                     value={imageUrl}
                     onChange={(e) => setImageUrl(e.target.value)}
                     autoComplete="off"
-                    autoCapitalize="none"
+                    autoCapitalize="off"
                     autoCorrect="off"
                     maxLength={250}
                 />
@@ -1284,7 +1365,7 @@ function renderDetailsStage({
                 <Input
                     label="Minting opens at block (optional)"
                     hint="Block height when public minting starts. Leave blank to open immediately."
-                    inputMode="decimal"
+                    inputMode="numeric"
                     value={mintStartBlock}
                     onChange={(e) => setMintStartBlock(e.target.value)}
                     autoComplete="off"
@@ -1294,7 +1375,7 @@ function renderDetailsStage({
                 <Input
                     label="Minting closes at block (optional)"
                     hint="Block height when public minting ends. Leave blank to keep it open until sold out."
-                    inputMode="decimal"
+                    inputMode="numeric"
                     value={mintStopBlock}
                     onChange={(e) => setMintStopBlock(e.target.value)}
                     autoComplete="off"
@@ -1317,7 +1398,7 @@ function renderDetailsStage({
                     value={transferTo}
                     onChange={(e) => setTransferTo(e.target.value)}
                     autoComplete="off"
-                    autoCapitalize="none"
+                    autoCapitalize="off"
                     autoCorrect="off"
                 />
             ) : null}
@@ -1328,7 +1409,7 @@ function renderDetailsStage({
                     value={transferSupplyTo}
                     onChange={(e) => setTransferSupplyTo(e.target.value)}
                     autoComplete="off"
-                    autoCapitalize="none"
+                    autoCapitalize="off"
                     autoCorrect="off"
                 />
             ) : null}
@@ -1463,7 +1544,7 @@ function AdvancedIssuePanel({
                         hint={callbackBlockEstimate
                             ? `The earliest block you can trigger the callback. Est. ${callbackBlockEstimate}.`
                             : 'The earliest block height you can trigger the callback. Must be a future block.'}
-                        inputMode="decimal"
+                        inputMode="numeric"
                         value={callbackBlock}
                         onChange={(e) => setCallbackBlock(e.target.value)}
                         autoComplete="off"

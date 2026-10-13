@@ -1,6 +1,38 @@
 .wrap {
     position: relative;
     flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+}
+
+.networkBadge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 2px 7px;
+    border: 1px solid var(--xc-border-strong);
+    border-radius: 999px;
+    color: var(--xc-text-muted);
+    background: var(--xc-surface);
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    line-height: 1;
+}
+
+.networkBadgeNonMainnet {
+    color: var(--xc-accent-primary);
+    border-color: var(--xc-accent-primary);
+    background: color-mix(in srgb, var(--xc-accent-primary) 10%, var(--xc-surface));
+}
+
+@media (max-width: 520px) {
+    .networkBadge {
+        width: 24px;
+        box-sizing: border-box;
+        overflow: hidden;
+        white-space: nowrap;
+    }
 }
 
 .btn {
@@ -28,7 +60,7 @@
 }
 
 .btnActive {
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     border-color: var(--xc-accent-primary);
     background: color-mix(in srgb, var(--xc-accent-primary) 10%, transparent);
 }
@@ -76,6 +108,18 @@
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--xc-text-muted);
+}
+
+.networkSelect {
+    width: 100%;
+    min-height: 36px;
+    padding: var(--xc-space-1) var(--xc-space-2);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-sm);
+    color: var(--xc-text);
+    background: var(--xc-bg);
+    font: inherit;
+    font-size: var(--xc-text-sm);
 }
 
 .empty {
@@ -148,7 +192,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
 }
 
 .walletName {

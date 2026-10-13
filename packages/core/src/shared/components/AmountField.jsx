@@ -17,7 +17,7 @@
 
 import { Input, Icon } from '@xchain-wallet/core/ui';
 import { formatWithThousands } from '../utils/amountFormat.js';
-import { coinToFiat } from '../../flows/priceLookup.js';
+import { coinToFiatExact } from '../../flows/priceLookup.js';
 import { formatFiat } from './BalanceList.jsx';
 import styles from './AmountField.module.css';
 
@@ -64,17 +64,18 @@ export function AmountField({
     const activeUnit = isFiat ? fiatCcy : tickUpper;
     const otherUnit = isFiat ? tickUpper : fiatCcy;
     const inputValue = isFiat ? fiatAmount : amount;
+    const priceSourceLabel = fiatRate?.source === 'market' ? ' · DEX price' : '';
 
     let derivedText = '';
     if (isFiat) {
         derivedText = amount
-            ? `≈ ${formatWithThousands(amount)} ${otherUnit}`.trim()
-            : `≈ 0 ${otherUnit}`.trim();
+            ? `≈ ${formatWithThousands(amount)} ${otherUnit}${priceSourceLabel}`.trim()
+            : `≈ 0 ${otherUnit}${priceSourceLabel}`.trim();
     } else if (fiatRate) {
-        const fiatN = amount ? coinToFiat(amount, fiatRate) : null;
-        derivedText = fiatN != null
-            ? `≈ ${formatFiat(fiatN, fiatCcy)} ${otherUnit}`
-            : `≈ ${formatFiat(0, fiatCcy)} ${otherUnit}`;
+        const fiatValue = amount ? coinToFiatExact(amount, fiatRate) : null;
+        derivedText = fiatValue != null
+            ? `≈ ${formatFiat(fiatValue, fiatCcy)} ${otherUnit}${priceSourceLabel}`
+            : `≈ ${formatFiat('0', fiatCcy)} ${otherUnit}${priceSourceLabel}`;
     }
 
     return (

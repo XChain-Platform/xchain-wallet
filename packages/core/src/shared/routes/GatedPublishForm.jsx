@@ -24,6 +24,8 @@ import {
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { imagePreviewDataUrl, publishFileType } from '../utils/publishingFile.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -71,7 +73,8 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
     );
     const [title, setTitle] = useState('');
     const [memo, setMemo] = useState('');
-    const [packs, setPacks] = useState(/** @type {any[]} */ ([]));
+    const [packs, setPacks] = useState(/** @type {any[] | null} */ (null));
+    const [packsError, setPacksError] = useState(/** @type {string | null} */ (null));
     const [packChoice, setPackChoice] = useState('new');
     // PC-29 unlock threshold (GATE_MIN_AMOUNT). The field only renders
     // once the extension is ACTIVE on this chain: scheduled height from
@@ -108,6 +111,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
     const [hwStatus, setHwStatus] = useState('idle');
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const fileReadIdRef = useRef(0);
 
     useEffect(() => {
         let cancelled = false;
@@ -120,11 +124,17 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
     // Reusable packs = pack keys this wallet's vault holds for this tick.
     // (Metadata only; the raw key never leaves the background context.)
     useEffect(() => {
-        if (typeof messaging.listGatedKeys !== 'function') return undefined;
+        setPacks(null);
+        setPacksError(null);
+        if (typeof messaging.listGatedKeys !== 'function') { setPacks([]); return undefined; }
         let cancelled = false;
         messaging.listGatedKeys({ walletId, chainId, gateTicker: tick })
             .then((rows) => { if (!cancelled) setPacks(Array.isArray(rows) ? rows : []); })
-            .catch(() => { /* pack reuse is optional; New pack still works */ });
+            .catch(() => {
+                if (cancelled) return;
+                setPacks([]);
+                setPacksError('Could not load reusable packs. You can still publish with a new pack.');
+            });
         return () => { cancelled = true; };
     }, [walletId, chainId, tick, messaging]);
 
@@ -195,8 +205,11 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         const file = event.target.files && event.target.files[0];
         setFormError(null);
         if (!file) return;
+        const readId = ++fileReadIdRef.current;
         setFileMeta(null);
-        const cap = plainCapFor(file.name, file.type || 'application/octet-stream');
+        const { type, error: typeError } = publishFileType(file);
+        if (typeError) { setFormError(typeError); return; }
+        const cap = plainCapFor(file.name, type);
         if (file.size === 0) {
             setFormError('That file is empty.');
             return;
@@ -208,14 +221,26 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         }
         const reader = new FileReader();
         reader.onload = () => {
-            const bytes = new Uint8Array(/** @type {ArrayBuffer} */ (reader.result));
+            if (readId !== fileReadIdRef.current) return;
+            if (!(reader.result instanceof ArrayBuffer)) {
+                setFormError('Could not read that file.');
+                return;
+            }
+            const bytes = new Uint8Array(reader.result);
+            if (bytes.length === 0) { setFormError('That file is empty.'); return; }
+            if (bytes.length > cap) {
+                setFormError(`That file is ${bytes.length.toLocaleString()} bytes; this publish lane supports up to ${cap.toLocaleString()}.`);
+                return;
+            }
             setFileMeta({
-                name: file.name,
-                type: file.type || 'application/octet-stream',
+                name: file.name || 'file',
+                type,
                 bytes,
             });
         };
-        reader.onerror = () => setFormError('Could not read that file.');
+        reader.onerror = () => {
+            if (readId === fileReadIdRef.current) setFormError('Could not read that file.');
+        };
         reader.readAsArrayBuffer(file);
     }
 
@@ -386,6 +411,11 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 </>,
             );
         }
+        if (result?.queued) {
+            return wrap(
+                <QueuedResultPanel onDone={onBack} what="gated file publish" unsaved={result.unsaved} />,
+            );
+        }
         return wrap(
             <>
                 <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>Encrypted file published</p>
@@ -415,6 +445,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         const packLabel = packChoice === 'new'
             ? 'New pack (fresh key)'
             : `Existing pack ${packChoice.slice(0, 12)}…`;
+        const reviewPreviewUrl = imagePreviewDataUrl(fileMeta?.bytes);
         return wrap(
             <FormPage
                 label="Review gated publish"
@@ -449,6 +480,13 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                     Publish <strong>{fileMeta?.name}</strong> encrypted; only holders
                     of {tick} will be able to read it.
                 </p>
+                {reviewPreviewUrl ? (
+                    <img
+                        src={reviewPreviewUrl}
+                        alt={`Preview of ${fileMeta?.name || 'file'}`}
+                        style={{ maxWidth: 160, maxHeight: 160, borderRadius: 8, display: 'block', margin: '0 auto var(--xc-space-3)' }}
+                    />
+                ) : null}
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Chain</dt>
                     <dd className={styles.detailsValue}>
@@ -506,6 +544,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
     }
 
     // Form stage.
+    const previewUrl = imagePreviewDataUrl(fileMeta?.bytes);
     return wrap(
         <FormPage
             label="Gated content"
@@ -537,15 +576,25 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 <input type="file" aria-label="File to publish" onChange={handlePickFile} disabled={ownerMissing} />
             </label>
             {fileMeta ? (
-                <p className={styles.hint}>
-                    {fileMeta.name} · {fileMeta.bytes.length.toLocaleString()} bytes · {fileMeta.type}
-                </p>
+                <>
+                    {previewUrl ? (
+                        <img
+                            src={previewUrl}
+                            alt={`Preview of ${fileMeta.name}`}
+                            style={{ maxWidth: 160, maxHeight: 160, borderRadius: 8, display: 'block', margin: 'var(--xc-space-3) auto' }}
+                        />
+                    ) : null}
+                    <p className={styles.hint}>
+                        {fileMeta.name} · {fileMeta.bytes.length.toLocaleString()} bytes · {fileMeta.type}
+                    </p>
+                </>
             ) : null}
 
             <label className={styles.pickerLabel}>
                 Title (optional)
                 <input
                     type="text"
+                    enterKeyHint="next"
                     aria-label="Title"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
@@ -557,6 +606,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 Memo (optional)
                 <input
                     type="text"
+                    enterKeyHint={thresholdActive ? 'next' : 'go'}
                     aria-label="Memo"
                     value={memo}
                     onChange={(e) => setMemo(e.target.value)}
@@ -571,6 +621,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                     <input
                         type="text"
                         inputMode="decimal"
+                        enterKeyHint="go"
                         aria-label="Unlock threshold"
                         placeholder="No threshold"
                         value={gateMinAmount}
@@ -597,7 +648,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                     />
                     {' '}New pack (fresh key)
                 </label>
-                {packs.map((p) => (
+                {(packs || []).map((p) => (
                     <label key={p.keyHash} className={styles.checkRow}>
                         <input
                             type="radio"
@@ -609,7 +660,11 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                         {' '}(files in this pack unlock together)
                     </label>
                 ))}
-                {packs.length === 0 ? (
+                {packs === null ? (
+                    <p className={styles.hint}>Loading reusable packs…</p>
+                ) : packsError ? (
+                    <StatusMessage variant="error" className={styles.error}>{packsError}</StatusMessage>
+                ) : packs.length === 0 ? (
                     <p className={styles.hint}>
                         No reusable packs in this wallet yet. Files published under
                         one pack share a single key and unlock together.

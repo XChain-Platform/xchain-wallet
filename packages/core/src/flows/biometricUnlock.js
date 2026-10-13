@@ -114,12 +114,12 @@ export class BiometricPrfUnavailableError extends Error {
 // provider releases the password, and the password remains the KDF root:
 // biometrics shorten the path to it, they never replace the derivation.
 //
-// HOW A PROVIDER DESCRIBES ITSELF. The shared UI used to hardcode
-// "Touch ID / Windows Hello / device biometric" and explain unavailability in
-// terms of WebAuthn and PRF. On a phone that is wrong twice over: it names an
-// Apple brand and a Microsoft one on Android, and it explains a browser API to
-// someone whose actual problem is that no fingerprint is enrolled - a reason
-// the native provider already had and threw away. So the vocabulary belongs to
+// HOW A PROVIDER DESCRIBES ITSELF. A shared UI that hardcodes
+// "Touch ID / Windows Hello / device biometric" and explains unavailability in
+// terms of WebAuthn and PRF is wrong twice over on a phone: it names an Apple
+// brand and a Microsoft one on Android, and it explains a browser API to
+// someone whose actual problem is that no fingerprint is enrolled, a reason
+// only the native provider knows. So the vocabulary belongs to
 // the provider, not to the component: each one names its own mechanism and
 // gives its own plain-language reason, and `describeBiometric()` below is the
 // single thing the UI asks. `mechanism`, `wrapNote` and `describe` are all
@@ -131,7 +131,7 @@ export class BiometricPrfUnavailableError extends Error {
 // @property {() => boolean} isRegistered
 // @property {(opts: { password: string, accountName?: string }) => Promise<void>} register
 // @property {() => Promise<string>} unlock      resolves to the wallet password
-// @property {() => void} clear
+// @property {() => void | Promise<void>} clear
 // @property {string} name
 // @property {string} [mechanism]   what the USER uses, in their words
 // @property {string} [wrapNote]    how the password is protected, in their words
@@ -230,7 +230,7 @@ function webauthnIsRegistered() {
 function webauthnClear() {
     const store = getStorage();
     if (!store) return;
-    try { store.removeItem(STORAGE_KEY); } catch (_err) { /* ignore */ }
+    store.removeItem(STORAGE_KEY);
 }
 
 /**
@@ -479,7 +479,7 @@ export function unlockWithBiometric() {
 
 /** Discard the enrollment. Called on disable AND on password change. */
 export function clearBiometricCredential() {
-    activeProvider().clear();
+    return activeProvider().clear();
 }
 
 // ---------------------------------------------------------------------

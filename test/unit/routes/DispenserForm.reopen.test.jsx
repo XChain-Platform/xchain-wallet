@@ -200,16 +200,16 @@ describe('DispenserForm opened again from a finished dispenser', () => {
             triggerPrice: undefined,
             fiatCode: 'USD',
             fiatAmount: '',
-            oracleAddress: 'bc1qoracleoracleoracleoracleoracleoracle',
+            oracleAddress: '1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2',
             expiration,
         });
         expect(utils.queryByLabelText(/^Trigger price/), 'oracle pricing hides the coin trigger').toBeNull();
-        expect(utils.getByLabelText(/^Oracle address/).value).toBe('bc1qoracleoracleoracleoracleoracleoracle');
+        expect(utils.getByLabelText(/^Oracle address/).value).toBe('1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2');
         expect(utils.getByRole('radio', { name: /Default window/ }).checked).toBe(true);
         const { compose } = await createAsIs(utils, calls);
         expect(compose.args.actionData.params).toMatchObject({
             GET_AMOUNT: '0',
-            ORACLE_ADDRESS: 'bc1qoracleoracleoracleoracleoracleoracle',
+            ORACLE_ADDRESS: '1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2',
             FIAT_CODE: 'USD',
         });
         expect(compose.args.actionData.params, 'the default window omits EXPIRATION').not.toHaveProperty('EXPIRATION');
