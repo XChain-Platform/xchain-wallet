@@ -123,7 +123,7 @@ describe('History keyboard operation', () => {
         // jsdom needs the click that a browser synthesizes after Enter.
         fireEvent.keyDown(row, { key: 'Enter' });
         fireEvent.click(row);
-        expect(await screen.findByRole('region', { name: 'Action detail' }))
+        expect(await screen.findByRole('region', { name: 'Transaction details' }))
             .toBeInTheDocument();
         expect(row).toHaveAttribute('aria-expanded', 'true');
 
@@ -136,7 +136,7 @@ describe('History keyboard operation', () => {
         }
 
         await waitFor(() => {
-            expect(screen.queryByRole('region', { name: 'Action detail' })).toBeNull();
+            expect(screen.queryByRole('region', { name: 'Transaction details' })).toBeNull();
             expect(row).toHaveFocus();
         });
     });
@@ -145,7 +145,7 @@ describe('History keyboard operation', () => {
         const view = mountHistory();
         await rowButtons(view);
 
-        const disclosure = screen.getByRole('button', { name: 'Additional details' });
+        const disclosure = screen.getByRole('button', { name: 'More filters' });
         disclosure.focus();
         fireEvent.keyDown(disclosure, { key: 'Enter' });
         fireEvent.click(disclosure);

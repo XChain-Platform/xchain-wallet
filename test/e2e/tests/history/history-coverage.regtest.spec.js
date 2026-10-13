@@ -511,7 +511,7 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
             // Web shell: this is a route change to a standalone page, not an
             // inline expand. The heading is the first proof we landed on the
             // right action.
-            await expect(page.getByRole('region', { name: 'Action detail' }))
+            await expect(page.getByRole('region', { name: 'Transaction details' }))
                 .toBeVisible({ timeout: 30_000 });
             await expect(page.getByRole('banner').filter({ hasText: 'Send #' }).first(),
                 'the detail page is not titled for the action index the chain recorded')

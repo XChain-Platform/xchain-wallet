@@ -96,7 +96,7 @@ for (const viewport of VIEWPORTS) {
 
         await openPhoneFilters(page);
         const datePresets = page.getByRole('group', { name: 'Date range presets' });
-        for (const preset of ['7 days', '30 days', 'All']) {
+        for (const preset of ['7 days', '30 days', 'All dates']) {
             const button = datePresets.getByRole('button', { name: preset, exact: true });
             await button.click();
             await expect(button).toHaveAttribute('aria-pressed', 'true');
@@ -107,12 +107,12 @@ for (const viewport of VIEWPORTS) {
         await page.getByLabel('From date').fill(today);
         await page.getByLabel('To date').fill(today);
         // The active range reads in the viewer's local date format.
-        await expect(page.getByText(/^Active range: .+ to .+$/)).toBeVisible();
+        await expect(page.getByText(/^Date range: .+ to .+$/)).toBeVisible();
         await expect(page.locator('[data-history-key*=":100003:"]')).toHaveCount(0);
         await expect(historyRow(page, 'bitcoin-regtest', 100001)).toBeVisible();
         await expectNoHorizontalOverflow(page, `${viewport.name} custom date range`);
 
-        await datePresets.getByRole('button', { name: 'All', exact: true }).click();
+        await datePresets.getByRole('button', { name: 'All dates', exact: true }).click();
         const search = page.getByRole('searchbox', { name: 'Search history' });
         await search.fill('thanks for lunch');
         await expectTimelineCount(page, 3);
@@ -141,7 +141,7 @@ for (const viewport of VIEWPORTS) {
         await exportButton.click();
         const exportDialog = page.getByRole('dialog', { name: 'Export history' });
         await expect(exportDialog).toBeVisible();
-        await expect(exportDialog.getByText('33 filtered rows will be exported.')).toBeVisible();
+        await expect(exportDialog.getByText('33 history items will be exported.')).toBeVisible();
         await expect(exportDialog.getByLabel(/^CSV/)).toBeChecked();
         await expect(exportDialog.getByRole('button', { name: 'Export', exact: true })).toBeEnabled();
         await expectNoHorizontalOverflow(page, `${viewport.name} export dialog`);
@@ -151,7 +151,7 @@ for (const viewport of VIEWPORTS) {
         await outgoing.locator('button').first().click();
         await expect(page.getByRole('heading', { name: 'Send #100,002' })).toBeVisible();
         // The detail opens on its Status tab; the amount lives under Details.
-        await page.getByRole('tablist', { name: 'Action detail view' })
+        await page.getByRole('tablist', { name: 'Transaction detail tabs' })
             .getByRole('tab', { name: 'Details', exact: true }).click();
         const amountCell = page.getByRole('rowheader', { name: 'Amount' }).first()
             .locator('xpath=following-sibling::td');

@@ -83,7 +83,7 @@ async function openPendingPanel(view) {
         expect(view.container.querySelector('[data-pending-state]')).toBeTruthy();
     });
     fireEvent.click(view.container.querySelector('[data-pending-state]').closest('button'));
-    const region = screen.getByRole('region', { name: 'Action detail' });
+    const region = screen.getByRole('region', { name: 'Transaction details' });
     return within(region).getByRole('region', { name: 'Pending transaction' });
 }
 
