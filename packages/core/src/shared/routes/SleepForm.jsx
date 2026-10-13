@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -77,7 +77,6 @@ const PROTOCOL_COIN_TICKER = {
 export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick, initialFromAddress }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
     const isTick = mode === 'tick';
 
     const lockedToken = isTick && !!(initialChainId && initialTick);
@@ -364,7 +363,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            {children}
         </Screen>
     );
 
@@ -414,7 +413,27 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
 
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
+            <FormPage
+                label={`Review ${titleNoun.toLowerCase()}`}
+                onSubmit={handleSubmit}
+                status={(isWatcherMode || isHwSource) && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant={isWatcherMode ? 'primary' : (isTick && resumeMode === 'resume') ? 'primary' : 'danger'}
+                        loading={stage === 'submitting'}
+                        disabled={!typedConfirmOk || (
+                            isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)
+                        )}
+                    >
+                        {isWatcherMode ? 'Create unsigned transaction'
+                            : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                : (descriptor ? `${titleNoun} on ${descriptor.displayName}` : titleNoun)}
+                    </Button>
+                )}
+            >
                 <p className={styles.summary}>{decoded?.summary}</p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Chain</dt>
@@ -466,7 +485,6 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                         signerInfo={hwSignerInfo}
                     />
                 )}
-                {(isWatcherMode || isHwSource) && submitError ? <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage> : null}
                 {!isTick ? (
                     <Input
                         label="Type LOCK to confirm"
@@ -478,21 +496,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                         spellCheck={false}
                     />
                 ) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant={isWatcherMode ? 'primary' : (isTick && resumeMode === 'resume') ? 'primary' : 'danger'}
-                        loading={stage === 'submitting'}
-                        disabled={!typedConfirmOk || (
-                            isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)
-                        )}
-                    >
-                        {isWatcherMode ? 'Create unsigned transaction'
-                            : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : (descriptor ? `${titleNoun} on ${descriptor.displayName}` : titleNoun)}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -537,7 +541,23 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
     }
 
     return wrap(
-        <form onSubmit={handleReview} noValidate>
+        <FormPage
+            label={titleNoun}
+            onSubmit={handleReview}
+            status={formError ? (
+                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={confirmAction.composing}
+                    disabled={!fromAddress || (isTick && sleepLocked) || (resumeMode === 'until' && !resumeBlockInput) || confirmAction.composing}
+                >
+                    {(!isWatcherMode && isTick) ? titleNoun : 'Preview'}
+                </Button>
+            )}
+        >
             {!isTick ? (
                 <NetworkField value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : [chainId]} chainRegistry={chainRegistry} />
             ) : null}
@@ -624,19 +644,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                 />
             ) : null}
             <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
-            {formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    block
-                    loading={confirmAction.composing}
-                    disabled={!fromAddress || (isTick && sleepLocked) || (resumeMode === 'until' && !resumeBlockInput) || confirmAction.composing}
-                >
-                    {(!isWatcherMode && isTick) ? titleNoun : 'Preview'}
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }
 

@@ -9,9 +9,8 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef, useState } from 'react';
-import { Screen, Input, Icon, PageHeader } from '@xchain-wallet/core/ui';
+import { FormPage, Screen, Input, Icon, PageHeader } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import styles from './CreateWallet.module.css';
 
 /**
  * RenameAccountForm: change an Account record's `name` field. No
@@ -31,7 +30,6 @@ import styles from './CreateWallet.module.css';
 export function RenameAccountForm({ accountId, initialName = '', onBack, onRenamed }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [name, setName] = useState(initialName);
     const [error, setError] = useState(/** @type {string | null} */ (null));
@@ -91,7 +89,7 @@ export function RenameAccountForm({ accountId, initialName = '', onBack, onRenam
     );
 
     const formBody = (
-        <form ref={formRef} onSubmit={handleSubmit} noValidate>
+        <FormPage ref={formRef} label="Rename account" onSubmit={handleSubmit}>
             <Input
                 ref={nameRef}
                 label="Account name"
@@ -100,12 +98,12 @@ export function RenameAccountForm({ accountId, initialName = '', onBack, onRenam
                 autoComplete="off"
                 error={error || undefined}
             />
-        </form>
+        </FormPage>
     );
 
     return (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{formBody}</div> : formBody}
+            {formBody}
         </Screen>
     );
 }
