@@ -65,6 +65,21 @@ describe('PortfolioChart on a real wallet', () => {
         mount('real-wallet-1', { prices: { 'bitcoin-mainnet': { sparkline } } });
         await waitFor(() => expect(document.querySelector('svg polyline')).not.toBeNull());
         expect(screen.queryByText(/No price history/)).toBeNull();
+
+        const chart = screen.getByRole('img');
+        expect(chart).toHaveAccessibleName(expect.stringMatching(
+            /^Portfolio performance chart\. Range 7d\. Values range from .* Start .* End \$40,000\.00\. Change \+/,
+        ));
+
+        const tablist = screen.getByRole('tablist', { name: 'Chart range' });
+        const panel = screen.getByRole('tabpanel');
+        const selected = screen.getByRole('tab', { name: '7d' });
+        const unselected = screen.getByRole('tab', { name: '24h' });
+        expect(tablist).toContainElement(selected);
+        expect(selected).toHaveAttribute('tabindex', '0');
+        expect(selected).toHaveAttribute('aria-controls', panel.id);
+        expect(panel).toHaveAttribute('aria-labelledby', selected.id);
+        expect(unselected).toHaveAttribute('tabindex', '-1');
     });
 });
 

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { Sparkline, synthesizeTokenChart } from './Sparkline.jsx';
 import { useMessaging } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -53,6 +53,7 @@ export function PortfolioChart({ rows, walletId }) {
     const fiatCurrency = settings?.fiatCurrency || 'USD';
     const [hidden] = useBalancesHidden();
     const [chartVisible] = usePortfolioChartVisible();
+    const chartPanelId = useId();
     // Only 24h and 7d have recorded prices behind them, so a real wallet
     // offers just those and opens on 7d; the longer ranges exist for the
     // demo wallet's synthesized walk.
@@ -129,6 +130,7 @@ export function PortfolioChart({ rows, walletId }) {
         ? styles.changeNeutral
         : delta > 0 ? styles.changePositive : styles.changeNegative;
     const arrow = delta == null || delta === 0 ? '-' : delta > 0 ? '▲' : '▼';
+    const selectedTabId = `${chartPanelId}-tab-${range.id}`;
 
     // Chart-icon toggle in TotalBalanceHero collapses the whole section.
     // The eye toggle is a separate, narrower concern handled below; it
@@ -139,28 +141,43 @@ export function PortfolioChart({ rows, walletId }) {
 
     return (
         <section className={styles.wrap} aria-label="Portfolio performance">
-            {hasData && delta != null && !hidden ? (
-                <div className={`${styles.change} ${tone}`}>
-                    {arrow} {formatFiat(Math.abs(delta), fiatCurrency)}
-                    {pct != null && Number.isFinite(pct)
-                        ? ` (${pct > 0 ? '+' : ''}${pct.toFixed(2)}%)`
-                        : ''}
-                </div>
-            ) : null}
-            {hasData ? (
-                <div className={styles.chart}>
-                    <Sparkline series={series} height={40} />
-                </div>
-            ) : (
-                <div className={styles.placeholder}>No price history for this range yet.</div>
-            )}
+            <div
+                id={chartPanelId}
+                role="tabpanel"
+                aria-labelledby={selectedTabId}
+            >
+                {hasData && delta != null && !hidden ? (
+                    <div className={`${styles.change} ${tone}`}>
+                        {arrow} {formatFiat(Math.abs(delta), fiatCurrency)}
+                        {pct != null && Number.isFinite(pct)
+                            ? ` (${pct > 0 ? '+' : ''}${pct.toFixed(2)}%)`
+                            : ''}
+                    </div>
+                ) : null}
+                {hasData ? (
+                    <div className={styles.chart}>
+                        <Sparkline
+                            series={series}
+                            height={40}
+                            label="Portfolio performance chart"
+                            rangeLabel={range.label}
+                            formatValue={(value) => formatFiat(value, fiatCurrency)}
+                        />
+                    </div>
+                ) : (
+                    <div className={styles.placeholder}>No price history for this range yet.</div>
+                )}
+            </div>
             <div className={styles.ranges} role="tablist" aria-label="Chart range">
                 {ranges.map((r) => (
                     <button
                         key={r.id}
+                        id={`${chartPanelId}-tab-${r.id}`}
                         type="button"
                         role="tab"
                         aria-selected={r.id === range.id ? 'true' : 'false'}
+                        aria-controls={chartPanelId}
+                        tabIndex={r.id === range.id ? 0 : -1}
                         className={`${styles.range} ${r.id === range.id ? styles.rangeActive : ''}`}
                         onClick={() => setRangeId(r.id)}
                     >
