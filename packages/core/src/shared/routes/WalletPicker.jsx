@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { EmptyState, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
@@ -39,7 +39,6 @@ export function WalletPicker({
 }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [wallets, setWallets] = useState(/** @type {any[] | null} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
@@ -75,13 +74,13 @@ export function WalletPicker({
 
     return (
         <Screen variant={variant} header={header}>
-            <div className={isFull ? styles.listFull : styles.listPopup}>
+            <ListPage>
                 {error ? (
                     <StatusMessage variant="error" className={styles.entryDescription}>{error}</StatusMessage>
                 ) : wallets === null ? (
                     <div className={styles.entryDescription}>Loading…</div>
                 ) : wallets.length === 0 ? (
-                    <div className={styles.entryDescription}>No wallets yet.</div>
+                    <EmptyState title="No wallets yet." />
                 ) : wallets.map((w) => {
                     const active = w.id === activeWalletId;
                     return (
@@ -128,7 +127,7 @@ export function WalletPicker({
                         </div>
                     );
                 })}
-            </div>
+            </ListPage>
         </Screen>
     );
 }

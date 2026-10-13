@@ -9,7 +9,17 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { AddressText, Button, ChainBadge, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import {
+    AddressText,
+    Button,
+    ChainBadge,
+    EmptyState,
+    ListPage,
+    PageHeader,
+    Screen,
+    SectionHeader,
+    StatusMessage,
+} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { TickMemberName } from '../components/TickMemberName.jsx';
@@ -59,7 +69,6 @@ const chainRegistry = registryLib.defaultRegistry();
 export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRename, onTransfer }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [data, setData] = useState(/** @type {any | null} */ (null));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
@@ -116,7 +125,7 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            <ListPage>{children}</ListPage>
         </Screen>
     );
 
@@ -170,32 +179,34 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
 
             {currentItems ? (
                 <>
-                    <h3 className={styles.successLabel}>Current members ({currentItems.length})</h3>
-                    <p className={styles.hint}>
-                        {membershipIndex && membershipIndex !== String(actionIndex)
+                    <SectionHeader
+                        title={`Current members (${currentItems.length})`}
+                        description={membershipIndex && membershipIndex !== String(actionIndex)
                             ? `From edit #${membershipIndex}, the newest valid edit of this list. Everything that references #${actionIndex} uses these members.`
                             : `No edits yet. Everything that references #${actionIndex} uses these members.`}
-                    </p>
+                    />
                     <MemberList items={currentItems} isTick={isTick} messaging={messaging} chainId={chainId} />
-                    <h3 className={styles.successLabel}>As created ({items.length})</h3>
-                    <p className={styles.hint}>The members this action was published with.</p>
+                    <SectionHeader
+                        title={`As created (${items.length})`}
+                        description="The members this action was published with."
+                    />
                     <MemberList items={items} isTick={isTick} messaging={messaging} chainId={chainId} />
                 </>
             ) : (
                 <>
-                    <h3 className={styles.successLabel}>
-                        {resolution === false ? `Current members (${items.length})` : `Members as published (${items.length})`}
-                    </h3>
+                    <SectionHeader
+                        title={resolution === false ? `Current members (${items.length})` : `Members as published (${items.length})`}
+                    />
                     <MemberList items={items} isTick={isTick} messaging={messaging} chainId={chainId} />
                 </>
             )}
 
             {!isFork && rejected.length > 0 ? (
                 <>
-                    <h3 className={styles.successLabel}>Left out by the network ({rejected.length})</h3>
-                    <p className={styles.hint}>
-                        These items were sent but are not on the list: the network checks each item on its own.
-                    </p>
+                    <SectionHeader
+                        title={`Left out by the network (${rejected.length})`}
+                        description="These items were sent but are not on the list: the network checks each item on its own."
+                    />
                     <ul className={styles.detailsList} style={{ display: 'block' }}>
                         {rejected.map((e, i) => (
                             <li key={i} style={{ padding: '2px 0' }}>
@@ -208,7 +219,7 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
 
             {isFork && edits.length > 0 ? (
                 <>
-                    <h3 className={styles.successLabel}>This fork's edit</h3>
+                    <SectionHeader title="This fork's edit" />
                     <ul className={styles.detailsList} style={{ display: 'block' }}>
                         {edits.map((e, i) => (
                             <li key={i} style={{ padding: '2px 0' }}>
@@ -220,14 +231,10 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
                 </>
             ) : null}
 
-            <h3 className={styles.successLabel}>Used by</h3>
-            <p className={styles.hint}>
-                The explorer has no reverse lookup from a list index to the
-                airdrops, dispensers, gates, or orders that reference it today,
-                so the wallet can't show what uses this list. If you know a
-                specific airdrop, dispenser, gate, or order references it,
-                check that item directly.
-            </p>
+            <SectionHeader
+                title="Used by"
+                description="The explorer has no reverse lookup from a list index to the airdrops, dispensers, gates, or orders that reference it today, so the wallet can't show what uses this list. If you know a specific airdrop, dispenser, gate, or order references it, check that item directly."
+            />
 
             <div className={styles.actions}>
                 <Button
@@ -274,7 +281,7 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
  */
 function MemberList({ items, isTick, messaging, chainId }) {
     if (items.length === 0) {
-        return <p className={styles.hint}>This list has no members.</p>;
+        return <EmptyState title="This list has no members." titleAs="h3" />;
     }
     return (
         <ul className={styles.detailsList} style={{ display: 'block' }}>
