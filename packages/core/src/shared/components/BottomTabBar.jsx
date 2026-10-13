@@ -10,7 +10,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from '@xchain-wallet/core/ui';
-import { formatBadgeCount, isNavItemActive } from './LeftNav.jsx';
+import { activeLeftNavItem, formatBadgeCount, isNavItemActive } from './LeftNav.jsx';
 import styles from './BottomTabBar.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
@@ -70,6 +70,12 @@ const SHEET_PRIMARY = [
     // PC-15: COINPAY obligations queue; a pending count also dots the More tab.
     { id: 'obligations', label: 'Payments due', Icon: Icon.ClockIcon, group: ['obligations'] },
 ];
+
+function bottomTabOwner(currentView, primaryTabs = PRIMARY_TABS) {
+    const routeGroup = activeLeftNavItem(currentView);
+    if (routeGroup === 'settings') return 'more';
+    return primaryTabs.some((tab) => tab.id === routeGroup) ? routeGroup : 'home';
+}
 
 function scrollMainToTop() {
     const main = typeof document === 'undefined' ? null : document.getElementById('xc-main');
@@ -140,18 +146,12 @@ export function BottomTabBar({
     // Messaging lives behind "More", so any unread inside the sheet also needs a
     // dot on the More tab itself or the user would never see it while collapsed.
     const sheetHasUnread = sheetRows.some((row) => badges[row.id] > 0);
-    const activeSheetRow = sheetRows.find((row) => isNavItemActive(row.id, currentView));
-    const moreActive = Boolean(activeSheetRow)
-        || isNavItemActive('settings', currentView)
-        || currentView === 'menu'
-        || currentView === 'alerts';
-    const activePrimary = primaryTabs.find((tab) => (
-        !moreActive && isNavItemActive(tab.id, currentView)
-    ));
+    const activeTab = bottomTabOwner(currentView, primaryTabs);
+    const moreActive = activeTab === 'more';
     const primaryIds = primaryTabs.map((tab) => tab.id);
     const tabStop = (rovingTab && [...primaryIds, 'more'].includes(rovingTab))
         ? rovingTab
-        : (moreActive ? 'more' : (activePrimary?.id || primaryIds[0]));
+        : (moreActive ? 'more' : (activeTab || primaryIds[0]));
 
     const onBarKeyDown = (e) => {
         if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
@@ -174,7 +174,7 @@ export function BottomTabBar({
         <>
             <nav className={styles.bar} aria-label="Bottom navigation" onKeyDown={onBarKeyDown}>
                 {primaryTabs.map((tab) => {
-                    const active = !moreActive && isNavItemActive(tab.id, currentView);
+                    const active = tab.id === activeTab;
                     return (
                         <button
                             key={tab.id}
