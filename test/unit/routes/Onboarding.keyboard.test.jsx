@@ -267,7 +267,9 @@ describe('import onboarding keyboard flow', () => {
         expect(screen.getByLabelText('Recovery phrase')).toHaveValue('');
         expect(screen.getByLabelText('Password')).toHaveValue('');
         expect(screen.getByLabelText('Confirm password')).toHaveValue('');
-        expect(screen.getByLabelText('BIP39 passphrase')).toHaveValue('');
+        // Back clears the passphrase and collapses its field.
+        expect(screen.queryByLabelText('BIP39 passphrase')).toBeNull();
+        expect(screen.getByRole('checkbox', { name: /wallet uses a BIP39 passphrase/ })).not.toBeChecked();
 
         fireEvent.change(screen.getByLabelText('Recovery phrase'), { target: { value: PHRASE } });
         fireEvent.click(screen.getByRole('button', { name: 'Back to wallet setup' }));
