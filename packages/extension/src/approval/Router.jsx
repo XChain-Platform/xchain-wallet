@@ -95,7 +95,7 @@ function ApprovalRoute() {
         return (
             <Screen variant="popup">
                 <div role="alert" className={styles.error}>
-                    Unsupported approval request type.
+                    {t('extension.approval.unsupported')}
                 </div>
             </Screen>
         );

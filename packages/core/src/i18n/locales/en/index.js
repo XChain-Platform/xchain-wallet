@@ -435,6 +435,7 @@ export const en = {
 
     // --- browser extension ---------------------------------------
     'extension.approval.loading': 'Loading approval request…',
+    'extension.approval.unsupported': 'Unsupported approval request type.',
     'extension.approval.reject': 'Reject',
     'extension.approval.requestingSite': 'Requesting site',
 
