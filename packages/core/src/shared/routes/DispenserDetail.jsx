@@ -70,6 +70,7 @@ import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { isUserRejection, useActionConfirmFlow, useConfirmSubmit } from '../hooks/useActionConfirmFlow.js';
 import { dispenserDestinationNotice, useDispenserDestination } from '../hooks/useDispenserDestination.js';
+import { copyText } from '../clipboard.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -257,6 +258,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const buyPasswordRef = useRef('');
     buyPasswordRef.current = buyPassword;
     const [copied, setCopied] = useState(/** @type {string | null} */ (null));
+    const [copyError, setCopyError] = useState(/** @type {string | null} */ (null));
 
     const descriptor = chainRegistry.get(chainId);
 
@@ -763,13 +765,15 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     }, [oracleQuote, giveAmount]);
 
     async function handleCopy(text, label) {
-        try {
-            await navigator.clipboard?.writeText(text);
+        const { ok } = await copyText(text);
+        if (ok) {
+            setCopyError(null);
             setCopied(label);
             setTimeout(() => setCopied(null), 1500);
-        } catch {
-            /* swallow; older browsers or locked-down contexts */
+            return;
         }
+        setCopied(null);
+        setCopyError('Copy failed: clipboard unavailable');
     }
 
     const buyerAddress = useMemo(() => {
@@ -1998,6 +2002,8 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 </div>
             </div>
 
+            {copyError ? <StatusMessage variant="error">{copyError}</StatusMessage> : null}
+
             <div className={local.tabBar} role="tablist">
                 <button
                     type="button"
@@ -2187,7 +2193,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                                 onClick={() => handleCopy(dispAddr, 'address')}
                                 style={{ marginLeft: '0.5rem' }}
                             >
-                                {copied === 'address' ? 'Copied' : 'Copy'}
+                                {copied === 'address' ? 'Copied' : 'Copy dispenser payment address'}
                             </button>
                         </dd>
                         {isFiatPriced ? (

@@ -177,7 +177,7 @@ export function CoSignerAccountDetail({ accountId, onBack }) {
                 <dt className={styles.detailsLabel}>Fund this address</dt>
                 <dd className={styles.detailsValue} style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'center', flexWrap: 'wrap' }}>
                     <AddressText address={account.aggregateAddress} />
-                    <CopyButton value={account.aggregateAddress || ''} label="Copy" />
+                    <CopyButton value={account.aggregateAddress || ''} label="Copy funding address" />
                 </dd>
                 <dt className={styles.detailsLabel}>Allowed actions</dt>
                 <dd className={styles.detailsValue}>{(p.allowedActions || []).map(actionDisplayLabel).join(', ') || 'none'}</dd>

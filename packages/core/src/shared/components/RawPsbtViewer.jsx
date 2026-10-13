@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useState } from 'react';
+import { copyText } from '../clipboard.js';
 import styles from './RawPsbtViewer.module.css';
 
 /**
@@ -37,7 +38,7 @@ import styles from './RawPsbtViewer.module.css';
  * @param {Record<string, unknown>} [props.actionFields]
  */
 export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
-    const [copied, setCopied] = useState(false);
+    const [copyState, setCopyState] = useState(/** @type {'idle' | 'copied' | 'failed'} */ ('idle'));
 
     if (!developerMode) return null;
 
@@ -49,15 +50,9 @@ export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
     const copyTarget = hasPsbt ? psbtHex : fieldsJson;
 
     async function handleCopy() {
-        try {
-            await navigator.clipboard?.writeText(copyTarget);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
-        } catch (_err) {
-            // Clipboard write can fail in approval popup contexts
-            // without permissions; the textarea above stays
-            // selectable as a fallback.
-        }
+        const { ok } = await copyText(copyTarget);
+        setCopyState(ok ? 'copied' : 'failed');
+        setTimeout(() => setCopyState('idle'), 1500);
     }
 
     return (
@@ -99,8 +94,13 @@ export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
                     type="button"
                     className={styles.copyBtn}
                     onClick={handleCopy}
+                    aria-live="polite"
                 >
-                    {copied ? 'Copied' : `Copy ${hasPsbt ? 'unsigned transaction hex' : 'action fields'}`}
+                    {copyState === 'copied'
+                        ? 'Copied'
+                        : copyState === 'failed'
+                            ? 'Copy failed: clipboard unavailable'
+                            : `Copy ${hasPsbt ? 'unsigned transaction hex' : 'action fields'}`}
                 </button>
             </div>
         </details>

@@ -32,6 +32,7 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { AnimatedQrFrames, Button, StatusMessage } from '../../ui/index.js';
+import { copyText } from '../clipboard.js';
 import { encodeXcwChunks } from '../../uri/psbtQr.js';
 import { encodeBbqrPsbtFrames } from '../../uri/bbqrPsbt.js';
 import styles from './WatcherResultPanel.module.css';
@@ -53,6 +54,7 @@ export function WatcherResultPanel({
 }) {
     const psbtHex = result?.psbtHex || '';
     const [qrFormat, setQrFormat] = useState('xcw');
+    const [copyState, setCopyState] = useState(/** @type {'idle' | 'copied' | 'failed'} */ ('idle'));
     const exportFrames = useMemo(() => {
         if (!psbtHex) return null;
         try {
@@ -63,9 +65,11 @@ export function WatcherResultPanel({
             return { error: e?.message || String(e) };
         }
     }, [psbtHex, qrFormat]);
-    const copyHex = useCallback(() => {
+    const copyHex = useCallback(async () => {
         if (!psbtHex) return;
-        try { navigator.clipboard?.writeText(psbtHex); } catch { /* best effort */ }
+        const { ok } = await copyText(psbtHex);
+        setCopyState(ok ? 'copied' : 'failed');
+        setTimeout(() => setCopyState('idle'), 1500);
     }, [psbtHex]);
     const formatLabel = qrFormat === 'bbqr' ? 'BBQr (hex)' : 'XCW chunks';
     const buildAnother = onBuildAnother || onSendAnother;
@@ -109,8 +113,13 @@ export function WatcherResultPanel({
                             className={styles.successLink}
                             onClick={copyHex}
                             aria-label="Copy unsigned transaction hex"
+                            aria-live="polite"
                         >
-                            Copy hex
+                            {copyState === 'copied'
+                                ? 'Copied'
+                                : copyState === 'failed'
+                                    ? 'Copy failed: clipboard unavailable'
+                                    : 'Copy hex'}
                         </button>
                     </div>
                 </div>
