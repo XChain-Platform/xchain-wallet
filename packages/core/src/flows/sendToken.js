@@ -190,8 +190,7 @@ export async function sendToken(opts) {
             // `sourceAddress` (xchain-sdk/src/encoder.js createTx), because a
             // change address is not always the spender. Passing only `change` left
             // the encoder resolving UTXOs from the raw `pubkey`, which is the
-            // opaque "has no matching Script" failure this comment used to claim
-            // was handled.
+            // opaque "has no matching Script" failure.
             change: opts.change || source.address,
             sourceAddress: source.address,
             ...(Array.isArray(opts.utxos) && opts.utxos.length > 0 ? { utxos: opts.utxos } : {}),

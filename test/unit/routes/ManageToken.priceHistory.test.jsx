@@ -52,13 +52,13 @@ describe('ManageToken price history', () => {
     it('shows a message, no line and no range tabs for a real wallet', async () => {
         renderManage('real-wallet');
         expect(await screen.findByText('No price history yet')).toBeTruthy();
-        expect(screen.queryByRole('img', { name: 'Price trend' })).toBeNull();
+        expect(screen.queryByRole('img', { name: /^Price trend\b/ })).toBeNull();
         expect(screen.queryByRole('tablist', { name: 'Chart range' })).toBeNull();
     });
 
     it('still draws a synthesized chart with range tabs for the demo wallet', async () => {
         renderManage('demo-wallet');
-        expect(await screen.findByRole('img', { name: 'Price trend' })).toBeTruthy();
+        expect(await screen.findByRole('img', { name: /^Price trend\b/ })).toBeTruthy();
         expect(screen.getByRole('tablist', { name: 'Chart range' })).toBeTruthy();
         expect(screen.queryByText('No price history yet')).toBeNull();
     });

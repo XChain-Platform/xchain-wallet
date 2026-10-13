@@ -66,7 +66,7 @@ describe('My Tokens copy matches its ownership query (D-82)', () => {
         const container = mountMyTokens({ tokens: [] });
 
         await waitFor(() => {
-            expect(container.textContent).toMatch(/don.t own any tokens yet/i);
+            expect(container.textContent).toMatch(/no owned tokens yet/i);
         });
         // The wallet that issued a token and then transferred it away lands
         // here; telling it that it never issued anything is simply false.
@@ -98,7 +98,7 @@ describe('My Tokens copy matches its ownership query (D-82)', () => {
         await waitFor(() => {
             expect(container.textContent).toMatch(/could not load your owned tokens/i);
         });
-        expect(container.textContent).not.toMatch(/don.t own any tokens yet/i);
+        expect(container.textContent).not.toMatch(/no owned tokens yet/i);
     });
 
     it('the command-palette entry does not claim issuance scope', () => {

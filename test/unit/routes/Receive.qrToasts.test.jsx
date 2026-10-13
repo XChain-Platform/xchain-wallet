@@ -295,9 +295,8 @@ describe('Receive QR copy and share toasts', () => {
         await clickWhenEnabled(/Share QR/);
 
         await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
-        expect(writeText).toHaveBeenCalledWith(
-            'bitcoin:bcrt1qexample',
-        );
+        // With no amount or token the request is the bare address URI.
+        expect(writeText).toHaveBeenCalledWith('bitcoin:bcrt1qexample');
         expect(showToast).toHaveBeenCalledWith({
             message: 'Share unavailable. Payment request copied to clipboard.',
         });

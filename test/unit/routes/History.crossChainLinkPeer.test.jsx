@@ -26,7 +26,8 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
 
-const GROUPING_MODE_STORAGE_KEY = 'xc:historyGroupingMode';
+// History keeps its grouping mode per wallet; these tests mount wallet w1.
+const GROUPING_MODE_STORAGE_KEY = 'xc:historyGroupingMode:w1';
 const BTC_CHAIN = 'bitcoin-testnet';
 const DOGE_CHAIN = 'dogecoin-testnet';
 const BTC_ADDR = 'tb1ql64k7xxxxxxxxxxxxxxxxxxxxxxxxe38nnl';

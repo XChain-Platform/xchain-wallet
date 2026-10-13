@@ -148,7 +148,7 @@ describe('detail page loading and empty states', () => {
                     getExecutionsForContract: vi.fn().mockResolvedValue({ data: [] }),
                 }),
                 child: <ContractDetail chainId={CHAIN} contractActionIndex="7" onBack={() => {}} />,
-                text: 'Contract not found.',
+                text: 'Contract not found',
             }),
         ],
         [
@@ -156,7 +156,7 @@ describe('detail page loading and empty states', () => {
             () => ({
                 messaging: messagingWith({ getListByActionIndex: vi.fn().mockResolvedValue(null) }),
                 child: <ListDetail chainId={CHAIN} actionIndex="7" onBack={() => {}} onFork={() => {}} />,
-                text: 'List not found.',
+                text: 'List not found',
             }),
         ],
         [
@@ -164,7 +164,7 @@ describe('detail page loading and empty states', () => {
             () => ({
                 messaging: messagingWith({ getDispenserByActionIndex: vi.fn().mockResolvedValue(null) }),
                 child: <DispenserDetail walletId="wallet" chainId={CHAIN} actionIndex="7" onBack={() => {}} />,
-                text: 'Dispenser not found.',
+                text: 'Dispenser not found',
             }),
         ],
     ])('renders a shared empty state when the %s record is absent', async (_name, build) => {

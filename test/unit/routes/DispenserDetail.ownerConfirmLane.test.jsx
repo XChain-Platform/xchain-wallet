@@ -214,9 +214,10 @@ describe('dispenser owner actions sign through the confirm page', () => {
         });
         await step(() => fireEvent.click(failed.utils.getByRole('button', { name: 'Close' })));
         await step(() => fireEvent.click(failed.utils.getByRole('button', { name: 'Create unsigned transaction' })));
-        expect(failed.utils.getByText(/Could not build close\./)).toBeInTheDocument();
+        // An unclassified build error reaches the user as the generic house line.
+        expect(failed.utils.getByText(/Something went wrong\. Try again\./)).toBeInTheDocument();
         await step(() => fireEvent.change(failed.utils.getByLabelText('Network fee'), { target: { value: '2' } }));
-        expect(failed.utils.queryByText(/Could not build close\./)).toBeNull();
+        expect(failed.utils.queryByText(/Something went wrong\. Try again\./)).toBeNull();
         failed.utils.unmount();
 
         let resolveBuild;

@@ -298,7 +298,7 @@ describe('the Airdrop holder-count preview survives one refusal and names any it
         }), { timeout: 3000 });
         expect(holders.mock.calls.some(([arg]) => arg.tick === 'A..B')).toBe(false);
         expect(screen.getByText(/These don't look like token names: A\.\.B/)).toBeTruthy();
-        expect(ticks).toHaveAttribute('autocapitalize', 'none');
+        expect(ticks).toHaveAttribute('autocapitalize', 'off');
     });
 
     it('keeps a symbol ticker spelling selected for the holder list', async () => {
@@ -306,7 +306,7 @@ describe('the Airdrop holder-count preview survives one refusal and names any it
         const mode = await screen.findByDisplayValue('Paste addresses');
         fireEvent.change(mode, { target: { value: 'holders' } });
         fireEvent.click(await screen.findByRole('button', { name: 'Add from token picker' }));
-        fireEvent.click(await screen.findByRole('button', { name: 'Select MiXeD! on Litecoin' }));
+        fireEvent.click(await screen.findByLabelText(/^Select MiXeD!(?:\s|$)/));
 
         expect(await screen.findByLabelText('Tokens (one per line)')).toHaveValue(SYMBOL_TICK);
     });
