@@ -1248,11 +1248,21 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         if (!previewBalances.sdkShape) return null;
         const tickUpper = tick.trim().toUpperCase();
         if (!tickUpper) return null;
+        const decoded = decoderLib.balancesFromSdk(previewBalances.sdkShape)
+            .find((balance) => balance.tick === tickUpper);
+        if (!decoded) return null;
         const native = previewBalances.sdkShape.native;
-        if (native && String(native.tick || '').toUpperCase() === tickUpper) {
-            return decoderLib.balancesFromSdk(previewBalances.sdkShape).find((b) => b.tick === tickUpper) || null;
-        }
-        return decoderLib.balancesFromSdk(previewBalances.sdkShape).find((b) => b.tick === tickUpper) || null;
+        const rawAsset = native && String(native.tick || '').toUpperCase() === tickUpper
+            ? native
+            : (previewBalances.sdkShape.tokens || [])
+                .find((token) => String(token?.tick || '').toUpperCase() === tickUpper);
+        const divisibility = Number(rawAsset?.divisibility);
+        return {
+            ...decoded,
+            divisibility: Number.isInteger(divisibility) && divisibility >= 0
+                ? divisibility
+                : undefined,
+        };
     }, [previewBalances.sdkShape, tick]);
 
     const [otherAddressHasTick, setOtherAddressHasTick] = useState(
@@ -2546,6 +2556,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                 fiatRate={amountFiatRate}
                 fiatCurrency={fiatCurrency}
                 amountInputMode={amountInputMode}
+                divisibility={sourceBalance?.divisibility ?? (isNativeSend ? 8 : undefined)}
                 onAmountFieldChange={onAmountFieldChange}
                 toggleAmountInputMode={toggleAmountInputMode}
                 inputRef={amountInputRef}

@@ -15,8 +15,8 @@
 // alive, the gate would go on returning null and the wrong number would come
 // back with no test failing anywhere.
 
-import { describe, it, expect } from 'vitest';
-import { render } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { fireEvent, render } from '@testing-library/react';
 import React from 'react';
 import { AmountField } from '../../../packages/core/src/shared/components/AmountField.jsx';
 
@@ -65,5 +65,81 @@ describe('AmountField fiat gate', () => {
         });
         expect(u.container.textContent).not.toMatch(/≈/);
         expect(u.queryByRole('button', { name: /switch input to/i })).toBeNull();
+    });
+});
+
+describe('AmountField input contract', () => {
+    it('switches display modes without replacing the canonical coin value', () => {
+        const toggleAmountInputMode = vi.fn();
+        const props = {
+            amount: '2',
+            fiatAmount: '134000.00',
+            tick: 'BTC',
+            fiatRate: RATE,
+            onAmountFieldChange() {},
+            toggleAmountInputMode,
+        };
+        const u = render(<AmountField {...props} amountInputMode="coin" />);
+
+        expect(u.getByRole('textbox', { name: 'Amount (BTC)' })).toHaveValue('2');
+        fireEvent.click(u.getByRole('button', { name: 'Switch input to USD' }));
+        expect(toggleAmountInputMode).toHaveBeenCalledOnce();
+
+        u.rerender(<AmountField {...props} amountInputMode="fiat" />);
+        expect(u.getByRole('textbox', { name: 'Amount (USD)' })).toHaveValue('134,000.00');
+        expect(u.container.textContent).toMatch(/≈\s*2 BTC/);
+
+        u.rerender(<AmountField {...props} amountInputMode="coin" />);
+        expect(u.getByRole('textbox', { name: 'Amount (BTC)' })).toHaveValue('2');
+    });
+
+    it('normalizes commas and spaces from pasted amounts', () => {
+        const onAmountFieldChange = vi.fn();
+        const u = mount({ amount: '', onAmountFieldChange });
+        const input = u.getByRole('textbox', { name: 'Amount (BTC)' });
+
+        fireEvent.change(input, {
+            target: { value: '1 234,567.89', selectionStart: 12 },
+        });
+
+        expect(onAmountFieldChange).toHaveBeenCalledWith('1234567.89', 10);
+    });
+
+    it('rejects precision beyond the selected asset divisibility', () => {
+        const onAmountFieldChange = vi.fn();
+        const u = mount({ amount: '', divisibility: 2, onAmountFieldChange });
+        const input = u.getByRole('textbox', { name: 'Amount (BTC)' });
+
+        fireEvent.change(input, { target: { value: '1.234' } });
+
+        expect(onAmountFieldChange).not.toHaveBeenCalled();
+        expect(input).toHaveAttribute('aria-invalid', 'true');
+        expect(u.getByRole('alert')).toHaveTextContent('at most 2 decimal places');
+    });
+
+    it('keeps labels and status semantics explicit for assistive technology', () => {
+        const onMax = vi.fn();
+        const u = mount({
+            amount: '2',
+            fiatRate: RATE,
+            balanceText: '3 BTC available',
+            onMax,
+            maxBusy: true,
+        });
+
+        expect(u.getByRole('textbox', { name: 'Amount (BTC)' }))
+            .toHaveAttribute('inputmode', 'decimal');
+        expect(u.getByRole('status')).toHaveTextContent('3 BTC available');
+        expect(u.getByRole('button', { name: 'Use max available amount' })).toBeDisabled();
+        expect(u.getByRole('button', { name: 'Switch input to USD' }))
+            .toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('forwards caller errors through the labelled input', () => {
+        const u = mount({ error: 'Amount exceeds the available balance.' });
+        const input = u.getByRole('textbox', { name: 'Amount (BTC)' });
+
+        expect(input).toHaveAttribute('aria-invalid', 'true');
+        expect(u.getByRole('alert')).toHaveTextContent('Amount exceeds the available balance.');
     });
 });
