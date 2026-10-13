@@ -8,9 +8,11 @@ import axe from 'axe-core';
 
 const BLOCKING_IMPACTS = new Set(['serious', 'critical']);
 
-export async function expectNoSeriousAxeViolations(container) {
+export async function expectNoSeriousAxeViolations(container, options = {}) {
     const { violations } = await axe.run(container, {
+        ...options,
         rules: {
+            ...options.rules,
             // jsdom does not compute the styles that axe needs for contrast.
             'color-contrast': { enabled: false },
         },
