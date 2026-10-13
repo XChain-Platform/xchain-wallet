@@ -526,6 +526,7 @@ export {
     BackupPointerUnresolvedError,
     BackupSeedPasswordError,
     BACKUP_PAYLOAD_VERSION,
+    MIN_BACKUP_PASSWORD_LENGTH,
 } from './backupFile.js';
 // Shells render the restore screen's copy, so they need the same
 // labels and the same failure classification core throws against.

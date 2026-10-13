@@ -78,6 +78,7 @@ import {
 } from './restorePasswordCopy.js';
 
 export const BACKUP_PAYLOAD_VERSION = 1;
+export const MIN_BACKUP_PASSWORD_LENGTH = 8;
 
 export class BackupConflictError extends Error {
     /** @param {string[]} conflicts */
@@ -158,8 +159,11 @@ export async function exportBackupFile({
     if (typeof walletId !== 'string' || walletId.length === 0) {
         throw new Error('exportBackupFile: walletId is required');
     }
-    if (typeof password !== 'string' || password.length === 0) {
-        throw new Error('exportBackupFile: password is required');
+    // Require the same minimum used when creating a wallet so a backup cannot be protected by a trivial password.
+    if (typeof password !== 'string' || password.length < MIN_BACKUP_PASSWORD_LENGTH) {
+        throw new Error(
+            `exportBackupFile: password must be at least ${MIN_BACKUP_PASSWORD_LENGTH} characters`,
+        );
     }
 
     const wallet = await vault.wallets.get(walletId);
