@@ -4142,7 +4142,7 @@ function CheckboxPicker({ options, selected, onToggle, allLabel, summaryNoun, ic
 
     const close = () => {
         setOpen(false);
-        triggerRef.current?.focus();
+        triggerRef.current?.querySelector('button')?.focus();
     };
 
     useEffect(() => {
@@ -4154,7 +4154,7 @@ function CheckboxPicker({ options, selected, onToggle, allLabel, summaryNoun, ic
         const onKey = (e) => {
             if (e.key !== 'Escape') return;
             setOpen(false);
-            triggerRef.current?.focus();
+            triggerRef.current?.querySelector('button')?.focus();
         };
         window.addEventListener('mousedown', onClick);
         window.addEventListener('keydown', onKey);
@@ -4176,24 +4176,24 @@ function CheckboxPicker({ options, selected, onToggle, allLabel, summaryNoun, ic
 
     return (
         <div ref={wrapRef} className={styles.chainPickerWrap}>
-            {/* A native trigger retains the ref-driven focus handoff for this custom listbox. */}
-            <button
-                ref={triggerRef}
-                type="button"
-                className={styles.chainPickerBtn}
-                aria-haspopup="listbox"
-                aria-expanded={open}
-                onClick={() => setOpen((v) => !v)}
-                onKeyDown={(event) => {
-                    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
-                    event.preventDefault();
-                    if (!open) setOpen(true);
-                    focusListboxOption(menuRef, event.key === 'ArrowUp' ? 'last' : 'selected');
-                }}
-            >
-                <span className={styles.chainPickerLeft}>{summary}</span>
-                <SingleChevron direction="down" />
-            </button>
+            <div ref={triggerRef}>
+                <Chip
+                    pressed={!isAll}
+                    className={styles.chainPickerLeft}
+                    aria-haspopup="listbox"
+                    aria-expanded={open}
+                    onClick={() => setOpen((v) => !v)}
+                    onKeyDown={(event) => {
+                        if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+                        event.preventDefault();
+                        if (!open) setOpen(true);
+                        focusListboxOption(menuRef, event.key === 'ArrowUp' ? 'last' : 'selected');
+                    }}
+                >
+                    <span className={styles.chainPickerLeft}>{summary}</span>
+                    <SingleChevron direction="down" />
+                </Chip>
+            </div>
             {open ? (
                 <ul
                     ref={menuRef}

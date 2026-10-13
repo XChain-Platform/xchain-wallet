@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Button, EmptyState, Icon, Input, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, Chip, EmptyState, Icon, Input, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, branding as brandingLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useReachability } from '../hooks/useReachability.js';
@@ -18,7 +18,6 @@ import { tickerColor } from '../components/BalanceList.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import styles from './IssueTokenForm.module.css';
 import receiveStyles from './Receive.module.css';
-import receivePickerStyles from './TokenPicker.module.css';
 import marketsStyles from './MarketsList.module.css';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
 
@@ -358,10 +357,9 @@ export function MarketsList({
                                     </Button>
                                 ) : null}
                                 <div
-                                    className={receivePickerStyles.kindSegments}
-                                    role="tablist"
+                                    className={marketsStyles.pairFilters}
+                                    role="group"
                                     aria-label="Markets view"
-                                    style={{ flexShrink: 0 }}
                                 >
                                     {[
                                         { id: 'all',       label: 'All' },
@@ -370,23 +368,18 @@ export function MarketsList({
                                     ].map((opt) => {
                                         const active = tab === opt.id;
                                         return (
-                                            /* Raw buttons preserve the native tab role and roving tab stop behavior. */
-                                            <button
+                                            <Chip
                                                 key={opt.id}
                                                 id={`${tabsId}-tab-${opt.id}`}
-                                                type="button"
-                                                role="tab"
-                                                aria-selected={active}
+                                                pressed={active}
                                                 aria-controls={`${tabsId}-panel`}
-                                                tabIndex={active ? 0 : -1}
-                                                className={`${receivePickerStyles.kindSegment} ${active ? receivePickerStyles.kindSegmentActive : ''}`}
-                                                onClick={() => {
+                                                onPressedChange={() => {
                                                     setTab(opt.id);
                                                     setVisibleMarketCount(MARKETS_PAGE_SIZE);
                                                 }}
                                             >
                                                 {opt.label}
-                                            </button>
+                                            </Chip>
                                         );
                                     })}
                                 </div>
@@ -397,7 +390,6 @@ export function MarketsList({
             >
                 <div
                     id={selectedAsset ? `${tabsId}-panel` : undefined}
-                    role={selectedAsset ? 'tabpanel' : undefined}
                     aria-labelledby={selectedAsset ? `${tabsId}-tab-${tab}` : undefined}
                 >
                     <div role="region" aria-label="Markets results" aria-busy={marketsLoading || undefined}>
@@ -570,7 +562,11 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, name1, name2, lastPric
                 }}
             >
                 <span style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--xc-space-2)', flexWrap: 'wrap' }}>
-                    <strong style={{ fontSize: 'var(--xc-text-md)' }}>{otherTick}</strong>
+                    <Chip>
+                        <span>{tick1}</span>
+                        <span aria-hidden="true">{' / '}</span>
+                        <span>{tick2}</span>
+                    </Chip>
                     {otherName && otherName.toUpperCase() !== otherTick.toUpperCase() ? (
                         <span>{otherName}</span>
                     ) : null}

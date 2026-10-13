@@ -237,10 +237,14 @@ describe('History filters', () => {
         await waitFor(() => expect(rowKeys(view)).toHaveLength(4));
 
         fireEvent.click(screen.getByRole('button', { name: 'Additional details' }));
+        expect(screen.getByRole('button', { name: 'All action types' }))
+            .toHaveAttribute('aria-pressed', 'false');
         chooseOption(/^All chains$/, 'Litecoin');
         await waitFor(() => expect(rowKeys(view)).toHaveLength(3));
 
         chooseOption(/^All action types$/, 'Send');
+        expect(screen.getByRole('button', { name: 'Send' }))
+            .toHaveAttribute('aria-pressed', 'true');
         await waitFor(() => expect(rowKeys(view)).toHaveLength(2));
 
         chooseOption(/^All statuses$/, 'Confirmed');

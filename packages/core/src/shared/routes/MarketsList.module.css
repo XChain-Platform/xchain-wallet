@@ -30,6 +30,13 @@
     margin-bottom: 0;
 }
 
+.pairFilters {
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    gap: var(--xc-space-1);
+}
+
 .starButton {
     display: inline-flex;
     align-items: center;

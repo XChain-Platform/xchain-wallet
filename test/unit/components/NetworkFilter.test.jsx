@@ -17,6 +17,7 @@ import { Input } from '../../../packages/core/src/ui/Input.jsx';
 import inputStyles from '../../../packages/core/src/ui/Input.module.css';
 import dropdownStyles from '../../../packages/core/src/shared/components/NetworkFilterDropdown.module.css';
 import filterStyles from '../../../packages/core/src/shared/components/NetworkFilter.module.css';
+import chipStyles from '../../../packages/core/src/ui/Chip.module.css';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -74,12 +75,15 @@ describe('NetworkFilter trigger', () => {
         expect(trigger).toHaveTextContent('All networks');
         expect(trigger).toHaveTextContent(countLabel);
         expect(trigger).toHaveAttribute('aria-expanded', 'false');
+        expect(trigger).toHaveAttribute('aria-pressed', 'false');
+        expect(trigger).toHaveClass(chipStyles.chip);
     });
 
     it('uses the selected family display name', () => {
         mount({ value: 'dogecoin' });
 
         expect(screen.getByRole('button', { name: /Dogecoin/ })).toHaveTextContent('Dogecoin');
+        expect(screen.getByRole('button', { name: /Dogecoin/ })).toHaveAttribute('aria-pressed', 'true');
     });
 
     it('falls back to the selected coin code without a descriptor', () => {
@@ -238,7 +242,7 @@ describe('NetworkFilter search', () => {
 });
 
 describe('shared network filter surfaces', () => {
-    it('matches a neighboring search Input at the default control size', () => {
+    it('uses canonical field and chip geometry for neighboring filters', () => {
         render(
             <div>
                 <Input type="search" aria-label="Search contacts" />
@@ -258,17 +262,23 @@ describe('shared network filter surfaces', () => {
             process.cwd(),
             'packages/core/src/ui/Input.module.css',
         ), 'utf8');
+        const chipCss = readFileSync(resolve(
+            process.cwd(),
+            'packages/core/src/ui/Chip.module.css',
+        ), 'utf8');
         const triggerClass = css.match(/\.trigger\s*\{[^}]*\}/)?.[0] || '';
         const inputClass = inputCss.match(/\.input\s*\{[^}]*\}/)?.[0] || '';
+        const chipClass = chipCss.match(/\.chip\s*\{[^}]*\}/)?.[0] || '';
 
         expect(search).toHaveClass(inputStyles.input);
         expect(dropdown).toHaveClass(dropdownStyles.md);
         expect(filter).toHaveClass(filterStyles.md);
         expect(trigger).toHaveClass(filterStyles.trigger);
-        expect(inputClass).toMatch(/(?:min-)?height:\s*(?:36px|var\(--xc-control-h-md)/);
         expect(inputClass).toMatch(/border-radius:\s*var\(--xc-(?:control-radius|radius-md)/);
-        expect(triggerClass).toMatch(/height:\s*var\(--network-filter-control-height,\s*var\(--xc-control-h-md/);
-        expect(triggerClass).toMatch(/border-radius:\s*var\(--xc-control-radius,\s*var\(--xc-radius-md\)\)/);
+        expect(trigger).toHaveClass(chipStyles.chip);
+        expect(triggerClass).not.toMatch(/(?:min-)?height:|border-radius:/);
+        expect(chipClass).toMatch(/height:\s*var\(--xc-control-h-sm\)/);
+        expect(chipClass).toMatch(/border-radius:\s*var\(--xc-radius-pill\)/);
     });
 
     it('uses the canonical filter for compact dropdowns and clears through All networks', () => {
