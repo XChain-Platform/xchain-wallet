@@ -38,24 +38,15 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { isHwSource } from '../components/SignCredentials.jsx';
 import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.js';
-import { explorerCoinCode } from '../../registry/coinTicker.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { copyText } from '../clipboard.js';
 import styles from './ResumeConfirm.module.css';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { useSettings } from '../hooks/useSettings.js';
+import { explorerPageUrl } from '../utils/explorerLinks.js';
 
 const chainRegistry = registryLib.defaultRegistry();
-
-function explorerTxUrl(descriptor, txid) {
-    const base = descriptor?.explorer?.defaultUrl;
-    if (!base || !txid) return null;
-    const port = Number(descriptor.explorer.defaultPort);
-    const standardPort = port === 80 || port === 443 || !Number.isFinite(port);
-    const origin = standardPort ? base : `${base}:${port}`;
-    const code = explorerCoinCode(descriptor);
-    return `${origin.replace(/\/$/, '')}${code ? `/${code}` : ''}/tx/${txid}`;
-}
 
 /**
  * @param {object} props
@@ -68,6 +59,7 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
     const variant = screenVariantFor(shell);
     const confirmAction = useConfirmAction();
     const { isWatcherMode } = useWalletMode();
+    const { settings } = useSettings();
     const [password, setPassword] = useState('');
     // Live mirror of `password`, because `confirm()` captures onApprove ONCE
     // and the user types afterwards - a plain closure would dispatch the empty
@@ -240,7 +232,12 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
         : txid ? 'Broadcast pending'
         : result ? 'Submitted'
         : 'Unfinished transaction';
-    const explorerUrl = explorerTxUrl(descriptor, txid);
+    const explorerUrl = explorerPageUrl({
+        chainId,
+        kind: 'transaction',
+        value: txid,
+        settings,
+    });
 
     return (
         <Screen variant={variant}>

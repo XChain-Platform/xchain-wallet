@@ -39,8 +39,10 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { parseRawTx } from '../../signers/verifySignedTx.js';
-import { explorerCoinCode, tickerForCoin } from '../../registry/coinTicker.js';
+import { tickerForCoin } from '../../registry/coinTicker.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
+import { useSettings } from '../hooks/useSettings.js';
+import { explorerPageUrl } from '../utils/explorerLinks.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -161,6 +163,7 @@ function BroadcastKindPicker({ value, onChange }) {
 }
 
 function RawTransactionBroadcast({ walletId, chainId, setChainId, messaging, onKindChange }) {
+    const { settings } = useSettings();
     const [raw, setRaw] = useState('');
     const [preview, setPreview] = useState(/** @type {{ txHex: string, decoded: any } | null} */ (null));
     const [state, setState] = useState(/** @type {'form' | 'preview' | 'submitting' | 'done'} */ ('form'));
@@ -213,11 +216,13 @@ function RawTransactionBroadcast({ walletId, chainId, setChainId, messaging, onK
         if (result?.queued) {
             return <QueuedResultPanel onDone={() => setState('form')} what="broadcast" unsaved={result?.unsaved} />;
         }
-        const base = descriptor?.explorer?.defaultUrl || '';
-        const code = explorerCoinCode(descriptor);
-        const explorerUrl = txid && base
-            ? `${base.replace(/\/$/, '')}${code ? `/${code}` : ''}/tx/${txid}`
-            : null;
+        const explorerBase = descriptor?.explorer?.defaultUrl;
+        const explorerUrl = txid && explorerBase ? explorerPageUrl({
+            chainId,
+            kind: 'transaction',
+            value: txid,
+            settings,
+        }) : null;
         return (
             <div role="status" aria-live="polite">
                 <h2 className={styles.successTitle}>{txid ? 'Transaction broadcast' : 'Transaction queued'}</h2>

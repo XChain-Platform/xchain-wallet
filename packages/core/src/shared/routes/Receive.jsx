@@ -40,6 +40,7 @@ import {
 } from '../utils/amountFormat.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { addressTypeLabel } from '../utils/addressTypeLabel.js';
+import { explorerPageUrl } from '../utils/explorerLinks.js';
 import styles from './Receive.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -330,6 +331,12 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     // address + active chain + the optional amount/tick customization.
 
     const descriptor = activeChainId ? chainRegistry.get(activeChainId) : null;
+    const addressExplorerUrl = explorerPageUrl({
+        chainId: activeChainId,
+        kind: 'address',
+        value: address?.address,
+        settings,
+    });
 
     // Inline payment-request fields, visible by default so customizing
     // the QR is a single-glance affair. As the amount changes, the QR
@@ -831,6 +838,15 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                             >
                                 Share QR
                             </Button>
+                        ) : null}
+                        {addressExplorerUrl ? (
+                            <a
+                                href={addressExplorerUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                            >
+                                View address on explorer
+                            </a>
                         ) : null}
                     </div>
 

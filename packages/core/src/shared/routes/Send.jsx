@@ -31,7 +31,6 @@ import {
     uri as uriLib,
 } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
-import { explorerCoinCode } from '../../registry/coinTicker.js';
 import { coinFromChainId, formatFiat, tickerColor } from '../components/BalanceList.jsx';
 import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
@@ -62,6 +61,7 @@ import { createUndoSendRequest, isUndoSendCancellation } from '../../flows/undoS
 import { checkRecipientNovelty } from '../../flows/recipientNovelty.js';
 import { classifySignRisk } from '../../flows/signRiskClassifier.js';
 import { MAX_SEND_LEGS, summarizeSendLegs, totalsByTick } from '../../flows/sendLegs.js';
+import { explorerPageUrl } from '../utils/explorerLinks.js';
 
 // Exact decimal-string -> satoshi conversion for the send-risk gates (#2249).
 // The old Math.floor(parseFloat(x) * 1e8) accumulated IEEE-754 rounding error
@@ -2033,10 +2033,13 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         const txid = result?.txid || result?.broadcast?.txid;
         const desc = chainId ? chainRegistry.get(chainId) : null;
         const explorerBase = desc?.explorer?.defaultUrl || '';
-        // The explorer base is bare; append the coin path segment.
-        const explorerCode = explorerCoinCode(desc);
         const explorerUrl = txid && explorerBase
-            ? `${explorerBase.replace(/\/$/, '')}${explorerCode ? `/${explorerCode}` : ''}/tx/${txid}`
+            ? explorerPageUrl({
+                chainId,
+                kind: 'transaction',
+                value: txid,
+                settings,
+            })
             : null;
         const sentAmount = amount && tick ? `${amount} ${tick}` : null;
         const recipient = toAddress
