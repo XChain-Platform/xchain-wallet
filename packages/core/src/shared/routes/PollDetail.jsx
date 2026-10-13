@@ -39,6 +39,7 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
+import detailStyles from './PollDetail.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -268,6 +269,11 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
     const hasCountdown = Number.isFinite(endBlock) && currentHeight !== null;
     const blocksRemaining = hasCountdown ? endBlock - currentHeight : null;
     const isOpen = pollReportsOpen && (blocksRemaining === null || blocksRemaining >= 0);
+    const resultWeights = results?.map((row) => {
+        const weight = Number(row?.total_weight);
+        return Number.isFinite(weight) && weight > 0 ? weight : 0;
+    }) || [];
+    const totalResultWeight = resultWeights.reduce((total, weight) => total + weight, 0);
     const walletBallots = useMemo(() => {
         if (!walletVotes || !addressesByChain) return [];
         return (addressesByChain[chainId] || []).map(({ address }) => ({
@@ -520,7 +526,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
             {blocksRemaining !== null ? (
                 <>
                     <dt className={styles.detailsLabel}>Voting window</dt>
-                    <dd className={styles.detailsValue}>{blocksRemaining > 0
+                    <dd className={`${styles.detailsValue} ${detailStyles.countdown}`}>{blocksRemaining > 0
                         ? `${blocksRemaining} block${blocksRemaining === 1 ? '' : 's'} remaining`
                         : blocksRemaining === 0 ? 'Final voting block' : 'Voting closed'}</dd>
                 </>
@@ -564,18 +570,36 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
         <div style={{ marginTop: '0.75rem' }}>
             <SectionHeader title="Results" />
             {results && results.length ? (
-                <table style={{ width: '100%', fontSize: '0.85rem' }}>
-                    <thead><tr><th style={{ textAlign: 'left' }}>Option</th><th style={{ textAlign: 'right' }}>Weight</th><th style={{ textAlign: 'right' }}>Voters</th></tr></thead>
-                    <tbody>
-                        {results.map((r) => (
-                            <tr key={String(r.option_index)}>
-                                <td>{r.option_index}: {options[r.option_index] ?? ''}</td>
-                                <td style={{ textAlign: 'right' }}>{String(r.total_weight ?? '0')}</td>
-                                <td style={{ textAlign: 'right' }}>{String(r.voter_count ?? '0')}</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
+                <ul className={detailStyles.resultList} aria-label="Poll results">
+                    {results.map((r, index) => {
+                        const optionText = `${r.option_index}: ${options[r.option_index] ?? ''}`;
+                        const percentage = totalResultWeight > 0
+                            ? Math.round((resultWeights[index] / totalResultWeight) * 100)
+                            : 0;
+                        return (
+                            <li className={detailStyles.resultItem} key={String(r.option_index)}>
+                                <div className={detailStyles.resultHeader}>
+                                    <span className={detailStyles.resultOption}>{optionText}</span>
+                                    <span className={detailStyles.resultValues}>
+                                        <span>{String(r.total_weight ?? '0')} weight</span>
+                                        <span>{String(r.voter_count ?? '0')} voter{Number(r.voter_count) === 1 ? '' : 's'}</span>
+                                    </span>
+                                </div>
+                                <div
+                                    className={detailStyles.resultTrack}
+                                    role="progressbar"
+                                    aria-label={`${optionText} weight`}
+                                    aria-valuemin={0}
+                                    aria-valuemax={100}
+                                    aria-valuenow={percentage}
+                                    aria-valuetext={`${String(r.total_weight ?? '0')} weight`}
+                                >
+                                    <div className={detailStyles.resultFill} style={{ width: `${percentage}%` }} />
+                                </div>
+                            </li>
+                        );
+                    })}
+                </ul>
             ) : (
                 <p className={styles.hint}>
                     {isOpen
@@ -677,6 +701,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
             {resultsBlock}
             {isOpen ? (
                 <FormPage
+                    className={detailStyles.ballotForm}
                     label={sourceBallot.length ? 'Change ballot' : 'Cast ballot'}
                     onSubmit={handleReview}
                     status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
@@ -686,19 +711,19 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.4rem' }}>
                         {options.map((label, i) => (
                             isSplit ? (
-                                <div key={i} style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
-                                    <div style={{ flex: 1 }}>
+                                <div key={i} className={detailStyles.splitOptionRow}>
+                                    <div className={detailStyles.splitOptionInput}>
                                         <Input label={`${i}: ${label}`} value={splitShares[i] || ''} inputMode="numeric"
                                             onChange={(e) => setSplitShares((prev) => ({ ...prev, [i]: e.target.value }))}
                                             placeholder="share" autoComplete="off" />
                                     </div>
                                 </div>
                             ) : (
-                                <label key={i} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                <label key={i} className={detailStyles.optionRow}>
                                     <input type="checkbox" checked={approvalChoices.has(i)}
                                         disabled={!approvalChoices.has(i) && approvalChoices.size >= maxSel}
                                         onChange={() => toggleApproval(i)} />
-                                    <span>{i}: {label}</span>
+                                    <span className={detailStyles.optionLabel}>{i}: {label}</span>
                                 </label>
                             )
                         ))}
