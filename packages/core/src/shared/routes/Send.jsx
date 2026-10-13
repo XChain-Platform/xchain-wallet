@@ -115,6 +115,11 @@ export function exactTokenMaxAmount(raw) {
     if (/^0+(\.0+)?$/.test(s)) return null;
     return s;
 }
+
+export function isPositiveDecimalAmount(raw) {
+    const value = String(raw ?? '').trim();
+    return /^(?:\d+(?:\.\d+)?|\.\d+)$/.test(value) && /[1-9]/.test(value);
+}
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -130,6 +135,7 @@ import { HwSignBlock } from '../components/HwSignBlock.jsx';
 import { BalanceChanges } from '../components/BalanceChanges.jsx';
 import { RawPsbtViewer } from '../components/RawPsbtViewer.jsx';
 import { useToast } from '../components/ToastHost.jsx';
+import { copyText } from '../clipboard.js';
 import { AmountField } from '../components/AmountField.jsx';
 import { TokenField } from '../components/TokenField.jsx';
 import { useHaptic } from '../hooks/useHaptic.js';
@@ -1371,7 +1377,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
             return;
         }
         const amt = String(amount).trim();
-        if (!amt || Number(amt) <= 0) {
+        if (!isPositiveDecimalAmount(amt)) {
             setFormError('Amount must be a positive number.');
             return;
         }
@@ -1412,7 +1418,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                 return;
             }
             const legAmount = String(leg.amount).trim();
-            if (!legAmount || Number(legAmount) <= 0) {
+            if (!isPositiveDecimalAmount(legAmount)) {
                 setFormError(`${label}: amount must be a positive number.`);
                 return;
             }
@@ -1897,9 +1903,13 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
             // setPreviewResult(null) call referenced a non-existent setter and
             // threw a ReferenceError the moment "Send another" was tapped.
         };
-        const copyTxid = () => {
+        const copyTxid = async () => {
             if (!txid) return;
-            try { navigator.clipboard?.writeText(txid); } catch { /* best effort */ }
+            const { ok } = await copyText(txid);
+            showToast({
+                message: ok ? 'Transaction ID copied.' : 'Copy failed: clipboard unavailable',
+                variant: ok ? 'success' : 'error',
+            });
         };
 
         // §20 / G040: watcher mode result. The submit returned an unsigned

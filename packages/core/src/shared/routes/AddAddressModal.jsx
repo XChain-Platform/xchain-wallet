@@ -151,7 +151,7 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
     async function handleGenerate(event) {
         event.preventDefault();
         if (busy) return;
-        const n = Math.floor(Number(count));
+        const n = Number(count);
         if (!effectiveChainId) { setError('Pick a coin.'); return; }
         if (!Number.isInteger(n) || n < 1 || n > MAX_ADDRESSES) {
             setError(`Enter a number between 1 and ${MAX_ADDRESSES}.`);
@@ -185,7 +185,7 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
         }
     }
 
-    const countNum = Math.floor(Number(count));
+    const countNum = Number(count);
     const generateLabel = Number.isInteger(countNum) && countNum > 1 ? `Generate ${countNum}` : 'Generate';
 
     const header = (

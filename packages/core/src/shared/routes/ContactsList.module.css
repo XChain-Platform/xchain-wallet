@@ -21,10 +21,10 @@
     gap: var(--xc-space-2);
     width: 100%;
     margin-bottom: var(--xc-space-2);
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
 }
 
-/* Search and network picker each take exactly 50% of the toolbar. */
+/* Search and network picker share the space left beside the sort control. */
 .search {
     flex: 1 1 0;
     min-width: 0;
@@ -53,6 +53,12 @@
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-radius-md);
+}
+
+@media (max-width: 420px) {
+    .sort {
+        flex: 1 1 100%;
+    }
 }
 
 /* Circular plus button in the header trailing slot, matching the

@@ -76,6 +76,18 @@ describe('Add address on an account with no addresses', () => {
         expect(generateReceiveAddress.mock.calls[0][0].addressType).toBeTruthy();
     });
 
+    it('rejects a fractional address count instead of rounding it down', async () => {
+        const generateReceiveAddress = vi.fn(async () => ({ address: 'bcrt1qexample' }));
+        renderModal({ getSettings: async () => REGTEST_SETTINGS, generateReceiveAddress });
+
+        const count = await screen.findByLabelText('Number of addresses');
+        fireEvent.change(count, { target: { value: '1.5' } });
+        fireEvent.click(screen.getByRole('button', { name: /^Generate$/ }));
+
+        expect(await screen.findByText(/Enter a number between 1 and 25/)).toBeTruthy();
+        expect(generateReceiveAddress).not.toHaveBeenCalled();
+    });
+
     it('keeps offering the chains the account already occupies', async () => {
         const generateReceiveAddress = vi.fn(async () => ({ address: 'bc1qexample' }));
         renderModal(

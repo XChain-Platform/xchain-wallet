@@ -54,6 +54,7 @@ import { readChainSet, writeChainSet } from '../utils/chainFilterMemory.js';
 import { contractDisplayLabel } from './contractResponseShape.js';
 import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
 import { findContactByName, withEntriesAdded } from '../utils/contactMerge.js';
+import { copyText } from '../clipboard.js';
 import styles from './History.module.css';
 
 const HISTORY_CHAIN_FILTER_KEY = 'history';
@@ -1401,7 +1402,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             ) : null}
 
             {visibleEntries.length === 0 && loadingChains.size === 0 ? (
-                filtersActive ? (
+                filtersActive && entries.length > 0 ? (
                     <EmptyStateNudge
                         title="No matches for the current filters"
                         body="Adjust or clear the filters to see more history."
@@ -1412,7 +1413,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     <EmptyStateNudge
                         title={crossChainOnly
                             ? 'No cross-chain actions yet'
-                            : 'No history yet'}
+                            : 'No activity yet'}
                         body={crossChainOnly
                             ? 'Make a cross-chain transfer or receive one to see entries here.'
                             : 'Once you send or receive on the selected chains, the activity feed populates.'}
@@ -1719,11 +1720,13 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
             id: 'copy-link',
             label: 'Copy action link',
             icon: <Icon.CopyIcon />,
-            onClick: () => {
+            onClick: async () => {
                 setMoreOpen(false);
-                if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-                    navigator.clipboard.writeText(shareUrl).catch(() => { /* no-op */ });
-                }
+                const { ok } = await copyText(shareUrl);
+                showToast({
+                    message: ok ? 'Action link copied.' : 'Copy failed: clipboard unavailable',
+                    variant: ok ? 'success' : 'error',
+                });
             },
         });
     }
@@ -2292,27 +2295,17 @@ function CopyableValue({ display, fullValue, ariaLabel }) {
 
 function CopyIconButton({ value, label = 'Copy to clipboard' }) {
     const [copied, setCopied] = useState(false);
+    const { showToast } = useToast();
     const handleClick = async (event) => {
         event.stopPropagation();
         const text = String(value ?? '');
-        try {
-            if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-                await navigator.clipboard.writeText(text);
-            } else if (typeof document !== 'undefined') {
-                // Fallback for non-secure contexts; hidden textarea + execCommand.
-                const ta = document.createElement('textarea');
-                ta.value = text;
-                ta.setAttribute('readonly', '');
-                ta.style.position = 'fixed';
-                ta.style.opacity = '0';
-                document.body.appendChild(ta);
-                ta.select();
-                document.execCommand('copy');
-                document.body.removeChild(ta);
-            }
+        const { ok } = await copyText(text);
+        if (ok) {
             setCopied(true);
             setTimeout(() => setCopied(false), 1500);
-        } catch { /* clipboard may be unavailable; swallow silently */ }
+            return;
+        }
+        showToast({ message: 'Copy failed: clipboard unavailable', variant: 'error' });
     };
     return (
         <button
@@ -2737,8 +2730,6 @@ function RecipientsBlock({ entry }) {
             {snapshotNote ? <span style={headingStyle}>{snapshotNote}</span> : null}
             {recipients.length > 0 ? (
                 <div style={{
-                    maxHeight: 160,
-                    overflowY: 'auto',
                     border: '1px solid var(--xc-border)',
                     borderRadius: 'var(--xc-radius-sm)',
                     padding: 'var(--xc-space-1)',
@@ -2746,15 +2737,15 @@ function RecipientsBlock({ entry }) {
                     fontSize: 'var(--xc-text-xs)',
                     color: 'var(--xc-text)',
                 }}>
-                    {recipients.slice(0, 200).map((r, i) => (
+                    {recipients.slice(0, 20).map((r, i) => (
                         <div key={`${r.address}-${i}`} style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--xc-space-1)' }}>
                             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.address}</span>
                             {r.balance !== undefined ? <span style={{ color: 'var(--xc-text-muted)' }}>{r.balance}</span> : null}
                         </div>
                     ))}
-                    {recipients.length > 200 ? (
+                    {recipients.length > 20 ? (
                         <div style={{ color: 'var(--xc-text-muted)', marginTop: 'var(--xc-space-1)' }}>
-                            … and {recipients.length - 200} more not shown
+                            … and {recipients.length - 20} more not shown
                         </div>
                     ) : null}
                 </div>

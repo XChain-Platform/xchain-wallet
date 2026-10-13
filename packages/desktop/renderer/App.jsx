@@ -1726,6 +1726,11 @@ function AppInner() {
                 return (
                     <ContactsList
                         walletId={activeWalletId}
+                        onSend={(prefill) => {
+                            setSendPrefill(prefill);
+                            setSendBackTo('contacts');
+                            setUnlockedView('send');
+                        }}
                         onSendMessage={(prefill) => {
                             setComposePrefill({ ...prefill, __from: 'contacts' });
                             setUnlockedView('compose-message');

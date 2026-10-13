@@ -18,6 +18,7 @@ import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { ConfirmModal } from '../components/ConfirmModal.jsx';
 import { useConfirmModal } from '../hooks/useConfirmModal.js';
 import { useToast } from '../components/ToastHost.jsx';
+import { copyText } from '../clipboard.js';
 import { AddAddressModal, addressTypeHint } from './AddAddressModal.jsx';
 import { coinFromChainId, formatAmount, fiatValue } from '../components/BalanceList.jsx';
 import { useSettings } from '../hooks/useSettings.js';
@@ -1049,12 +1050,14 @@ export function AddressList({
                 setLabelSaving(false);
             }
         };
-        const copyAddress = () => {
-            try {
-                navigator.clipboard?.writeText?.(selected.address);
+        const copyAddress = async () => {
+            const { ok } = await copyText(selected.address);
+            if (ok) {
                 setAddrCopied(true);
                 setTimeout(() => setAddrCopied(false), 1200);
-            } catch { /* no-op */ }
+                return;
+            }
+            showToast({ message: 'Copy failed: clipboard unavailable', variant: 'error' });
         };
         const removeAddress = async () => {
             if (!selected.record?.id) return;
@@ -1190,24 +1193,22 @@ export function AddressList({
                 </div>
 
                 <div className={local.quickActions} role="group" aria-label="Address actions">
-                    <button
-                        type="button"
-                        className={local.quickAction}
-                        onClick={setAsActive}
-                        disabled={!selected.record?.id}
-                        title={isActiveRow(selected) ? 'This is the active address' : 'Make this the active address'}
-                    >
-                        <span className={local.quickActionIcon} aria-hidden="true"><Icon.ReceiveIcon /></span>
-                        <span>Use</span>
-                    </button>
-                    {/* Absent when the shell wired no handler, greyed only for
-                        rows that cannot reveal (same rule as onReceive below). */}
-                    {onShowPrivateKey ? (
+                    {selected.record?.id ? (
+                        <button
+                            type="button"
+                            className={local.quickAction}
+                            onClick={setAsActive}
+                            title={isActiveRow(selected) ? 'This is the active address' : 'Make this the active address'}
+                        >
+                            <span className={local.quickActionIcon} aria-hidden="true"><Icon.ReceiveIcon /></span>
+                            <span>Use</span>
+                        </button>
+                    ) : null}
+                    {canSecret ? (
                         <button
                             type="button"
                             className={local.quickAction}
                             onClick={() => onShowPrivateKey?.(selected.record)}
-                            disabled={!canSecret}
                         >
                             <span className={local.quickActionIcon} aria-hidden="true"><Icon.KeyIcon /></span>
                             <span>Secret</span>
@@ -1221,15 +1222,16 @@ export function AddressList({
                         <span className={local.quickActionIcon} aria-hidden="true"><Icon.ExternalLinkIcon /></span>
                         <span>XChain</span>
                     </button>
-                    <button
-                        type="button"
-                        className={local.quickAction}
-                        onClick={removeAddress}
-                        disabled={!canDelete}
-                    >
-                        <span className={local.quickActionIcon} aria-hidden="true"><Icon.TrashIcon /></span>
-                        <span>Delete</span>
-                    </button>
+                    {canDelete ? (
+                        <button
+                            type="button"
+                            className={local.quickAction}
+                            onClick={removeAddress}
+                        >
+                            <span className={local.quickActionIcon} aria-hidden="true"><Icon.TrashIcon /></span>
+                            <span>Delete</span>
+                        </button>
+                    ) : null}
                 </div>
 
                 <div className={local.tabsRow} role="tablist" aria-label="Address sections">

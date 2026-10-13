@@ -23,6 +23,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
 
 const CHAIN_ID = 'bitcoin-mainnet';
@@ -75,7 +76,11 @@ function mount({ onViewHistory } = {}) {
         React.createElement(
             MessagingProvider,
             { shell: 'web', messaging },
-            React.createElement(Send, { walletId: 'w', onBack() {}, onViewHistory }),
+            React.createElement(
+                ToastHost,
+                null,
+                React.createElement(Send, { walletId: 'w', onBack() {}, onViewHistory }),
+            ),
         ),
     );
     return { messaging };
@@ -137,5 +142,18 @@ describe('Send success card: "View in history" (M2.4)', () => {
         // pre-existing actions.
         expect(screen.getByRole('button', { name: /^Send another$/ })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /^Done$/ })).toBeInTheDocument();
+    });
+
+    it('reports clipboard failure instead of claiming the transaction ID was copied', async () => {
+        Object.defineProperty(document, 'execCommand', {
+            configurable: true,
+            value: vi.fn(() => false),
+        });
+        const { messaging } = mount();
+        await driveToBroadcastDone(messaging);
+
+        fireEvent.click(screen.getByRole('button', { name: /Copy transaction ID/i }));
+
+        expect(await screen.findByText('Copy failed: clipboard unavailable')).toBeInTheDocument();
     });
 });
