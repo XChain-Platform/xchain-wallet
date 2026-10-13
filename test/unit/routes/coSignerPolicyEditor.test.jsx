@@ -91,6 +91,75 @@ describe('CoSignerPolicyEditor helpers', () => {
             .toMatch(/hours/i);
     });
 
+    it('rejects policy amounts that are not non-negative decimals', () => {
+        expect(buildPolicyDraft({
+            ...emptyPolicyDraft(),
+            allowedActionsText: 'SEND',
+            maxPerAction: [{ action: 'SEND', tick: '*', cap: '-1' }],
+        }).error).toMatch(/non-negative number/i);
+        expect(buildPolicyDraft({
+            ...emptyPolicyDraft(),
+            allowedActionsText: 'SEND',
+            windowEnabled: true,
+            windowHours: '24',
+            windowPerTick: [{ tick: 'XCHAIN', cap: 'not-a-number' }],
+        }).error).toMatch(/non-negative number/i);
+        expect(buildPolicyDraft({
+            ...emptyPolicyDraft(),
+            allowedActionsText: 'SEND',
+            confirmAbove: [{ tick: 'XCHAIN', amount: '-0.1' }],
+        }).error).toMatch(/non-negative number/i);
+    });
+
+    it('requires an enabled rolling window to contain an enforceable limit', () => {
+        const out = buildPolicyDraft({
+            ...emptyPolicyDraft(),
+            allowedActionsText: 'SEND',
+            windowEnabled: true,
+            windowHours: '24',
+        });
+        expect(out.error).toMatch(/max action count|per-token limit/i);
+    });
+
+    it('rejects duplicate limit rows instead of silently replacing one', () => {
+        expect(buildPolicyDraft({
+            ...emptyPolicyDraft(),
+            allowedActionsText: 'SEND',
+            maxPerAction: [
+                { action: 'SEND', tick: 'xchain', cap: '10' },
+                { action: 'SEND', tick: 'XCHAIN', cap: '20' },
+            ],
+        }).error).toMatch(/listed more than once/i);
+        expect(buildPolicyDraft({
+            ...emptyPolicyDraft(),
+            allowedActionsText: 'SEND',
+            confirmAbove: [
+                { tick: 'xchain', amount: '10' },
+                { tick: 'XCHAIN', amount: '20' },
+            ],
+        }).error).toMatch(/listed more than once/i);
+    });
+
+    it('rejects max action counts outside JavaScript safe integer range', () => {
+        const out = buildPolicyDraft({
+            ...emptyPolicyDraft(),
+            allowedActionsText: 'SEND',
+            windowEnabled: true,
+            windowHours: '24',
+            windowMaxActions: '999999999999999999999',
+        });
+        expect(out.error).toMatch(/positive whole number/i);
+    });
+
+    it('rejects an output max value without an output address', () => {
+        const out = buildPolicyDraft({
+            ...emptyPolicyDraft(),
+            allowedActionsText: 'SEND',
+            allowedOutputs: [{ address: '', maxValue: '1000' }],
+        });
+        expect(out.error).toMatch(/missing its address/i);
+    });
+
     it('round-trips a stored account back into a draft', () => {
         const account = createCoSignerAccount({
             walletId: 'w1',
