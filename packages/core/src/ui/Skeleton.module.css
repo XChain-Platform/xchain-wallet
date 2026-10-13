@@ -60,9 +60,11 @@
 }
 
 .row {
+    box-sizing: border-box;
     display: flex;
     align-items: center;
     gap: var(--xc-space-3);
+    min-height: var(--xc-control-h-lg);
     padding: var(--xc-space-2) 0;
 }
 

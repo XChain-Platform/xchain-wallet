@@ -221,26 +221,6 @@
     padding: var(--xc-space-6) var(--xc-space-3);
 }
 
-.persistingSpinner {
-    width: var(--xc-control-h-md);
-    height: var(--xc-control-h-md);
-    border-radius: 50%;
-    /* 3px gives the progress ring enough weight without changing its diameter. */
-    border: 3px solid var(--xc-border-strong);
-    border-top-color: var(--xc-accent-primary);
-    animation: persisting-spin 0.9s linear infinite;
-}
-
-@keyframes persisting-spin {
-    to { transform: rotate(360deg); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .persistingSpinner {
-        animation: none;
-    }
-}
-
 /* 520px targets short landscape viewports without a matching layout token. */
 @media (max-height: 520px) {
     .headPopup,

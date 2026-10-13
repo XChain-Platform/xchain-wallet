@@ -155,13 +155,35 @@
     filter: brightness(0.92);
 }
 
+.spinnerStatus {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--xc-space-2);
+    flex: 0 0 auto;
+}
+
 .spinner {
-    width: 0.75rem;
-    height: 0.75rem;
+    width: var(--xc-spinner-size);
+    height: var(--xc-spinner-size);
+    box-sizing: border-box;
+    flex: 0 0 auto;
     border-radius: 50%;
     border: 0.125rem solid currentColor;
     border-top-color: transparent;
     animation: spin 0.7s linear infinite;
+}
+
+.spinner_sm {
+    --xc-spinner-size: var(--xc-icon-sm);
+}
+
+.spinner_md {
+    --xc-spinner-size: var(--xc-icon-md);
+}
+
+.spinner_lg {
+    --xc-spinner-size: var(--xc-icon-xl);
 }
 
 .loading .label {

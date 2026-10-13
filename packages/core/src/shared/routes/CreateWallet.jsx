@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
 import { RECOVERY_PHRASE_WARNING } from '../utils/securityMomentCopy.js';
-import { Button, FormErrorSummary, FormPage, Icon, InfoTip, Input, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, FormErrorSummary, FormPage, Icon, InfoTip, Input, Screen, Spinner, StatusMessage } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { crypto as cryptoLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -314,7 +314,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     if (stage === 'persisting') {
         const persistingBody = (
             <div className={styles.persisting} role="status" aria-live="polite">
-                <span className={styles.persistingSpinner} aria-hidden="true" />
+                <Spinner size="lg" />
                 <h1 ref={headingRef} tabIndex={-1} className={titleClass}>Creating your wallet</h1>
                 <p className={subtitleClass}>
                     XChain Platform is encrypting your wallet with your password.
