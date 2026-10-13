@@ -20,7 +20,7 @@
 // the shared confirm then dry-runs and signs the exact composed transaction.
 
 import { useEffect, useRef, useState, useMemo } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, FeeSelector, FormPage, FormSection, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { humanizeError } from '../utils/humanizeError.js';
@@ -60,7 +60,6 @@ const chainRegistry = registryLib.defaultRegistry();
 export function AddressPreferencesForm({ walletId, chainId: initialChainId, address, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const {
         chainId,
@@ -239,7 +238,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            {children}
         </Screen>
     );
 
@@ -297,7 +296,22 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
     if (stage === 'review' || stage === 'submitting') {
         const rows = writtenRows(actionParams, reviewBaseline);
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
+            <FormPage
+                label="Review preferences"
+                onSubmit={handleSubmit}
+                status={submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={stage === 'submitting' || ownerLane.composing}
+                    >
+                        {isWatcherMode ? 'Build unsigned transaction' : 'Continue to confirmation'}
+                    </Button>
+                )}
+            >
                 <p className={styles.summary}>
                     Writes all three on-chain preferences for this address in one
                     ADDRESS action. Unchanged rows are re-written with their current
@@ -335,115 +349,109 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                         transaction to a Full-mode wallet to broadcast.
                     </p>
                 ) : null}
-                {submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
-                ) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting' || ownerLane.composing}
-                    >
-                        {isWatcherMode ? 'Build unsigned transaction' : 'Continue to confirmation'}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
     return wrap(
-        <form onSubmit={handleReview} noValidate>
-            <p className={styles.hint}>
+        <FormPage
+            label="On-chain preferences"
+            onSubmit={handleReview}
+            sectioned
+            intro={(
+                <>
                 On-chain preferences apply to <AddressText address={address} /> itself
                 and are visible to the whole network once written.
-            </p>
-            {currentError ? (
-                <StatusMessage variant="error" className={styles.error}>{currentError}</StatusMessage>
-            ) : null}
-            {current ? (
-                <dl className={styles.detailsList}>
-                    <DetailRow
-                        label="Currently on chain"
-                        value={current.onChain ? 'Custom preferences set' : 'Protocol defaults (never written)'}
-                    />
-                </dl>
-            ) : null}
-
-            <p className={styles.detailsLabel}>Protocol fee handling</p>
-            <label className={styles.checkRow}>
-                <input
-                    type="radio"
-                    name="feePref"
-                    checked={feePref === '2'}
-                    onChange={() => pick(setFeePref)('2')}
-                />
-                <span>Donate to protocol development (default)</span>
-            </label>
-            <label className={styles.checkRow}>
-                <input
-                    type="radio"
-                    name="feePref"
-                    checked={feePref === '1'}
-                    onChange={() => pick(setFeePref)('1')}
-                />
-                <span>{feePreferenceLabel(1)}</span>
-            </label>
-
-            <p className={styles.detailsLabel}>Incoming sends</p>
-            <label className={styles.checkRow}>
-                <input
-                    type="checkbox"
-                    checked={requireMemo}
-                    onChange={(e) => pick(setRequireMemo)(e.target.checked)}
-                />
-                <span>Require a memo on any send to this address</span>
-            </label>
-
-            <p className={styles.detailsLabel}>Dispensers on this address</p>
-            <label className={styles.checkRow}>
-                <input
-                    type="radio"
-                    name="dispPref"
-                    checked={dispPref === '1'}
-                    onChange={() => pick(setDispPref)('1')}
-                />
-                <span>Only this address may open dispensers (default)</span>
-            </label>
-            <label className={styles.checkRow}>
-                <input
-                    type="radio"
-                    name="dispPref"
-                    checked={dispPref === '2'}
-                    onChange={() => pick(setDispPref)('2')}
-                />
-                <span>Anyone may open a dispenser funded by this address</span>
-            </label>
-
-            <Input
-                label="Memo (optional)"
-                value={memo}
-                onChange={(e) => setMemo(e.target.value)}
-                autoComplete="off"
-            />
-
-            {feeTiers ? (
-                <FeeSelector
-                    label="Network fee"
-                    coinTicker={coinTicker}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                />
-            ) : null}
-            <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
-            {formError ? (
+                </>
+            )}
+            status={formError ? (
                 <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
             ) : null}
-            <div className={styles.actions}>
+            actions={(
                 <Button type="submit" variant="primary">Review</Button>
-            </div>
-        </form>,
+            )}
+        >
+            <FormSection title="Protocol fee handling">
+                {currentError ? (
+                    <StatusMessage variant="error" className={styles.error}>{currentError}</StatusMessage>
+                ) : null}
+                {current ? (
+                    <dl className={styles.detailsList}>
+                        <DetailRow
+                            label="Currently on chain"
+                            value={current.onChain ? 'Custom preferences set' : 'Protocol defaults (never written)'}
+                        />
+                    </dl>
+                ) : null}
+                <label className={styles.checkRow}>
+                    <input
+                        type="radio"
+                        name="feePref"
+                        checked={feePref === '2'}
+                        onChange={() => pick(setFeePref)('2')}
+                    />
+                    <span>Donate to protocol development (default)</span>
+                </label>
+                <label className={styles.checkRow}>
+                    <input
+                        type="radio"
+                        name="feePref"
+                        checked={feePref === '1'}
+                        onChange={() => pick(setFeePref)('1')}
+                    />
+                    <span>{feePreferenceLabel(1)}</span>
+                </label>
+            </FormSection>
+
+            <FormSection title="Incoming sends">
+                <label className={styles.checkRow}>
+                    <input
+                        type="checkbox"
+                        checked={requireMemo}
+                        onChange={(e) => pick(setRequireMemo)(e.target.checked)}
+                    />
+                    <span>Require a memo on any send to this address</span>
+                </label>
+            </FormSection>
+
+            <FormSection title="Dispensers on this address">
+                <label className={styles.checkRow}>
+                    <input
+                        type="radio"
+                        name="dispPref"
+                        checked={dispPref === '1'}
+                        onChange={() => pick(setDispPref)('1')}
+                    />
+                    <span>Only this address may open dispensers (default)</span>
+                </label>
+                <label className={styles.checkRow}>
+                    <input
+                        type="radio"
+                        name="dispPref"
+                        checked={dispPref === '2'}
+                        onChange={() => pick(setDispPref)('2')}
+                    />
+                    <span>Anyone may open a dispenser funded by this address</span>
+                </label>
+                <Input
+                    label="Memo (optional)"
+                    value={memo}
+                    onChange={(e) => setMemo(e.target.value)}
+                    autoComplete="off"
+                />
+                {feeTiers ? (
+                    <FeeSelector
+                        label="Network fee"
+                        coinTicker={coinTicker}
+                        tiers={feeTiers}
+                        value={feePick}
+                        onChange={setFeePick}
+                        customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+                    />
+                ) : null}
+                <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
+            </FormSection>
+        </FormPage>,
     );
 }
 

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Screen, PageHeader, Icon, VerifiedBadge } from '@xchain-wallet/core/ui';
+import { EmptyState, ListPage, Screen, PageHeader, VerifiedBadge } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -147,7 +147,9 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
             <Screen variant={variant} header={(
                 <PageHeader onBack={onBack} backLabel="Back to history" title="Action" />
             )}>
-                <p className={styles.empty}>No action selected.</p>
+                <ListPage>
+                    <EmptyState title="No action selected." titleAs="p" />
+                </ListPage>
             </Screen>
         );
     }
@@ -179,7 +181,7 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
 
     return (
         <Screen variant={variant} header={header}>
-            <div className={styles.body}>
+            <ListPage className={styles.body}>
                 {verdict ? (
                     <div className={styles.detailVerify}>
                         <VerifiedBadge status={verdict.status} reason={verdict.reason} size="sm" />
@@ -205,7 +207,7 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
                         }
                         : undefined}
                 />
-            </div>
+            </ListPage>
         </Screen>
     );
 }
