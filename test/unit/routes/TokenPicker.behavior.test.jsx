@@ -151,9 +151,9 @@ describe('TokenPicker asset visibility and filtering', () => {
         await screen.findByText(LONG_NAME);
         fireEvent.change(search, { target: { value: 'missing asset' } });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Reset filters' }));
         expect(search).toHaveValue('');
-        expect(screen.getByText(LONG_NAME)).toBeInTheDocument();
+        expect(await screen.findByText(LONG_NAME)).toBeInTheDocument();
     });
 
     it('retries balance and platform-search failures', async () => {

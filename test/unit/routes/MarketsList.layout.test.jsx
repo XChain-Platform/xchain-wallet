@@ -149,10 +149,10 @@ describe('MarketsList narrow layout', () => {
 
         const search = screen.getByRole('searchbox', { name: 'Search markets' });
         fireEvent.change(search, { target: { value: 'missing' } });
-        expect(screen.getByText('No matches')).toBeInTheDocument();
+        expect(await screen.findByText('No matches')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
         expect(search).toHaveValue('');
-        expect(screen.getByText('TOKEN0')).toBeInTheDocument();
+        expect(await screen.findByText('TOKEN0')).toBeInTheDocument();
     });
 
     it('shows a loading skeleton and retries a failed marketplace activity request', async () => {
