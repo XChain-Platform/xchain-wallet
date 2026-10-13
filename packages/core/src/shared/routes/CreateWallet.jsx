@@ -314,7 +314,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     if (stage === 'persisting') {
         const persistingBody = (
             <div className={styles.persisting} role="status" aria-live="polite">
-                <span className={styles.persistingSpinner} aria-hidden="true" />
+                <Button loading icon={<Icon.CheckIcon />}>Create wallet</Button>
                 <h1 ref={headingRef} tabIndex={-1} className={titleClass}>Creating your wallet</h1>
                 <p className={subtitleClass}>
                     XChain Platform is encrypting your wallet with your password.

@@ -728,14 +728,10 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     type="submit"
                     variant="primary"
                     block
-                    loading={actionConfirm.composing}
+                    loading={accountLoading || actionConfirm.composing}
                     disabled={accountLoading || actionConfirm.composing}
                 >
-                    {accountLoading
-                        ? 'Loading wallet…'
-                        : actionConfirm.composing
-                        ? 'Preparing review…'
-                        : (singleEncode ? `Place ${side} order` : 'Review')}
+                    {singleEncode ? `Place ${side} order` : 'Review'}
                 </Button>
             )}
         >

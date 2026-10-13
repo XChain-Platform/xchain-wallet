@@ -67,7 +67,7 @@ export function Button({
             {...rest}
         >
             {loading ? <span className={styles.spinner} aria-hidden="true" /> : null}
-            {!loading && resolvedIcon ? <span className={styles.icon} aria-hidden="true">{resolvedIcon}</span> : null}
+            {resolvedIcon ? <span className={styles.icon} aria-hidden="true">{resolvedIcon}</span> : null}
             <span className={styles.label}>{children}</span>
         </button>
     );
