@@ -28,6 +28,11 @@
     flex-wrap: nowrap;
 }
 
+.actionSlot {
+    display: inline-flex;
+    flex: 0 0 auto;
+}
+
 /* Compact shells keep every global action available on a second row. The
    header grows with that row instead of widening the 320px content area. */
 :global([data-xc-tier='compact']) .bar {
@@ -143,6 +148,33 @@
     }
 
     .logo {
+        width: 44px;
+    }
+}
+
+/* Phone portrait keeps identity and essential state in one row. Search,
+   settings, scan and platform links remain available from bottom navigation. */
+@media (max-width: 479px) {
+    :global([data-xc-tier='compact']) .bar.phoneCondensed {
+        align-items: center;
+        flex-wrap: nowrap;
+    }
+
+    :global([data-xc-tier='compact']) .bar.phoneCondensed .right {
+        flex: 0 0 auto;
+        flex-wrap: nowrap;
+    }
+
+    .phoneCondensed .phoneHidden {
+        display: none;
+    }
+
+    .phoneCondensed .networkSlot > div > button {
+        width: 28px;
+        border-color: transparent;
+    }
+
+    .phoneCondensed .logo {
         width: 44px;
     }
 }

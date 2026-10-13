@@ -104,7 +104,11 @@ export function AppHeader({
     return (
         // A labelled region, not a second banner: each screen's Screen header already
         // is the page banner, and a document may hold only one.
-        <div className={styles.bar} style={{ flexWrap: 'wrap' }} role="region" aria-label="App header">
+        <div
+            className={`${styles.bar} ${onMenuOpen ? styles.phoneCondensed : ''}`.trim()}
+            role="region"
+            aria-label="App header"
+        >
             <div className={styles.left}>
                 <img
                     src={branding.logoUrl()}
@@ -116,43 +120,51 @@ export function AppHeader({
             </div>
             <div className={styles.right}>
                 {onOpenNetworkSettings ? (
-                    <NetworkStatusIndicator onOpenNetworkSettings={onOpenNetworkSettings} />
+                    <span className={`${styles.actionSlot} ${styles.networkSlot}`}>
+                        <NetworkStatusIndicator onOpenNetworkSettings={onOpenNetworkSettings} />
+                    </span>
                 ) : null}
                 {showSettings ? (
-                    <HeaderSettingsButton
-                        activeWallet={activeWallet}
-                        activeAccount={activeAccount}
-                        onOpenWalletPicker={onOpenWalletPicker}
-                        onOpenAccountPicker={onOpenAccountPicker}
-                        onOpenSettings={onOpenSettings}
-                        walletNonDefault={walletNonDefault}
-                        accountNonDefault={accountNonDefault}
-                        chainRegistry={networkWired ? chainRegistry : undefined}
-                        coinFamilies={networkWired ? coinFamilies : undefined}
-                        networkFilter={networkFilter}
-                        onNetworkFilterChange={networkWired ? onNetworkFilterChange : undefined}
-                        activeNetwork={activeNetwork}
-                        developerMode={developerMode}
-                        onActiveNetworkChange={onActiveNetworkChange}
-                    />
+                    <span className={`${styles.actionSlot} ${styles.phoneHidden}`} data-phone-secondary-action>
+                        <HeaderSettingsButton
+                            activeWallet={activeWallet}
+                            activeAccount={activeAccount}
+                            onOpenWalletPicker={onOpenWalletPicker}
+                            onOpenAccountPicker={onOpenAccountPicker}
+                            onOpenSettings={onOpenSettings}
+                            walletNonDefault={walletNonDefault}
+                            accountNonDefault={accountNonDefault}
+                            chainRegistry={networkWired ? chainRegistry : undefined}
+                            coinFamilies={networkWired ? coinFamilies : undefined}
+                            networkFilter={networkFilter}
+                            onNetworkFilterChange={networkWired ? onNetworkFilterChange : undefined}
+                            activeNetwork={activeNetwork}
+                            developerMode={developerMode}
+                            onActiveNetworkChange={onActiveNetworkChange}
+                        />
+                    </span>
                 ) : null}
                 {onCommandPalette ? (
-                    <button
-                        type="button"
-                        className={styles.menuBtn}
-                        onClick={onCommandPalette}
-                        aria-label="Open command palette"
-                        aria-keyshortcuts="Meta+K Control+K"
-                        title="Search (Cmd/Ctrl+K)"
-                    >
-                        <Icon.SearchIcon />
-                    </button>
+                    <span className={`${styles.actionSlot} ${styles.phoneHidden}`} data-phone-secondary-action>
+                        <button
+                            type="button"
+                            className={styles.menuBtn}
+                            onClick={onCommandPalette}
+                            aria-label="Open command palette"
+                            aria-keyshortcuts="Meta+K Control+K"
+                            title="Search (Cmd/Ctrl+K)"
+                        >
+                            <Icon.SearchIcon />
+                        </button>
+                    </span>
                 ) : null}
-                <ScanMenu
-                    onScan={onScan}
-                    onManageAddresses={onManageAddresses}
-                    onViewAddress={onViewAddress}
-                />
+                <span className={`${styles.actionSlot} ${styles.phoneHidden}`} data-phone-secondary-action>
+                    <ScanMenu
+                        onScan={onScan}
+                        onManageAddresses={onManageAddresses}
+                        onViewAddress={onViewAddress}
+                    />
+                </span>
                 {onLock ? (
                     <button
                         type="button"
@@ -165,7 +177,9 @@ export function AppHeader({
                         <Icon.LockIcon />
                     </button>
                 ) : null}
-                <PlatformSwitcher current={platformCurrent} />
+                <span className={`${styles.actionSlot} ${styles.phoneHidden}`} data-phone-secondary-action>
+                    <PlatformSwitcher current={platformCurrent} />
+                </span>
                 {onMenuOpen ? (
                     <button
                         type="button"

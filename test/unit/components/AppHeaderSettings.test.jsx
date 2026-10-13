@@ -19,7 +19,11 @@ import { join } from 'node:path';
 import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
 import { AppHeader } from '../../../packages/core/src/shared/components/AppHeader.jsx';
 import { HeaderSettingsButton } from '../../../packages/core/src/shared/components/HeaderSettingsButton.jsx';
+import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
+import { FullLayoutWithNav } from '../../../packages/core/src/shared/components/LeftNav.jsx';
+import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { registry as registryLib } from '../../../packages/core/src/index.js';
+import PLATFORM_LINKS from '../../../packages/core/src/shared/platform-links.json';
 
 afterEach(() => {
     cleanup();
@@ -172,16 +176,80 @@ describe('AppHeader action row', () => {
         expect(buttons.every((button) => button.tabIndex === 0)).toBe(true);
     });
 
-    it('keeps the fully populated action row on one line at every audited width', () => {
+    it('keeps only network state, lock and menu in one header row at 360px', () => {
+        const originalWidth = window.innerWidth;
+        window.innerWidth = 360;
+        const { container } = render(
+            <MessagingProvider
+                shell="web"
+                messaging={{ getSettings: async () => ({ schemaVersion: 1, activeNetwork: 'mainnet' }) }}
+            >
+                <FullLayoutWithNav
+                    header={(
+                        <AppHeader
+                            {...allActions}
+                            activeWallet={{ id: 'w1', name: 'Main' }}
+                            onOpenNetworkSettings={() => {}}
+                        />
+                    )}
+                >
+                    <main />
+                </FullLayoutWithNav>
+            </MessagingProvider>,
+        );
+
         const rightRule = /\.right\s*\{([^}]*)\}/.exec(appHeaderCss)?.[1] || '';
         expect(rightRule).toMatch(/gap:\s*var\(--xc-space-1\)/);
         expect(rightRule).toMatch(/flex-wrap:\s*nowrap/);
+        const phoneRule = /@media \(max-width: (\d+)px\)\s*\{([\s\S]*)\}\s*$/.exec(appHeaderCss);
+        expect(phoneRule).not.toBeNull();
+        expect(Number(phoneRule[1])).toBe(479);
+        expect(phoneRule[2]).toMatch(/\.bar\.phoneCondensed\s*\{[^}]*flex-wrap:\s*nowrap/s);
+        expect(phoneRule[2]).toMatch(/\.right\s*\{[^}]*flex:\s*0 0 auto/s);
+        expect(phoneRule[2]).toMatch(/\.phoneCondensed \.phoneHidden\s*\{[^}]*display:\s*none/s);
+        expect(container.querySelector('[data-xc-tier]')).toHaveAttribute('data-xc-tier', 'compact');
+        expect(screen.getByRole('region', { name: 'App header' }).style.flexWrap).toBe('');
 
-        // 58px logo + 12px group gap + six 38px controls + five 4px
-        // action gaps + 24px horizontal padding leaves 18px at 360px.
-        const occupiedWidth = 58 + 12 + (6 * 38) + (5 * 4) + 24;
-        for (const width of [360, 411, 600, 900, 1280]) {
-            expect(occupiedWidth, `${width}px header`).toBeLessThanOrEqual(width);
+        const secondary = [...container.querySelectorAll('[data-phone-secondary-action]')];
+        expect(secondary).toHaveLength(4);
+        expect(secondary.flatMap((slot) => [...slot.querySelectorAll('button')]
+            .map((button) => button.getAttribute('aria-label')))).toEqual([
+            'Settings',
+            'Open command palette',
+            'Scan and addresses',
+            'XChain platform sites',
+        ]);
+        expect(screen.getByRole('button', { name: 'Checking network' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Lock wallet' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Open menu' })).toBeTruthy();
+        expect(screen.getByText('Wallet: Main')).toBeTruthy();
+        expect([360, 412].every((width) => width <= Number(phoneRule[1]))).toBe(true);
+        expect(480).toBeGreaterThan(Number(phoneRule[1]));
+        window.innerWidth = originalWidth;
+    });
+
+    it('keeps phone-hidden actions reachable from bottom navigation', () => {
+        const onCommandPalette = vi.fn();
+        render(
+            <BottomTabBar
+                currentView="home"
+                onSelect={() => {}}
+                onOpenSettings={() => {}}
+                onCommandPalette={onCommandPalette}
+                platformCurrent="wallet"
+            />,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'More' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+        expect(onCommandPalette).toHaveBeenCalledOnce();
+
+        fireEvent.click(screen.getByRole('button', { name: 'More' }));
+        expect(screen.getByRole('button', { name: 'Settings' })).toBeTruthy();
+        for (const site of PLATFORM_LINKS.links.filter((entry) => entry.key !== 'wallet')) {
+            const link = screen.getByRole('link', { name: site.label });
+            expect(link).toHaveAttribute('href', site.href);
+            expect(link).toHaveAttribute('target', '_blank');
         }
     });
 
