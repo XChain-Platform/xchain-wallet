@@ -5,6 +5,7 @@ import android.os.Bundle;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import androidx.activity.OnBackPressedCallback;
+import androidx.core.splashscreen.SplashScreen;
 
 import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeActivity;
@@ -13,6 +14,7 @@ import io.xchain.wallet.android.app.XChainAppPlugin;
 import io.xchain.wallet.android.clipboard.XChainClipboardPlugin;
 import io.xchain.wallet.android.links.XChainLinksPlugin;
 import io.xchain.wallet.android.security.NoNativeHttpProxyWebViewClient;
+import io.xchain.wallet.android.splash.XChainSplashPlugin;
 import io.xchain.wallet.android.vault.XChainVaultPlugin;
 
 /**
@@ -21,8 +23,12 @@ import io.xchain.wallet.android.vault.XChainVaultPlugin;
  * BiometricPrompt requires of its host.
  */
 public class MainActivity extends BridgeActivity {
+    private volatile boolean shellReady = false;
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        SplashScreen splashScreen = SplashScreen.installSplashScreen(this);
+        splashScreen.setKeepOnScreenCondition(() -> !shellReady);
         // Registration must happen BEFORE super.onCreate: that is where the
         // Bridge is built, and a plugin registered afterwards is missing from
         // the map the WebView sees. The symptom would not be a crash - it
@@ -30,6 +36,7 @@ public class MainActivity extends BridgeActivity {
         // app whose backup posture assumes the vault is in native storage.
         registerPlugin(XChainVaultPlugin.class);
         registerPlugin(XChainLinksPlugin.class);
+        registerPlugin(XChainSplashPlugin.class);
         registerPlugin(XChainAppPlugin.class);
         // SSC-4: without this the SPA finds no clipboard plugin and
         // refuses sensitive copies, rather than writing a seed phrase to an
@@ -42,6 +49,11 @@ public class MainActivity extends BridgeActivity {
         blockNativeHttpProxy();
         routeBackKeyToTheSpa();
         lastFontScale = getResources().getConfiguration().fontScale;
+    }
+
+    /** Releases the launch splash after the SPA has committed its shell. */
+    public void markShellReady() {
+        shellReady = true;
     }
 
     private float lastFontScale = 1f;
