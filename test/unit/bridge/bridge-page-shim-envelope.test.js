@@ -295,6 +295,19 @@ describe('what the reference dApp sees through the real provider', () => {
         provider.off('accountsChanged', handler);
     });
 
+    it('isolates rejected async event listeners', () => {
+        const catchRejection = vi.fn();
+        const handler = vi.fn(() => ({ catch: catchRejection }));
+        provider.on('accountsChanged', handler);
+
+        replyEvent('accountsChanged', [{ id: 'account-1', name: 'Primary' }]);
+
+        expect(handler).toHaveBeenCalledOnce();
+        expect(catchRejection).toHaveBeenCalledOnce();
+        expect(catchRejection.mock.calls[0][0]).toBeTypeOf('function');
+        provider.off('accountsChanged', handler);
+    });
+
     it('does not install the provider when evaluated in a subframe', () => {
         const frameWindow = { top: {}, addEventListener: vi.fn(), dispatchEvent: vi.fn() };
         const run = new Function('window', providerSource);

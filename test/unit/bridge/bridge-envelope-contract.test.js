@@ -435,6 +435,44 @@ describe('the signing methods answer their published success shapes', () => {
         expect(result).toEqual({ ok: true, signedPsbtHex: 'ab', txHex: 'cd', txid: 'tx-2' });
     });
 
+    it('rejects malformed signing results instead of reporting incomplete successes', async () => {
+        const vault = makeVault({ site: connectedSite() });
+
+        flowMocks.signMessageFlow.mockResolvedValueOnce({});
+        const message = await buildHost(vault).handle({
+            type: 'bridge.signMessage',
+            request: { origin: ORIGIN, chainId: CHAIN, address: FROM, message: 'hello' },
+        });
+        expect(message.ok).toBe(false);
+        expect(message.error.code).toBe('INTERNAL_ERROR');
+
+        flowMocks.sendToken.mockResolvedValueOnce({});
+        const action = await buildHost(vault).handle({
+            type: 'bridge.signAction',
+            request: {
+                origin: ORIGIN,
+                chainId: CHAIN,
+                action: 'SEND',
+                params: { fromAddress: FROM, toAddress: 'bcrt1qto', asset: 'BTC', amount: '1' },
+            },
+        });
+        expect(action.ok).toBe(false);
+        expect(action.error.code).toBe('INTERNAL_ERROR');
+
+        flowMocks.signPsbtFlow.mockResolvedValueOnce({});
+        const psbt = await buildHost(vault).handle({
+            type: 'bridge.signPsbt',
+            request: {
+                origin: ORIGIN,
+                chainId: CHAIN,
+                psbtHex: '70736274',
+                signingPaths: [{ inputIndex: 0, address: FROM }],
+            },
+        });
+        expect(psbt.ok).toBe(false);
+        expect(psbt.error.code).toBe('INTERNAL_ERROR');
+    });
+
     // bridge-spec publishes PsbtSigningPath as { inputIndex, address? |
     // derivationPath? }; the Signer contract wants { inputIndex, path? |
     // addressId? }. The handler owns the translation, and only against
@@ -463,6 +501,67 @@ describe('the signing methods answer their published success shapes', () => {
             expect(flowMocks.signPsbtFlow.mock.calls[0][0].signingPaths).toEqual([
                 { inputIndex: 1, path: "m/84'/1'/0'/0/0", addressId: undefined, sighashType: 1 },
             ]);
+        });
+
+        it('uses the wallet that owns every signing path, not the approval window default', async () => {
+            const wrongWalletApprovals = {
+                ...approvals,
+                signPsbt: async () => ({ approved: true, password: 'pw', walletId: 'wallet-2' }),
+            };
+            const vault = makeVault({ site: connectedSite() });
+            const host = new MessageHost({ vault, chainRegistry, sdkRegistry: {} });
+            registerBridgeHandlers(host, { approvals: wrongWalletApprovals, signThrottle: okThrottle });
+
+            const response = await host.handle({
+                type: 'bridge.signPsbt',
+                request: {
+                    origin: ORIGIN,
+                    chainId: CHAIN,
+                    psbtHex: '70736274',
+                    signingPaths: [{ inputIndex: 0, address: FROM }],
+                },
+            });
+
+            expect(response.ok).toBe(true);
+            expect(flowMocks.signPsbtFlow.mock.calls[0][0].walletId).toBe('wallet-1');
+        });
+
+        it('refuses signing paths that span wallets', async () => {
+            const vault = makeVault({ site: connectedSite({ accounts: [] }) });
+            const originalAddresses = await vault.addresses.list();
+            vault.addresses.list = async () => [
+                ...originalAddresses,
+                {
+                    id: 'addr-wallet-2',
+                    address: 'bcrt1qwallet2',
+                    chain: 'bitcoin',
+                    network: 'regtest',
+                    accountId: 'acct-wallet-2',
+                    derivationPath: "m/84'/1'/1'/0/0",
+                },
+            ];
+            const originalAccountGet = vault.accounts.get;
+            vault.accounts.get = async (id) => (id === 'acct-wallet-2'
+                ? { id, walletId: 'wallet-2' }
+                : originalAccountGet(id));
+            const host = buildHost(vault);
+
+            const response = await host.handle({
+                type: 'bridge.signPsbt',
+                request: {
+                    origin: ORIGIN,
+                    chainId: CHAIN,
+                    psbtHex: '70736274',
+                    signingPaths: [
+                        { inputIndex: 0, address: FROM },
+                        { inputIndex: 1, address: 'bcrt1qwallet2' },
+                    ],
+                },
+            });
+
+            expect(response.ok).toBe(false);
+            expect(response.error.code).toBe('INVALID_PARAMS');
+            expect(flowMocks.signPsbtFlow).not.toHaveBeenCalled();
         });
 
         it('refuses an address or a derivationPath the wallet does not own', async () => {
@@ -558,6 +657,47 @@ describe('the signing methods answer their published success shapes', () => {
         expect(result.ok).toBe(true);
         expect(result.approved).toBe(false);
         expect(result.reason).toBe('ACCOUNT_DISABLED');
+    });
+
+    it('coSign accepts a complete approved signature outcome', async () => {
+        flowMocks.findCoSignerAccountByAddress.mockResolvedValue({
+            id: 'cosigner-1', aggregateAddress: 'bcrt1pagg', name: 'Policy signer',
+            chainId: CHAIN, daemonDerivationPath: "m/84'/1'/0'/0/0",
+        });
+        flowMocks.passiveCoSignForAccount.mockResolvedValue({
+            approved: true,
+            publicNonce: 'aa',
+            sig: 'bb',
+            msg: 'cc',
+            action: 'SEND',
+        });
+        const host = buildHost(makeVault({ site: connectedSite() }));
+        const { result } = await host.handle({
+            type: 'bridge.coSign',
+            request: {
+                origin: ORIGIN, chainId: CHAIN, aggregateAddress: 'bcrt1pagg',
+                psbtHex: '70736274', agentPublicNonce: '02ff',
+            },
+        });
+        expect(result).toMatchObject({ ok: true, approved: true, sig: 'bb' });
+    });
+
+    it('coSign rejects a malformed core outcome instead of inventing a policy refusal', async () => {
+        flowMocks.findCoSignerAccountByAddress.mockResolvedValue({
+            id: 'cosigner-1', aggregateAddress: 'bcrt1pagg', name: 'Policy signer',
+            chainId: CHAIN, daemonDerivationPath: "m/84'/1'/0'/0/0",
+        });
+        flowMocks.passiveCoSignForAccount.mockResolvedValue(undefined);
+        const host = buildHost(makeVault({ site: connectedSite() }));
+        const response = await host.handle({
+            type: 'bridge.coSign',
+            request: {
+                origin: ORIGIN, chainId: CHAIN, aggregateAddress: 'bcrt1pagg',
+                psbtHex: '70736274', agentPublicNonce: '02ff',
+            },
+        });
+        expect(response.ok).toBe(false);
+        expect(response.error.code).toBe('INTERNAL_ERROR');
     });
 });
 
