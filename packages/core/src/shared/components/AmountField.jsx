@@ -20,7 +20,7 @@ import { Button, Input, Icon } from '@xchain-wallet/core/ui';
 import { ClipboardPasteButton } from '../../ui/ClipboardPasteButton.jsx';
 import {
     formatWithThousands,
-    normalizeLocalizedDecimal,
+    normalizeAmountFieldInput,
 } from '../utils/amountFormat.js';
 import { coinToFiatExact } from '../../flows/priceLookup.js';
 import { formatFiat } from './BalanceList.jsx';
@@ -44,10 +44,12 @@ import styles from './AmountField.module.css';
  * @param {import('react').ReactNode} [props.balanceText]    right-hand footer text, typically "X.XX BTC available". Omit when meaningless (e.g. Receive).
  * @param {string} [props.hint]                           hint line under the input, forwarded to Input
  * @param {string} [props.error]                          caller-supplied validation error, forwarded to Input
+ * @param {string} [props.id]                             id forwarded to the amount input
  * @param {number | string} [props.divisibility]          maximum coin-mode decimal places for the selected asset
  * @param {'md' | 'lg'} [props.size]                         field size, forwarded to the inner Input. Defaults to 'md' (compact) so it matches a form's other inputs; hero screens (Send/Receive) pass 'lg'.
  */
 export function AmountField({
+    id,
     label = 'Amount',
     amount,
     size = 'md',
@@ -85,9 +87,14 @@ export function AmountField({
     const handleChange = (event) => {
         const rawValue = String(event.target.value);
         const cursorPos = event.target.selectionStart;
-        const normalized = normalizeLocalizedDecimal(rawValue);
+        const normalized = normalizeAmountFieldInput(rawValue, {
+            unit: activeUnit,
+            fiatCurrency: isFiat ? fiatCcy : null,
+        });
         const normalizedCursor = typeof cursorPos === 'number'
-            ? rawValue.slice(0, cursorPos).replace(/[\s,]/g, '').length
+            ? cursorPos === rawValue.length
+                ? normalized?.length ?? null
+                : rawValue.slice(0, cursorPos).replace(/[\s,]/g, '').length
             : null;
 
         if (normalized === null) {
@@ -123,6 +130,7 @@ export function AmountField({
                 <Input
                     ref={inputRef}
                     size={size}
+                    id={id}
                     label={activeUnit ? `${label} (${activeUnit})` : label}
                     hint={hint}
                     error={inputError || error}

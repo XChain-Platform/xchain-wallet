@@ -1,11 +1,15 @@
 .wrap {
     position: relative;
+    box-sizing: border-box;
     width: 100%;
+    min-width: 0;
 }
 
 .trigger {
     appearance: none;
+    box-sizing: border-box;
     width: 100%;
+    min-width: 0;
     display: flex;
     align-items: center;
     gap: var(--xc-space-2);
@@ -79,6 +83,7 @@
 
 .popover {
     position: absolute;
+    box-sizing: border-box;
     top: calc(100% + 6px);
     inset-inline-start: 0;
     inset-inline-end: 0;
@@ -95,6 +100,7 @@
 
 .searchWrap {
     display: flex;
+    min-width: 0;
     align-items: center;
     gap: var(--xc-space-2);
     padding: var(--xc-space-2) var(--xc-space-3);
@@ -108,6 +114,7 @@
     background: transparent;
     border: none;
     flex: 1 1 auto;
+    min-width: 0;
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
     padding: var(--xc-space-1) 0;
@@ -124,9 +131,11 @@
 
 .item {
     appearance: none;
+    box-sizing: border-box;
     background: transparent;
     border: none;
     width: 100%;
+    min-width: 0;
     display: flex;
     align-items: center;
     gap: var(--xc-space-2);

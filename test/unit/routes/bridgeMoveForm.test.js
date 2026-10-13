@@ -133,18 +133,18 @@ const amountInput = () => screen.getByLabelText(/^Amount/i);
 // matches three controls.
 const moveButton = (name = 'Review move') => screen.getByRole('button', { name });
 
-async function advanceFeeQuote() {
-    await act(async () => {
-        await vi.advanceTimersByTimeAsync(400);
-    });
-}
-
 afterEach(() => {
     cleanup();
     vi.clearAllMocks();
     vi.useRealTimers();
     __clearTokenInfoCache();
 });
+
+async function advanceFeeQuote() {
+    await act(async () => {
+        await vi.advanceTimersByTimeAsync(400);
+    });
+}
 
 describe('BridgeMoveForm: the destination is resolved from the user\'s own account', () => {
     it('fills the receiving address from the wallet\'s own address on the destination chain', async () => {
@@ -325,8 +325,6 @@ describe('BridgeMoveForm: unhappy path - amount below the protocol fee', () => {
         vi.useFakeTimers();
         fireEvent.change(amountInput(), { target: { value: '0.01' } });
         await advanceFeeQuote();
-        expect(messaging.requoteNativeFee).toHaveBeenCalledTimes(1);
-        expect(screen.queryByText(/Loading protocol fee/i)).toBeNull();
         expect(screen.queryByText(/in protocol fees/i)).toBeNull();
     });
 

@@ -196,7 +196,7 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
             className={styles.overlay}
             role="dialog"
             aria-modal="true"
-            aria-label="Command palette"
+            aria-labelledby="xc-command-palette-title"
             onMouseDown={onClose}
         >
             <div
@@ -204,6 +204,7 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
                 role="presentation"
                 onMouseDown={(e) => e.stopPropagation()}
             >
+                <div id="xc-command-palette-title" className={styles.groupHead}>Command palette</div>
                 <div className={styles.searchRow}>
                     <span className={styles.searchIcon} aria-hidden="true">
                         <Icon.SearchIcon />
