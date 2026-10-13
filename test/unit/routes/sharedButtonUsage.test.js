@@ -195,6 +195,29 @@ describe('shared route button usage', () => {
 });
 
 describe('trade form style guide primitives', () => {
+    const choicePrimitiveRoutes = {
+        CreateOrderForm: ['Checkbox', 'RadioGroup', 'Switch'],
+        CrossChainOrderForm: ['Checkbox', 'RadioGroup'],
+        CrossChainSwapForm: ['Checkbox', 'RadioGroup'],
+        DispenserExplorer: ['RadioGroup'],
+        DispenserForm: ['RadioGroup'],
+        MyOrdersView: ['Switch'],
+    };
+
+    it.each(Object.entries(choicePrimitiveRoutes))('%s uses kit choice controls', (routeName, controls) => {
+        const source = readFileSync(resolve(
+            process.cwd(),
+            `packages/core/src/shared/routes/${routeName}.jsx`,
+        ), 'utf8');
+
+        for (const control of controls) {
+            expect(source).toMatch(new RegExp(`import\\s+\\{[^}]*\\b${control}\\b[^}]*\\}\\s+from\\s+'@xchain-wallet/core/ui'`, 's'));
+            expect(source).toMatch(new RegExp(`<${control}\\b`));
+        }
+        expect(source).not.toMatch(/<input\b[^>]*type="(?:checkbox|radio)"/s);
+        expect(source).not.toMatch(/kit has no (?:checkbox|radio)/i);
+    });
+
     const targets = [
         'packages/core/src/shared/routes/CreateOrderForm.jsx',
         'packages/core/src/shared/routes/DispenserForm.jsx',
@@ -202,7 +225,7 @@ describe('trade form style guide primitives', () => {
         'packages/core/src/shared/components/PlaceOrderPanel.jsx',
     ];
 
-    it.each(targets)('%s uses kit fields and documents native control exceptions', (file) => {
+    it.each(targets)('%s uses kit fields and documents any native control exceptions', (file) => {
         const source = readFileSync(resolve(process.cwd(), file), 'utf8');
         const rawInputs = source.match(/<input\b[^>]*>/g) || [];
 

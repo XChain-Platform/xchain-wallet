@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, CopyButton, FeeSelector, FormPage, FormSection, Input, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, CopyButton, FeeSelector, FormPage, FormSection, Input, ListPage, PageHeader, RadioGroup, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -604,18 +604,14 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                         autoCorrect="off"
                         spellCheck={false}
                     />
-                    <label className={styles.checkRow}>
-                        {/* Native checkbox remains because the UI kit has no checkbox control. */}
-                        <input
-                            type="checkbox"
-                            checked={giveOwnership}
-                            onChange={(e) => {
-                                if (e.target.checked !== giveOwnership) setGiveAmount('');
-                                setGiveOwnership(e.target.checked);
-                            }}
-                        />
-                        {' '}Give this token&apos;s ownership (not a balance)
-                    </label>
+                    <Checkbox
+                        label="Give this token's ownership (not a balance)"
+                        checked={giveOwnership}
+                        onChange={(e) => {
+                            if (e.target.checked !== giveOwnership) setGiveAmount('');
+                            setGiveOwnership(e.target.checked);
+                        }}
+                    />
                     {!giveOwnership ? (
                         <AmountField
                             label="Give amount"
@@ -665,18 +661,14 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                         autoCorrect="off"
                         spellCheck={false}
                     />
-                    <label className={styles.checkRow}>
-                        {/* Native checkbox remains because the UI kit has no checkbox control. */}
-                        <input
-                            type="checkbox"
-                            checked={getOwnership}
-                            onChange={(e) => {
-                                if (e.target.checked !== getOwnership) setGetAmount('');
-                                setGetOwnership(e.target.checked);
-                            }}
-                        />
-                        {' '}Require the matcher to give that token&apos;s ownership
-                    </label>
+                    <Checkbox
+                        label="Require the matcher to give that token's ownership"
+                        checked={getOwnership}
+                        onChange={(e) => {
+                            if (e.target.checked !== getOwnership) setGetAmount('');
+                            setGetOwnership(e.target.checked);
+                        }}
+                    />
                     {!getOwnership ? (
                         <AmountField
                             label="Get amount"
@@ -692,17 +684,16 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
             </FormSection>
 
             <FormSection title="Order settings">
-                    <p className={styles.successLabel}>Expiration</p>
-                    <label className={styles.checkRow}>
-                        {/* Native radio remains because the UI kit has no segmented radio control. */}
-                        <input type="radio" name="xorder-exp" checked={expMode === 'default'} onChange={() => setExpMode('default')} />
-                        {' '}Default window
-                    </label>
-                    <label className={styles.checkRow}>
-                        {/* Native radio remains because the UI kit has no segmented radio control. */}
-                        <input type="radio" name="xorder-exp" checked={expMode === 'custom'} onChange={() => setExpMode('custom')} />
-                        {' '}Expire at a specific time
-                    </label>
+                    <RadioGroup
+                        legend="Expiration"
+                        name="xorder-exp"
+                        value={expMode}
+                        onChange={setExpMode}
+                        options={[
+                            { value: 'default', label: 'Default window' },
+                            { value: 'custom', label: 'Expire at a specific time' },
+                        ]}
+                    />
                     {expMode === 'custom' ? (
                         <Input
                             label="Expires"

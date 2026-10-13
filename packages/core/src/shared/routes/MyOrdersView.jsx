@@ -27,7 +27,7 @@
 // Cancel/edit are offered only while an order is open.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, EmptyState, FormPage, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, EmptyState, FormPage, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
@@ -424,10 +424,11 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
                         Allow list {allowList ? `#${allowList}` : 'none'} · Block list {blockList ? `#${blockList}` : 'none'}
                     </div>
                     {consent && isNativeGive(it.row) ? (
-                        <label className={F.checkRow}>
-                            <input type="checkbox" checked={consent.autopay === true} onChange={() => handleAutopayToggle(consent)} />
-                            {' '}CoinPay auto-pay {consent.autopay === true ? 'on' : 'off (notify-only)'}
-                        </label>
+                        <Switch
+                            label={`CoinPay auto-pay ${consent.autopay === true ? 'on' : 'off (notify-only)'}`}
+                            checked={consent.autopay === true}
+                            onChange={() => handleAutopayToggle(consent)}
+                        />
                     ) : null}
                 </div>
                 <div className={L.rowActions}>

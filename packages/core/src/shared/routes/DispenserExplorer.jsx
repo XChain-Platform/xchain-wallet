@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, EmptyState, Input, ListPage, PageHeader, Screen, SectionHeader, Select, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, EmptyState, Input, ListPage, PageHeader, RadioGroup, Screen, SectionHeader, Select, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -290,28 +290,17 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
     );
     const toolbar = (
         <form className={local.searchForm} onSubmit={handleSearch} noValidate>
-                <div className={local.searchModes}>
-                    <Input
-                        type="radio"
-                        name="searchMode"
-                        value="token"
-                        size="md"
-                        label="By token"
-                        className={local.searchModeInput}
-                        checked={searchMode === 'token'}
-                        onChange={() => setSearchMode('token')}
-                    />
-                    <Input
-                        type="radio"
-                        name="searchMode"
-                        value="address"
-                        size="md"
-                        label="By address"
-                        className={local.searchModeInput}
-                        checked={searchMode === 'address'}
-                        onChange={() => setSearchMode('address')}
-                    />
-                </div>
+                <RadioGroup
+                    legend="Search mode"
+                    name="searchMode"
+                    value={searchMode}
+                    onChange={setSearchMode}
+                    options={[
+                        { value: 'token', label: 'By token' },
+                        { value: 'address', label: 'By address' },
+                    ]}
+                    className={local.searchModes}
+                />
                 <div className={local.filterRow}>
                     <div className={local.chainControl}>
                         <Select
