@@ -43,6 +43,7 @@ import { StatesSection } from './sections/StatesSection.jsx';
 import { PrivacyModeSection } from './sections/PrivacyModeSection.jsx';
 import { PageTemplatesSection } from './sections/PageTemplatesSection.jsx';
 import { FormPageSection } from './sections/FormPageSection.jsx';
+import { FormErrorSummarySection } from './sections/FormErrorSummarySection.jsx';
 import { FormSectionSection } from './sections/FormSectionSection.jsx';
 import { ListPageSection } from './sections/ListPageSection.jsx';
 import { EmptyStateSection } from './sections/EmptyStateSection.jsx';
@@ -77,6 +78,7 @@ export const SECTIONS = [
     { id: 'icons',                 label: 'Icon catalog',           Component: IconsSection, primitives: ['Icon'] },
     { id: 'page-templates',        label: 'Page templates',         Component: PageTemplatesSection, primitives: ['Screen'] },
     { id: 'form-page',             label: 'Form page',              Component: FormPageSection, primitives: ['FormPage'] },
+    { id: 'form-error-summary',    label: 'Form error summary',     Component: FormErrorSummarySection, primitives: ['FormErrorSummary'] },
     { id: 'form-section',          label: 'Form section',           Component: FormSectionSection, primitives: ['FormSection'] },
     { id: 'list-page',             label: 'List page',              Component: ListPageSection, primitives: ['ListPage'] },
     { id: 'empty-state',           label: 'Empty state',            Component: EmptyStateSection, primitives: ['EmptyState'] },
