@@ -3,8 +3,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { Button, Screen } from '@xchain-wallet/core/ui';
-import { screenVariantFor, useMessaging } from '@xchain-wallet/core/shared/useMessaging.js';
+import { Button } from '@xchain-wallet/core/ui';
 
 const RUNTIME_CONNECTION_CODES = new Set([
     'RUNTIME_DISCONNECTED',
@@ -46,29 +45,25 @@ export async function connectToBackground(load, {
 }
 
 export function BackgroundConnectionState({ failed = false, onReload }) {
-    const { shell } = useMessaging();
-    const variant = screenVariantFor(shell);
     const reload = onReload || (() => window.location.reload());
 
     return (
-        <Screen variant={variant}>
-            <section
-                className="popup-background-connection"
-                role={failed ? 'alert' : 'status'}
-                aria-live="polite"
-            >
-                <h1>{failed ? 'Unable to reconnect' : 'Reconnecting to wallet...'}</h1>
-                <p>
-                    {failed
-                        ? 'The wallet background is not responding. Reload the popup to try again.'
-                        : 'The wallet background is restarting. This should only take a moment.'}
-                </p>
-                {failed ? (
-                    <Button type="button" variant="primary" block onClick={reload}>
-                        Reload
-                    </Button>
-                ) : null}
-            </section>
-        </Screen>
+        <section
+            className="popup-background-connection"
+            role={failed ? 'alert' : 'status'}
+            aria-live="polite"
+        >
+            <h1>{failed ? 'Unable to reconnect' : 'Reconnecting to wallet...'}</h1>
+            <p>
+                {failed
+                    ? 'The wallet background is not responding. Reload the popup to try again.'
+                    : 'The wallet background is restarting. This should only take a moment.'}
+            </p>
+            {failed ? (
+                <Button type="button" variant="primary" block onClick={reload}>
+                    Reload
+                </Button>
+            ) : null}
+        </section>
     );
 }
