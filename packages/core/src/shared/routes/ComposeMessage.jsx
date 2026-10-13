@@ -1015,24 +1015,23 @@ function ComposeMessageForm({
             />
 
             <div>
-                <label htmlFor="message-attachment" style={{ display: 'block', fontWeight: 600, marginBottom: '0.35rem' }}>
-                    Attachment (optional)
-                </label>
-                <input
+                <Input
                     id="message-attachment"
                     type="file"
+                    label="Attachment"
+                    optional
                     accept={MESSAGE_ATTACHMENT_TYPES.join(',')}
                     onChange={handleAttachmentPick}
-                    aria-describedby="message-attachment-hint"
+                    hint={`PNG, JPEG, GIF, WebP, PDF, or plain text, up to ${MAX_MESSAGE_ATTACHMENT_BYTES.toLocaleString()} bytes.`}
+                    error={attachmentError}
                 />
-                <p id="message-attachment-hint" className={styles.hint}>
-                    PNG, JPEG, GIF, WebP, PDF, or plain text, up to {MAX_MESSAGE_ATTACHMENT_BYTES.toLocaleString()} bytes.
-                </p>
                 {attachment ? (
                     <p>
                         Attached: {attachment.name} ({attachment.size.toLocaleString()} bytes){' '}
-                        <button
+                        <Button
                             type="button"
+                            variant="secondary"
+                            size="sm"
                             onClick={() => {
                                 attachmentReadIdRef.current += 1;
                                 setAttachment(null);
@@ -1040,10 +1039,9 @@ function ComposeMessageForm({
                             }}
                         >
                             Remove
-                        </button>
+                        </Button>
                     </p>
                 ) : null}
-                {attachmentError ? <p role="alert" style={{ color: 'var(--xc-danger-fg)' }}>{attachmentError}</p> : null}
             </div>
 
             {/* 3. Encryption. Locked (still visible) for thread replies: a

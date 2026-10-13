@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, ChainBadge, EmptyState, Icon, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, ChainBadge, EmptyState, Icon, Input, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -365,19 +365,21 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
         <ListPage
             toolbar={(
                 <>
-                    <input
-                        type="search"
-                        enterKeyHint="search"
-                        autoCapitalize="off"
-                        className={local.search}
-                        placeholder="Search"
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                        autoComplete="off"
-                        autoCorrect="off"
-                        spellCheck={false}
-                        aria-label="Search dispensers"
-                    />
+                    <div className={local.searchField}>
+                        <Input
+                            type="search"
+                            enterKeyHint="search"
+                            autoCapitalize="off"
+                            className={local.search}
+                            placeholder="Search"
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                            autoComplete="off"
+                            autoCorrect="off"
+                            spellCheck={false}
+                            aria-label="Search dispensers"
+                        />
+                    </div>
                     <NetworkFilterDropdown value={network} onChange={setNetwork} />
                 </>
             )}

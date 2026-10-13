@@ -575,6 +575,7 @@ export function CoinpayForm({
                             ) ?? `${row.obligation.coin_amount} ${t || 'base units'}`;
                             return (
                                 <li key={`${row.chainId}-${row.obligation.action_index}`}>
+                                    {/* The native row button keeps the whole obligation card as one target. */}
                                     <button
                                         type="button"
                                         onClick={() => setSelected(row)}

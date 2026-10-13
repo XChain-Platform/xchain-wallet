@@ -203,6 +203,7 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
                         const id = p.action_index;
                         const label = p.question || (Array.isArray(p.options) ? p.options.join(' / ') : String(p.options || ''));
                         return (
+                            /* The native row button keeps the whole poll card as one target. */
                             <button
                                 key={String(id)}
                                 type="button"

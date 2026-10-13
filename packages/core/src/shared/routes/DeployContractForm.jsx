@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { normalizeConstructorParams } from '../../flows/deployChunked.js';
 import { indexerWaitMessage } from '../../flows/deployLegWait.js';
@@ -1331,33 +1331,31 @@ export function DeployContractForm({ walletId, onBack }) {
                 </div>
             ) : null}
 
-            <label className={styles.pickerLabel}>
-                Code source
-                <textarea
-                    ref={codeRef}
-                    value={code}
-                    onChange={(e) => {
-                        setCode(e.target.value);
-                        setValidation(null);
-                        setSizeInfo(null);
-                        validationRequestRef.current += 1;
-                        sizeRequestRef.current += 1;
-                        gasRequestRef.current += 1;
-                        setValidationBusy(false);
-                        setSizeBusy(false);
-                        setGasBusy(false);
-                        setFormError(null);
-                    }}
-                    rows={10}
-                    spellCheck={false}
-                    autoCapitalize="off"
-                    autoCorrect="off"
-                    autoComplete="off"
-                    wrap="off"
-                    placeholder="// JavaScript contract source…"
-                    className={contractStyles.codeSource}
-                />
-            </label>
+            <Textarea
+                label="Code source"
+                ref={codeRef}
+                value={code}
+                onChange={(e) => {
+                    setCode(e.target.value);
+                    setValidation(null);
+                    setSizeInfo(null);
+                    validationRequestRef.current += 1;
+                    sizeRequestRef.current += 1;
+                    gasRequestRef.current += 1;
+                    setValidationBusy(false);
+                    setSizeBusy(false);
+                    setGasBusy(false);
+                    setFormError(null);
+                }}
+                rows={10}
+                spellCheck={false}
+                autoCapitalize="off"
+                autoCorrect="off"
+                autoComplete="off"
+                wrap="off"
+                placeholder="// JavaScript contract source…"
+                className={contractStyles.codeSource}
+            />
 
             <div className={contractStyles.toolActions}>
                 <Button

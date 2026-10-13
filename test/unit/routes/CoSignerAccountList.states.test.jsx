@@ -107,9 +107,9 @@ describe('CoSignerAccountList states', () => {
             enabled: true,
         }]));
 
-        const name = await screen.findByText('Build agent');
+        await screen.findByText('Build agent');
         expect(screen.getByText('Active')).toBeInTheDocument();
-        fireEvent.click(name.closest('button'));
+        fireEvent.click(screen.getByRole('button', { name: /Build agent/ }));
         expect(onOpen).toHaveBeenCalledWith('account-1');
     });
 });

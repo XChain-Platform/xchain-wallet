@@ -36,6 +36,22 @@ const styleGuideRoutes = {
     MultisigCreate: ['Button', 'Input', 'Select'],
     PairSignerForm: ['Button', 'Input'],
 };
+const styleGuideRoutes = [
+    'BetFeedDetail',
+    'CoSignerAccountList',
+    'CoinpayForm',
+    'ComposeMessage',
+    'DeployContractForm',
+    'DispenserExplorer',
+    'DispensersList',
+    'GovernancePolls',
+];
+
+const nativeRowButtonRoutes = new Set([
+    'CoSignerAccountList',
+    'CoinpayForm',
+    'GovernancePolls',
+]);
 
 describe('shared route button usage', () => {
     it.each(migratedRoutes)('%s uses the shared Button component', (routeName) => {
@@ -87,6 +103,7 @@ describe('shared route button usage', () => {
         ['VerifySignatureForm', ['Button', 'Input', 'Textarea'], 0],
         ['WalletPicker', ['Button'], 1],
     ])('%s adopts kit controls and documents any native list row', (routeName, primitives, nativeRowCount) => {
+    it.each(styleGuideRoutes)('%s uses kit controls except documented row buttons', (routeName) => {
         const source = readFileSync(
             resolve(process.cwd(), `packages/core/src/shared/routes/${routeName}.jsx`),
             'utf8',
@@ -227,6 +244,13 @@ describe('trade form style guide primitives', () => {
         expect(source.match(/<button\b/g) || []).toHaveLength(nativeRowCount);
         if (nativeRowCount > 0) {
             expect(source).toMatch(/Keep the native button because the complete .+ row is the list .+ target\./);
+        expect(source).not.toMatch(/<(?:input|select|textarea)\b/);
+        const nativeButtons = source.match(/<button\b/g) || [];
+        if (nativeRowButtonRoutes.has(routeName)) {
+            expect(nativeButtons).toHaveLength(1);
+            expect(source).toMatch(/native row button keeps the whole .* card as one target/);
+        } else {
+            expect(nativeButtons).toHaveLength(0);
         }
     });
 });

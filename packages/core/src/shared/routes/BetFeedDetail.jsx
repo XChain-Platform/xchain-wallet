@@ -484,13 +484,14 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                         <strong>Run by</strong>:{' '}
                         {onOpenOracle
                             ? (
-                                <button
+                                <Button
                                     type="button"
                                     className={styles.inlineAction}
+                                    icon={null}
                                     onClick={() => onOpenOracle(chainId, feed.source)}
                                 >
                                     {feed.source}
-                                </button>
+                                </Button>
                             )
                             : feed.source}
                     </div>
