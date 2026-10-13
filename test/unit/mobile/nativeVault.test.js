@@ -134,11 +134,24 @@ describe('decodeReadReply: absence is a fact, not a fallback', () => {
         for (const reply of [undefined, null, {}, { status: 'MAYBE' }, { status: 42 }]) {
             expect(() => decodeReadReply(reply)).toThrow(VaultUnavailableError);
         }
+        const secret = 'private-native-status';
+        try {
+            decodeReadReply({ status: secret });
+        } catch (err) {
+            expect(err.message).not.toContain(secret);
+        }
     });
 
-    it('keeps the native detail so the user sees why', () => {
-        expect(() => decodeReadReply({ status: 'LOCKED', detail: 'device is locked' }))
-            .toThrow(/device is locked/);
+    it('reports the status without reflecting native detail', () => {
+        const secret = 'legal winner thank year wave sausage';
+        expect(() => decodeReadReply({ status: 'LOCKED', detail: secret }))
+            .toThrow(/native vault is locked/);
+        try {
+            decodeReadReply({ status: 'CORRUPT', detail: secret });
+        } catch (err) {
+            expect(err).toBeInstanceOf(Error);
+            expect(err.message).not.toContain(secret);
+        }
     });
 });
 
@@ -157,7 +170,7 @@ describe('callNativeVault', () => {
         __setNativeVaultForTests({
             loadVault: async () => { throw new Error('binder died'); },
         });
-        await expect(callNativeVault('loadVault')).rejects.toThrow(/binder died/);
+        await expect(callNativeVault('loadVault')).rejects.toThrow(/XChainVault\.loadVault failed/);
         await expect(callNativeVault('loadVault')).rejects.toThrow(VaultUnavailableError);
     });
 });
@@ -200,10 +213,25 @@ describe('CapacitorStorageBackend', () => {
             .rejects.toThrow(VaultLockedError);
     });
 
-    it('treats a silent write reply as a failure', async () => {
-        __setNativeVaultForTests(fakePlugin({ saveVault: async () => ({}) }));
-        await expect(new CapacitorStorageBackend().save(new Uint8Array([1])))
-            .rejects.toThrow(/did not confirm the write/);
+    it('does not reflect a refused write detail into its error', async () => {
+        const secret = 'opaque-vault-ciphertext';
+        __setNativeVaultForTests(fakePlugin({
+            saveVault: async () => ({ status: 'LOCKED', detail: secret }),
+        }));
+        const error = await new CapacitorStorageBackend().save(new Uint8Array([1]))
+            .catch((err) => err);
+        expect(error).toBeInstanceOf(Error);
+        expect(error.message).not.toContain(secret);
+    });
+
+    it('treats an unknown write reply as a secret-free failure', async () => {
+        const secret = 'private-native-status';
+        __setNativeVaultForTests(fakePlugin({ saveVault: async () => ({ status: secret }) }));
+        const error = await new CapacitorStorageBackend().save(new Uint8Array([1]))
+            .catch((err) => err);
+        expect(error).toBeInstanceOf(Error);
+        expect(error.message).toMatch(/did not confirm the write/);
+        expect(error.message).not.toContain(secret);
     });
 
     it('surfaces a locked keystore on load instead of empty state', async () => {
@@ -301,7 +329,7 @@ describe('wipe hook', () => {
         installNativeWipeHook();
         const result = await globalThis.xchainWalletBridge.wipeStorage();
         expect(result.ok).toBe(false);
-        expect(result.error).toMatch(/keystore busy/);
+        expect(result.error).toMatch(/XChainVault\.clearVault failed/);
     });
 
     it('never displaces a hook another shell already published', () => {
