@@ -104,19 +104,13 @@
 }
 
 .qrBox {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    padding: var(--xc-space-3);
-    width: 100%;
-    max-width: 100%;
-    box-sizing: border-box;
-    /* raw-color-ok: fixed white preserves QR scanner contrast. */
-    background: #FFFFFF;
-    border-radius: var(--xc-radius-md);
-    border: 1px solid var(--xc-border);
+    margin: 0;
+}
+
+.receiveQrDisplay {
+    --xc-qr-frame-size: 20rem;
+
     margin-bottom: var(--xc-space-3);
-    overflow: hidden;
 }
 
 .qrSurface {
@@ -206,9 +200,7 @@
 }
 
 .qrActions {
-    display: flex;
-    gap: var(--xc-space-2);
-    margin-top: var(--xc-space-3);
+    margin-top: 0;
 }
 
 .qrActions > * {
@@ -242,23 +234,6 @@
     display: flex;
     justify-content: flex-end;
     margin-bottom: var(--xc-space-3);
-}
-
-/* The phone hero keeps the complete address and its actions above the fold.
-   Tablet and desktop retain the field-first request layout above 420px. */
-@media (max-width: 420px) {
-    .receiveQrBox {
-        width: 100%;
-        max-width: 14rem;
-        margin-inline: auto;
-        padding: var(--xc-space-2);
-        margin-bottom: var(--xc-space-2);
-    }
-
-    .qrActions {
-        margin-top: 0;
-        margin-bottom: var(--xc-space-3);
-    }
 }
 
 /* §17.6 hardware receive-address confirmation block. */

@@ -44,6 +44,7 @@ import {
     NO_CHAINS_TITLE,
 } from '../utils/chainAvailability.js';
 import styles from './Receive.module.css';
+import qrStyles from '../../ui/QrDisplay.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 const NATIVE_COIN_DECIMALS = 8;
@@ -937,7 +938,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     }
 
     const qrActionsContent = address ? (
-        <div className={styles.qrActions}>
+        <div className={`${qrStyles.actions} ${styles.qrActions}`}>
             <Button
                 variant="secondary"
                 onClick={copyQrImage}
@@ -1026,50 +1027,47 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             ) : null}
 
             {address ? (
-                <div className={`${styles.qrBox} ${styles.receiveQrBox}`}>
-                    <div ref={qrSurfaceRef} className={styles.qrSurface}>
-                        {qrDataUrl ? (
-                            <img
-                                src={qrDataUrl}
-                                alt={`QR code for ${address.address}`}
-                                width={qrPixelSize}
-                                height={qrPixelSize}
-                                className={styles.qr}
-                            />
-                        ) : (
-                            <div className={styles.qrPlaceholder} aria-hidden="true">
-                                Rendering QR…
-                            </div>
-                        )}
+                <div className={`${qrStyles.stack} ${styles.receiveQrDisplay}`}>
+                    <div className={`${qrStyles.frame} ${styles.qrBox}`}>
+                        <div ref={qrSurfaceRef} className={styles.qrSurface}>
+                            {qrDataUrl ? (
+                                <img
+                                    src={qrDataUrl}
+                                    alt={`QR code for ${address.address}`}
+                                    width={qrPixelSize}
+                                    height={qrPixelSize}
+                                    className={styles.qr}
+                                />
+                            ) : (
+                                <div className={styles.qrPlaceholder} aria-hidden="true">
+                                    Rendering QR…
+                                </div>
+                            )}
+                        </div>
                     </div>
+                    <AddressField
+                        size="md"
+                        label={address.label || 'Address'}
+                        aria-label="Copy payment link for receive address"
+                        icon="addresses"
+                        value={address.address}
+                        readOnly
+                        onChange={() => {}}
+                        onClick={copyAddress}
+                        onKeyDown={onAddressKeyDown}
+                        title="Tap to copy payment link"
+                        hint="Tap the address to copy its payment link."
+                        style={{ cursor: 'text', userSelect: 'text' }}
+                        wrapReadOnlyAddress
+                        onIconClick={() => setAddressPickerOpen(true)}
+                        iconLabel="Choose receive address"
+                    />
+                    {qrActionsContent}
                 </div>
             ) : null}
 
-            {address ? (
-                <AddressField
-                    size="md"
-                    label={address.label || 'Address'}
-                    aria-label="Copy payment link for receive address"
-                    icon="addresses"
-                    value={address.address}
-                    readOnly
-                    onChange={() => {}}
-                    onClick={copyAddress}
-                    onKeyDown={onAddressKeyDown}
-                    title="Tap to copy payment link"
-                    hint="Tap the address to copy its payment link."
-                    style={{ cursor: 'text', userSelect: 'text' }}
-                    wrapReadOnlyAddress
-                    onIconClick={() => setAddressPickerOpen(true)}
-                    iconLabel="Choose receive address"
-                />
-            ) : null}
-
             {phoneReceiveLayout ? (
-                <>
-                    {qrActionsContent}
-                    {generateAddressContent}
-                </>
+                generateAddressContent
             ) : null}
 
             {address?.id ? (
@@ -1138,8 +1136,6 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     {amountError ? (
                         <StatusMessage variant="error" className={styles.error}>{amountError}</StatusMessage>
                     ) : null}
-                    {!phoneReceiveLayout ? qrActionsContent : null}
-
                     {isHwAddress ? (
                         <section
                             role="group"
@@ -1202,24 +1198,26 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                         />
                         <strong>{multisig.schemeLabel}</strong>
                     </header>
-                    {multisigQrs[multisig.multisigConfigId] ? (
-                        <div className={styles.qrBox}>
-                            <img
-                                src={multisigQrs[multisig.multisigConfigId]}
-                                alt={`Multisig QR code for ${multisig.address}`}
-                                width={qrPixelSize}
-                                height={qrPixelSize}
-                                className={styles.qr}
-                            />
+                    <div className={`${qrStyles.stack} ${styles.receiveQrDisplay}`}>
+                        {multisigQrs[multisig.multisigConfigId] ? (
+                            <div className={`${qrStyles.frame} ${styles.qrBox}`}>
+                                <img
+                                    src={multisigQrs[multisig.multisigConfigId]}
+                                    alt={`Multisig QR code for ${multisig.address}`}
+                                    width={qrPixelSize}
+                                    height={qrPixelSize}
+                                    className={styles.qr}
+                                />
+                            </div>
+                        ) : (
+                            <div className={`${qrStyles.frame} ${styles.qrBox}`} aria-hidden="true">
+                                <div className={styles.qrPlaceholder}>Rendering multisig QR…</div>
+                            </div>
+                        )}
+                        <div className={styles.addressBox}>
+                            <AddressText address={multisig.address} truncate={false} size="sm" />
+                            <CopyButton value={multisig.address} label="Copy multisignature receive address" />
                         </div>
-                    ) : (
-                        <div className={styles.qrBox} aria-hidden="true">
-                            <div className={styles.qrPlaceholder}>Rendering multisig QR…</div>
-                        </div>
-                    )}
-                    <div className={styles.addressBox}>
-                        <AddressText address={multisig.address} truncate={false} size="sm" />
-                        <CopyButton value={multisig.address} label="Copy multisignature receive address" />
                     </div>
                     {multisig.cosignerNames?.length > 0 ? (
                         <p className={styles.hint} style={{ marginTop: 'var(--xc-space-2)' }}>
