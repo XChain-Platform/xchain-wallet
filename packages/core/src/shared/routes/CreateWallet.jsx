@@ -90,6 +90,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const firstQuizInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const stageFormRef = useRef(/** @type {HTMLFormElement | null} */ (null));
+    const keepKeyboardDismissedRef = useRef(false);
 
     // The clipboard auto-clear that used to live here is gone with the copy
     // button it existed for (, decided 2026-08-01): the phrase cannot
@@ -97,7 +98,14 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
 
     useEffect(() => {
         const id = setTimeout(() => {
-            if (stage === 'password') passwordRef.current?.focus();
+            if (keepKeyboardDismissedRef.current) {
+                keepKeyboardDismissedRef.current = false;
+                const heading = stageFormRef.current?.querySelector('h1');
+                if (heading instanceof HTMLElement) {
+                    heading.tabIndex = -1;
+                    heading.focus();
+                }
+            } else if (stage === 'password') passwordRef.current?.focus();
             else if (stage === 'verify') firstQuizInputRef.current?.focus();
             else {
                 const heading = stageFormRef.current?.querySelector('h1');
@@ -110,7 +118,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         return () => clearTimeout(id);
     }, [stage]);
 
-    useBackHandler(handleBack, stage === 'persisting');
+    useBackHandler(handleNativeBack, stage === 'persisting' || stage === 'ads-notice');
 
     function clearEntrySecrets() {
         setPassword('');
@@ -139,6 +147,14 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         }
         clearEntrySecrets();
         onBack();
+    }
+
+    function handleNativeBack() {
+        if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        // Returning from the phrase to the password form must not reopen the
+        // software keyboard that the edge gesture just dismissed.
+        keepKeyboardDismissedRef.current = stage === 'mnemonic';
+        handleBack();
     }
 
     function handlePasswordSubmit(event) {
@@ -254,7 +270,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                 className={pickerStyles.iconBtn}
                 aria-label={stage === 'password' ? 'Back to wallet setup' : 'Back to previous step'}
                 title={stage === 'password' ? 'Back to wallet setup' : 'Back to previous step'}
-                disabled={stage === 'persisting'}
+                disabled={stage === 'persisting' || stage === 'ads-notice'}
             >
                 <Icon.BackIcon />
             </Button>

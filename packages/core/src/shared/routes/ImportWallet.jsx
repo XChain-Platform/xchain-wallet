@@ -224,9 +224,18 @@ export function ImportWallet({
         headingRef.current?.focus();
     }, [lane]);
 
-    useBackHandler(handleBack, busy);
+    useBackHandler(handleBack, busy || adsNotice);
 
     function handleBack() {
+        if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        if (scanning) {
+            setScanning(false);
+            return;
+        }
+        if (backupScanning) {
+            setBackupScanning(false);
+            return;
+        }
         setMnemonic('');
         setMnemonicCursor(0);
         setPassword('');

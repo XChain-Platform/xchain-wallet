@@ -2259,8 +2259,10 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 showToast({ message: 'Transaction cancelled.' });
                 return;
             }
-            // User rejection is a calm no-op: stay on the form untouched.
+            // Rejection returns to the intact draft without carrying a signing
+            // credential into the next review.
             if (err && (err.reason === 'user-rejected' || err.name === 'UserRejectedError')) {
+                setPassword('');
                 return;
             }
             // Everything else (compose/tamper failure, bad password, broadcast
@@ -2382,7 +2384,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     const header = (
         <PageHeader
             onBack={stage === 'review'
-                ? () => { setSubmitError(null); setStage('form'); }
+                ? () => { setSubmitError(null); setPassword(''); setStage('form'); }
                 : leaveGuard.guardedOnBack}
             backDisabled={stage === 'submitting'}
             backLabel={stage === 'review' ? t('send.backToEdit') : t('common.backToHome')}
