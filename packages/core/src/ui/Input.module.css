@@ -34,6 +34,25 @@
     box-shadow: 0 0 0 3px var(--xc-focus-ring);
 }
 
+.input:is([type='date'], [type='datetime-local'], [type='time'])::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.7;
+    margin-inline-start: var(--xc-space-1);
+    min-width: var(--xc-tap-min);
+    min-height: var(--xc-tap-min);
+    filter: invert(var(--xc-date-picker-invert, 0));
+}
+
+.input:is([type='date'], [type='datetime-local'], [type='time'])::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+}
+
+@media (prefers-color-scheme: dark) {
+    .input:is([type='date'], [type='datetime-local'], [type='time'])::-webkit-calendar-picker-indicator {
+        --xc-date-picker-invert: 1;
+    }
+}
+
 /* Size contract. `.md` (36px) is the default and lives on `.input`/`.label`
    above, so the md path needs no extra class. `.lg` is the "hero field"
    treatment (Send's Amount/To): larger type, taller box, weightier label.

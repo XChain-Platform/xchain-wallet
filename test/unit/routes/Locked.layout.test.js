@@ -79,7 +79,7 @@ describe('Locked compact-height layout', () => {
     it.each(VIEWPORTS)('renders every lock-screen control at $width x $height ($name)', (viewport) => {
         renderLocked(viewport);
 
-        expect(screen.getByText('XChain Wallet')).toBeVisible();
+        expect(screen.getByRole('heading', { name: 'Unlock wallet' })).toBeVisible();
         expect(screen.getByLabelText('Password')).toBeVisible();
         expect(screen.getByRole('button', { name: 'Unlock Wallet' })).toBeVisible();
         expect(screen.getByRole('button', { name: 'Forgot password?' })).toBeVisible();

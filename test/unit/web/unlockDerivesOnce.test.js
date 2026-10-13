@@ -28,6 +28,9 @@ const state = vi.hoisted(() => ({
     salts: [],
     storageBlob: null,
     meta: null,
+    watcherStarts: 0,
+    watcherRefreshes: 0,
+    idleCallbacks: [],
 }));
 
 /** The stand-in derivation: deterministic, cheap, and sensitive to every input. */
@@ -57,12 +60,26 @@ vi.mock('../../../packages/core/src/crypto/kdf.js', async (importOriginal) => {
     };
 });
 
+// The web host imports each watcher from its own module, so each module
+// is replaced with a counting stand-in that never polls.
+const InertModuleWatcher = vi.hoisted(() => class {
+    async start() { state.watcherStarts += 1; }
+    stop() { /* nothing started */ }
+    refresh() { state.watcherRefreshes += 1; return Promise.resolve(); }
+});
+vi.mock('../../../packages/core/src/notifications/NotificationService.js', () => ({ NotificationService: InertModuleWatcher }));
+vi.mock('../../../packages/core/src/notifications/PriceAlertWatcher.js', () => ({ PriceAlertWatcher: InertModuleWatcher }));
+vi.mock('../../../packages/core/src/notifications/GovernancePollWatcher.js', () => ({ GovernancePollWatcher: InertModuleWatcher }));
+vi.mock('../../../packages/core/src/notifications/CoinpayAutopayWatcher.js', () => ({ CoinpayAutopayWatcher: InertModuleWatcher }));
+vi.mock('../../../packages/core/src/notifications/DeadlineWatcher.js', () => ({ DeadlineWatcher: InertModuleWatcher }));
+vi.mock('../../../packages/core/src/notifications/DispenserEscrowWatcher.js', () => ({ DispenserEscrowWatcher: InertModuleWatcher }));
+
 vi.mock('@xchain-wallet/core', async (importOriginal) => {
     const actual = await importOriginal();
     class InertWatcher {
-        async start() { /* no polling in a unit test */ }
+        async start() { state.watcherStarts += 1; }
         stop() { /* nothing started */ }
-        refresh() { return Promise.resolve(); }
+        refresh() { state.watcherRefreshes += 1; return Promise.resolve(); }
     }
     return {
         ...actual,
@@ -117,7 +134,17 @@ beforeEach(async () => {
     state.meta = null;
     state.issued.length = 0;
     state.salts.length = 0;
+    state.watcherStarts = 0;
+    state.watcherRefreshes = 0;
+    state.idleCallbacks.length = 0;
     populated = [];
+    vi.stubGlobal('requestIdleCallback', vi.fn((callback) => {
+        state.idleCallbacks.push(callback);
+        return state.idleCallbacks.length - 1;
+    }));
+    vi.stubGlobal('cancelIdleCallback', vi.fn((id) => {
+        state.idleCallbacks[id] = null;
+    }));
     const realPopulate = SignerPool.prototype.populate;
     vi.spyOn(SignerPool.prototype, 'populate').mockImplementation(async function populateSpy(opts) {
         const summary = await realPopulate.call(this, opts);
@@ -177,6 +204,19 @@ async function addSecondWallet() {
 }
 
 describe('the web onboarding lanes derive the master key once', () => {
+    it('defers notification price and history watchers until idle', async () => {
+        await createWalletLocal({ password: PASSWORD });
+
+        expect(state.watcherStarts).toBe(0);
+        expect(state.watcherRefreshes).toBe(0);
+        expect(state.idleCallbacks.filter(Boolean)).toHaveLength(1);
+
+        state.idleCallbacks.find(Boolean)();
+
+        expect(state.watcherStarts).toBe(6);
+        expect(state.watcherRefreshes).toBe(1);
+    });
+
     it('createWalletLocal: vault, wallet seal and signer pool share one derivation', async () => {
         await createWalletLocal({ password: PASSWORD });
         expect(state.issued).toHaveLength(1);

@@ -27,10 +27,16 @@ function localeNumberSeparators(locale) {
     }
 }
 
-function validGroupedInteger(value, separator) {
-    if (!value.includes(separator)) return /^\d+$/.test(value);
-    const escaped = separator.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return new RegExp(`^\\d{1,3}(?:${escaped}\\d{3})+$`).test(value);
+function validGroupedInteger(value, separators) {
+    const active = separators.filter((separator) => value.includes(separator));
+    if (active.length === 0) return /^\d+$/.test(value);
+    const escaped = active.map((separator) => separator.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const pieces = value.split(new RegExp(`[${escaped.join('')}]`));
+    return /^\d{1,3}$/.test(pieces[0]) && pieces.slice(1).every((piece) => /^\d{3}$/.test(piece));
+}
+
+function removeGrouping(value, separators) {
+    return separators.reduce((result, separator) => result.split(separator).join(''), value);
 }
 
 /**
@@ -42,9 +48,9 @@ export function normalizeLocalizedDecimal(value, locale) {
     if (value === null || value === undefined) return null;
     let raw = String(value).trim();
     if (raw === '') return '';
-    if (!/^[\d.,\s\u00a0\u202f]+$/.test(raw)) return null;
+    if (!/^[\d., \t\u00a0\u202f]+$/.test(raw)) return null;
     const { decimal: localeDecimal, group: localeGroup } = localeNumberSeparators(locale);
-    raw = raw.replace(/[\s\u00a0\u202f]+/g, localeGroup);
+    raw = raw.replace(/[ \t\u00a0\u202f]+/g, ' ');
     if (raw === '') return null;
 
     const dotCount = (raw.match(/\./g) || []).length;
@@ -57,14 +63,17 @@ export function normalizeLocalizedDecimal(value, locale) {
         group = decimal === '.' ? ',' : '.';
     } else {
         const separator = dotCount ? '.' : commaCount ? ',' : null;
-        if (!separator) return /^\d+$/.test(raw) ? raw : null;
+        if (!separator) {
+            return validGroupedInteger(raw, [' ']) ? removeGrouping(raw, [' ']) : null;
+        }
         const count = separator === '.' ? dotCount : commaCount;
         if (count > 1) {
-            return validGroupedInteger(raw, separator) ? raw.split(separator).join('') : null;
+            const groups = [separator, ' '];
+            return validGroupedInteger(raw, groups) ? removeGrouping(raw, groups) : null;
         }
         if (separator === localeGroup && separator !== localeDecimal
-            && validGroupedInteger(raw, separator)) {
-            return raw.split(separator).join('');
+            && validGroupedInteger(raw, [separator, ' '])) {
+            return removeGrouping(raw, [separator, ' ']);
         }
         decimal = separator;
     }
@@ -74,15 +83,69 @@ export function normalizeLocalizedDecimal(value, locale) {
     const [integerRaw, fraction] = pieces;
     if (!/^\d*$/.test(fraction)) return null;
     let integer = integerRaw;
-    const integerGroup = group || (integerRaw.includes(localeGroup) ? localeGroup : null);
-    if (integerGroup) {
-        if (!validGroupedInteger(integerRaw, integerGroup)) return null;
-        integer = integerRaw.split(integerGroup).join('');
+    const integerGroups = [group, ' '].filter(Boolean);
+    if (integerGroups.some((separator) => integerRaw.includes(separator))) {
+        if (!validGroupedInteger(integerRaw, integerGroups)) return null;
+        integer = removeGrouping(integerRaw, integerGroups);
     } else if (!/^\d*$/.test(integer)) {
         return null;
     }
     if (integer === '' && fraction === '') return '.';
     return `${integer}.${fraction}`;
+}
+
+function currencySymbols(currency, locale) {
+    const symbols = new Set();
+    for (const currencyDisplay of ['symbol', 'narrowSymbol']) {
+        try {
+            const parts = new Intl.NumberFormat(getFormatLocale(locale), {
+                style: 'currency',
+                currency,
+                currencyDisplay,
+            }).formatToParts(1);
+            const symbol = parts.find((part) => part.type === 'currency')?.value;
+            if (symbol && /\p{Sc}/u.test(symbol)) symbols.add(symbol);
+        } catch {
+            return symbols;
+        }
+    }
+    return symbols;
+}
+
+function escapedPattern(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Normalize an amount that may carry its active unit or fiat symbol. */
+export function normalizeAmountFieldInput(value, { unit = '', fiatCurrency = null, locale } = {}) {
+    if (value === null || value === undefined) return null;
+    const raw = String(value).trim();
+    if (raw === '') return '';
+    const activeUnit = String(unit).trim();
+    const unitSuffix = activeUnit
+        ? new RegExp(`^(.*\\S)[ \\t\\u00a0\\u202f]+${escapedPattern(activeUnit)}$`, 'i').exec(raw)
+        : null;
+    if (unitSuffix) return normalizeLocalizedDecimal(unitSuffix[1], locale);
+
+    const fiatCode = String(fiatCurrency || '').trim().toUpperCase();
+    if (fiatCode) {
+        const codePattern = escapedPattern(fiatCode);
+        const leadingCode = new RegExp(`^${codePattern}[ \\t\\u00a0\\u202f]+(.+)$`, 'i').exec(raw);
+        if (leadingCode) return normalizeLocalizedDecimal(leadingCode[1], locale);
+        const trailingCode = new RegExp(`^(.*\\S)[ \\t\\u00a0\\u202f]+${codePattern}$`, 'i').exec(raw);
+        if (trailingCode) return normalizeLocalizedDecimal(trailingCode[1], locale);
+
+        const symbols = currencySymbols(fiatCode, locale);
+        for (const symbol of symbols) {
+            const pattern = escapedPattern(symbol);
+            const leadingSymbol = new RegExp(`^${pattern}[ \\t\\u00a0\\u202f]*(.+)$`, 'u').exec(raw);
+            if (leadingSymbol) return normalizeLocalizedDecimal(leadingSymbol[1], locale);
+            const trailingSymbol = new RegExp(`^(.*\\S)[ \\t\\u00a0\\u202f]*${pattern}$`, 'u').exec(raw);
+            if (trailingSymbol) return normalizeLocalizedDecimal(trailingSymbol[1], locale);
+        }
+    }
+
+    return normalizeLocalizedDecimal(raw, locale);
 }
 
 // Group a canonical dot-decimal value with the active locale's separators.
@@ -179,6 +242,33 @@ export function formatHistoryAmount(value, direction, locale) {
     if (direction === 'in') return `+${formatted}`;
     if (direction === 'out') return `-${formatted}`;
     return formatted;
+}
+
+/** Speak a History amount as one directional amount-and-unit phrase. */
+export function formatHistoryAmountForSpeech(value, unit, direction, locale) {
+    const raw = String(value ?? '').trim().replace(/^[+-]/, '');
+    const amountWithUnit = `${formatDisplayAmount(raw, locale)} ${String(unit || '').trim()}`.trim();
+    if (!amountWithUnit) return '';
+    if (direction === 'in') return `Received ${amountWithUnit}`;
+    if (direction === 'out') return `Sent ${amountWithUnit}`;
+    return amountWithUnit;
+}
+
+/** Format a token quantity already expressed in whole-token units. */
+export function formatTokenQuantity(value, divisibility = 0, locale) {
+    if (value === null || value === undefined) return '';
+    const raw = String(value).trim();
+    if (divisibility === null || divisibility === '') {
+        return formatDecimalAmount(trimAmountTail(raw), locale);
+    }
+    const precision = Number(divisibility);
+    if (!Number.isInteger(precision) || precision < 0 || precision > 100) {
+        return formatDecimalAmount(trimAmountTail(raw), locale);
+    }
+    const rounded = roundDecimalString(raw, precision);
+    if (rounded === null) return raw;
+    const trimmed = trimAmountTail(rounded);
+    return formatDecimalAmount(trimmed === '-0' ? '0' : trimmed, locale);
 }
 
 /** Render an atomic integer at its divisibility using exact string arithmetic. */
@@ -331,8 +421,10 @@ export function decimalToBaseUnits(value, decimals = 8) {
 
 /** Convert an integer quantity and divisibility into a decimal amount. */
 export function decimalFromBaseUnits(value, decimals = 8) {
+    const scale = Number(decimals);
+    if (!Number.isInteger(scale) || scale < 0) return null;
     try {
-        return renderDecimal(BigInt(String(value)), decimals);
+        return renderDecimal(BigInt(String(value)), scale);
     } catch {
         return null;
     }

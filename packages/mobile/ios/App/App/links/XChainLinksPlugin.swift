@@ -72,6 +72,7 @@ final class XChainLinkInbox {
     private static let coinSchemes = Set(["bitcoin", "litecoin", "dogecoin"])
     private static let schemeWeb = "https"
     private static let hostWeb = "xchain.io"
+    private static let pathPrefixWeb = "/wallet/link/"
 
     /// Delivery can arrive on the main thread (the scene callbacks) while the
     /// plugin drains on the bridge's queue, so the one field they share is
@@ -150,7 +151,9 @@ final class XChainLinkInbox {
               let scheme = parsed.scheme?.lowercased() else { return nil }
 
         if scheme == Self.schemeApp || Self.coinSchemes.contains(scheme) { return raw }
-        if scheme == Self.schemeWeb, parsed.host?.lowercased() == Self.hostWeb { return raw }
+        if scheme == Self.schemeWeb,
+           parsed.host?.lowercased() == Self.hostWeb,
+           parsed.percentEncodedPath.hasPrefix(Self.pathPrefixWeb) { return raw }
 
         // An http:// link, another host, or a scheme some other app aimed at us.
         // The association file and the URL types should not have routed it here

@@ -147,7 +147,7 @@ test.describe('responsive: one interface at every width', () => {
                 await shrinkVisualViewport(page, viewport.keyboardHeight);
                 await page.getByRole('main').evaluate((main) => { main.scrollTop = 0; });
 
-                const walletName = page.getByText('XChain Wallet', { exact: true });
+                const walletName = page.getByRole('heading', { level: 1 });
                 const password = page.getByLabel('Password');
                 const unlock = page.getByRole('button', { name: 'Unlock Wallet' });
                 const forgot = page.getByRole('button', { name: 'Forgot password?' });
@@ -228,7 +228,7 @@ test.describe('responsive: one interface at every width', () => {
         await test.step('More sheet', async () => {
             await page.getByRole('navigation', { name: 'Bottom navigation' })
                 .getByRole('button', { name: 'More', exact: true }).click();
-            await expect(page.getByRole('dialog', { name: 'More navigation' })).toBeVisible();
+            await expect(page.getByRole('dialog', { name: 'More', exact: true })).toBeVisible();
             await expectTappable(page, 'More sheet at 360px');
             await page.keyboard.press('Escape');
         });

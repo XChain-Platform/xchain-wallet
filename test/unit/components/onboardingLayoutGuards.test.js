@@ -39,7 +39,9 @@ describe('onboarding and Home layout guards', () => {
         expect(balanceCss).toMatch(/\.amountFit\s*\{[^}]*overflow:\s*hidden;[^}]*white-space:\s*nowrap;/s);
         expect(balanceCss).toMatch(/\.name\s*\{[^}]*text-overflow:\s*ellipsis;/s);
         expect(walletPickerCss).toMatch(/\.rowText\s*>\s*span\s*\{[^}]*text-overflow:\s*ellipsis;/s);
-        expect(totalBalanceCss).toMatch(/\.row\s*\{[^}]*flex-wrap:\s*wrap;/s);
+        // The hero amount takes a full-width grid row of its own below the
+        // label and actions, so a long total never shares a line with them.
+        expect(totalBalanceCss).toMatch(/\.row\s*\{[^}]*'amount amount';[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto;/s);
     });
 
     it('allows a resumed transaction id to wrap', () => {

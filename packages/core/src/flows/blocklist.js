@@ -73,18 +73,27 @@ export function normalizeOrigin(input) {
     const trimmed = input.trim();
     if (!trimmed) return null;
     try {
-        return new URL(trimmed).origin;
+        return canonicalOrigin(new URL(trimmed));
     } catch {
         // Bare host (no scheme). Try with https://.
         if (!/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) {
             try {
-                return new URL(`https://${trimmed}`).origin;
+                return canonicalOrigin(new URL(`https://${trimmed}`));
             } catch {
                 return null;
             }
         }
         return null;
     }
+}
+
+function canonicalOrigin(url) {
+    // DNS treats a trailing dot as the same absolute host. Remove it so an
+    // equivalent spelling cannot bypass an exact or wildcard block.
+    if (url.hostname.endsWith('.')) {
+        url.hostname = url.hostname.slice(0, -1);
+    }
+    return url.origin;
 }
 
 /**
