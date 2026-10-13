@@ -157,6 +157,7 @@ import { useGovernanceAddressesPresent } from '@xchain-wallet/core/shared/hooks/
 import { registerSigner as registerLocalSigner } from './signerBridge.js';
 import * as messaging from './messaging.js';
 import { getSessionStatus, listWallets, listAccounts } from './messaging.js';
+import { createLaunchRouteState, shellForExtensionView } from './launchState.js';
 
 const lazyRoute = (load, name) => lazy(() => load().then((module) => ({ default: module[name] })));
 
@@ -199,8 +200,9 @@ const pairLedgerSigner = (...args) => import('../signers/ledgerFactory.js')
     .then((module) => module.pairLedgerSigner(...args));
 
 export function App() {
+    const shell = shellForExtensionView();
     return (
-        <MessagingProvider shell="popup" messaging={messaging}>
+        <MessagingProvider shell={shell} messaging={messaging}>
             <ToastHost>
                 <ReachabilityBanner />
                 <AppInner />
@@ -425,14 +427,9 @@ function AppInner() {
         }),
     );
 
-    // Deep-link view that must survive the unlock cycle. The `?uri=` boot
-    // handler routes immediately, but `refresh()` (fired by Locked's
-    // onUnlocked) resets the view to 'home', which stomped the route
-    // whenever the popup opened locked. Re-applied once the session
-    // reports unlocked, then cleared.
-    const pendingUriView = useRef(
-        /** @type {'send' | 'receive' | 'contract-execute' | null} */ (null),
-    );
+    // The route guard remains armed until the wallet becomes active because
+    // per-wallet last-view restoration runs after the unlock refresh.
+    const launchRouteState = useRef(createLaunchRouteState());
 
     const refresh = useCallback(() => {
         setStatus({ state: 'loading' });
@@ -441,10 +438,8 @@ function AppInner() {
         getSessionStatus()
             .then((next) => {
                 setStatus(next);
-                if (next?.state === 'unlocked' && pendingUriView.current) {
-                    setUnlockedView(pendingUriView.current);
-                    pendingUriView.current = null;
-                }
+                const launchView = launchRouteState.current.takeForSession(next);
+                if (launchView) setUnlockedView(launchView);
             })
             .catch((err) =>
                 setStatus({
@@ -494,10 +489,10 @@ function AppInner() {
                     memo: intent.memo,
                 });
                 setUnlockedView('send');
-                pendingUriView.current = 'send';
+                launchRouteState.current.remember('send');
             } else if (intent && intent.kind === 'receive') {
                 setUnlockedView('receive');
-                pendingUriView.current = 'receive';
+                launchRouteState.current.remember('receive');
             } else if (intent && intent.kind === 'execute' && intent.contractActionIndex && intent.chainId) {
                 // Explorer Write-tab deep link: land on the EXECUTE form
                 // prefilled. Unroutable without a contract index and a
@@ -508,7 +503,7 @@ function AppInner() {
                     paramsText: intent.executeParams || '',
                 });
                 setUnlockedView('contract-execute');
-                pendingUriView.current = 'contract-execute';
+                launchRouteState.current.remember('contract-execute');
             }
         } catch {
             // Parser surfaces unknown via kind === 'unknown'; defensive
@@ -635,7 +630,11 @@ function AppInner() {
         walletId: activeWalletId,
         currentView: unlockedView,
         onResume: setUnlockedView,
+        skip: launchRouteState.current.shouldSkipLastViewResume(),
     });
+    useEffect(() => {
+        if (activeWalletId) launchRouteState.current.walletActivated();
+    }, [activeWalletId]);
 
     // §33 command palette: Cmd/Ctrl+K opens a launcher over every action and
     // destination. Inert unless unlocked; contacts feed its fuzzy search and
