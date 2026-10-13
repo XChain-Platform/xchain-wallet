@@ -23,7 +23,7 @@ import React from 'react';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, fireEvent } from '@testing-library/react';
 import {
     applySettingsRootAttributes,
     cacheDisplayPrefs,
@@ -165,18 +165,37 @@ describe('LearnNote', () => {
         expect(screen.queryByTestId('learn-note')).toBeNull();
     });
 
-    it('renders explanatory copy naming the chain when Learn Mode is on', () => {
+    it.each([
+        ['action', 'Bitcoin', 'the Bitcoin network'],
+        ['message', undefined, 'without moving coins'],
+        ['psbt', undefined, 'another app'],
+    ])('renders one short %s sentence and links to live docs', (variant, chainLabel, expected) => {
         applySettingsRootAttributes({ learnMode: true });
-        render(<LearnNote variant="action" chainLabel="Bitcoin" />);
+        render(<LearnNote variant={variant} chainLabel={chainLabel} />);
         const note = screen.getByTestId('learn-note');
-        expect(note.textContent).toContain('nothing has been sent yet');
-        expect(note.textContent).toContain('the Bitcoin network');
+        const body = note.querySelector('p');
+        expect(note).not.toHaveAttribute('role');
+        expect(body.textContent.match(/[.!?](?=\s|$)/g)).toHaveLength(1);
+        expect(note.textContent).toContain(expected);
+        expect(screen.getByRole('link', { name: 'Learn more' })).toHaveAttribute(
+            'href',
+            'https://docs.xchain.io/',
+        );
     });
 
-    it('explains a message signature differently from a payment', () => {
+    it('keeps each dismissed confirmation note hidden after remounting', () => {
         applySettingsRootAttributes({ learnMode: true });
+        const view = render(<LearnNote variant="action" chainLabel="Bitcoin" />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Dismiss learn note' }));
+        expect(screen.queryByTestId('learn-note')).toBeNull();
+
+        view.unmount();
+        render(<LearnNote variant="action" chainLabel="Bitcoin" />);
+        expect(screen.queryByTestId('learn-note')).toBeNull();
+
         render(<LearnNote variant="message" />);
-        expect(screen.getByTestId('learn-note').textContent).toContain('moves no coins');
+        expect(screen.getByTestId('learn-note')).toBeInTheDocument();
     });
 
     it('picks the live setting up without a remount', async () => {
