@@ -591,8 +591,9 @@ function openWindowAfterIdleCheck() {
  *
  * §24.6 / G057.
  */
-function buildApplicationMenu() {
-    const isMac = process.platform === 'darwin';
+export function installApplicationMenu({
+    isMac = process.platform === 'darwin',
+} = {}) {
     const updateItem = runUpdaterCheck
         ? createUpdateCheckMenuItem(() => { void requestUpdateCheck({ visible: true }); })
         : null;
@@ -676,6 +677,10 @@ function buildApplicationMenu() {
         }] : []),
     ];
     Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
+function buildApplicationMenu() {
+    installApplicationMenu();
 }
 
 // §40.12 Step 19: single-instance lock + deep-link dispatch must run
