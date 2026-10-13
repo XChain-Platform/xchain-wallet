@@ -139,6 +139,14 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const submitInFlightRef = useRef(false);
+    const [reviewRequest, setReviewRequest] = useState(
+        /** @type {{ params: Record<string, string>, full: boolean, availableAmt: string } | null} */ (null),
+    );
+
+    useEffect(() => {
+        setChainId(initialChainId);
+    }, [initialChainId]);
 
     useEffect(() => {
         let cancelled = false;
@@ -404,32 +412,34 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
 
     // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
     // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
-    async function openConfirmScreen() {
-        if (!actionParams) {
+    async function openConfirmScreen(request) {
+        if (!request?.params) {
             setFormError('Enter an amount greater than zero, with at most 8 decimal places.');
             return;
         }
-        const from = {
-            address: fromAddress.address,
-            publicKey: fromAddress.publicKey,
-            derivationPath: fromAddress.derivationPath,
-            addressId: fromAddress.id,
-            source: fromAddress.source,
-            signerId: fromAddress.signerId,
-        };
-        setSubmitError(null);
+        if (submitInFlightRef.current) return;
+        submitInFlightRef.current = true;
         try {
+            const from = {
+                address: fromAddress.address,
+                publicKey: fromAddress.publicKey,
+                derivationPath: fromAddress.derivationPath,
+                addressId: fromAddress.id,
+                source: fromAddress.source,
+                signerId: fromAddress.signerId,
+            };
+            setSubmitError(null);
             const res = await actionConfirm.run({
                 chainId,
                 from,
-                actionData: { action: isUnstake ? 'UNSTAKE' : 'COLLECT', params: actionParams },
+                actionData: { action: isUnstake ? 'UNSTAKE' : 'COLLECT', params: request.params },
                 ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
                 onApprove: (prebuiltPsbt) => submitConfirmed({
                     walletId,
                     chainId,
                     from,
-                    params: actionParams,
-                    full: isWholeAmount,
+                    params: request.params,
+                    full: request.full,
                     ...(feePerKb != null ? { feePerKb } : {}),
                     prebuiltPsbt,
                 }),
@@ -442,6 +452,8 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
             setFormError(submitFailureMessage(err, {
                 chainId, coinTicker, fallback: err?.message || (verb + ' failed.'),
             }));
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 
@@ -483,8 +495,6 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
         () => stakingActionParams({ isUnstake, signingPubkey, amount, availableAmt }),
         [isUnstake, signingPubkey, amount, availableAmt],
     );
-    const isPartial = amountValid && !isWholeAmount;
-
     function handleReview(event) {
         event.preventDefault();
         if (!fromAddress) {
@@ -512,19 +522,32 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
             return;
         }
         setFormError(null);
-        if (singleEncode) { openConfirmScreen(); return; }
+        const request = {
+            params: { ...actionParams },
+            full: isWholeAmount,
+            availableAmt: String(availableAmt),
+        };
+        if (singleEncode) { void openConfirmScreen(request); return; }
+        setReviewRequest(request);
         setStage('review');
     }
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
-        if (!actionParams) {
+        if (stage === 'submitting' || submitInFlightRef.current) return;
+        const request = reviewRequest || (actionParams ? {
+            params: actionParams,
+            full: isWholeAmount,
+            availableAmt: String(availableAmt),
+        } : null);
+        if (!request) {
             setFormError('Enter an amount greater than zero, with at most 8 decimal places.');
             return;
         }
+        const actionParams = request.params;
         if (!isWatcherMode && !isHwSource && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && isHwSource && hwStatus !== 'available') return;
+        submitInFlightRef.current = true;
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -540,7 +563,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                     signerId: fromAddress.signerId,
                 },
                 params: actionParams,
-                full: isWholeAmount,
+                full: request.full,
                 ...(feePerKb != null ? { feePerKb } : {}),
             };
             let res;
@@ -578,18 +601,26 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
             }
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 
     function handleBuildAnother() {
         setResult(null);
         setSubmitError(null);
+        setReviewRequest(null);
+        setStage('form');
+    }
+
+    function leaveReview() {
+        setReviewRequest(null);
         setStage('form');
     }
 
     const header = (
         <PageHeader
-            onBack={stage === 'review' ? () => setStage('form') : onBack}
+            onBack={stage === 'review' ? leaveReview : onBack}
             backDisabled={stage === 'submitting' || actionConfirm.composing}
             title={stage === 'review' || stage === 'submitting'
                     ? `Review ${verb.toLowerCase()}`
@@ -645,6 +676,12 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
     }
 
     if (stage === 'review' || stage === 'submitting') {
+        const reviewed = reviewRequest || {
+            params: actionParams,
+            full: isWholeAmount,
+            availableAmt: String(availableAmt),
+        };
+        const isPartial = !reviewed.full;
         return wrap(
             <FormPage
                 label={`Review ${verb.toLowerCase()}`}
@@ -674,18 +711,18 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                 <p className={styles.summary}>
                     {isUnstake
                         ? (isPartial
-                            ? `Unstake ${formatWithThousands(actionParams?.AMOUNT)} XCHAIN from signing public key ${actionParams?.SIGNING_PUBKEY?.slice(0, 12)}. The rest stays staked; the unstaked amount returns after the cooldown.`
-                            : `Unstake signing public key ${actionParams?.SIGNING_PUBKEY?.slice(0, 12)}. The full active balance for this public key returns after the cooldown.`)
+                            ? `Unstake ${formatWithThousands(reviewed.params?.AMOUNT)} XCHAIN from signing public key ${reviewed.params?.SIGNING_PUBKEY?.slice(0, 12)}. The rest stays staked; the unstaked amount returns after the cooldown.`
+                            : `Unstake signing public key ${reviewed.params?.SIGNING_PUBKEY?.slice(0, 12)}. The full active balance for this public key returns after the cooldown.`)
                         : (isPartial
-                            ? `Claim ${formatWithThousands(actionParams?.AMOUNT)} XCHAIN of the pending staking rewards for this address; the rest stays pending.`
+                            ? `Claim ${formatWithThousands(reviewed.params?.AMOUNT)} XCHAIN of the pending staking rewards for this address; the rest stays pending.`
                             : 'Claim all pending staking rewards for this address.')}
                 </p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Amount</dt>
                     <dd className={styles.detailsValue}>
                         {isPartial
-                            ? `${formatWithThousands(actionParams?.AMOUNT)} XCHAIN`
-                            : `${availableAmt != null ? formatWithThousands(String(availableAmt)) : 'All'} XCHAIN (full ${isUnstake ? 'balance' : 'pending rewards'})`}
+                            ? `${formatWithThousands(reviewed.params?.AMOUNT)} XCHAIN`
+                            : `${formatWithThousands(reviewed.availableAmt)} XCHAIN (full ${isUnstake ? 'balance' : 'pending rewards'})`}
                     </dd>
                     <dt className={styles.detailsLabel}>Chain</dt>
                     <dd className={styles.detailsValue}>
@@ -699,7 +736,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                         <>
                             <dt className={styles.detailsLabel}>Signing public key</dt>
                             <dd className={styles.detailsValue} style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
-                                {actionParams?.SIGNING_PUBKEY}
+                                {reviewed.params?.SIGNING_PUBKEY}
                             </dd>
                         </>
                     ) : null}
