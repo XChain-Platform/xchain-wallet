@@ -9,14 +9,19 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef, useState } from 'react';
+import { Button } from './Button.jsx';
+import { getNativeQrScanner } from './nativeQrScanner.js';
 
 /**
  * Camera-based QR scanner. Wraps the browser's native
  * `BarcodeDetector` API against a live `<video>` + `MediaStream`,
  * available in Chromium-based browsers (Chrome, Edge, modern Opera,
- * Chromium-based Electron) since ~2020. Falls back to a clear
- * "Camera scanning not supported on this browser" message elsewhere
- * so callers can prompt the user to use the paste-chunk path.
+ * Chromium-based Electron) since ~2020. The iPhone app's WebView has
+ * no BarcodeDetector, so there the shell's native scanner (registered
+ * through ./nativeQrScanner.js) takes over behind a "Scan with camera"
+ * button. Everywhere else it falls back to a clear "Camera scanning not
+ * supported on this browser" message so callers can prompt the user to
+ * use the paste-chunk path.
  *
  * The component emits each scanned string through `onFrame`; it
  * deliberately does NOT de-duplicate across scans; callers that
@@ -24,11 +29,16 @@ import { useEffect, useRef, useState } from 'react';
  * no-op on duplicate chunks, and the scanner has no opinion about
  * what payload shape is being transported.
  *
- * Lifecycle:
+ * Lifecycle (BarcodeDetector path):
  *   - on mount (or `autoStart=true`): getUserMedia → attach to
  *     video → start `requestAnimationFrame` loop that runs
  *     `detector.detect(video)` on each frame.
  *   - on unmount: stop every track + cancel the RAF loop.
+ *
+ * Lifecycle (native path): nothing opens until the button is pressed,
+ * whatever `autoStart` says; the native view covers the whole screen,
+ * so it opens on a deliberate tap. Every code the camera reads goes to
+ * `onFrame`, and unmounting dismisses the native view.
  *
  * @param {object} props
  * @param {(text: string) => void} props.onFrame
@@ -50,6 +60,11 @@ const BLANK_POSTER = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAA
  * @returns {string}
  */
 export function cameraErrorText(e) {
+    // The native scanner (iPhone app) rejects with a reason rather than a
+    // DOMException name; its words point at Settings, where iOS keeps the
+    // camera switch.
+    const native = NATIVE_START_TEXT[e?.reason];
+    if (native) return native;
     const name = e?.name || '';
     if (name === 'NotAllowedError' || name === 'SecurityError' || name === 'PermissionDeniedError') {
         return 'Camera access is turned off for XChain Wallet. To scan, allow the camera in your device settings, or paste the code instead.';
@@ -63,6 +78,29 @@ export function cameraErrorText(e) {
     return 'The camera could not start. Paste the code instead.';
 }
 
+/** Plain words for each reason the native scanner can refuse to start. */
+const NATIVE_START_TEXT = Object.freeze({
+    denied: 'Camera access is turned off for XChain Wallet. Allow it in Settings, or paste the code instead.',
+    unavailable: 'There is no camera on this device. Paste the code instead.',
+    busy: 'The camera is already open for another scan. Close it and try again, or paste the code instead.',
+    error: 'The camera could not start. Paste the code instead.',
+});
+
+/**
+ * Plain words for a native scanner that closed by itself, or null when the
+ * user closed it (Cancel needs no explanation).
+ *
+ * @param {string} reason
+ * @returns {string | null}
+ */
+export function nativeScanClosedText(reason) {
+    if (reason === 'cancelled') return null;
+    if (reason === 'interrupted') {
+        return 'Scanning stopped when the app was interrupted. Scan again, or paste the code instead.';
+    }
+    return 'The camera stopped unexpectedly. Scan again, or paste the code instead.';
+}
+
 /** True inside the Capacitor iOS or Android app rather than a browser. */
 function isNativeApp() {
     try {
@@ -70,6 +108,120 @@ function isNativeApp() {
     } catch {
         return false;
     }
+}
+
+/**
+ * The native-scanner surface: a "Scan with camera" button that opens the
+ * shell's full-screen camera view, and plain words when it cannot.
+ *
+ * `onFrame` is read through a ref, so a caller that passes a new callback
+ * on every render (most do) never reopens the camera view.
+ *
+ * @param {{ scanner: import('./nativeQrScanner.js').NativeQrScanner, onFrame: (text: string) => void, alt: string }} props
+ */
+function NativeCameraScan({ scanner, onFrame, alt }) {
+    const onFrameRef = useRef(onFrame);
+    onFrameRef.current = onFrame;
+    const stopRef = useRef(/** @type {(() => void) | null} */ (null));
+    const mountedRef = useRef(false);
+    const [phase, setPhase] = useState(/** @type {'idle' | 'starting' | 'open'} */ ('idle'));
+    const [error, setError] = useState(/** @type {string | null} */ (null));
+
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => {
+            mountedRef.current = false;
+            const stop = stopRef.current;
+            stopRef.current = null;
+            if (stop) stop();
+        };
+    }, []);
+
+    async function open() {
+        if (phase !== 'idle') return;
+        setError(null);
+        setPhase('starting');
+        let closedEarly = false;
+        let stop;
+        try {
+            stop = await scanner.start(
+                (text) => {
+                    if (mountedRef.current) onFrameRef.current(text);
+                },
+                (reason) => {
+                    closedEarly = true;
+                    stopRef.current = null;
+                    if (!mountedRef.current) return;
+                    setPhase('idle');
+                    setError(nativeScanClosedText(reason));
+                },
+            );
+        } catch (e) {
+            // 'stopped' means the view was told to close before it finished
+            // opening; nothing went wrong, so nothing is said.
+            if (mountedRef.current) {
+                setPhase('idle');
+                setError(e?.reason === 'stopped' ? null : cameraErrorText(e));
+            }
+            return;
+        }
+        // Unmounted while the view was opening (the caller finished, or the
+        // user navigated away): close it now rather than leave a camera
+        // covering a screen that no longer exists.
+        if (!mountedRef.current) {
+            stop();
+            return;
+        }
+        if (closedEarly) return;
+        stopRef.current = stop;
+        setPhase('open');
+    }
+
+    return (
+        <div
+            role="region"
+            aria-label={alt}
+            data-testid="qr-scanner-native"
+            style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '0.5rem',
+            }}
+        >
+            <Button
+                variant="secondary"
+                size="sm"
+                onClick={open}
+                loading={phase === 'starting'}
+                disabled={phase !== 'idle'}
+            >
+                Scan with camera
+            </Button>
+            {error ? (
+                <p
+                    role="alert"
+                    style={{
+                        margin: 0,
+                        padding: '0.75rem',
+                        fontSize: '0.85rem',
+                        lineHeight: 1.4,
+                        color: 'var(--xc-text)',
+                        background: 'var(--xc-bg-muted)',
+                        borderRadius: 'var(--xc-radius-sm)',
+                    }}
+                >
+                    {error}
+                </p>
+            ) : (
+                <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--xc-text-muted)' }}>
+                    {phase === 'open'
+                        ? 'Scanning… point the camera at a QR code.'
+                        : 'Opens the camera to read a QR code.'}
+                </p>
+            )}
+        </div>
+    );
 }
 
 export function QrScanner({ onFrame, autoStart = true, width = 320, alt = 'QR scanner' }) {
@@ -163,6 +315,14 @@ export function QrScanner({ onFrame, autoStart = true, width = 320, alt = 'QR sc
         };
     }, [supported, autoStart, onFrame]);
 
+    // The iPhone app: no BarcodeDetector in its WebView, but a native
+    // scanner registered by the shell. Android's WebView has BarcodeDetector
+    // and never reaches this branch.
+    const nativeScanner = hasBarcodeDetector ? null : getNativeQrScanner();
+    if (nativeScanner) {
+        return <NativeCameraScan scanner={nativeScanner} onFrame={onFrame} alt={alt} />;
+    }
+
     if (!supported) {
         let reason;
         if (!isSecureContext) {
@@ -179,8 +339,10 @@ export function QrScanner({ onFrame, autoStart = true, width = 320, alt = 'QR sc
                 </>
             );
         } else if (!hasBarcodeDetector) {
-            // Inside the iPhone app there is no other browser to switch to:
-            // its WebView has no BarcodeDetector, so the advice is to paste.
+            // Inside the app there is no other browser to switch to. This is a
+            // shell build with no native scanner (an iPhone build from before
+            // it, or an Android WebView without BarcodeDetector), so the
+            // advice is to paste.
             reason = isNativeApp() ? (
                 <>
                     Scanning with the camera is not available on this device yet.

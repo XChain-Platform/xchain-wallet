@@ -118,6 +118,7 @@ import {
 import { requestPersistentStorage } from './storage/storagePersistence.js';
 import { installNativeBiometricProvider } from './storage/nativeBiometricProvider.js';
 import { installNativeKdfProvider } from './storage/nativeKdfProvider.js';
+import { installNativeQrScanner } from './storage/nativeQrScanner.js';
 import { installNativeGuardPersistence } from './storage/nativeGuards.js';
 import { installDirectUpdateProvider } from './update/directUpdateProvider.js';
 import { resolveSdkFactory } from './sdkFactory.js';
@@ -1068,6 +1069,8 @@ export async function getSessionStatus() {
     try {
         // First, so the unlock and onboarding derivations run natively.
         installNativeKdfProvider();
+        // The iPhone WebView cannot read QR codes; its shell scans natively.
+        installNativeQrScanner();
         if (!installNativeWipeHook({ afterWipe: sealPageBroadcastQueue })) installPageWipeSeal();
         installNativeScreenGuard();
         await installNativeBiometricProvider();
