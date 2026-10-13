@@ -22,6 +22,7 @@ import { useReachability } from '../hooks/useReachability.js';
 import { useWalletFilters } from '../hooks/useWalletFilters.js';
 import { HomeTabs } from '../components/HomeTabs.jsx';
 import { buildBalanceRows, detectSpamCandidates } from '../components/BalanceList.jsx';
+import { hasBackupReminderFunds } from '../../flows/backupReminder.js';
 import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
 import { useToast } from '../components/ToastHost.jsx';
 import { BackupReminderCard } from '../components/BackupReminderCard.jsx';
@@ -280,6 +281,9 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // What every row consumer reads: the balances plus each shown address's
     // open-offer escrow, so a token escrowed in full keeps its row.
     const balancesView = useEscrowedBalances({ balances, activeByChain, balancesFetchedAt, messaging });
+    const backupReminderHasFunds = useMemo(() => hasBackupReminderFunds(
+        buildBalanceRows(balancesView, chainRegistry, activeByChain),
+    ), [balancesView, activeByChain]);
     const [pendingAirdrops, setPendingAirdrops] = useState(
         /** @type {any[]} */ ([]),
     );
@@ -1387,7 +1391,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 {activeWalletId ? (
                     <BackupReminderCard
                         walletId={activeWalletId}
-                        walletCreatedAt={activeWallet?.createdAt}
+                        hasFunds={backupReminderHasFunds}
                         onAction={() => { setSettingsSubpage('backup'); setSettingsOpen(true); }}
                     />
                 ) : null}

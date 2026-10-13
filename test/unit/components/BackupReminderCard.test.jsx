@@ -7,7 +7,7 @@
 // General Public License v3.0 or later; see LICENSE.md.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 
 import { markBackupVerified } from '../../../packages/core/src/flows/backupReminder.js';
@@ -15,16 +15,13 @@ import { BackupReminderCard } from '../../../packages/core/src/shared/components
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
 
 const NOW = Date.parse('2026-10-13T12:00:00.000Z');
-const THREE_DAYS_AGO = new Date(NOW - 3 * 24 * 60 * 60 * 1000).toISOString();
-
 function mount(props = {}) {
     const messaging = {};
-    const cardProps = { onAction: vi.fn(), ...props };
+    const cardProps = { onAction: vi.fn(), hasFunds: true, ...props };
     const tree = (nextProps) => (
         <MessagingContext.Provider value={{ shell: 'web', messaging }}>
             <BackupReminderCard
                 walletId="wallet-1"
-                walletCreatedAt={THREE_DAYS_AGO}
                 {...nextProps}
             />
         </MessagingContext.Provider>
@@ -50,6 +47,14 @@ afterEach(() => {
 });
 
 describe('BackupReminderCard', () => {
+    it('stays out of the receive path until funds arrive', async () => {
+        const { rerenderCard } = mount({ hasFunds: false });
+        await waitFor(() => expect(screen.queryByRole('region')).toBeNull());
+
+        rerenderCard({ hasFunds: true });
+        expect(await screen.findByRole('region', { name: 'Back up your wallet' })).toBeTruthy();
+    });
+
     it('shows accurate recovery options only for an unverified wallet', async () => {
         mount();
 
@@ -71,14 +76,16 @@ describe('BackupReminderCard', () => {
         unmount();
         mount({ onAction });
         await waitFor(() => expect(screen.queryByRole('region')).toBeNull());
+
+        act(() => vi.advanceTimersByTime(24 * 60 * 60 * 1000));
+        expect(await screen.findByRole('region', { name: 'Back up your wallet' })).toBeTruthy();
     });
 
-    it('never renders after the wallet backup is verified', async () => {
-        const { rerenderCard } = mount();
+    it('disappears immediately when the mounted wallet is verified', async () => {
+        mount();
         await screen.findByRole('region', { name: 'Back up your wallet' });
 
-        markBackupVerified('wallet-2', '2020-01-01T00:00:00.000Z');
-        rerenderCard({ walletId: 'wallet-2' });
+        markBackupVerified('wallet-1', '2020-01-01T00:00:00.000Z');
 
         await waitFor(() => expect(screen.queryByRole('region')).toBeNull());
     });

@@ -9,13 +9,14 @@
 // Unit: flows/backupReminder (§19.7 / G034 + G062). Backup-verified state
 // lives in localStorage keyed by walletId. computeBackupReminderState is
 // the state machine that decides hidden/gentle/firm from verified-at,
-// wallet age, and a 24h snooze window.
+// first funding, and a 24h snooze window.
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
     markBackupVerified,
     getBackupVerifiedAt,
     dismissBackupReminder,
+    hasBackupReminderFunds,
     computeBackupReminderState,
 } from '../../../packages/core/src/flows/backupReminder.js';
 
@@ -44,43 +45,39 @@ describe('flows/backupReminder mark + read', () => {
 describe('flows/backupReminder computeBackupReminderState (verified wallet)', () => {
     it('stays hidden regardless of the reminder cadence or elapsed time', () => {
         markBackupVerified('w1', '2020-01-01T00:00:00.000Z');
-        for (const backupReminders of ['off', 'monthly', 'quarterly']) {
-            expect(computeBackupReminderState({
-                walletId: 'w1',
-                settings: { backupReminders },
-                now: Date.parse('2030-01-01T00:00:00.000Z'),
-            })).toEqual({ kind: 'hidden' });
-        }
+        expect(computeBackupReminderState({
+            walletId: 'w1',
+            hasFunds: true,
+            now: Date.parse('2030-01-01T00:00:00.000Z'),
+        })).toEqual({ kind: 'hidden' });
     });
 
     it('is hidden when the stored timestamp is unparseable', () => {
         markBackupVerified('w1', 'not-a-date');
         const s = computeBackupReminderState({
-            walletId: 'w1', settings: { backupReminders: 'monthly' }, now: Date.now(),
+            walletId: 'w1', hasFunds: true, now: Date.now(),
         });
         expect(s.kind).toBe('hidden');
     });
 });
 
 describe('flows/backupReminder computeBackupReminderState (never verified)', () => {
-    const created = Date.parse('2026-06-01T00:00:00.000Z');
+    const funded = Date.parse('2026-06-01T00:00:00.000Z');
 
-    it('is hidden before the 1-day gentle threshold', () => {
+    it('stays hidden until the wallet first has funds', () => {
         const s = computeBackupReminderState({
             walletId: 'w1',
-            walletCreatedAt: new Date(created).toISOString(),
-            settings: {},
-            now: created + 0.5 * MS_PER_DAY,
+            hasFunds: false,
+            now: funded,
         });
         expect(s.kind).toBe('hidden');
     });
 
-    it('is gentle between 1 and 7 days old', () => {
+    it('is gentle as soon as the first funds arrive', () => {
         const s = computeBackupReminderState({
             walletId: 'w1',
-            walletCreatedAt: new Date(created).toISOString(),
-            settings: {},
-            now: created + 3 * MS_PER_DAY,
+            hasFunds: true,
+            now: funded,
         });
         expect(s.kind).toBe('gentle');
         expect(s.dismissable).toBe(true);
@@ -88,48 +85,48 @@ describe('flows/backupReminder computeBackupReminderState (never verified)', () 
         expect(s.body).toMatch(/recovery phrase or export an encrypted backup/i);
     });
 
-    it('escalates to a non-dismissable firm reminder at 7+ days', () => {
-        const s = computeBackupReminderState({
-            walletId: 'w1',
-            walletCreatedAt: new Date(created).toISOString(),
-            settings: {},
-            now: created + 8 * MS_PER_DAY,
-        });
+    it('remembers first funding even after the displayed balance returns to zero', () => {
+        computeBackupReminderState({ walletId: 'w1', hasFunds: true, now: funded });
+        const s = computeBackupReminderState({ walletId: 'w1', hasFunds: false, now: funded + MS_PER_DAY });
+        expect(s.kind).toBe('gentle');
+    });
+
+    it('escalates seven days after first funding', () => {
+        computeBackupReminderState({ walletId: 'w1', hasFunds: true, now: funded });
+        const s = computeBackupReminderState({ walletId: 'w1', hasFunds: false, now: funded + 8 * MS_PER_DAY });
         expect(s.kind).toBe('firm');
         expect(s.dismissable).toBe(false);
         expect(s.headline).toBe('Back up your wallet');
         expect(s.body).toMatch(/permanently lock you out/i);
     });
 
-    it('honours the full 24-hour snooze across the firm threshold', () => {
-        dismissBackupReminder('w1', created + 6.5 * MS_PER_DAY);
+    it('returns after the full 24-hour snooze', () => {
+        computeBackupReminderState({ walletId: 'w1', hasFunds: true, now: funded });
+        dismissBackupReminder('w1', funded);
         const stillGentle = computeBackupReminderState({
             walletId: 'w1',
-            walletCreatedAt: new Date(created).toISOString(),
-            settings: {},
-            now: created + 7 * MS_PER_DAY,
+            hasFunds: false,
+            now: funded + MS_PER_DAY - 1,
         });
-        expect(stillGentle.kind).toBe('hidden');
+        expect(stillGentle).toEqual({ kind: 'hidden', recheckAt: funded + MS_PER_DAY });
 
-        const firm = computeBackupReminderState({
+        const returned = computeBackupReminderState({
             walletId: 'w1',
-            walletCreatedAt: new Date(created).toISOString(),
-            settings: {},
-            now: created + 7.5 * MS_PER_DAY,
+            hasFunds: false,
+            now: funded + MS_PER_DAY,
         });
-        expect(firm.kind).toBe('firm');
+        expect(returned.kind).toBe('gentle');
     });
+});
 
-    it('falls back to gentle when createdAt is missing and not dismissed', () => {
-        const s = computeBackupReminderState({ walletId: 'w1', settings: {}, now: Date.now() });
-        expect(s.kind).toBe('gentle');
-    });
-
-    it('is hidden with no createdAt once dismissed', () => {
-        const now = Date.parse('2026-06-10T00:00:00.000Z');
-        dismissBackupReminder('w1', now);
-        const s = computeBackupReminderState({ walletId: 'w1', settings: {}, now });
-        expect(s.kind).toBe('hidden');
+describe('flows/backupReminder funding detection', () => {
+    it('counts confirmed, pending, and escrowed value but not empty or malformed rows', () => {
+        expect(hasBackupReminderFunds([])).toBe(false);
+        expect(hasBackupReminderFunds([{ quantity: '0', pendingQuantity: '0' }])).toBe(false);
+        expect(hasBackupReminderFunds([{ quantity: 'not-an-amount' }])).toBe(false);
+        expect(hasBackupReminderFunds([{ quantity: '1' }])).toBe(true);
+        expect(hasBackupReminderFunds([{ quantity: '0', pendingQuantity: '1' }])).toBe(true);
+        expect(hasBackupReminderFunds([{ quantity: '0', escrowed: '1' }])).toBe(true);
     });
 });
 
