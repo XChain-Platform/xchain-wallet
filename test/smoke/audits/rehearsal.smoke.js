@@ -805,7 +805,7 @@ const check = (over) => assertRecord({
 
     const coverage = cli('coverage', '--records', join(work, 'no-records'));
     assert.equal(coverage.status, 1, 'no lane has been swapped, so coverage fails');
-    assert.match(coverage.stdout, /mac-arm64\s+device Mac Studio/,
+    assert.match(coverage.stdout, /mac-arm64\s+device MacBook Pro M3 Max/,
         'a lane with hardware is reported as hardware-ready but unrehearsed');
     // mac-x64's Rosetta device can never witness the x64 zip, so it is a named waiver, never a red.
     assert.match(coverage.stdout, /mac-x64\s+device .*WAIVED, device cannot witness.*operator hardware decision owed/);
