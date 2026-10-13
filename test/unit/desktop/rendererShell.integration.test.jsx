@@ -212,7 +212,9 @@ describe('desktop renderer shell', () => {
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } });
         fireEvent.click(screen.getByRole('button', { name: 'Unlock Wallet' }));
 
-        expect(await screen.findByText('IPC channel unavailable')).toBeInTheDocument();
+        // The failure is reported in plain copy; the raw IPC text stays off screen.
+        expect(await screen.findByText('Could not unlock the wallet. Close and reopen the app, then try again.')).toBeInTheDocument();
+        expect(screen.queryByText('IPC channel unavailable')).toBeNull();
         expect(screen.getByRole('heading', { name: 'Unlock wallet' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Unlock Wallet' })).toBeEnabled();
         expect(bridge.sendMessage).toHaveBeenCalledWith({

@@ -98,6 +98,6 @@ describe('Locked unlock progress', () => {
 
         act(() => vi.advanceTimersByTime(2000));
         expect(screen.queryByText(/unlocking your wallet securely/i)).toBeNull();
-        expect(screen.getByText('Unlock failed quickly')).toBeTruthy();
+        expect(screen.getByText('Could not unlock the wallet. Close and reopen the app, then try again.')).toBeTruthy();
     });
 });
