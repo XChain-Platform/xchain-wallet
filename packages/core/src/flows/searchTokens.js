@@ -19,9 +19,8 @@
 // good enough for type-ahead today; if it gets slow we can swap to a
 // dedicated prefix endpoint without touching the renderer.
 //
-// Returns a flat, renderer-friendly list. Empty array on any failure
-// (network error, unconfigured SDK, dev-mock fallback): the picker
-// just shows fewer rows rather than surfacing an error.
+// Returns a flat, renderer-friendly list. Transport failures remain errors so
+// the picker can offer retry instead of presenting a failed search as empty.
 
 /**
  * @typedef {Object} PlatformTokenHit
@@ -46,12 +45,7 @@ export async function searchPlatformTokens({ sdkRegistry, chainId, query, limit 
     const cappedLimit = Math.max(1, Math.min(50, Number(limit) || 20));
     const sdk = sdkRegistry.get(chainId);
     if (typeof sdk.getTokens !== 'function') return [];
-    let raw;
-    try {
-        raw = await sdk.getTokens(trimmed, 'token', { limit: cappedLimit });
-    } catch {
-        return [];
-    }
+    const raw = await sdk.getTokens(trimmed, 'token', { limit: cappedLimit });
     // Explorer wraps records in `{data: [...]}`; the dev-mock SDK
     // proxy returns a bare `[]`. Accept either.
     const rows = Array.isArray(raw)

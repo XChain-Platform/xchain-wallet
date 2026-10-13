@@ -58,7 +58,11 @@
 .abRow:hover,
 .abRow:focus-visible {
     background: var(--xc-bg-muted);
-    outline: none;
+}
+
+.abRow:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: -2px;
 }
 
 .abName {
@@ -87,7 +91,7 @@
  * this control a real outline there (WCAG 2.4.7). */
 @media (forced-colors: active) {
     .abRow:focus-visible {
-        outline: 2px solid Highlight;
-        outline-offset: 2px;
+        outline: 2px solid var(--xc-focus-ring);
+        outline-offset: -2px;
     }
 }

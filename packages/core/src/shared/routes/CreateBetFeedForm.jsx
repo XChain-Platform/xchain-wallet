@@ -29,6 +29,10 @@ import { useBetChainIds } from './BetFeedsList.jsx';
 import styles from './IssueTokenForm.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import {
+    formatWithThousands,
+    normalizeLocalizedDecimal,
+} from '../utils/amountFormat.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -730,8 +734,11 @@ export function CreateBetFeedForm({
             <Input
                 label="Your fee (optional)"
                 hint={`Your share of the pot, such as 1.5 for 1.5%. Up to ${MAX_FEE_PCT}%. Paid only when you publish a result; cancelled, void, and expired markets pay nothing.`}
-                value={feePct}
-                onChange={(e) => setFeePct(e.target.value)}
+                value={formatWithThousands(feePct)}
+                onChange={(e) => {
+                    const raw = e.target.value;
+                    setFeePct(normalizeLocalizedDecimal(raw) ?? raw);
+                }}
                 inputMode="decimal"
                 autoComplete="off"
             />
@@ -739,8 +746,11 @@ export function CreateBetFeedForm({
             <Input
                 label="Smallest bet allowed (optional)"
                 hint="Leave empty for no minimum. Useful because payouts round down: a tiny stake can win and still pay nothing."
-                value={minAmount}
-                onChange={(e) => setMinAmount(e.target.value)}
+                value={formatWithThousands(minAmount)}
+                onChange={(e) => {
+                    const raw = e.target.value;
+                    setMinAmount(normalizeLocalizedDecimal(raw) ?? raw);
+                }}
                 inputMode="decimal"
                 autoComplete="off"
             />

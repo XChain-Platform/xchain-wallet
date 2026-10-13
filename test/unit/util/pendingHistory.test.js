@@ -284,9 +284,17 @@ describe('a merged pending entry satisfies the contracts History already has', (
         expect(kept).toHaveLength(1);
     });
 
-    it('is offered for RBF replacement', () => {
+    it('offers RBF only when the local signing record says it was enabled', () => {
         const descriptor = { displayName: 'Bitcoin', feeStrategy: { rbfSupported: true } };
-        expect(isEntryReplaceable(fromMempool(), { descriptor }).ok).toBe(true);
+        const merged = mergePendingEntries({
+            confirmed: [],
+            pending: [fromMempool(), fromLocal({ txid: 'AABBCC', rbf: true })],
+        }).pending[0];
+        expect(isEntryReplaceable(merged, { descriptor }).ok).toBe(true);
+        expect(isEntryReplaceable(fromMempool(), { descriptor })).toEqual({
+            ok: false,
+            reason: 'This transaction did not allow fee replacement.',
+        });
     });
 
     it('is not offered for RBF when the action is not coin-moving', () => {
