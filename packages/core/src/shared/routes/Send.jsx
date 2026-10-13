@@ -2525,6 +2525,10 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                     result={previewResult}
                     loading={previewBalances.loading}
                     error={previewBalances.error}
+                    chainCoin={descriptor?.coin}
+                    nativeTicker={nativeTickerFor(descriptor)}
+                    fiatCurrency={fiatCurrency}
+                    allowCoingeckoFallback={settings?.privacy?.priceDataEnabled !== false}
                 />
                 {multiTickPreviewGap ? (
                     <StatusMessage variant="status">
