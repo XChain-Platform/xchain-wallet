@@ -13,11 +13,13 @@ import { describe, expect, it } from 'vitest';
 import config from '../../e2e/playwright.config.js';
 
 describe('default Playwright projects', () => {
-    it('runs smoke-tagged specs with LG K51 Chrome 102 emulation', () => {
+    it('runs smoke-tagged and LG K51 tagged specs with LG K51 Chrome 102 emulation', () => {
         const project = config.projects.find(({ name }) => name === 'android-lg-k51-smoke');
 
         expect(project).toBeDefined();
-        expect(project.grep).toEqual(/@smoke/);
+        expect(project.grep.test('@smoke')).toBe(true);
+        expect(project.grep.test('@lg-k51')).toBe(true);
+        expect(config.projects.find(({ name }) => name === 'chromium').grepInvert.test('@lg-k51')).toBe(true);
         expect(project.use).toMatchObject({
             browserName: 'chromium',
             viewport: { width: 412, height: 869 },
