@@ -12,11 +12,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
     PageHeader,
+    FormPage,
     Button,
     Input,
     ChainBadge,
     AddressText,
- NetworkField,  Icon, StatusMessage, FeeSelector, AddressField,} from '@xchain-wallet/core/ui';
+    NetworkField,
+    Icon,
+    StatusMessage,
+    FeeSelector,
+    AddressField,
+} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -177,7 +183,6 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     const signerReady = useSignerReady(walletId);
     const { settings } = useSettings();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -1038,7 +1043,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            {children}
         </Screen>
     );
 
@@ -1084,7 +1089,30 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
+            <FormPage
+                label="Review dispenser"
+                onSubmit={handleSubmit}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={stage === 'submitting'}
+                        disabled={
+                            isWatcherMode
+                                ? false
+                                : hw
+                                    ? hwStatus !== 'available'
+                                    : (!signerReady && password.length === 0)
+                        }
+                    >
+                        {isWatcherMode
+                            ? 'Create unsigned transaction'
+                            : hw
+                                ? `Sign on ${sourceAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                : (descriptor ? `Sign on ${descriptor.displayName}` : 'Sign')}
+                    </Button>
+                )}
+            >
                 <p className={styles.summary}>{decoded?.summary}</p>
                 <p className={styles.hint}>{summaryLine}</p>
                 <dl className={styles.detailsList}>
@@ -1172,27 +1200,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         {submitError}
                     </StatusMessage>
                 ) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={
-                            isWatcherMode
-                                ? false
-                                : hw
-                                    ? hwStatus !== 'available'
-                                    : (!signerReady && password.length === 0)
-                        }
-                    >
-                        {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : hw
-                                ? `Sign on ${sourceAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : (descriptor ? `Sign on ${descriptor.displayName}` : 'Sign')}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -1376,7 +1384,21 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     ) : null;
 
     return wrap(
-        <form onSubmit={handleReview} noValidate>
+        <FormPage
+            label="Create dispenser"
+            onSubmit={handleReview}
+            status={formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={actionConfirm.composing}
+                    disabled={derivingGetAddress || actionConfirm.composing || outsideBlocked}
+                >
+                    {derivingGetAddress || actionConfirm.composing ? 'Preparing review…' : 'Create'}
+                </Button>
+            )}
+        >
             {draftBanner}
             {lockedToken && chainId ? (
                 <LockedTokenContext chainId={chainId} tick={ticker} />
@@ -1659,21 +1681,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 />
             </div>
 
-            {formError ? (
-                <StatusMessage variant="error">{formError}</StatusMessage>
-            ) : null}
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    block
-                    loading={actionConfirm.composing}
-                    disabled={derivingGetAddress || actionConfirm.composing || outsideBlocked}
-                >
-                    {derivingGetAddress || actionConfirm.composing ? 'Preparing review…' : 'Create'}
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }
 

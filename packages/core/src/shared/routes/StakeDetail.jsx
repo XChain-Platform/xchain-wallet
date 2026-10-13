@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, EmptyState, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import {
     isDemoWallet,
@@ -87,7 +87,6 @@ export function StakeDetail({
 }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
@@ -254,7 +253,7 @@ export function StakeDetail({
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            <ListPage>{children}</ListPage>
         </Screen>
     );
 
@@ -493,10 +492,11 @@ export function StakeDetail({
             </div>
 
             {activeTab === 'rewards' ? (
-                <ul className={local.eventList}>
-                    {rewards.length === 0 ? (
-                        <li><div className={local.eventEmpty}>No reward events yet.</div></li>
-                    ) : rewards.slice(0, 25).map((r, i) => (
+                rewards.length === 0 ? (
+                    <EmptyState title="No reward events yet." />
+                ) : (
+                    <ul className={local.eventList}>
+                        {rewards.slice(0, 25).map((r, i) => (
                         <li key={`${String(r.action_index ?? i)}:${i}`}>
                             <div className={local.eventRow}>
                                 <span className={local.eventAmount}>
@@ -508,15 +508,17 @@ export function StakeDetail({
                                 </span>
                             </div>
                         </li>
-                    ))}
-                </ul>
+                        ))}
+                    </ul>
+                )
             ) : null}
 
             {activeTab === 'delegation' ? (
-                <ul className={local.eventList}>
-                    {delegations.length === 0 ? (
-                        <li><div className={local.eventEmpty}>No signing key delegated. Use Delegate to add one.</div></li>
-                    ) : delegations.slice(0, 25).map((d, i) => (
+                delegations.length === 0 ? (
+                    <EmptyState title="No signing key delegated." body="Use Delegate to add one." />
+                ) : (
+                    <ul className={local.eventList}>
+                        {delegations.slice(0, 25).map((d, i) => (
                         <li key={`${String(d.delegation_id ?? i)}:${i}`}>
                             <div className={local.eventRow}>
                                 <span className={local.eventAmount}>
@@ -528,16 +530,16 @@ export function StakeDetail({
                                 </span>
                             </div>
                         </li>
-                    ))}
-                </ul>
+                        ))}
+                    </ul>
+                )
             ) : null}
 
             {activeTab === 'positions' ? (
-                <ul className={local.eventList}>
-                    {activeContractStakes.length === 0 && pendingContractUnstakes.length === 0 ? (
-                        <li><div className={local.eventEmpty}>No positions found for this contract.</div></li>
-                    ) : (
-                        <>
+                activeContractStakes.length === 0 && pendingContractUnstakes.length === 0 ? (
+                    <EmptyState title="No positions found for this contract." />
+                ) : (
+                    <ul className={local.eventList}>
                             {activeContractStakes.map((s, i) => (
                                 <li key={`s:${String(s.action_index ?? i)}:${i}`}>
                                     <div className={local.eventRow}>
@@ -560,16 +562,16 @@ export function StakeDetail({
                                     </div>
                                 </li>
                             ))}
-                        </>
-                    )}
-                </ul>
+                    </ul>
+                )
             ) : null}
 
             {activeTab === 'slashes' ? (
-                <ul className={local.eventList}>
-                    {slashEvents.length === 0 ? (
-                        <li><div className={local.eventEmpty}>No slash events against this position.</div></li>
-                    ) : slashEvents.slice(0, 25).map((ev, i) => (
+                slashEvents.length === 0 ? (
+                    <EmptyState title="No slash events against this position." />
+                ) : (
+                    <ul className={local.eventList}>
+                        {slashEvents.slice(0, 25).map((ev, i) => (
                         <li key={`sl:${i}`}>
                             <div className={local.eventRow}>
                                 <span className={local.slashAmount}>-{fmt(ev.amount)} {ev.tick}</span>
@@ -581,8 +583,9 @@ export function StakeDetail({
                                 </span>
                             </div>
                         </li>
-                    ))}
-                </ul>
+                        ))}
+                    </ul>
+                )
             ) : null}
 
             {activeTab === 'details' ? (

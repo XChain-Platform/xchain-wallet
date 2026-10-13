@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, Button, Input, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, Button, FormPage, Input, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -579,7 +579,21 @@ export function CreateBetFeedForm({
     })();
 
     return wrap(
-        <form onSubmit={submit} noValidate>
+        <FormPage
+            label="Open a market"
+            onSubmit={submit}
+            status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={actionConfirm.composing}
+                    disabled={actionConfirm.composing}
+                >
+                    {actionConfirm.composing ? 'Preparing review…' : 'Review market'}
+                </Button>
+            )}
+        >
             {duplicated ? (
                 <p className={styles.hint}>
                     Copied from market #{String(duplicateFeedIndex)}. Pick new dates, then check the terms:
@@ -798,22 +812,10 @@ export function CreateBetFeedForm({
                 />
             ) : null}
 
-            {formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    block
-                    loading={actionConfirm.composing}
-                    disabled={actionConfirm.composing}
-                >
-                    {actionConfirm.composing ? 'Preparing review…' : 'Review market'}
-                </Button>
-            </div>
             <p className={styles.hint}>
                 Everything above is permanent once the market is on the chain: there is no edit. Your only
                 later choices are publishing the winning outcome or cancelling and refunding everyone.
             </p>
-        </form>,
+        </FormPage>,
     );
 }

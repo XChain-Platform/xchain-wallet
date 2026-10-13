@@ -9,7 +9,19 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import {
+    AddressText,
+    Button,
+    ChainBadge,
+    FeeSelector,
+    FormPage,
+    Input,
+    ListPage,
+    PageHeader,
+    Screen,
+    SectionHeader,
+    StatusMessage,
+} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -333,14 +345,14 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
             return wrap(<WatcherResultPanel result={result} onBuildAnother={() => setStage('view')} onDone={onBack} />);
         }
         return wrap(
-            <>
+            <ListPage>
                 <p className={styles.summary}>Ballot cast. It counts once the network records the action; weight is measured at the poll's close block.</p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Transaction ID</dt>
                     <dd className={styles.detailsValue}>{String(txid || 'n/a')}</dd>
                 </dl>
                 <div className={styles.actions}><Button variant="primary" onClick={onBack}>Done</Button></div>
-            </>,
+            </ListPage>,
         );
     }
 
@@ -369,7 +381,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
     // Finalized results table (frozen per-option tally).
     const resultsBlock = results && results.length ? (
         <div style={{ marginTop: '0.75rem' }}>
-            <span className={styles.fromLabel}>Results</span>
+            <SectionHeader title="Results" />
             <table style={{ width: '100%', fontSize: '0.85rem' }}>
                 <thead><tr><th style={{ textAlign: 'left' }}>Option</th><th style={{ textAlign: 'right' }}>Weight</th><th style={{ textAlign: 'right' }}>Voters</th></tr></thead>
                 <tbody>
@@ -420,7 +432,22 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
             ? ballot.map((e) => `${e.option}: ${options[e.option] ?? ''} (${e.share})`).join(' · ')
             : ballot.map((i) => `${i}: ${options[i] ?? ''}`).join(' · ');
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
+            <FormPage
+                label="Review ballot"
+                onSubmit={handleSubmit}
+                status={(isWatcherMode || isHwSource) && submitError
+                    ? <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    : null}
+                actions={(
+                    <>
+                        <Button type="button" variant="ghost" onClick={() => setStage('view')} disabled={stage === 'submitting'}>Back</Button>
+                        <Button type="submit" variant="primary" loading={stage === 'submitting'}
+                            disabled={isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)}>
+                            {isWatcherMode ? 'Create unsigned transaction' : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}` : 'Cast ballot'}
+                        </Button>
+                    </>
+                )}
+            >
                 <p className={styles.summary}>Vote on poll #{String(pollIndex)} ({poll.tick}).</p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>From</dt>
@@ -450,24 +477,21 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 )}
-                {(isWatcherMode || isHwSource) && submitError ? (<StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>) : null}
-                <div className={styles.actions}>
-                    <Button type="button" variant="ghost" onClick={() => setStage('view')} disabled={stage === 'submitting'}>Back</Button>
-                    <Button type="submit" variant="primary" loading={stage === 'submitting'}
-                        disabled={isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)}>
-                        {isWatcherMode ? 'Create unsigned transaction' : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}` : 'Cast ballot'}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
     return wrap(
-        <>
+        <ListPage>
             {pollInfo}
             {resultsBlock}
             {isOpen ? (
-                <form onSubmit={handleReview} noValidate style={{ marginTop: '0.75rem' }}>
+                <FormPage
+                    label="Cast ballot"
+                    onSubmit={handleReview}
+                    status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
+                    actions={<Button type="submit" variant="primary" disabled={!fromAddress}>Vote</Button>}
+                >
                     <span className={styles.fromLabel}>{isSplit ? 'Split your weight across options' : `Choose up to ${maxSel} option${maxSel > 1 ? 's' : ''}`}</span>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.4rem' }}>
                         {options.map((label, i) => (
@@ -498,15 +522,11 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                             customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                         />
                     ) : null}
-                    {formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
-                    <div className={styles.actions}>
-                        <Button type="submit" variant="primary" disabled={!fromAddress}>Vote</Button>
-                    </div>
                     {!fromAddress ? <p className={styles.hint}>No address on this chain. Use Receive to generate one, then vote.</p> : null}
-                </form>
+                </FormPage>
             ) : (
                 <p className={styles.hint} style={{ marginTop: '0.75rem' }}>Voting is closed for this poll.</p>
             )}
-        </>,
+        </ListPage>,
     );
 }
