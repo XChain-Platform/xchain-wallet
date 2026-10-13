@@ -972,6 +972,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                         onChange={setFeePick}
                         allowCustom={false}
                         disabled={!feeTiers}
+                        showEstimateNotice={false}
                     />
                     <div className={styles.qrActions}>
                         <Button

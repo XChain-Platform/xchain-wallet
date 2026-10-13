@@ -10,10 +10,9 @@
 
 // §15.6: the recovery-phrase row also reveals a stored 25th-word passphrase,
 // under the same tap-to-reveal blur and the same password gate as the
-// recovery phrase itself. No copy control anywhere in that block (the row's
-// own hint says "Never type or paste it into anything else", so a
-// clipboard button would contradict the sentence directly above it),
-// and a wallet without a stored passphrase renders nothing extra.
+// recovery phrase itself. No copy control appears in that block because
+// clipboard contents are available to other apps, and a wallet without
+// a stored passphrase renders nothing extra.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
@@ -54,6 +53,9 @@ describe('BackupSection reveal: stored 25th-word passphrase', () => {
         mount(revealMnemonicRequest);
         await revealSeed();
 
+        expect(screen.getByText(/Never share your recovery phrase/)).toHaveTextContent(
+            'Never share your recovery phrase. Anyone with it can spend your funds.',
+        );
         expect(screen.getByText('Passphrase (25th word)')).toBeTruthy();
         expect(screen.getByText('my 25th word')).toBeTruthy();
 

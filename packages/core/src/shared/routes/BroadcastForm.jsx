@@ -37,20 +37,15 @@ import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
-import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
+import { MAX_MEMO_LENGTH, memoLengthError, utf8ByteLength } from '../utils/memoLimit.js';
 import { parseRawTx } from '../../signers/verifySignedTx.js';
-import { tickerForCoin } from '../../registry/coinTicker.js';
+import { formatNativeBaseUnits, tickerForDescriptor } from '../../registry/coinTicker.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
+import { useLongOperationStatus } from '../hooks/useLongOperationStatus.js';
 
 const chainRegistry = registryLib.defaultRegistry();
-
-const PROTOCOL_COIN_TICKER = {
-    bitcoin: 'BTC',
-    litecoin: 'LTC',
-    dogecoin: 'DOGE',
-};
 
 // Separator between the parts the form packs into one MEMO slot (the optional
 // UTC timestamp and the message body).: this used to be ' | ', and '|'
@@ -65,7 +60,7 @@ const MEMO_PART_SEPARATOR = ' - ';
 // letting the compose call fail with the protocol's field names.
 const RESERVED_DELIMITERS = /[|;]/;
 
-// BROADCAST MESSAGE uses the same 250-character ceiling as MEMO, but the
+// BROADCAST MESSAGE uses the same 250-byte ceiling as MEMO, but the
 // indexer validates it under its own field-specific setting.
 const MAX_BROADCAST_MESSAGE_LENGTH = 250;
 const DECIMAL_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/;
@@ -107,10 +102,8 @@ function rawTransactionMismatch(decoded, descriptor) {
     return null;
 }
 
-function formatCoinAmount(valueSat, ticker) {
-    const whole = valueSat / 100000000n;
-    const fraction = String(valueSat % 100000000n).padStart(8, '0').replace(/0+$/, '');
-    return `${fraction ? `${whole}.${fraction}` : whole} ${ticker}`;
+function formatCoinAmount(valueSat, descriptor) {
+    return `${formatNativeBaseUnits(valueSat, descriptor)} ${tickerForDescriptor(descriptor)}`;
 }
 
 function rawBroadcastFailure(err) {
@@ -162,7 +155,9 @@ function BroadcastKindPicker({ value, onChange }) {
     );
 }
 
-function RawTransactionBroadcast({ walletId, chainId, setChainId, messaging, onKindChange }) {
+function RawTransactionBroadcast({
+    walletId, chainId, setChainId, messaging, onKindChange, onBusyChange, onDone,
+}) {
     const { settings } = useSettings();
     const [raw, setRaw] = useState('');
     const [preview, setPreview] = useState(/** @type {{ txHex: string, decoded: any } | null} */ (null));
@@ -170,9 +165,10 @@ function RawTransactionBroadcast({ walletId, chainId, setChainId, messaging, onK
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
-    const ticker = tickerForCoin(descriptor?.coin);
+    const ticker = tickerForDescriptor(descriptor);
     const mismatch = rawTransactionMismatch(preview?.decoded, descriptor);
     const chainIds = chainRegistry.supportedChains().map((chain) => chain.id);
+    const broadcastTime = useLongOperationStatus(state === 'submitting', { timeoutMs: 30_000 });
 
     function review(event) {
         event.preventDefault();
@@ -194,6 +190,7 @@ function RawTransactionBroadcast({ walletId, chainId, setChainId, messaging, onK
         event.preventDefault();
         if (!preview || !chainId || mismatch || state === 'submitting') return;
         setState('submitting');
+        onBusyChange(true);
         setError(null);
         try {
             const response = await messaging.broadcastSignedTxRequest({
@@ -206,6 +203,8 @@ function RawTransactionBroadcast({ walletId, chainId, setChainId, messaging, onK
         } catch (err) {
             setError(rawBroadcastFailure(err));
             setState('preview');
+        } finally {
+            onBusyChange(false);
         }
     }
 
@@ -224,10 +223,19 @@ function RawTransactionBroadcast({ walletId, chainId, setChainId, messaging, onK
             settings,
         }) : null;
         return (
-            <div role="status" aria-live="polite">
-                <h2 className={styles.successTitle}>{txid ? 'Transaction broadcast' : 'Transaction queued'}</h2>
+            <div>
+                <div role="status" aria-live="polite" aria-atomic="true">
+                    <h2 className={styles.successTitle}>{txid ? 'Broadcast pending' : 'Transaction queued'}</h2>
+                    {txid ? (
+                        <p className={styles.hint}>
+                            The transaction was broadcast but is not confirmed yet.
+                            Confirmation time depends on the selected network and fee.
+                        </p>
+                    ) : null}
+                </div>
                 {txid ? (
                     <>
+                        <p><ChainBadge descriptor={descriptor} /></p>
                         <p className={styles.successLabel}>Transaction ID</p>
                         <code className={styles.txid}>{txid}</code>
                         <CopyButton value={txid} label="Copy transaction ID" />
@@ -240,6 +248,17 @@ function RawTransactionBroadcast({ walletId, chainId, setChainId, messaging, onK
                 ) : (
                     <p>The signed transaction is saved in the broadcast queue. Send it from there when the network is available.</p>
                 )}
+                <div className={styles.actions}>
+                    <Button type="button" onClick={() => {
+                        setRaw('');
+                        setPreview(null);
+                        setResult(null);
+                        setState('form');
+                    }}>
+                        Broadcast another
+                    </Button>
+                    <Button type="button" variant="primary" onClick={onDone}>Done</Button>
+                </div>
             </div>
         );
     }
@@ -254,7 +273,13 @@ function RawTransactionBroadcast({ walletId, chainId, setChainId, messaging, onK
                 ) : null}
                 actions={(
                     <>
-                        <Button type="button" onClick={() => setState('form')}>Back</Button>
+                        <Button
+                            type="button"
+                            onClick={() => setState('form')}
+                            disabled={state === 'submitting'}
+                        >
+                            Back
+                        </Button>
                         <Button type="submit" variant="primary" loading={state === 'submitting'} disabled={!!mismatch}>
                             Broadcast transaction
                         </Button>
@@ -271,7 +296,7 @@ function RawTransactionBroadcast({ walletId, chainId, setChainId, messaging, onK
                         <DetailRow
                             key={`${output.scriptPubKeyHex}-${index}`}
                             label={`Output ${index + 1}`}
-                            value={`${formatCoinAmount(output.valueSat, ticker)} to ${scriptType(output.scriptPubKeyHex)} script ${output.scriptPubKeyHex}`}
+                            value={`${formatCoinAmount(output.valueSat, descriptor)} to ${scriptType(output.scriptPubKeyHex)} script ${output.scriptPubKeyHex}`}
                         />
                     ))}
                     <DetailRow
@@ -282,6 +307,16 @@ function RawTransactionBroadcast({ walletId, chainId, setChainId, messaging, onK
                 <p className={styles.hint}>
                     Raw transaction data does not identify mainnet, testnet, or regtest. Confirm that the selected network is the one that created it.
                 </p>
+                {broadcastTime.showElapsed ? (
+                    <p role="status" className={styles.hint} data-testid="raw-broadcast-elapsed">
+                        Waiting for the relay for {broadcastTime.elapsedSeconds} seconds.
+                    </p>
+                ) : null}
+                {broadcastTime.timedOut ? (
+                    <StatusMessage variant="error" className={styles.error}>
+                        The relay has not responded. Check History or a block explorer before trying again. Closing this screen does not cancel a transaction the relay already received.
+                    </StatusMessage>
+                ) : null}
             </FormPage>
         );
     }
@@ -341,9 +376,11 @@ function RawTransactionBroadcast({ walletId, chainId, setChainId, messaging, onK
  * @param {object} props
  * @param {string} props.walletId
  * @param {() => void} props.onBack
+ * @param {() => void} [props.onDone]
  */
-export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, initialFromAddress }) {
+export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initialTick, initialFromAddress }) {
     const { messaging, shell } = useMessaging();
+    const { settings } = useSettings();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -369,6 +406,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
     const [feedFee, setFeedFee] = useState('');
     const [includeTimestamp, setIncludeTimestamp] = useState(false);
     const [broadcastKind, setBroadcastKind] = useState('message');
+    const [rawBroadcastBusy, setRawBroadcastBusy] = useState(false);
     const [password, setPassword] = useState('');
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
 
@@ -450,7 +488,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
     }, [chainId, fromAddressId, addressesByChain]);
 
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
-    const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
+    const coinTicker = tickerForDescriptor(descriptor);
 
     // PC-51: native-coin protocol fee (BROADCAST is quotable); the
     // authoritative price check runs at submit via applyNativeFeePreflight.
@@ -514,10 +552,10 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
         return p;
     }, [feedName, text, value, feedFee, includeTimestamp]);
 
-    const messageLength = String(actionParams.MESSAGE || '').length;
-    const memoLength = String(actionParams.MEMO || '').length;
-    const messageLengthError = messageLength > MAX_BROADCAST_MESSAGE_LENGTH
-        ? `Message is ${messageLength} characters; the network accepts at most ${MAX_BROADCAST_MESSAGE_LENGTH}.`
+    const messageBytes = utf8ByteLength(actionParams.MESSAGE);
+    const memoBytes = utf8ByteLength(actionParams.MEMO);
+    const messageLengthError = messageBytes > MAX_BROADCAST_MESSAGE_LENGTH
+        ? `Message is ${messageBytes} bytes; the network accepts at most ${MAX_BROADCAST_MESSAGE_LENGTH} bytes.`
         : null;
     const broadcastMemoLengthError = memoLengthError(actionParams.MEMO || '');
     const broadcastLengthError = messageLengthError || broadcastMemoLengthError;
@@ -736,6 +774,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
         const header = (
         <PageHeader
             onBack={onBack}
+            backDisabled={stage === 'submitting' || rawBroadcastBusy}
             title={stage === 'review' || stage === 'submitting'
                     ? 'Review broadcast'
                     : (broadcastKind === 'transaction' ? 'Broadcast transaction' : 'Broadcast')}
@@ -755,6 +794,8 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
                 setChainId={setChainId}
                 messaging={messaging}
                 onKindChange={setBroadcastKind}
+                onBusyChange={setRawBroadcastBusy}
+                onDone={onDone || onBack}
             />,
         );
     }
@@ -779,7 +820,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
                 <WatcherResultPanel
                     result={result}
                     onBuildAnother={handleBuildAnother}
-                    onDone={onBack}
+                    onDone={onDone || onBack}
                 />,
             );
         }
@@ -788,22 +829,42 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
         // branch it renders as a completed broadcast.
         if (result?.queued) {
             return wrap(
-                <QueuedResultPanel onDone={onBack} what="broadcast" unsaved={result?.unsaved} />,
+                <QueuedResultPanel onDone={onDone || onBack} what="broadcast" unsaved={result?.unsaved} />,
             );
         }
+        const explorerUrl = txid ? explorerPageUrl({
+            chainId,
+            kind: 'transaction',
+            value: txid,
+            settings,
+        }) : null;
         return wrap(
             <>
-                <h2 className={styles.successTitle}>Broadcast sent</h2>
+                <div role="status" aria-live="polite" aria-atomic="true">
+                    <h2 className={styles.successTitle}>Broadcast pending</h2>
+                    <p className={styles.hint}>
+                        Your action was broadcast but is not confirmed yet.
+                        Confirmation time depends on the selected network and fee.
+                    </p>
+                </div>
                 {txid ? (
                     <>
+                        <p><ChainBadge descriptor={descriptor} /></p>
                         <p className={styles.successLabel}>Transaction ID</p>
                         <code className={styles.txid}>{txid}</code>
+                        <CopyButton value={txid} label="Copy transaction ID" />
+                        {explorerUrl ? (
+                            <a href={explorerUrl} target="_blank" rel="noopener noreferrer">
+                                View on explorer <span aria-hidden="true">↗</span>
+                            </a>
+                        ) : null}
                     </>
                 ) : (
-                    <p className={styles.hint}>Broadcast complete.</p>
+                    <p className={styles.hint}>The broadcast completed without a transaction ID.</p>
                 )}
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Done</Button>
+                    <Button type="button" onClick={handleBuildAnother}>Broadcast another</Button>
+                    <Button type="button" variant="primary" onClick={onDone || onBack}>Done</Button>
                 </div>
             </>,
         );
@@ -986,7 +1047,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
 
             <Input
                 label="Feed name (optional)"
-                hint={`${feedName.trim().length} / ${MAX_BROADCAST_MESSAGE_LENGTH} characters. Stable label for an oracle or feed.`}
+                hint={`${utf8ByteLength(feedName.trim())} / ${MAX_BROADCAST_MESSAGE_LENGTH} bytes. Stable label for an oracle or feed.`}
                 error={feedName.trim() ? messageLengthError || undefined : undefined}
                 value={feedName}
                 onChange={(e) => setFeedName(e.target.value)}
@@ -996,10 +1057,10 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
                 spellCheck={false}
             />
             <Input
-                label="Message"
+                label="Message (optional)"
                 hint={feedName.trim()
-                    ? `${memoLength} / ${MAX_MEMO_LENGTH} on-chain memo characters.`
-                    : `${messageLength} / ${MAX_BROADCAST_MESSAGE_LENGTH} characters.`}
+                    ? `${memoBytes} / ${MAX_MEMO_LENGTH} on-chain memo bytes.`
+                    : `${messageBytes} / ${MAX_BROADCAST_MESSAGE_LENGTH} bytes.`}
                 error={(feedName.trim() ? broadcastMemoLengthError : messageLengthError) || undefined}
                 value={text}
                 onChange={(e) => setText(e.target.value)}
@@ -1014,7 +1075,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
                 autoComplete="off"
             />
             <Input
-                label="Feed fee (optional, %)"
+                label="Feed fee (%) (optional)"
                 hint="Usage fee charged to dispensers that use this oracle. Leave blank for none."
                 inputMode="decimal"
                 value={feedFee}
