@@ -35,6 +35,12 @@
     margin-bottom: 0;
 }
 
+.search input {
+    height: var(--xc-control-h-md);
+    font-size: var(--xc-control-font-md, var(--xc-control-font));
+    border-radius: var(--xc-control-radius);
+}
+
 /* Sort sits beside the two half-width controls at its natural width. */
 .sort {
     flex: 0 0 auto;

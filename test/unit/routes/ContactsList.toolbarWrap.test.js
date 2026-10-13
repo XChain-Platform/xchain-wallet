@@ -11,16 +11,20 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const css = readFileSync(
-    resolve(process.cwd(), 'packages/core/src/shared/routes/ContactsList.module.css'),
-    'utf8',
-);
+const readCss = (path) => readFileSync(resolve(process.cwd(), path), 'utf8');
+const routeCss = (name) => readCss(`packages/core/src/shared/routes/${name}.module.css`);
+const css = routeCss('ContactsList');
 const source = readFileSync(
     resolve(process.cwd(), 'packages/core/src/shared/routes/ContactsList.jsx'),
     'utf8',
 );
 
 const phoneRules = css.match(/@media \(max-width: 420px\)\s*\{([\s\S]*?)\n\}/)?.[1] || '';
+
+function rule(text, selector) {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return text.match(new RegExp(`${escaped}\\s*\\{[^}]*\\}`))?.[0] || '';
+}
 
 describe('ContactsList toolbar at phone width', () => {
     it('applies the route toolbar layout to the controls', () => {
@@ -35,5 +39,44 @@ describe('ContactsList toolbar at phone width', () => {
     it('gives each control its own row at 420px and below', () => {
         expect(phoneRules).toMatch(/\.search\s*\{[^}]*flex:\s*1 1 100%/);
         expect(phoneRules).toMatch(/\.sort\s*\{[^}]*flex:\s*1 1 100%/);
+    });
+});
+
+describe('list toolbar control alignment', () => {
+    const mediumControl = (text, selector) => {
+        const body = rule(text, selector);
+        expect(body).toMatch(/height:\s*var\(--xc-control-h-md\)/);
+        expect(body).toMatch(/font-size:\s*var\(--xc-control-font-md,\s*var\(--xc-control-font\)\)/);
+        expect(body).toMatch(/border-radius:\s*var\(--xc-control-radius\)/);
+    };
+
+    it('centres shared toolbar rows and removes field wrapper spacing', () => {
+        const listPage = readCss('packages/core/src/ui/ListPage.module.css');
+        const toolbar = rule(listPage, '.toolbar');
+        expect(toolbar).toMatch(/align-items:\s*center/);
+        expect(toolbar).toMatch(/gap:\s*var\(--xc-space-2\)/);
+        expect(rule(listPage, '.toolbar > div')).toMatch(/margin-bottom:\s*0/);
+    });
+
+    it('uses medium control tokens for every route search field', () => {
+        for (const name of ['DispensersList', 'MyLists']) {
+            mediumControl(routeCss(name), '.search');
+        }
+        // These toolbars use the shared medium Input, which owns the control tokens.
+        for (const name of ['StakingList', 'MessagingInbox']) {
+            const route = readCss(`packages/core/src/shared/routes/${name}.jsx`);
+            expect(route).toMatch(/<Input\s+type="search"\s+size="md"/);
+        }
+        mediumControl(routeCss('ContactsList'), '.search input');
+        mediumControl(routeCss('AddressList'), '.searchField input');
+    });
+
+    it('uses medium control tokens for the address type segments', () => {
+        const addressList = routeCss('AddressList');
+        const segmented = rule(addressList, '.segmented');
+        expect(segmented).toMatch(/height:\s*var\(--xc-control-h-md\)/);
+        expect(segmented).toMatch(/border-radius:\s*var\(--xc-control-radius\)/);
+        expect(rule(addressList, '.segment'))
+            .toMatch(/font-size:\s*var\(--xc-control-font-md,\s*var\(--xc-control-font\)\)/);
     });
 });
