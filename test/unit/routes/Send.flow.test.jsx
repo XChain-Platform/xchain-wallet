@@ -13,12 +13,20 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
+import { ExecuteContractForm } from '../../../packages/core/src/shared/routes/ExecuteContractForm.jsx';
 import {
     Send,
     getUnusualSendWarnings,
 } from '../../../packages/core/src/shared/routes/Send.jsx';
 import { Receive } from '../../../packages/core/src/shared/routes/Receive.jsx';
 import { sendToken as submitSendToken } from '../../../packages/core/src/flows/sendToken.js';
+import { parseBip21Uri } from '../../../packages/core/src/uri/bip21.js';
+import { parseXchainUri } from '../../../packages/core/src/uri/xchainUri.js';
+import {
+    deepLinkRoute,
+    INVALID_DEEP_LINK_MESSAGE,
+} from '../../../packages/desktop/renderer/deepLinkRoute.js';
+import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
 import { userEvent } from '../../helpers/userEvent.js';
 
 const CHAIN_ID = 'bitcoin-mainnet';
@@ -68,6 +76,7 @@ function mount({
     encoding,
     messagingOverrides = {},
     overrides = {},
+    prefill = null,
 } = {}) {
     const base = {
         getAddressesByChain: vi.fn().mockResolvedValue({
@@ -141,7 +150,7 @@ function mount({
     const view = render(
         <MessagingProvider shell="web" messaging={messaging}>
             <ToastHost>
-                <Send walletId={WALLET_ID} onBack={onBack} onDone={onDone} />
+                <Send walletId={WALLET_ID} onBack={onBack} onDone={onDone} prefill={prefill} />
             </ToastHost>
         </MessagingProvider>,
     );
@@ -277,6 +286,174 @@ describe('Send flow with mocked messaging', () => {
         expect(alert).not.toHaveTextContent('SDK wallet exploded');
         expect(alert).not.toHaveTextContent('signer.js');
         expect(screen.queryByText(/technical details/i)).toBeNull();
+    });
+
+    it('bounds and type-checks URI fields while ignoring unknown optional parameters', () => {
+        const valid = parseXchainUri(
+            `xchain:BTC/send?to=${TO}&amount=1.25&tick=BTC&label=Invoice&message=Lunch&unknown=drop-me`,
+            { chainRegistry: defaultRegistry() },
+        );
+        expect(valid).toMatchObject({
+            kind: 'send',
+            amount: '1.25',
+            tick: 'BTC',
+            label: 'Invoice',
+            message: 'Lunch',
+        });
+        expect(valid.params).not.toHaveProperty('unknown');
+        expect(deepLinkRoute(
+            `xchain:BTC/send?to=${TO}&amount=1.25&tick=BTC&message=Invoice&unknown=drop-me`,
+            defaultRegistry(),
+        )).toMatchObject({
+            view: 'send',
+            sendPrefill: { requestMessage: 'Invoice', memo: undefined },
+        });
+
+        expect(() => parseBip21Uri(`bitcoin:${TO}?label=${'a'.repeat(251)}`)).toThrow(/limit/);
+        for (const uri of [
+            `xchain:BTC/send?to=${TO}&tick=${'T'.repeat(251)}`,
+            `xchain:BTC/execute?contract=1&method=${'m'.repeat(65)}`,
+            `xchain:BTC/execute?contract=1&method=pay&params=a||b`,
+            `xchain:BTC/execute?contract=1&method=pay&params=${'a'.repeat(1025)}`,
+        ]) {
+            expect(parseXchainUri(uri, { chainRegistry: defaultRegistry() }).kind, uri).toBe('unknown');
+        }
+        expect(deepLinkRoute(
+            'xchain:BTC/execute?contract=not-a-number&method=pay',
+            defaultRegistry(),
+        )).toEqual({ view: 'deep-link-error', message: INVALID_DEEP_LINK_MESSAGE });
+        expect(deepLinkRoute(
+            `xchain:BTC/send?to=${TO}&amount=1e9`,
+            defaultRegistry(),
+        )).toEqual({ view: 'deep-link-error', message: INVALID_DEEP_LINK_MESSAGE });
+        expect(deepLinkRoute(
+            `xchain:BTC/send?to=${TO}&tick=${encodeURIComponent('NOT A TOKEN')}`,
+            defaultRegistry(),
+        )).toEqual({ view: 'deep-link-error', message: INVALID_DEEP_LINK_MESSAGE });
+    });
+
+    it('shows deep-link text as text on the compose form and requires review before action', async () => {
+        const registry = defaultRegistry();
+        const message = '<img src=x onerror="globalThis.deepLinkRan=true">';
+        const route = deepLinkRoute(
+            `bitcoin:${TO}?amount=${AMOUNT}&label=ignored&message=${encodeURIComponent(message)}&unknown=drop-me`,
+            registry,
+        );
+
+        expect(route).toEqual({
+            view: 'send',
+            sendPrefill: {
+                address: TO,
+                amount: AMOUNT,
+                tick: 'BTC',
+                chainId: CHAIN_ID,
+                memo: message,
+            },
+        });
+        const messaging = mount({ prefill: route.sendPrefill });
+
+        expect(await screen.findByRole('form', { name: 'Send' })).toBeInTheDocument();
+        expect(screen.getByLabelText('Token')).toHaveValue('BTC');
+        expect(screen.getByLabelText(/^Amount \(/)).toHaveValue(AMOUNT);
+        expect(screen.getByTestId('payment-request-message')).toHaveTextContent(message);
+        expect(document.querySelector('img[src="x"]')).toBeNull();
+        expect(globalThis.deepLinkRan).toBeUndefined();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+        expect(messaging.sendToken).not.toHaveBeenCalled();
+
+        const pastedMessage = '<svg onload="globalThis.pastedUriRan=true">';
+        fireEvent.paste(screen.getByLabelText(/^To$/), {
+            clipboardData: {
+                getData: () => `bitcoin:${TO}?amount=${AMOUNT}&message=${encodeURIComponent(pastedMessage)}`,
+            },
+        });
+        expect(screen.getByTestId('payment-request-message')).toHaveTextContent(pastedMessage);
+        expect(document.querySelector('svg[onload]')).toBeNull();
+        expect(globalThis.pastedUriRan).toBeUndefined();
+
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
+        expect(await screen.findByTestId('confirm-modal')).toBeInTheDocument();
+        expect(messaging.sendToken).not.toHaveBeenCalled();
+    });
+
+    it('rejects oversized deep links and only routes valid contract calls to their form', () => {
+        const registry = defaultRegistry();
+        expect(deepLinkRoute(
+            `bitcoin:${TO}?message=${'x'.repeat(251)}`,
+            registry,
+        )).toEqual({ view: 'deep-link-error', message: INVALID_DEEP_LINK_MESSAGE });
+
+        const contract = deepLinkRoute(
+            'xchain:BTC/execute?contract=12&method=pay&params=alice%7C1&unknown=drop-me',
+            registry,
+        );
+        expect(contract).toEqual({
+            view: 'contract-execute',
+            contractRef: { chainId: CHAIN_ID, contractActionIndex: '12' },
+            executePrefill: { method: 'pay', paramsText: 'alice|1' },
+        });
+        expect(contract).not.toHaveProperty('action');
+        expect(contract).not.toHaveProperty('submit');
+        expect(contract.view).not.toMatch(/review|confirm|sign|submit/);
+    });
+
+    it('renders contract arguments as plain text and waits for review before building', async () => {
+        const registry = defaultRegistry();
+        const argument = '<img src=x onerror="globalThis.contractLinkRan=true">';
+        const route = deepLinkRoute(
+            `xchain:BTC/execute?contract=12&method=pay&params=${encodeURIComponent(argument)}`,
+            registry,
+        );
+        const base = {
+            getAddressesByChain: vi.fn().mockResolvedValue({
+                [CHAIN_ID]: [{
+                    id: 'address-1',
+                    address: FROM,
+                    publicKey: '02ab',
+                    derivationPath: "m/84'/0'/0'/0/0",
+                    source: 'hd',
+                }],
+            }),
+            getActiveAddresses: vi.fn().mockResolvedValue({}),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+            signerReady: vi.fn().mockResolvedValue({ ready: false }),
+            getContractByActionIndex: vi.fn().mockResolvedValue(null),
+            buildActionPsbtRequest: vi.fn().mockResolvedValue({ psbtHex: PSBT }),
+        };
+        const messaging = new Proxy(base, {
+            get(target, property) {
+                if (property in target) return target[property];
+                const stub = vi.fn().mockResolvedValue(null);
+                target[property] = stub;
+                return stub;
+            },
+        });
+
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <ExecuteContractForm
+                    walletId={WALLET_ID}
+                    chainId={route.contractRef.chainId}
+                    contractActionIndex={route.contractRef.contractActionIndex}
+                    initialMethod={route.executePrefill.method}
+                    initialParamsText={route.executePrefill.paramsText}
+                    onBack={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        expect(await screen.findByLabelText('Method')).toHaveValue('pay');
+        expect(screen.getByLabelText('Arguments (optional)')).toHaveValue(argument);
+        expect(document.querySelector('img[src="x"]')).toBeNull();
+        expect(globalThis.contractLinkRan).toBeUndefined();
+        expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        const review = await screen.findByRole('form', { name: 'Review contract call' });
+        expect(review).toHaveTextContent(argument);
+        expect(document.querySelector('img[src="x"]')).toBeNull();
+        expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 
     it('keeps field labels ahead of their values in DOM reading order', async () => {
