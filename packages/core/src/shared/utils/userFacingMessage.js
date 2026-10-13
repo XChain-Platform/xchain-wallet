@@ -111,7 +111,11 @@ export function isDeveloperMessage(err) {
     if (err && typeof err === 'object') {
         const e = /** @type {any} */ (err);
         if (/^SDK[A-Za-z]*Error$/.test(String(e.name || ''))) return true;
-        if (INTERNAL_NAME.test(String(e.name || ''))) return true;
+        // A browser storage or runtime exception (QuotaExceededError,
+        // InvalidStateError) carries engine wording. The wallet's own named
+        // errors (hardware transport, wrong password) carry copy written for
+        // the user, so the class name alone is not a reason to hide them.
+        if (typeof DOMException !== 'undefined' && err instanceof DOMException) return true;
         if (typeof e.code === 'string' && /^[A-Z][A-Z0-9_]+$/.test(e.code)) return true;
     }
     return DEV_PREFIX.test(text) || INTERNALS.test(text)
