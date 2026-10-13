@@ -36,6 +36,7 @@ import { nextPaint } from '../utils/nextPaint.js';
 import {
     readActiveWallet,
     readActiveWalletName,
+    subscribeActiveWallet,
     writeActiveWallet,
 } from '../utils/activeWalletMemory.js';
 import { DemoExitConfirm } from '../components/DemoExitConfirm.jsx';
@@ -205,6 +206,10 @@ export function Locked({ onUnlocked }) {
             .catch(() => { /* Keep the last known name when metadata is unavailable. */ });
         return () => { cancelled = true; };
     }, [messaging]);
+
+    useEffect(() => subscribeActiveWallet(({ name }) => {
+        setActiveWalletName(name);
+    }), []);
 
     // Probe for biometric availability + a registered credential. The
     // button only renders when both are true; otherwise the user sees
