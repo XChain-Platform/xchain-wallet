@@ -332,7 +332,7 @@ describe('route scroll position', () => {
 });
 
 describe('AppHeader button labels and tooltips', () => {
-    it('gives each header action an accessible label and tooltip', () => {
+    it('labels the three visible header controls and the overflow rows', () => {
         render(
             <AppHeader
                 onMenuOpen={() => {}}
@@ -345,15 +345,16 @@ describe('AppHeader button labels and tooltips', () => {
         );
 
         const expected = [
-            ['Settings', 'Settings'],
-            ['Open command palette', 'Search (Cmd/Ctrl+K)'],
-            ['Scan and addresses', 'Scan and addresses'],
             ['Lock wallet', 'Lock wallet'],
-            ['XChain platform sites', 'XChain platform sites'],
             ['Open menu', 'Open menu'],
         ];
         for (const [label, title] of expected) {
             expect(screen.getByRole('button', { name: label })).toHaveAttribute('title', title);
+        }
+
+        fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+        for (const label of ['Settings', 'Search', 'Scan', 'More wallet actions']) {
+            expect(screen.getByRole('menuitem', { name: label })).toBeTruthy();
         }
     });
 });

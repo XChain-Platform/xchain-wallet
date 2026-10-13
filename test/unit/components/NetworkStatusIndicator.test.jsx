@@ -31,7 +31,7 @@ describe('NetworkStatusIndicator', () => {
         render(<AppHeader onOpenNetworkSettings={onOpenNetworkSettings} />);
 
         const header = screen.getByRole('region', { name: 'App header' });
-        const trigger = screen.getByRole('button', { name: 'Network connected' });
+        const trigger = screen.getByRole('button', { name: 'Mainnet. Network connected' });
         expect(header).toContainElement(trigger);
         expect(trigger.closest('[data-state]')).toHaveAttribute('data-state', 'normal');
         fireEvent.click(trigger);
@@ -51,7 +51,7 @@ describe('NetworkStatusIndicator', () => {
         };
         render(<NetworkStatusIndicator onOpenNetworkSettings={() => {}} />);
 
-        const trigger = screen.getByRole('button', { name: 'Network degraded: Litecoin, Dogecoin' });
+        const trigger = screen.getByRole('button', { name: 'Mainnet. Network degraded: Litecoin, Dogecoin' });
         expect(trigger.closest('[data-state]')).toHaveAttribute('data-state', 'degraded');
         fireEvent.click(trigger);
         expect(screen.getByText('Litecoin').closest('li')).toHaveTextContent('Litecoin: explorer unavailable');
@@ -71,7 +71,7 @@ describe('NetworkStatusIndicator', () => {
 
         render(<NetworkStatusIndicator onOpenNetworkSettings={() => {}} />);
         fireEvent.click(screen.getByRole('button', {
-            name: 'Network degraded: Litecoin, Litecoin',
+            name: 'Mainnet. Network degraded: Litecoin, Litecoin',
         }));
 
         expect(screen.getAllByText('Litecoin')).toHaveLength(2);
@@ -83,7 +83,7 @@ describe('NetworkStatusIndicator', () => {
         render(<NetworkStatusIndicator onOpenNetworkSettings={() => {}} />);
 
         const trigger = screen.getByRole('button', {
-            name: 'Network offline: no selected chain is reachable',
+            name: 'Mainnet. Network offline: no selected chain is reachable',
         });
         expect(trigger.closest('[data-state]')).toHaveAttribute('data-state', 'offline');
         fireEvent.click(trigger);
