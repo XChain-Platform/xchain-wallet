@@ -29,7 +29,7 @@
 // blowing up MarketView.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { StatusMessage, useReducedMotion } from '@xchain-wallet/core/ui';
+import { StatusMessage } from '@xchain-wallet/core/ui';
 import { bucketizeMatches, PERIODS, DEFAULT_PERIOD_ID } from '../../market/bucketize.js';
 import { useMessaging } from '../useMessaging.js';
 import { sampleMatchesFor } from '../../market/sampleMarketData.js';
@@ -46,7 +46,6 @@ import { describeChartSeries } from './Sparkline.jsx';
  */
 export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120px' }) {
     const { messaging } = useMessaging();
-    const reducedMotion = useReducedMotion();
     const containerRef = useRef(/** @type {HTMLDivElement | null} */ (null));
     const chartRef = useRef(/** @type {any} */ (null));
     const seriesRef = useRef(/** @type {any} */ (null));
@@ -112,7 +111,7 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
                         vertLine: { color: colors.muted },
                         horzLine: { color: colors.muted },
                     },
-                    kineticScroll: { mouse: !reducedMotion, touch: !reducedMotion },
+                    kineticScroll: { mouse: false, touch: false },
                 });
                 const series = chart.addLineSeries({
                     color: colors.accent,
@@ -176,7 +175,7 @@ export function MarketChart({ chainId, tick1, tick2, demo = false, height = '120
             chartRef.current = null;
             seriesRef.current = null;
         };
-    }, [height, reducedMotion, tick2]);
+    }, [height, tick2]);
     // Fetch matches whenever the pair changes.
 
     useEffect(() => {

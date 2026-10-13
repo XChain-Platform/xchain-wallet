@@ -7,7 +7,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 
-const reducedMotionHarness = vi.hoisted(() => ({ value: false }));
 const chartHarness = vi.hoisted(() => {
     const setData = vi.fn();
     const fitContent = vi.fn();
@@ -31,10 +30,6 @@ const chartHarness = vi.hoisted(() => {
     };
 });
 
-vi.mock('@xchain-wallet/core/ui', async (importOriginal) => ({
-    ...(await importOriginal()),
-    useReducedMotion: () => reducedMotionHarness.value,
-}));
 vi.mock('lightweight-charts', () => ({ createChart: chartHarness.createChart }));
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -42,7 +37,6 @@ import { MarketChart } from '../../../packages/core/src/shared/components/Market
 
 afterEach(() => {
     cleanup();
-    reducedMotionHarness.value = false;
     document.documentElement.removeAttribute('data-xc-theme');
     vi.clearAllMocks();
 });
@@ -200,8 +194,7 @@ describe('MarketChart states and timeframes', () => {
         computedStyle.mockRestore();
     });
 
-    it('resizes the canvas with its container and disables momentum for reduced motion', async () => {
-        reducedMotionHarness.value = true;
+    it('resizes the canvas with its container without enabling momentum redraws', async () => {
         renderChart(vi.fn().mockResolvedValue([]));
         await waitFor(() => {
             expect(chartHarness.createChart.mock.calls.at(-1)[1].kineticScroll)
