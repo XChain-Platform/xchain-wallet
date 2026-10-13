@@ -36,6 +36,7 @@ import { oracleUsageFeeLine } from '../../flows/oracleFeeDisclosure.js';
 import { envelopeTransactionLines } from '../../flows/envelopeFeeDisclosure.js';
 import { satsToCoinDecimal } from '../../flows/feeEstimate.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { formatDisplayAmount } from '../utils/amountFormat.js';
 import { OriginIdentity } from './OriginIdentity.jsx';
 import { CONTRACT_CALL_WARNING } from '../utils/securityMomentCopy.js';
@@ -409,9 +410,10 @@ export function ConfirmActionModal({
                         so the message is adjacent to the field it refers to. */}
                     {error ? (
                         <div className={styles.error} role="alert" data-testid="confirm-error">
-                            {typeof error === 'string'
-                                ? error
-                                : (error?.message || 'The request stopped because the wallet service returned no explanation.')}
+                            {userFacingMessage(
+                                error,
+                                'The request stopped because the wallet service returned no explanation.',
+                            )}
                         </div>
                     ) : null}
 
