@@ -85,4 +85,27 @@ describe('DisplaySection', () => {
         }));
         expect(await screen.findByText('Display settings reset to defaults.')).toBeTruthy();
     });
+
+    it('debounces token-list search across ticker and network name with clear and keyboard controls', async () => {
+        setup({
+            pinnedTokens: ['bitcoin-mainnet:XCP'],
+            hiddenTokens: ['litecoin-mainnet:LTC'],
+        });
+
+        const search = await screen.findByRole('searchbox', { name: 'Search pinned and hidden tokens' });
+        fireEvent.change(search, { target: { value: 'liteCOIN' } });
+        expect(screen.getByText('bitcoin-mainnet:XCP')).toBeInTheDocument();
+        await waitFor(() => expect(screen.queryByText('bitcoin-mainnet:XCP')).toBeNull());
+        expect(screen.getByText('litecoin-mainnet:LTC')).toBeInTheDocument();
+
+        fireEvent.change(search, { target: { value: 'missing' } });
+        expect(await screen.findByText('No pinned tokens match "missing".')).toBeInTheDocument();
+        expect(screen.getByText('No hidden tokens match "missing".')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Clear settings token search' }));
+        expect(search).toHaveValue('');
+        expect(screen.getByText('bitcoin-mainnet:XCP')).toBeInTheDocument();
+        fireEvent.keyDown(search, { key: 'ArrowDown' });
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Unpin bitcoin-mainnet:XCP' }));
+    });
 });

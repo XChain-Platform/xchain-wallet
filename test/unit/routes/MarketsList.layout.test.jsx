@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MarketsList } from '../../../packages/core/src/shared/routes/MarketsList.jsx';
@@ -80,5 +80,43 @@ describe('MarketsList narrow layout', () => {
         fireEvent.click(all);
         expect(all).toHaveAttribute('aria-selected', 'true');
         expect(await screen.findByText('FFF')).toBeInTheDocument();
+    });
+
+    it('debounces case-insensitive ticker and name search, clears it, and opens the result from the keyboard', async () => {
+        const onOpenMarket = vi.fn();
+        const messaging = {
+            getMarkets: vi.fn().mockResolvedValue([
+                { tick1: 'BTC', tick2: 'PEPE', tick2_name: 'Pepe Collectible', depth: 9 },
+                { tick1: 'BTC', tick2: 'XCP', tick2_name: 'Counterparty', depth: 8 },
+            ]),
+            getDispensersForToken: vi.fn().mockResolvedValue([]),
+            listWatchlistForWallet: vi.fn().mockResolvedValue([]),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <MarketsList
+                    walletId="w"
+                    selectedAsset={{ chainId: 'bitcoin-mainnet', tick: 'BTC' }}
+                    onChangeAsset={() => {}}
+                    onOpenMarket={onOpenMarket}
+                />
+            </MessagingProvider>,
+        );
+
+        const search = await screen.findByRole('searchbox', { name: 'Search markets' });
+        await screen.findByText('Counterparty');
+        fireEvent.change(search, { target: { value: 'pepe collectible' } });
+        expect(screen.getByText('Counterparty')).toBeInTheDocument();
+        await waitFor(() => expect(screen.queryByText('Counterparty')).toBeNull());
+        expect(screen.getByText('PEPE')).toBeInTheDocument();
+
+        fireEvent.keyDown(search, { key: 'Enter' });
+        expect(onOpenMarket).toHaveBeenCalledWith('bitcoin-mainnet', 'BTC', 'PEPE');
+
+        fireEvent.change(search, { target: { value: 'absent' } });
+        expect(await screen.findByText('No matches')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Clear market search' }));
+        expect(search).toHaveValue('');
+        expect(screen.getByText('Counterparty')).toBeInTheDocument();
     });
 });
