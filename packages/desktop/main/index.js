@@ -516,6 +516,9 @@ export function createWindow(opts = {}) {
         ...initialBounds,
         minWidth: MIN_WINDOW_BOUNDS.width,
         minHeight: MIN_WINDOW_BOUNDS.height,
+        // Linux and Windows hide the File/Edit/View/Window/Help bar until
+        // Alt is pressed; macOS uses the global menu bar and ignores this.
+        autoHideMenuBar: process.platform !== 'darwin',
         webPreferences: {
             preload: join(here, '..', 'preload.cjs'),
             contextIsolation: true,

@@ -554,6 +554,19 @@ describe('desktop main entry point', () => {
         error.mockRestore();
     });
 
+    it('auto-hides the menu bar on the main window except on macOS', async () => {
+        const { createWindow } = await import('../../../packages/desktop/main/index.js');
+        const original = Object.getOwnPropertyDescriptor(process, 'platform');
+        try {
+            for (const [platform, expected] of [['linux', true], ['win32', true], ['darwin', false]]) {
+                Object.defineProperty(process, 'platform', { value: platform });
+                expect(createWindow().options.autoHideMenuBar).toBe(expected);
+            }
+        } finally {
+            Object.defineProperty(process, 'platform', original);
+        }
+    });
+
     it('allows only the marked Trezor bridge in an isolated no-HID session', async () => {
         await import('../../../packages/desktop/main/index.js');
         let openHandler;

@@ -44,12 +44,13 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
+import Module, { createRequire } from 'node:module';
 
 import {
     assertRecord, makeSwapCheck, validateSwapCheck, inCi, osesInRelease, RECORD_VERSION, SWAP_CHECK_VERSION,
 } from '../../../tools/release/rehearse.mjs';
 import {
-    pairFromArtifacts, siliconOf, disposabilityVerdict, positionalOf,
+    pairFromArtifacts, installElectronStandIn, siliconOf, disposabilityVerdict, positionalOf,
 } from '../../../tools/release/drills/win-update-swap.mjs';
 import { LANES, laneById } from '../../../tools/release/rehearsal-matrix.mjs';
 
@@ -529,6 +530,27 @@ const passing = makeSwapCheck({
             'no upload step may publish the unsigned installers this job builds');
     }
     assert.match(wf, /swap-check-result\.json/, 'the evidence file is what leaves the job');
+}
+
+// ------------- 9. the electron stand-in that BaseUpdater.quitAndInstall needs
+
+{
+    // electron-updater does require("electron").autoUpdater.emit(...) lazily under Node.
+    const seen = [];
+    const standIn = installElectronStandIn(Module, (m) => seen.push(m));
+    try {
+        const lazy = createRequire(import.meta.url);
+        const electron = lazy('electron');
+        assert.equal(electron.autoUpdater, standIn.autoUpdater, 'require("electron") yields the stand-in');
+        let heard = false;
+        electron.autoUpdater.on('before-quit-for-update', () => { heard = true; });
+        electron.autoUpdater.emit('before-quit-for-update');
+        assert.ok(heard, 'the before-quit-for-update event reaches listeners');
+        assert.ok(seen.some((m) => /before-quit-for-update/.test(m)), 'the drill sees the emit');
+    } finally {
+        standIn.restore();
+    }
+    assert.equal(typeof createRequire(import.meta.url)('node:path').join, 'function', 'other modules still load');
 }
 
 rmSync(work, { recursive: true, force: true });

@@ -80,7 +80,8 @@
 // off-Windows by test/smoke/audits/windows-swap-check.smoke.js.
 
 import { createHash } from 'node:crypto';
-import { createRequire } from 'node:module';
+import Module, { createRequire } from 'node:module';
+import { EventEmitter } from 'node:events';
 import { createServer } from 'node:http';
 import { spawnSync } from 'node:child_process';
 import {
@@ -241,6 +242,43 @@ export function disposabilityVerdict(env = process.env) {
             + 'then lets an updater replace it. Set XCHAIN_DRILL_DISPOSABLE=1 only on a host you '
             + 'are willing to lose.',
     };
+}
+
+/**
+ * A stand-in for the `electron` module, for an updater driven under Node.
+ *
+ * BaseUpdater.quitAndInstall does, on the tick after the installer is
+ * spawned, `require("electron").autoUpdater.emit("before-quit-for-update")`
+ * and then `this.app.quit()`. Under plain Node `require("electron")` is the
+ * npm package, which exports the path of the Electron binary as a string (and
+ * tries to download it), so `.autoUpdater` is undefined and the process dies
+ * with a TypeError before the drill can write its evidence. The require is
+ * lazy and CommonJS, so it is intercepted at Module._load. Only the surface
+ * electron-updater touches on the nsis path exists here.
+ *
+ * @param {{_load: Function}} ModuleClass node:module's Module (injectable for tests)
+ * @param {(m: string) => void} onEvent called as the updater uses the stand-in
+ * @returns {{autoUpdater: EventEmitter, stub: object, restore: () => void}}
+ */
+export function installElectronStandIn(ModuleClass, onEvent = () => {}) {
+    const autoUpdater = new EventEmitter();
+    const originalEmit = autoUpdater.emit.bind(autoUpdater);
+    autoUpdater.emit = (event, ...args) => {
+        onEvent(`electron.autoUpdater emitted ${String(event)}`);
+        return originalEmit(event, ...args);
+    };
+    const stub = {
+        autoUpdater,
+        shell: {
+            openPath: async (p) => { onEvent(`electron.shell.openPath(${p}) refused`); return 'not available under Node'; },
+        },
+    };
+    const originalLoad = ModuleClass._load;
+    ModuleClass._load = function load(request, ...rest) {
+        if (request === 'electron') return stub;
+        return originalLoad.call(this, request, ...rest);
+    };
+    return { autoUpdater, stub, restore: () => { ModuleClass._load = originalLoad; } };
 }
 
 // --------------------------------------------------------------- the drill
@@ -412,6 +450,9 @@ async function main(argv) {
     const desktopRequire = createRequire(
         new URL('../../../packages/desktop/package.json', import.meta.url),
     );
+    // Installed before the updater is used: its quitAndInstall requires
+    // `electron` lazily and would otherwise get the npm package under Node.
+    installElectronStandIn(Module, log);
     const { NsisUpdater } = desktopRequire('electron-updater');
     const { NodeHttpExecutor } = desktopRequire('builder-util');
     const { configureRequestUrl, configureRequestOptions } = desktopRequire('builder-util-runtime');
