@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, FeeSelector, Input, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import {
@@ -49,12 +49,14 @@ const SECTION_STYLE = {
 export function OperatorPublisherMode({ walletId, chainId, address, feed, messaging, variant }) {
     const [open, setOpen] = useState(false);
     const [feedActionIndex, setFeedActionIndex] = useState('');
+    const feedActionIndexSeed = feed?.action_index ?? feed?.ACTION_INDEX ?? '';
+    const feedSeedKey = JSON.stringify([walletId, chainId, address, feedActionIndexSeed]);
+    const seededFeedRef = useRef(null);
     useEffect(() => {
-        if (!feedActionIndex && feed) {
-            const idx = feed.action_index || feed.ACTION_INDEX;
-            if (idx) setFeedActionIndex(String(idx));
-        }
-    }, [feed, feedActionIndex]);
+        if (feedSeedKey === seededFeedRef.current) return;
+        seededFeedRef.current = feedSeedKey;
+        setFeedActionIndex(String(feedActionIndexSeed));
+    }, [feedActionIndexSeed, feedSeedKey]);
 
     const fromAddress = usePublisherAddress({ messaging, walletId, chainId, address });
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
