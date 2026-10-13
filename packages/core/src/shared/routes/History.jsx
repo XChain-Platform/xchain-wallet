@@ -81,11 +81,14 @@ import {
 import { formatLocalDateTime } from '../utils/dateTime.js';
 import { RelativeTime } from '../components/RelativeTime.jsx';
 import { useHapticFeedback } from '../hooks/useHaptic.js';
+import { isNavigatorOnline, useOnlineStatus } from '../hooks/useOnlineStatus.js';
+import { readHistoryCache, writeHistoryCache } from '../utils/historyCache.js';
 import styles from './History.module.css';
 
 const HISTORY_CHAIN_FILTER_KEY = 'history';
 const GROUPING_MODE_STORAGE_KEY = 'xc:historyGroupingMode';
 const HISTORY_PAGE_SIZE = 100;
+const OFFLINE_ACTION_REASON = 'This action needs a network connection.';
 
 function historyChainFilterKey(walletId) {
     return `${HISTORY_CHAIN_FILTER_KEY}:${walletId || 'none'}`;
@@ -457,6 +460,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
     const { showToast } = useToast();
+    const browserOnline = useOnlineStatus();
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -464,6 +468,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [entries, setEntries] = useState(/** @type {HistoryEntry[]} */ ([]));
     const [historyLoaded, setHistoryLoaded] = useState(false);
+    const [showingCachedHistory, setShowingCachedHistory] = useState(false);
     const historyLoadedRef = useRef(false);
     historyLoadedRef.current = historyLoaded;
     const [refreshing, setRefreshing] = useState(false);
@@ -530,9 +535,12 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
 
     // Step 1: resolve the wallet's addresses grouped by chainId.
     useEffect(() => {
+        const cached = readHistoryCache(walletId, accountId);
         setAddressesByChain(null);
-        setEntries([]);
-        setHistoryFetchedAt(null);
+        setEntries(cached?.entries || []);
+        setHistoryFetchedAt(cached?.fetchedAt || null);
+        setHistoryLoaded(Boolean(cached));
+        setShowingCachedHistory(!isNavigatorOnline() && Boolean(cached));
         setLoadingChains(new Set());
         setRefreshing(false);
         setLoadError(null);
@@ -550,7 +558,6 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         let cancelled = false;
         setLoadError(null);
         setAddressesByChain(null);
-        setHistoryLoaded(false);
         messaging.getAddressesByChain(walletId, accountId)
             .then((byChain) => {
                 if (cancelled) return;
@@ -582,7 +589,12 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 setEnabledChains(remembered ?? all);
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+                if (cancelled) return;
+                if (cached) {
+                    setAddressesByChain(cached.addressesByChain);
+                    return;
+                }
+                setLoadError(err?.message || 'Failed to load addresses.');
             });
         return () => { cancelled = true; };
     }, [walletId, accountId, messaging, initialChainCoin, addressesReload]);
@@ -705,6 +717,20 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             // Nothing to fetch, so nothing lands below to release the slot a
             // focus may have claimed on the way here. `fail()` rather than
             // `succeed()`: no read happened, so the window must not move.
+            pollThrottleRef.current.fail();
+            return;
+        }
+        if (!browserOnline) {
+            const cached = readHistoryCache(walletId, accountId);
+            if (cached) {
+                setEntries(cached.entries);
+                setHistoryFetchedAt(cached.fetchedAt);
+                setShowingCachedHistory(true);
+            } else if (entriesRef.current.length > 0) {
+                setShowingCachedHistory(true);
+            }
+            setLoadingChains(new Set());
+            setHistoryLoaded(true);
             pollThrottleRef.current.fail();
             return;
         }
@@ -945,21 +971,37 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 if (!liveKeys.has(key)) rememberedMempoolRef.current.delete(key);
             }
             merged.entries.sort(compareMergedEntries);
+            const fetchedAt = Date.now();
             setEntries(merged.entries);
             setLoadingChains(new Set());
             setHistoryFetchedAt(Date.now());
             setHistoryLoaded(true);
+            setShowingCachedHistory(false);
+            writeHistoryCache(walletId, accountId, {
+                entries: merged.entries,
+                addressesByChain,
+                fetchedAt,
+            });
             setRefreshing(false);
         }).catch((err) => {
             if (cancelled) return;
             throttle.fail();
             setLoadingChains(new Set());
             setRefreshing(false);
+            const cached = readHistoryCache(walletId, accountId);
             if (historyLoadedRef.current) {
+                // Rows are already on screen (live or saved): keep them, say
+                // so, and name the saved copy when one exists.
+                if (cached) setShowingCachedHistory(true);
                 showToast({
                     message: humanizeError(err, 'refresh history').message,
                     variant: 'error',
                 });
+            } else if (cached) {
+                setEntries(cached.entries);
+                setHistoryFetchedAt(cached.fetchedAt);
+                setHistoryLoaded(true);
+                setShowingCachedHistory(true);
             } else {
                 setHistoryLoaded(true);
                 setLoadError('Could not load history. Try again.');
@@ -967,7 +1009,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         });
 
         return () => { cancelled = true; };
-    }, [addressesByChain, messaging, refreshTick, walletId, accountId]);
+    }, [addressesByChain, messaging, refreshTick, walletId, accountId, browserOnline]);
 
     // Lowercase set of every wallet address across every chain. Used by
     // the action-type filter to discriminate Send (wallet is source)
@@ -1013,6 +1055,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     // no real explorer behind synthesized history).
     useEffect(() => {
         if (!addressesByChain) return undefined;
+        if (!browserOnline) return undefined;
         if (flowsLib.isDemoWallet(walletId)) return undefined;
         const chains = Object.entries(addressesByChain)
             .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
@@ -1034,7 +1077,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             setIndexerWatermarkByChainId(next);
         });
         return () => { cancelled = true; };
-    }, [addressesByChain, messaging, walletId, refreshTick]);
+    }, [addressesByChain, messaging, walletId, browserOnline, refreshTick]);
 
     const visibleEntries = useMemo(() => {
         let list = entries.filter((e) => enabledChains.has(e.chainId));
@@ -1106,7 +1149,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const actionVerifyMap = useActionProofVerification({
         messaging,
         items: verifyItems,
-        enabled: verifyProofsEnabled,
+        enabled: verifyProofsEnabled && browserOnline,
     });
 
     const chainFilterActive = activeChainIds.some((cid) => !enabledChains.has(cid));
@@ -1395,6 +1438,13 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         if (entry.link?.peerChainId && entry.link.peerActionIndex) {
             const pKey = peerCacheKey(entry.link.peerChainId, entry.link.peerActionIndex);
             if (!peerCache[pKey]) {
+                if (!browserOnline) {
+                    setPeerCache((prev) => ({
+                        ...prev,
+                        [pKey]: { loading: false, action: null, error: OFFLINE_ACTION_REASON },
+                    }));
+                    return;
+                }
                 setPeerCache((prev) => ({
                     ...prev,
                     [pKey]: { loading: true, action: null, error: null },
@@ -1649,6 +1699,19 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             </div>
         )}>
 
+            {!browserOnline || showingCachedHistory ? (
+                <StatusMessage
+                    variant="warning"
+                    id="history-offline-action-reason"
+                >
+                    {!browserOnline
+                        ? (showingCachedHistory
+                            ? 'You are offline. Showing the last saved history. Network actions will be available when your connection returns.'
+                            : 'You are offline. Connect to load history and use network actions.')
+                        : 'Could not refresh history. Showing the last saved history.'}
+                </StatusMessage>
+            ) : null}
+
             {exportModalOpen ? (
                 <ExportModal
                     onClose={() => setExportModalOpen(false)}
@@ -1765,6 +1828,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                                                     fiatCurrency={fiatCurrency}
                                                     walletAddresses={walletAddressSet}
                                                     onDismissFailed={dismissFailedPending}
+                                                    networkAvailable={browserOnline}
                                                 />
                                             ))}
                                             {memberLimit < item.members.length ? (
@@ -1810,6 +1874,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             fiatCurrency={fiatCurrency}
                             walletAddresses={walletAddressSet}
                             onDismissFailed={dismissFailedPending}
+                            networkAvailable={browserOnline}
                         />
                     );
                 })}
@@ -1840,7 +1905,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
  * Inline detail card. For LINK-threaded entries we render two
  * `detailSide` blocks side-by-side; for everything else, one block.
  */
-export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walletId, showFiatInHistory, fiatCurrency, onDismissFailed }) {
+export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walletId, showFiatInHistory, fiatCurrency, onDismissFailed, networkAvailable = true }) {
     const { messaging, shell } = useMessaging();
     const { showToast } = useToast();
     const { settings } = useSettings();
@@ -2049,14 +2114,16 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
             id: 'rbf-speedup',
             label: rbfBusy === 'speedup' ? 'Speeding up…' : 'Speed up',
             icon: <Icon.ForwardIcon />,
-            disabled: rbfBusy !== null,
+            disabled: rbfBusy !== null || !networkAvailable,
+            disabledReason: !networkAvailable ? OFFLINE_ACTION_REASON : undefined,
             onClick: () => runRbf('speedup'),
         });
         moreOptions.push({
             id: 'rbf-cancel',
             label: rbfBusy === 'cancel' ? 'Cancelling…' : 'Cancel transaction',
             icon: <Icon.XIcon />,
-            disabled: rbfBusy !== null,
+            disabled: rbfBusy !== null || !networkAvailable,
+            disabledReason: !networkAvailable ? OFFLINE_ACTION_REASON : undefined,
             onClick: () => runRbf('cancel'),
         });
     }
@@ -2150,7 +2217,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                 incomplete pending records. */}
             {explorerButtons.length > 0 || moreOptions.length > 0 ? (
                 <div className={styles.detailActions} role="group" aria-label={t('history.detail.options')}>
-                    {explorerButtons.map((link) => (
+                    {explorerButtons.map((link) => networkAvailable ? (
                         <a
                             key={link.id}
                             href={link.url}
@@ -2170,6 +2237,27 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                             )}
                             <span>{link.label} <span aria-hidden="true">↗</span></span>
                         </a>
+                    ) : (
+                        <button
+                            key={link.id}
+                            type="button"
+                            className={styles.detailAction}
+                            disabled
+                            title={OFFLINE_ACTION_REASON}
+                            aria-describedby="history-offline-action-reason"
+                        >
+                            {link.iconImg ? (
+                                <img
+                                    src={link.iconImg}
+                                    alt=""
+                                    aria-hidden="true"
+                                    className={styles.detailActionFavicon}
+                                />
+                            ) : (
+                                <span className={styles.detailActionIcon} aria-hidden="true">{link.icon}</span>
+                            )}
+                            <span>{link.label}</span>
+                        </button>
                     ))}
                     <div className={styles.detailActionMoreWrap} ref={moreWrapRef}>
                         <button
@@ -2193,6 +2281,8 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                                             className={styles.moreMenuItem}
                                             onClick={opt.onClick}
                                             disabled={Boolean(opt.disabled)}
+                                            title={opt.disabledReason}
+                                            aria-describedby={opt.disabledReason ? 'history-offline-action-reason' : undefined}
                                         >
                                             {opt.icon ? (
                                                 <span className={styles.moreMenuItemIcon} aria-hidden="true">
@@ -2987,6 +3077,7 @@ function explorerLinksFor(entry, settings) {
  */
 function RecipientsBlock({ entry }) {
     const { messaging } = useMessaging();
+    const networkAvailable = useOnlineStatus();
     const action = String(entry?.action || '').toUpperCase();
     const isDividend = action === 'DIVIDEND';
     const isAirdrop = action === 'AIRDROP';
@@ -3076,7 +3167,15 @@ function RecipientsBlock({ entry }) {
     if (stage === 'idle') {
         return (
             <div style={blockStyle}>
-                <Button type="button" variant="secondary" size="sm" onClick={load}>
+                <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={load}
+                    disabled={!networkAvailable}
+                    title={!networkAvailable ? OFFLINE_ACTION_REASON : undefined}
+                    aria-describedby={!networkAvailable ? 'history-offline-action-reason' : undefined}
+                >
                     {isDividend
                         ? t('history.recipients.showHolders')
                         : t('history.recipients.showRecipients')}
@@ -3389,7 +3488,7 @@ function contractRowLabel(entry) {
     return contractDisplayLabel(raw, { chainId: entry.chainId, actionIndex: idx });
 }
 
-export function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, chainTip, indexerWatermark, walletId, verify, showFiatInHistory, fiatCurrency, walletAddresses, onDismissFailed }) {
+export function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, chainTip, indexerWatermark, walletId, verify, showFiatInHistory, fiatCurrency, walletAddresses, onDismissFailed, networkAvailable = true }) {
     const d = chainRegistry.get(entry.chainId);
     const settledAmount = settledAmountAnnotation(entry);
     const receiveLabel = entry.receiveLabel
@@ -3484,6 +3583,7 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
                     showFiatInHistory={showFiatInHistory}
                     fiatCurrency={fiatCurrency}
                     onDismissFailed={onDismissFailed}
+                    networkAvailable={networkAvailable}
                 />
             ) : null}
         </li>
