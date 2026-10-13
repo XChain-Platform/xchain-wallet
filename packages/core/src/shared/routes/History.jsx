@@ -453,18 +453,13 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const [dateFrom, setDateFrom] = useState(() => isoDateDaysAgo(30));
     const [dateTo, setDateTo] = useState(() => isoDateDaysAgo(0));
     const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
-    // Cluster I FOLLOWUP 5: single-modal export. Holds the modal's
-    // open state + the field choices (format / column set / date-range
-    // override). Initial column set = every field; date range defaults
-    // to the active filter when the modal opens.
+    // The export modal controls only the file representation. Row selection
+    // remains owned by the History filters so the file matches the list.
     const [exportModalOpen, setExportModalOpen] = useState(false);
     const [exportFormat, setExportFormat] = useState(/** @type {'csv' | 'json'} */ ('csv'));
     const [exportColumns, setExportColumns] = useState(
         /** @type {Set<string>} */ (new Set(flowsLib.EXPORT_COLUMNS)),
     );
-    const [exportFromDate, setExportFromDate] = useState('');
-    const [exportToDate, setExportToDate] = useState('');
-    const [exportScope, setExportScope] = useState(/** @type {'filtered' | 'all'} */ ('filtered'));
     const [selectedKey, setSelectedKey] = useState(/** @type {string | null} */ (null));
     // M2.3: the open row is remembered by TRANSACTION as well as by key.
     // A pending entry is keyed on its hash and a confirmed one on its
@@ -481,17 +476,6 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     // re-render or after the user manually navigates away from the row.
     const initialFocusFiredRef = useRef(false);
     const searchInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
-
-    // §34.2 context shortcuts: '/' focuses the search input, 'e' opens the
-    // export modal. Single keys only, so they stay inert while any input has
-    // focus (useScreenShortcuts applies the same editable-target gate as the
-    // global dispatcher).
-    useScreenShortcuts({
-        keys: {
-            '/': () => { searchInputRef.current?.focus(); },
-            e: () => { setExportModalOpen(true); },
-        },
-    });
 
     // Step 1: resolve the wallet's addresses grouped by chainId.
     useEffect(() => {
@@ -944,6 +928,16 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     // choice survives navigation and syncs across shells.
     const showFiatInHistory = Boolean(proofSettings.settings?.showFiatInHistory);
     const fiatCurrency = proofSettings.settings?.fiatCurrency || 'USD';
+    // Context shortcuts share the trigger's empty-view guard. A disabled
+    // button must not have a keyboard path that opens the same action.
+    useScreenShortcuts({
+        keys: {
+            '/': () => { searchInputRef.current?.focus(); },
+            e: () => {
+                if (visibleEntries.length > 0) setExportModalOpen(true);
+            },
+        },
+    });
     const toggleShowFiatInHistory = async () => {
         try {
             await proofSettings.update({ showFiatInHistory: !showFiatInHistory });
@@ -1378,31 +1372,14 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     setFormat={setExportFormat}
                     columns={exportColumns}
                     setColumns={setExportColumns}
-                    fromDate={exportFromDate}
-                    setFromDate={setExportFromDate}
-                    toDate={exportToDate}
-                    setToDate={setExportToDate}
-                    scope={exportScope}
-                    setScope={setExportScope}
-                    activeFilterFromDate={dateFrom}
-                    activeFilterToDate={dateTo}
                     visibleCount={visibleEntries.length}
-                    totalCount={entries.length}
                     onConfirm={() => {
-                        const sourceEntries = exportScope === 'all' ? entries : visibleEntries;
-                        const ranged = (exportFromDate || exportToDate)
-                            ? flowsLib.filterEntriesByDateRange(sourceEntries, {
-                                // Same local-day reading as the filter bar, so an
-                                // export of "today" contains what the list showed.
-                                fromTs: exportFromDate ? Math.floor(localDayStartMs(exportFromDate) / 1000) : null,
-                                toTs: exportToDate ? Math.floor(localDayEndMs(exportToDate) / 1000) : null,
-                            })
-                            : sourceEntries;
                         runExport({
-                            entries: ranged,
+                            entries: visibleEntries,
                             scope: chainScopeLabel(enabledChains, activeChainIds),
                             format: exportFormat,
                             columns: Array.from(exportColumns),
+                            fiatCurrency,
                         });
                         setExportModalOpen(false);
                     }}
@@ -1438,21 +1415,34 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 )
             ) : null}
 
-            {(visibleEntries.length > 0 || historyFetchedAt) ? (
+            {historyFetchedAt ? (
                 <div className={styles.resultsHeader}>
                     {historyFetchedAt && loadingChains.size === 0 ? (
                         <StalenessLabel lastSyncedAt={historyFetchedAt} />
                     ) : <span />}
-                    <button
-                        type="button"
-                        className={styles.exportTrigger}
-                        aria-haspopup="dialog"
-                        aria-expanded={exportModalOpen}
-                        onClick={() => setExportModalOpen(true)}
-                        disabled={entries.length === 0}
-                    >
-                        Export…
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)' }}>
+                        {visibleEntries.length === 0 ? (
+                            <span
+                                id="history-export-disabled-reason"
+                                style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}
+                            >
+                                {entries.length > 0
+                                    ? 'No rows match the current filters.'
+                                    : 'There are no history rows to export.'}
+                            </span>
+                        ) : null}
+                        <button
+                            type="button"
+                            className={styles.exportTrigger}
+                            aria-haspopup="dialog"
+                            aria-expanded={exportModalOpen}
+                            aria-describedby={visibleEntries.length === 0 ? 'history-export-disabled-reason' : undefined}
+                            onClick={() => setExportModalOpen(true)}
+                            disabled={visibleEntries.length === 0}
+                        >
+                            Export…
+                        </button>
+                    </div>
                 </div>
             ) : null}
 
@@ -3715,12 +3705,12 @@ function ChainPicker({ activeChainIds, chainRegistry, enabledChains, onChange })
     );
 }
 
-function runExport({ entries, scope, format, columns }) {
+function runExport({ entries, scope, format, columns, fiatCurrency }) {
     if (!Array.isArray(entries) || entries.length === 0) return;
     const filename = flowsLib.buildExportFilename({ scope, format });
     const fileContent = format === 'csv'
-        ? flowsLib.entriesToCsv(entries, { columns })
-        : flowsLib.entriesToJson(entries, { scope, columns });
+        ? flowsLib.entriesToCsv(entries, { columns, fiatCurrency })
+        : flowsLib.entriesToJson(entries, { scope, columns, fiatCurrency });
     const mime = format === 'csv' ? 'text/csv;charset=utf-8' : 'application/json';
     const blob = new Blob([fileContent], { type: mime });
     const url = URL.createObjectURL(blob);
@@ -3790,11 +3780,7 @@ function ExportModal({
     onClose,
     format, setFormat,
     columns, setColumns,
-    fromDate, setFromDate,
-    toDate, setToDate,
-    scope, setScope,
-    activeFilterFromDate, activeFilterToDate,
-    visibleCount, totalCount,
+    visibleCount,
     onConfirm,
 }) {
     useEffect(() => {
@@ -3809,9 +3795,6 @@ function ExportModal({
         else next.add(col);
         setColumns(next);
     };
-
-    const filterChanged = fromDate !== activeFilterFromDate || toDate !== activeFilterToDate;
-    const sourceCount = scope === 'all' ? totalCount : visibleCount;
 
     return (
         <div
@@ -3866,55 +3849,9 @@ function ExportModal({
                     ))}
                 </fieldset>
 
-                <fieldset style={MODAL_FIELDSET}>
-                    <legend style={MODAL_LEGEND}>Scope</legend>
-                    <label style={MODAL_LABEL}>
-                        <input
-                            type="radio"
-                            name="export-scope"
-                            value="filtered"
-                            checked={scope === 'filtered'}
-                            onChange={() => setScope('filtered')}
-                        />
-                        Filtered ({visibleCount.toLocaleString()} row{visibleCount === 1 ? '' : 's'})
-                    </label>
-                    <label style={MODAL_LABEL}>
-                        <input
-                            type="radio"
-                            name="export-scope"
-                            value="all"
-                            checked={scope === 'all'}
-                            onChange={() => setScope('all')}
-                        />
-                        Everything loaded ({totalCount.toLocaleString()} row{totalCount === 1 ? '' : 's'})
-                    </label>
-                </fieldset>
-
-                <fieldset style={MODAL_FIELDSET}>
-                    <legend style={MODAL_LEGEND}>
-                        Date range {filterChanged ? '(overrides active filter)' : '(matches active filter)'}
-                    </legend>
-                    <label style={MODAL_LABEL}>
-                        From
-                        <input
-                            type="date"
-                            value={fromDate}
-                            onChange={(e) => setFromDate(e.target.value)}
-                            style={{ marginLeft: 'auto' }}
-                            aria-label="From date"
-                        />
-                    </label>
-                    <label style={MODAL_LABEL}>
-                        To
-                        <input
-                            type="date"
-                            value={toDate}
-                            onChange={(e) => setToDate(e.target.value)}
-                            style={{ marginLeft: 'auto' }}
-                            aria-label="To date"
-                        />
-                    </label>
-                </fieldset>
+                <p style={{ margin: 0, fontSize: 'var(--xc-text-sm)' }}>
+                    {visibleCount.toLocaleString()} filtered row{visibleCount === 1 ? '' : 's'} will be exported.
+                </p>
 
                 <div style={MODAL_ACTIONS}>
                     <button type="button" className={styles.chip} onClick={onClose}>Cancel</button>
@@ -3922,7 +3859,7 @@ function ExportModal({
                         type="button"
                         className={styles.chip}
                         onClick={onConfirm}
-                        disabled={sourceCount === 0 || columns.size === 0}
+                        disabled={visibleCount === 0 || columns.size === 0}
                     >
                         Export
                     </button>
