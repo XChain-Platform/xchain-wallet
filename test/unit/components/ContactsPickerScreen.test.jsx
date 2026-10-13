@@ -10,6 +10,7 @@
 
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { userEvent } from '../../helpers/userEvent.js';
 
 vi.mock('@xchain-wallet/core/ui', () => ({
     Screen: ({ header, children }) => <div>{header}<main>{children}</main></div>,
@@ -22,6 +23,9 @@ vi.mock('@xchain-wallet/core/ui', () => ({
     ListPage: ({ toolbar, children }) => <section data-testid="list-page">{toolbar}{children}</section>,
     EmptyState: ({ title, body, role, titleAs: Title = 'h2' }) => (
         <div data-testid="empty-state" role={role}><Title>{title}</Title>{body ? <p>{body}</p> : null}</div>
+    ),
+    ListRow: ({ title, subtitle, onClick, ...props }) => (
+        <button type="button" onClick={onClick} {...props}>{title}{subtitle}</button>
     ),
     Icon: { UsersIcon: () => <span /> },
 }));
@@ -158,11 +162,13 @@ describe('ContactsPickerScreen filters', () => {
 });
 
 describe('ContactsPickerScreen selection and header', () => {
-    it('passes the exact selected entry to onPick once', () => {
+    it('passes the exact selected entry to onPick through native keyboard activation', async () => {
         const { props } = mount();
-        const row = screen.getByText('bc1-alice').closest('button');
+        const user = userEvent.setup();
+        const row = screen.getByRole('button', { name: /Alice.*bc1-alice/ });
 
-        fireEvent.click(row);
+        row.focus();
+        await user.keyboard('{Enter}');
         expect(props.onPick).toHaveBeenCalledOnce();
         expect(props.onPick.mock.calls[0]).toHaveLength(1);
         expect(props.onPick.mock.calls[0][0]).toBe(bitcoinEntry);

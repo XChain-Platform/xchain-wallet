@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useMemo, useState } from 'react';
-import { EmptyState, Icon, ListPage, PageHeader, Screen } from '@xchain-wallet/core/ui';
+import { EmptyState, Icon, ListPage, ListRow, PageHeader, Screen } from '@xchain-wallet/core/ui';
 import { NetworkFilterDropdown } from './NetworkFilterDropdown.jsx';
 import { contactEntryChain } from '../utils/contactChain.js';
 import { compareContactsByName } from '../utils/contactMerge.js';
@@ -117,14 +117,14 @@ export function ContactsPickerScreen({ contacts, variant, onPick, onBack }) {
                     <ul className={styles.abList}>
                         {rows.map(({ contact, entry, key }) => (
                             <li key={key}>
-                                <button
-                                    type="button"
+                                <ListRow
                                     className={styles.abRow}
                                     onClick={() => onPick(entry)}
-                                >
-                                    <span className={styles.abName}>{contact.name}</span>
-                                    <span className={styles.abAddr} title={entry.address}>{entry.address}</span>
-                                </button>
+                                    title={<span className={styles.abName}>{contact.name}</span>}
+                                    subtitle={(
+                                        <span className={styles.abAddr} title={entry.address}>{entry.address}</span>
+                                    )}
+                                />
                             </li>
                         ))}
                     </ul>
