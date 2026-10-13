@@ -23,6 +23,7 @@ import {
     FeeSelector,
     AddressField,
     FormErrorSummary,
+    Select,
 } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
@@ -1621,10 +1622,12 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             />
             <p className={styles.pickerLabel}>Buyers pay with</p>
             <label className={styles.radioOption}>
+                {/* Native radios preserve single-choice keyboard behavior because the kit has no radio primitive. */}
                 <input type="radio" name="disp-pay" checked={payWith === 'coin'} onChange={() => setPayWith('coin')} />
                 {' '}Native {coinTicker || 'coin'}
             </label>
             <label className={styles.radioOption}>
+                {/* Native radios preserve single-choice keyboard behavior because the kit has no radio primitive. */}
                 <input type="radio" name="disp-pay" checked={payWith === 'token'} onChange={() => setPayWith('token')} />
                 {' '}A token
             </label>
@@ -1680,32 +1683,31 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             </StatusMessage>
 
             {payWith === 'coin' ? (
-                <button
-                    type="button"
-                    className={styles.pickerLabel}
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={null}
                     onClick={() => setShowAdvanced((v) => !v)}
-                    style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}
                 >
                     {showAdvanced ? '▾ Advanced options' : '▸ Advanced options (fiat pricing, oracle)'}
-                </button>
+                </Button>
             ) : null}
 
             {showAdvanced && payWith === 'coin' ? (
                 <>
-                    <label className={styles.pickerLabel}>
-                        Priced in fiat (optional)
-                        <select
-                            id="dispenser-fiat-code"
-                            className={styles.picker}
-                            value={fiatCode}
-                            onChange={(e) => setFiatCode(e.target.value)}
-                        >
-                            <option value="">(none, coin-paid)</option>
-                            {FIAT_CODES.map((c) => (
-                                <option key={c} value={c}>{c}</option>
-                            ))}
-                        </select>
-                    </label>
+                    <Select
+                        id="dispenser-fiat-code"
+                        label="Priced in fiat (optional)"
+                        value={fiatCode}
+                        onChange={(e) => setFiatCode(e.target.value)}
+                    >
+                        {/* Native options supply Select choices because the kit has no option primitive. */}
+                        <option value="">(none, coin-paid)</option>
+                        {FIAT_CODES.map((c) => (
+                            /* Native options supply Select choices because the kit has no option primitive. */
+                            <option key={c} value={c}>{c}</option>
+                        ))}
+                    </Select>
                     <Input
                         id="dispenser-fiat-amount"
                         label="Fiat amount (e.g. 12.34)"
@@ -1716,7 +1718,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         autoComplete="off"
                     />
                     <StatusMessage>{priceNotes.fiatWarning}</StatusMessage>
-                    <Input
+                    <AddressField
                         id="dispenser-oracle"
                         label="Oracle address (optional)"
                         hint="Oracle address used for fiat pricing. If it charges a usage fee, you pay it now based on the escrow amount. Enter the full address."
@@ -1732,10 +1734,12 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
             <p className={styles.pickerLabel}>Expiration</p>
             <label className={styles.radioOption}>
+                {/* Native radios preserve single-choice keyboard behavior because the kit has no radio primitive. */}
                 <input type="radio" name="disp-exp" checked={expMode === 'default'} onChange={() => setExpMode('default')} />
                 {' '}Default window
             </label>
             <label className={styles.radioOption}>
+                {/* Native radios preserve single-choice keyboard behavior because the kit has no radio primitive. */}
                 <input type="radio" name="disp-exp" checked={expMode === 'custom'} onChange={() => setExpMode('custom')} />
                 {' '}Expire at a specific time
             </label>

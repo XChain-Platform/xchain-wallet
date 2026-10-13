@@ -906,6 +906,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                     />
                 )}
                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', margin: '0.25rem 0 0.5rem' }}>
+                    {/* Native checkboxes preserve toggle keyboard behavior because the kit has no checkbox primitive. */}
                     <input
                         type="checkbox"
                         checked={giveOwnership}
@@ -939,6 +940,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                     />
                 )}
                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', margin: '0.25rem 0 0.5rem' }}>
+                    {/* Native checkboxes preserve toggle keyboard behavior because the kit has no checkbox primitive. */}
                     <input
                         type="checkbox"
                         checked={getOwnership}
@@ -959,10 +961,12 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
             >
             <p className={styles.successLabel}>Expiration</p>
             <label className={styles.checkRow}>
+                {/* Native radios preserve single-choice keyboard behavior because the kit has no radio primitive. */}
                 <input type="radio" name="swap-exp" checked={expMode === 'default'} onChange={() => setExpMode('default')} />
                 {' '}Default window
             </label>
             <label className={styles.checkRow}>
+                {/* Native radios preserve single-choice keyboard behavior because the kit has no radio primitive. */}
                 <input type="radio" name="swap-exp" checked={expMode === 'custom'} onChange={() => setExpMode('custom')} />
                 {' '}Expire at a specific time
             </label>
@@ -986,16 +990,17 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 source address. Paid transaction fees are not refunded.
             </p>
 
-            <button
-                type="button"
+            <Button
+                variant="ghost"
+                size="sm"
+                icon={null}
                 onClick={() => setShowAdvanced((v) => !v)}
-                style={{ background: 'none', border: 0, padding: '0.25rem 0', color: 'var(--xc-accent-text)', cursor: 'pointer', font: 'inherit' }}
             >
                 {showAdvanced ? 'Hide advanced options' : 'Advanced options (receive address, lists)'}
-            </button>
+            </Button>
             {showAdvanced ? (
                 <>
-                    <Input
+                    <AddressField
                         label="Receive at (optional)"
                         hint="Address where you receive the get side. Defaults to your source address."
                         value={getAddress}
