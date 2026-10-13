@@ -91,6 +91,7 @@ export function CoSignerAccountList({ walletId, onBack, onProvision, onOpen }) {
                         const descriptor = chainRegistry.get(a.chainId);
                         return (
                             <li key={a.id} style={{ marginBottom: 'var(--xc-space-2)' }}>
+                                {/* The native row button keeps the whole account card as one target. */}
                                 <button
                                     type="button"
                                     onClick={() => onOpen(a.id)}

@@ -11,6 +11,20 @@
     margin-bottom: var(--xc-space-2);
 }
 
+.searchModes > div {
+    flex-direction: row-reverse;
+    align-items: center;
+    justify-content: flex-end;
+    margin-bottom: 0;
+}
+
+.searchModeInput {
+    width: 1rem;
+    min-width: 1rem;
+    min-height: 1rem;
+    padding: 0;
+}
+
 .chainField {
     display: grid;
     grid-template-columns: max-content minmax(0, 1fr);

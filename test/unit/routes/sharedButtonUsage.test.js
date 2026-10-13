@@ -25,6 +25,23 @@ const migratedRoutes = [
     'BatchComposerForm',
 ];
 
+const styleGuideRoutes = [
+    'BetFeedDetail',
+    'CoSignerAccountList',
+    'CoinpayForm',
+    'ComposeMessage',
+    'DeployContractForm',
+    'DispenserExplorer',
+    'DispensersList',
+    'GovernancePolls',
+];
+
+const nativeRowButtonRoutes = new Set([
+    'CoSignerAccountList',
+    'CoinpayForm',
+    'GovernancePolls',
+]);
+
 describe('shared route button usage', () => {
     it.each(migratedRoutes)('%s uses the shared Button component', (routeName) => {
         const source = readFileSync(
@@ -64,5 +81,21 @@ describe('shared route button usage', () => {
 
         expect(inputs).toHaveLength(4);
         expect(rationales).toHaveLength(inputs.length);
+    });
+
+    it.each(styleGuideRoutes)('%s uses kit controls except documented row buttons', (routeName) => {
+        const source = readFileSync(
+            resolve(process.cwd(), `packages/core/src/shared/routes/${routeName}.jsx`),
+            'utf8',
+        );
+
+        expect(source).not.toMatch(/<(?:input|select|textarea)\b/);
+        const nativeButtons = source.match(/<button\b/g) || [];
+        if (nativeRowButtonRoutes.has(routeName)) {
+            expect(nativeButtons).toHaveLength(1);
+            expect(source).toMatch(/native row button keeps the whole .* card as one target/);
+        } else {
+            expect(nativeButtons).toHaveLength(0);
+        }
     });
 });

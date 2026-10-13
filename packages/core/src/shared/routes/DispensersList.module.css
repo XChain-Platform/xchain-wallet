@@ -24,6 +24,15 @@
     border-radius: var(--xc-radius-md);
 }
 
+.searchField {
+    flex: 1 1 12rem;
+    min-width: 0;
+}
+
+.searchField > div {
+    margin-bottom: 0;
+}
+
 .search::placeholder {
     color: var(--xc-text-muted);
 }
