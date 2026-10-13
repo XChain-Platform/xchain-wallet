@@ -42,9 +42,6 @@
 //     record and the in-memory registry entry.
 //   - Logs and diagnostics console (§48.5 / G150).
 //
-// Deferred:
-//   - Raw PSBT inspector reveal on sign screens (§48.4)
-
 import { useEffect, useState } from 'react';
 import { registry as registryLib, schemas, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging } from '../../useMessaging.js';
@@ -90,7 +87,7 @@ export function DeveloperModeSection({ onNavigateToMint } = {}) {
         <div style={STACK}>
             <ToggleRow
                 label="Developer Mode"
-                hint="Reveals regtest networks in chain pickers, custom-endpoint editors, and the raw PSBT inspector."
+                hint="Reveals regtest networks in chain pickers and custom-endpoint editors."
                 checked={Boolean(settings.developerMode)}
                 onChange={(v) => onToggle('developerMode', v)}
             />
@@ -114,14 +111,6 @@ export function DeveloperModeSection({ onNavigateToMint } = {}) {
                 onNavigateToMint={onNavigateToMint}
             />
             <CustomChainsRow developerMode={Boolean(settings.developerMode)} />
-            <ToggleRow
-                label="Raw PSBT inspector"
-                /* Spec §48.4 */
-                hint="Coming soon: reveals the raw PSBT hex + parsed fields on sign screens."
-                checked={false}
-                disabled
-                onChange={() => {}}
-            />
             <ToggleRow
                 label="Auto-approve localhost dApps"
                 hint="Skip the bridge.connect prompt for http://localhost / 127.0.0.1 / [::1] origins. Requires Developer Mode. Signing is a separate opt-in below."
@@ -261,6 +250,7 @@ export function RegtestRow({ descriptor, isActive, disabled }) {
         /** @type {Array<{ subject: string, message: string }>} */ ([]),
     );
     const [walletId, setWalletId] = useState(/** @type {string | null} */ (null));
+    const [walletLoadError, setWalletLoadError] = useState(/** @type {string | null} */ (null));
     // §17.4 / FOLLOWUP 1: signer selection. null = the implicit software
     // seed (password path); a non-null signerId names a paired HW signer,
     // which activates through the device instead of a wallet password.
@@ -274,13 +264,20 @@ export function RegtestRow({ descriptor, isActive, disabled }) {
             if (cancelled) return;
             const first = Array.isArray(wallets) ? wallets[0] : null;
             setWalletId(first?.id ?? null);
-        }).catch(() => { /* silent; activate button stays disabled */ });
+            setWalletLoadError(first?.id ? null : 'No wallet is available for network activation.');
+        }).catch(() => {
+            if (!cancelled) setWalletLoadError('Could not load a wallet for network activation.');
+        });
         return () => { cancelled = true; };
     }, [messaging]);
 
     const onActivate = async (event) => {
         event.preventDefault();
-        if (busy || !walletId) return;
+        if (busy) return;
+        if (!walletId) {
+            setErrorText(walletLoadError || 'No wallet is available for network activation.');
+            return;
+        }
         if (typeof messaging?.activateChainRequest !== 'function') {
             setErrorText('Activation is not wired in this shell yet.');
             return;
@@ -410,7 +407,7 @@ export function RegtestRow({ descriptor, isActive, disabled }) {
                             }}
                         />
                     )}
-                    <div style={{ display: 'flex', gap: 'var(--xc-space-1)' }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--xc-space-1)' }}>
                         <button type="submit" disabled={busy || (!isHardware && password.length === 0)} style={{
                             background: 'var(--xc-accent-primary)',
                             borderColor: 'var(--xc-accent-primary)',
@@ -441,6 +438,7 @@ export function RegtestRow({ descriptor, isActive, disabled }) {
                 items={skippedAccounts}
             />
             {errorText ? <Status text={errorText} tone="error" /> : null}
+            {walletLoadError && !errorText ? <Status text={walletLoadError} tone="error" /> : null}
         </div>
     );
 }
@@ -471,7 +469,16 @@ function RegtestFaucetRow({ developerMode, fees, onNavigateToMint }) {
 
     const onGetFunds = async (event) => {
         event.preventDefault();
-        if (busy || typeof messaging?.listWallets !== 'function') return;
+        if (busy) return;
+        if (typeof messaging?.listWallets !== 'function') {
+            setErrorText('The wallet list is not available in this build.');
+            return;
+        }
+        const amountNumber = Number(amount);
+        if (amount.trim() === '' || !Number.isFinite(amountNumber) || amountNumber <= 0) {
+            setErrorText(`Enter an amount of ${coinTicker} greater than 0.`);
+            return;
+        }
         setBusy(true);
         setStatusText(null);
         setErrorText(null);
@@ -482,7 +489,7 @@ function RegtestFaucetRow({ developerMode, fees, onNavigateToMint }) {
             const addr = await messaging.getNewestAddress(walletId, descriptor.id);
             const address = addr?.address;
             if (!address) throw new Error(`No ${descriptor.displayName} address yet. Use Receive first.`);
-            const result = await flowsLib.fundBtcFromMiner({ minerUrl, address, amount: Number(amount) });
+            const result = await flowsLib.fundBtcFromMiner({ minerUrl, address, amount: amountNumber });
             if (!result.ok) throw new Error(result.error || 'Funding failed.');
             setStatusText(`Sent ${amount} ${coinTicker} to ${address}. txid ${result.txid}. Waiting for the regtest miner to confirm it.`);
         } catch (err) {
@@ -545,7 +552,7 @@ function RegtestFaucetRow({ developerMode, fees, onNavigateToMint }) {
                         }}
                     />
                 </label>
-                <div style={{ display: 'flex', gap: 'var(--xc-space-1)' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--xc-space-1)' }}>
                     <button
                         type="submit"
                         disabled={!developerMode || busy}
@@ -563,23 +570,25 @@ function RegtestFaucetRow({ developerMode, fees, onNavigateToMint }) {
                     >
                         {busy ? 'Sending…' : `Get test ${coinTicker}`}
                     </button>
-                    <button
-                        type="button"
-                        onClick={() => onNavigateToMint?.({ chainId: descriptor.id, tick: 'XCHAIN' })}
-                        disabled={!developerMode || busy || typeof onNavigateToMint !== 'function' || descriptor.coin !== 'bitcoin'}
-                        style={{
-                            background: 'transparent',
-                            border: '1px solid var(--xc-border)',
-                            color: 'var(--xc-text)',
-                            borderRadius: 'var(--xc-radius-sm)',
-                            padding: 'var(--xc-space-1) var(--xc-space-3)',
-                            fontSize: 'var(--xc-text-xs)',
-                            cursor: !developerMode || busy ? 'not-allowed' : 'pointer',
-                            opacity: !developerMode || busy ? 0.5 : 1,
-                        }}
-                    >
-                        Mint test XCHAIN
-                    </button>
+                    {typeof onNavigateToMint === 'function' && descriptor.coin === 'bitcoin' ? (
+                        <button
+                            type="button"
+                            onClick={() => onNavigateToMint({ chainId: descriptor.id, tick: 'XCHAIN' })}
+                            disabled={!developerMode || busy}
+                            style={{
+                                background: 'transparent',
+                                border: '1px solid var(--xc-border)',
+                                color: 'var(--xc-text)',
+                                borderRadius: 'var(--xc-radius-sm)',
+                                padding: 'var(--xc-space-1) var(--xc-space-3)',
+                                fontSize: 'var(--xc-text-xs)',
+                                cursor: !developerMode || busy ? 'not-allowed' : 'pointer',
+                                opacity: !developerMode || busy ? 0.5 : 1,
+                            }}
+                        >
+                            Mint test XCHAIN
+                        </button>
+                    ) : null}
                 </div>
             </form>
             {statusText ? <Status text={statusText} /> : null}
@@ -799,7 +808,7 @@ function CustomChainsRow({ developerMode }) {
                             resize: 'vertical',
                         }}
                     />
-                    <div style={{ display: 'flex', gap: 'var(--xc-space-1)' }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--xc-space-1)' }}>
                         <button type="submit" disabled={busy || pasted.length === 0} style={{
                             background: 'var(--xc-accent-primary)',
                             borderColor: 'var(--xc-accent-primary)',

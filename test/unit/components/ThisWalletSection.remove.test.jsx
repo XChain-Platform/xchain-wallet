@@ -52,7 +52,9 @@ async function removeActiveWallet() {
     fireEvent.change(screen.getByLabelText('Confirm wallet name'), {
         target: { value: ACTIVE_WALLET.name },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Remove permanently' }));
+    const confirm = screen.getByRole('button', { name: 'Remove permanently' });
+    expect(confirm.style.color).toBe('var(--xc-on-accent)');
+    fireEvent.click(confirm);
     await screen.findByText('Wallet removed.');
 }
 
