@@ -353,6 +353,9 @@ function AppInner() {
     const [accountRenameTarget, setAccountRenameTarget] = useState(
         /** @type {{ id: string, name: string } | null} */ (null),
     );
+    const [accountPickerBackTo, setAccountPickerBackTo] = useState(
+        /** @type {'home' | 'settings'} */ ('home'),
+    );
     const [migrateLegacyWalletId, setMigrateLegacyWalletId] = useState(/** @type {string | null} */ (null));
     // PC-34: SweepForm context. Free-entry sweeps leave it null (form
     // defaults to the active wallet); the migrate lane prefills the
@@ -818,7 +821,7 @@ function AppInner() {
     // can name the active one. The per-wallet effect above owns SELECTION;
     // this owns the label, and keeping them separate stops the header from
     // reaching into that effect's control flow.
-    const headerAccounts = useAccountList(activeWalletId);
+    const headerAccounts = useAccountList(activeWalletId, activeAccountId);
 
     // Build the pancake menu's Alerts panel from the shared list in core
     // (walletAlerts.js); the menu lives at the App level here, not in Home.
@@ -2429,10 +2432,13 @@ function AppInner() {
                         key={settingsSubpage || 'root'}
                         onBack={() => { setSettingsInitialSection(null); setUnlockedView('home'); }}
                         activeWallet={activeWallet}
-                        activeAccount={null}
+                        activeAccount={headerAccounts.find((account) => account.id === activeAccountId) || null}
                         onOpenWalletPicker={() => setUnlockedView('wallet-picker')}
                         onOpenAccountPicker={
-                            activeWalletId ? () => setUnlockedView('account-picker') : undefined
+                            activeWalletId ? () => {
+                                setAccountPickerBackTo('settings');
+                                setUnlockedView('account-picker');
+                            } : undefined
                         }
                         initialSubpageId={settingsSubpage}
                         onNavigateToMint={handleFaucetMint}
@@ -2481,11 +2487,11 @@ function AppInner() {
                         activeAccountId={activeAccountId}
                         onSwitch={handleSwitchAccount}
                         onAddAccount={() => setUnlockedView('add-account')}
-                        onRenameAccount={(id) => {
-                            setAccountRenameTarget({ id, name: '' });
+                        onRenameAccount={(account) => {
+                            setAccountRenameTarget(account);
                             setUnlockedView('account-rename');
                         }}
-                        onBack={() => setUnlockedView('home')}
+                        onBack={() => setUnlockedView(accountPickerBackTo)}
                     />
                 );
             }
@@ -2493,6 +2499,7 @@ function AppInner() {
                 return (
                     <RenameAccountForm
                         accountId={accountRenameTarget.id}
+                        walletId={activeWalletId}
                         initialName={accountRenameTarget.name}
                         onBack={() => {
                             setAccountRenameTarget(null);
@@ -2509,8 +2516,11 @@ function AppInner() {
                 return (
                     <AddAccountForm
                         walletId={activeWalletId}
-                        onBack={() => setUnlockedView('home')}
-                        onCreated={() => setUnlockedView('home')}
+                        onBack={() => setUnlockedView('account-picker')}
+                        onCreated={(account) => {
+                            if (account?.id) handleSwitchAccount(account.id);
+                            setUnlockedView('home');
+                        }}
                     />
                 );
             }
@@ -2614,7 +2624,10 @@ function AppInner() {
                             setUnlockedView('action-detail');
                         } : undefined}
                         onOpenWalletPicker={() => setUnlockedView('wallet-picker')}
-                        onOpenAccountPicker={activeWalletId ? () => setUnlockedView('account-picker') : undefined}
+                        onOpenAccountPicker={activeWalletId ? () => {
+                            setAccountPickerBackTo('home');
+                            setUnlockedView('account-picker');
+                        } : undefined}
                         onSignPsbt={activeWalletId ? () => setUnlockedView('sign-psbt') : undefined}
                         onSignMessage={activeWalletId ? () => setUnlockedView('sign-message') : undefined}
                         onVerifySignature={activeWalletId ? () => setUnlockedView('verify-signature') : undefined}
@@ -2630,7 +2643,10 @@ function AppInner() {
                     .catch(() => refresh());
             };
             const handleOpenWalletPicker = () => setUnlockedView('wallet-picker');
-            const handleOpenAccountPicker = () => setUnlockedView('account-picker');
+            const handleOpenAccountPicker = () => {
+                setAccountPickerBackTo('home');
+                setUnlockedView('account-picker');
+            };
             const handleOpenSettings = () => setUnlockedView('settings');
             const activeWalletName =
                 walletList.find((w) => w.id === activeWalletId)?.name || undefined;
