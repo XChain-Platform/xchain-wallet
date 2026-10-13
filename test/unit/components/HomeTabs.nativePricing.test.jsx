@@ -202,7 +202,7 @@ describe('Home token rows on a real wallet', () => {
         expect(within(hero()).getByText('3 tokens not priced')).toBeInTheDocument();
         await waitFor(() => expect(within(hero()).getByText('2 tokens not priced')).toBeInTheDocument());
         expect(within(hero()).getByText('$0.08')).toBeInTheDocument();
-        expect(within(hero()).getByText(/Prices updated/)).toBeInTheDocument();
+        expect(within(hero()).getByText(/Updated/)).toBeInTheDocument();
         expect(document.body.textContent).not.toContain('$80,000.00');
 
         fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
