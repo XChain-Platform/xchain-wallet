@@ -34,6 +34,7 @@ import { AddAddressModal } from './AddAddressModal.jsx';
 import { WALLET_MODE_DEFAULT } from '../../schemas/settings.js';
 import { humanizeError } from '../utils/humanizeError.js';
 import { loadDisplayBalances } from '../utils/displayBalances.js';
+import { readBalanceCache, writeBalanceCache } from '../utils/balanceCache.js';
 import { explorerReadFailure, rateLimitedMessage } from '../../sdk/explorerErrors.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import styles from './Home.module.css';
@@ -205,21 +206,46 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // Unread-message count for the active wallet + account, surfaced as a Home
     // alert and a dot on the Messaging button (see useMessagingUnread).
     const messagingUnread = useMessagingUnread(activeWalletId, activeAccountId);
+    const initialBalanceCacheRef = useRef(/** @type {{ value: ReturnType<typeof readBalanceCache> } | undefined} */ (undefined));
+    if (!initialBalanceCacheRef.current) {
+        initialBalanceCacheRef.current = {
+            value: readBalanceCache(activeWalletId, activeAccountId),
+        };
+    }
+    const initialBalanceCache = initialBalanceCacheRef.current.value;
     const [balances, setBalances] = useState(
-        /** @type {Record<string, any[]> | null} */ (null),
+        /** @type {Record<string, any[]> | null} */ (initialBalanceCache?.balances || null),
     );
     // Active (operating) address per chain. The headline balance per coin
     // reflects this address only (not the sum across all addresses).
     const [activeByChain, setActiveByChain] = useState(
-        /** @type {Record<string, { id: string, address: string }>} */ ({}),
+        /** @type {Record<string, { id: string, address: string }>} */ (initialBalanceCache?.activeByChain || {}),
     );
     // Cluster G FOLLOWUP 5: Unix-ms timestamp of the most recent
     // successful balance fetch; null until the first one completes.
     // Threaded into HomeTabs → StalenessLabel so the user can tell
     // when the balance view was last live.
     const [balancesFetchedAt, setBalancesFetchedAt] = useState(
-        /** @type {number | null} */ (null),
+        /** @type {number | null} */ (initialBalanceCache?.fetchedAt ?? null),
     );
+    // Cached rows stay visible while their live replacement is in flight.
+    // This flag distinguishes that refresh from a first load with no data.
+    const [cachedBalancesUpdating, setCachedBalancesUpdating] = useState(
+        Boolean(initialBalanceCache) && isNavigatorOnline(),
+    );
+    const balanceScopeRef = useRef({ walletId: activeWalletId, accountId: activeAccountId || null });
+    const balanceScopeChanged = balanceScopeRef.current.walletId !== activeWalletId
+        || balanceScopeRef.current.accountId !== (activeAccountId || null);
+    if (balanceScopeChanged) {
+        // React discards this render and retries with the next scope's state,
+        // so a wallet switch never commits one frame of the prior wallet.
+        balanceScopeRef.current = { walletId: activeWalletId, accountId: activeAccountId || null };
+        const scopedCache = readBalanceCache(activeWalletId, activeAccountId);
+        setBalances(scopedCache?.balances || null);
+        setActiveByChain(scopedCache?.activeByChain || {});
+        setBalancesFetchedAt(scopedCache?.fetchedAt ?? null);
+        setCachedBalancesUpdating(Boolean(scopedCache) && isNavigatorOnline());
+    }
     // What every row consumer reads: the balances plus each shown address's
     // open-offer escrow, so a token escrowed in full keeps its row.
     const balancesView = useEscrowedBalances({ balances, activeByChain, balancesFetchedAt, messaging });
@@ -558,31 +584,48 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     }, []);
 
     const loadHomeData = useCallback(async (walletId, accountId, { reset, isCancelled }) => {
+        const cached = readBalanceCache(walletId, accountId);
+        let activeForCache = cached?.activeByChain || {};
+        let freshBalances = null;
+        let freshFetchedAt = null;
+        let freshBalancesCacheable = false;
+
+        if (reset) {
+            // Scope the synchronous cache lookup to the exact wallet/account
+            // pair before starting any live work. A switch can therefore show
+            // only its own saved rows, even while the previous read settles.
+            pollThrottleRef.current.reset();
+            if (cached) {
+                setBalances(cached.balances);
+                setBalancesFetchedAt(cached.fetchedAt);
+                setActiveByChain(cached.activeByChain);
+            } else {
+                setBalances(null);
+                setBalancesFetchedAt(null);
+                setActiveByChain({});
+            }
+            setCachedBalancesUpdating(Boolean(cached) && isNavigatorOnline());
+            setMultisig(null);
+            setPendingAirdrops([]);
+            setConfirmSessions([]);
+            setLoadError(null);
+        }
+
         // A browser offline event is definitive enough to avoid starting work
         // that cannot finish. In particular, keep the last successful balance
         // state on screen instead of replacing it with a loading skeleton.
         if (!isNavigatorOnline()) {
             pollThrottleRef.current.fail();
+            if (!isCancelled()) setCachedBalancesUpdating(false);
             return;
         }
         if (reset) {
-            // A switch (or a manual reload) is about to replace everything on
-            // screen, so nothing an earlier wallet polled may hold off the
-            // re-polls that follow.
-            pollThrottleRef.current.reset();
-            // ...but the load about to run DOES take the in-flight slot, the
+            // The load about to run takes the in-flight slot, the
             // way an event-driven one does. Without it a cold open that is
             // still waiting (a 429's honoured Retry-After holds one request for
             // up to 60 s) would be joined by the 20 s beat, which is the burst
             // the limiter counted in the first place.
             pollThrottleRef.current.start();
-            setBalances(null);
-            setBalancesFetchedAt(null);
-            setActiveByChain({});
-            setMultisig(null);
-            setPendingAirdrops([]);
-            setConfirmSessions([]);
-            setLoadError(null);
         }
 
         try {
@@ -599,6 +642,9 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 pollThrottleRef.current.succeed();
                 setBalances(b);
                 setBalancesFetchedAt(Date.now());
+                setCachedBalancesUpdating(false);
+                freshBalances = b;
+                freshFetchedAt = Date.now();
                 // A read can LAND and still be rate limited: the aggregator
                 // reports a refused address as that entry's `error` string
                 // rather than throwing, so the banner is decided from what
@@ -608,6 +654,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 if (wait) {
                     beginRateLimitWait(wait.seconds);
                 } else {
+                    freshBalancesCacheable = true;
                     // Balances landed clean, so whatever the last failure said
                     // is no longer true. Cleared on the poll path too: a wallet
                     // that recovered on its own used to keep the error banner
@@ -625,6 +672,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             // should not stomp a screen the user is already looking at
             // with an error banner; only surface it on the reset path.
             if (!isCancelled() && reset) {
+                setCachedBalancesUpdating(false);
                 // The raw SDK message used to go straight on screen here, URL
                 // and all ("Explorer returned HTTP 429 for /RLTC/api/balances/
                 // bcrt1q..."). humanizeError owns the wording for every shape
@@ -641,8 +689,19 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         if (typeof messaging.getActiveAddresses === 'function') {
             try {
                 const active = await messaging.getActiveAddresses(walletId, accountId);
-                if (!isCancelled()) setActiveByChain(active || {});
+                if (!isCancelled()) {
+                    activeForCache = active || {};
+                    setActiveByChain(activeForCache);
+                }
             } catch { /* fall back to aggregate when unavailable */ }
+        }
+
+        if (!isCancelled() && freshBalances && freshBalancesCacheable) {
+            writeBalanceCache(walletId, accountId, {
+                balances: freshBalances,
+                activeByChain: activeForCache,
+                fetchedAt: freshFetchedAt,
+            });
         }
 
         if (typeof messaging.getMultisigReceiveAddress === 'function') {
@@ -987,6 +1046,10 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 ) : null}
                 {loadErrorText ? (
                     <StatusMessage variant="error" className={styles.error}>{loadErrorText}</StatusMessage>
+                ) : null}
+
+                {cachedBalancesUpdating ? (
+                    <StatusMessage variant="status">Updating balances…</StatusMessage>
                 ) : null}
 
                 {balances === null && browserOnline && !loadErrorText ? (

@@ -12,6 +12,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Settings } from '../../../packages/core/src/shared/routes/Settings.jsx';
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
+import {
+    readBalanceCache,
+    writeBalanceCache,
+} from '../../../packages/core/src/shared/utils/balanceCache.js';
 
 const { wipeWalletStorage } = vi.hoisted(() => ({
     wipeWalletStorage: vi.fn(async () => {}),
@@ -105,6 +109,12 @@ describe('ThisWalletSection removal completion', () => {
     });
 
     it('selects another wallet after removing the active wallet', async () => {
+        writeBalanceCache(ACTIVE_WALLET.id, 'account-active', {
+            balances: {}, activeByChain: {}, fetchedAt: 100,
+        });
+        writeBalanceCache(OTHER_WALLET.id, 'account-other', {
+            balances: {}, activeByChain: {}, fetchedAt: 200,
+        });
         const { messaging, reload } = mount([OTHER_WALLET]);
 
         await removeActiveWallet();
@@ -115,6 +125,12 @@ describe('ThisWalletSection removal completion', () => {
             expect(globalThis.localStorage.getItem('xc:activeWallet')).toBe(OTHER_WALLET.id);
         });
         expect(wipeWalletStorage).not.toHaveBeenCalled();
+        expect(readBalanceCache(ACTIVE_WALLET.id, 'account-active')).toBeNull();
+        expect(readBalanceCache(OTHER_WALLET.id, 'account-other')).not.toBeNull();
+        writeBalanceCache(ACTIVE_WALLET.id, 'account-active', {
+            balances: {}, activeByChain: {}, fetchedAt: 300,
+        });
+        expect(readBalanceCache(ACTIVE_WALLET.id, 'account-active')).toBeNull();
         expect(reload).toHaveBeenCalledOnce();
         expect(screen.queryByRole('button', { name: 'Remove…' })).toBeNull();
         expect(screen.queryByRole('button', { name: 'Remove permanently' })).toBeNull();
