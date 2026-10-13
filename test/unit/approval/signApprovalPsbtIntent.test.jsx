@@ -18,10 +18,12 @@
 import React from 'react';
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
+import { userEvent } from '../../helpers/userEvent.js';
 
 vi.mock('../../../packages/extension/src/approval/messaging.js', () => ({
+    fetchApproval: vi.fn(async () => null),
     listWallets: async () => [{ id: 'wallet-1', name: 'Wallet 1' }],
-    getSettings: async () => ({}),
+    getSettings: vi.fn(async () => ({})),
     getAddressesByChain: async () => ({
         'bitcoin-regtest': [{ address: 'bcrt1qownaddressownaddress' }],
     }),
@@ -41,7 +43,7 @@ vi.mock('../../../packages/extension/src/approval/messaging.js', () => ({
     getTokenInfo: async () => { throw new Error('not used by signPsbt'); },
     requoteNativeFee: vi.fn(async () => ({ feeDestination: 'bcrt1qfeedestination' })),
     preflight: vi.fn(async () => ({ verdict: 'pass', findings: [], unverified: [] })),
-    describeAction: async () => { throw new Error('not used by signPsbt'); },
+    describeAction: vi.fn(async () => { throw new Error('not used by signPsbt'); }),
     parseCoSign: async () => { throw new Error('not used by signPsbt'); },
 }));
 
@@ -50,6 +52,7 @@ vi.stubGlobal('React', React);
 const { SignApproval } = await import(
     '../../../packages/extension/src/approval/kinds/SignApproval.jsx'
 );
+const { Router } = await import('../../../packages/extension/src/approval/Router.jsx');
 const messaging = await import('../../../packages/extension/src/approval/messaging.js');
 
 const DEFAULT_PARSED_PSBT = {
@@ -68,6 +71,13 @@ afterAll(() => vi.unstubAllGlobals());
 
 afterEach(() => {
     cleanup();
+    messaging.fetchApproval.mockReset();
+    messaging.fetchApproval.mockResolvedValue(null);
+    messaging.getSettings.mockReset();
+    messaging.getSettings.mockResolvedValue({});
+    messaging.describeAction.mockReset();
+    messaging.describeAction.mockRejectedValue(new Error('not used by signPsbt'));
+    messaging.resolveApproval.mockClear();
     messaging.parsePsbt.mockReset();
     messaging.parsePsbt.mockResolvedValue(DEFAULT_PARSED_PSBT);
     messaging.requoteNativeFee.mockReset();
@@ -90,9 +100,10 @@ describe('SignApproval signPsbt intent', () => {
             />,
         );
 
+        await waitFor(() => expect(messaging.parsePsbt.mock.calls.length).toBeGreaterThanOrEqual(2));
+        const actionIntent = await screen.findByTestId('psbt-action-intent');
         const panel = await screen.findByTestId('psbt-intent-panel');
-        expect(screen.getByTestId('psbt-action-intent').textContent)
-            .toBe('Carries an XChain Mint action');
+        expect(actionIntent.textContent).toBe('Carries an XChain Mint action');
         expect(panel.textContent).toContain('Recipient');
         expect(panel.textContent).toContain('100,000 sats');
         expect(panel.textContent).toContain('Change (back to you)');
@@ -127,7 +138,7 @@ describe('SignApproval signPsbt intent', () => {
     });
 
     it('blocks approval when PSBT action preflight has a hard failure', async () => {
-        messaging.preflight.mockResolvedValueOnce({
+        messaging.preflight.mockResolvedValue({
             verdict: 'fail',
             findings: [{
                 code: 'BALANCE_INSUFFICIENT',
@@ -334,7 +345,9 @@ describe('SignApproval untrusted text', () => {
         fireEvent.click(second.closest('label').querySelector('input[type="radio"]'));
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'pw' } });
         await waitFor(() => expect(screen.getByRole('button', { name: 'Sign in' }).disabled).toBe(false));
-        fireEvent.submit(document.getElementById('sign-approval-form'));
+        const approve = screen.getByRole('button', { name: 'Sign in' });
+        approve.focus();
+        fireEvent.click(approve);
         await waitFor(() => expect(messaging.resolveApproval).toHaveBeenCalledTimes(1));
         expect(messaging.resolveApproval).toHaveBeenCalledWith('signin-pick', {
             approved: true,
@@ -358,5 +371,89 @@ describe('SignApproval untrusted text', () => {
         expect(await screen.findByText(/no address it may sign in with/i)).toBeTruthy();
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'pw' } });
         expect(screen.getByRole('button', { name: 'Sign in' }).disabled).toBe(true);
+    });
+});
+
+describe('approval window keyboard controls', () => {
+    function renderActionApproval() {
+        window.history.replaceState({}, '', '/approval.html?id=keyboard-request');
+        messaging.fetchApproval.mockResolvedValueOnce({
+            id: 'keyboard-request',
+            kind: 'signAction',
+            payload: {
+                origin: 'https://dapp.test',
+                chainId: 'bitcoin-regtest',
+                action: 'MINT',
+                payload: { TICK: 'JDOG', QUANTITY: '1' },
+            },
+        });
+        messaging.getSettings.mockResolvedValueOnce({ developerMode: true });
+        messaging.describeAction.mockResolvedValueOnce({
+            summary: 'Mint 1 JDOG',
+            details: [{ label: 'Ticker', value: 'JDOG' }],
+            warnings: [],
+        });
+        return render(<Router />);
+    }
+
+    it('starts on Reject and requires deliberate keyboard focus before approval', async () => {
+        const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => {});
+        const user = userEvent.setup();
+        renderActionApproval();
+
+        const reject = await screen.findByRole('button', { name: 'Reject' });
+        const approve = screen.getByRole('button', { name: 'Approve' });
+        const details = await screen.findByText('Details (1)');
+        const rawDetails = await screen.findByText('Developer · raw view');
+        await waitFor(() => expect(document.activeElement).toBe(reject));
+
+        await user.keyboard('{Enter}');
+        await waitFor(() => expect(messaging.resolveApproval).toHaveBeenCalledWith(
+            'keyboard-request',
+            { approved: false },
+        ));
+        messaging.resolveApproval.mockClear();
+
+        await user.tab();
+        expect(document.activeElement).toBe(details);
+        await user.tab();
+        expect(document.activeElement).toBe(rawDetails);
+        await user.tab();
+        const password = screen.getByLabelText('Password');
+        expect(document.activeElement).toBe(password);
+        await user.keyboard('secret{Enter}');
+        expect(password).toHaveValue('secret');
+        expect(messaging.resolveApproval).not.toHaveBeenCalled();
+
+        await user.tab();
+        expect(document.activeElement).toBe(screen.getByRole('checkbox', {
+            name: /Always allow this site/i,
+        }));
+        await user.tab();
+        expect(document.activeElement).toBe(reject);
+        await user.tab();
+        expect(document.activeElement).toBe(approve);
+        await user.keyboard('{Enter}');
+
+        await waitFor(() => expect(messaging.resolveApproval).toHaveBeenCalledWith(
+            'keyboard-request',
+            expect.objectContaining({ approved: true, password: 'secret' }),
+        ));
+        closeSpy.mockRestore();
+    });
+
+    it('rejects from Escape anywhere in the approval window', async () => {
+        const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => {});
+        const user = userEvent.setup();
+        renderActionApproval();
+
+        await screen.findByRole('button', { name: 'Reject' });
+        await user.keyboard('{Escape}');
+
+        await waitFor(() => expect(messaging.resolveApproval).toHaveBeenCalledWith(
+            'keyboard-request',
+            { approved: false },
+        ));
+        closeSpy.mockRestore();
     });
 });

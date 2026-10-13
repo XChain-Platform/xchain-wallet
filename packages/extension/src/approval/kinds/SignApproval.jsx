@@ -145,8 +145,6 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 // Show the error but still let the user reject cleanly.
                 setError(err?.message || 'Failed to load wallets.');
             });
-        // Focus the password field once the screen paints.
-        setTimeout(() => inputRef.current?.focus(), 0);
     }, []);
 
     // §21.3 / §48.4 raw-view gate. The approval window doesn't sit
@@ -588,8 +586,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
         || !!psbtRefusal || preflightBlocked || signInBlocked;
     const modeApprovalBlocked = walletMode === null || watcherMode;
 
-    async function handleApprove(event) {
-        event.preventDefault();
+    async function handleApprove() {
         if (busy || password.length === 0 || !walletId || approvalBlocked) return;
         if (modeApprovalBlocked) return;
         setBusy(true);
@@ -637,13 +634,13 @@ export function SignApproval({ id, kind, payload, onReject }) {
                     </Button>
                     {!watcherMode ? (
                         <Button
-                            type="submit"
-                            form="sign-approval-form"
+                            type="button"
                             variant="primary"
                             block
                             icon={<Icon.ThumbsUpIcon />}
                             loading={busy}
                             disabled={password.length === 0 || !walletId || approvalBlocked}
+                            onClick={handleApprove}
                         >
                             {approveLabel}
                         </Button>
@@ -799,7 +796,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
             ) : (
                 <form
                     id="sign-approval-form"
-                    onSubmit={handleApprove}
+                    onSubmit={(event) => event.preventDefault()}
                     noValidate
                     className={styles.form}
                 >
