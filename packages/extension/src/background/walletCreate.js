@@ -35,8 +35,9 @@ export const DEFAULT_ACTIVE_CHAIN_IDS = registry.DEFAULT_ONBOARDING_CHAIN_IDS;
  * @property {import('../storage/ChromeMetaBackend.js').ChromeMetaBackend} metaBackend
  * @property {import('@xchain-wallet/core').registry.ChainRegistry} chainRegistry
  * @property {import('@xchain-wallet/core').sdk.SDKRegistry} sdkRegistry
- * @property {import('@xchain-wallet/core').signers.SignerPool} [signerPool]   filled by the fresh-restore lane while its keys are in scope
+ * @property {import('@xchain-wallet/core').signers.SignerPool} [signerPool]   filled by the create and fresh-restore lanes while their keys are in scope
  * @property {() => Promise<void> | void} [onUnlocked]
+ * @property {(opts: { walletId: string, password: string, bip39Passphrase: string, chainIds: string[], sdkRegistry: any }) => string} [startLabelSyncRestore]
  */
 
 /**
@@ -59,6 +60,7 @@ export async function handleWalletCreateWithMnemonic(request, deps) {
     const kdfParams = cryptoLib.makeFreshKdfParams();
     const masterKey = cryptoLib.deriveMasterKey(password, kdfParams);
     let mnemonic;
+    let pooled = false;
     try {
         const vault = new storageLib.Vault({
             backend: deps.storageBackend,
@@ -76,9 +78,24 @@ export async function handleWalletCreateWithMnemonic(request, deps) {
                 strengthBits,
                 bip39Passphrase,
                 kdfParams,
+                // The wallet seal shares the vault key because the password
+                // and KDF params are identical for a fresh create.
+                masterKey,
             });
             await vault.save();
             mnemonic = result.mnemonic;
+            if (deps.signerPool) {
+                pooled = true;
+                await deps.signerPool.populate({
+                    vault,
+                    password,
+                    bip39Passphrase,
+                    chainRegistry: deps.chainRegistry,
+                    sdkRegistry: deps.sdkRegistry,
+                    masterKey,
+                    masterKeyKdfParams: kdfParams,
+                });
+            }
         } finally {
             // Vault kept its own copy of the key; close zeros that copy.
             vault.close();
@@ -87,6 +104,13 @@ export async function handleWalletCreateWithMnemonic(request, deps) {
         await deps.metaBackend.save({ kdfParams });
         await deps.sessionBackend.save(masterKey);
         await saveSigningSecret(deps.signingSecretBackend, password);
+    } catch (err) {
+        // A create that fails after pooling opens no session, so no unlocked
+        // signer may stay behind in the background's pool.
+        if (pooled) {
+            try { deps.signerPool.lockAll(); } catch { /* best-effort */ }
+        }
+        throw err;
     } finally {
         masterKey.fill(0);
     }
@@ -117,7 +141,7 @@ export async function handleWalletImport(request, deps) {
     const masterKey = cryptoLib.deriveMasterKey(password, kdfParams);
     let format;
     let walletId;
-    let labelSync = null;
+    let labelSyncToken = null;
     try {
         const vault = new storageLib.Vault({
             backend: deps.storageBackend,
@@ -138,21 +162,6 @@ export async function handleWalletImport(request, deps) {
                 kdfParams,
             });
             await vault.save();
-            // §19.5.2 restore half: the labels + contacts this seed published
-            // earlier come back into the fresh vault while the password is
-            // still in scope. The wallet is already saved above, so a failure
-            // here costs the restore and never the import.
-            labelSync = await restoreLabelSyncBestEffort({
-                vault,
-                walletId: result.wallet.id,
-                password,
-                bip39Passphrase,
-                chainIds: typeof flows.labelSyncSearchChainIds === 'function'
-                    ? flows.labelSyncSearchChainIds(deps.chainRegistry, activeChainIds)
-                    : activeChainIds,
-                sdkRegistry: deps.sdkRegistry,
-            });
-            if (labelSync?.restored) await vault.save();
             format = result.format;
             walletId = result.wallet.id;
         } finally {
@@ -169,13 +178,24 @@ export async function handleWalletImport(request, deps) {
     if (typeof deps.onUnlocked === 'function') {
         await deps.onUnlocked();
     }
+    if (origin !== 'created' && typeof deps.startLabelSyncRestore === 'function') {
+        labelSyncToken = deps.startLabelSyncRestore({
+            walletId,
+            password,
+            bip39Passphrase,
+            chainIds: typeof flows.labelSyncSearchChainIds === 'function'
+                ? flows.labelSyncSearchChainIds(deps.chainRegistry, activeChainIds)
+                : activeChainIds,
+            sdkRegistry: deps.sdkRegistry,
+        });
+    }
     // `walletId` rides along for the same reason the host-registered
     // `wallet.import` returns a whole wallet record: a fresh-install caller may
     // have more to do with the wallet it just made. The pairing lane
     // imports the shared phrase here and then asks the host for that wallet's
     // pairing payload, addressed BY id; without it the lane dead-ended after
     // the wallet already existed.
-    return { format, walletName: name, walletId, labelSync };
+    return { format, walletName: name, walletId, labelSyncToken };
 }
 
 /**

@@ -59,7 +59,53 @@ function renderDetail(walletId) {
     ));
 }
 
+function renderNativeDetail() {
+    const messaging = {
+        getSettings: vi.fn().mockResolvedValue({ fiatCurrency: 'EUR' }),
+        getNativePricesRequest: vi.fn().mockResolvedValue({
+            prices: {
+                [CHAIN]: {
+                    priceFiat: 40000,
+                    marketCapFiat: 1200000000,
+                    change24hPct: 1.5,
+                    sparkline: [39000, 40000],
+                    fetchedAt: Date.now(),
+                },
+            },
+        }),
+        getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [] }),
+    };
+    render(React.createElement(
+        MessagingProvider,
+        { shell: 'web', messaging },
+        React.createElement(TokenDetail, {
+            walletId: 'real-wallet',
+            chainId: CHAIN,
+            tick: 'BTC',
+            kind: 'native',
+            quantity: '200000000',
+            fiatRate: 50,
+            onBack() {},
+        }),
+    ));
+    return messaging;
+}
+
 describe('TokenDetail price history', () => {
+    it('uses the selected currency for balances, market values, and price requests', async () => {
+        const messaging = renderNativeDetail();
+
+        expect(await screen.findAllByText(/€100\.00/)).not.toHaveLength(0);
+        expect(await screen.findByText('€40,000.00')).toBeTruthy();
+        expect(await screen.findByText('€1.20B')).toBeTruthy();
+        expect(screen.queryByText('$40,000.00')).toBeNull();
+        expect(messaging.getNativePricesRequest).toHaveBeenLastCalledWith({
+            chainIds: [CHAIN],
+            includeSparkline: true,
+            fiatCurrency: 'EUR',
+        });
+    });
+
     it('shows a message and no synthesized line for a real wallet', async () => {
         renderDetail('real-wallet');
         expect(await screen.findByText('No price history yet')).toBeTruthy();

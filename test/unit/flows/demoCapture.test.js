@@ -32,8 +32,10 @@ import {
 } from '../../../packages/core/src/flows/demoCapture.js';
 import { isValidBip39Mnemonic } from '../../../packages/core/src/crypto/mnemonic.js';
 import {
+    DEMO_TOKEN_ICONS,
     synthesizeDemoBalances,
     synthesizeDemoDefiPositions,
+    synthesizeDemoDispensers,
     synthesizeDemoDispenses,
     synthesizeDemoHistory,
     synthesizeDemoMarketActivity,
@@ -184,6 +186,35 @@ describe('demo fixtures are clock-injectable', () => {
 });
 
 describe('demo balances have the aggregator\'s entry shape', () => {
+    it('keeps every demo fixture image URL off remote origins', () => {
+        const chainIds = [
+            'bitcoin-mainnet',
+            'bitcoin-testnet',
+            'bitcoin-regtest',
+            'litecoin-mainnet',
+            'litecoin-regtest',
+            'dogecoin-mainnet',
+            'dogecoin-regtest',
+        ];
+        const addressesByChain = Object.fromEntries(chainIds.map((chainId) => [
+            chainId,
+            [{ address: `${chainId}-address`, label: '', addressType: 'p2pkh', derivationPath: null }],
+        ]));
+        const balances = synthesizeDemoBalances(addressesByChain);
+        const balanceImages = Object.values(balances).flatMap((entries) => (
+            entries.flatMap((entry) => entry.balances.tokens.map((token) => token.imageUrl).filter(Boolean))
+        ));
+        const dispenserImages = chainIds.flatMap((chainId) => (
+            synthesizeDemoDispensers(chainId, `${chainId}-address`)
+                .map((dispenser) => dispenser.imageUrl)
+                .filter(Boolean)
+        ));
+        const icons = [...Object.values(DEMO_TOKEN_ICONS), ...balanceImages, ...dispenserImages];
+        expect(icons.length).toBeGreaterThan(Object.keys(DEMO_TOKEN_ICONS).length);
+        expect(icons.every((url) => url.startsWith('data:image/svg+xml;utf8,'))).toBe(true);
+        expect(icons.some((url) => /^https?:\/\//i.test(url))).toBe(false);
+    });
+
     it('gives every entry the typed failure fields beside `error`, all null', () => {
         // `AddressBalancesEntry` (flows/balances.js) carries `errorCode` and
         // `retryAfterSeconds` next to `error`. A demo read never fails, so the

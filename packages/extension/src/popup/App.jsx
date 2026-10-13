@@ -24,7 +24,8 @@
 // MessagingProvider context (shell="popup"). Popup-local wiring boils
 // down to session-state polling and sub-route navigation.
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Skeleton } from '@xchain-wallet/core/ui';
 import { uri as coreUri } from '@xchain-wallet/core';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { withResolvedIssuer } from '@xchain-wallet/core/shared/utils/tokenDetailIssuer.js';
@@ -82,12 +83,10 @@ import { Send } from '@xchain-wallet/core/shared/routes/Send.jsx';
 import { SendPicker } from '@xchain-wallet/core/shared/routes/SendPicker.jsx';
 import { ReceivePicker } from '@xchain-wallet/core/shared/routes/ReceivePicker.jsx';
 import { ScanRoute } from '@xchain-wallet/core/shared/routes/ScanRoute.jsx';
-import { TokenWizard } from '@xchain-wallet/core/shared/routes/TokenWizard.jsx';
 import { ActionsMenu } from '@xchain-wallet/core/shared/routes/ActionsMenu.jsx';
 import { buildActionEntries } from '@xchain-wallet/core/shared/actionEntries.js';
 import { MyTokens } from '@xchain-wallet/core/shared/routes/MyTokens.jsx';
 import { ManageToken } from '@xchain-wallet/core/shared/routes/ManageToken.jsx';
-import { MarketActivity } from '@xchain-wallet/core/shared/routes/MarketActivity.jsx';
 import { IssueTokenForm } from '@xchain-wallet/core/shared/routes/IssueTokenForm.jsx';
 import { MintForm } from '@xchain-wallet/core/shared/routes/MintForm.jsx';
 import { DestroyForm } from '@xchain-wallet/core/shared/routes/DestroyForm.jsx';
@@ -96,7 +95,6 @@ import { BridgeMoveForm } from '@xchain-wallet/core/shared/routes/BridgeMoveForm
 import { CallbackForm } from '@xchain-wallet/core/shared/routes/CallbackForm.jsx';
 import { SleepForm } from '@xchain-wallet/core/shared/routes/SleepForm.jsx';
 import { BroadcastForm } from '@xchain-wallet/core/shared/routes/BroadcastForm.jsx';
-import { OracleForm } from '@xchain-wallet/core/shared/routes/OracleForm.jsx';
 import { DispenserForm } from '@xchain-wallet/core/shared/routes/DispenserForm.jsx';
 import { DispensersList } from '@xchain-wallet/core/shared/routes/DispensersList.jsx';
 import { DispenserDetail } from '@xchain-wallet/core/shared/routes/DispenserDetail.jsx';
@@ -106,41 +104,18 @@ import { AirdropForm } from '@xchain-wallet/core/shared/routes/AirdropForm.jsx';
 import { AdvancedActionsForm } from '@xchain-wallet/core/shared/routes/AdvancedActionsForm.jsx';
 import { MigrateToBip39 } from '@xchain-wallet/core/shared/routes/MigrateToBip39.jsx';
 import { SweepForm } from '@xchain-wallet/core/shared/routes/SweepForm.jsx';
-import { MarketsList } from '@xchain-wallet/core/shared/routes/MarketsList.jsx';
-import { MarketView } from '@xchain-wallet/core/shared/routes/MarketView.jsx';
-import { CreateOrderForm } from '@xchain-wallet/core/shared/routes/CreateOrderForm.jsx';
-import { MyOrdersView } from '@xchain-wallet/core/shared/routes/MyOrdersView.jsx';
-import { MySwapsView } from '@xchain-wallet/core/shared/routes/MySwapsView.jsx';
 import { CoinpayForm } from '@xchain-wallet/core/shared/routes/CoinpayForm.jsx';
-import { SwapForm } from '@xchain-wallet/core/shared/routes/SwapForm.jsx';
 import { SellOwnershipForm } from '@xchain-wallet/core/shared/routes/SellOwnershipForm.jsx';
 import { MessagingInbox } from '@xchain-wallet/core/shared/routes/MessagingInbox.jsx';
 import { NoticeModal } from '@xchain-wallet/core/shared/components/NoticeModal.jsx';
 import { ComposeMessage } from '@xchain-wallet/core/shared/routes/ComposeMessage.jsx';
 import { ContactsList } from '@xchain-wallet/core/shared/routes/ContactsList.jsx';
-import { ContractsList } from '@xchain-wallet/core/shared/routes/ContractsList.jsx';
-import { ContractDetail } from '@xchain-wallet/core/shared/routes/ContractDetail.jsx';
-import { DeployContractForm } from '@xchain-wallet/core/shared/routes/DeployContractForm.jsx';
-import { ExecuteContractForm } from '@xchain-wallet/core/shared/routes/ExecuteContractForm.jsx';
-import { ContractFundsForm } from '@xchain-wallet/core/shared/routes/ContractFundsForm.jsx';
-import { ControllerBindForm } from '@xchain-wallet/core/shared/routes/ControllerBindForm.jsx';
-import { ContractStakeForm } from '@xchain-wallet/core/shared/routes/ContractStakeForm.jsx';
 import { StakingList } from '@xchain-wallet/core/shared/routes/StakingList.jsx';
 import { StakeDetail } from '@xchain-wallet/core/shared/routes/StakeDetail.jsx';
 import { StakeNew } from '@xchain-wallet/core/shared/routes/StakeNew.jsx';
 import { StakeForm } from '@xchain-wallet/core/shared/routes/StakeForm.jsx';
 import { StakingActionForm } from '@xchain-wallet/core/shared/routes/StakingActionForm.jsx';
 import { DelegationActionForm } from '@xchain-wallet/core/shared/routes/DelegationActionForm.jsx';
-import { GovernancePolls } from '@xchain-wallet/core/shared/routes/GovernancePolls.jsx';
-import { BetFeedsList } from '@xchain-wallet/core/shared/routes/BetFeedsList.jsx';
-import { BetFeedDetail } from '@xchain-wallet/core/shared/routes/BetFeedDetail.jsx';
-import { CreateBetFeedForm } from '@xchain-wallet/core/shared/routes/CreateBetFeedForm.jsx';
-import { MyBets } from '@xchain-wallet/core/shared/routes/MyBets.jsx';
-import { OracleConsole } from '@xchain-wallet/core/shared/routes/OracleConsole.jsx';
-import { OracleRecord } from '@xchain-wallet/core/shared/routes/OracleRecord.jsx';
-import { CreatePollForm } from '@xchain-wallet/core/shared/routes/CreatePollForm.jsx';
-import { PollDetail } from '@xchain-wallet/core/shared/routes/PollDetail.jsx';
-import { DelegateVoteForm } from '@xchain-wallet/core/shared/routes/DelegateVoteForm.jsx';
 import { OperatorDashboard } from '@xchain-wallet/core/shared/routes/OperatorDashboard.jsx';
 import { History } from '@xchain-wallet/core/shared/routes/History.jsx';
 import { ActionDetail } from '@xchain-wallet/core/shared/routes/ActionDetail.jsx';
@@ -156,14 +131,7 @@ import { ViewPrivateKey } from '@xchain-wallet/core/shared/routes/ViewPrivateKey
 import { KeyQR } from '@xchain-wallet/core/shared/components/KeyQR.jsx';
 import { ParallelComposer } from '@xchain-wallet/core/shared/routes/ParallelComposer.jsx';
 import { BatchComposerForm } from '@xchain-wallet/core/shared/routes/BatchComposerForm.jsx';
-import { CrossChainSwapForm } from '@xchain-wallet/core/shared/routes/CrossChainSwapForm.jsx';
-import { CrossChainOrderForm } from '@xchain-wallet/core/shared/routes/CrossChainOrderForm.jsx';
 import { CrossChainTemplates } from '@xchain-wallet/core/shared/routes/CrossChainTemplates.jsx';
-import { MultisigCreate } from '@xchain-wallet/core/shared/routes/MultisigCreate.jsx';
-import { MultisigSigningSession } from '@xchain-wallet/core/shared/routes/MultisigSigningSession.jsx';
-import { CoSignerAccountList } from '@xchain-wallet/core/shared/routes/CoSignerAccountList.jsx';
-import { CoSignerProvision } from '@xchain-wallet/core/shared/routes/CoSignerProvision.jsx';
-import { CoSignerAccountDetail } from '@xchain-wallet/core/shared/routes/CoSignerAccountDetail.jsx';
 import { MyLists } from '@xchain-wallet/core/shared/routes/MyLists.jsx';
 import { ListDetail } from '@xchain-wallet/core/shared/routes/ListDetail.jsx';
 import { ListCreateForm } from '@xchain-wallet/core/shared/routes/ListCreateForm.jsx';
@@ -176,7 +144,6 @@ import { SharedListDirectory } from '@xchain-wallet/core/shared/routes/SharedLis
 import { ObligationsView } from '@xchain-wallet/core/shared/routes/ObligationsView.jsx';
 import { AddressList } from '@xchain-wallet/core/shared/routes/AddressList.jsx';
 import { AddressPreferencesForm } from '@xchain-wallet/core/shared/routes/AddressPreferencesForm.jsx';
-import { PairSignerForm } from '@xchain-wallet/core/shared/routes/PairSignerForm.jsx';
 import { useBtcAddressesPresent } from '@xchain-wallet/core/shared/hooks/useBtcAddressesPresent.js';
 import { useVmAddressesPresent } from '@xchain-wallet/core/shared/hooks/useVmAddressesPresent.js';
 import { useGovernanceAddressesPresent } from '@xchain-wallet/core/shared/hooks/useGovernanceAddressesPresent.js';
@@ -187,10 +154,49 @@ import { useGovernanceAddressesPresent } from '@xchain-wallet/core/shared/hooks/
 // Connect from Trezor's hosted script instead; the extension ships
 // Ledger (WebHID) + software signing only. PairSignerForm renders the
 // Trezor option disabled when `pairTrezor` is null.
-import { pairLedgerSigner } from '../signers/ledgerFactory.js';
 import { registerSigner as registerLocalSigner } from './signerBridge.js';
 import * as messaging from './messaging.js';
 import { getSessionStatus, listWallets, listAccounts } from './messaging.js';
+
+const lazyRoute = (load, name) => lazy(() => load().then((module) => ({ default: module[name] })));
+
+const TokenWizard = lazyRoute(() => import('@xchain-wallet/core/shared/routes/TokenWizard.jsx'), 'TokenWizard');
+const MarketActivity = lazyRoute(() => import('@xchain-wallet/core/shared/routes/MarketActivity.jsx'), 'MarketActivity');
+const OracleForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/OracleForm.jsx'), 'OracleForm');
+const MarketsList = lazyRoute(() => import('@xchain-wallet/core/shared/routes/MarketsList.jsx'), 'MarketsList');
+const MarketView = lazyRoute(() => import('@xchain-wallet/core/shared/routes/MarketView.jsx'), 'MarketView');
+const CreateOrderForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/CreateOrderForm.jsx'), 'CreateOrderForm');
+const MyOrdersView = lazyRoute(() => import('@xchain-wallet/core/shared/routes/MyOrdersView.jsx'), 'MyOrdersView');
+const MySwapsView = lazyRoute(() => import('@xchain-wallet/core/shared/routes/MySwapsView.jsx'), 'MySwapsView');
+const SwapForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/SwapForm.jsx'), 'SwapForm');
+const CrossChainSwapForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/CrossChainSwapForm.jsx'), 'CrossChainSwapForm');
+const CrossChainOrderForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/CrossChainOrderForm.jsx'), 'CrossChainOrderForm');
+const ContractsList = lazyRoute(() => import('@xchain-wallet/core/shared/routes/ContractsList.jsx'), 'ContractsList');
+const ContractDetail = lazyRoute(() => import('@xchain-wallet/core/shared/routes/ContractDetail.jsx'), 'ContractDetail');
+const ContractStakeForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/ContractStakeForm.jsx'), 'ContractStakeForm');
+const DeployContractForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/DeployContractForm.jsx'), 'DeployContractForm');
+const ExecuteContractForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/ExecuteContractForm.jsx'), 'ExecuteContractForm');
+const ContractFundsForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/ContractFundsForm.jsx'), 'ContractFundsForm');
+const ControllerBindForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/ControllerBindForm.jsx'), 'ControllerBindForm');
+const GovernancePolls = lazyRoute(() => import('@xchain-wallet/core/shared/routes/GovernancePolls.jsx'), 'GovernancePolls');
+const BetFeedsList = lazyRoute(() => import('@xchain-wallet/core/shared/routes/BetFeedsList.jsx'), 'BetFeedsList');
+const BetFeedDetail = lazyRoute(() => import('@xchain-wallet/core/shared/routes/BetFeedDetail.jsx'), 'BetFeedDetail');
+const CreateBetFeedForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/CreateBetFeedForm.jsx'), 'CreateBetFeedForm');
+const MyBets = lazyRoute(() => import('@xchain-wallet/core/shared/routes/MyBets.jsx'), 'MyBets');
+const OracleConsole = lazyRoute(() => import('@xchain-wallet/core/shared/routes/OracleConsole.jsx'), 'OracleConsole');
+const OracleRecord = lazyRoute(() => import('@xchain-wallet/core/shared/routes/OracleRecord.jsx'), 'OracleRecord');
+const CreatePollForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/CreatePollForm.jsx'), 'CreatePollForm');
+const PollDetail = lazyRoute(() => import('@xchain-wallet/core/shared/routes/PollDetail.jsx'), 'PollDetail');
+const DelegateVoteForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/DelegateVoteForm.jsx'), 'DelegateVoteForm');
+const MultisigCreate = lazyRoute(() => import('@xchain-wallet/core/shared/routes/MultisigCreate.jsx'), 'MultisigCreate');
+const MultisigSigningSession = lazyRoute(() => import('@xchain-wallet/core/shared/routes/MultisigSigningSession.jsx'), 'MultisigSigningSession');
+const CoSignerAccountList = lazyRoute(() => import('@xchain-wallet/core/shared/routes/CoSignerAccountList.jsx'), 'CoSignerAccountList');
+const CoSignerProvision = lazyRoute(() => import('@xchain-wallet/core/shared/routes/CoSignerProvision.jsx'), 'CoSignerProvision');
+const CoSignerAccountDetail = lazyRoute(() => import('@xchain-wallet/core/shared/routes/CoSignerAccountDetail.jsx'), 'CoSignerAccountDetail');
+const PairSignerForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/PairSignerForm.jsx'), 'PairSignerForm');
+
+const pairLedgerSigner = (...args) => import('../signers/ledgerFactory.js')
+    .then((module) => module.pairLedgerSigner(...args));
 
 export function App() {
     return (
@@ -2572,7 +2578,9 @@ function AppInner() {
             })();
             return (
                 <>
-                    <Fragment key={palette.navigationKey}>{routeNode}</Fragment>
+                    <Suspense fallback={<Skeleton.List rows={5} />}>
+                        <Fragment key={palette.navigationKey}>{routeNode}</Fragment>
+                    </Suspense>
                     {messageSentNotice ? (
                         <NoticeModal
                             title="Message sent"

@@ -26,8 +26,17 @@
 // was a rendering decision (which branch of the panel runs), not arithmetic.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, within, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, within, waitFor, cleanup, fireEvent } from '@testing-library/react';
 import React from 'react';
+
+vi.mock('../../../packages/core/src/shared/hooks/useFiatRate.js', async (importOriginal) => {
+    const actual = await importOriginal();
+    return {
+        ...actual,
+        useFiatRate: () => ({ rate: 100, fiatCurrency: 'EUR' }),
+    };
+});
+
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DispenserDetail } from '../../../packages/core/src/shared/routes/DispenserDetail.jsx';
 
@@ -118,6 +127,7 @@ function mount(dispenser, extraMessaging = {}) {
             }],
         }),
         getSignerStatus: vi.fn().mockResolvedValue({ unlocked: false }),
+        getSettings: vi.fn().mockResolvedValue({ fiatCurrency: 'EUR' }),
         sendToken: vi.fn().mockResolvedValue({ txid: 'deadbeef' }),
     };
     render(
@@ -146,6 +156,13 @@ async function payToBuy() {
 }
 
 describe('fiat-priced dispenser, buyer view (D-144)', () => {
+    it('shows the network fee in the selected currency', async () => {
+        mount({ ...COIN_DISPENSER, source: BUYER, address: BUYER });
+        fireEvent.click(await screen.findByTitle('Change expiration or allow/block lists'));
+        expect(await screen.findByText(/€[0-9,.]+/)).toBeInTheDocument();
+        expect(document.body.textContent).not.toContain('$');
+    });
+
     it('never quotes a coin price of zero', async () => {
         mount(FIAT_DISPENSER);
         await screen.findByText(/Pay to buy/);

@@ -82,20 +82,31 @@ assert.match(
 
 // --- Import: every success path ends on the notice -------------------
 
-// Only the notice's Continue may call onImported. A direct call anywhere
-// else would skip the notice for that lane.
+// The notice Continue marks itself consumed before it calls onImported. A
+// completed background label restore may call it again only after that mark,
+// so late labels refresh Home without skipping the notice.
 const importedCalls = imp.match(/\bonImported\b/g) || [];
 assert.equal(
     importedCalls.length,
-    3,
-    'onImported appears only in the prop docs, the signature and the notice Continue',
+    4,
+    'onImported appears only in the prop contract, the guarded label refresh and notice Continue',
+);
+assert.match(
+    imp,
+    /if \(labelSync\?\.restored && adsContinuedRef\.current\) onImported\(\)/,
+    'a late label restore refreshes Home only after Continue',
 );
 const importStart = imp.indexOf('if (adsNotice)');
 assert.ok(importStart > 0, 'located the import ads-notice render branch');
 assert.match(
     imp.slice(importStart, imp.indexOf('</Screen>', importStart)),
-    /<AdsNotice[\s\S]*onContinue=\{onImported\}/,
-    'import Continue goes straight to onImported',
+    /<AdsNotice[\s\S]*onContinue=\{continueAfterNotice\}/,
+    'import Continue uses the guarded completion handler',
+);
+assert.match(
+    imp,
+    /const continueAfterNotice = \(\) => \{\s*adsContinuedRef\.current = true;\s*onImported\(\);/,
+    'import Continue marks the notice consumed before refreshing App',
 );
 
 // Mnemonic import (which also carries the FreeWallet variant), fresh

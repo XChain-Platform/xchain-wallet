@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useMemo, useState } from 'react';
-import { Screen, PageHeader, Icon } from '@xchain-wallet/core/ui';
+import { EmptyState, Icon, ListPage, PageHeader, Screen } from '@xchain-wallet/core/ui';
 import { NetworkFilterDropdown } from './NetworkFilterDropdown.jsx';
 import { contactEntryChain } from '../utils/contactChain.js';
 import { compareContactsByName } from '../utils/contactMerge.js';
@@ -73,45 +73,55 @@ export function ContactsPickerScreen({ contacts, variant, onPick, onBack }) {
     if (!hasAnyAddress) {
         return (
             <Screen variant={variant} header={header}>
-                <div className={styles.emptyCard}>You have no contacts yet</div>
+                <ListPage>
+                    <EmptyState title="You have no contacts yet" titleAs="p" role={null} />
+                </ListPage>
             </Screen>
         );
     }
 
     return (
         <Screen variant={variant} header={header}>
-            <div className={styles.abToolbar}>
-                <input
-                    type="text"
-                    className={styles.abSearch}
-                    placeholder="Search"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    aria-label="Search contacts"
-                />
-                <NetworkFilterDropdown value={network} onChange={setNetwork} />
-            </div>
-            {rows.length === 0 ? (
-                <div className={styles.abEmpty}>No addresses match your filters.</div>
-            ) : (
-                <ul className={styles.abList}>
-                    {rows.map(({ contact, entry }) => (
-                        <li key={`${contact.id}:${entry.address}`}>
-                            <button
-                                type="button"
-                                className={styles.abRow}
-                                onClick={() => onPick(entry)}
-                            >
-                                <span className={styles.abName}>{contact.name}</span>
-                                <span className={styles.abAddr} title={entry.address}>{entry.address}</span>
-                            </button>
-                        </li>
-                    ))}
-                </ul>
-            )}
+            <ListPage toolbar={(
+                <>
+                    <input
+                        type="search"
+                        role="textbox"
+                        className={styles.abSearch}
+                        placeholder="Search"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        autoComplete="off"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        aria-label="Search contacts"
+                    />
+                    <NetworkFilterDropdown value={network} onChange={setNetwork} />
+                </>
+            )}>
+                {rows.length === 0 ? (
+                    <EmptyState
+                        title="No addresses match your filters."
+                        titleAs="p"
+                        role={null}
+                    />
+                ) : (
+                    <ul className={styles.abList}>
+                        {rows.map(({ contact, entry }) => (
+                            <li key={`${contact.id}:${entry.address}`}>
+                                <button
+                                    type="button"
+                                    className={styles.abRow}
+                                    onClick={() => onPick(entry)}
+                                >
+                                    <span className={styles.abName}>{contact.name}</span>
+                                    <span className={styles.abAddr} title={entry.address}>{entry.address}</span>
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </ListPage>
         </Screen>
     );
 }

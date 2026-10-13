@@ -343,7 +343,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
 
     const onAmountFieldChange = useCallback((rawValue, cursorPos) => {
         const stripped = String(rawValue).replace(/,/g, '');
-        if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
+        if (stripped !== '' && !/^\d+(?:\.\d{0,8})?$/.test(stripped)) return;
         if (amountInputMode === 'fiat') {
             setFiatAmount(stripped);
             if (!fiatRate) {
@@ -406,37 +406,24 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
 
     const nativeTicker = nativeTickerFor(descriptor);
 
-    // QR content. When the user has set an amount (or has a token tick),
-    // encode an `xchain:CODE/send?to=…&amount=…&tick=…` URI; the receiver
-    // (another XChain wallet) lands on Send with chain + token + amount
-    // pre-filled. When nothing is customized, fall back to a bare BIP21 URI
-    // (`bitcoin:`/`litecoin:`/`dogecoin:`) so external wallets that only
-    // understand BIP21 can still pay the bare address.
+    // The QR and text-copy paths share one BIP21-style payment request. The
+    // optional chain extension distinguishes testnet from regtest, whose
+    // address formats and URI schemes are otherwise identical.
     const qrUri = useMemo(() => {
         if (!address || !descriptor || !activeChainId) return null;
         const amount = reqAmount.trim();
         const tick = reqTick.trim().toUpperCase();
         const feePriority = feePick?.mode || 'normal';
-        try {
-            return uriLib.buildXchainUri(
-                {
-                    chainId: activeChainId,
-                    action: 'send',
-                    address: address.address,
-                    amount: amount || undefined,
-                    tick: tick || undefined,
-                    feePriority,
-                },
-                { chainRegistry },
-            );
-        } catch {
-            // Chain isn't mapped to a coin code yet; fall through to BIP21
-            // (BIP21 has no feePriority slot; receiver's preference is dropped).
-            return uriLib.encodeBip21Uri({
-                scheme: descriptor.uriScheme,
-                address: address.address,
-            });
-        }
+        return uriLib.encodeBip21Uri({
+            scheme: descriptor.uriScheme,
+            address: address.address,
+            amount,
+            params: {
+                chain: activeChainId,
+                ...(tick ? { tick } : {}),
+                feePriority,
+            },
+        });
     }, [address, descriptor, activeChainId, reqAmount, reqTick, feePick]);
 
     useEffect(() => {
@@ -550,16 +537,13 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         }
     }, [qrDataUrl, address?.address, qrFileName, canCopyImages, showToast]);
 
-    // Single-tap address copy. The field is read-only, so before this a
-    // user had to select the text by hand and copy it; a tap now copies
-    // the bare address (not the payment URI, which is what the QR
-    // carries, because the thing people paste into another wallet is the
-    // address). Enter/Space do the same from the keyboard.
+    // Single-tap request copy uses the exact payload rendered in the QR so a
+    // pasted request cannot disagree with the amount or network a payer scans.
     const copyAddress = useCallback(async () => {
-        if (!address?.address) return;
-        const { ok } = await copyText(address.address);
-        showToast({ message: ok ? 'Address copied to clipboard.' : 'Copy failed: clipboard unavailable' });
-    }, [address?.address, showToast]);
+        if (!qrUri) return;
+        const { ok } = await copyText(qrUri);
+        showToast({ message: ok ? 'Payment request copied to clipboard.' : 'Copy failed: clipboard unavailable' });
+    }, [qrUri, showToast]);
     const onAddressKeyDown = useCallback((event) => {
         if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
@@ -657,8 +641,8 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     onChange={() => {}}
                     onClick={copyAddress}
                     onKeyDown={onAddressKeyDown}
-                    title="Tap to copy"
-                    hint="Tap the address to copy it."
+                    title="Tap to copy payment request"
+                    hint="Tap the address to copy its payment request."
                     style={{ cursor: 'copy' }}
                     onIconClick={() => setAddressPickerOpen(true)}
                     iconLabel="Choose receive address"

@@ -21,8 +21,12 @@
 // SSC-1 applies to this file specifically: it is the whole native surface the
 // WebView can reach, so it stays the only registered plugin, and every method
 // on it either moves an opaque ciphertext, asks the Secure Enclave a
-// question, or derives a key (argon2id) from inputs the JS already holds.
-// Nothing here takes a file path, a URL, or a class name from JS.
+// question, derives a key (argon2id) from inputs the JS already holds, or opens
+// the camera QR scanner, which only hands back the text it reads. Nothing here
+// takes a file path, a URL, or a class name from JS.
+//
+// The QR methods are iOS only: WKWebView has no BarcodeDetector, while
+// Android's WebView does, so the Kotlin twin keeps the web scanner.
 
 import Capacitor
 import Foundation
@@ -46,7 +50,9 @@ public class XChainVaultPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "biometricEnroll", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "biometricUnlock", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "biometricClear", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "argon2id", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "argon2id", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "qrScanStart", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "qrScanStop", returnType: CAPPluginReturnPromise)
     ]
 
     private var vaultStore: VaultStore?
@@ -238,6 +244,38 @@ public class XChainVaultPlugin: CAPPlugin, CAPBridgedPlugin {
             } catch {
                 call.reject((error as? Argon2idFailure)?.message ?? "argon2id failed")
             }
+        }
+    }
+
+    // MARK: - QR scanning
+
+    /// The scan coordinator, built on first use; tests replace it with one on a fake camera.
+    lazy var qrScan = QrScanCoordinator(environment: SystemQrScanEnvironment(host: { [weak self] in
+        self?.bridge?.viewController
+    }))
+
+    /// Opens the native scanner. Resolves `{ started: true }` once it is on screen, or rejects
+    /// with denied, unavailable, busy, or stopped (the SPA called qrScanStop first).
+    @objc func qrScanStart(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            let scan = self.qrScan
+            scan.emit = { [weak self] event, data in
+                self?.notifyListeners(event, data: data, retainUntilConsumed: false)
+            }
+            scan.start { refusal in
+                if let refusal = refusal {
+                    call.reject(refusal.rawValue)
+                } else {
+                    call.resolve(["started": true])
+                }
+            }
+        }
+    }
+
+    /// Closes the scanner if one is open; resolves either way, and sends no qrScanClosed.
+    @objc func qrScanStop(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            self.qrScan.stop { call.resolve([:]) }
         }
     }
 

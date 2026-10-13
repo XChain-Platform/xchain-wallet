@@ -120,8 +120,8 @@ const { BALANCE_POLL_INTERVAL_MS } = flowsLib;
 
 /**
  * Home screen: landing view for an unlocked wallet. Header shows the
- * wallet name; body renders a per-chain balance card grid; footer
- * exposes Send / Receive / Create-a-token action buttons.
+ * wallet name; body renders a per-chain balance card grid; the hero
+ * exposes Send / Receive and the footer exposes supplementary actions.
  *
  * When the wallet has pending §40.9 airdrops (LIST signed but AIRDROP
  * still pending, either waiting for the LIST to be indexed or ready
@@ -1169,29 +1169,11 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                     />
                 ) : null}
 
-                {/* Action button grid is full-mode only. In small mode the
-                    actions live in the pancake menu, freeing the body for
+                {/* Supplementary action grid is full-mode only. In small mode
+                    the actions live in the pancake menu, freeing the body for
                     the balance list. */}
                 {isFull ? (
                 <div className={styles.actionsFull}>
-                    <Button
-                        variant="primary"
-                        block={!isFull}
-                        onClick={onSend}
-                        disabled={!onSend}
-                        icon={<Icon.SendIcon />}
-                    >
-                        Send
-                    </Button>
-                    <Button
-                        variant="secondary"
-                        block={!isFull}
-                        onClick={onReceive}
-                        disabled={!onReceive}
-                        icon={<Icon.ReceiveIcon />}
-                    >
-                        Receive
-                    </Button>
                     <Button
                         variant="secondary"
                         block={!isFull}

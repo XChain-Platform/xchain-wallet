@@ -19,12 +19,55 @@
 // addresses Home actually shows, and a failed read keeps the last good answer
 // instead of blanking the rows.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 export const ESCROW_REFRESH_MS = 60000;
 // Upper bound on addresses read per chain when Home shows the whole account
 // rather than one active address per chain.
 export const ESCROW_ADDRESSES_PER_CHAIN = 10;
+
+// Every Home using the same host transport joins the same address-set read.
+// The completed result also lets a later mount hydrate without spending
+// another explorer request inside the refresh window.
+const readsByMessaging = new WeakMap();
+
+function sharedEscrowRead(messaging, targetKey, targets) {
+    let reads = readsByMessaging.get(messaging);
+    if (!reads) {
+        reads = new Map();
+        readsByMessaging.set(messaging, reads);
+    }
+    let read = reads.get(targetKey);
+    if (!read) {
+        read = { lastStartedAt: null, inFlight: null, result: null };
+        reads.set(targetKey, read);
+    }
+    if (read.inFlight) return read.inFlight;
+    const now = Date.now();
+    if (read.lastStartedAt !== null && now - read.lastStartedAt < ESCROW_REFRESH_MS) {
+        return Promise.resolve(read.result);
+    }
+
+    read.lastStartedAt = now;
+    const inFlight = Promise.all(targets.map((target) => messaging.getEscrowedTokens({
+        chainId: target.chainId,
+        address: target.address,
+    })
+        .then((response) => [
+            `${target.chainId}:${target.address}`,
+            Array.isArray(response?.rows) ? response.rows : null,
+        ])
+        .catch(() => [`${target.chainId}:${target.address}`, null])))
+        .then((pairs) => {
+            read.result = pairs;
+            return pairs;
+        })
+        .finally(() => {
+            if (read.inFlight === inFlight) read.inFlight = null;
+        });
+    read.inFlight = inFlight;
+    return inFlight;
+}
 
 /**
  * The (chainId, address) pairs Home shows: the active address where one is
@@ -74,40 +117,39 @@ export function mergeEscrow(balances, escrowByKey) {
  *           balancesFetchedAt?: number | null, messaging: any }} args
  * @returns {Record<string, any[]> | null} `balances` with escrow merged in
  */
-export function useEscrowedBalances({ balances, activeByChain, balancesFetchedAt, messaging }) {
+export function useEscrowedBalances({ balances, activeByChain, messaging }) {
     const [escrowByKey, setEscrowByKey] = useState(/** @type {Record<string, any[]>} */ ({}));
-    const lastRunRef = useRef({ key: '', at: 0 });
-    // Unmount only, not effect re-runs: a balance refresh inside the throttle
-    // window re-runs the effect and skips, and must not drop the read in flight.
-    const mountedRef = useRef(true);
-    useEffect(() => {
-        mountedRef.current = true;
-        return () => { mountedRef.current = false; };
-    }, []);
     const targets = useMemo(() => escrowTargets(balances, activeByChain), [balances, activeByChain]);
-    const targetKey = targets.map((t) => `${t.chainId}:${t.address}`).join('|');
+    const targetKey = targets.map((t) => `${t.chainId}:${t.address}`).sort().join('|');
 
     useEffect(() => {
         if (!targetKey || typeof messaging?.getEscrowedTokens !== 'function') return undefined;
-        const now = Date.now();
-        const last = lastRunRef.current;
-        if (last.key === targetKey && now - last.at < ESCROW_REFRESH_MS) return undefined;
-        lastRunRef.current = { key: targetKey, at: now };
-        Promise.all(targets.map((t) => messaging.getEscrowedTokens({ chainId: t.chainId, address: t.address })
-            .then((r) => [`${t.chainId}:${t.address}`, Array.isArray(r?.rows) ? r.rows : null])
-            .catch(() => [`${t.chainId}:${t.address}`, null])))
-            .then((pairs) => {
-                if (!mountedRef.current) return;
+        let active = true;
+        const hidden = () => typeof document !== 'undefined' && document.visibilityState === 'hidden';
+        const poll = () => {
+            if (hidden()) return;
+            sharedEscrowRead(messaging, targetKey, targets).then((pairs) => {
+                if (!active || !pairs) return;
                 setEscrowByKey((prev) => {
                     const next = {};
                     for (const [key, rows] of pairs) next[key] = rows ?? prev[key] ?? [];
                     return next;
                 });
             });
-        return undefined;
-    // `targets` is derived from targetKey; balancesFetchedAt re-arms the refresh.
+        };
+        poll();
+        const timer = setInterval(poll, ESCROW_REFRESH_MS);
+        const onVisible = () => { if (!hidden()) poll(); };
+        if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisible);
+        return () => {
+            active = false;
+            clearInterval(timer);
+            if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisible);
+        };
+    // `targets` is represented by the canonical targetKey, so balance object
+    // replacement with the same address set does not restart the poll.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [targetKey, balancesFetchedAt, messaging]);
+    }, [targetKey, messaging]);
 
     return useMemo(() => mergeEscrow(balances, escrowByKey), [balances, escrowByKey]);
 }

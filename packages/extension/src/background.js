@@ -72,6 +72,8 @@ import {
     attachLayoutModeListener,
     readLayoutMode,
 } from './background/layoutMode.js';
+import { restoreLabelSyncBestEffort } from './background/walletCreate.js';
+import { startLabelSyncRestoreTask } from './background/labelSyncRestoreTasks.js';
 
 // Apply the user's saved layout mode (popup vs sidepanel) at worker
 // boot, then watch storage for live changes from the in-wallet
@@ -665,6 +667,10 @@ attachSessionMetaListener({
             console.error('[xchain] ensureHost after unlock failed:', err);
         });
     },
+    startLabelSyncRestore: (opts) => startLabelSyncRestoreTask({
+        walletId: opts.walletId,
+        run: () => restoreLabelSyncBestEffort({ ...opts, vault }),
+    }),
     // Keeps the auto-lock record (and tears the host down) per the backstop's
     // rule: a secret that survived the clear leaves the idle alarm the job.
     onLocked: (result) => lockBackstop.onLocked(result),

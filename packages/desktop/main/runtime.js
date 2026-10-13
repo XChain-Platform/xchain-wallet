@@ -67,6 +67,8 @@ import { serializeError } from '@xchain-wallet/extension/src/background/MessageH
 import { shouldAutoLock } from '@xchain-wallet/extension/src/background/autoLockState.js';
 import { createBroadcastQueueStore, sealBroadcastQueueStore } from '@xchain-wallet/extension/src/background/broadcastQueueStore.js';
 import { createBroadcastQueueStorage } from '@xchain-wallet/extension/src/background/broadcastQueueStorage.js';
+import { restoreLabelSyncBestEffort } from '@xchain-wallet/extension/src/background/walletCreate.js';
+import { startLabelSyncRestoreTask } from '@xchain-wallet/extension/src/background/labelSyncRestoreTasks.js';
 
 import { createDesktopMessageHost } from './messageHost.js';
 import { applyAutoLockReport, hasEnforceableWindow, stampAutoLockActivity } from './autoLockState.js';
@@ -656,6 +658,10 @@ export async function handleIpcMessage(runtime, message) {
                         console.error('[xchain] ensureHost after unlock failed:', err);
                     }
                 },
+                startLabelSyncRestore: (opts) => startLabelSyncRestoreTask({
+                    walletId: opts.walletId,
+                    run: () => restoreLabelSyncBestEffort({ ...opts, vault: runtime.vault }),
+                }),
                 onLocked: () => {
                     tearDownHost(runtime);
                     // An explicit lock ends the window the stamp described.

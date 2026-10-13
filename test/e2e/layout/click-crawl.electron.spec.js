@@ -66,7 +66,13 @@ for (let shard = 0; shard < SHARDS; shard += 1) {
                     await accept.click();
                 }
             };
-            const crawl = createCrawl(page, { venue, outDir: join(OUT_ROOT, venue, RUN), origin, start });
+            const crawl = createCrawl(page, {
+                venue,
+                outDir: join(OUT_ROOT, venue, RUN),
+                origin,
+                start,
+                directReentry: true,
+            });
             await crawl.enterDemo();
             let screens = await crawl.discover();
             if (ONLY) screens = screens.filter((s) => ONLY.test(s.label));

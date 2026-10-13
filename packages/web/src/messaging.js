@@ -95,6 +95,11 @@ export function addImportedWallet(opts) {
     return /** @type {any} */ (sendMessage('wallet.add.import', opts));
 }
 
+/** @param {{ token: string }} opts */
+export function labelSyncRestoreResult(opts) {
+    return /** @type {any} */ (sendMessage('wallet.labelSyncRestoreResult', opts));
+}
+
 /**
  * Store a legacy wallet's BIP39 passphrase on its record, once (§3.4).
  * Rejects with PassphraseMismatchError when the passphrase does not own the

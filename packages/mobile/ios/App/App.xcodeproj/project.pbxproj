@@ -34,6 +34,9 @@
 		XC1040B00000000000000007 /* blake2b.c in Sources */ = {isa = PBXBuildFile; fileRef = XC1040A00000000000000007 /* blake2b.c */; settings = {COMPILER_FLAGS = "-Os"; }; };
 		XC1040B00000000000000008 /* VaultArgon2idTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1040A00000000000000008 /* VaultArgon2idTests.swift */; };
 		XC1040B00000000000000009 /* argon2id-vectors.json in Resources */ = {isa = PBXBuildFile; fileRef = XC1040A00000000000000009 /* argon2id-vectors.json */; };
+		XC1050B00000000000000001 /* VaultQrScan.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1050A00000000000000001 /* VaultQrScan.swift */; };
+		XC1050B00000000000000002 /* VaultQrScannerViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1050A00000000000000002 /* VaultQrScannerViewController.swift */; };
+		XC1050B00000000000000003 /* VaultQrScanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1050A00000000000000003 /* VaultQrScanTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -88,6 +91,9 @@
 		XC1040A00000000000000007 /* blake2b.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = src/blake2/blake2b.c; sourceTree = "<group>"; };
 		XC1040A00000000000000008 /* VaultArgon2idTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultArgon2idTests.swift; sourceTree = "<group>"; };
 		XC1040A00000000000000009 /* argon2id-vectors.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = "argon2id-vectors.json"; path = "../../../../test/fixtures/crypto/argon2id-vectors.json"; sourceTree = SOURCE_ROOT; };
+		XC1050A00000000000000001 /* VaultQrScan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = vault/VaultQrScan.swift; sourceTree = "<group>"; };
+		XC1050A00000000000000002 /* VaultQrScannerViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = vault/VaultQrScannerViewController.swift; sourceTree = "<group>"; };
+		XC1050A00000000000000003 /* VaultQrScanTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultQrScanTests.swift; sourceTree = "<group>"; };
 		XC1040A0000000000000000A /* AppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -161,6 +167,8 @@
 				XC1000A00000000000000003 /* VaultStore.swift */,
 				XC1000A00000000000000004 /* VaultBiometricSidecar.swift */,
 				XC1040A00000000000000001 /* VaultArgon2id.swift */,
+				XC1050A00000000000000001 /* VaultQrScan.swift */,
+				XC1050A00000000000000002 /* VaultQrScannerViewController.swift */,
 				XC1014A00000000000000001 /* XChainClipboardPlugin.swift */,
 				XC1000A00000000000000006 /* XChainLinksPlugin.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
@@ -211,6 +219,7 @@
 			isa = PBXGroup;
 			children = (
 				XC1040A00000000000000008 /* VaultArgon2idTests.swift */,
+				XC1050A00000000000000003 /* VaultQrScanTests.swift */,
 				XC1040A00000000000000009 /* argon2id-vectors.json */,
 			);
 			path = AppTests;
@@ -360,6 +369,8 @@
 				XC1000B00000000000000003 /* VaultStore.swift in Sources */,
 				XC1000B00000000000000004 /* VaultBiometricSidecar.swift in Sources */,
 				XC1040B00000000000000001 /* VaultArgon2id.swift in Sources */,
+				XC1050B00000000000000001 /* VaultQrScan.swift in Sources */,
+				XC1050B00000000000000002 /* VaultQrScannerViewController.swift in Sources */,
 				XC1040B00000000000000002 /* argon2.c in Sources */,
 				XC1040B00000000000000003 /* core.c in Sources */,
 				XC1040B00000000000000004 /* encoding.c in Sources */,
@@ -385,6 +396,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				XC1040B00000000000000008 /* VaultArgon2idTests.swift in Sources */,
+				XC1050B00000000000000003 /* VaultQrScanTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

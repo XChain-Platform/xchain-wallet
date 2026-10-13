@@ -55,15 +55,19 @@ import { serializeError } from './MessageHost.js';
  * @typedef {PreHostBackends & {
  *   chainRegistry?: import('@xchain-wallet/core').registry.ChainRegistry,
  *   sdkRegistry?: import('@xchain-wallet/core').sdk.SDKRegistry,
+ *   signerPool?: import('@xchain-wallet/core').signers.SignerPool,
  *   onUnlocked?: () => Promise<void> | void,
  *   onLocked?: (result: { secretsCleared: boolean }) => Promise<void> | void,
+ *   startLabelSyncRestore?: (opts: object) => string,
  * }} PreHostDispatchDeps
  *
  * @typedef {Object} PreHostDeps
  * @property {() => Promise<void> | void} [onUnlocked]
  * @property {(result: { secretsCleared: boolean }) => Promise<void> | void} [onLocked]   receives whether both secret clears succeeded, so a shell can keep its auto-lock retry record when they did not
+ * @property {(opts: object) => string} [startLabelSyncRestore]
  * @property {import('@xchain-wallet/core').registry.ChainRegistry} [chainRegistry]
  * @property {import('@xchain-wallet/core').sdk.SDKRegistry} [sdkRegistry]
+ * @property {import('@xchain-wallet/core').signers.SignerPool | (() => import('@xchain-wallet/core').signers.SignerPool)} [signerPool]
  */
 
 /** Types the pre-host listener owns. `ChromeRuntimeAdapter` ignores these. */
@@ -130,6 +134,7 @@ export function attachSessionMetaListener(deps = {}, chromeRuntime) {
                         : deps.signerPool,
                     onUnlocked: deps.onUnlocked,
                     onLocked: deps.onLocked,
+                    startLabelSyncRestore: deps.startLabelSyncRestore,
                 });
                 sendResponse({ ok: true, result });
             } catch (err) {
@@ -200,6 +205,7 @@ export async function dispatchPreHost(type, request, deps) {
                 metaBackend: deps.metaBackend,
                 chainRegistry: deps.chainRegistry,
                 sdkRegistry: deps.sdkRegistry,
+                signerPool: deps.signerPool,
                 onUnlocked: deps.onUnlocked,
             });
         case 'wallet.importBackup.fresh':
@@ -223,6 +229,7 @@ export async function dispatchPreHost(type, request, deps) {
                 chainRegistry: deps.chainRegistry,
                 sdkRegistry: deps.sdkRegistry,
                 onUnlocked: deps.onUnlocked,
+                startLabelSyncRestore: deps.startLabelSyncRestore,
             });
         default:
             throw new Error(`pre-host: no dispatcher for "${type}"`);

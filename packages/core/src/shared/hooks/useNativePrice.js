@@ -43,11 +43,12 @@ import { useMessaging } from '../useMessaging.js';
 
 /**
  * @param {string | null} chainId
- * @param {{ includeSparkline?: boolean }} [opts]
+ * @param {{ includeSparkline?: boolean, fiatCurrency?: string }} [opts]
  * @returns {UseNativePriceResult}
  */
 export function useNativePrice(chainId, opts = {}) {
     const includeSparkline = Boolean(opts.includeSparkline);
+    const fiatCurrency = String(opts.fiatCurrency || 'USD').toUpperCase();
     const { messaging } = useMessaging();
     const [entry, setEntry] = useState(/** @type {NativePriceEntry | null} */ (null));
     const [loading, setLoading] = useState(false);
@@ -70,7 +71,7 @@ export function useNativePrice(chainId, opts = {}) {
         let cancelled = false;
         setLoading(true);
         setError(null);
-        messaging.getNativePricesRequest({ chainIds: [chainId], includeSparkline })
+        messaging.getNativePricesRequest({ chainIds: [chainId], includeSparkline, fiatCurrency })
             .then((result) => {
                 if (cancelled) return;
                 if (result?.disabled) {
@@ -92,7 +93,7 @@ export function useNativePrice(chainId, opts = {}) {
                 if (!cancelled) setLoading(false);
             });
         return () => { cancelled = true; };
-    }, [chainId, includeSparkline, messaging]);
+    }, [chainId, includeSparkline, fiatCurrency, messaging]);
 
     return { entry, loading, disabled, error };
 }

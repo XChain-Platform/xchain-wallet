@@ -27,6 +27,9 @@
 //   2. tokens.css defines --xc-viewport-h as the viewport MINUS that inset.
 //   3. Both root height consumers (Screen, FullLayoutWithNav's layout) fall
 //      back to --xc-viewport-h and NOT to a bare 100vh/100dvh.
+//   4. The Android shell replaces that token with the native WebView's
+//      innerHeight, because WebView 102 can resolve 100vh below its visible
+//      and accessibility bounds after Capacitor applies system-bar padding.
 //
 // Rule 3 is the one that rots: a bare `100dvh` reads as obviously right,
 // and on every non-iOS shell it behaves identically, so nothing but a
@@ -44,6 +47,10 @@ const tokens = readFileSync(join(core, 'src', 'ui', 'tokens.css'), 'utf8');
 const screen = readFileSync(join(core, 'src', 'ui', 'Screen.module.css'), 'utf8');
 const leftNav = readFileSync(
     join(core, 'src', 'shared', 'components', 'LeftNav.module.css'),
+    'utf8',
+);
+const keyboardViewport = readFileSync(
+    join(core, '..', 'web', 'src', 'platform', 'keyboardViewport.js'),
     'utf8',
 );
 
@@ -115,5 +122,18 @@ for (const [name, css] of [['Screen.module.css', screen], ['LeftNav.module.css',
         );
     }
 }
+
+// --- 4. Android uses the native WebView's visible height -----------------
+
+assert.match(
+    keyboardViewport,
+    /Capacitor\?\.getPlatform\?\.\(\) === 'android'/,
+    'the viewport override is limited to the Android native shell',
+);
+assert.match(
+    keyboardViewport,
+    /--xc-viewport-h'[\s\S]*?Math\.round\(win\.innerHeight\)/,
+    'Android sizes --xc-viewport-h from the native WebView innerHeight',
+);
 
 console.log('safe-area-shell-height smoke OK');
