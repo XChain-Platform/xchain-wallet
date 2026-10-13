@@ -65,13 +65,17 @@
 }
 
 .balanceHeroRow {
-    display: flex;
+    display: grid;
+    grid-template-areas:
+        'label controls'
+        'amount amount';
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    justify-content: space-between;
-    gap: var(--xc-space-2);
+    gap: 4px var(--xc-space-2);
 }
 
 .balanceHeroLabel {
+    grid-area: label;
     font-size: var(--xc-text-xs);
     font-weight: 700;
     text-transform: uppercase;
@@ -80,6 +84,7 @@
 }
 
 .balanceHeroControls {
+    grid-area: controls;
     display: inline-flex;
     align-items: center;
     gap: var(--xc-space-1);
@@ -162,6 +167,7 @@
 }
 
 .balanceHeroAmount {
+    grid-area: amount;
     font-family: var(--xc-font-mono);
     font-size: 32px;
     font-weight: 800;

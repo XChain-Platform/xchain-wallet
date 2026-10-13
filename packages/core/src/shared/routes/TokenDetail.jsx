@@ -465,6 +465,16 @@ export function TokenDetail({
                     <div className={styles.balanceHeroMain}>
                         <div className={styles.balanceHeroRow}>
                             <span className={styles.balanceHeroLabel}>Total balance</span>
+                            <div className={styles.balanceHeroAmount}>
+                                {balanceHidden ? (
+                                    <span className={styles.balanceHeroHidden}>•••••</span>
+                                ) : (
+                                    <AutoShrinkText>
+                                        {primaryAmount}
+                                        <span className={styles.balanceHeroAmountCode}>{primaryCode}</span>
+                                    </AutoShrinkText>
+                                )}
+                            </div>
                             <div className={styles.balanceHeroControls}>
                                 <button
                                     type="button"
@@ -496,16 +506,6 @@ export function TokenDetail({
                                     {balanceHidden ? <Icon.EyeOffIcon /> : <Icon.EyeIcon />}
                                 </button>
                             </div>
-                        </div>
-                        <div className={styles.balanceHeroAmount}>
-                            {balanceHidden ? (
-                                <span className={styles.balanceHeroHidden}>•••••</span>
-                            ) : (
-                                <AutoShrinkText>
-                                    {primaryAmount}
-                                    <span className={styles.balanceHeroAmountCode}>{primaryCode}</span>
-                                </AutoShrinkText>
-                            )}
                         </div>
                         {!balanceHidden && fiatAvailable ? (
                             <div className={styles.balanceHeroNote}>

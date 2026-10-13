@@ -159,6 +159,20 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                         <span className={styles.scope}>· {filterLabel}</span>
                     ) : null}
                 </span>
+                <div className={styles.amount}>
+                    {hidden ? (
+                        <span className={styles.hidden}>•••••</span>
+                    ) : (
+                        <>
+                            <span className={styles.amountValue}>
+                                {priceUnavailable
+                                    ? 'Price unavailable'
+                                    : formatFiatAmount(total, fiatCurrency, fiatLocale, true)}
+                            </span>
+                            {!priceUnavailable ? <span className={styles.amountCode}>{fiatCurrency}</span> : null}
+                        </>
+                    )}
+                </div>
                 <div className={styles.actions}>
                     {typeof onRefresh === 'function' ? (
                         <button
@@ -244,20 +258,6 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                         </button>
                     ) : null}
                 </div>
-            </div>
-            <div className={styles.amount}>
-                {hidden ? (
-                    <span className={styles.hidden}>•••••</span>
-                ) : (
-                    <>
-                        <span className={styles.amountValue}>
-                            {priceUnavailable
-                                ? 'Price unavailable'
-                                : formatFiatAmount(total, fiatCurrency, fiatLocale, true)}
-                        </span>
-                        {!priceUnavailable ? <span className={styles.amountCode}>{fiatCurrency}</span> : null}
-                    </>
-                )}
             </div>
             {showMeta ? (
                 <div className={styles.meta} aria-label="Balance summary">
