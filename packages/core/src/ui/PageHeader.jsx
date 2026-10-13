@@ -27,10 +27,11 @@ import styles from './PageHeader.module.css';
  *   Android Back key, the browser's Back button) run it. Omit to render an
  *   empty spacer.
  * @param {string} [props.backLabel]                  aria-label for the back
- *   button. Defaults to "Back".
+ *   button. Defaults to "Back to previous screen".
  * @param {boolean} [props.backDisabled]              disables the back button
  *   (e.g. while a submit is in flight). The chevron stays visible but inert.
  * @param {import('react').ReactNode} props.title     centered title text.
+ * @param {string} [props.titleId]                    id for naming the screen body.
  * @param {import('react').ReactNode} [props.titleIcon]   optional inline icon
  *   placed immediately to the left of the title (e.g. a route-action glyph
  *   like Send / Receive).
@@ -40,13 +41,17 @@ import styles from './PageHeader.module.css';
  */
 export function PageHeader({
     onBack,
-    backLabel = 'Back',
+    backLabel = 'Back to previous screen',
     backDisabled = false,
     title,
+    titleId,
     titleIcon = null,
     trailing = null,
 }) {
     useBackHandler(onBack, backDisabled, 'route');
+    const accessibleBackLabel = backLabel.trim().toLowerCase() === 'back'
+        ? 'Back to previous screen'
+        : backLabel;
     return (
         <div className={styles.header}>
             {onBack ? (
@@ -54,7 +59,7 @@ export function PageHeader({
                     type="button"
                     onClick={onBack}
                     className={styles.back}
-                    aria-label={backLabel}
+                    aria-label={accessibleBackLabel}
                     disabled={backDisabled}
                 >
                     <BackIcon />
@@ -70,7 +75,7 @@ export function PageHeader({
                 ) : null}
                 {/* The screen's title is its one top-level heading, so a
                     screen reader can jump to it and announce where the user is. */}
-                <h1 className={styles.title}>{title}</h1>
+                <h1 id={titleId} className={styles.title} title={typeof title === 'string' ? title : undefined}>{title}</h1>
             </span>
             {trailing ? (
                 <span className={styles.trailing}>{trailing}</span>

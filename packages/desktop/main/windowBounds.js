@@ -57,26 +57,35 @@ export function normalizeWindowBounds(value) {
 }
 
 /**
- * Keep a remembered position only when a useful part of the window remains on
- * a current display. Monitor removal otherwise leaves the restored window lost.
+ * Fit remembered bounds to one current display. Monitor removal and display
+ * resolution changes otherwise leave all or part of the restored window lost.
  *
  * @param {unknown} value
  * @param {Array<{ workArea?: { x?: number, y?: number, width?: number, height?: number } }>} displays
  */
 export function restoreWindowBounds(value, displays = []) {
     const bounds = normalizeWindowBounds(value);
-    if (!bounds || bounds.x === undefined || bounds.y === undefined) return bounds;
+    if (!bounds) return null;
 
-    const visible = displays.some(({ workArea }) => {
-        const area = normalizeDisplayArea(workArea);
-        if (!area) return false;
-        const overlapWidth = Math.min(bounds.x + bounds.width, area.x + area.width)
-            - Math.max(bounds.x, area.x);
-        const overlapHeight = Math.min(bounds.y + bounds.height, area.y + area.height)
-            - Math.max(bounds.y, area.y);
-        return overlapWidth >= MIN_VISIBLE_EDGE && overlapHeight >= MIN_VISIBLE_EDGE;
-    });
-    return visible ? bounds : { width: bounds.width, height: bounds.height };
+    const areas = displays.map(({ workArea }) => normalizeDisplayArea(workArea)).filter(Boolean);
+    if (areas.length === 0) return bounds.x === undefined || bounds.y === undefined
+        ? bounds
+        : { width: bounds.width, height: bounds.height };
+
+    const target = bounds.x === undefined || bounds.y === undefined
+        ? largestDisplayArea(areas)
+        : bestVisibleDisplay(bounds, areas);
+    const width = Math.min(bounds.width, target.width);
+    const height = Math.min(bounds.height, target.height);
+    if (bounds.x === undefined || bounds.y === undefined || !hasUsefulOverlap(bounds, target)) {
+        return { width, height };
+    }
+    return {
+        x: clamp(bounds.x, target.x, target.x + target.width - width),
+        y: clamp(bounds.y, target.y, target.y + target.height - height),
+        width,
+        height,
+    };
 }
 
 /**
@@ -106,6 +115,38 @@ function normalizeDisplayArea(value) {
     const height = finiteInt(value.height);
     if ([x, y, width, height].some((part) => part === null) || width <= 0 || height <= 0) return null;
     return { x, y, width, height };
+}
+
+function overlapSize(bounds, area) {
+    return {
+        width: Math.max(0, Math.min(bounds.x + bounds.width, area.x + area.width)
+            - Math.max(bounds.x, area.x)),
+        height: Math.max(0, Math.min(bounds.y + bounds.height, area.y + area.height)
+            - Math.max(bounds.y, area.y)),
+    };
+}
+
+function hasUsefulOverlap(bounds, area) {
+    const overlap = overlapSize(bounds, area);
+    return overlap.width >= MIN_VISIBLE_EDGE && overlap.height >= MIN_VISIBLE_EDGE;
+}
+
+function bestVisibleDisplay(bounds, areas) {
+    return areas.reduce((best, area) => {
+        const overlap = overlapSize(bounds, area);
+        const bestOverlap = overlapSize(bounds, best);
+        return overlap.width * overlap.height > bestOverlap.width * bestOverlap.height ? area : best;
+    });
+}
+
+function largestDisplayArea(areas) {
+    return areas.reduce((best, area) => (
+        area.width * area.height > best.width * best.height ? area : best
+    ));
+}
+
+function clamp(value, min, max) {
+    return Math.min(Math.max(value, min), max);
 }
 
 export class FileWindowBoundsStore {
