@@ -26,7 +26,9 @@ const positionedBlock = /([^{}]+)\{([^{}]*\bposition\s*:\s*(?:fixed|sticky|['"]f
 function sourceFiles(dir) {
     return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
         const path = join(dir, entry.name);
-        if (entry.isDirectory()) return sourceFiles(path);
+        // Build output is minified with the marker comments stripped; the
+        // source blocks it came from are what this audit judges.
+        if (entry.isDirectory()) return entry.name === 'dist' ? [] : sourceFiles(path);
         return sourceExtensions.has(extname(entry.name)) ? [path] : [];
     });
 }
