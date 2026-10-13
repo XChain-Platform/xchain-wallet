@@ -136,7 +136,7 @@ export const en = {
     'send.saveRecipient.save': 'Save contact',
     'send.saveRecipient.saving': 'Saving…',
     'send.saveRecipient.saved': 'Recipient saved to contacts.',
-    'send.token.hint': "Token symbol. The network's main coin is selected by default.",
+    'send.token.hint': "Choose the asset to send. The network's own coin is selected by default.",
     'send.balance.unavailable': 'Balance unavailable ({error})',
     'send.balance.available': '{amount} {ticker} available',
     'send.recipient.heading': 'Recipient {number}',
@@ -267,7 +267,7 @@ export const en = {
     'history.filters.fromDate': 'From date',
     'history.filters.toDate': 'To date',
     'history.filters.additionalDetails': 'Additional details',
-    'history.filters.fiatHelp': 'Show the fiat equivalent for native-coin amounts',
+    'history.filters.fiatHelp': "Show local-currency values for the network's own coin.",
     'history.filters.fiatCurrency': 'Fiat: {currency}',
     'history.filters.showFiat': 'Show fiat',
     'history.filters.groupingMode': 'Grouping mode',
@@ -386,10 +386,10 @@ export const en = {
     'pending.detail.confirmedSectionLabel': 'Confirmed transaction',
     'pending.detail.confirmed': 'Confirmed on the network',
     'pending.detail.confirmedHelp':
-        'A block carries this transaction. It moved coins only, so the service has no action to report for it.',
+        'This transaction is in the permanent network record. It moved coins only, so there is no other action to show.',
     'pending.detail.confirmedNoEffect': 'Confirmed, no effect',
     'pending.detail.confirmedNoEffectHelp':
-        'A block carries this transaction, and the service recorded no action for it. Any coins it moved have moved; nothing else took effect.',
+        'This transaction is in the permanent network record, but it did not complete an action. Any coin movement still took effect.',
     'pending.detail.confirmedBlock': 'Included in block {block}',
     'pending.detail.awaitingNetwork': 'Broadcast, awaiting network',
     'pending.detail.seen': 'Held by the network, waiting for a block',
@@ -397,13 +397,13 @@ export const en = {
     'pending.detail.dropped': 'No longer seen by the network',
     'pending.detail.replaced': 'Replaced by a newer transaction',
     'pending.detail.awaitingNetworkHelp':
-        'The transaction has been sent. It can take a minute before any node reports holding it.',
+        'The transaction has been sent. It can take a minute before the network reports it.',
     'pending.detail.seenHelp':
-        'A node is holding this transaction, and no miner has put it in a block yet.',
+        'The network has this transaction, but it is still waiting to be added to its permanent record.',
     'pending.detail.notSeenHelp':
-        'Nothing has reported this transaction since it was broadcast, so it may never have reached the network.',
+        'The network has not reported this transaction since it was sent, so it may never have arrived.',
     'pending.detail.droppedHelp':
-        'A node reported this transaction earlier and no longer does, and no block carries it yet.',
+        'The network reported this transaction earlier but no longer does, and it is not in the permanent record.',
     'pending.detail.replacedHelp':
         'This wallet replaced this transaction with a newer one. Follow the replacement instead.',
     'pending.detail.notValidated': 'Pending, not yet validated by the service.',

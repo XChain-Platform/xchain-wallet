@@ -125,7 +125,10 @@ describe('Automatic Donation System settings', () => {
         expect(screen.getByLabelText('Bitcoin trigger threshold').disabled).toBe(true);
 
         fireEvent.click(screen.getByRole('button', { name: 'Trigger threshold help' }));
-        expect(screen.getByRole('tooltip').textContent).toMatch(/included with the next outgoing transaction/);
+        const tip = screen.getByRole('tooltip').textContent;
+        expect(tip).toMatch(/A sat is the smallest unit/);
+        expect(tip).toMatch(/one network fee/);
+        expect(tip.match(/[.!?](?:\s|$)/g)).toHaveLength(2);
     });
 
     it('does not set aside more after ADS is turned off', () => {

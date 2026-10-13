@@ -1032,7 +1032,7 @@ export function AddressList({
             fields.push({
                 label: 'Address format',
                 value: prefix ? `${addressTypeLabel(type)} (starts with ${prefix})` : addressTypeLabel(type),
-                hint: 'How this address is written. The format decides what the address starts with; some older services cannot send to the newer SegWit and Taproot formats.',
+                hint: 'This controls how the address begins and which services can send to it. Some older services cannot use newer formats.',
             });
         }
         if (selected.multisig) {

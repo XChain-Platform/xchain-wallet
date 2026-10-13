@@ -167,7 +167,7 @@ export function AdsSection() {
                                     {triggerIsDefault ? ' · default' : ' · custom'}
                                     <InfoTip
                                         aria="Trigger threshold help"
-                                        label="After this threshold is reached, the donation is included with the next outgoing transaction; larger thresholds share one network fee across more donations, and 'default' uses this release's recommendation."
+                                        label="A sat is the smallest unit of the network's coin. The donation joins the next outgoing transaction at this amount; larger amounts send donations less often and share one network fee."
                                     />
                                 </span>
                                 <div style={ROW_HINT}>

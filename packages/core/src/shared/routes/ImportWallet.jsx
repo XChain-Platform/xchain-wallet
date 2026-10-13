@@ -1091,7 +1091,7 @@ export function ImportWallet({
                         <span>This wallet uses a BIP39 passphrase</span>
                         <InfoTip
                             aria="BIP39 passphrase help"
-                            label="A BIP39 passphrase creates a different wallet from the same recovery phrase. Enter the exact passphrase from the original wallet. XChain Platform stores it on this device, protected by your password, and does not ask for it again here. Hardware wallets handle passphrases on the device. Use Add Account > Hardware Signer to pair one."
+                            label="This extra secret combines with your recovery phrase to recreate the same wallet. It stays behind your password here; hardware wallets request it on the device and connect through Add Account, then Hardware Signer."
                         />
                     </label>
                     {showPassphrase ? (
