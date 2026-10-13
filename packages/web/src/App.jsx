@@ -1756,6 +1756,7 @@ function AppInner() {
                         chainId={betRef.chainId}
                         feedIndex={betRef.feedIndex}
                         onOpenOracle={(chainId, address) => { setBetRef({ ...betRef, chainId, oracleAddress: address }); setUnlockedView('bet-oracle-record'); }}
+                        onSettleMarket={() => setUnlockedView('bet-oracle-console')}
                         onBack={() => setUnlockedView('bet-markets')}
                     />
                 );
