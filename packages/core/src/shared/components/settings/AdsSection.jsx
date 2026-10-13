@@ -58,6 +58,15 @@ const ADDRESS_BOX = {
     overflow: 'auto',
     wordBreak: 'break-all',
 };
+const PLACEHOLDER_BOX = {
+    ...ADDRESS_BOX,
+    fontFamily: 'inherit',
+    fontStyle: 'italic',
+    color: 'var(--xc-text-muted)',
+    overflow: 'visible',
+    wordBreak: 'normal',
+    overflowWrap: 'break-word',
+};
 
 export function AdsSection() {
     const { settings, loading, error, update } = useSettings();
@@ -203,7 +212,7 @@ export function AdsSection() {
                         <div>
                             <div style={ROW_HINT}>Donation address</div>
                             {isPlaceholder ? (
-                                <div style={{ ...ADDRESS_BOX, fontStyle: 'italic', color: 'var(--xc-text-muted)' }}>
+                                <div style={PLACEHOLDER_BOX}>
                                     Not set yet. A donation address for {displayName} arrives in a future release; until then nothing is sent on this chain.
                                 </div>
                             ) : (

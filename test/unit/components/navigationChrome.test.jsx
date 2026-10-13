@@ -95,9 +95,12 @@ describe('navigation route highlighting', () => {
                 rerender(<BottomTabBar currentView={route} onSelect={() => {}} />);
                 const activeTabs = bottomNavigation.getAllByRole('button')
                     .filter((tab) => tab.getAttribute('aria-current') === 'page');
+                const expectedTab = route === 'account-picker'
+                    ? 'More'
+                    : (tabByGroup[group] || 'More');
 
                 expect(activeTabs, route).toHaveLength(1);
-                expect(activeTabs[0], route).toHaveAccessibleName(tabByGroup[group] || 'Home');
+                expect(activeTabs[0], route).toHaveAccessibleName(expectedTab);
             }
         }
     });
@@ -123,7 +126,7 @@ describe('navigation route highlighting', () => {
         expect(screen.getByRole('button', { name: 'Home' })).not.toHaveAttribute('aria-current');
     });
 
-    it('marks Home and the matching row for sheet-only destinations', () => {
+    it('marks More and the matching row for sheet-only destinations', () => {
         render(
             <BottomTabBar
                 currentView="contract-stake"
@@ -132,10 +135,16 @@ describe('navigation route highlighting', () => {
             />,
         );
         const more = screen.getByRole('button', { name: 'More' });
-        expect(screen.getByRole('button', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
-        expect(more).not.toHaveAttribute('aria-current');
+        expect(screen.getByRole('button', { name: 'Home' })).not.toHaveAttribute('aria-current');
+        expect(more).toHaveAttribute('aria-current', 'page');
         fireEvent.click(more);
         expect(screen.getByRole('button', { name: 'Contracts' })).toHaveAttribute('aria-current', 'page');
+    });
+
+    it('marks More for the account picker opened from Settings', () => {
+        render(<BottomTabBar currentView="account-picker" onSelect={() => {}} />);
+        expect(screen.getByRole('button', { name: 'More' })).toHaveAttribute('aria-current', 'page');
+        expect(screen.getByRole('button', { name: 'Home' })).not.toHaveAttribute('aria-current');
     });
 
     it('marks Home for the compact menu route in the shared Home group', () => {
