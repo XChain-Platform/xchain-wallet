@@ -748,7 +748,15 @@ export const en = {
     'history.empty.noAddressesBody': 'History appears here after you generate an address and send or receive funds.',
     'history.empty.noMatchesTitle': 'No results for these filters',
     'history.empty.noSearchResultsTitle': 'No results for "{query}"',
-    'history.empty.noMatchesBody': 'Matching history appears here after you reset or change the filters.',
+    'history.empty.noMatchesBody':
+        'No transactions match all active filters: {filters}. Reset the filters to show all activity.',
+    'history.empty.filterSearch': 'search "{query}"',
+    'history.empty.filterDate': 'date range {from} to {to}',
+    'history.empty.filterChains': 'selected chains',
+    'history.empty.filterActions': 'action types {actions}',
+    'history.empty.filterStatuses': 'statuses {statuses}',
+    'history.empty.filterCrossChain': 'cross-chain only',
+    'history.empty.filterMultisig': 'multisig only',
     'history.empty.clearFilters': 'Reset filters',
     'history.empty.noCrossChainTitle': 'No cross-chain actions yet',
     'history.empty.noCrossChainBody':
@@ -789,6 +797,8 @@ export const en = {
     'history.filters.activeRange': 'Active range: {from} to {to}',
     'history.filters.anyDate': 'any date',
     'history.filters.clearDateRange': 'Clear date range',
+    'history.matchCount':
+        '{count, plural, one {# matching transaction} other {# matching transactions}}',
     'history.detail.label': 'Action detail',
     'history.detail.options': 'Action options',
     'history.detail.more': 'More',
