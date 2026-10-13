@@ -8,8 +8,8 @@
 
 // Unit: flows/backupReminder (§19.7 / G034 + G062). Backup-verified state
 // lives in localStorage keyed by walletId. computeBackupReminderState is
-// the state machine that decides hidden/gentle/firm from verified-at,
-// first funding, and a 24h snooze window.
+// the state machine that decides hidden/gentle/firm from when the backup
+// was verified, when the wallet was first funded, and a 24h snooze window.
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
