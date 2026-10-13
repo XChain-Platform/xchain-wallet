@@ -58,6 +58,17 @@
     min-width: 0;
 }
 
+@media (max-width: 360px) {
+    .bar {
+        flex-wrap: wrap;
+    }
+
+    .searchWrap,
+    .networkWrap {
+        flex-basis: 100%;
+    }
+}
+
 /* Box-shadow focus rings are not painted in forced-colors mode, so give
  * this control a real outline there (WCAG 2.4.7). */
 @media (forced-colors: active) {
