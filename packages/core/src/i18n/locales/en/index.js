@@ -141,10 +141,10 @@ export const en = {
     'scan.title': 'Scan',
     'scan.scannerAlt': 'Scan a QR code',
     'scan.routing': 'Scanned, routing…',
-    'scan.pasteLabel': 'Or paste a payload',
+    'scan.pasteLabel': 'Or paste it here',
     'scan.pastePlaceholder': 'xchain:… / bitcoin:… / address / transaction hex',
-    'scan.classifyPaste': 'Classify pasted payload',
-    'scan.error.pasteEmpty': 'Paste a payload first.',
+    'scan.classifyPaste': 'Use pasted text',
+    'scan.error.pasteEmpty': 'Paste something first.',
     'scan.error.unknownXchainIntent':
         'xchain: URI was scanned but the intent was not recognized. Try a clearer code.',
     'scan.error.wif':

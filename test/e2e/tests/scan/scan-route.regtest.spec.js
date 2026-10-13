@@ -104,7 +104,7 @@ async function openScan(page) {
 async function classifyPaste(page, text) {
     const box = page.getByRole('textbox').first();
     await box.fill(text);
-    await page.getByRole('button', { name: 'Classify pasted payload' }).click();
+    await page.getByRole('button', { name: 'Use pasted text' }).click();
 
     // 'Routed' = the scan route handed off and unmounted. Anchored on the route
     // itself rather than on any one destination, so this works for send, receive
