@@ -38,7 +38,7 @@ import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
  * @param {() => void} [props.onReceive]             when supplied, the empty-state shows a Receive CTA
  * @param {string} [props.emptyActionLabel]          label for a caller-defined empty-state action; takes the button over from Receive
  * @param {() => void} [props.onEmptyAction]         runs that action (e.g. clearing the filter that emptied the list)
- * @param {(token: { chainId: string, tick: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string }) => void} [props.onSelectToken]
+ * @param {(token: { chainId: string, tick: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, fiatRateSource?: string, quantity: string }) => void} [props.onSelectToken]
  *        Click handler for a balance row. Surfaces the §27.6 Token detail page (G071) when supplied.
  * @param {Set<string> | null} [props.pinnedKeys]    `chainId:tick` keys pinned by the user. Pinned rows sort to the top (§27.3 / G072).
  * @param {(key: string, nextPinned: boolean) => void} [props.onTogglePin]   per-row pin/unpin callback; when supplied each row renders a star button
@@ -257,6 +257,7 @@ function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, on
             displayName: row.displayName,
             divisibility: row.divisibility,
             fiatRate: row.fiatRate,
+            fiatRateSource: row.fiatRateSource,
             quantity: row.quantity,
             imageUrl: row.imageUrl,
         })
@@ -356,8 +357,8 @@ function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, on
                             : row.unavailable === 'all'
                                 ? <span title={row.unavailableReason || undefined}>Balance couldn&apos;t be loaded</span>
                                 : row.unavailable === 'partial'
-                                    ? <span title={row.unavailableReason || undefined}>At least {formatFiat(fiat, fiatCurrency)}</span>
-                                    : formatFiat(fiat, fiatCurrency)}
+                                    ? <span title={row.unavailableReason || undefined}>At least {formatRowFiat(row, fiat, fiatCurrency)}</span>
+                                    : formatRowFiat(row, fiat, fiatCurrency)}
                     </div>
                 </div>
             </ContentTag>
@@ -818,6 +819,12 @@ export function sumFiatValue(rows) {
  */
 export function formatFiat(value, currency = 'USD') {
     return formatFiatAmount(value, currency);
+}
+
+function formatRowFiat(row, value, currency) {
+    const formatted = formatFiat(value, currency);
+    if (!formatted || row?.kind === 'native' || row?.fiatRateSource !== 'market') return formatted;
+    return `${formatted} · DEX price`;
 }
 
 // Every chip carries white text, so each swatch is dark enough for 4.5:1

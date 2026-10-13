@@ -64,17 +64,18 @@ export function AmountField({
     const activeUnit = isFiat ? fiatCcy : tickUpper;
     const otherUnit = isFiat ? tickUpper : fiatCcy;
     const inputValue = isFiat ? fiatAmount : amount;
+    const priceSourceLabel = fiatRate?.source === 'market' ? ' · DEX price' : '';
 
     let derivedText = '';
     if (isFiat) {
         derivedText = amount
-            ? `≈ ${formatWithThousands(amount)} ${otherUnit}`.trim()
-            : `≈ 0 ${otherUnit}`.trim();
+            ? `≈ ${formatWithThousands(amount)} ${otherUnit}${priceSourceLabel}`.trim()
+            : `≈ 0 ${otherUnit}${priceSourceLabel}`.trim();
     } else if (fiatRate) {
         const fiatValue = amount ? coinToFiatExact(amount, fiatRate) : null;
         derivedText = fiatValue != null
-            ? `≈ ${formatFiat(fiatValue, fiatCcy)} ${otherUnit}`
-            : `≈ ${formatFiat('0', fiatCcy)} ${otherUnit}`;
+            ? `≈ ${formatFiat(fiatValue, fiatCcy)} ${otherUnit}${priceSourceLabel}`
+            : `≈ ${formatFiat('0', fiatCcy)} ${otherUnit}${priceSourceLabel}`;
     }
 
     return (

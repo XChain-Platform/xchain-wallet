@@ -136,7 +136,7 @@ import {
     resolveFeeUnit,
 } from '../../flows/feeEstimate.js';
 import { coinToFiatExact, fiatToCoin } from '../../flows/priceLookup.js';
-import { useFiatRate, fiatRateForTick } from '../hooks/useFiatRate.js';
+import { useFiatRate, useTickFiatRate } from '../hooks/useFiatRate.js';
 import { HwSignBlock } from '../components/HwSignBlock.jsx';
 import { BalanceChanges } from '../components/BalanceChanges.jsx';
 import { RawPsbtViewer } from '../components/RawPsbtViewer.jsx';
@@ -825,20 +825,17 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         setFormError((prev) => (prev !== null && prev === pushed ? null : prev));
     }, [dustBlock]);
 
-    // `fiatRate` prices the CHAIN COIN. The amount field may be holding a
-    // TOKEN amount, and pricing that at the coin's rate renders a confidently
-    // formatted, wildly wrong number (50,000 XCHAIN shown as billions of dollars).
-    // Everything that prices the AMOUNT uses this gated rate; the network-fee
-    // preview below keeps using the raw `fiatRate`, because a fee is always paid
-    // in the native coin regardless of which token is being sent.
-    const amountFiatRate = useMemo(
-        () => fiatRateForTick({
-            rate: fiatRate,
-            tick,
-            nativeTicker: nativeTickerFor(chainId ? chainRegistry.get(chainId) : null),
-        }),
-        [fiatRate, tick, chainId],
-    );
+    // The amount may be a token while the network fee is always paid in the
+    // chain coin. Resolve them separately so a token with no market shows no
+    // fiat preview, while a token with its own oracle or DEX rate uses that
+    // rate and retains its source label in AmountField.
+    const amountFiatRate = useTickFiatRate({
+        chainCoin: chainId ? chainRegistry.get(chainId)?.coin : null,
+        tick,
+        nativeTicker: nativeTickerFor(chainId ? chainRegistry.get(chainId) : null),
+        fiatCurrency,
+        allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
+    });
 
     // Switching from the coin to a token while typing in fiat would leave the
     // field in a mode it can no longer convert, so fall back to coin entry.

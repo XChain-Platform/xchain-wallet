@@ -21,7 +21,9 @@ vi.mock('../../../packages/core/src/shared/hooks/useCollectibleKeys.js', () => (
 }));
 vi.mock('../../../packages/core/src/shared/hooks/useFiatRate.js', () => ({
     useNativeFiatRates: () => ({}),
+    useTokenFiatRates: () => ({}),
     priceNativeRows: (rows) => rows,
+    priceTokenRows: (rows) => rows,
 }));
 
 import { HomeTabs } from '../../../packages/core/src/shared/components/HomeTabs.jsx';
