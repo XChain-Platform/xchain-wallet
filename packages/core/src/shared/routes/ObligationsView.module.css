@@ -59,6 +59,7 @@
     align-items: center;
     gap: var(--xc-space-3);
     padding: var(--xc-space-3) var(--xc-space-4);
+    min-width: 0;
 }
 
 .row + .row {
@@ -79,21 +80,28 @@
 
 .rowTitle {
     font-weight: 600;
+    overflow-wrap: anywhere;
 }
 
 .rowDetail {
     margin-top: var(--xc-space-1);
     font-size: var(--xc-text-sm);
+    overflow-wrap: anywhere;
 }
 
 .rowMeta {
     margin-top: 2px;
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
+    overflow-wrap: anywhere;
 }
 
 .rowActions {
     flex: 0 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-2);
+    justify-content: flex-end;
 }
 
 .atRiskNote {
@@ -135,7 +143,10 @@
     }
 
     .rowActions {
-        display: flex;
-        justify-content: flex-end;
+        width: 100%;
+    }
+
+    .rowActions > * {
+        flex: 1 1 auto;
     }
 }
