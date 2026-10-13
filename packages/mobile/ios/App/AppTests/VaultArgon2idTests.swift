@@ -13,6 +13,7 @@
 // produced. A mismatch would leave existing wallets unopenable on iOS.
 
 import Capacitor
+import os
 import XCTest
 @testable import App
 
@@ -143,6 +144,21 @@ final class VaultArgon2idTests: XCTestCase {
             XCTAssertNotNil(outcome.error, "\(name)=\(String(describing: value))")
         }
         XCTAssertNotNil(callPlugin(good).key, "the unaltered options derive a key")
+    }
+
+    /// The memory check needs the derivation's block plus the 64 MiB margin;
+    /// one byte short is refused before anything is allocated.
+    func testMemoryWithoutTheMarginIsRefused() throws {
+        let params = try Argon2idParams.checked(iterations: 1, memoryKib: 64, parallelism: 1, length: 32)
+        let needed = 64 * 1024 + Int(VaultArgon2id.memoryMarginBytes)
+        let salt = [UInt8](repeating: 1, count: 8)
+        XCTAssertThrowsError(try VaultArgon2id.derive(password: [1], salt: salt, params: params,
+                                                      availableMemory: needed - 1)) {
+            XCTAssertEqual($0 as? Argon2idFailure, .outOfMemory)
+        }
+        XCTAssertNoThrow(try VaultArgon2id.derive(password: [1], salt: salt, params: params, availableMemory: needed))
+        XCTAssertNoThrow(try VaultArgon2id.derive(password: [1], salt: salt, params: params, availableMemory: 0))
+        print("os_proc_available_memory on this run: \(os_proc_available_memory())")
     }
 
     func testWipeZeroesTheBuffer() {

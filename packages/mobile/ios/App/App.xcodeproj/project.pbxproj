@@ -26,12 +26,12 @@
 		XC1014B00000000000000001 /* XChainClipboardPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1014A00000000000000001 /* XChainClipboardPlugin.swift */; };
 		XC1000B00000000000000006 /* XChainLinksPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1000A00000000000000006 /* XChainLinksPlugin.swift */; };
 		XC1040B00000000000000001 /* VaultArgon2id.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1040A00000000000000001 /* VaultArgon2id.swift */; };
-		XC1040B00000000000000002 /* argon2.c in Sources */ = {isa = PBXBuildFile; fileRef = XC1040A00000000000000002 /* argon2.c */; };
-		XC1040B00000000000000003 /* core.c in Sources */ = {isa = PBXBuildFile; fileRef = XC1040A00000000000000003 /* core.c */; };
-		XC1040B00000000000000004 /* encoding.c in Sources */ = {isa = PBXBuildFile; fileRef = XC1040A00000000000000004 /* encoding.c */; };
-		XC1040B00000000000000005 /* ref.c in Sources */ = {isa = PBXBuildFile; fileRef = XC1040A00000000000000005 /* ref.c */; };
-		XC1040B00000000000000006 /* thread.c in Sources */ = {isa = PBXBuildFile; fileRef = XC1040A00000000000000006 /* thread.c */; };
-		XC1040B00000000000000007 /* blake2b.c in Sources */ = {isa = PBXBuildFile; fileRef = XC1040A00000000000000007 /* blake2b.c */; };
+		XC1040B00000000000000002 /* argon2.c in Sources */ = {isa = PBXBuildFile; fileRef = XC1040A00000000000000002 /* argon2.c */; settings = {COMPILER_FLAGS = "-Os"; }; };
+		XC1040B00000000000000003 /* core.c in Sources */ = {isa = PBXBuildFile; fileRef = XC1040A00000000000000003 /* core.c */; settings = {COMPILER_FLAGS = "-Os"; }; };
+		XC1040B00000000000000004 /* encoding.c in Sources */ = {isa = PBXBuildFile; fileRef = XC1040A00000000000000004 /* encoding.c */; settings = {COMPILER_FLAGS = "-Os"; }; };
+		XC1040B00000000000000005 /* ref.c in Sources */ = {isa = PBXBuildFile; fileRef = XC1040A00000000000000005 /* ref.c */; settings = {COMPILER_FLAGS = "-Os"; }; };
+		XC1040B00000000000000006 /* thread.c in Sources */ = {isa = PBXBuildFile; fileRef = XC1040A00000000000000006 /* thread.c */; settings = {COMPILER_FLAGS = "-Os"; }; };
+		XC1040B00000000000000007 /* blake2b.c in Sources */ = {isa = PBXBuildFile; fileRef = XC1040A00000000000000007 /* blake2b.c */; settings = {COMPILER_FLAGS = "-Os"; }; };
 		XC1040B00000000000000008 /* VaultArgon2idTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = XC1040A00000000000000008 /* VaultArgon2idTests.swift */; };
 		XC1040B00000000000000009 /* argon2id-vectors.json in Resources */ = {isa = PBXBuildFile; fileRef = XC1040A00000000000000009 /* argon2id-vectors.json */; };
 /* End PBXBuildFile section */

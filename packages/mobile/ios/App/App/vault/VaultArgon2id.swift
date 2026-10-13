@@ -74,15 +74,28 @@ enum VaultArgon2id {
 
     /// Derives the key with Argon2id v1.3 (0x13), no secret and no associated
     /// data. Blocks for the whole derivation, so callers run it off the main thread.
-    static func derive(password: [UInt8], salt: [UInt8], params: Argon2idParams) throws -> [UInt8] {
+    /// Headroom kept free beyond the derivation's own block: the WebView and the
+    /// rest of the app keep allocating while it runs, so a request that only just
+    /// fits could still cross the kill limit instead of rejecting to the JS KDF.
+    static let memoryMarginBytes: UInt64 = 64 * 1024 * 1024
+
+    /// Whether `kib` of working memory plus the margin fits in `available`
+    /// bytes; 0 is what the OS reports when it cannot say (the simulator), so it passes.
+    static func hasMemory(forKib kib: Int, available: Int) -> Bool {
+        available == 0 || UInt64(available) >= UInt64(kib) * 1024 + memoryMarginBytes
+    }
+
+    /// `availableMemory` is the process's remaining allowance in bytes; tests
+    /// pass a figure to drive the refusal, the plugin takes the OS reading.
+    static func derive(password: [UInt8], salt: [UInt8], params: Argon2idParams,
+                       availableMemory: Int = os_proc_available_memory()) throws -> [UInt8] {
         // The salt is at least 8 bytes, the Argon2 minimum.
         guard salt.count >= Argon2idParams.minSaltBytes else {
             throw Argon2idFailure.invalid("salt must be at least 8 bytes")
         }
         // Refuse up front when the process cannot have the memory, since iOS ends
-        // an app that overcommits instead of failing its malloc; 0 means unknown.
-        let available = os_proc_available_memory()
-        if available > 0 && UInt64(params.memoryKib) * 1024 > UInt64(available) {
+        // an app that overcommits instead of failing its malloc.
+        guard hasMemory(forKib: params.memoryKib, available: availableMemory) else {
             throw Argon2idFailure.outOfMemory
         }
 
