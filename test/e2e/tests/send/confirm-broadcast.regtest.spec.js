@@ -55,33 +55,26 @@ function amountField(page) {
     return page.getByRole('textbox', { name: /^Amount/ });
 }
 
+/** Opens a funded native-send form for one test. */
+async function openFundedSend(page) {
+    await createWallet(page, { password: PASSWORD });
+    await switchToRegtest(page, PASSWORD);
+
+    const ownAddress = await readReceiveAddress(page);
+    await fundAddress(ownAddress, FUNDING_BTC);
+
+    // Balances are fetched per chain on mount, so remount after funding.
+    await page.reload();
+    await unlockAfterReload(page, PASSWORD);
+    await gotoSection(page, 'Send');
+    // Send selects both asset and chain through the Token field.
+    await selectVenueSendAsset(page);
+}
+
 test.describe('confirm -> broadcast on regtest', () => {
-    let ownAddress;
-
-    test.beforeEach(async ({ page }) => {
-        await createWallet(page, { password: PASSWORD });
-        await switchToRegtest(page, PASSWORD);
-
-        ownAddress = await readReceiveAddress(page);
-        await fundAddress(ownAddress, FUNDING_BTC);
-
-        // Balances are fetched per chain on mount; a reload is the cheapest
-        // way to make the freshly-confirmed UTXO visible to the send form
-        // without reaching into app internals.
-        await page.reload();
-        await unlockAfterReload(page, PASSWORD);
-        await gotoSection(page, 'Send');
-        // Send has no chain picker and no source field of its own: it selects
-        // asset AND chain through the Token field, and its source only appears
-        // once that chain has an address. Without this the form composes on
-        // Bitcoin while the funding above went to this run's chain, and the
-        // compose fails for want of funds rather than for anything this spec is
-        // about. NOT `selectVenueChain` - see that helper's neighbour for why
-        // the Token field is not a chain picker and hangs one.
-        await selectVenueSendAsset(page);
-    });
 
     test('the confirm page states real composed values, then Approve broadcasts', async ({ page }) => {
+        await openFundedSend(page);
         await toField(page).fill(REGTEST_DESTINATION);
         await amountField(page).fill(SEND_BTC);
         await mainButton(page, 'Send').click();
@@ -164,6 +157,7 @@ test.describe('confirm -> broadcast on regtest', () => {
     // Reject also has to release the §4.7 reservation and abort the in-flight
     // pre-flight - a leak shows up as the NEXT compose behaving oddly.
     test('Reject leaves the wallet able to compose again', async ({ page }) => {
+        await openFundedSend(page);
         await toField(page).fill(REGTEST_DESTINATION);
         await amountField(page).fill(SEND_BTC);
         await mainButton(page, 'Send').click();
@@ -205,6 +199,7 @@ test.describe('confirm -> broadcast on regtest', () => {
     //
     // This went unseen because no venue had Tier 1 configured until.
     test('a valid native-coin send is never reported as likely to fail', async ({ page }) => {
+        await openFundedSend(page);
         await toField(page).fill(REGTEST_DESTINATION);
         await amountField(page).fill(SEND_BTC);
         await mainButton(page, 'Send').click();

@@ -140,13 +140,8 @@ test.describe('two-window same-balance race (extension)', () => {
         await page.getByTestId('confirm-approve').click();
         await expect(page.getByRole('heading', { name: /Broadcast pending|Signed\./ }))
             .toBeVisible({ timeout: 120_000 });
-        // Let window 1's broadcast settle into a durable pendingTx (status
-        // signed/broadcast) before window 2 pre-flights; the netting reads the
-        // shared pendingTx store, so this closes the write-vs-read race that
-        // otherwise makes the assertion timing-dependent. Safe now that mining
-        // is paused - the settle can no longer hand a block time to land
-        //, which is what made it counterproductive before.
-        await page.waitForTimeout(3_000);
+        // The terminal heading renders only after submitAction persists the
+        // signed or broadcast pendingTx that the next popup reads.
 
         // Window 2: the same token balance, reserved by window 1. The shared
         // §4.7 ledger must net window 1's reservation into this pre-flight.

@@ -116,6 +116,8 @@ async function onboardFundedWallet(page, walletName, { utxos = 1 } = {}) {
 // accessible name is just the span, so match on role plus exact name.
 const picker = (scope, name) => scope.getByRole('combobox', { name, exact: true });
 const paramsBox = (scope) => scope.getByRole('textbox', { name: 'Params (JSON object)', exact: true });
+const batchStep = (scope, number) => scope.getByRole('group', { name: `Step ${number}`, exact: true });
+const parallelRow = (scope, number) => scope.getByRole('region', { name: `Row ${number}`, exact: true });
 
 /** Opens the catch-all Actions page ("More actions", off the pancake menu). */
 async function gotoMoreActions(page) {
@@ -258,13 +260,16 @@ test.describe(`Batch and Parallel composers on ${REGTEST_CHAIN_LABEL}`, () => {
                 'the batch composer defaulted to a different address than the one this run funded')
                 .toBe(owner);
 
-            await picker(main, 'Action').nth(0).selectOption('BROADCAST');
-            await paramsBox(main).nth(0)
+            const firstStep = batchStep(main, 1);
+            await picker(firstStep, 'Action').selectOption('BROADCAST');
+            await paramsBox(firstStep)
                 .fill(JSON.stringify({ VERSION: '0', MESSAGE: msgOne }));
 
             await main.getByRole('button', { name: '+ Add action', exact: true }).click();
-            await picker(main, 'Action').nth(1).selectOption('BROADCAST');
-            await paramsBox(main).nth(1)
+            const secondStep = batchStep(main, 2);
+            await expect(secondStep).toBeVisible();
+            await picker(secondStep, 'Action').selectOption('BROADCAST');
+            await paramsBox(secondStep)
                 .fill(JSON.stringify({ VERSION: '0', MESSAGE: msgTwo }));
 
             await main.getByRole('button', { name: 'Review', exact: true }).click();
@@ -323,21 +328,24 @@ test.describe(`Batch and Parallel composers on ${REGTEST_CHAIN_LABEL}`, () => {
 
         await test.step('queue two independent BROADCASTs and sign them one at a time', async () => {
             const main = await gotoParallelComposer(page);
-            await picker(main, 'Chain').nth(0).selectOption(REGTEST_CHAIN_ID);
-            expect(await picker(main, 'From address').nth(0).evaluate((el) => el.options[el.selectedIndex]?.text || ''),
+            const firstRow = parallelRow(main, 1);
+            await picker(firstRow, 'Chain').selectOption(REGTEST_CHAIN_ID);
+            expect(await picker(firstRow, 'From address').evaluate((el) => el.options[el.selectedIndex]?.text || ''),
                 'row 1 defaulted to a different address than the one this run funded')
                 .toBe(owner);
-            await picker(main, 'Action').nth(0).selectOption('BROADCAST');
-            await paramsBox(main).nth(0)
+            await picker(firstRow, 'Action').selectOption('BROADCAST');
+            await paramsBox(firstRow)
                 .fill(JSON.stringify({ VERSION: '0', MESSAGE: msgOne }));
 
             await main.getByRole('button', { name: '+ Add action', exact: true }).click();
-            await picker(main, 'Chain').nth(1).selectOption(REGTEST_CHAIN_ID);
-            expect(await picker(main, 'From address').nth(1).evaluate((el) => el.options[el.selectedIndex]?.text || ''),
+            const secondRow = parallelRow(main, 2);
+            await expect(secondRow).toBeVisible();
+            await picker(secondRow, 'Chain').selectOption(REGTEST_CHAIN_ID);
+            expect(await picker(secondRow, 'From address').evaluate((el) => el.options[el.selectedIndex]?.text || ''),
                 'row 2 defaulted to a different address than the one this run funded')
                 .toBe(owner);
-            await picker(main, 'Action').nth(1).selectOption('BROADCAST');
-            await paramsBox(main).nth(1)
+            await picker(secondRow, 'Action').selectOption('BROADCAST');
+            await paramsBox(secondRow)
                 .fill(JSON.stringify({ VERSION: '0', MESSAGE: msgTwo }));
 
             await main.getByRole('button', { name: 'Review', exact: true }).click();

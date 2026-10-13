@@ -113,30 +113,29 @@ async function composeTokenSend(page, amount) {
     await expectConfirmModal(page, 'this action', 30_000);
 }
 
+/** Creates the funded token wallet used by one pre-flight scenario. */
+async function openFundedTokenWallet(page) {
+    await createWallet(page, { password: PASSWORD });
+    await switchToRegtest(page, PASSWORD);
+
+    const own = await readReceiveAddress(page);
+    // BTC pays the miner fee; XCHAIN is what the send actually spends.
+    await fundAddress(own, FUNDING_BTC);
+    await page.reload();
+    await unlockAfterReload(page, PASSWORD);
+
+    await mintXchain(page, MINT_XCHAIN);
+    await waitForTokenBalance(own, 'XCHAIN', MINT_XCHAIN);
+
+    // The mint leaves the shell on its terminal screen, so remount Home.
+    await page.reload();
+    await unlockAfterReload(page, PASSWORD);
+    return own;
+}
+
 test.describe('pre-flight gate on regtest', () => {
-    /** This wallet's own address, and the `source` every dry-run is asked about. */
-    let own;
-
-    test.beforeEach(async ({ page }) => {
-        await createWallet(page, { password: PASSWORD });
-        await switchToRegtest(page, PASSWORD);
-
-        own = await readReceiveAddress(page);
-        // BTC pays the miner fee; XCHAIN is what the send actually spends.
-        await fundAddress(own, FUNDING_BTC);
-        await page.reload();
-        await unlockAfterReload(page, PASSWORD);
-
-        await mintXchain(page, MINT_XCHAIN);
-        await waitForTokenBalance(own, 'XCHAIN', MINT_XCHAIN);
-
-        // The mint left the shell on its terminal screen; come back to a
-        // clean unlocked Home before composing.
-        await page.reload();
-        await unlockAfterReload(page, PASSWORD);
-    });
-
     test('an unaffordable token send fails pre-flight, blocks Approve, and can be overridden', async ({ page }) => {
+        const own = await openFundedTokenWallet(page);
         await warmSend(own, UNAFFORDABLE, false);
         await composeTokenSend(page, UNAFFORDABLE);
 
@@ -195,6 +194,7 @@ test.describe('pre-flight gate on regtest', () => {
     });
 
     test('fixing the amount clears the verdict and the send broadcasts', async ({ page }) => {
+        const own = await openFundedTokenWallet(page);
         // The scripted §8.6 walk: fail -> fix -> approve -> broadcast. The
         // point is that a rejected pre-flight is not a dead end and leaves
         // nothing behind - the second compose has to produce a clean report,

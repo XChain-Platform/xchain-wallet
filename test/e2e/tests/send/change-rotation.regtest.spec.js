@@ -181,26 +181,26 @@ async function sendAndBroadcast(page) {
     return txid;
 }
 
+/** Creates and funds the wallet used by one rotation scenario. */
+async function onboardAndFund(page) {
+    await createWallet(page, { password: PASSWORD });
+    await switchToRegtest(page, PASSWORD);
+
+    const ownAddress = await readReceiveAddress(page);
+    await fundAddress(ownAddress, FUNDING_BTC);
+
+    // Balances are fetched per chain on mount, so remount after funding.
+    await page.reload();
+    await unlockAfterReload(page, PASSWORD);
+    return ownAddress;
+}
+
 test.describe('change-address rotation on regtest', () => {
     test.setTimeout(600_000);
 
-    let ownAddress;
-
-    test.beforeEach(async ({ page }) => {
-        await createWallet(page, { password: PASSWORD });
-        await switchToRegtest(page, PASSWORD);
-
-        ownAddress = await readReceiveAddress(page);
-        await fundAddress(ownAddress, FUNDING_BTC);
-
-        // Balances are fetched per chain on mount; a reload is the cheapest
-        // way to make the freshly-confirmed UTXO visible to the send form.
-        await page.reload();
-        await unlockAfterReload(page, PASSWORD);
-    });
-
     test('with rotation ON, the change does not come back to the source address',
         async ({ page }) => {
+            const ownAddress = await onboardAndFund(page);
             await setRotation(page, true);
 
             const fundingBefore = await utxosOf(ownAddress);
@@ -239,6 +239,7 @@ test.describe('change-address rotation on regtest', () => {
 
     test('with rotation OFF, the change does come back to the source address',
         async ({ page }) => {
+            const ownAddress = await onboardAndFund(page);
             await setRotation(page, false);
 
             const txid = await sendAndBroadcast(page);

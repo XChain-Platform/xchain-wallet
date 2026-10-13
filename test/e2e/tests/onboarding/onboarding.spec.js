@@ -77,10 +77,9 @@ test.describe('onboarding', () => {
 
         // Deliberately wrong words: the wallet must not be created.
         const boxes = page.getByRole('textbox', { name: /^Word \d+$/ });
-        const count = await boxes.count();
-        for (let i = 0; i < count; i += 1) {
-            await boxes.nth(i).fill('wrongword');
-        }
+        await expect(boxes, 'the 12-word recovery phrase did not render its three challenges')
+            .toHaveCount(3);
+        for (const box of await boxes.all()) await box.fill('wrongword');
         await page.getByRole('button', { name: 'Create wallet' }).click();
 
         // Still on the verification stage; no wallet, no Home.

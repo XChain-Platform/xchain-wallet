@@ -181,20 +181,25 @@ async function submitPartnerCode(page, { partnerCode, cta }) {
     await page.getByLabel('Paste the other wallet\'s code').fill(partnerCode);
     await page.getByRole('button', { name: cta, exact: true }).click();
 
-    const deadline = Date.now() + 60_000;
-    for (;;) {
+    let result = null;
+    await expect.poll(async () => {
         if (await paired.count() > 0) {
-            return { ok: true, message: (await paired.first().innerText()).trim() };
+            result = { ok: true, message: (await paired.first().innerText()).trim() };
+            return 'settled';
         }
         if (await failed.count() > 0) {
             const text = (await failed.first().innerText()).trim();
-            if (text !== previous) return { ok: false, message: text };
+            if (text !== previous) {
+                result = { ok: false, message: text };
+                return 'settled';
+            }
         }
-        if (Date.now() > deadline) {
-            throw new Error('the pairing form neither paired nor reported a new error within 60s');
-        }
-        await page.waitForTimeout(250);
-    }
+        return 'pending';
+    }, {
+        timeout: 60_000,
+        message: 'the pairing form neither paired nor reported a new error within 60s',
+    }).toBe('settled');
+    return result;
 }
 
 /** base64url -> the decoded pairing payload object. */
