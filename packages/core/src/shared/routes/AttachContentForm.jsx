@@ -1015,7 +1015,11 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     <img
                         src={previewUrl}
                         alt={`Preview of ${fileMeta.name}`}
-                        style={{ maxWidth: 160, maxHeight: 160, borderRadius: 8, display: 'block', margin: '0 auto var(--xc-space-3)' }}
+                        width={160}
+                        height={160}
+                        loading="lazy"
+                        decoding="async"
+                        style={{ maxWidth: 160, maxHeight: 160, objectFit: 'contain', borderRadius: 8, display: 'block', margin: '0 auto var(--xc-space-3)' }}
                     />
                 ) : null}
                 <dl className={styles.detailsList}>
@@ -1202,7 +1206,11 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 <img
                     src={previewUrl}
                     alt={`Preview of ${fileMeta?.name || 'file'}`}
-                    style={{ maxWidth: 160, maxHeight: 160, borderRadius: 8, display: 'block', margin: '0 auto var(--xc-space-3)' }}
+                    width={160}
+                    height={160}
+                    loading="lazy"
+                    decoding="async"
+                    style={{ maxWidth: 160, maxHeight: 160, objectFit: 'contain', borderRadius: 8, display: 'block', margin: '0 auto var(--xc-space-3)' }}
                 />
             ) : null}
             <Input

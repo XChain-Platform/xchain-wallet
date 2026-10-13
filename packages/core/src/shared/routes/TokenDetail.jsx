@@ -1578,6 +1578,9 @@ function ImageHero({ img }) {
                 src={img.url}
                 alt={img.name || ''}
                 className={styles.heroImage}
+                loading="lazy"
+                decoding="async"
+                style={{ aspectRatio: '1 / 1' }}
                 onError={() => setFailedImageUrl(img.url)}
             />
             <span aria-hidden="true">↗</span>
