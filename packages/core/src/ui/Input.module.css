@@ -48,6 +48,10 @@
     padding: 0 var(--xc-control-pad-x);
 }
 
+.input:is([type='number'], [inputmode='decimal'], [inputmode='numeric']) {
+    direction: ltr;
+}
+
 .controlHitArea {
     position: relative;
     width: 100%;

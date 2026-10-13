@@ -90,7 +90,3 @@
     --xc-icon-size: var(--xc-icon-sm);
     color: var(--xc-text-muted);
 }
-
-.defaultChevron {
-    transform: rotate(-90deg);
-}

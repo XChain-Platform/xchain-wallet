@@ -185,6 +185,7 @@
     color: var(--xc-text);
     font-size: var(--xc-text-xs);
     text-align: end;
+    direction: ltr;
 }
 
 .customInput::-webkit-outer-spin-button,

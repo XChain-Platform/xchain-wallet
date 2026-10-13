@@ -19,7 +19,9 @@
     color: var(--xc-accent-text);
     font-size: var(--xc-text-sm);
     cursor: pointer;
-    padding: var(--xc-space-1) var(--xc-space-2) var(--xc-space-1) 0;
+    padding-block: var(--xc-space-1);
+    padding-inline-start: 0;
+    padding-inline-end: var(--xc-space-2);
     border-radius: var(--xc-radius-sm);
     transition: color 0.12s ease;
     /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of

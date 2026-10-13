@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { ChevronDownIcon } from './icons/index.jsx';
+import { ForwardIcon } from './icons/index.jsx';
 import styles from './ListRow.module.css';
 
 /**
@@ -47,7 +47,7 @@ export function ListRow({
     const componentProps = isLink
         ? { href, onClick }
         : isButton ? { type, onClick } : {};
-    const resolvedChevron = chevron === true ? <ChevronDownIcon /> : chevron;
+    const resolvedChevron = chevron === true ? <ForwardIcon /> : chevron;
 
     return (
         <Component
@@ -67,13 +67,7 @@ export function ListRow({
             </span>
             {trailing ? <span className={styles.trailing}>{trailing}</span> : null}
             {resolvedChevron ? (
-                <span
-                    className={[
-                        styles.chevron,
-                        chevron === true ? styles.defaultChevron : null,
-                    ].filter(Boolean).join(' ')}
-                    aria-hidden="true"
-                >
+                <span className={styles.chevron} aria-hidden="true">
                     {resolvedChevron}
                 </span>
             ) : null}

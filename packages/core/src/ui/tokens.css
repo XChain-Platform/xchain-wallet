@@ -596,6 +596,11 @@ body {
     height: var(--xc-icon-size, var(--xc-icon-md));
 }
 
+/* Horizontal navigation glyphs follow the document's inline direction. */
+:where([dir='rtl']) :where(svg[data-xc-directional-icon]) {
+    transform: scaleX(-1);
+}
+
 /* Machine-readable values remain directly selectable wherever they appear,
  * including inside a control that opens a transaction detail view. */
 :where(code, samp, output, address) {
