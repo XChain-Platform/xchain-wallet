@@ -30,8 +30,10 @@ afterEach(() => { cleanup(); vi.clearAllMocks(); });
 describe('BridgeOriginTick', () => {
     it('renders the bare name with an origin badge, and keeps the wire name on hover', () => {
         render(React.createElement(BridgeOriginTick, { tick: 'BTC.PEPECASH', localCoin: 'DOGE' }));
-        expect(screen.getByText('from BTC')).toBeInTheDocument();
-        expect(screen.getByTitle('PEPECASH is bridged from Bitcoin (BTC.PEPECASH)')).toBeInTheDocument();
+        const badge = screen.getByText('Bridged from Bitcoin');
+        expect(badge).toBeInTheDocument();
+        expect(badge).toHaveStyle({ maxWidth: '100%', overflowWrap: 'anywhere' });
+        expect(screen.getByTitle('On-chain token name: BTC.PEPECASH')).toBeInTheDocument();
         expect(screen.getByText(/PEPECASH/)).toBeInTheDocument();
     });
 
@@ -40,7 +42,7 @@ describe('BridgeOriginTick', () => {
             React.createElement(BridgeOriginTick, { tick: 'PEPECASH', localCoin: 'BTC' }),
         );
         expect(container.textContent).toBe('PEPECASH');
-        expect(screen.queryByText(/^from /)).toBeNull();
+        expect(screen.queryByText(/^Bridged from /)).toBeNull();
     });
 
     it('adds nothing to a subasset of THIS chain\'s own reserved root', () => {
@@ -85,7 +87,7 @@ describe('MyTokens: origin badge on an owned row', () => {
             { tick: 'BTC.PEPECASH', locked: false, description: null },
             { tick: 'FUFU', locked: false, description: null },
         ]);
-        await waitFor(() => expect(screen.getByText('from BTC')).toBeInTheDocument(), WAIT);
+        await waitFor(() => expect(screen.getByText('Bridged from Bitcoin')).toBeInTheDocument(), WAIT);
         expect(screen.getByText('PEPECASH')).toBeInTheDocument();
         // The native row beside it is untouched.
         expect(screen.getByText('FUFU')).toBeInTheDocument();
@@ -117,6 +119,6 @@ describe('MyTokens: a native row on its own chain', () => {
             }),
         ));
         await waitFor(() => expect(screen.getByText('BTC.PEPECASH')).toBeInTheDocument(), WAIT);
-        expect(screen.queryByText('from BTC')).toBeNull();
+        expect(screen.queryByText('Bridged from Bitcoin')).toBeNull();
     });
 });
