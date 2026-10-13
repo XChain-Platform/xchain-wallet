@@ -10,6 +10,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { userEvent } from '../../helpers/userEvent.js';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -181,6 +182,26 @@ describe('TokenPicker asset visibility and filtering', () => {
 });
 
 describe('TokenPicker keyboard and return behavior', () => {
+    it('roves one token-row tab stop and closes with Escape', async () => {
+        const user = userEvent.setup();
+        const onBack = vi.fn();
+        mount({ onBack });
+        await screen.findByText(LONG_NAME);
+        const rows = screen.getAllByRole('button', { name: /^Select / });
+
+        expect(rows.map((row) => row.tabIndex)).toEqual([0, ...rows.slice(1).map(() => -1)]);
+        rows[0].focus();
+        fireEvent.keyDown(rows[0], { key: 'ArrowDown' });
+        expect(rows[1]).toHaveFocus();
+        expect(rows.map((row) => row.tabIndex)).toEqual([-1, 0, ...rows.slice(2).map(() => -1)]);
+        fireEvent.keyDown(rows[1], { key: 'Home' });
+        expect(rows[0]).toHaveFocus();
+        fireEvent.keyDown(rows[0], { key: 'End' });
+        expect(rows.at(-1)).toHaveFocus();
+        await user.keyboard('{Escape}');
+        expect(onBack).toHaveBeenCalledOnce();
+    });
+
     it('renders rows as keyboard-native buttons and returns the exact selection', async () => {
         const onSelect = vi.fn();
         const onBack = vi.fn();

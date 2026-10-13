@@ -88,6 +88,7 @@ export function BottomTabBar({
     badges = {},
 }) {
     const [sheetOpen, setSheetOpen] = useState(false);
+    const [rovingTab, setRovingTab] = useState(null);
     const moreTriggerRef = useRef(null);
     const sheetRef = useRef(null);
     // The system Back gesture closes this before it leaves the screen.
@@ -144,18 +145,45 @@ export function BottomTabBar({
         || isNavItemActive('settings', currentView)
         || currentView === 'menu'
         || currentView === 'alerts';
+    const activePrimary = primaryTabs.find((tab) => (
+        !moreActive && isNavItemActive(tab.id, currentView)
+    ));
+    const primaryIds = primaryTabs.map((tab) => tab.id);
+    const tabStop = (rovingTab && [...primaryIds, 'more'].includes(rovingTab))
+        ? rovingTab
+        : (moreActive ? 'more' : (activePrimary?.id || primaryIds[0]));
+
+    const onBarKeyDown = (e) => {
+        if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+        const current = e.target.closest?.('[data-bottom-tab]');
+        if (!current) return;
+        const tabs = Array.from(e.currentTarget.querySelectorAll('[data-bottom-tab]'));
+        const index = tabs.indexOf(current);
+        let next = null;
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (index + 1) % tabs.length;
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (index - 1 + tabs.length) % tabs.length;
+        if (e.key === 'Home') next = 0;
+        if (e.key === 'End') next = tabs.length - 1;
+        if (next === null || next === index) return;
+        e.preventDefault();
+        tabs[next].focus();
+        tabs[next].click();
+    };
 
     return (
         <>
-            <nav className={styles.bar} aria-label="Bottom navigation">
+            <nav className={styles.bar} aria-label="Bottom navigation" onKeyDown={onBarKeyDown}>
                 {primaryTabs.map((tab) => {
                     const active = !moreActive && isNavItemActive(tab.id, currentView);
                     return (
                         <button
                             key={tab.id}
                             type="button"
+                            data-bottom-tab={tab.id}
+                            tabIndex={tabStop === tab.id ? 0 : -1}
                             className={`${styles.tab} ${active ? styles.tabActive : ''}`}
                             aria-current={active ? 'page' : undefined}
+                            onFocus={() => setRovingTab(tab.id)}
                             onClick={() => {
                                 if (active) scrollMainToTop();
                                 onSelect(tab.id);
@@ -171,10 +199,13 @@ export function BottomTabBar({
                 <button
                     ref={moreTriggerRef}
                     type="button"
+                    data-bottom-tab="more"
+                    tabIndex={tabStop === 'more' ? 0 : -1}
                     className={`${styles.tab} ${sheetOpen || moreActive ? styles.tabActive : ''}`}
                     aria-current={moreActive ? 'page' : undefined}
                     aria-expanded={sheetOpen ? 'true' : 'false'}
                     aria-controls="xc-bottom-sheet"
+                    onFocus={() => setRovingTab('more')}
                     onClick={() => setSheetOpen((v) => !v)}
                 >
                     <span className={styles.tabIcon} aria-hidden="true">
