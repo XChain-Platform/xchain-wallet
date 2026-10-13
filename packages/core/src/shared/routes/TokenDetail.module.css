@@ -55,6 +55,8 @@
     align-items: center;
     gap: var(--xc-space-2);
     box-shadow: 0 6px 18px rgba(30, 144, 199, 0.25);
+    min-height: 104px;
+    box-sizing: border-box;
 }
 
 .balanceHeroMain {
@@ -438,6 +440,31 @@
        quick-action buttons immediately below - same accent cue tying
        the chart card into the page's blue-highlighted controls. */
     border-color: var(--xc-accent-primary);
+}
+
+.marketHistorySlot {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 72px;
+}
+
+.officialBannerSlot {
+    min-height: 38px;
+}
+
+.priceAlertCard {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: var(--xc-space-2);
+    min-height: 54px;
+    box-sizing: border-box;
+}
+
+.supplyCard {
+    min-height: 118px;
+    box-sizing: border-box;
 }
 
 /* Adjacent metaBlocks inside an infoCard get a divider + vertical

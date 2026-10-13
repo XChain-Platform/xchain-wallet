@@ -13,7 +13,7 @@
 // gets a plain message in the chart's place and no range tabs.
 
 import { describe, it, expect, vi, afterEach, beforeEach, beforeAll, afterAll } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { act, render, screen, fireEvent, cleanup } from '@testing-library/react';
 import React from 'react';
 
 const widgetFailure = vi.hoisted(() => ({ current: null }));
@@ -119,6 +119,107 @@ function renderNativeDetail() {
 }
 
 describe('TokenDetail price history', () => {
+    it('keeps artwork, verification, and supply-history slots stable while they load', async () => {
+        const finishInfo = [];
+        let finishHistory;
+        const messaging = {
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            getTokenInfo: vi.fn(() => new Promise((resolve) => { finishInfo.push(resolve); })),
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [] }),
+            getHoldersForToken: vi.fn().mockResolvedValue({ data: [] }),
+            listGatedContent: vi.fn().mockResolvedValue([]),
+            getSupplyHistory: vi.fn(() => new Promise((resolve) => { finishHistory = resolve; })),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <TokenDetail
+                    walletId="w1"
+                    chainId={CHAIN}
+                    tick="SUPPLYPROBE"
+                    kind="token"
+                    quantity="100"
+                    onBack={() => {}}
+                    onBuy={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        await screen.findByRole('status', { name: 'Loading token artwork' });
+        expect(document.querySelectorAll('[aria-label="Loading token artwork"]')).toHaveLength(2);
+        expect(screen.getByRole('status', { name: 'Loading token verification' }).style.height).toBe('38px');
+        expect(screen.getByRole('status', { name: 'Loading supply history' }).style.height).toBe('94px');
+        expect(screen.getByRole('status', { name: 'Loading price history' }).style.height).toBe('64px');
+        const actions = screen.getByRole('group', { name: 'Quick actions' });
+        const supplySlot = actions.previousElementSibling;
+
+        await act(async () => {
+            const info = {
+                creator: 'bcrt1qx',
+                marketPrice: '0.5',
+                projects: ['Example'],
+                images: [{ type: 'icon', url: 'https://assets.example/icon.png' }],
+            };
+            for (const resolve of finishInfo) resolve(info);
+            finishHistory([{ height: 1, supply: 10 }, { height: 2, supply: 50 }]);
+        });
+
+        expect(await screen.findByRole('img', { name: /Supply of SUPPLYPROBE over time/ })).toBeTruthy();
+        expect(screen.getByText(/official token in the/i)).toBeTruthy();
+        expect(actions.previousElementSibling).toBe(supplySlot);
+        expect(screen.queryByRole('status', { name: 'Loading supply history' })).toBeNull();
+    });
+
+    it('reserves price-history and price-alert space until native prices settle', async () => {
+        let finishPrices;
+        const messaging = {
+            getSettings: vi.fn().mockResolvedValue({ fiatCurrency: 'USD' }),
+            getNativePricesRequest: vi.fn(() => new Promise((resolve) => { finishPrices = resolve; })),
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [] }),
+            listPriceAlertsForWallet: vi.fn().mockResolvedValue([]),
+            savePriceAlert: vi.fn().mockResolvedValue(undefined),
+            clearPriceAlert: vi.fn().mockResolvedValue(undefined),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <TokenDetail
+                    walletId="real-wallet"
+                    chainId={CHAIN}
+                    tick="BTC"
+                    kind="native"
+                    quantity="200000000"
+                    onBack={() => {}}
+                    onReceive={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        const historySkeleton = await screen.findByRole('status', { name: 'Loading price history' });
+        expect(historySkeleton.style.height).toBe('64px');
+        const alertSkeleton = screen.getByRole('status', { name: 'Loading price alert action' });
+        expect(alertSkeleton.style.height).toBe('28px');
+        const actions = screen.getByRole('group', { name: 'Quick actions' });
+        const alertSlot = actions.previousElementSibling;
+
+        await act(async () => {
+            finishPrices({
+                prices: {
+                    [CHAIN]: {
+                        priceFiat: 40000,
+                        marketCapFiat: 1200000000,
+                        change24hPct: 1.5,
+                        sparkline: [39000, 40000],
+                        fetchedAt: Date.now(),
+                    },
+                },
+            });
+        });
+
+        expect(await screen.findByRole('button', { name: 'Set price alert' })).toBeTruthy();
+        expect(screen.getByText('No price history yet')).toBeTruthy();
+        expect(actions.previousElementSibling).toBe(alertSlot);
+        expect(screen.queryByRole('status', { name: 'Loading price history' })).toBeNull();
+    });
+
     it('uses the selected currency for balances, market values, and price requests', async () => {
         const messaging = renderNativeDetail();
 
