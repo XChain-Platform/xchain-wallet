@@ -76,7 +76,8 @@ export function useTokenInfo({ chainId, tick, skip = false, demo = false }) {
         }
         if (typeof messaging?.getTokenInfo !== 'function') return undefined;
         let cancelled = false;
-        messaging.getTokenInfo({ chainId, tick, demo })
+        Promise.resolve()
+            .then(() => messaging.getTokenInfo({ chainId, tick, demo }))
             .then((next) => {
                 if (cancelled) return;
                 writeTokenInfoCache(key, next);
@@ -109,7 +110,8 @@ export function fetchTokenInfo(messaging, chainId, tick, opts = {}) {
     const cached = readTokenInfoCache(key);
     if (cached.hit) return Promise.resolve(cached.value);
     if (typeof messaging?.getTokenInfo !== 'function') return Promise.resolve(null);
-    return messaging.getTokenInfo({ chainId, tick, demo })
+    return Promise.resolve()
+        .then(() => messaging.getTokenInfo({ chainId, tick, demo }))
         .then((next) => {
             writeTokenInfoCache(key, next);
             return next;

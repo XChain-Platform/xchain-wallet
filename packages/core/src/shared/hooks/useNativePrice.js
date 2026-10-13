@@ -71,7 +71,8 @@ export function useNativePrice(chainId, opts = {}) {
         let cancelled = false;
         setLoading(true);
         setError(null);
-        messaging.getNativePricesRequest({ chainIds: [chainId], includeSparkline, fiatCurrency })
+        Promise.resolve()
+            .then(() => messaging.getNativePricesRequest({ chainIds: [chainId], includeSparkline, fiatCurrency }))
             .then((result) => {
                 if (cancelled) return;
                 if (result?.disabled) {
