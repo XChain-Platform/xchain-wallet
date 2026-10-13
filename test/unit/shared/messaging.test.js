@@ -37,13 +37,15 @@ describe('MessagingContext', () => {
 
 describe('useMessaging', () => {
     it('throws when used outside MessagingProvider', () => {
-        // suppress React error boundary noise in test output
-        const consoleError = console.error;
-        console.error = () => {};
-        expect(() => {
-            renderHook(() => useMessaging());
-        }).toThrow('useMessaging must be used inside <MessagingProvider>');
-        console.error = consoleError;
+        const preventExpectedError = (event) => event.preventDefault();
+        window.addEventListener('error', preventExpectedError);
+        try {
+            expect(() => {
+                renderHook(() => useMessaging());
+            }).toThrow('useMessaging must be used inside <MessagingProvider>');
+        } finally {
+            window.removeEventListener('error', preventExpectedError);
+        }
     });
 
     it('returns the context value when inside a provider', () => {
