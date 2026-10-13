@@ -30,6 +30,7 @@ const componentSizes = {
     Input: FIELD_SIZES,
     Select: FIELD_SIZES,
     Textarea: FIELD_SIZES,
+    RadioGroup: FIXED_SIZE,
     IconSelect: FIXED_SIZE,
     AddressCombobox: FIELD_SIZES,
     AddressField: FIELD_SIZES,
@@ -123,6 +124,20 @@ function ComponentPreview({ name, size, state }) {
         return <UI.Select label="Network" size={nativeSize} defaultValue="btc" disabled={disabled} error={error}><option value="btc">Bitcoin</option></UI.Select>;
     case 'Textarea':
         return <UI.Textarea label="Message" size={nativeSize} defaultValue="Hello" rows={2} disabled={disabled} error={error} />;
+    case 'RadioGroup':
+        return (
+            <UI.RadioGroup
+                legend="Preference"
+                value="first"
+                onChange={noop}
+                disabled={disabled}
+                error={error}
+                options={[
+                    { value: 'first', label: 'First choice' },
+                    { value: 'second', label: 'Second choice' },
+                ]}
+            />
+        );
     case 'IconSelect':
         return <UI.IconSelect label="Action" value="send" onChange={noop} options={sampleOptions} disabled={disabled} />;
     case 'AddressCombobox':
