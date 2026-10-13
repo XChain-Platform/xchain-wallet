@@ -20,6 +20,7 @@ import listPageStyles from '../../../packages/core/src/ui/ListPage.module.css';
 import formPageStyles from '../../../packages/core/src/ui/FormPage.module.css';
 import screenStyles from '../../../packages/core/src/ui/Screen.module.css';
 import sectionHeaderStyles from '../../../packages/core/src/ui/SectionHeader.module.css';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 
 vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
     TokenPicker: ({ title, onSelect }) => (
@@ -340,7 +341,7 @@ describe('412px protocol detail layouts', () => {
         expect(screen.getByText(LONG_KEY, { selector: 'code' })).toBeTruthy();
         expect(screen.getByText(LONG_KEY, { selector: 'code' }).closest('dd').style.overflowWrap).toBe('anywhere');
         for (const label of ['Claim', 'Unstake', 'Delegate', 'More']) {
-            expect(screen.getByRole('button', { name: label })).toBeTruthy();
+            expect(screen.getByRole('button', { name: label })).toHaveClass(buttonStyles.btn);
         }
     });
 
@@ -382,7 +383,7 @@ describe('412px protocol detail layouts', () => {
         expect(screen.getByRole('heading', { name: 'Activity' })).toBeTruthy();
         await waitFor(() => expect(screen.getByLabelText(OTHER_LONG_ADDRESS).textContent).toBe(OTHER_LONG_ADDRESS));
         expect(screen.getByLabelText(OTHER_LONG_ADDRESS).closest('dd').style.overflowWrap).toBe('anywhere');
-        expect(screen.getByRole('button', { name: 'More' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'More' })).toHaveClass(buttonStyles.btn);
     });
 
     it('keeps a long poll question, option, amount, and vote action visible', async () => {

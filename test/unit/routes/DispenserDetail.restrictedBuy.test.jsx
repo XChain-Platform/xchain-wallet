@@ -35,6 +35,7 @@ import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/re
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DispenserDetail } from '../../../packages/core/src/shared/routes/DispenserDetail.jsx';
+import inputStyles from '../../../packages/core/src/ui/Input.module.css';
 
 const CHAIN = 'litecoin-mainnet';
 const BUYER = 'ltc1qbuyerbuyerbuyerbuyerbuyerbuyerbuyerbu';
@@ -230,8 +231,9 @@ describe('restricted dispenser, buyer view (D-148)', () => {
             addresses,
             lists: { 1690: list([BUYER, OWNER]) },
         });
-        await screen.findByLabelText(/Pay from/i);
-        fireEvent.change(screen.getByLabelText(/Pay from/i), { target: { value: 'addr-2' } });
+        const payerSelect = await screen.findByRole('combobox', { name: /Pay from/i });
+        expect(payerSelect).toHaveClass(inputStyles.input);
+        fireEvent.change(payerSelect, { target: { value: 'addr-2' } });
         await expectSelectedPayerRefused();
     });
 

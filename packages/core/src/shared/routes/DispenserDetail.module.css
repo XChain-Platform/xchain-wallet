@@ -14,7 +14,13 @@
     margin: calc(var(--xc-space-2) - var(--xc-space-4)) 0 var(--xc-space-3);
 }
 
-.quickAction {
+.quickActions > button,
+.quickActionMoreWrap > button {
+    padding: var(--xc-space-3) var(--xc-space-1);
+    flex-direction: column;
+}
+
+.quickActionLink {
     appearance: none;
     background: var(--xc-surface-raised);
     border: 1px solid var(--xc-accent-primary);
@@ -32,18 +38,13 @@
     font-weight: 600;
 }
 
-.quickAction:hover:not(:disabled) {
+.quickActionLink:hover {
     background: var(--xc-bg-muted);
 }
 
-.quickAction:focus-visible {
+.quickActionLink:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: 2px;
-}
-
-.quickAction:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
 }
 
 .quickActionIcon {
@@ -72,7 +73,7 @@
     align-self: stretch;
 }
 
-.quickActionMoreWrap > .quickAction {
+.quickActionMoreWrap > button {
     flex: 1 1 auto;
     width: 100%;
 }
@@ -92,29 +93,8 @@
     flex-direction: column;
 }
 
-.quickActionMoreItem {
-    appearance: none;
-    background: transparent;
-    border: none;
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: var(--xc-radius-sm);
-    color: var(--xc-text);
-    font-family: inherit;
-    font-size: var(--xc-text-sm);
-    text-align: start;
-    cursor: pointer;
-}
-
-.quickActionMoreItem:hover:not(:disabled) {
-    background: var(--xc-bg-muted);
-}
-
-.quickActionMoreItem:disabled {
-    color: var(--xc-text-muted);
-    cursor: default;
+.quickActionMoreMenu > button {
+    justify-content: flex-start;
 }
 
 /* Tab strip: single "Dispenses" tab today, shaped like the home tabs so
@@ -283,29 +263,17 @@
     flex: 0 0 auto;
 }
 
-.buyPanel {
+.buySection {
     min-width: 0;
     margin-top: var(--xc-space-4);
-    padding: var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm, 4px);
     overflow-wrap: anywhere;
 }
 
-.buyPanel code,
-.buyPanel button {
+.buySection code,
+.buySection button {
     max-width: 100%;
     white-space: normal;
     overflow-wrap: anywhere;
-}
-
-.buyerAddressField {
-    display: grid;
-    grid-template-columns: max-content minmax(0, 1fr);
-    align-items: center;
-    gap: var(--xc-space-2);
-    min-width: 0;
-    margin-bottom: var(--xc-space-2);
 }
 
 .buyerAddressSelect {
@@ -325,14 +293,6 @@
 
     .dispenseWhen {
         white-space: normal;
-    }
-
-    .buyPanel {
-        padding: var(--xc-space-2);
-    }
-
-    .buyerAddressField {
-        grid-template-columns: minmax(0, 1fr);
     }
 
     .buyFillsRow {

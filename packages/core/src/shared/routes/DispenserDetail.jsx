@@ -10,8 +10,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    AddressText, Button, ChainBadge, EmptyState, FeeSelector, FormPage, Icon,
-    Input, ListPage, PageHeader, Screen, SectionHeader, StatusMessage,
+    AddressText, Button, ChainBadge, CopyButton, EmptyState, FeeSelector, FormPage,
+    FormSection, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Select,
+    StatusMessage,
 } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
@@ -2026,58 +2027,59 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     chain refuses all three unless the status is open, and a
                     disabled button's tooltip never shows on a phone. */}
                 {isTerminal ? (canOpenAgain ? (
-                    <button
-                        type="button"
-                        className={local.quickAction}
+                    <Button
+                        variant="secondary"
+                        block
+                        icon={<span className={local.quickActionIcon}><Icon.RefreshIcon /></span>}
                         onClick={() => onOpenAgain(reopenTermsFrom(dispenser, liveState, { chainId }))}
                         title="Open a new dispenser on this address with the same terms"
                     >
-                        <span className={local.quickActionIcon} aria-hidden="true"><Icon.RefreshIcon /></span>
-                        <span>Open again</span>
-                    </button>
+                        Open again
+                    </Button>
                 ) : null) : (
                     <>
-                        <button
-                            type="button"
-                            className={local.quickAction}
+                        <Button
+                            variant="secondary"
+                            block
+                            icon={<span className={local.quickActionIcon}><Icon.XIcon /></span>}
                             onClick={() => setCancelStage('confirm')}
                             disabled={!ownerAddress || !isOpen}
                             title={!ownerAddress ? 'Only the owner can close'
                                 : !isOpen ? 'Dispenser is not open'
                                 : 'Close this dispenser'}
                         >
-                            <span className={local.quickActionIcon} aria-hidden="true"><Icon.XIcon /></span>
-                            <span>Close</span>
-                        </button>
-                        <button
-                            type="button"
-                            className={local.quickAction}
+                            Close
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            block
+                            icon={<span className={local.quickActionIcon}><Icon.PlusIcon /></span>}
                             onClick={() => setRefillStage('confirm')}
                             disabled={!ownerAddress || !isOpen}
                             title={!ownerAddress ? 'Only the owner can refill'
                                 : !isOpen ? 'Dispenser is not open'
                                 : 'Add escrow to this dispenser'}
                         >
-                            <span className={local.quickActionIcon} aria-hidden="true"><Icon.PlusIcon /></span>
-                            <span>Refill</span>
-                        </button>
-                        <button
-                            type="button"
-                            className={local.quickAction}
+                            Refill
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            block
+                            icon={<span className={local.quickActionIcon}><Icon.PencilIcon /></span>}
                             onClick={() => setEditStage('confirm')}
                             disabled={!ownerAddress || !isOpen}
                             title={!ownerAddress ? 'Only the owner can edit'
                                 : !isOpen ? 'Dispenser is not open'
                                 : 'Change expiration or allow/block lists'}
                         >
-                            <span className={local.quickActionIcon} aria-hidden="true"><Icon.PencilIcon /></span>
-                            <span>Edit</span>
-                        </button>
+                            Edit
+                        </Button>
                     </>
                 )}
                 {dispenserExplorerUrl ? (
+                    /* The kit has no link-button primitive for an external explorer destination. */
                     <a
-                        className={local.quickAction}
+                        className={local.quickActionLink}
                         href={dispenserExplorerUrl}
                         target="_blank"
                         rel="noopener noreferrer"
@@ -2088,36 +2090,38 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     </a>
                 ) : null}
                 <div className={local.quickActionMoreWrap} ref={moreWrapRef}>
-                    <button
-                        type="button"
-                        className={local.quickAction}
+                    <Button
+                        variant="secondary"
+                        block
+                        icon={<span className={local.quickActionIcon}><Icon.MoreIcon /></span>}
                         aria-haspopup="menu"
                         aria-expanded={moreOpen}
                         onClick={() => setMoreOpen((o) => !o)}
                     >
-                        <span className={local.quickActionIcon} aria-hidden="true"><Icon.MoreIcon /></span>
-                        <span>More</span>
-                    </button>
+                        More
+                    </Button>
                     {moreOpen ? (
                         <div className={local.quickActionMoreMenu} role="menu">
-                            <button
-                                type="button"
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                block
+                                icon={<Icon.CopyIcon />}
                                 role="menuitem"
-                                className={local.quickActionMoreItem}
                                 onClick={() => { setMoreOpen(false); handleCopy(dispAddress || source || '', 'address'); }}
                             >
-                                <span aria-hidden="true"><Icon.CopyIcon /></span>
-                                <span>{copied === 'address' ? 'Copied' : 'Copy dispenser address'}</span>
-                            </button>
-                            <button
-                                type="button"
+                                {copied === 'address' ? 'Copied' : 'Copy dispenser address'}
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                block
+                                icon={<Icon.CopyIcon />}
                                 role="menuitem"
-                                className={local.quickActionMoreItem}
                                 onClick={() => { setMoreOpen(false); handleCopy(String(actionIndex), 'index'); }}
                             >
-                                <span aria-hidden="true"><Icon.CopyIcon /></span>
-                                <span>{copied === 'index' ? 'Copied' : 'Copy action index'}</span>
-                            </button>
+                                {copied === 'index' ? 'Copied' : 'Copy action index'}
+                            </Button>
                         </div>
                     ) : null}
                 </div>
@@ -2127,6 +2131,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
 
             <SectionHeader title="Activity" />
             <div className={local.tabBar} role="tablist" aria-label="Dispenser activity">
+                {/* Native buttons carry tab semantics because the kit has no tab primitive. */}
                 <button
                     type="button"
                     role="tab"
@@ -2150,7 +2155,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 !lifecycleLoaded ? (
                     <StatusMessage variant="status">Loading lifecycle…</StatusMessage>
                 ) : (
-                    <ul className={local.dispenseList}>
+                    <ul className={local.dispenseList} aria-label="Dispenser lifecycle">
                         {lifecycleTimeline.length === 0 ? (
                             <li><EmptyState title="No lifecycle events yet" body="Dispenser lifecycle changes appear here." titleAs="p" /></li>
                         ) : lifecycleTimeline.slice(0, 40).map((e) => {
@@ -2179,7 +2184,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             ) : !dispensesLoaded ? (
                 <StatusMessage variant="status">Loading dispenses…</StatusMessage>
             ) : (
-                <ul className={local.dispenseList}>
+                <ul className={local.dispenseList} aria-label="Dispenses">
                     {matchingDispenses.length === 0 ? (
                         <li><EmptyState title="No dispenses yet" body="Completed dispenses appear here." titleAs="p" /></li>
                     ) : matchingDispenses.slice(0, 25).map((d) => {
@@ -2206,117 +2211,116 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             )}
 
             {canBuyWithSend ? (
-                <section className={local.buyPanel} data-testid="dispenser-buy-form">
-                    <SectionHeader title="Buy from this dispenser" />
-                    <p className={styles.hint}>
-                        {isTokenPaid
-                            ? `Send ${getAmount} ${getTick} per fill. Tokens dispense when the SEND`
-                            : `Pay ${getAmount} ${payTick} per fill from this wallet. Tokens dispense when the payment`}
-                        {' '}confirms and the dispenser is still open.
-                    </p>
-                    {listWarnings}
-                    {buyerAddresses.length > 1 ? (
-                        <label className={local.buyerAddressField}>
-                            <span className={styles.detailsLabel}>Pay from</span>
-                            <select
+                <div data-testid="dispenser-buy-form">
+                    <FormSection title="Buy from this dispenser" className={local.buySection}>
+                        <p className={styles.hint}>
+                            {isTokenPaid
+                                ? `Send ${getAmount} ${getTick} per fill. Tokens dispense when the SEND`
+                                : `Pay ${getAmount} ${payTick} per fill from this wallet. Tokens dispense when the payment`}
+                            {' '}confirms and the dispenser is still open.
+                        </p>
+                        {listWarnings}
+                        {buyerAddresses.length > 1 ? (
+                            <Select
+                                label="Pay from"
                                 value={buyerAddressId || ''}
                                 onChange={(e) => setBuyerAddressId(e.target.value)}
                                 className={local.buyerAddressSelect}
                             >
+                                {/* Native options remain because Select accepts option children. */}
                                 {buyerAddresses.map((a) => (
                                     <option key={a.id} value={a.id}>{a.address}</option>
                                 ))}
-                            </select>
-                        </label>
-                    ) : buyerAddress ? (
-                        <p className={styles.entryDescription}>
-                            Paying from <AddressText address={buyerAddress.address} />
+                            </Select>
+                        ) : buyerAddress ? (
+                            <p className={styles.entryDescription}>
+                                Paying from <AddressText address={buyerAddress.address} />
+                            </p>
+                        ) : null}
+                        <div className={local.buyFillsRow}>
+                            <Input
+                                label="Fills"
+                                hint={`Whole fills only. Your payment must be a multiple of ${formatWithThousands(String(getAmount))} ${payTick}.`}
+                                inputMode="numeric"
+                                value={fills}
+                                onChange={(e) => setFills(e.target.value)}
+                                autoComplete="off"
+                            />
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                onClick={onMaxFills}
+                                disabled={maxBuyFills == null || maxBuyFills <= 0n}
+                            >
+                                Max
+                            </Button>
+                        </div>
+                        {totalPayAmount && totalReceive ? (
+                            <dl className={styles.detailsList} data-testid="buy-totals">
+                                <dt className={styles.detailsLabel}>Price per fill</dt>
+                                <dd className={styles.detailsValue}>{formatWithThousands(String(getAmount))} {payTick}</dd>
+                                <dt className={styles.detailsLabel}>You receive per fill</dt>
+                                <dd className={styles.detailsValue}>{formatWithThousands(String(giveAmount))} {giveTick}</dd>
+                                <dt className={styles.detailsLabel}>You pay</dt>
+                                <dd className={styles.detailsValue}>{formatWithThousands(totalPayAmount)} {payTick}</dd>
+                                <dt className={styles.detailsLabel}>You receive</dt>
+                                <dd className={styles.detailsValue}>{formatWithThousands(totalReceive)} {giveTick}</dd>
+                            </dl>
+                        ) : null}
+                        {fillsError ? (
+                            <p role="alert" className={styles.warning}>{fillsError}</p>
+                        ) : null}
+                        {inventoryError ? (
+                            <p role="alert" className={styles.warning}>{inventoryError}</p>
+                        ) : null}
+                        {minFillsNotice ? (
+                            <p className={styles.hint} data-testid="min-fills-notice">{minFillsNotice}</p>
+                        ) : null}
+                        {buyDustBlock ? (
+                            <p role="alert" className={styles.warning} data-testid="buy-dust-block">{buyDustBlock}</p>
+                        ) : null}
+                        <p className={styles.hint} data-testid="buy-balance">
+                            {buyBalance == null
+                                ? `Checking your ${String(payTick).toUpperCase()} balance…`
+                                : `${formatWithThousands(buyBalance)} ${String(payTick).toUpperCase()} available`}
                         </p>
-                    ) : null}
-                    <div className={local.buyFillsRow}>
-                        <Input
-                            label="Fills"
-                            hint={`Whole fills only. Your payment must be a multiple of ${formatWithThousands(String(getAmount))} ${payTick}.`}
-                            inputMode="numeric"
-                            value={fills}
-                            onChange={(e) => setFills(e.target.value)}
-                            autoComplete="off"
-                        />
+                        {buyPreflight ? (
+                            <PreflightPanel
+                                report={buyPreflight}
+                                acknowledged={NO_ACKNOWLEDGMENTS}
+                                onAcknowledge={() => {}}
+                            />
+                        ) : null}
+                        {buyError ? (
+                            <StatusMessage variant="error" className={styles.error}>{buyError}</StatusMessage>
+                        ) : null}
+                        {ownerLane.isWatcherMode ? (
+                            <p className={styles.hint}>
+                                Watcher mode: this wallet will build an unsigned transaction. Sign it on your
+                                Signer-mode wallet, then broadcast from a Full-mode wallet.
+                            </p>
+                        ) : null}
                         <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            onClick={onMaxFills}
-                            disabled={maxBuyFills == null || maxBuyFills <= 0n}
+                            variant="primary"
+                            onClick={beginBuy}
+                            loading={buyStage === 'submitting' || buyConfirm.composing}
+                            disabled={fillsCount == null || !totalPayAmount || !buyerAddress || !dispAddr
+                                || buyUnderfunded || Boolean(buyDustBlock) || eligibilityChecking
+                                || buyerEligibilityBarred || dispenserSelfBarred || priceStale
+                                || Boolean(inventoryError)
+                                || buyStage === 'submitting' || buyConfirm.composing}
                         >
-                            Max
+                            {ownerLane.isWatcherMode
+                                ? 'Create unsigned transaction'
+                                : `Buy ${fillsCount != null ? `${fillsCount} ` : ''}fill${fillsCount === 1n ? '' : 's'}`}
                         </Button>
-                    </div>
-                    {totalPayAmount && totalReceive ? (
-                        <dl className={styles.detailsList} data-testid="buy-totals">
-                            <dt className={styles.detailsLabel}>Price per fill</dt>
-                            <dd className={styles.detailsValue}>{formatWithThousands(String(getAmount))} {payTick}</dd>
-                            <dt className={styles.detailsLabel}>You receive per fill</dt>
-                            <dd className={styles.detailsValue}>{formatWithThousands(String(giveAmount))} {giveTick}</dd>
-                            <dt className={styles.detailsLabel}>You pay</dt>
-                            <dd className={styles.detailsValue}>{formatWithThousands(totalPayAmount)} {payTick}</dd>
-                            <dt className={styles.detailsLabel}>You receive</dt>
-                            <dd className={styles.detailsValue}>{formatWithThousands(totalReceive)} {giveTick}</dd>
-                        </dl>
-                    ) : null}
-                    {fillsError ? (
-                        <p role="alert" className={styles.warning}>{fillsError}</p>
-                    ) : null}
-                    {inventoryError ? (
-                        <p role="alert" className={styles.warning}>{inventoryError}</p>
-                    ) : null}
-                    {minFillsNotice ? (
-                        <p className={styles.hint} data-testid="min-fills-notice">{minFillsNotice}</p>
-                    ) : null}
-                    {buyDustBlock ? (
-                        <p role="alert" className={styles.warning} data-testid="buy-dust-block">{buyDustBlock}</p>
-                    ) : null}
-                    <p className={styles.hint} data-testid="buy-balance">
-                        {buyBalance == null
-                            ? `Checking your ${String(payTick).toUpperCase()} balance…`
-                            : `${formatWithThousands(buyBalance)} ${String(payTick).toUpperCase()} available`}
-                    </p>
-                    {buyPreflight ? (
-                        <PreflightPanel
-                            report={buyPreflight}
-                            acknowledged={NO_ACKNOWLEDGMENTS}
-                            onAcknowledge={() => {}}
-                        />
-                    ) : null}
-                    {buyError ? (
-                        <StatusMessage variant="error" className={styles.error}>{buyError}</StatusMessage>
-                    ) : null}
-                    {ownerLane.isWatcherMode ? (
-                        <p className={styles.hint}>
-                            Watcher mode: this wallet will build an unsigned transaction. Sign it on your
-                            Signer-mode wallet, then broadcast from a Full-mode wallet.
-                        </p>
-                    ) : null}
-                    <Button
-                        variant="primary"
-                        onClick={beginBuy}
-                        loading={buyStage === 'submitting' || buyConfirm.composing}
-                        disabled={fillsCount == null || !totalPayAmount || !buyerAddress || !dispAddr
-                            || buyUnderfunded || Boolean(buyDustBlock) || eligibilityChecking
-                            || buyerEligibilityBarred || dispenserSelfBarred || priceStale
-                            || Boolean(inventoryError)
-                            || buyStage === 'submitting' || buyConfirm.composing}
-                    >
-                        {ownerLane.isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : `Buy ${fillsCount != null ? `${fillsCount} ` : ''}fill${fillsCount === 1n ? '' : 's'}`}
-                    </Button>
-                </section>
+                    </FormSection>
+                </div>
             ) : null}
 
             {showPayHere ? (
-                <section className={local.buyPanel}>
-                    <SectionHeader title="Pay to buy" />
+                <FormSection title="Pay to buy" className={local.buySection}>
                     {canBuyWithSend ? null : listWarnings}
                     <p className={styles.hint}>
                         This dispenser accepts bare {getCoin} payments.
@@ -2335,13 +2339,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         <dd className={styles.detailsValue}>
                             <code style={{ wordBreak: 'break-all' }}>{dispAddr}</code>
                             {' '}
-                            <button
-                                type="button"
-                                onClick={() => handleCopy(dispAddr, 'address')}
-                                style={{ marginLeft: '0.5rem' }}
-                            >
-                                {copied === 'address' ? 'Copied' : 'Copy dispenser payment address'}
-                            </button>
+                            <CopyButton value={dispAddr} label="Copy dispenser payment address" />
                         </dd>
                         {isFiatPriced ? (
                             <>
@@ -2383,13 +2381,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                                 <dd className={styles.detailsValue}>
                                     <code>{getAmount} {getCoin}</code>
                                     {' '}
-                                    <button
-                                        type="button"
-                                        onClick={() => handleCopy(String(getAmount), 'amount')}
-                                        style={{ marginLeft: '0.5rem' }}
-                                    >
-                                        {copied === 'amount' ? 'Copied' : 'Copy amount'}
-                                    </button>
+                                    <CopyButton value={String(getAmount)} label="Copy amount" />
                                     {' per fill'}
                                 </dd>
                             </>
@@ -2404,7 +2396,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                                 ? `This wallet cannot size a fiat-priced payment before it lands; use any ${getCoin} wallet to trigger the dispense.`
                                 : `No spendable ${getCoin} address in this wallet on this chain; use any ${getCoin} wallet to trigger the dispense.`}
                     </p>
-                </section>
+                </FormSection>
             ) : null}
 
         </>,
