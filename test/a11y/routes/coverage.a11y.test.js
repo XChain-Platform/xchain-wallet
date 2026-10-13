@@ -10,17 +10,8 @@ const routeModules = import.meta.glob(
 );
 
 const ROUTES_RENDERED_BY_AXE = [
-    'ActionDetail',
-    'Onboarding',
-    'OnboardingCarousel',
-    'Receive',
-    'Send',
-    'Settings',
-    'TokenDetail',
-];
-
-const ROUTES_NOT_RENDERED_BY_AXE = [
     'AccountPicker',
+    'ActionDetail',
     'ActionsMenu',
     'AddAccountForm',
     'AddAddressModal',
@@ -82,6 +73,15 @@ const ROUTES_NOT_RENDERED_BY_AXE = [
     'ListTransferForm',
     'Loading',
     'Locked',
+    'Onboarding',
+    'OnboardingCarousel',
+    'Receive',
+    'Send',
+    'Settings',
+    'TokenDetail',
+];
+
+const ROUTES_NOT_RENDERED_BY_AXE = [
     'ManageToken',
     'MarketActivity',
     'MarketView',
