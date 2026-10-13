@@ -35,6 +35,16 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+export const DESKTOP_RENDERER_CSP = [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:",
+    "connect-src 'self'",
+    "frame-src 'none'",
+    "frame-ancestors 'none'",
+].join('; ');
+
 /**
  * True when `url` carries the `file://` scheme.
  *
@@ -87,6 +97,46 @@ export function isAppUrl(url, appRoot) {
     if (rel.length === 0) return false;
     if (path.isAbsolute(rel)) return false;
     return !rel.startsWith('..');
+}
+
+/**
+ * Return response headers with the full renderer CSP applied to app files.
+ * The response header carries frame-ancestors, which a meta policy ignores.
+ *
+ * @param {unknown} url
+ * @param {Record<string, string | string[]> | undefined} responseHeaders
+ * @param {unknown} appRoot
+ * @returns {Record<string, string | string[]>}
+ */
+export function rendererCspResponseHeaders(url, responseHeaders, appRoot) {
+    const headers = { ...(responseHeaders ?? {}) };
+    if (!isAppUrl(url, appRoot)) return headers;
+    for (const name of Object.keys(headers)) {
+        if (name.toLowerCase() === 'content-security-policy') delete headers[name];
+    }
+    headers['Content-Security-Policy'] = [DESKTOP_RENDERER_CSP];
+    return headers;
+}
+
+/**
+ * Attach the renderer CSP to local app responses in an Electron session.
+ *
+ * @param {{ onHeadersReceived: Function }} webRequest
+ * @param {unknown} appRoot
+ */
+export function attachRendererCspHeaders(webRequest, appRoot) {
+    webRequest.onHeadersReceived(
+        { urls: ['file://*/*'] },
+        (details, callback) => {
+            callback({
+                responseHeaders: rendererCspResponseHeaders(
+                    details.url,
+                    details.responseHeaders,
+                    appRoot,
+                ),
+            });
+        },
+    );
 }
 
 /**

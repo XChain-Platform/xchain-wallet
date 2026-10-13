@@ -24,6 +24,7 @@ const electron = vi.hoisted(() => {
     };
     const ownerWindow = {};
     const popup = vi.fn();
+    const webRequest = { onHeadersReceived: vi.fn() };
     class BrowserWindow {
         static instances = [];
         static fromWebContents = vi.fn(() => ownerWindow);
@@ -54,6 +55,7 @@ const electron = vi.hoisted(() => {
         isolatedSession,
         ownerWindow,
         popup,
+        webRequest,
         state,
         app: {
             isPackaged: true,
@@ -77,7 +79,7 @@ const electron = vi.hoisted(() => {
             getPrimaryDisplay: vi.fn(() => state.displays[0]),
         },
         session: {
-            defaultSession: {},
+            defaultSession: { webRequest },
             fromPartition: vi.fn(() => isolatedSession),
         },
         shell: { openExternal: vi.fn(async () => {}) },
@@ -209,6 +211,35 @@ afterEach(() => {
 });
 
 describe('desktop main entry point', () => {
+    it('sets a restrictive CSP response header on packaged renderer files', async () => {
+        electron.app.whenReady.mockResolvedValueOnce();
+        await import('../../../packages/desktop/main/index.js');
+        await vi.waitFor(() => expect(electron.webRequest.onHeadersReceived).toHaveBeenCalledOnce());
+
+        const [filter, handler] = electron.webRequest.onHeadersReceived.mock.calls[0];
+        expect(filter).toEqual({ urls: ['file://*/*'] });
+        const callback = vi.fn();
+        handler({
+            url: appIndex,
+            responseHeaders: {
+                'content-security-policy': ["default-src *; script-src 'unsafe-inline' 'unsafe-eval'"],
+                'X-Content-Type-Options': ['nosniff'],
+            },
+        }, callback);
+
+        const headers = callback.mock.calls[0][0].responseHeaders;
+        expect(headers['X-Content-Type-Options']).toEqual(['nosniff']);
+        const policy = headers['Content-Security-Policy'][0];
+        const directives = Object.fromEntries(policy.split(';').map((directive) => {
+            const [name, ...sources] = directive.trim().split(/\s+/);
+            return [name, sources];
+        }));
+        expect(directives['script-src']).toEqual(["'self'"]);
+        expect(policy).not.toContain("'unsafe-eval'");
+        expect(directives['connect-src']).toEqual(["'self'"]);
+        expect(directives['frame-ancestors']).toEqual(["'none'"]);
+    });
+
     it('registers Electron lifecycle and deep-link handlers at import time', async () => {
         await import('../../../packages/desktop/main/index.js');
 
