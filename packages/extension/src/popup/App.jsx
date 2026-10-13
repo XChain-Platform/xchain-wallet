@@ -26,6 +26,7 @@
 
 import { Fragment, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Skeleton } from '@xchain-wallet/core/ui';
+import { RouteErrorBoundary } from '@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx';
 import { uri as coreUri } from '@xchain-wallet/core';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { withResolvedIssuer } from '@xchain-wallet/core/shared/utils/tokenDetailIssuer.js';
@@ -209,7 +210,9 @@ export function App() {
         <MessagingProvider shell={shell} messaging={messaging}>
             <ToastHost>
                 <ReachabilityBanner />
-                <AppInner />
+                <RouteErrorBoundary>
+                    <AppInner />
+                </RouteErrorBoundary>
             </ToastHost>
         </MessagingProvider>
     );
@@ -2634,9 +2637,14 @@ function AppInner() {
                         />
                     )}
                 >
-                    <Suspense fallback={<Skeleton.List rows={5} />}>
-                        <Fragment key={palette.navigationKey}>{routeNode}</Fragment>
-                    </Suspense>
+                    <RouteErrorBoundary
+                        resetKey={`${unlockedView}:${palette.navigationKey}`}
+                        onHome={() => setUnlockedView('home')}
+                    >
+                        <Suspense fallback={<Skeleton.List rows={5} />}>
+                            <Fragment key={palette.navigationKey}>{routeNode}</Fragment>
+                        </Suspense>
+                    </RouteErrorBoundary>
                     {messageSentNotice ? (
                         <NoticeModal
                             title="Message sent"
