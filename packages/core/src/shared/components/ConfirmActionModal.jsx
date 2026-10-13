@@ -61,6 +61,49 @@ function formatReviewDecoded(decoded) {
     return { ...decoded, summary, details };
 }
 
+function escapeRegExp(value) {
+    return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function reviewActionLabel(decoded, fallback, chainLabel) {
+    const summary = String(decoded?.summary || '').trim();
+    if (!summary) return fallback;
+
+    const details = decoded?.details || [];
+    const amountDetail = details.find((detail) => /^(amount|quantity)$/i.test(String(detail?.label || '')));
+    const tokenDetail = details.find((detail) => /^token$/i.test(String(detail?.label || '')));
+    const amount = String(amountDetail?.value || '').trim();
+    if (amount) {
+        const amountMatch = new RegExp(`(^|\\s)${escapeRegExp(amount)}(?=\\s|$)`).exec(summary);
+        if (amountMatch) {
+            const amountStart = amountMatch.index + amountMatch[1].length;
+            const action = summary.slice(0, amountStart).trim();
+            const remainder = summary.slice(amountStart + amount.length).trim();
+            const token = String(tokenDetail?.value || '').trim()
+                || remainder.match(/^([^\s,:;)]+)/)?.[1]
+                || '';
+            if (action) return [action, amount, token].filter(Boolean).join(' ');
+        }
+    }
+
+    // Some host decoders carry the amount only in their summary. Keep the
+    // visible action, amount and unit while dropping destinations and detail.
+    const inlineAmount = summary.match(/^([^:]+?)\s+((?:<\s*)?\d[\d.,]*(?:[eE][+-]?\d+)?)\s+([^\s,:;)]+)/);
+    if (inlineAmount) {
+        const unit = /^(to|on|for|of|per)$/i.test(inlineAmount[3]) ? '' : inlineAmount[3];
+        return [inlineAmount[1], inlineAmount[2], unit].filter(Boolean).join(' ');
+    }
+
+    const withoutChain = chainLabel
+        ? summary.replace(new RegExp(`\\s+on\\s+${escapeRegExp(chainLabel)}(?=\\s|:|\\(|$)`, 'i'), '')
+        : summary;
+    const actionPhrase = withoutChain
+        .split(/:\s|\s+to\s+/i)[0]
+        .replace(/\s+\([^)]*\)\s*$/, '')
+        .trim();
+    return actionPhrase.split(/\s+/).slice(0, 3).join(' ') || fallback;
+}
+
 /**
  * @param {object} props
  * @param {import('../hooks/useConfirmAction.js').ConfirmPhase} props.phase
@@ -127,7 +170,7 @@ export function ConfirmActionModal({
         : (formattedDecoded?.summary?.split('\n')[0] || fallbackHeadline);
     const defaultApproveLabel = 'Approve';
     const resolvedApproveLabel = approveLabel || (variant === 'action'
-        ? `${defaultApproveLabel} ${headlineText}`
+        ? reviewActionLabel(formattedDecoded, defaultApproveLabel, chainLabel)
         : headlineText);
     const reviewDetails = (formattedDecoded?.details || []).map((detail, index) => ({
         ...detail,
@@ -421,18 +464,11 @@ export function ConfirmActionModal({
                         onClick={handleApprove}
                         disabled={approveDisabled || signaturePhase || terminal || !canApprove || !credentialsReady || !!refusal}
                         data-testid="confirm-approve"
-                        // The visible label is an expression, so name the button
-                        // explicitly: it matches the visible text exactly (the
-                        // accessible name must contain it), and a screen-reader
-                        // user gets the same "on <chain>" that a sighted one does.
+                        // The explicit accessible name stays identical to the
+                        // visible action and amount.
                         aria-label={resolvedApproveLabel}
                     >
-                        {variant === 'action' ? (
-                            <>
-                                {approveLabel || defaultApproveLabel}
-                                {approveLabel ? null : ` ${headlineText}`}
-                            </>
-                        ) : (approveLabel || headlineText)}
+                        {resolvedApproveLabel}
                     </Button>
                 </footer>
             </div>

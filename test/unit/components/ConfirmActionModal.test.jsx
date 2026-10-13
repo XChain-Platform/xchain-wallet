@@ -51,8 +51,50 @@ describe('ConfirmActionModal', () => {
         expect(screen.getByTestId('confirm-chain-badge').textContent).toBe('Bitcoin');
         expect(screen.getByTestId('preflight-panel')).toBeTruthy();
         expect(screen.getByTestId('confirm-approve').textContent)
-            .toBe('Approve Send 5 JDOG to bc1qxyz');
+            .toBe('Send 5 JDOG');
         expect(screen.getByTestId('confirm-reject').textContent).toBe('Reject');
+    });
+
+    it('names amount-free actions and updates when the reviewed amount changes', () => {
+        const { rerender } = render(<ConfirmActionModal {...base({
+            decoded: {
+                summary: 'Send 0.5 BTC to bc1qxyz',
+                details: [
+                    { label: 'Token', value: 'BTC' },
+                    { label: 'Amount', value: '0.5' },
+                ],
+                warnings: [],
+            },
+        })} />);
+        expect(screen.getByTestId('confirm-approve')).toHaveTextContent(/^Send 0\.5 BTC$/);
+
+        rerender(<ConfirmActionModal {...base({
+            decoded: {
+                summary: 'Send 12345678901234567890.12345678 BTC to bc1qxyz',
+                details: [
+                    { label: 'Token', value: 'BTC' },
+                    { label: 'Amount', value: '12345678901234567890.12345678' },
+                ],
+                warnings: [],
+            },
+        })} />);
+        expect(screen.getByTestId('confirm-approve'))
+            .toHaveTextContent(/^Send 12,345,678,901,234,567,890\.12345678 BTC$/);
+
+        rerender(<ConfirmActionModal {...base({
+            decoded: { summary: 'Create dispenser on Bitcoin: lock 10 TOKEN', details: [], warnings: [] },
+        })} />);
+        expect(screen.getByTestId('confirm-approve')).toHaveTextContent(/^Create dispenser$/);
+
+        rerender(<ConfirmActionModal {...base({
+            decoded: { summary: 'Cancel order on Bitcoin (#17)', details: [], warnings: [] },
+        })} />);
+        expect(screen.getByTestId('confirm-approve')).toHaveTextContent(/^Cancel order$/);
+
+        rerender(<ConfirmActionModal {...base({
+            decoded: { summary: 'Publish 123.45 to feed 700', details: [], warnings: [] },
+        })} />);
+        expect(screen.getByTestId('confirm-approve')).toHaveTextContent(/^Publish 123\.45$/);
     });
 
     it('orders and labels the review as recipient, amount, fee, then total', () => {
@@ -93,7 +135,7 @@ describe('ConfirmActionModal', () => {
         expect(screen.getByTestId('action-intent').querySelector('p').textContent)
             .toBe(`Send ${expected} JDOG to bc1qxyz`);
         expect(screen.getByTestId('confirm-approve').textContent)
-            .toBe(`Approve Send ${expected} JDOG to bc1qxyz`);
+            .toBe(`Send ${expected} JDOG`);
     });
 
     it('shows an exact total for a native payment without adding unlike units', () => {
@@ -221,6 +263,9 @@ describe('ConfirmActionModal', () => {
         expect(intentCss).toMatch(/\.deltaTick\s*\{[^}]*overflow-wrap:\s*anywhere/s);
         expect(modalCss).toMatch(/\.fee\s*\{[^}]*text-align:\s*end/s);
         expect(modalCss).toMatch(/\.page\s*\{[^}]*padding-bottom:\s*var\(--xc-bottom-bar-h, 0px\)/s);
+        expect(modalCss).toMatch(/\.footer > button\s*\{[^}]*white-space:\s*normal/s);
+        expect(modalCss).toMatch(/\.footer > button > span:last-child\s*\{[^}]*overflow-wrap:\s*anywhere/s);
+        expect(modalCss).toMatch(/\.footer > button > span:last-child\s*\{[^}]*text-overflow:\s*clip/s);
         expect(modalCss).toMatch(/@media \(max-width: 399px\)[\s\S]*\.footer\s*\{[^}]*flex-direction:\s*column/s);
     });
 
