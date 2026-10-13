@@ -83,10 +83,11 @@ describe('<Button>', () => {
             `\\.${size}\\s*\\{[^}]*min-height:\\s*var\\(--xc-control-h-${size},\\s*${height}px\\)`,
             's',
         ).test(candidate));
+        const iconSizes = { sm: 'sm', md: 'md', lg: 'md' };
         for (const [size] of sizes) {
             expect(css).toMatch(new RegExp(
                 `\\.${size}\\s*\\{[^}]*--xc-button-height:\\s*var\\(--xc-control-h-${size}\\)`
-                + `[^}]*--xc-icon-size:\\s*var\\(--xc-icon-${size}\\)`,
+                + `[^}]*--xc-icon-size:\\s*var\\(--xc-icon-${iconSizes[size]}\\)`,
                 's',
             ));
         }
@@ -101,6 +102,47 @@ describe('<Button>', () => {
         expect(css).toMatch(/\.btn\s*\{[^}]*border-radius:\s*var\(--xc-control-radius\)/s);
         expect(css).toMatch(/\.btn\s*\{[^}]*font-size:\s*var\(--xc-control-font\)/s);
         expect(css).not.toMatch(/min-height:\s*(?:28|36)px/);
+    });
+
+    it('passes shared icon tokens through controls, adornments, rows, and tabs', () => {
+        const readCss = (path) => readFileSync(`packages/core/src/${path}`, 'utf8');
+        const sizedControls = [
+            {
+                css: readCss('ui/ChainPicker.module.css'),
+                forwardedToken: '--chain-picker-icon-size',
+            },
+            {
+                css: readCss('shared/components/NetworkFilter.module.css'),
+                forwardedToken: '--network-filter-icon-size',
+            },
+        ];
+        const expectedSizes = { sm: 'sm', md: 'md', lg: 'md' };
+
+        for (const { css, forwardedToken } of sizedControls) {
+            for (const [controlSize, iconSize] of Object.entries(expectedSizes)) {
+                const block = css.match(new RegExp(`\\.${controlSize}\\s*\\{[^}]*\\}`, 's'))?.[0] || '';
+                expect(block).toMatch(new RegExp(`--xc-icon-size:\\s*var\\(--xc-icon-${iconSize}\\)`));
+                expect(block).toMatch(new RegExp(`${forwardedToken}:\\s*var\\(--xc-icon-size\\)`));
+            }
+        }
+
+        for (const path of ['ui/AddressField.module.css', 'ui/AddressCombobox.module.css']) {
+            const iconButton = readCss(path).match(/\.iconButton\s*\{[^}]*\}/s)?.[0] || '';
+            expect(iconButton).toMatch(/--xc-icon-size:\s*var\(--xc-icon-md\)/);
+            expect(iconButton).toMatch(/align-items:\s*center/);
+            expect(iconButton).toMatch(/justify-content:\s*center/);
+        }
+
+        const tabCss = readCss('shared/components/BottomTabBar.module.css');
+        for (const selector of ['tabIcon', 'sheetIcon']) {
+            const block = tabCss.match(new RegExp(`\\.${selector}\\s*\\{[^}]*\\}`, 's'))?.[0] || '';
+            expect(block).toMatch(/--xc-icon-size:\s*var\(--xc-icon-md\)/);
+            expect(block).toMatch(/align-items:\s*center/);
+            expect(block).toMatch(/justify-content:\s*center/);
+        }
+
+        const chevron = readFileSync('packages/core/src/ui/ChainPicker.icons.jsx', 'utf8');
+        expect(chevron).not.toMatch(/--xc-icon-size/);
     });
 
     it('keeps icon-only buttons square with an invisible coarse-pointer hit area', () => {
