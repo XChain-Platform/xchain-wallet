@@ -43,6 +43,10 @@
     --xc-page-gutter: var(--xc-space-3);
     --xc-page-top: var(--xc-space-3);
 
+    /* Card interiors share one inset and radius across content types. */
+    --xc-card-pad: var(--xc-space-4);
+    --xc-card-radius: var(--xc-radius-md);
+
     /* Typography - platform fonts remain available when the web font fails. */
     --xc-font-sans: 'XChain Sans', 'XChain Sans Fallback', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     --xc-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
@@ -216,6 +220,12 @@
 @supports (height: 100dvh) {
     :root {
         --xc-viewport-h: calc(100dvh - env(safe-area-inset-top, 0px));
+    }
+}
+
+@media (max-width: 480px) {
+    :root {
+        --xc-card-pad: var(--xc-space-3);
     }
 }
 

@@ -7,8 +7,8 @@
     display: flex;
     align-items: center;
     gap: var(--xc-space-2);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: var(--xc-radius-md);
+    padding: var(--xc-card-pad);
+    border-radius: var(--xc-card-radius);
     border: 1px solid;
     font-size: var(--xc-text-sm);
     margin: var(--xc-space-2);

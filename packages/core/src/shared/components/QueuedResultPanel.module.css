@@ -11,9 +11,9 @@
     width: 100%;
     min-width: 0;
     max-width: 100%;
-    padding: var(--xc-space-4);
+    padding: var(--xc-card-pad);
     border: 1px solid var(--xc-warning, #b8860b);
-    border-radius: var(--xc-radius-md);
+    border-radius: var(--xc-card-radius);
     background: var(--xc-surface-raised);
 }
 
@@ -71,10 +71,6 @@
 }
 
 @media (max-width: 360px) {
-    .queuedCard {
-        padding: var(--xc-space-3);
-    }
-
     .actions {
         width: 100%;
     }
