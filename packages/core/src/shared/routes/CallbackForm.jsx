@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -80,10 +80,8 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         addressesByChain,
         loadError,
         chainId,
-        setChainId,
         fromAddress,
         setFromAddressId,
-        chainsWithAddresses,
         descriptor,
         signerReady,
         isWatcherMode,

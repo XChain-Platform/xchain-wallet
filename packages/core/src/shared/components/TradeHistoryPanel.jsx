@@ -10,7 +10,7 @@
 
 // TradeHistoryPanel (§41.3.6): per-market user trade history.
 //
-// Collapsible section below OpenOrdersPanel. Fans out
+// Always-open section below OpenOrdersPanel. Fans out
 // `messaging.getMarketHistory({ chainId, tick1, tick2, address })`
 // across every wallet address on `chainId` and shows the user's own
 // completed fills for this market. "Buy" means the user received
@@ -23,7 +23,7 @@
 // pollers.
 
 import { useCallback, useEffect, useState } from 'react';
-import { AddressText } from '@xchain-wallet/core/ui';
+import { AddressText, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../useMessaging.js';
 import { historyTimestamp, normalizeMarketHistoryRowExact } from '../../market/history_rows.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
@@ -41,23 +41,37 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
     const { messaging } = useMessaging();
     const [addresses, setAddresses] = useState(/** @type {any[]} */ ([]));
     const [rows, setRows] = useState(/** @type {any[]} */ ([]));
-    const [loading, setLoading] = useState(false);
+    const [addressesLoading, setAddressesLoading] = useState(true);
+    const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
     useEffect(() => {
         let cancelled = false;
+        setAddresses([]);
+        setRows([]);
+        setAddressesLoading(true);
+        setLoading(true);
+        setLoadError(null);
         messaging.getAddressesByChain(walletId)
             .then((byChain) => {
                 if (cancelled) return;
                 setAddresses(byChain?.[chainId] || []);
+                setAddressesLoading(false);
             })
-            .catch(() => {});
+            .catch((err) => {
+                if (cancelled) return;
+                setLoadError(readFailureMessage(err, 'load your trade history'));
+                setAddressesLoading(false);
+                setLoading(false);
+            });
         return () => { cancelled = true; };
     }, [messaging, walletId, chainId]);
 
     const reload = useCallback(async () => {
+        if (addressesLoading) return;
         if (addresses.length === 0) {
             setRows([]);
+            setLoading(false);
             return;
         }
         setLoading(true);
@@ -67,7 +81,6 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
                 messaging.getMarketHistory({
                     chainId, tick1, tick2, address: addr.address,
                 }).then((resp) => ({ addr, rows: extractRows(resp) }))
-                  .catch(() => ({ addr, rows: [] }))
             ));
             const flat = [];
             for (const { addr, rows: addrRows } of results) {
@@ -80,7 +93,7 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
         } finally {
             setLoading(false);
         }
-    }, [messaging, chainId, tick1, tick2, addresses]);
+    }, [messaging, chainId, tick1, tick2, addresses, addressesLoading]);
 
     useEffect(() => {
         reload();
@@ -95,7 +108,9 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
         .filter(Boolean);
 
     return (
-        <div
+        <section
+            aria-label="Trade history"
+            aria-busy={addressesLoading || loading || undefined}
             style={{
                 border: '1px solid var(--xc-border)',
                 borderRadius: '4px',
@@ -103,11 +118,19 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
                 marginTop: '0.75rem',
             }}
         >
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.25rem' }}>
+            <div style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '0.5rem',
+                marginBottom: '0.25rem',
+            }}>
+                <p style={{ margin: 0, fontWeight: 600 }}>Trade history</p>
                 <button
                     type="button"
                     onClick={reload}
-                    disabled={loading}
+                    disabled={addressesLoading || loading}
                     style={{
                         background: 'none',
                         border: '1px solid var(--xc-border)',
@@ -115,15 +138,33 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
                         padding: '0.1rem 0.4rem',
                         font: 'inherit',
                         fontSize: '0.75rem',
-                        cursor: loading ? 'default' : 'pointer',
+                        cursor: addressesLoading || loading ? 'default' : 'pointer',
                         color: 'inherit',
                     }}
                 >
-                    {loading ? 'Loading…' : 'Refresh'}
+                    {addressesLoading || loading ? 'Loading…' : 'Refresh'}
                 </button>
             </div>
 
-            <div>
+            {addressesLoading || loading ? (
+                <StatusMessage variant="status">Loading trade history…</StatusMessage>
+            ) : null}
+            {loadError ? (
+                <StatusMessage variant="error">{loadError}</StatusMessage>
+            ) : null}
+            {!loadError && !addressesLoading && !loading && summaries.length === 0 ? (
+                <p
+                    style={{
+                        margin: '0.25rem 0.25rem 0',
+                        color: 'var(--xc-fg-muted)',
+                        fontSize: '0.75rem',
+                    }}
+                >
+                    No trades on this market yet.
+                </p>
+            ) : null}
+            {summaries.length > 0 ? (
+                <div style={{ maxWidth: '100%', overflowX: 'auto' }}>
                     <table className={tableStyles.table}>
                         <caption className={tableStyles.caption}>Trade history</caption>
                         <thead>
@@ -137,6 +178,7 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
                         </thead>
                         <tbody>
                             {summaries.map((summary, idx) => {
+                                const sideColor = summary.side === 'buy' ? 'var(--xc-success)' : 'var(--xc-danger)';
                                 const key = summary.key || `row-${idx}`;
                                 return (
                                     <tr key={key}>
@@ -155,14 +197,14 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
                                         <td
                                             className={`${tableStyles.cell} ${tableStyles.numeric}`}
                                             data-label="Price"
-                                            style={{ color: summary.side === 'buy' ? '#26a69a' : '#ef5350' }}
+                                            style={{ color: sideColor }}
                                         >
                                             {summary.price}
                                         </td>
                                         <td className={`${tableStyles.cell} ${tableStyles.numeric}`} data-label={`Size (${tick1})`}>
                                             {summary.size}
                                         </td>
-                                        <td className={tableStyles.cell} data-label="Side">
+                                        <td className={tableStyles.cell} data-label="Side" style={{ color: sideColor, fontWeight: 600 }}>
                                             {summary.side === 'buy' ? 'Buy' : 'Sell'}
                                         </td>
                                         <td className={tableStyles.cell} data-label="Address">
@@ -175,30 +217,9 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
                             })}
                         </tbody>
                     </table>
-                    {loadError ? (
-                        <p
-                            style={{
-                                margin: '0.25rem 0.25rem 0',
-                                color: 'var(--xc-fg-muted)',
-                                fontSize: '0.75rem',
-                            }}
-                        >
-                            {loadError}
-                        </p>
-                    ) : null}
-                    {!loadError && !loading && summaries.length === 0 ? (
-                        <p
-                            style={{
-                                margin: '0.25rem 0.25rem 0',
-                                color: 'var(--xc-fg-muted)',
-                                fontSize: '0.75rem',
-                            }}
-                        >
-                            No trades on this market yet.
-                        </p>
-                    ) : null}
                 </div>
-        </div>
+            ) : null}
+        </section>
     );
 }
 

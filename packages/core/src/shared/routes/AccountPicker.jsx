@@ -59,7 +59,7 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
     const footer = (
         <div className={pickerStyles.footerActions}>
             <Button variant="primary" onClick={onAddAccount} icon={<Icon.PlusIcon />}>
-                Add Account
+                Add account
             </Button>
             {onRenameAccount && activeAccount ? (
                 <Button

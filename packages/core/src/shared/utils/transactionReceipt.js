@@ -70,7 +70,7 @@ export function transactionReceiptText(entry, {
         `Date: ${receiptDate(entry?.timestamp)}`,
         `Chain: ${chain}`,
         `Amount: ${amountText}`,
-        `Fee: ${feeText}`,
+        `Network fee: ${feeText}`,
         `Transaction ID: ${txid || NOT_AVAILABLE}`,
         `Explorer: ${explorerUrl || NOT_AVAILABLE}`,
     ].join('\n');

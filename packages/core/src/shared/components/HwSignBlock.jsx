@@ -19,6 +19,7 @@
 //   - 'wrong-app'     → "Open the [coin] app on your Ledger" warning
 //   - 'disconnected'  → "Device not detected; plug in and unlock"
 //   - 'locked'        → "Device is locked; enter PIN" (Trezor path)
+//   - 'cancelled'     → calm retry guidance after rejecting on the device
 //   - 'idle'          → no banner (pre-first-poll)
 //   - 'error'         → generic "Couldn't reach device" with detail
 //
@@ -124,7 +125,7 @@ export function HwSignBlock({
 export function statusCopy(status, signerKind, chainId, detail) {
     switch (status) {
         case 'available':
-            return 'Ready to sign. Confirm on your device when you tap Send.';
+            return 'Ready. 1. Select the sign button below. 2. Review every detail on your device. 3. Approve on the device only if everything matches. To cancel, reject on the device; nothing will be signed.';
         case 'wrong-app':
             return `Open the ${coinNameFor(chainId) || 'correct'} app on your Ledger and try again.`;
         case 'unsupported-network':
@@ -137,6 +138,8 @@ export function statusCopy(status, signerKind, chainId, detail) {
             return detail
                 ? `Device not detected. ${userFacingMessage(detail, 'Plug in and unlock, then try again.')}`
                 : 'Device not detected. Plug in and unlock.';
+        case 'cancelled':
+            return 'Signing was cancelled on your device. Nothing was signed. Review the details and try again when you are ready.';
         case 'error':
             return detail
                 ? `Couldn't reach device. ${userFacingMessage(detail, 'Check the connection and try again.')}`

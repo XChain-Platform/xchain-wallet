@@ -49,6 +49,10 @@ const EXPIRED_ERROR = 'This payment window has expired. Do not pay: a payment '
     + 'confirming after the deadline sends your coin without receiving the '
     + 'tokens. The escrowed tokens return to the seller.';
 
+const EXPIRY_LOSS_WARNING = 'This payment must confirm before the payment deadline. '
+    + 'If it confirms after the deadline, the coin is still sent but you do not '
+    + 'receive the tokens.';
+
 /**
  * §41.4 COINPAY authoring surface. Settles a pending coinpay
  * obligation (created when a non-BTC token matched against a native
@@ -93,6 +97,10 @@ export function CoinpayForm({
     );
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
+    const [nativeBalance, setNativeBalance] = useState(
+        /** @type {{ loading: boolean, baseUnits: bigint | null }} */
+        ({ loading: false, baseUnits: null }),
+    );
 
     useEffect(() => {
         let cancelled = false;
@@ -222,6 +230,40 @@ export function CoinpayForm({
         && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
+    const requiredBaseUnits = summary?.coinAmount == null
+        ? null
+        : BigInt(summary.coinAmount) + BigInt(feeEstimate?.sats || 0);
+    const insufficientBalance = nativeBalance.baseUnits != null
+        && requiredBaseUnits != null
+        && nativeBalance.baseUnits < requiredBaseUnits;
+    const insufficientBalanceMessage = insufficientBalance
+        ? `Insufficient ${coinTicker || 'coin'} balance. This address has ${coinAmountLabel(nativeBalance.baseUnits, coinTicker)}, but the payment and estimated network fee require ${coinAmountLabel(requiredBaseUnits, coinTicker)}.`
+        : null;
+
+    useEffect(() => {
+        if (!selected?.chainId || !selected?.address) {
+            setNativeBalance({ loading: false, baseUnits: null });
+            return undefined;
+        }
+        if (typeof messaging.getAddressBalances !== 'function') {
+            setNativeBalance({ loading: false, baseUnits: null });
+            return undefined;
+        }
+        let cancelled = false;
+        setNativeBalance({ loading: true, baseUnits: null });
+        messaging.getAddressBalances(selected.chainId, selected.address)
+            .then((balances) => {
+                if (cancelled) return;
+                setNativeBalance({
+                    loading: false,
+                    baseUnits: nativeBalanceBaseUnits(balances, coinTicker),
+                });
+            })
+            .catch(() => {
+                if (!cancelled) setNativeBalance({ loading: false, baseUnits: null });
+            });
+        return () => { cancelled = true; };
+    }, [selected?.chainId, selected?.address, coinTicker, messaging]);
 
     // Validate the selected obligation before advancing to review.
     // Signs nothing; just gates stage transition.
@@ -230,6 +272,10 @@ export function CoinpayForm({
         if (!selected || !summary) return;
         if (summary.coinAmount == null || !summary.payeeAddress) {
             setSubmitError('Obligation has no valid payee or a coin amount too large to pay safely.');
+            return;
+        }
+        if (insufficientBalance) {
+            setSubmitError(insufficientBalanceMessage);
             return;
         }
         if (classifyObligation(summary.expiration).state === 'expired') {
@@ -245,6 +291,10 @@ export function CoinpayForm({
         if (!selected || !summary || stage === 'submitting' || ownerLane.composing) return;
         if (summary.coinAmount == null || !summary.payeeAddress) {
             setSubmitError('Obligation has no valid payee or a coin amount too large to pay safely.');
+            return;
+        }
+        if (insufficientBalance) {
+            setSubmitError(insufficientBalanceMessage);
             return;
         }
         // PC-15 funds-safety re-check at sign time: the deadline can pass
@@ -397,7 +447,9 @@ export function CoinpayForm({
         }
         return wrap(
             <>
-                <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>Payment broadcast</p>
+                <StatusMessage variant="success">
+                    Payment broadcast successfully.
+                </StatusMessage>
                 {txid ? (
                     <p style={{ margin: '0 0 0.5rem' }}>
                         Transaction: <code>{txid}</code>
@@ -432,6 +484,8 @@ export function CoinpayForm({
                 )}
                 status={submitError ? (
                     <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : stage === 'submitting' ? (
+                    <StatusMessage>Preparing payment for confirmation…</StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -467,10 +521,12 @@ export function CoinpayForm({
                         value={amountLabel}
                     />
                     {coinpayExpiryText(summary.expiration) ? (
-                        <DetailRow label="Expires" value={coinpayExpiryText(summary.expiration)} />
+                        <DetailRow label="Payment deadline" value={coinpayExpiryText(summary.expiration)} />
                     ) : null}
                     <DetailRow label="Network fee" value={feeLabel} />
                 </dl>
+
+                <StatusMessage className={styles.error}>{EXPIRY_LOSS_WARNING}</StatusMessage>
 
                 {ownerLane.isWatcherMode ? (
                     <p className={styles.hint}>
@@ -551,7 +607,7 @@ export function CoinpayForm({
                                         <div style={{ fontSize: '0.75rem', color: 'var(--xc-fg-muted)' }}>
                                             From <AddressText address={row.address} />
                                             {coinpayExpiryText(row.obligation.expiration) ? (
-                                                <> · expires {coinpayExpiryText(row.obligation.expiration)}</>
+                                                <> · payment deadline {coinpayExpiryText(row.obligation.expiration)}</>
                                             ) : null}
                                             {classifyObligation(row.obligation.expiration).state === 'expired' ? (
                                                 <strong style={{ color: 'var(--xc-danger-fg)' }}> · EXPIRED, do not pay</strong>
@@ -569,14 +625,18 @@ export function CoinpayForm({
                 <FormPage
                     label="Selected payment obligation"
                     onSubmit={handleReview}
-                    status={submitError ? (
-                        <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    status={(submitError || insufficientBalanceMessage) ? (
+                        <StatusMessage variant="error" className={styles.error}>
+                            {submitError || insufficientBalanceMessage}
+                        </StatusMessage>
+                    ) : nativeBalance.loading ? (
+                        <StatusMessage>Checking available balance…</StatusMessage>
                     ) : null}
                     actions={(
                         <Button
                             type="submit"
                             variant="primary"
-                            disabled={!selected || !summary}
+                            disabled={!selected || !summary || nativeBalance.loading || insufficientBalance}
                         >
                             Review
                         </Button>
@@ -605,7 +665,7 @@ export function CoinpayForm({
                         </dd>
                         {coinpayExpiryText(summary.expiration) ? (
                             <>
-                                <dt className={styles.detailsLabel}>Expires</dt>
+                                <dt className={styles.detailsLabel}>Payment deadline</dt>
                                 <dd className={styles.detailsValue}>
                                     {coinpayExpiryText(summary.expiration)}
                                 </dd>
@@ -664,6 +724,20 @@ function coinAmountLabel(baseUnits, coinTicker) {
     return coinText != null
         ? `${coinText} ${coinTicker || 'coins'}`
         : `${baseUnits} base units`;
+}
+
+function nativeBalanceBaseUnits(balances, coinTicker) {
+    const native = balances?.native;
+    if (!native || (coinTicker && String(native.tick || '').toUpperCase() !== coinTicker)) {
+        return null;
+    }
+    const quantity = String(native.quantity ?? '').trim();
+    if (!/^\d+$/.test(quantity)) return null;
+    try {
+        return BigInt(quantity);
+    } catch {
+        return null;
+    }
 }
 
 function isPendingForPayer(row, address) {

@@ -22,7 +22,7 @@
     color: var(--xc-text);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-lg);
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+    box-shadow: var(--xc-shadow-modal);
     padding: var(--xc-space-4);
     text-align: center;
     animation: pop 140ms ease-out;

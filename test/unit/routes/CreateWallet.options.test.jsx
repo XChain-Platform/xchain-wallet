@@ -8,6 +8,7 @@ import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { MnemonicGrid } from '../../../packages/core/src/shared/components/MnemonicGrid.jsx';
 import { CreateWallet } from '../../../packages/core/src/shared/routes/CreateWallet.jsx';
 
 const { generateBip39Mnemonic, phrase24 } = vi.hoisted(() => ({
@@ -77,11 +78,13 @@ describe('CreateWallet security options', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
         expect(generateBip39Mnemonic).toHaveBeenCalledWith(256);
+        expect(screen.queryByRole('list', { name: 'Recovery phrase' })).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal recovery phrase' }));
         const grid = await screen.findByRole('list', { name: 'Recovery phrase' });
         const words = within(grid).getAllByRole('listitem');
         expect(words).toHaveLength(24);
-        expect(words[0].textContent).toBe('1abandon');
-        expect(words[23].textContent).toBe('24actual');
+        expect(words[0]).toHaveAccessibleName('1. abandon');
+        expect(words[23]).toHaveAccessibleName('24. actual');
         expect(screen.getByText(/Never share your recovery phrase/)).toHaveTextContent(
             'Never share your recovery phrase. Anyone with it can spend your funds.',
         );
@@ -117,6 +120,7 @@ describe('CreateWallet security options', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
         const main = container.querySelector('main');
+        fireEvent.click(await screen.findByRole('button', { name: 'Reveal recovery phrase' }));
         const phrase = await screen.findByRole('list', { name: 'Recovery phrase' });
         const verify = screen.getByRole('button', { name: 'Verify recovery phrase' });
         expect(main).toContainElement(phrase);
@@ -132,7 +136,7 @@ describe('CreateWallet security options', () => {
 });
 
 describe('MnemonicGrid narrow layout', () => {
-    it('keeps numbered words inside two shrinkable columns at 320px', () => {
+    it('keeps numbered whole words in two columns at 320px without selection', () => {
         const gridCss = css('packages/core/src/shared/components/MnemonicGrid.module.css');
         const popupRule = gridCss.match(/\.gridPopup\s*\{([^}]*)\}/)?.[1];
         const fullRule = gridCss.match(/\.gridFull\s*\{([^}]*)\}/)?.[1];
@@ -145,11 +149,34 @@ describe('MnemonicGrid narrow layout', () => {
         expect(popupRule).toMatch(/width:\s*100%/);
         expect(fullRule).toMatch(/width:\s*100%/);
         expect(cellRule).toMatch(/min-width:\s*0/);
+        expect(cellRule).toMatch(/user-select:\s*none/);
         expect(indexRule).toMatch(/flex:\s*0 0 2ch/);
         expect(indexRule).toMatch(/font-weight:\s*600/);
-        expect(wordRule).toMatch(/min-width:\s*0/);
-        expect(wordRule).toMatch(/overflow-wrap:\s*anywhere/);
-        expect(gridCss).toMatch(/@media \(max-width:\s*359px\)/);
+        expect(wordRule).toMatch(/white-space:\s*nowrap/);
+        expect(wordRule).toMatch(/word-break:\s*keep-all/);
+        expect(gridCss).not.toMatch(/user-select:\s*all/);
+        expect(gridCss).not.toMatch(/overflow-wrap:\s*anywhere/);
+        expect(gridCss).toMatch(/@media not all and \(min-width:\s*360px\)/);
+    });
+
+    it('requires a reveal action and prevents copying the revealed phrase', () => {
+        render(<MnemonicGrid mnemonic="abandon ability able about" variant="small" />);
+
+        const reveal = screen.getByRole('button', { name: 'Reveal recovery phrase' });
+        expect(reveal).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.queryByText('abandon')).toBeNull();
+        expect(screen.queryByRole('list', { name: 'Recovery phrase' })).toBeNull();
+
+        fireEvent.click(reveal);
+
+        const grid = screen.getByRole('list', { name: 'Recovery phrase' });
+        expect(screen.getByRole('button', { name: 'Hide recovery phrase' }))
+            .toHaveAttribute('aria-expanded', 'true');
+        expect(within(grid).getAllByRole('listitem')[0]).toHaveAccessibleName('1. abandon');
+        expect(fireEvent.copy(grid)).toBe(false);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Hide recovery phrase' }));
+        expect(screen.queryByText('abandon')).toBeNull();
     });
 
     it('keeps onboarding controls contained and compact in short landscape screens', () => {

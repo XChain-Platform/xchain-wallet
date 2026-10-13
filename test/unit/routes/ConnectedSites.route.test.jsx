@@ -37,7 +37,7 @@ function mount(overrides = {}, onBack = () => {}) {
 describe('ConnectedSites standalone route', () => {
     it('renders its own header rather than a Settings sub-page', async () => {
         mount();
-        expect(screen.getByText('Connected Sites')).toBeTruthy();
+        expect(screen.getByText('Connected sites')).toBeTruthy();
         // The Settings drilldown labels its back control "Back to settings".
         // A top-level route must not, or the popup promises a Settings screen
         // that back never lands on.
@@ -73,6 +73,6 @@ describe('ConnectedSites standalone route', () => {
         // Shells wire routes incrementally; an absent route must render an
         // empty screen, not throw inside the popup.
         mount({ listConnectedSites: undefined });
-        expect(screen.getByText('Connected Sites')).toBeTruthy();
+        expect(screen.getByText('Connected sites')).toBeTruthy();
     });
 });

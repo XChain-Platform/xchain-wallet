@@ -68,6 +68,7 @@ export function Sparkline({
             role="img"
             aria-label={summary}
         >
+            <title>{summary}</title>
             <polyline
                 fill="none"
                 stroke={stroke}

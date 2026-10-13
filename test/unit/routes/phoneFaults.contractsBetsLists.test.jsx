@@ -21,6 +21,21 @@ afterEach(() => {
 });
 
 describe('MyLists load failure wording', () => {
+    it('shows an address load failure as a sentence', async () => {
+        const raw = 'address database unavailable';
+        const messaging = {
+            getAddressesByChain: vi.fn().mockRejectedValue(new Error(raw)),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <MyLists walletId="w1" onOpenList={() => {}} onBack={() => {}} />
+            </MessagingProvider>,
+        );
+
+        expect(await screen.findByText('Failed to load addresses.')).toBeTruthy();
+        expect(screen.queryByText(raw)).toBeNull();
+    });
+
     it('names the chain without API paths or HTTP codes', async () => {
         const raw = 'Explorer returned HTTP 429 for /BTC/api/lists/tb1qexample/address';
         const messaging = {
@@ -39,6 +54,14 @@ describe('MyLists load failure wording', () => {
         expect(msg.textContent).not.toMatch(/HTTP|429|\/api\/|Explorer returned/);
         expect(msg.textContent).toMatch(/Try again in a moment/);
     }, 20_000);
+});
+
+describe('MyLists row sizing', () => {
+    it('gives the list and its rows the full available width', () => {
+        const css = route('MyLists.module.css');
+        expect(css).toMatch(/\.list\s*{[^}]*\bwidth:\s*100%/s);
+        expect(css).toMatch(/\.row\s*{[^}]*\bwidth:\s*100%/s);
+    });
 });
 
 describe('BetFeedsList market cards', () => {

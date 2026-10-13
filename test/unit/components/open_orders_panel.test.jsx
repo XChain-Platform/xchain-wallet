@@ -89,13 +89,22 @@ function orderRow(extra = {}) {
     };
 }
 
-function mountPanel(rows = [orderRow()]) {
+function deferred() {
+    let resolve;
+    const promise = new Promise((resolvePromise) => {
+        resolve = resolvePromise;
+    });
+    return { promise, resolve };
+}
+
+function mountPanel(rows = [orderRow()], overrides = {}) {
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue({ 'bitcoin-mainnet': [OWNER] }),
         getMarketOrders: vi.fn().mockResolvedValue(rows),
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
         cancelOrder: vi.fn(),
         cancelOrderHw: vi.fn(),
+        ...overrides,
     };
     render(
         <MessagingProvider shell="web" messaging={messaging}>
@@ -127,11 +136,29 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('OpenOrdersPanel cancellation confirmation', () => {
+    it('distinguishes loading from empty and contains wide rows on narrow screens', async () => {
+        const addressRequest = deferred();
+        mountPanel([], { getAddressesByChain: vi.fn(() => addressRequest.promise) });
+
+        expect(screen.getByRole('status')).toHaveTextContent('Loading open orders…');
+        expect(screen.queryByText('No open orders on this market.')).toBeNull();
+        expect(screen.getByRole('region', { name: 'Open orders' })).toHaveAttribute('aria-busy', 'true');
+
+        await act(async () => addressRequest.resolve({ 'bitcoin-mainnet': [OWNER] }));
+
+        expect(await screen.findByText('No open orders on this market.')).toBeInTheDocument();
+        expect(screen.queryByText('Loading open orders…')).toBeNull();
+    });
+
     it('renders the summarized market-orders response', async () => {
         mountPanel();
-        expect(await screen.findByText('Sell')).toBeInTheDocument();
-        expect(screen.getByText('2.00000000')).toBeInTheDocument();
+        const side = await screen.findByText('Sell');
+        const price = screen.getByText('2.00000000');
         expect(screen.getByText('10.00000000')).toBeInTheDocument();
+        expect(side.style.color).toBe('var(--xc-danger)');
+        expect(price.style.textAlign).toBe('right');
+        expect(price.style.fontVariantNumeric).toBe('tabular-nums');
+        expect(screen.getByText('Price').parentElement.parentElement.style.overflowX).toBe('auto');
     });
 
     it('composes through the owner-action lane and replaces the panel while confirming', async () => {

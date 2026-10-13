@@ -177,7 +177,7 @@ describe('MarketsList narrow layout', () => {
         expect(onOpenMarket).toHaveBeenCalledWith('bitcoin-mainnet', 'BTC', 'PEPE');
 
         fireEvent.change(search, { target: { value: 'absent' } });
-        expect(await screen.findByText('No matches')).toBeInTheDocument();
+        expect(await screen.findByText('No results for these filters')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Clear market search' }));
         expect(search).toHaveValue('');
         expect(screen.getByText('Counterparty')).toBeInTheDocument();
@@ -211,7 +211,7 @@ describe('MarketsList narrow layout', () => {
 
         const search = screen.getByRole('searchbox', { name: 'Search markets' });
         fireEvent.change(search, { target: { value: 'missing' } });
-        expect(await screen.findByText('No matches')).toBeInTheDocument();
+        expect(await screen.findByText('No results for these filters')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
         expect(search).toHaveValue('');
         expect(await screen.findByText('TOKEN0')).toBeInTheDocument();

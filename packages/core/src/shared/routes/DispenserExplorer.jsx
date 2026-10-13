@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { AddressText, Button, ChainBadge, EmptyState, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -474,7 +474,7 @@ function ResultRow({ row, oracleFeeds, onSelect }) {
     const price = dispenserFillPriceLabel(row, oracleFeeds);
     const status = String(flowsLib.dispenserLiveState(row).status || '-');
     return (
-        <button
+        <Button
             type="button"
             className={styles.entry}
             onClick={onSelect}
@@ -490,7 +490,7 @@ function ResultRow({ row, oracleFeeds, onSelect }) {
                 {row.source ? ` · by ` : ''}
                 {row.source ? <AddressText address={row.source} /> : null}
             </span>
-        </button>
+        </Button>
     );
 }
 

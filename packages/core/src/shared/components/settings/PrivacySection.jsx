@@ -28,7 +28,17 @@ import {
     CLIPBOARD_AUTO_CLEAR_MAX,
     CLIPBOARD_AUTO_CLEAR_MIN,
 } from '../../../schemas/settings.js';
-import { INPUT, ROW, ROW_HINT, ToggleRow, SettingsLoadError, Status, STACK } from './_settingsPrimitives.jsx';
+import {
+    INPUT,
+    ROW,
+    ROW_HINT,
+    ROW_VALUE,
+    SELECT,
+    ToggleRow,
+    SettingsLoadError,
+    Status,
+    STACK,
+} from './_settingsPrimitives.jsx';
 
 export function PrivacySection() {
     const { settings, loading, error, update } = useSettings();
@@ -135,7 +145,7 @@ function ClipboardAutoClearRow({ settings, update }) {
     return (
         <div style={ROW}>
             <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>
+                <span style={ROW_VALUE}>
                     Clipboard auto-clear
                 </span>
                 <span style={ROW_HINT}>
@@ -174,7 +184,7 @@ function FormDraftTtlRow({ settings, update }) {
     return (
         <div style={ROW}>
             <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>
+                <span style={ROW_VALUE}>
                     Form draft retention
                 </span>
                 <span style={ROW_HINT}>
@@ -190,7 +200,7 @@ function FormDraftTtlRow({ settings, update }) {
                 onChange={onChange}
                 aria-label="Form draft retention"
                 style={{
-                    ...INPUT,
+                    ...SELECT,
                     width: '7.5rem',
                 }}
             >

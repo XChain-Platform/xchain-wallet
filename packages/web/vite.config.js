@@ -115,6 +115,26 @@ const httpsEnabled = process.env.VITE_HTTPS === '1' || process.env.HTTPS === '1'
 // Vite otherwise rejects any Host it doesn't recognize.
 const devAllowedHost = process.env.VITE_DEV_ALLOWED_HOST || null;
 
+export const WEB_ENTRY_CHUNK_SIZE_LIMIT = 1_000_000;
+
+const entryChunkSizePlugin = {
+    name: 'xchain-web-entry-chunk-size',
+    generateBundle(_options, bundle) {
+        const entry = Object.values(bundle).find((output) => (
+            output.type === 'chunk'
+            && output.isEntry
+            && output.name === 'index'
+        ));
+        if (!entry) this.error('web entry chunk was not emitted');
+        const bytes = Buffer.byteLength(entry.code);
+        if (bytes > WEB_ENTRY_CHUNK_SIZE_LIMIT) {
+            this.error(
+                `web entry chunk is ${bytes} bytes; limit is ${WEB_ENTRY_CHUNK_SIZE_LIMIT}`,
+            );
+        }
+    },
+};
+
 // Dev-only convenience: rewrite a bare `/style-guide` to `/style-guide/`
 // so Vite picks up the multi-page entry at packages/web/style-guide/
 // index.html. Without the trailing slash, Vite's static-asset middleware
@@ -371,6 +391,23 @@ export default defineConfig({
         // false. The web shell is the outlier, and the mobile shells inherited
         // the outlier by bundling its output rather than by deciding anything.
         sourcemap: BUILD_PROFILE !== 'store',
+        rollupOptions: {
+            treeshake: {
+                // QR consumers are route-lazy, and the encoder performs no
+                // top-level work when UI barrels re-export those consumers.
+                moduleSideEffects(id) {
+                    return !id.replace(/\\/g, '/').includes('/node_modules/.pnpm/qrcode@');
+                },
+            },
+            output: {
+                manualChunks(id) {
+                    if (id.replace(/\\/g, '/').includes('/node_modules/.pnpm/qrcode@')) {
+                        return 'qrcode';
+                    }
+                    return undefined;
+                },
+            },
+        },
         // (prod half of G163): Rollup's commonjs pass defaults to
         // /node_modules/ only, and the `link:`-resolved xchain-sdk lives
         // outside every node_modules dir, so without this include the
@@ -407,6 +444,7 @@ export default defineConfig({
     },
     plugins: [
         polyfillShimResolver,
+        entryChunkSizePlugin,
         react(),
         ...(httpsEnabled ? [basicSsl()] : []),
         nodePolyfills({

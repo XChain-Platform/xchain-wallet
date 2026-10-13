@@ -283,7 +283,7 @@ export function ContractDetail({
                 <Section
                     title="State (expandable)"
                     rightSlot={
-                        <button
+                        <Button
                             type="button"
                             className={styles.entry}
                             style={{ padding: '0.25rem 0.5rem' }}
@@ -291,7 +291,7 @@ export function ContractDetail({
                             aria-expanded={stateExpanded}
                         >
                             {stateExpanded ? 'Collapse' : 'Expand'}
-                        </button>
+                        </Button>
                     }
                 >
                     {stateError ? (

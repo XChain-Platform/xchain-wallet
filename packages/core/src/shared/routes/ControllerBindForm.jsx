@@ -32,6 +32,7 @@ import styles from './IssueTokenForm.module.css';
 import { externalIndexOf, preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { isValidAddressForChain } from '../utils/addressValidation.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -293,6 +294,14 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
         event.preventDefault();
         if (!fromAddress) {
             setFormError('No source address available.');
+            return;
+        }
+        if (!descriptor?.coin || !descriptor?.networkKind || !isValidAddressForChain(
+            fromAddress.address,
+            descriptor.coin,
+            descriptor.networkKind,
+        )) {
+            setFormError('The selected source address is not valid for this network.');
             return;
         }
         if (target === 'token' && (!tick || !String(tick).trim())) {
@@ -632,6 +641,16 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
         <FormPage
             label={`${verb} controller`}
             onSubmit={handleReview}
+            intro={(
+                <>
+                    Binding lets a guard contract approve or block the selected actions for this token or address.
+                    {' '}Use Unbind on this screen to remove the guard later, after any cooldown finishes.
+                    {' '}You will review the source address, guard, action class, and fee before signing.
+                    {isWatcherMode
+                        ? ' Watch-only mode creates an unsigned transaction here and cannot sign it.'
+                        : ''}
+                </>
+            )}
             status={formError ? (
                 <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
             ) : null}

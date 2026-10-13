@@ -228,11 +228,11 @@ describe('ConfirmActionModal', () => {
             'packages/core/src/shared/components/ConfirmActionModal.module.css',
             'utf8',
         );
-        expect(intentCss).toMatch(/@media \(max-width: 399px\)[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\)/);
+        expect(intentCss).toMatch(/@media not all and \(min-width: 400px\)[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\)/);
         expect(intentCss).toMatch(/\.deltaTick\s*\{[^}]*overflow-wrap:\s*anywhere/s);
         expect(modalCss).toMatch(/\.fee\s*\{[^}]*text-align:\s*end/s);
         expect(modalCss).toMatch(/\.page\s*\{[^}]*padding-bottom:\s*var\(--xc-bottom-bar-h, 0px\)/s);
-        expect(modalCss).toMatch(/@media \(max-width: 399px\)[\s\S]*\.footer\s*\{[^}]*flex-direction:\s*column/s);
+        expect(modalCss).toMatch(/@media not all and \(min-width: 400px\)[\s\S]*\.footer\s*\{[^}]*flex-direction:\s*column/s);
     });
 
     it('uses a plain headline when an action has no decoded summary', () => {

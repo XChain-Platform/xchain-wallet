@@ -328,6 +328,49 @@
     flex: 0 0 auto;
 }
 
+.dateTools,
+.activeDateRange {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+}
+
+.datePresets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-1);
+}
+
+.dateZone,
+.activeDateRange {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+}
+
+.activeDateRange button {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--xc-accent-text);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    padding: var(--xc-space-1);
+    min-height: var(--xc-tap-min);
+}
+
+.activeDateRange button:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.dateError {
+    color: var(--xc-danger-text, #b42318);
+    font-size: var(--xc-text-sm);
+}
+
 .chip {
     display: inline-flex;
     align-items: center;
@@ -1345,7 +1388,7 @@
 /* Compact history layouts wrap controls and row metadata, while detail keys
    stack above their values. This keeps each piece of content in its own track
    when the available width reaches the 320px phone viewport. */
-@media (max-width: 399px) {
+@media not all and (min-width: 400px) {
     .filterCard {
         min-width: 0;
     }

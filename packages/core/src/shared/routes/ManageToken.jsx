@@ -553,7 +553,7 @@ export function ManageToken({
         <PageHeader
             onBack={onBack}
             backLabel="Back to my tokens"
-            title="Manage Token"
+            title="Manage token"
             titleIcon={<Icon.TokenIcon />}
         />
     );

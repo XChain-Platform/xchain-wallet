@@ -57,7 +57,6 @@ const receive = readFileSync(sharedReceive, 'utf8');
 for (const symbol of [
     'QRCode',
     'encodeBip21Uri',
-    'ChainBadge',
     'AddressText',
     'CopyButton',
 ]) {

@@ -26,7 +26,7 @@ describe('ShortcutHelp', () => {
         expect(screen.getByRole('dialog', { name: 'Keyboard shortcuts' })).toHaveAttribute('aria-modal', 'true');
         // A representative row from each group.
         expect(screen.getByText('Lock wallet')).toBeTruthy();
-        expect(screen.getByText('Go to History')).toBeTruthy();
+        expect(screen.getByText('Go to history')).toBeTruthy();
         // Section headings.
         expect(screen.getByText('General')).toBeTruthy();
         expect(screen.getByText('Go to')).toBeTruthy();

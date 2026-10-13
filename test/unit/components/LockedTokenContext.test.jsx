@@ -23,8 +23,15 @@ vi.mock('../../../packages/core/src/shared/components/TickerIcon.jsx', () => ({
     ),
 }));
 
+vi.mock('@xchain-wallet/core/ui', () => ({
+    Button: ({ children, onClick }) => <button type="button" onClick={onClick}>{children}</button>,
+}));
+
 const { LockedTokenContext } = await import(
     '../../../packages/core/src/shared/components/LockedTokenContext.jsx'
+);
+const { EmptyStateNudge } = await import(
+    '../../../packages/core/src/shared/components/EmptyStateNudge.jsx'
 );
 
 function renderContext(overrides = {}) {
@@ -84,5 +91,35 @@ describe('LockedTokenContext', () => {
         renderContext({ chainId: 'not-a-registered-chain' });
 
         expect(screen.queryByText(/^on /)).not.toBeInTheDocument();
+    });
+
+    it('stays role-neutral inside a parent landmark', () => {
+        render(
+            <main>
+                <LockedTokenContext chainId="unknown-chain" tick="XCP" />
+            </main>,
+        );
+
+        expect(screen.getAllByRole('main')).toHaveLength(1);
+        expect(screen.getByText('Token').parentElement).not.toHaveAttribute('role');
+    });
+});
+
+describe('EmptyStateNudge', () => {
+    it('does not duplicate a parent status role by default', () => {
+        render(
+            <div role="status">
+                <EmptyStateNudge title="Nothing here" body="Add an item to get started." />
+            </div>,
+        );
+
+        expect(screen.getAllByRole('status')).toHaveLength(1);
+        expect(screen.getByText('Nothing here').parentElement).not.toHaveAttribute('role');
+    });
+
+    it('supports an explicit role when it owns the announcement', () => {
+        render(<EmptyStateNudge title="Nothing here" role="status" />);
+
+        expect(screen.getByRole('status')).toHaveTextContent('Nothing here');
     });
 });

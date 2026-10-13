@@ -448,7 +448,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                                                     <AddressText address={row.legacy} />
                                                 </div>
                                                 <div>
-                                                    <strong>New wallet address</strong>{' '}
+                                                    <strong>New address</strong>{' '}
                                                     {row.next
                                                         ? <AddressText address={row.next} />
                                                         : <em>Unavailable</em>}

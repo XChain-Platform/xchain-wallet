@@ -26,6 +26,8 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, within, act, cleanup, fireEvent, waitFor } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import React from 'react';
 
 import { DemoBanner } from '../../../packages/core/src/shared/components/DemoBanner.jsx';
@@ -42,6 +44,10 @@ vi.mock('../../../packages/core/src/shared/utils/demoGraduation.js', async (orig
 }));
 
 const messaging = { listWallets: vi.fn(async () => ({ wallets: [] })) };
+const popupAppSource = readFileSync(
+    join(process.cwd(), 'packages', 'extension', 'src', 'popup', 'App.jsx'),
+    'utf8',
+);
 
 function mount(props = {}) {
     return render(
@@ -160,7 +166,10 @@ describe('DemoBanner: the demo disclosure on Home', () => {
 
         const dialog = screen.getByRole('dialog', { name: /exit demo and delete its data/i });
         expect(dialog).toHaveTextContent(/permanently deletes the demo wallet/i);
-        expect(dialog).toHaveTextContent(/sample accounts, addresses, and history/i);
+        expect(dialog).toHaveTextContent(/sample accounts, addresses, balances, and history/i);
+        expect(dialog).toHaveTextContent(/real wallets and their data are not affected/i);
+        expect(dialog).toHaveTextContent(/another wallet is available, the app opens it/i);
+        expect(dialog).toHaveTextContent(/returns you to wallet setup/i);
         expect(exitDemoWallet).not.toHaveBeenCalled();
         expect(within(dialog).getByRole('button', { name: /exit demo/i }).className).toMatch(/danger/);
     });
@@ -219,5 +228,14 @@ describe('DemoBanner: the demo disclosure on Home', () => {
         markDemoWallet('demo-1', { ttlMs: 1, now: Date.now() - 1000 });
         await act(async () => { mount({ activeWalletId: 'demo-1' }); });
         expect(exitDemoWallet).toHaveBeenCalledTimes(1);
+    });
+
+    it('mounts the extension banner in the layout header so it cannot consume route height', () => {
+        expect(popupAppSource).toMatch(
+            /<FullLayoutWithNav[\s\S]*?header=\{\(\s*<>[\s\S]*?<AppHeader[\s\S]*?\{activeWalletId \? <DemoBanner activeWalletId=\{activeWalletId\} onExited=\{refresh\} \/> : null\}\s*<\/>\s*\)\}\s*bottomBar=/,
+        );
+        expect(popupAppSource).not.toMatch(
+            /<FullLayoutWithNav[\s\S]*?>\s*\{activeWalletId \? \(\s*<DemoBanner/,
+        );
     });
 });

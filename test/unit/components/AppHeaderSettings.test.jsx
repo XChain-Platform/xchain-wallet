@@ -346,7 +346,7 @@ describe('header network badge width', () => {
     });
 
     it('falls back to a dot with a hidden name, not clipped letters, at phone width', () => {
-        const narrow = /@media \(max-width: (\d+)px\)\s*\{([\s\S]*?)\n\}/.exec(badgeCss);
+        const narrow = /@media not all and \(min-width: (\d+)px\)\s*\{([\s\S]*?)\n\}/.exec(badgeCss);
         expect(narrow).not.toBeNull();
         expect(Number(narrow[1])).toBeGreaterThanOrEqual(400);
         expect(narrow[2]).toMatch(/\.networkBadgeDot\s*\{[^}]*display:\s*inline-block/);

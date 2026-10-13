@@ -18,9 +18,10 @@ import { useTickBalance } from '../hooks/useTickBalance.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { formatWithThousands } from '../utils/amountFormat.js';
+import { divideDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
+import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -75,11 +76,8 @@ const isPlainPositive = (value) => /^\d+(\.\d+)?$/.test(String(value).trim())
  * Users can override to a different known address if they want the
  * SWAP fill to land at a different account.
  *
- * Expiration is entered as a block-height delta from the give-chain's
- * current tip; the form does not consult the tip and forwards the
- * raw delta value as the EXPIRATION field. (The SDK validator
- * accepts an integer block height; the indexer enforces the
- * absolute-vs-relative semantics.)
+ * Custom expiration is entered as a wall-clock time and serialized as a
+ * Unix timestamp. Omitting it lets the indexer apply its default window.
  *
  * @param {object} props
  * @param {string} props.walletId
@@ -237,6 +235,16 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         address: fromAddress?.address,
         tick: giveTick,
     });
+    const giveTokenInfo = useTokenInfo({
+        chainId: giveChainId,
+        tick: giveTick,
+        skip: giveOwnership || !giveTick.trim(),
+    });
+    const getTokenInfo = useTokenInfo({
+        chainId: getChainId,
+        tick: getTick,
+        skip: getOwnership || !getTick.trim(),
+    });
     const hw = isHwSource(fromAddress);
 
     const validationError = useMemo(() => {
@@ -256,6 +264,22 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         if (!getOwnership && getAmount && !isPlainPositive(getAmount)) {
             return 'Get amount must be a positive decimal number.';
         }
+        if (!giveOwnership && giveAmount) {
+            const precisionError = tokenAmountPrecisionError(giveAmount, {
+                divisibility: giveTokenInfo?.divisibility,
+                tick: giveTick,
+                noun: 'Give amount',
+            });
+            if (precisionError) return precisionError;
+        }
+        if (!getOwnership && getAmount) {
+            const precisionError = tokenAmountPrecisionError(getAmount, {
+                divisibility: getTokenInfo?.divisibility,
+                tick: getTick,
+                noun: 'Get amount',
+            });
+            if (precisionError) return precisionError;
+        }
         if (getAddress.includes('|') || getAddress.includes(';')) return 'Receive address is invalid.';
         if (memo.includes('|') || memo.includes(';')) return 'Memo cannot contain "|" or ";".';
         if (expMode === 'custom' && expInput.trim()) {
@@ -265,7 +289,15 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         }
         return null;
     }, [giveCoinTicker, getCoinTicker, giveTick, getTick, giveOwnership, giveAmount,
-        getOwnership, getAmount, getAddress, memo, expMode, expInput]);
+        getOwnership, getAmount, giveTokenInfo?.divisibility, getTokenInfo?.divisibility,
+        getAddress, memo, expMode, expInput]);
+
+    const rate = !giveOwnership && !getOwnership
+        ? divideDecimalStrings(getAmount, giveAmount, 8)
+        : null;
+    const rateText = rate
+        ? `1 ${giveTick.trim().toUpperCase()} = ${rate} ${getTick.trim().toUpperCase()}`
+        : 'Enter both amounts to see the rate';
 
     // Network fee for the give chain (the chain that pays the on-chain fee):
     // Low / Normal / Fast / Custom, editable via FeeSelector on the form
@@ -632,6 +664,9 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                         label="Get"
                         value={getSide}
                     />
+                    {!giveOwnership && !getOwnership ? (
+                        <DetailRow label="Rate" value={rateText} />
+                    ) : null}
                     <DetailRow
                         label="Receive at"
                         value={<AddressText address={getAddress} />}
@@ -647,7 +682,16 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                         <DetailRow label="Memo" value={memo} />
                     ) : null}
                     <DetailRow label="Network fee" value={feeText} />
+                    <DetailRow
+                        label="Protocol fee"
+                        value={`If charged, paid in ${nativeFee.flag ? giveTicker : 'XCHAIN'}; the network fee is separate.`}
+                    />
                 </dl>
+                <p className={styles.hintLeft}>
+                    The give side is escrowed until this offer is matched. If you cancel it or
+                    it expires, the escrow returns to the source address. Paid transaction fees
+                    are not refunded.
+                </p>
                 {isWatcherMode ? (
                     <p className={styles.hint}>
                         Watcher mode: this wallet will build an unsigned transaction.
@@ -776,7 +820,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                 >
                     {actionConfirm.composing
                         ? 'Preparing review…'
-                        : (singleEncode ? 'Swap' : 'Review')}
+                        : 'Review'}
                 </Button>
             )}
         >
@@ -873,7 +917,10 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                     ) : null}
             </FormSection>
 
-            <FormSection title="Expiration">
+            <FormSection
+                title="Timing and fees"
+                description="The give side stays escrowed until a match, cancellation, or expiration."
+            >
                 <label style={{ display: 'block' }}>
                     <input type="radio" name="xswap-exp" checked={expMode === 'default'} onChange={() => setExpMode('default')} />
                     {' '}Default window
@@ -890,6 +937,15 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                     onChange={(e) => setExpInput(e.target.value)}
                 />
                 ) : null}
+
+                <dl className={styles.detailsList}>
+                    <DetailRow label="Rate" value={rateText} />
+                </dl>
+
+                <p className={styles.hintLeft}>
+                    Cancel from My swaps or let the offer expire to return the escrow to the
+                    source address. Paid transaction fees are not refunded.
+                </p>
 
                 <Input
                     label="Memo (optional)"

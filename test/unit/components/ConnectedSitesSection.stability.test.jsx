@@ -143,6 +143,51 @@ describe('ConnectedSitesSection settings controls', () => {
         expect(await screen.findByText('No sites connected yet')).toBeTruthy();
     });
 
+    it('requires confirmation before blocking a connected origin', async () => {
+        messaging.listConnectedSites = vi.fn(async () => [{
+            id: 'site-1',
+            origin: 'https://dapp.example',
+            appName: 'Example dApp',
+            permissions: {},
+        }]);
+        render(<ConnectedSitesSection />);
+
+        const block = (await screen.findAllByRole('button', { name: 'Block' }))[0];
+        expect(block.className).toMatch(/danger/);
+        fireEvent.click(block);
+
+        expect(messaging.blockOrigin).not.toHaveBeenCalled();
+        expect(screen.getByRole('dialog', { name: 'Block https://dapp.example?' })).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        expect(messaging.blockOrigin).not.toHaveBeenCalled();
+
+        fireEvent.click(block);
+        fireEvent.click(screen.getByRole('button', { name: 'Block origin' }));
+        await waitFor(() => expect(messaging.blockOrigin).toHaveBeenCalledWith({
+            origin: 'https://dapp.example',
+        }));
+    });
+
+    it('uses a confirmed danger action to clear the blocklist audit log', async () => {
+        messaging.listBlocklistAuditLog = vi.fn(async () => ([{
+            at: Date.now(),
+            action: 'add',
+            entry: 'https://blocked.example',
+        }]));
+        messaging.clearBlocklistAuditLog = vi.fn(async () => {});
+        render(<ConnectedSitesSection />);
+
+        const clear = await screen.findByRole('button', { name: 'Clear log' });
+        expect(clear.className).toMatch(/danger/);
+        fireEvent.click(clear);
+
+        expect(messaging.clearBlocklistAuditLog).not.toHaveBeenCalled();
+        expect(screen.getByRole('dialog', { name: 'Clear blocklist audit log?' })).toBeTruthy();
+        fireEvent.click(screen.getAllByRole('button', { name: 'Clear log' }).at(-1));
+
+        await waitFor(() => expect(messaging.clearBlocklistAuditLog).toHaveBeenCalledTimes(1));
+    });
+
     it('writes effective defaults when both throttle fields are cleared', async () => {
         render(<ConnectedSitesSection />);
         const burst = await screen.findByLabelText('Sign-throttle burst (max requests per window)');

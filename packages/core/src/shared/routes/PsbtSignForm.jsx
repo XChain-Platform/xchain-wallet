@@ -51,7 +51,6 @@ import {
     AddressText,
     ChainPicker,
     CopyButton,
-    Icon,
     StatusMessage,
     QrScanner,
     PageHeader,
@@ -363,7 +362,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
     //     wallet emits the PSBT once enough frames reduce to the full
     //     message (Cluster U FOLLOWUP 2).
     const [scannerOpen, setScannerOpen] = useState(false);
-    const [xcwCollector, setXcwCollector] = useState(() => createXcwCollector());
+    const [, setXcwCollector] = useState(() => createXcwCollector());
     const bbqrFramesRef = useRef(/** @type {Map<number, string>} */ (new Map()));
     const bbqrStreamRef = useRef('');
     const [scanProgress, setScanProgress] = useState(
@@ -1029,7 +1028,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                 {' · '}
                 <strong>Total out:</strong> {formatExactSats(totalOut)} sats
                 {' · '}
-                <strong>Fee:</strong> {formatExactSats(fee)} sats
+                <strong>Network fee:</strong> {formatExactSats(fee)} sats
             </div>
             <div>
                 <strong>Inputs this address signs:</strong> {ownedInputCount} of {decomposed.inputs.length}

@@ -171,7 +171,7 @@ export function PortfolioChart({ rows, walletId }) {
                             height={40}
                             label="Portfolio performance chart"
                             rangeLabel={range.label}
-                            formatValue={(value) => formatFiat(value, fiatCurrency)}
+                            formatValue={(value) => formatFiatTooltip(value, fiatCurrency)}
                         />
                     </div>
                 ) : (
@@ -289,4 +289,9 @@ function hasNonZeroQuantity(row) {
 
 function formatFiat(value, currency) {
     return formatFiatAmount(String(value), currency);
+}
+
+function formatFiatTooltip(value, currency) {
+    const code = String(currency || 'USD').toUpperCase();
+    return `${formatFiat(value, code)} ${code}`;
 }

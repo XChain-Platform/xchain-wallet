@@ -41,29 +41,46 @@ export function isValidFiatAmount(amount) {
 }
 
 /** Format an exact decimal value in the selected currency and language. */
-export function formatFiatAmount(value, currency = 'USD', locale) {
+export function formatFiatAmount(value, currency = 'USD', locale, options = {}) {
     if (value === null || value === undefined) return '';
     const code = String(currency || 'USD').toUpperCase();
+    const zeroComparison = compareDecimalStrings(value, '0');
+    const centComparison = compareDecimalStrings(value, '0.01');
+    const numericValue = Number(value);
+    const isTinyPositive = zeroComparison === null || centComparison === null
+        ? Number.isFinite(numericValue) && numericValue > 0 && numericValue < 0.01
+        : zeroComparison === 1 && centComparison === -1;
+    const displayValue = isTinyPositive ? '0.01' : String(value);
+    const omitCodeSymbol = options?.omitCodeSymbol === true;
     let formatter;
     try {
         formatter = new Intl.NumberFormat(getFormatLocale(locale), {
             style: 'currency',
             currency: code,
             currencyDisplay: 'symbol',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
         });
     } catch {
-        return `${formatDecimalAmount(value, locale, {
-            minimumFractionDigits: 0,
+        const formatted = formatDecimalAmount(displayValue, locale, {
+            minimumFractionDigits: 2,
             maximumFractionDigits: 2,
-        })} ${code}`;
+        });
+        return `${isTinyPositive ? '< ' : ''}${formatted}${omitCodeSymbol ? '' : ` ${code}`}`;
     }
-    const fractionDigits = formatter.resolvedOptions().maximumFractionDigits;
-    const minorUnit = fractionDigits === 0
-        ? '1'
-        : `0.${'0'.repeat(fractionDigits - 1)}1`;
-    if (compareDecimalStrings(value, '0') === 1
-        && compareDecimalStrings(value, minorUnit) === -1) {
-        return `<${formatter.format(minorUnit)}`;
+    let formatted = formatter.format(displayValue);
+    if (omitCodeSymbol) {
+        const parts = formatter.formatToParts(displayValue);
+        const currencyIsCode = parts.some(
+            (part) => part.type === 'currency' && part.value.toUpperCase() === code,
+        );
+        if (currencyIsCode) {
+            formatted = parts
+                .filter((part) => part.type !== 'currency')
+                .map((part) => part.value)
+                .join('')
+                .trim();
+        }
     }
-    return formatter.format(String(value));
+    return `${isTinyPositive ? '< ' : ''}${formatted}`;
 }

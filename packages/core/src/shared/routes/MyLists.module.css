@@ -2,18 +2,6 @@
    DispensersList (48px round icon + chain overlay, search + network
    filter toolbar, status chip on the trailing edge). */
 
-.wrapFull {
-    display: flex;
-    flex-direction: column;
-    margin: var(--xc-space-6) 0 0;
-    padding: var(--xc-space-4) 0;
-}
-
-.wrapPopup {
-    display: flex;
-    flex-direction: column;
-}
-
 /* Secondary list actions, under the header rather than in it. */
 .actions {
     display: flex;
@@ -50,6 +38,7 @@
 .list {
     display: flex;
     flex-direction: column;
+    width: 100%;
     background: var(--xc-surface);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-md);

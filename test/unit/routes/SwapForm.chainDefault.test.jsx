@@ -51,23 +51,23 @@ function mount({ settings = {}, props = {} } = {}) {
     );
 }
 
-const chainButton = () => screen.findByRole('button', { name: /^Chain: / });
+const chainButton = () => screen.findByRole('button', { name: /^Give and get chain: / });
 
 afterEach(() => cleanup());
 
 describe('SwapForm opens on the last-used chain', () => {
     it('opens on Dogecoin when Bitcoin was created first and Dogecoin was used last', async () => {
         mount({ settings: { lastUsedChain: { mainnet: DOGE } } });
-        await waitFor(async () => expect((await chainButton()).getAttribute('aria-label')).toBe('Chain: Dogecoin'));
+        await waitFor(async () => expect((await chainButton()).getAttribute('aria-label')).toBe('Give and get chain: Dogecoin'));
     });
 
     it('a caller-seeded chain wins over the last-used chain', async () => {
         mount({ settings: { lastUsedChain: { mainnet: DOGE } }, props: { initialChainId: BTC } });
-        await waitFor(async () => expect((await chainButton()).getAttribute('aria-label')).toBe('Chain: Bitcoin'));
+        await waitFor(async () => expect((await chainButton()).getAttribute('aria-label')).toBe('Give and get chain: Bitcoin'));
     });
 
     it('falls back to the first chain when the last-used chain has no addresses', async () => {
         mount({ settings: { lastUsedChain: { mainnet: LTC } } });
-        await waitFor(async () => expect((await chainButton()).getAttribute('aria-label')).toBe('Chain: Bitcoin'));
+        await waitFor(async () => expect((await chainButton()).getAttribute('aria-label')).toBe('Give and get chain: Bitcoin'));
     });
 });

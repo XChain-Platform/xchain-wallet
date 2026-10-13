@@ -20,13 +20,14 @@ describe('multisig slice presentation safeguards', () => {
     it('uses theme tokens for status and accent colors', () => {
         const compose = route('ComposeMessage.jsx');
         const parallel = route('ParallelComposer.jsx');
+        const parallelStyles = route('ParallelComposer.module.css');
         const inbox = route('MessagingInbox.jsx');
 
         expect(compose).not.toMatch(/#ef5350|#f59e0b/i);
         expect(compose).toContain("color: 'var(--xc-danger-fg)'");
         expect(compose).toContain("border: '1px solid var(--xc-warning)'");
-        expect(parallel).not.toContain("color: '#b00'");
-        expect(parallel).toContain("color: 'var(--xc-danger-fg)'");
+        expect(parallel + parallelStyles).not.toContain("color: '#b00'");
+        expect(parallelStyles).toContain('color: var(--xc-danger-fg);');
         expect(inbox).not.toContain("color: isOutgoing ? '#FFFFFF'");
         expect(inbox).toContain("color: isOutgoing ? 'var(--xc-on-accent)'");
     });

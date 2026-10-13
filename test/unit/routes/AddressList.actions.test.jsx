@@ -226,7 +226,7 @@ describe('Address detail actions', () => {
             getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: records }),
         }));
 
-        const list = await screen.findByRole('list', { name: 'Wallet addresses' });
+        const list = await screen.findByRole('list', { name: 'Addresses' });
         await waitFor(() => expect(list.querySelectorAll('li')).toHaveLength(100));
         expect(screen.getByText('100 of 5,000 addresses shown')).toBeInTheDocument();
 

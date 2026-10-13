@@ -191,6 +191,16 @@ describe('429 retry', () => {
             .rejects.toBe(boom);
         expect(calls).toBe(1);
     });
+
+    it('can gate a non-GET request without retrying its 429 response', async () => {
+        const { limiter } = fakeLimiter();
+        let calls = 0;
+        await expect(limiter.request('h', null, async () => {
+            calls += 1;
+            throw http429();
+        }, () => null, 0)).rejects.toMatchObject({ response: { status: 429 } });
+        expect(calls).toBe(1);
+    });
 });
 
 describe('the wait cap', () => {
@@ -321,7 +331,7 @@ describe('the friendly message across the wallet', () => {
 const sdkReady = sdkInstalled();
 
 describe.skipIf(!sdkReady)('installed on the real SDK ExplorerClient', () => {
-    function realExplorer(stubGet) {
+    function realExplorer(stubGet, stubPost) {
         const ExplorerClient = requireSdkDeep('explorerClient');
         const ex = new ExplorerClient({
             network: 'bitcoin-mainnet',
@@ -329,6 +339,7 @@ describe.skipIf(!sdkReady)('installed on the real SDK ExplorerClient', () => {
             retry: { maxRetries: 1, baseDelay: 1, maxDelay: 2, retryAfterMaxDelay: 60_000 },
         });
         ex.client.get = stubGet;
+        if (stubPost) ex.client.post = stubPost;
         return ex;
     }
 
@@ -363,6 +374,20 @@ describe.skipIf(!sdkReady)('installed on the real SDK ExplorerClient', () => {
         expect(err.retryAfterMs).toBe(3_000);
         expect(err.detail).toMatch(/Explorer returned HTTP 429 for \/BTC\/api\/lists/);
         expect(explorerReadFailure(err, 'load lists').cause).toBe('rate_limited');
+    });
+
+    it('does not retry an explorer POST read', async () => {
+        const { limiter } = fakeLimiter();
+        let calls = 0;
+        const ex = realExplorer(async () => ok(1), async () => {
+            calls += 1;
+            throw Object.assign(http429(), { isAxiosError: true });
+        });
+        const sdk = installExplorerRateLimit({ explorer: ex }, limiter);
+
+        await expect(sdk.explorer.post('/balances', { addresses: ['bc1q'] }))
+            .rejects.toMatchObject({ message: EXPLORER_BUSY_MESSAGE });
+        expect(calls).toBe(1);
     });
 
     it('leaves non-429 explorer errors worded as before', async () => {

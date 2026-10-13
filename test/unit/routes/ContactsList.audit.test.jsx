@@ -60,7 +60,7 @@ function mount(messaging, walletId = 'w1') {
 function listedNames() {
     return within(screen.getByRole('list', { name: 'Contacts' }))
         .getAllByRole('listitem')
-        .map((row) => (row.firstElementChild ?? row).textContent.trim());
+        .map((row) => (row.querySelector('[class*="rowName"]') ?? row).textContent.trim());
 }
 
 afterEach(() => {

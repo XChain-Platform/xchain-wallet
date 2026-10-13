@@ -27,7 +27,6 @@
 import { Fragment, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Skeleton } from '@xchain-wallet/core/ui';
 import { RouteErrorBoundary } from '@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx';
-import { uri as coreUri } from '@xchain-wallet/core';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { deepLinkRoute } from '../../../desktop/renderer/deepLinkRoute.js';
 import { withResolvedIssuer } from '@xchain-wallet/core/shared/utils/tokenDetailIssuer.js';
@@ -966,9 +965,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                             setUnlockedView('home');
                         }}
                         onChangeAsset={(carry) => {
-                            // Carry the typed To address + amount so picking a
-                            // new asset doesn't wipe those fields.
-                            setSendPrefill({ address: carry?.address || '', amount: carry?.amount || '' });
+                            setSendPrefill({ assetSwitchDraft: carry });
                             setUnlockedView('send-picker');
                         }}
                     />
@@ -981,15 +978,31 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                         accountId={activeAccountId || undefined}
                         onBack={() => { setSendPrefill(null); setUnlockedView('home'); }}
                         onSelect={(sel) => {
-                            // Preserve any To address + amount carried in via onChangeAsset.
                             setSendPrefill((prev) => ({
                                 chainId: sel.chainId,
                                 tick: sel.tick,
                                 kind: sel.kind,
                                 displayName: sel.displayName,
                                 imageUrl: sel.imageUrl,
-                                address: prev?.address || undefined,
-                                amount: prev?.amount || undefined,
+                                address: prev?.assetSwitchDraft?.chainId === sel.chainId
+                                    ? (prev.assetSwitchDraft.address || undefined)
+                                    : undefined,
+                                amount: prev?.assetSwitchDraft?.chainId === sel.chainId
+                                    && prev.assetSwitchDraft.tick?.trim().toUpperCase()
+                                        === String(sel.tick || '').trim().toUpperCase()
+                                    ? (prev.assetSwitchDraft.amount || undefined)
+                                    : undefined,
+                                feeSelection: prev?.assetSwitchDraft?.chainId === sel.chainId
+                                    ? prev.assetSwitchDraft.feeSelection
+                                    : undefined,
+                                assetSwitchNotice: prev?.assetSwitchDraft
+                                    ? (prev.assetSwitchDraft.chainId !== sel.chainId
+                                        ? 'Chain changed. Recipient, amount, and fee rate were reset.'
+                                        : prev.assetSwitchDraft.tick?.trim().toUpperCase()
+                                            !== String(sel.tick || '').trim().toUpperCase()
+                                            ? 'Token changed. Amount was reset for the new token precision.'
+                                            : undefined)
+                                    : undefined,
                             }));
                             setSendBackTo('send-picker');
                             setUnlockedView('send');
@@ -2765,12 +2778,17 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                 <FullLayoutWithNav
                     routeKey={`${unlockedView}:${palette.navigationKey}`}
                     header={(
-                        <AppHeader
-                            onCommandPalette={palette.openPalette}
-                            onLock={handleLock}
-                            isWatcherMode={isWatcherMode}
-                            onOpenNetworkSettings={() => openSettingsSection('network-endpoints')}
-                        />
+                        <>
+                            <AppHeader
+                                onCommandPalette={palette.openPalette}
+                                onLock={handleLock}
+                                isWatcherMode={isWatcherMode}
+                                onOpenNetworkSettings={() => openSettingsSection('network-endpoints')}
+                            />
+                            {/* In the header slot, not the route body, so the
+                                banner cannot consume route height. */}
+                            {activeWalletId ? <DemoBanner activeWalletId={activeWalletId} onExited={refresh} /> : null}
+                        </>
                     )}
                     bottomBar={(
                         <BottomTabBar
@@ -2785,9 +2803,6 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                         />
                     )}
                 >
-                    {activeWalletId ? (
-                        <DemoBanner activeWalletId={activeWalletId} onExited={refresh} />
-                    ) : null}
                     <ScrollRestoration routeKey={unlockedView}>
                         <RouteErrorBoundary
                             resetKey={`${unlockedView}:${palette.navigationKey}`}

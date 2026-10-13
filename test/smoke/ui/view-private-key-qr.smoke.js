@@ -13,8 +13,8 @@
 // Pins:
 //   - shared/components/KeyQR.jsx exists, named export, lazy `qrcode`-backed
 //     dataUrl rendering, degrades to null on encode failure.
-//   - Both extension popup + web App.jsx import KeyQR and pass it through
-//     ViewPrivateKey's renderQR render-prop.
+//   - The extension imports KeyQR directly, while the web shell defers it until
+//     the private-key route renders, and both pass it through ViewPrivateKey.
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
@@ -45,14 +45,22 @@ assert.match(keyQrSrc, /alt=\{alt\}/, 'KeyQR threads alt through for a11y');
 
 // --- 2. Both shells wire renderQR to KeyQR --------------------------------
 
-for (const [name, file] of [
-    ['extension', join(ext, 'src', 'popup', 'App.jsx')],
-    ['web', join(web, 'src', 'App.jsx')],
+for (const [name, file, importPattern] of [
+    [
+        'extension',
+        join(ext, 'src', 'popup', 'App.jsx'),
+        /import \{ KeyQR \} from '@xchain-wallet\/core\/shared\/components\/KeyQR\.jsx'/,
+    ],
+    [
+        'web',
+        join(web, 'src', 'App.jsx'),
+        /const KeyQR = lazyRoute\(\(\) => import\('@xchain-wallet\/core\/shared\/components\/KeyQR\.jsx'\), 'KeyQR'\)/,
+    ],
 ]) {
     const src = readFileSync(file, 'utf8');
     assert.match(
         src,
-        /import \{ KeyQR \} from '@xchain-wallet\/core\/shared\/components\/KeyQR\.jsx'/,
+        importPattern,
         `${name} App imports KeyQR`,
     );
     assert.match(

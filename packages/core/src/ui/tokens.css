@@ -72,8 +72,10 @@
     --xc-tap-min: 24px;
 
     /* Radii */
+    --xc-radius-xs: 2px;
     --xc-radius-sm: 4px;
     --xc-radius-md: 8px;
+    --xc-radius-control: 10px;
     --xc-radius-lg: 12px;
     --xc-radius-pill: 9999px;
 
@@ -157,6 +159,17 @@
     --xc-disabled-saturation: 0.35;
     --xc-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
     --xc-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
+    --xc-shadow-header-menu: 0 8px 20px rgba(0, 0, 0, 0.18);
+    --xc-shadow-toast: 0 8px 24px rgba(0, 0, 0, 0.15);
+    --xc-shadow-popover: 0 12px 30px rgba(0, 0, 0, 0.18);
+    --xc-shadow-modal: 0 16px 40px rgba(0, 0, 0, 0.35);
+    --xc-shadow-side-panel: -16px 0 40px rgba(0, 0, 0, 0.35);
+    --xc-shadow-bottom-sheet: 0 -8px 32px rgba(0, 0, 0, 0.18);
+    --xc-shadow-surface-ring: 0 0 0 1.5px var(--xc-surface);
+    --xc-shadow-accent-ring: 0 0 0 1px var(--xc-accent-primary, var(--xc-border-strong));
+    --xc-shadow-focus-ring: 0 0 0 3px var(--xc-focus-ring);
+    --xc-shadow-danger-focus-ring: 0 0 0 3px rgba(220, 38, 38, 0.2);
+    --xc-shadow-nav-indicator: inset 3px 0 0 var(--xc-accent-primary, var(--xc-text));
 
     /* How tall the app shell may be. NOT plain 100dvh, because
      * `body` below pads itself by the top safe-area inset, so a shell that

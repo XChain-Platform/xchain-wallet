@@ -19,7 +19,6 @@ import { usePortfolioChartVisible } from '../hooks/usePortfolioChartVisible.js';
 import { isDemoWallet } from '../../flows/demoMode.js';
 import { synthesizeDemoNativePrices } from '../../flows/demoFixtures.js';
 import styles from './TotalBalanceHero.module.css';
-import { compareDecimalStrings } from '../utils/amountFormat.js';
 import { formatFiatAmount as formatFiatValue } from '../utils/fiatAmountFormat.js';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
 
@@ -366,41 +365,5 @@ function fiatValueOf(row) {
 // formatter "symbol" that is itself the code without affecting change lines.
 function formatFiatAmount(value, currency, locale, omitCodeSymbol = false) {
     if (value === null || value === undefined) return '-';
-    // Change lines use the shared localized formatter; only the main total needs
-    // the code-symbol suppression below.
-    if (!omitCodeSymbol) return formatFiatValue(value, currency, locale);
-    const code = String(currency || 'USD').toUpperCase();
-    try {
-        let fmt;
-        try {
-            fmt = new Intl.NumberFormat(locale || 'en-US', {
-                style: 'currency',
-                currency: code,
-                currencyDisplay: 'symbol',
-            });
-        } catch {
-            fmt = new Intl.NumberFormat('en-US', {
-                style: 'currency',
-                currency: code,
-                currencyDisplay: 'symbol',
-            });
-        }
-        const minorUnit = fmt.resolvedOptions().maximumFractionDigits === 0 ? 1 : 0.01;
-        const displayValue = compareDecimalStrings(value, '0') === 1
-            && compareDecimalStrings(value, String(minorUnit)) === -1
-            ? minorUnit
-            : String(value);
-        const parts = fmt.formatToParts(displayValue);
-        const currencyIsCode = omitCodeSymbol && parts.some(
-            (part) => part.type === 'currency' && part.value.toUpperCase() === code,
-        );
-        const formatted = parts
-            .filter((part) => !currencyIsCode || part.type !== 'currency')
-            .map((part) => part.value)
-            .join('')
-            .trim();
-        return displayValue === minorUnit ? `<${formatted}` : formatted;
-    } catch {
-        return String(value);
-    }
+    return formatFiatValue(value, currency, locale, { omitCodeSymbol });
 }

@@ -16,6 +16,14 @@ import {
 const root = path.resolve(import.meta.dirname, '../../..');
 const uiIndexPath = path.join(root, 'packages/core/src/ui/index.js');
 const tokensPath = path.join(root, 'packages/core/src/ui/tokens.css');
+const sectionRoot = path.join(root, 'packages/web/src/style-guide/sections');
+
+function sectionSource(file, component) {
+    const source = fs.readFileSync(path.join(sectionRoot, file), 'utf8');
+    const start = source.indexOf(`export function ${component}()`);
+    const next = source.indexOf('\nexport function ', start + 1);
+    return source.slice(start, next === -1 ? source.length : next);
+}
 
 function namedComponentExports(source) {
     const named = [...source.matchAll(
@@ -101,5 +109,44 @@ describe('style guide primitive coverage', () => {
             expect(section, `${primitive} has canonical JSX`).toContain('<Markup>');
             expect(section, `${primitive} has a live example`).toContain('<LiveExample');
         }
+    });
+
+    it('renders finite visual variants instead of only naming them in guidance', () => {
+        const fieldSizes = sectionSource('FieldSizesSection.jsx', 'FieldSizesSection');
+        expect(fieldSizes).toMatch(
+            /<LiveExample label="Same contract on Textarea">[\s\S]*?<Textarea[\s\S]*?label="Message \(lg, hero\)"[\s\S]*?size="lg"/,
+        );
+
+        const choices = sectionSource('ChoicePrimitivesSection.jsx', 'AddressComboboxSection');
+        expect(choices).toContain('<AddressComboboxExample size="lg" />');
+
+        const display = fs.readFileSync(
+            path.join(sectionRoot, 'DisplayPrimitivesSection.jsx'),
+            'utf8',
+        );
+        expect(display).toContain('showName={false}');
+        expect(display).toContain('showNetworkKind={false}');
+        expect(display).toContain('scheme="p2sh-multisig" size="sm"');
+        expect(display).toContain('status="pending" size="md"');
+        expect(display).toContain('placement="bottom"');
+
+        const network = sectionSource('NetworkFieldSection.jsx', 'NetworkFieldSection');
+        expect(network).toMatch(
+            /<LiveExample label="Hero size for a focused transaction screen\.">[\s\S]*?<NetworkField[\s\S]*?size="lg"/,
+        );
+
+        const chainPicker = sectionSource('ChainPickerSection.jsx', 'ChainPickerSection');
+        expect(chainPicker).toMatch(
+            /<LiveExample label="Scoped context:[^>]+>[\s\S]*?<ChainPicker[\s\S]*?hideNetworkKind/,
+        );
+
+        const states = sectionSource('StatesSection.jsx', 'StatesSection');
+        for (const shape of ['row', 'text', 'title', 'avatar', 'badge', 'card', 'tile']) {
+            expect(states, `Skeleton ${shape} shape`).toContain(`shape="${shape}"`);
+        }
+        expect(states).toContain('<Skeleton.Row />');
+        expect(states).toContain('<Skeleton.List');
+        expect(states).toContain('details="available=');
+        expect(states).toContain("recovery={{ label: 'Use Max'");
     });
 });

@@ -45,7 +45,7 @@
 .control:focus-visible {
     outline: none;
     border-color: var(--xc-accent-primary);
-    box-shadow: 0 0 0 3px var(--xc-focus-ring);
+    box-shadow: var(--xc-shadow-focus-ring);
 }
 
 .control:disabled {
@@ -57,7 +57,7 @@
     border-color: var(--xc-danger);
 }
 .invalid:focus-visible {
-    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.2);
+    box-shadow: var(--xc-shadow-danger-focus-ring);
 }
 
 /* lg (hero) size, matching Input.module.css `.lg`. */

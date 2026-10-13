@@ -863,8 +863,8 @@ function AppInner() {
                             setSendBackTo('home');
                             setUnlockedView('home');
                         }}
-                        onChangeAsset={() => {
-                            setSendPrefill(null);
+                        onChangeAsset={(carry) => {
+                            setSendPrefill({ assetSwitchDraft: carry });
                             setUnlockedView('send-picker');
                         }}
                     />
@@ -875,15 +875,34 @@ function AppInner() {
                     <SendPicker
                         walletId={activeWalletId}
                         accountId={activeAccountId || undefined}
-                        onBack={() => setUnlockedView('home')}
+                        onBack={() => { setSendPrefill(null); setUnlockedView('home'); }}
                         onSelect={(sel) => {
-                            setSendPrefill({
+                            setSendPrefill((prev) => ({
                                 chainId: sel.chainId,
                                 tick: sel.tick,
                                 kind: sel.kind,
                                 displayName: sel.displayName,
                                 imageUrl: sel.imageUrl,
-                            });
+                                address: prev?.assetSwitchDraft?.chainId === sel.chainId
+                                    ? (prev.assetSwitchDraft.address || undefined)
+                                    : undefined,
+                                amount: prev?.assetSwitchDraft?.chainId === sel.chainId
+                                    && prev.assetSwitchDraft.tick?.trim().toUpperCase()
+                                        === String(sel.tick || '').trim().toUpperCase()
+                                    ? (prev.assetSwitchDraft.amount || undefined)
+                                    : undefined,
+                                feeSelection: prev?.assetSwitchDraft?.chainId === sel.chainId
+                                    ? prev.assetSwitchDraft.feeSelection
+                                    : undefined,
+                                assetSwitchNotice: prev?.assetSwitchDraft
+                                    ? (prev.assetSwitchDraft.chainId !== sel.chainId
+                                        ? 'Chain changed. Recipient, amount, and fee rate were reset.'
+                                        : prev.assetSwitchDraft.tick?.trim().toUpperCase()
+                                            !== String(sel.tick || '').trim().toUpperCase()
+                                            ? 'Token changed. Amount was reset for the new token precision.'
+                                            : undefined)
+                                    : undefined,
+                            }));
                             setSendBackTo('send-picker');
                             setUnlockedView('send');
                         }}

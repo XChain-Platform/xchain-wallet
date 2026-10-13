@@ -75,6 +75,17 @@ afterEach(() => {
 });
 
 describe('ThisWalletSection removal completion', () => {
+    it('names the wallet and warns about backups in the confirmation', () => {
+        mount([OTHER_WALLET]);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Remove…' }));
+
+        expect(screen.getAllByText(ACTIVE_WALLET.name)
+            .some((element) => element.tagName === 'STRONG')).toBe(true);
+        expect(screen.getByText(/Make sure you have a backup before continuing/)).toBeTruthy();
+        expect(screen.getByText(/encrypted seed is destroyed and cannot be recovered/)).toBeTruthy();
+    });
+
     it('submits an exact wallet-name confirmation with Enter', async () => {
         const { messaging } = mount([OTHER_WALLET]);
 
@@ -147,6 +158,7 @@ describe('ThisWalletSection removal completion', () => {
         await waitFor(() => expect(wipeWalletStorage).toHaveBeenCalledOnce());
         expect(messaging.removeWallet).toHaveBeenCalledWith({ walletId: ACTIVE_WALLET.id });
         expect(globalThis.localStorage.getItem('xc:activeWallet')).toBeNull();
+        expect(messaging.listWallets).toHaveBeenCalledOnce();
         expect(reload).toHaveBeenCalledOnce();
         expect(screen.queryByRole('button', { name: 'Remove…' })).toBeNull();
         expect(screen.queryByRole('button', { name: 'Remove wallet' })).toBeNull();

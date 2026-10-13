@@ -52,6 +52,7 @@ describe('empty list screens offer the create action', () => {
             { getListsForSource: vi.fn().mockResolvedValue({ data: [] }) },
         );
         expect(await screen.findByText('No lists yet', {}, { timeout: 10_000 })).toBeTruthy();
+        expect(screen.getByText('Create an address list for airdrops or a token list for project rosters and gates.')).toBeTruthy();
         expect(screen.queryByText(/Use Create list/)).toBeNull();
         const buttons = screen.getAllByRole('button', { name: 'Create list' });
         fireEvent.click(buttons[buttons.length - 1]);

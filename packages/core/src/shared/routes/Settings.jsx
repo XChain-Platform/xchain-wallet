@@ -137,7 +137,7 @@ export function Settings({
     const sections = useMemo(() => /** @type {SectionDef[]} */ ([
         {
             id: 'this-wallet',
-            title: 'This Wallet',
+            title: 'This wallet',
             description: 'Wallet name, extended public keys, switch / rename, remove wallet.',
             keywords: 'wallet name xpub extended public key watch only export switch rename remove delete destroy migrate bip39 upgrade recovery phrase encrypted seed backup',
             kind: 'internal-drill',
@@ -151,7 +151,7 @@ export function Settings({
         },
         {
             id: 'accounts-addresses',
-            title: 'Accounts & Addresses',
+            title: 'Accounts & addresses',
             description: 'Active account, change addresses, signer pairing.',
             keywords: 'account address signer change addresses',
             kind: 'external-drill',
@@ -188,7 +188,7 @@ export function Settings({
         },
         {
             id: 'language-region',
-            title: 'Language & Region',
+            title: 'Language & region',
             description: 'Language, currency.',
             keywords: 'language region currency fiat locale custom iso code',
             kind: 'panel',
@@ -214,7 +214,7 @@ export function Settings({
         },
         {
             id: 'wallet-mode',
-            title: 'Wallet Mode',
+            title: 'Wallet mode',
             description: 'Normal / Watcher (watch-only) / Signer (air-gapped). Pairs of watcher + signer wallets enable transaction-via-QR signing.',
             keywords: 'wallet mode full watcher watch only signer air gapped psbt cold storage',
             kind: 'internal-drill',
@@ -224,7 +224,7 @@ export function Settings({
         {
             id: 'backup',
             title: 'Backup',
-            description: 'Seed phrase, dry-run restore, encrypted backup file.',
+            description: 'Recovery phrase, dry-run restore, encrypted backup file.',
             keywords: 'backup password wallet password export encrypted file reveal back up seed recovery phrase mnemonic test dry run restore publish labels on chain contacts',
             kind: 'internal-drill',
             Component: BackupSection,
@@ -259,7 +259,7 @@ export function Settings({
         },
         {
             id: 'network-endpoints',
-            title: 'Network & Endpoints',
+            title: 'Network & endpoints',
             description: 'Per-chain explorer, encoder, and hub URLs.',
             keywords: 'network endpoints explorer encoder hub url chain registry reset default save',
             kind: 'internal-drill',
@@ -277,7 +277,7 @@ export function Settings({
         },
         {
             id: 'connected-sites',
-            title: 'Connected Sites',
+            title: 'Connected sites',
             description: 'dApp connections and per-site permissions.',
             keywords: 'connected sites website dapp connections permissions chains accounts sign messages actions origin disconnect block unblock blocked mutations throttle burst window',
             kind: 'internal-drill',
@@ -294,7 +294,7 @@ export function Settings({
         },
         {
             id: 'ads',
-            title: 'Automatic Donation System',
+            title: 'Automatic donation system',
             description: 'Turn automatic donations on or off, set per-chain amounts and thresholds, and view lifetime totals.',
             keywords: 'donation ads automatic on off per chain transaction amount trigger threshold address lifetime totals',
             kind: 'internal-drill',
@@ -303,7 +303,7 @@ export function Settings({
         },
         {
             id: 'developer',
-            title: 'Developer Mode',
+            title: 'Developer mode',
             description: 'Custom endpoints, regtest networks, and diagnostics.',
             keywords: 'developer mode learn variant popover regtest networks faucet mint custom chains endpoints diagnostics logs console localhost dapps auto approve auto sign cache password miner url',
             kind: 'internal-drill',

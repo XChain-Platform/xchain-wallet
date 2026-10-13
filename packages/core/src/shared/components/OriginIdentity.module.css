@@ -33,6 +33,7 @@
     min-width: 0;
 }
 
+.registrableDomain,
 .hostEnding,
 .fullOrigin {
     direction: ltr;
@@ -43,6 +44,11 @@
     white-space: pre-wrap;
 }
 
+.registrableDomain {
+    font-size: var(--xc-text-md);
+    font-weight: 800;
+}
+
 .hostEnding {
     font-size: var(--xc-text-md);
     font-weight: 700;
@@ -50,4 +56,14 @@
 
 .fullOrigin {
     font-size: var(--xc-text-xs);
+}
+
+.warning {
+    margin: var(--xc-space-1) 0 0;
+    padding: var(--xc-space-2);
+    border-inline-start: 3px solid var(--xc-warning);
+    background: var(--xc-warning-bg);
+    color: var(--xc-warning-text);
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
 }

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { EmptyState, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { outcomeLabelsOf, outcomePhrase } from '../utils/betOutcomeLabels.js';
@@ -79,8 +79,10 @@ export function MyBets({ walletId, accountId, onOpenMarket, onBack }) {
     // Outcome labels per market, keyed `${chainId}:${feedActionIndex}`. Empty
     // array = asked, nothing to show (see the effect below).
     const [labelsByMarket, setLabelsByMarket] = useState(/** @type {Record<string, string[]>} */ ({}));
+    const loadRequestId = useRef(0);
 
     const load = useCallback(async () => {
+        const requestId = ++loadRequestId.current;
         if (typeof messaging?.getAddressesByChain !== 'function' || typeof messaging?.bets !== 'function') {
             setRows([]); return;
         }
@@ -88,6 +90,7 @@ export function MyBets({ walletId, accountId, onOpenMarket, onBack }) {
         setError(null);
         try {
             const chains = (await messaging.getAddressesByChain(walletId, accountId)) || {};
+            if (requestId !== loadRequestId.current) return;
             const pairs = [];
             for (const [chainId, addrs] of Object.entries(chains)) {
                 for (const a of addrs || []) pairs.push({ chainId, address: a.address });
@@ -96,6 +99,7 @@ export function MyBets({ walletId, accountId, onOpenMarket, onBack }) {
                 .bets({ chainId: p.chainId, query: p.address, type: 'address', opts: { limit: 100 } })
                 .then((r) => ({ p, bets: extractRows(r) }))
                 .catch(() => ({ p, bets: [], failed: true }))));
+            if (requestId !== loadRequestId.current) return;
 
             // One address can appear on several chains, and a chain query returns
             // only that chain's rows, so dedupe on chain + action_index.
@@ -125,12 +129,16 @@ export function MyBets({ walletId, accountId, onOpenMarket, onBack }) {
             }
             setRows(all);
         } catch (err) {
+            if (requestId !== loadRequestId.current) return;
             setError(err?.message || 'Failed to load bets.');
             setRows([]);
         }
     }, [walletId, accountId, messaging]);
 
-    useEffect(() => { load(); }, [load]);
+    useEffect(() => {
+        load();
+        return () => { loadRequestId.current += 1; };
+    }, [load]);
 
     // (c): a bet row names its outcome by INDEX only - the explorer's
     // bets query joins the wager, not the market that declared the labels - so

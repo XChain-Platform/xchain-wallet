@@ -90,7 +90,7 @@ function mount(options) {
 }
 
 async function openPublisher() {
-    fireEvent.click(await screen.findByRole('button', { name: 'Show' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Enter publisher mode' }));
     await waitFor(() => expect(screen.queryByText('Loading source address…')).toBeNull());
 }
 
@@ -106,6 +106,23 @@ async function approve() {
 }
 
 describe('operator publisher feed field selection', () => {
+    it('explains the on-chain effect and provides an explicit way to leave', async () => {
+        mount();
+
+        const enter = await screen.findByRole('button', { name: 'Enter publisher mode' });
+        expect(enter).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.getByText(/creates an on-chain update of the selected feed reference/)).toBeTruthy();
+        fireEvent.click(enter);
+
+        const leave = await screen.findByRole('button', { name: 'Leave publisher mode' });
+        expect(leave).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByText(/Choose Leave publisher mode to close the form/)).toBeTruthy();
+        fireEvent.click(leave);
+
+        expect(screen.queryByLabelText('Value')).toBeNull();
+        expect(screen.getByRole('button', { name: 'Enter publisher mode' })).toHaveAttribute('aria-expanded', 'false');
+    });
+
     it('prefills the newest feed-create by action_format rather than an unrelated version field', async () => {
         mount({
             rows: [

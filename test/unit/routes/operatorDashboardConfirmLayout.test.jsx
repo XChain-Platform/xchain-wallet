@@ -86,7 +86,7 @@ function mount(report) {
 }
 
 async function reachConfirm() {
-    fireEvent.click(await screen.findByRole('button', { name: 'Show' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Enter publisher mode' }));
     await waitFor(() => expect(screen.queryByText('Loading source address…')).toBeNull());
     fireEvent.change(screen.getByLabelText('Value'), { target: { value: '123.45' } });
     fireEvent.click(screen.getByRole('button', { name: 'Publish value' }));

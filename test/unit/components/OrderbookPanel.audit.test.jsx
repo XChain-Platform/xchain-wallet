@@ -68,7 +68,7 @@ describe('OrderbookPanel market display', () => {
         const columns = screen.getByText('Order book').nextElementSibling;
         expect(columns.className).toMatch(/orderBookGrid/);
 
-        const bidScroller = screen.getByRole('region', { name: 'Bids order book levels' });
+        const bidScroller = screen.getByRole('region', { name: 'Buy bids order book levels' });
         expect(bidScroller.className).toMatch(/levelsScroller/);
         expect(bidScroller.firstElementChild.className).toMatch(/levelsTable/);
 
@@ -78,7 +78,10 @@ describe('OrderbookPanel market display', () => {
         expect(priceHeader.className).toContain('numeric');
         expect(bids.querySelectorAll('th[scope="col"]')).toHaveLength(3);
 
-        const rowButton = screen.getByRole('button', { name: 'Pick price 0.010000' });
+        expect(screen.getByText('Buy bids')).toBeInTheDocument();
+        expect(screen.getByText('Sell asks')).toBeInTheDocument();
+
+        const rowButton = screen.getByRole('button', { name: 'Pick buy bid price 0.010000' });
         const row = rowButton.closest('tr');
         expect(rowButton.closest('td')).toHaveAttribute('data-label', 'Price');
         expect(row.style.background).toContain('50%');

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, FormSection, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useGatedTickNotice, gatedTickWarningCopy } from '../hooks/useGatedTickNotice.js';
@@ -17,7 +17,7 @@ import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hook
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
-import { divideDecimalStrings, formatWithThousands } from '../utils/amountFormat.js';
+import { divideDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
@@ -43,6 +43,7 @@ import {
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { useNativeFee } from '../hooks/useNativeFee.js';
+import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -224,6 +225,16 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         address: fromAddress?.address,
         tick: giveTick,
     });
+    const giveTokenInfo = useTokenInfo({
+        chainId,
+        tick: giveTick,
+        skip: giveOwnership || !giveTick.trim(),
+    });
+    const getTokenInfo = useTokenInfo({
+        chainId,
+        tick: getTick,
+        skip: getOwnership || !getTick.trim(),
+    });
     const hw = isHwSource(fromAddress);
     const hwSignerInfo = useSignerInfo({
         walletId,
@@ -257,10 +268,34 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         if (!getOwnership && getAmount && !isPlainPositive(getAmount)) {
             return 'Get amount must be a positive decimal number.';
         }
+        if (!giveOwnership && giveAmount) {
+            const precisionError = tokenAmountPrecisionError(giveAmount, {
+                divisibility: giveTokenInfo?.divisibility,
+                tick: giveTick,
+                noun: 'Give amount',
+            });
+            if (precisionError) return precisionError;
+        }
+        if (!getOwnership && getAmount) {
+            const precisionError = tokenAmountPrecisionError(getAmount, {
+                divisibility: getTokenInfo?.divisibility,
+                tick: getTick,
+                noun: 'Get amount',
+            });
+            if (precisionError) return precisionError;
+        }
         if (getAddress.includes('|') || getAddress.includes(';')) return 'Receive address is invalid.';
         if (memo.includes('|') || memo.includes(';')) return 'Memo cannot contain "|" or ";".';
         return null;
-    }, [giveTick, getTick, coinTicker, giveOwnership, giveAmount, getOwnership, getAmount, getAddress, memo]);
+    }, [giveTick, getTick, coinTicker, giveOwnership, giveAmount, getOwnership, getAmount,
+        giveTokenInfo?.divisibility, getTokenInfo?.divisibility, getAddress, memo]);
+
+    const rate = !giveOwnership && !getOwnership
+        ? divideDecimalStrings(getAmount, giveAmount, 8)
+        : null;
+    const rateText = rate
+        ? `1 ${giveTick.trim().toUpperCase()} = ${rate} ${getTick.trim().toUpperCase()}`
+        : 'Enter both amounts to see the rate';
 
     // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
@@ -597,12 +632,18 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                     {descriptor ? ` on ${descriptor.displayName}` : ''}.
                 </p>
                 <dl className={styles.detailsList}>
-                    <DetailRow label="Chain" value={
+                    <DetailRow label="Give chain" value={
                         descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId
                     } />
                     <DetailRow label="From" value={<AddressText address={fromAddress.address} />} />
-                    <DetailRow label="Give" value={giveSide} />
-                    <DetailRow label="Get" value={getSide} />
+                    <DetailRow label="Give amount" value={giveSide} />
+                    <DetailRow label="Get chain" value={
+                        descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId
+                    } />
+                    <DetailRow label="Get amount" value={getSide} />
+                    {!giveOwnership && !getOwnership ? (
+                        <DetailRow label="Rate" value={rateText} />
+                    ) : null}
                     <DetailRow
                         label="Expiration"
                         value={expMode === 'custom' && expInput.trim()
@@ -617,21 +658,18 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                     />
                     <DetailRow label="Allow list" value={allowListIdx ? `#${allowListIdx}` : 'None'} />
                     <DetailRow label="Block list" value={blockListIdx ? `#${blockListIdx}` : 'None'} />
-                    {!giveOwnership && !getOwnership ? (
-                        <DetailRow
-                            label="Price"
-                            value={
-                                divideDecimalStrings(getAmount, giveAmount, 8) !== null
-                                    ? `1 ${giveTick.trim().toUpperCase()} = ${
-                                        divideDecimalStrings(getAmount, giveAmount, 8)
-                                    } ${getTick.trim().toUpperCase()}`
-                                    : 'n/a'
-                            }
-                        />
-                    ) : null}
                     {memo.trim() ? <DetailRow label="Memo" value={memo.trim()} /> : null}
                     <DetailRow label="Network fee" value={feeLabel} />
+                    <DetailRow
+                        label="Protocol fee"
+                        value={`If charged, paid in ${payFeeInNativeCoin ? coinTicker : 'XCHAIN'}; the network fee is separate.`}
+                    />
                 </dl>
+                <p className={styles.hintLeft}>
+                    The give side is escrowed until this offer is matched. If you cancel it or
+                    it expires, the escrow returns to the source address. Paid transaction fees
+                    are not refunded.
+                </p>
                 {payFeeInNativeCoin ? (
                     <div role="alert" className={styles.warnings}>
                         <p className={styles.warning}>{NATIVE_FEE_WARNING}</p>
@@ -765,6 +803,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         <FormPage
             label="Swap tokens"
             onSubmit={handleReview}
+            sectioned
             onChangeCapture={() => { if (formError) setFormError(null); }}
             status={validationError || formError ? (
                 <>
@@ -789,106 +828,119 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 >
                     {actionConfirm.composing
                         ? 'Preparing review…'
-                        : (singleEncode ? 'Swap' : 'Review')}
+                        : 'Review'}
                 </Button>
             )}
         >
-            <ChainPicker
-                label="Chain"
-                value={chainId}
-                onChange={setChainId}
-                chainIds={chainIds}
-                chainRegistry={chainRegistry}
-            />
-
-            {fromAddress ? (
-                <AddressField
-                    label="From"
-                    icon="addresses"
-                    value={fromAddress.address}
-                    readOnly
-                    onChange={() => {}}
-                    onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel="Choose source address"
+            <FormSection
+                title="Network"
+                description="Both swap legs settle on this chain."
+            >
+                <ChainPicker
+                    label="Give and get chain"
+                    value={chainId}
+                    onChange={setChainId}
+                    chainIds={chainIds}
+                    chainRegistry={chainRegistry}
                 />
-            ) : null}
 
-            <TokenField
-                label="Give token"
-                value={giveTick && chainId ? { chainId, tick: giveTick } : null}
-                onOpenPicker={() => setGivePickerOpen(true)}
-            />
-            {gatedGiveNotice.gated && !giveOwnership ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
-                        {gatedTickWarningCopy(giveTick, 'the swap counterparty')}
+                {fromAddress ? (
+                    <AddressField
+                        label="From"
+                        icon="addresses"
+                        value={fromAddress.address}
+                        readOnly
+                        onChange={() => {}}
+                        onIconClick={() => setSourcePickerOpen(true)}
+                        iconLabel="Choose source address"
+                    />
+                ) : null}
+            </FormSection>
+
+            <FormSection title="You give" description={descriptor?.displayName || chainId}>
+                <TokenField
+                    label="Give token"
+                    value={giveTick && chainId ? { chainId, tick: giveTick } : null}
+                    onOpenPicker={() => setGivePickerOpen(true)}
+                />
+                {gatedGiveNotice.gated && !giveOwnership ? (
+                    <div role="alert" className={styles.warnings}>
+                        <p className={styles.warning}>
+                            {gatedTickWarningCopy(giveTick, 'the swap counterparty')}
+                        </p>
+                    </div>
+                ) : null}
+                {giveOwnership ? null : (
+                    <AmountField
+                        label="Give amount"
+                        amount={giveAmount}
+                        tick={giveTick}
+                        onAmountFieldChange={(rawValue) => {
+                            const stripped = String(rawValue).replace(/,/g, '');
+                            if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
+                            setGiveAmount(stripped);
+                        }}
+                        onMax={giveBalance && Number(giveBalance) > 0
+                            ? () => setGiveAmount(giveBalance)
+                            : undefined}
+                        maxDisabled={!giveBalance}
+                        balanceText={giveBalance != null && giveTick.trim()
+                            ? `${formatWithThousands(giveBalance)} ${giveTick.trim().toUpperCase()} available`
+                            : null}
+                    />
+                )}
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', margin: '0.25rem 0 0.5rem' }}>
+                    <input
+                        type="checkbox"
+                        checked={giveOwnership}
+                        onChange={(e) => setGiveOwnership(e.target.checked)}
+                    />
+                    Give this token&apos;s ownership instead of an amount
+                </label>
+                {giveOwnership ? (
+                    <p className={styles.hint} style={{ margin: '0 0 0.5rem' }}>
+                        Transfers the entire ownership of {giveTick.trim() ? giveTick.trim().toUpperCase() : 'this token'} (single-fill, no partial matches).
                     </p>
-                </div>
-            ) : null}
-            {giveOwnership ? null : (
-                <AmountField
-                    label="Give amount"
-                    amount={giveAmount}
-                    tick={giveTick}
-                    onAmountFieldChange={(rawValue) => {
-                        const stripped = String(rawValue).replace(/,/g, '');
-                        if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
-                        setGiveAmount(stripped);
-                    }}
-                    onMax={giveBalance && Number(giveBalance) > 0
-                        ? () => setGiveAmount(giveBalance)
-                        : undefined}
-                    maxDisabled={!giveBalance}
-                    balanceText={giveBalance != null && giveTick.trim()
-                        ? `${formatWithThousands(giveBalance)} ${giveTick.trim().toUpperCase()} available`
-                        : null}
-                />
-            )}
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', margin: '0.25rem 0 0.5rem' }}>
-                <input
-                    type="checkbox"
-                    checked={giveOwnership}
-                    onChange={(e) => setGiveOwnership(e.target.checked)}
-                />
-                Give this token&apos;s ownership instead of an amount
-            </label>
-            {giveOwnership ? (
-                <p className={styles.hint} style={{ margin: '0 0 0.5rem' }}>
-                    Transfers the entire ownership of {giveTick.trim() ? giveTick.trim().toUpperCase() : 'this token'} (single-fill, no partial matches).
-                </p>
-            ) : null}
+                ) : null}
+            </FormSection>
 
-            <TokenField
-                label="Get token"
-                value={getTick && chainId ? { chainId, tick: getTick } : null}
-                onOpenPicker={() => setGetPickerOpen(true)}
-            />
-            {getOwnership ? null : (
-                <AmountField
-                    label="Get amount"
-                    amount={getAmount}
-                    tick={getTick}
-                    onAmountFieldChange={(rawValue) => {
-                        const stripped = String(rawValue).replace(/,/g, '');
-                        if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
-                        setGetAmount(stripped);
-                    }}
+            <FormSection title="You get" description={descriptor?.displayName || chainId}>
+                <TokenField
+                    label="Get token"
+                    value={getTick && chainId ? { chainId, tick: getTick } : null}
+                    onOpenPicker={() => setGetPickerOpen(true)}
                 />
-            )}
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', margin: '0.25rem 0 0.5rem' }}>
-                <input
-                    type="checkbox"
-                    checked={getOwnership}
-                    onChange={(e) => setGetOwnership(e.target.checked)}
-                />
-                Require the matcher to give that token&apos;s ownership instead of an amount
-            </label>
-            {getOwnership ? (
-                <p className={styles.hint} style={{ margin: '0 0 0.5rem' }}>
-                    The matcher must currently own {getTick.trim() ? getTick.trim().toUpperCase() : 'this token'}; on match its ownership transfers to you.
-                </p>
-            ) : null}
+                {getOwnership ? null : (
+                    <AmountField
+                        label="Get amount"
+                        amount={getAmount}
+                        tick={getTick}
+                        onAmountFieldChange={(rawValue) => {
+                            const stripped = String(rawValue).replace(/,/g, '');
+                            if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
+                            setGetAmount(stripped);
+                        }}
+                    />
+                )}
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', margin: '0.25rem 0 0.5rem' }}>
+                    <input
+                        type="checkbox"
+                        checked={getOwnership}
+                        onChange={(e) => setGetOwnership(e.target.checked)}
+                    />
+                    Require the matcher to give that token&apos;s ownership instead of an amount
+                </label>
+                {getOwnership ? (
+                    <p className={styles.hint} style={{ margin: '0 0 0.5rem' }}>
+                        The matcher must currently own {getTick.trim() ? getTick.trim().toUpperCase() : 'this token'}; on match its ownership transfers to you.
+                    </p>
+                ) : null}
+            </FormSection>
 
+            <FormSection
+                title="Timing and fees"
+                description="The give side stays escrowed until a match, cancellation, or expiration."
+            >
             <p className={styles.successLabel}>Expiration</p>
             <label className={styles.checkRow}>
                 <input type="radio" name="swap-exp" checked={expMode === 'default'} onChange={() => setExpMode('default')} />
@@ -908,6 +960,15 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 />
             ) : null}
             {expError ? <StatusMessage variant="error" className={styles.error}>{expError}</StatusMessage> : null}
+
+            <dl className={styles.detailsList}>
+                <DetailRow label="Rate" value={rateText} />
+            </dl>
+
+            <p className={styles.hintLeft}>
+                Cancel from My swaps or let the offer expire to return the escrow to the
+                source address. Paid transaction fees are not refunded.
+            </p>
 
             <button
                 type="button"
@@ -965,7 +1026,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 coinTicker={coinTicker}
                 mandatory={nativeFeeMandatory}
             />
-
+            </FormSection>
         </FormPage>,
     );
 }

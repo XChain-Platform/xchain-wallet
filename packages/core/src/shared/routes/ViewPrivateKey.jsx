@@ -145,7 +145,7 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
                 </p>
                 <p className={styles.paragraph}>
                     To recover this key, use your {sourceInfo.deviceLabel}'s own recovery
-                    tools (seed phrase, recovery card, or vendor recovery app).
+                    tools (recovery phrase, recovery card, or vendor recovery app).
                 </p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Address</dt>
@@ -190,14 +190,14 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
                     </li>
                     {sourceInfo.kind === 'hd' ? (
                         <li>
-                            This key is derived from your seed phrase. If you have your
-                            seed phrase backed up, you don't need to back up this key
+                            This key is derived from your recovery phrase. If you have your
+                            recovery phrase backed up, you don't need to back up this key
                             separately.
                         </li>
                     ) : (
                         <li>
                             This key was imported separately. It is included in encrypted
-                            backups but is <strong>not</strong> recoverable from your seed phrase.
+                            backups but is <strong>not</strong> recoverable from your recovery phrase.
                         </li>
                     )}
                 </ul>

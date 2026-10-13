@@ -30,6 +30,7 @@ import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ROUTE_NAV_GROUPS } from '../../../packages/core/src/shared/routeRegistry.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -63,13 +64,17 @@ assert.ok(/label:\s*'Contacts'/.test(navSrc),
     'LeftNav secondary list includes Contacts row');
 
 // View → nav-item mappings keep the active highlight on drilldown views.
-assert.ok(/'token-detail'/.test(navSrc) && /'addresses'/.test(navSrc),
+assert.ok(['token-detail', 'addresses'].every((route) => ROUTE_NAV_GROUPS.home.includes(route)),
     'LeftNav home group covers token-detail + addresses drilldowns');
-assert.ok(/'compose-message'/.test(navSrc),
+assert.ok(ROUTE_NAV_GROUPS.messaging.includes('compose-message'),
     'LeftNav messaging group covers compose-message drilldown');
-assert.ok(/'dispenser-detail'/.test(navSrc) && /'dispenser-explorer'/.test(navSrc),
+assert.ok(['dispenser-detail', 'dispenser-explorer'].every(
+    (route) => ROUTE_NAV_GROUPS['dispensers-list'].includes(route),
+),
     'LeftNav dispensers group covers dispenser-detail + dispenser-explorer');
-assert.ok(/'staking-dashboard'/.test(navSrc) && /'contract-deploy'/.test(navSrc),
+assert.ok(['staking-dashboard', 'contract-deploy'].every(
+    (route) => ROUTE_NAV_GROUPS['contracts-list'].includes(route),
+),
     'LeftNav contracts group covers staking + contract drilldowns');
 
 // --- 3. hasVmAddress gate + aria-current ---------------------------------

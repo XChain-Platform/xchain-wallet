@@ -50,6 +50,7 @@
 //      teardown reaches while the sender stays alive.
 
 import { createBackgroundTransport } from '@xchain-wallet/core/signers';
+import { isValidSignerBridgeMessage } from './security.js';
 // The extension package owns the process-wide signer-bridge registry;
 // `createBackgroundHost` (which desktop's MessageHost reuses) imports
 // from the same module, so registering here reaches the
@@ -80,9 +81,8 @@ const DOCUMENT_END_EVENTS = Object.freeze(['destroyed', 'did-navigate', 'render-
  * @param {Object} opts
  * @param {{ on: Function, off: Function }} opts.ipcMain
  * @param {string} [opts.channel]
- * @param {(event: any) => boolean} [opts.isTrustedSender]  reject a frame
- *        index.js identifies as a remote origin; defaults to accept-all so
- *        the pure unit harness (fake senders with no URL) is unaffected.
+ * @param {(event: any) => boolean} [opts.isTrustedSender]  accept only an app
+ *        frame; defaults to reject-all so omitted production wiring fails closed.
  * @param {number} [opts.maxSignerIdsPerMessage]
  * @param {number} [opts.maxSignerIdsPerSender]  cumulative cap on the ids one
  *        webContents may hold at once; freed by unregister and teardown.
@@ -91,7 +91,7 @@ const DOCUMENT_END_EVENTS = Object.freeze(['destroyed', 'did-navigate', 'render-
 export function attachSignerBridgeListener({
     ipcMain,
     channel = SIGNER_BRIDGE_CHANNEL,
-    isTrustedSender = () => true,
+    isTrustedSender = () => false,
     maxSignerIdsPerMessage = MAX_SIGNER_IDS_PER_MESSAGE,
     maxSignerIdsPerSender = MAX_SIGNER_IDS_PER_SENDER,
 }) {
@@ -108,8 +108,9 @@ export function attachSignerBridgeListener({
     const onIpc = (event, msg) => {
         const sender = event?.sender;
         if (!sender) return;
-        // Trust boundary: drop messages from a frame identified as remote.
+        // Trust boundary: accept messages only from a positively trusted frame.
         if (!isTrustedSender(event)) return;
+        if (!isValidSignerBridgeMessage(msg)) return;
         let entry = bySender.get(sender.id);
         if (!entry) entry = createEntryFor(sender);
         // Fan out to every listener bound on the port. In practice
@@ -145,7 +146,7 @@ export function attachSignerBridgeListener({
 
         listeners.add((msg) => {
             if (!msg) return;
-            if (msg.kind === 'register' && Array.isArray(msg.signerIds)) {
+            if (msg.kind === 'register') {
                 // Cap the batch: a legitimate renderer registers a handful
                 // of ids; an over-cap message is a misbehaving/hostile
                 // sender and is dropped whole rather than partially applied.
@@ -157,7 +158,6 @@ export function attachSignerBridgeListener({
                 // Whole-message, not partial, to match the batch cap above.
                 const adds = new Set();
                 for (const sid of msg.signerIds) {
-                    if (typeof sid !== 'string' || sid.length === 0) continue;
                     if (ownedIds.has(sid)) continue;
                     const holder = ownerBySignerId.get(sid);
                     if (holder !== undefined && holder !== sender.id && bySender.has(holder)) {
@@ -167,7 +167,6 @@ export function attachSignerBridgeListener({
                 }
                 if (ownedIds.size + adds.size > maxSignerIdsPerSender) return;
                 for (const sid of msg.signerIds) {
-                    if (typeof sid !== 'string' || sid.length === 0) continue;
                     // Ownership guard: never re-point a signerId a different,
                     // still-live webContents already owns.
                     const owner = ownerBySignerId.get(sid);
@@ -178,7 +177,7 @@ export function attachSignerBridgeListener({
                     ownedIds.add(sid);
                     ownerBySignerId.set(sid, sender.id);
                 }
-            } else if (msg.kind === 'unregister' && Array.isArray(msg.signerIds)) {
+            } else if (msg.kind === 'unregister') {
                 for (const sid of msg.signerIds) {
                     if (!ownedIds.has(sid)) continue;
                     signerBridge.clearTransport(sid);

@@ -54,7 +54,7 @@ assert.ok(
     'the route renders the section with no props of its own, so behaviour cannot drift',
 );
 assert.ok(
-    /<PageHeader onBack=\{onBack\} title="Connected Sites" \/>/.test(route),
+    /<PageHeader onBack=\{onBack\} title="Connected sites" \/>/.test(route),
     'the route owns its header and hands back to the shell',
 );
 // Its own screen means its own state: nothing about Settings may leak in.

@@ -762,7 +762,7 @@ export function ImportWallet({
                             : lane === 'wif'
                                 ? 'Import one WIF private key as a wallet. Pick the matching chain so the correct address is derived.'
                             : (isFull
-                                ? 'Enter a BIP39 recovery phrase (12, 15, 18, 21, or 24 words) or a Counterwallet 12-word mnemonic. The format is detected automatically.'
+                                ? 'Enter a BIP39 recovery phrase (12, 15, 18, 21, or 24 words) or a Counterwallet 12-word recovery phrase. The format is detected automatically.'
                                 : 'Paste a 12-, 15-, 18-, 21-, or 24-word recovery phrase.')}
                 </p>
             </header>
@@ -1006,7 +1006,7 @@ export function ImportWallet({
                     </div>
                 ) : null}
                 <p className={styles.dropHint}>
-                    {dragOver ? 'Release to load' : 'Drop a .txt file with your seed phrase to load it here.'}
+                    {dragOver ? 'Release to load' : 'Drop a .txt file with your recovery phrase to load it here.'}
                 </p>
             </div>
             <Input

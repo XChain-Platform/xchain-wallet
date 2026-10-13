@@ -1,4 +1,5 @@
 .overlay {
+    box-sizing: border-box;
     position: fixed;
     inset: 0;
     z-index: var(--xc-z-modal);
@@ -13,6 +14,7 @@
 }
 
 .panel {
+    box-sizing: border-box;
     width: 100%;
     max-width: 520px;
     max-height: 85vh;
@@ -22,7 +24,7 @@
     color: var(--xc-text);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-lg);
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+    box-shadow: var(--xc-shadow-modal);
     padding: var(--xc-space-4);
     animation: pop 140ms ease-out;
 }
@@ -69,6 +71,10 @@
     image-rendering: auto;
 }
 
+.image[aria-busy='true'] {
+    visibility: hidden;
+}
+
 .text {
     margin: 0;
     padding: var(--xc-space-3);
@@ -102,4 +108,18 @@
     display: flex;
     gap: var(--xc-space-2);
     flex: 0 0 auto;
+}
+
+@media (max-width: 360px) {
+    .overlay {
+        padding: var(--xc-space-2);
+    }
+
+    .panel {
+        padding: var(--xc-space-3);
+    }
+
+    .actions {
+        flex-direction: column;
+    }
 }

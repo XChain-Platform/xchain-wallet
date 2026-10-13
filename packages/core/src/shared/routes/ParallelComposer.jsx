@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, FormPage, FormSection, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, FeeSelector, FormPage, FormSection, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -26,6 +26,7 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
+import parallelStyles from './ParallelComposer.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import {
     AUTHORABLE_ACTIONS,
@@ -302,9 +303,9 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
         }
     }
 
-    const allDoneOrSkipped = rows.every((r) => r.status === 'success' || r.status === 'skipped');
+    const allRowsBroadcast = rows.every((r) => r.status === 'success');
 
-        const header = (
+    const header = (
         <PageHeader
             onBack={onBack}
             title="Parallel cross-chain actions"
@@ -364,9 +365,9 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                 <p className={styles.successTitle}>Parallel run complete</p>
                 <SummaryList rows={rows} />
                 <p className={styles.hint}>
-                    {allDoneOrSkipped
+                    {allRowsBroadcast
                         ? 'All rows broadcast. Link them in a follow-up action to thread them together in your History.'
-                        : 'Some rows did not finish. Return to the composer to retry the rest.'}
+                        : 'Run finished. Skipped rows were not signed or broadcast.'}
                 </p>
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>
@@ -388,8 +389,14 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                 </>,
             );
         }
-        const remaining = rows.filter((r) => r.status !== 'success').length;
-        const totalSucceeded = rows.length - remaining;
+        const totalSucceeded = rows.filter((r) => r.status === 'success').length;
+        const totalSkipped = rows.filter((r) => r.status === 'skipped').length;
+        const remaining = rows.length - totalSucceeded - totalSkipped;
+        const progressText = [
+            `Action ${activeRowIndex + 1} of ${rows.length}.`,
+            `${totalSucceeded} broadcast, ${totalSkipped} skipped, ${remaining} remaining.`,
+            `Current row: ${statusLabel(activeRow.status)}.`,
+        ].join(' ');
         return wrap(
             <FormPage
                 label="Sign parallel actions"
@@ -420,14 +427,18 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                             disabled={!activeFromAddress || activeRow.status === 'submitting'}
                             onClick={signActiveRow}
                         >
-                            Sign
+                            {activeRow.status === 'failed' ? 'Retry row' : 'Sign'}
                         </Button>
                     </>
                 )}
             >
-                <p className={styles.summary}>
-                    Signing action {activeRowIndex + 1} of {rows.length}
-                    {' '}({totalSucceeded} signed, {remaining} remaining)
+                <p
+                    className={styles.summary}
+                    role="status"
+                    aria-live="polite"
+                    aria-atomic="true"
+                >
+                    {progressText}
                 </p>
                 <RowDetail
                     row={activeRow}
@@ -478,21 +489,21 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                 </p>
                 <SummaryList rows={rows} />
                 <div className={styles.warnings}>
-                    <p className={styles.warning}>
-                        Each action signs and broadcasts independently.
-                        If row 2 fails after row 1 succeeds, row 1 is NOT
-                        rolled back. Actions on different chains are not
-                        settled as one unit; only an individual swap
-                        completes together.
+                    <p className={styles.warning} id="parallel-no-rollback-warning">
+                        <strong>No rollback:</strong> each action signs and broadcasts independently.
+                        If a later row fails, successful earlier rows remain broadcast.
+                        Actions on different chains are not settled as one unit;
+                        only an individual swap completes together.
                     </p>
                 </div>
-                <label className={styles.checkRow}>
+                <label className={`${styles.checkRow} ${parallelStyles.acknowledgement}`}>
                     <input
                         type="checkbox"
                         checked={acknowledgedNoRollback}
                         onChange={(e) => setAcknowledgedNoRollback(e.target.checked)}
+                        aria-describedby="parallel-no-rollback-warning"
                     />
-                    <span>I understand parallel actions are not atomic.</span>
+                    <span>I understand successful actions cannot be rolled back if a later action fails.</span>
                 </label>
             </FormPage>,
         );
@@ -549,7 +560,12 @@ function RowEditor({ index, row, chainIds, addressesByChain, activeByChain, acti
     const addrs = (addressesByChain && row.chainId) ? (addressesByChain[row.chainId] || []) : [];
 
     return (
-        <FormSection title={`Row ${index + 1}`}>
+        <FormSection title={`Row ${index + 1}`} className={parallelStyles.rowEditor}>
+
+            <div className={parallelStyles.rowStatus}>
+                <span>Row state</span>
+                <StatusPill status={row.status} labelPrefix={`Row ${index + 1} status`} />
+            </div>
 
             <label className={styles.pickerLabel}>
                 <span>Chain</span>
@@ -651,6 +667,8 @@ function RowDetail({ row, addressesByChain }) {
             </dd>
             <dt className={styles.detailsLabel}>Action</dt>
             <dd className={styles.detailsValue}>{row.action ? actionDisplayLabel(row.action) : 'none'}</dd>
+            <dt className={styles.detailsLabel}>Status</dt>
+            <dd className={styles.detailsValue}><StatusPill status={row.status} /></dd>
             <dt className={styles.detailsLabel}>Params</dt>
             <dd className={styles.detailsValue} style={{ fontFamily: 'var(--xc-font-mono, monospace)', fontSize: 'var(--xc-text-xs)' }}>
                 {row.paramsJson}
@@ -661,18 +679,21 @@ function RowDetail({ row, addressesByChain }) {
 
 function SummaryList({ rows }) {
     return (
-        <ol style={{ paddingLeft: '1rem', margin: 'var(--xc-space-2) 0' }}>
-            {rows.map((r, i) => {
+        <ol className={parallelStyles.summaryList}>
+            {rows.map((r) => {
                 const d = r.chainId ? chainRegistry.get(r.chainId) : null;
                 return (
-                    <li key={r.id} style={{ margin: 'var(--xc-space-1) 0' }}>
-                        <span style={{ fontWeight: 600 }}>{r.action ? actionDisplayLabel(r.action) : 'none'}</span>
-                        {' on '}
-                        {d ? d.displayName : r.chainId}
-                        {' - '}
-                        <StatusPill status={r.status} />
-                        {r.txid ? <> · <code style={{ fontSize: '0.75rem' }}>{shortenTxid(r.txid)}</code></> : null}
-                        {r.error ? <> · <span style={{ color: 'var(--xc-danger-fg)' }}>{r.error}</span></> : null}
+                    <li key={r.id} className={parallelStyles.summaryItem}>
+                        <div className={parallelStyles.summaryMain}>
+                            <span>
+                                <strong>{r.action ? actionDisplayLabel(r.action) : 'none'}</strong>
+                                {' on '}
+                                {d ? d.displayName : r.chainId}
+                            </span>
+                            <StatusPill status={r.status} />
+                        </div>
+                        {r.txid ? <code className={parallelStyles.summaryMeta}>{shortenTxid(r.txid)}</code> : null}
+                        {r.error ? <span className={`${parallelStyles.summaryMeta} ${parallelStyles.summaryError}`}>{r.error}</span> : null}
                     </li>
                 );
             })}
@@ -680,15 +701,27 @@ function SummaryList({ rows }) {
     );
 }
 
-function StatusPill({ status }) {
-    const label = {
-        pending: 'pending',
-        submitting: 'signing…',
-        success: '✅ broadcast',
-        failed: '⚠ failed',
-        skipped: '↷ skipped',
+function statusLabel(status) {
+    return {
+        pending: 'Pending',
+        submitting: 'Signing',
+        success: 'Broadcast',
+        failed: 'Failed',
+        skipped: 'Skipped',
     }[status] || status;
-    return <span style={{ fontSize: '0.85em', color: 'var(--xc-text-muted)' }}>{label}</span>;
+}
+
+function StatusPill({ status, labelPrefix = 'Status' }) {
+    const label = statusLabel(status);
+    return (
+        <span
+            className={parallelStyles.statusPill}
+            data-state={status}
+            aria-label={`${labelPrefix}: ${label}`}
+        >
+            {label}
+        </span>
+    );
 }
 
 /** @typedef {{

@@ -26,7 +26,7 @@
 // The transports are mocked, because what is under test is the envelope,
 // not chrome.runtime or the in-page host.
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 
 const { webSend, desktopSend, popupSend, webLocals } = vi.hoisted(() => {
     const webLocals = {
@@ -104,8 +104,10 @@ const ARG = Object.freeze({
 /**
  * Call one helper with the fixture in three positions and report the single
  * `sendMessage` envelope it produced, or how it declined to produce one.
+ * The web barrel loads its host bridge lazily, so a helper reaches the
+ * transport only after its returned promise settles; wait for that first.
  */
-function dispatch(shell, fnName) {
+async function dispatch(shell, fnName) {
     shell.send.mockReset();
     shell.send.mockReturnValue(Promise.resolve({ ok: true }));
     for (const local of Object.values(webLocals)) {
@@ -117,7 +119,7 @@ function dispatch(shell, fnName) {
         const out = shell.mod[fnName](ARG, ARG, ARG);
         // Swallow the settled sentinel; an unhandled rejection here would
         // fail an unrelated test file, not this one.
-        if (out && typeof out.then === 'function') out.then(() => {}, () => {});
+        if (out && typeof out.then === 'function') await out.then(() => {}, () => {});
     } catch (err) {
         threw = err;
     }
@@ -144,10 +146,10 @@ beforeEach(() => {
 
 describe('messaging barrels: every helper dispatches exactly one envelope', () => {
     for (const shell of SHELLS) {
-        it(`${shell.name} sends one message per helper and forwards its argument`, () => {
+        it(`${shell.name} sends one message per helper and forwards its argument`, async () => {
             const bad = [];
             for (const fnName of helpersOf(shell)) {
-                const r = dispatch(shell, fnName);
+                const r = await dispatch(shell, fnName);
                 if (r.threw) {
                     bad.push(`${fnName}: threw ${r.threw.message}`);
                     continue;
@@ -181,17 +183,19 @@ describe('messaging barrels: every helper dispatches exactly one envelope', () =
 describe('messaging barrels: the shells agree on the wire', () => {
     // Built once: helper name -> { shellName -> [type, payload] }.
     const wire = new Map();
-    for (const shell of SHELLS) {
-        for (const fnName of helpersOf(shell)) {
-            if (shell.name === 'web' && WEB_LOCAL_HELPERS.has(fnName)) continue;
-            const r = dispatch(shell, fnName);
-            if (r.threw || r.calls.length !== 1) continue;
-            if (!wire.has(fnName)) wire.set(fnName, {});
-            wire.get(fnName)[shell.name] = r.calls[0];
+    let shared = [];
+    beforeAll(async () => {
+        for (const shell of SHELLS) {
+            for (const fnName of helpersOf(shell)) {
+                if (shell.name === 'web' && WEB_LOCAL_HELPERS.has(fnName)) continue;
+                const r = await dispatch(shell, fnName);
+                if (r.threw || r.calls.length !== 1) continue;
+                if (!wire.has(fnName)) wire.set(fnName, {});
+                wire.get(fnName)[shell.name] = r.calls[0];
+            }
         }
-    }
-
-    const shared = [...wire.entries()].filter(([, byShell]) => Object.keys(byShell).length > 1);
+        shared = [...wire.entries()].filter(([, byShell]) => Object.keys(byShell).length > 1);
+    });
 
     it('has helpers implemented by more than one shell', () => {
         // Guards the check below against passing because it compared nothing.

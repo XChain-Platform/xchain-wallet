@@ -36,7 +36,16 @@ import {
     formatWithThousands,
     normalizeLocalizedDecimal,
 } from '../../utils/amountFormat.js';
-import { INPUT, ROW_HINT, SELECT, STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
+import {
+    INPUT,
+    ROW_HINT,
+    SELECT,
+    STACK,
+    SettingsFieldRow,
+    SettingsLoadError,
+    Status,
+    ToggleRow,
+} from './_settingsPrimitives.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -61,14 +70,6 @@ const CHAIN_HEADER = {
     color: 'var(--xc-text)',
     fontSize: 'var(--xc-text-sm)',
 };
-const FIELD_ROW = {
-    display: 'flex',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 'var(--xc-space-2)',
-};
-
 export function FeesSection() {
     const { settings, loading, error, update } = useSettings();
     const [rateErrors, setRateErrors] = useState(/** @type {Record<string, string>} */ ({}));
@@ -111,12 +112,17 @@ export function FeesSection() {
                 // Derive the unit and seed from the descriptor (a fixed 1000 is 1 sat/vB but 0.00001 DOGE/kB).
                 const unit = resolveFeeUnit(descriptor);
                 const seedRate = defaultCustomSettingsRate(unit);
+                const headingId = `fee-settings-${chainId}`;
+                const rateErrorId = `fee-rate-${chainId}-error`;
                 return (
-                    <div key={chainId} style={CHAIN_BLOCK}>
-                        <div style={CHAIN_HEADER}>{displayName}{networkSuffix}</div>
+                    <div key={chainId} style={CHAIN_BLOCK} role="group" aria-labelledby={headingId}>
+                        <div id={headingId} style={CHAIN_HEADER}>{displayName}{networkSuffix}</div>
 
-                        <div style={FIELD_ROW}>
-                            <span style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}>Strategy</span>
+                        <SettingsFieldRow
+                            label="Fee strategy"
+                            hint="Choose the balance between confirmation speed and network cost."
+                            embedded
+                        >
                             <select
                                 value={fees.strategy}
                                 onChange={(e) => onPatch(chainId, {
@@ -131,14 +137,16 @@ export function FeesSection() {
                                     <option key={s.value} value={s.value}>{s.label}</option>
                                 ))}
                             </select>
-                        </div>
+                        </SettingsFieldRow>
 
                         {fees.strategy === 'custom' ? (
-                            <div style={FIELD_ROW}>
-                                <span style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}>
-                                    {unit}
-                                </span>
+                            <SettingsFieldRow
+                                label="Custom fee rate"
+                                hint={`Enter the rate in ${unit}.`}
+                                embedded
+                            >
                                 <input
+                                    id={`fee-rate-${chainId}`}
                                     type="text"
                                     inputMode="decimal"
                                     defaultValue={formatWithThousands(settingsCustomToDisplayRate(unit, fees.customSatsPerKb ?? seedRate))}
@@ -171,26 +179,24 @@ export function FeesSection() {
                                     onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                                     aria-label={`${displayName} custom fee rate`}
                                     aria-invalid={rateErrors[chainId] ? 'true' : undefined}
-                                    aria-describedby={rateErrors[chainId]
-                                        ? `${chainId}-custom-fee-error`
-                                        : undefined}
+                                    aria-errormessage={rateErrors[chainId] ? rateErrorId : undefined}
+                                    aria-describedby={rateErrors[chainId] ? rateErrorId : undefined}
                                     style={{ ...INPUT, width: 120, textAlign: 'right' }}
                                 />
-                            </div>
+                            </SettingsFieldRow>
                         ) : null}
                         {rateErrors[chainId] ? (
-                            <div
-                                id={`${chainId}-custom-fee-error`}
-                                role="alert"
-                                style={{ ...ROW_HINT, color: 'var(--xc-danger-fg)' }}
-                            >
+                            <div id={rateErrorId} role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger-fg)' }}>
                                 {rateErrors[chainId]}
                             </div>
                         ) : null}
 
                         <ToggleRow
                             label="Allow fee bump (Replace-by-Fee)"
-                            hint="Keep this on so you can raise the fee later to speed up a stuck send on this chain."
+                            accessibleLabel={`${displayName} allow fee bump (Replace-by-Fee)`}
+                            hint={descriptor?.feeStrategy?.rbfSupported
+                                ? 'Keep this on so you can raise the fee later to speed up a stuck send on this chain.'
+                                : `Fee bumping is not supported on ${displayName}.`}
                             checked={Boolean(fees.rbfByDefault)}
                             onChange={(v) => onPatch(chainId, {
                                 strategy: fees.strategy,
@@ -198,10 +204,8 @@ export function FeesSection() {
                                 rbfByDefault: v,
                             })}
                             disabled={!descriptor?.feeStrategy?.rbfSupported}
+                            embedded
                         />
-                        {!descriptor?.feeStrategy?.rbfSupported ? (
-                            <div style={ROW_HINT}>Fee bumping is not supported on {displayName}.</div>
-                        ) : null}
                     </div>
                 );
             })}

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { sendTokenMock } = vi.hoisted(() => ({ sendTokenMock: vi.fn() }));
 
@@ -66,6 +66,18 @@ function makeHost(sendHold) {
         sendHold,
     });
 }
+
+// The broadcast hold counts signing time against the undo window from
+// Date.now(), so a frozen clock keeps exact hold lengths deterministic when
+// a loaded runner lets a millisecond pass between request and broadcast.
+let frozenNow;
+beforeEach(() => {
+    frozenNow = vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+});
+
+afterEach(() => {
+    frozenNow.mockRestore();
+});
 
 describe('send hold registry', () => {
     it('releases only after the configured timer elapses', async () => {

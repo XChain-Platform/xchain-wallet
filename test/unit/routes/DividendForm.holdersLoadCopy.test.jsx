@@ -79,7 +79,7 @@ describe('the Dividend holder-count hint on a failed holder read', () => {
         expect(text.match(/Couldn't load/g)).toHaveLength(1);
         expect(text).not.toContain('/RBTC/api/');
         expect(text).not.toContain('Explorer returned');
-        expect(holders).toHaveBeenCalledWith({ chainId: CHAIN, tick: TICK });
+        expect(holders).toHaveBeenCalledWith({ chainId: CHAIN, tick: TICK, all: true });
     });
 
     it('keeps a plain person-written reason after a single opener', async () => {

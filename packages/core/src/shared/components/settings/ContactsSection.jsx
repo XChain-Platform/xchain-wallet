@@ -19,24 +19,18 @@
 // owns the bulk export / import action.
 
 import { useEffect, useRef, useState } from 'react';
+import { Button } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
 import { useDropZone } from '../../hooks/useDropZone.js';
+import { useConfirmModal } from '../../hooks/useConfirmModal.js';
 import { contactsFromCsv, contactsToCsv } from '../../utils/contactsCsv.js';
+import { ConfirmModal } from '../ConfirmModal.jsx';
 import { DiagnosticDetails } from '../DiagnosticDetails.jsx';
-import { ROW, ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
-
-const ACTION_BTN = {
-    background: 'transparent',
-    border: '1px solid var(--xc-border)',
-    color: 'var(--xc-text)',
-    borderRadius: 'var(--xc-radius-sm)',
-    padding: 'var(--xc-space-1) var(--xc-space-3)',
-    fontSize: 'var(--xc-text-sm)',
-    cursor: 'pointer',
-};
+import { ROW, ROW_HINT, ROW_VALUE, STACK, Status } from './_settingsPrimitives.jsx';
 
 export function ContactsSection() {
     const { messaging } = useMessaging();
+    const confirmDialog = useConfirmModal();
     const [count, setCount] = useState(/** @type {number | null} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [importResult, setImportResult] = useState(
@@ -102,6 +96,13 @@ export function ContactsSection() {
                 }
                 rows = parsed.map((record, index) => ({ record, line: index + 1 }));
             }
+            const confirmed = await confirmDialog.confirm({
+                title: 'Import contacts?',
+                message: 'Contacts with the same ID will be replaced by the imported records. This cannot be undone.',
+                confirmLabel: 'Import contacts',
+                danger: true,
+            });
+            if (!confirmed) return;
             let imported = 0;
             for (const { record, line } of rows) {
                 try {
@@ -149,7 +150,7 @@ export function ContactsSection() {
         <div style={STACK}>
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                    <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Contacts in this wallet</span>
+                    <span style={ROW_VALUE}>Contacts in this wallet</span>
                     <span style={ROW_HINT}>
                         {count === null ? 'Loading…' : `${count} contact${count === 1 ? '' : 's'} stored`}
                     </span>
@@ -157,27 +158,26 @@ export function ContactsSection() {
             </div>
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                    <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Export</span>
+                    <span style={ROW_VALUE}>Export</span>
                     <span style={ROW_HINT}>Saves plain JSON or spreadsheet-compatible CSV. Neither format is encrypted.</span>
                 </div>
-                <button type="button" onClick={onExport} style={ACTION_BTN} disabled={count === 0}>
+                <Button type="button" size="sm" variant="secondary" onClick={onExport} disabled={count === 0}>
                     Export…
-                </button>
-                <button type="button" onClick={onExportCsv} style={ACTION_BTN} disabled={count === 0}>
+                </Button>
+                <Button type="button" size="sm" variant="secondary" onClick={onExportCsv} disabled={count === 0}>
                     Export CSV…
-                </button>
+                </Button>
             </div>
             <div
                 {...importDrop.rootProps}
                 style={{
                     ...ROW,
-                    border: importDrop.isDragOver ? '2px dashed var(--xc-accent)' : '1px solid transparent',
-                    borderRadius: 'var(--xc-radius-sm)',
+                    border: importDrop.isDragOver ? '2px dashed var(--xc-accent)' : ROW.border,
                     transition: 'border-color 120ms ease',
                 }}
             >
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                    <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Import</span>
+                    <span style={ROW_VALUE}>Import</span>
                     <span style={ROW_HINT}>
                         Reads contacts JSON or CSV, or drop one here. Existing contacts with the same id are overwritten.
                     </span>
@@ -190,13 +190,14 @@ export function ContactsSection() {
                     aria-label="Import contacts JSON"
                     style={{ display: 'none' }}
                 />
-                <button
+                <Button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    style={ACTION_BTN}
+                    size="sm"
+                    variant="danger"
                 >
                     Import…
-                </button>
+                </Button>
             </div>
             {importResult ? (
                 <>
@@ -210,6 +211,13 @@ export function ContactsSection() {
                 </>
             ) : null}
             {error ? <Status text={error} tone="error" /> : null}
+            {confirmDialog.request ? (
+                <ConfirmModal
+                    {...confirmDialog.request}
+                    onConfirm={confirmDialog.onConfirm}
+                    onCancel={confirmDialog.onCancel}
+                />
+            ) : null}
         </div>
     );
 }

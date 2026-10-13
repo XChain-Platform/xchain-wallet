@@ -71,8 +71,8 @@ export function MyLists({ walletId, activeAccountId, onOpenList, onCreateList, o
                 if (cancelled) return;
                 setAddressesByChain(byChain);
             })
-            .catch((err) => {
-                if (!cancelled) setAddressesError(err?.message || 'Failed to load addresses.');
+            .catch(() => {
+                if (!cancelled) setAddressesError('Failed to load addresses.');
             });
         return () => { cancelled = true; };
     }, [walletId, messaging, activeAccountId, addressesReload]);
@@ -170,7 +170,7 @@ export function MyLists({ walletId, activeAccountId, onOpenList, onCreateList, o
             onBack={onBack}
             backLabel="Back to home"
             titleIcon={<Icon.TokenListIcon />}
-            title="My Lists"
+            title="My lists"
             // Only the round + belongs in the header: PageHeader styles every
             // trailing button as a 38px circle, and the two text actions
             // squeezed into circles spilled across the title at phone width.
@@ -297,7 +297,7 @@ export function MyLists({ walletId, activeAccountId, onOpenList, onCreateList, o
                 allRows.length === 0 ? (
                     <EmptyState
                         title="No lists yet"
-                        body="An address list for airdrops, or a token list for a project roster or gate."
+                        body="Create an address list for airdrops or a token list for project rosters and gates."
                         actionLabel={onCreateList ? 'Create list' : undefined}
                         onAction={onCreateList ? () => onCreateList() : undefined}
                     />

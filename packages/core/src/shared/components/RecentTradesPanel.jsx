@@ -16,6 +16,7 @@
 // Raw give/get rows retain orientation support for older explorers.
 
 import { useEffect, useState } from 'react';
+import { StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../useMessaging.js';
 import { sampleMatchesFor } from '../../market/sampleMarketData.js';
 import { normalizeMarketHistoryRowExact } from '../../market/history_rows.js';
@@ -39,12 +40,14 @@ const MAX_ROWS = 30;
 export function RecentTradesPanel({ chainId, tick1, tick2, demo = false, onOpenTx }) {
     const { messaging } = useMessaging();
     const [rows, setRows] = useState(/** @type {any[]} */ ([]));
+    const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
     useEffect(() => {
         let cancelled = false;
         setRows([]);
         setLoadError(null);
+        setLoading(true);
         messaging.getMarketHistory({ chainId, tick1, tick2 })
             .then((resp) => {
                 if (cancelled) return;
@@ -54,81 +57,91 @@ export function RecentTradesPanel({ chainId, tick1, tick2, demo = false, onOpenT
                 // yet" empty state. Never fabricated trades.
                 const next = real.length > 0 ? real : (demo ? sampleMatchesFor(tick1, tick2) : []);
                 setRows(next.slice(0, MAX_ROWS));
+                setLoading(false);
             })
             .catch((err) => {
                 if (cancelled) return;
                 setRows(demo ? sampleMatchesFor(tick1, tick2).slice(0, MAX_ROWS) : []);
                 setLoadError(readFailureMessage(err, 'load recent trades'));
+                setLoading(false);
             });
         return () => { cancelled = true; };
     }, [messaging, chainId, tick1, tick2, demo]);
 
+    const summaries = rows
+        .map((row) => ({ row, summary: summarizeRow(row, tick1, tick2) }))
+        .filter(({ summary }) => Boolean(summary));
+
     return (
-        <div
+        <section
+            aria-label="Recent trades"
+            aria-busy={loading || undefined}
             style={{
                 border: '1px solid var(--xc-border)',
                 borderRadius: '4px',
                 padding: '0.5rem',
             }}
         >
-            <table className={tableStyles.table}>
-                <caption className={tableStyles.caption}>Recent trades</caption>
-                <thead>
-                    <tr>
-                        <th className={tableStyles.headerCell} scope="col">Time</th>
-                        <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Price</th>
-                        <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Size ({tick1})</th>
-                        <th className={tableStyles.headerCell} scope="col">Side</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {rows.map((row) => {
-                        const summary = summarizeRow(row, tick1, tick2);
-                        if (!summary) return null;
-                        const key = String(row.action_index ?? `${summary.timeLabel}-${summary.price}-${summary.size}`);
-                        return (
-                            <tr key={key}>
-                                <td className={`${tableStyles.cell} ${tableStyles.numeric}`} data-label="Time" style={{ color: 'var(--xc-fg-muted)' }}>
-                                    {onOpenTx && row.tx_hash ? (
-                                        <button
-                                            type="button"
-                                            onClick={() => onOpenTx(String(row.tx_hash))}
-                                            aria-label={`Open transaction ${row.tx_hash}`}
-                                            className={tableStyles.cellButton}
-                                        >
-                                            {summary.timeLabel}
-                                        </button>
-                                    ) : summary.timeLabel}
-                                </td>
-                                <td
-                                    className={`${tableStyles.cell} ${tableStyles.numeric}`}
-                                    data-label="Price"
-                                    style={{ color: summary.side === 'buy' ? '#26a69a' : '#ef5350' }}
-                                >
-                                    {summary.price}
-                                </td>
-                                <td className={`${tableStyles.cell} ${tableStyles.numeric}`} data-label={`Size (${tick1})`}>
-                                    {summary.size}
-                                </td>
-                                <td className={tableStyles.cell} data-label="Side">
-                                    {summary.side === 'buy' ? 'Buy' : 'Sell'}
-                                </td>
-                            </tr>
-                        );
-                    })}
-                </tbody>
-            </table>
-            {loadError ? (
-                <p style={{ margin: '0.25rem 0.25rem 0', color: 'var(--xc-fg-muted)', fontSize: '0.75rem' }}>
-                    {loadError}
-                </p>
+            <div style={{ maxWidth: '100%', overflowX: 'auto' }}>
+                <table className={tableStyles.table}>
+                    <caption className={tableStyles.caption}>Recent trades</caption>
+                    <thead>
+                        <tr>
+                            <th className={tableStyles.headerCell} scope="col">Time</th>
+                            <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Price</th>
+                            <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Size ({tick1})</th>
+                            <th className={tableStyles.headerCell} scope="col">Side</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {summaries.map(({ row, summary }) => {
+                            const sideColor = summary.side === 'buy' ? 'var(--xc-success)' : 'var(--xc-danger)';
+                            const key = String(row.action_index ?? `${summary.timeLabel}-${summary.price}-${summary.size}`);
+                            return (
+                                <tr key={key}>
+                                    <td className={`${tableStyles.cell} ${tableStyles.numeric}`} data-label="Time" style={{ color: 'var(--xc-fg-muted)' }}>
+                                        {onOpenTx && row.tx_hash ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => onOpenTx(String(row.tx_hash))}
+                                                aria-label={`Open transaction ${row.tx_hash}`}
+                                                className={tableStyles.cellButton}
+                                            >
+                                                {summary.timeLabel}
+                                            </button>
+                                        ) : summary.timeLabel}
+                                    </td>
+                                    <td
+                                        className={`${tableStyles.cell} ${tableStyles.numeric}`}
+                                        data-label="Price"
+                                        style={{ color: sideColor }}
+                                    >
+                                        {summary.price}
+                                    </td>
+                                    <td className={`${tableStyles.cell} ${tableStyles.numeric}`} data-label={`Size (${tick1})`}>
+                                        {summary.size}
+                                    </td>
+                                    <td className={tableStyles.cell} data-label="Side" style={{ color: sideColor, fontWeight: 600 }}>
+                                        {summary.side === 'buy' ? 'Buy' : 'Sell'}
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
+            {loading ? (
+                <StatusMessage variant="status">Loading recent trades…</StatusMessage>
             ) : null}
-            {!loadError && rows.length === 0 ? (
+            {loadError ? (
+                <StatusMessage variant="error">{loadError}</StatusMessage>
+            ) : null}
+            {!loadError && !loading && summaries.length === 0 ? (
                 <p style={{ margin: '0.25rem 0.25rem 0', color: 'var(--xc-fg-muted)', fontSize: '0.75rem' }}>
                     No trades yet.
                 </p>
             ) : null}
-        </div>
+        </section>
     );
 }
 

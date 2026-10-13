@@ -46,7 +46,7 @@ afterEach(cleanup);
 describe('the main menu', () => {
     it('offers the DEX rows when the shell wires them', () => {
         draw(<MenuRoute onBack={() => {}} onMarkets={() => {}} onMarketActivity={() => {}} />);
-        expect(screen.queryByText('Decentralized Exchange')).toBeTruthy();
+        expect(screen.queryByText('Decentralized exchange')).toBeTruthy();
         expect(screen.queryByText('Marketplace')).toBeTruthy();
     });
 
@@ -55,7 +55,7 @@ describe('the main menu', () => {
         // is not in the bundle. MenuRoute has always filtered on handler
         // presence; this pins that, since it is load-bearing rather than tidy.
         draw(<MenuRoute onBack={() => {}} onTokens={() => {}} />);
-        expect(screen.queryByText('Decentralized Exchange')).toBeNull();
+        expect(screen.queryByText('Decentralized exchange')).toBeNull();
         expect(screen.queryByText('Marketplace')).toBeNull();
     });
 });

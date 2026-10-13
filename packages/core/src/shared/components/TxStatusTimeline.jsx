@@ -55,7 +55,7 @@ const MEMPOOL_STAGE_COPY = {
         label: 'Failed',
         done: false,
         warn: true,
-        sub: 'This send did not reach the network',
+        sub: "This send did not reach the network. Review the failure reason in this transaction's details, correct the problem, and try again",
     },
 };
 
@@ -216,35 +216,42 @@ export function TxStatusTimeline({
             sub: indexedSub,
         },
     ];
+    const currentStageIndex = failed
+        ? stages.findIndex((stage) => stage.key === 'mempool')
+        : stages.findIndex((stage) => !stage.done);
 
     return (
         <ol className={styles.timeline} aria-label="Transaction status">
-            {stages.map((s, i) => (
-                <li
-                    key={s.key}
-                    className={`${styles.row} ${s.done ? styles.rowDone : styles.rowPending}`
-                        + (s.warn ? ` ${styles.rowWarn}` : '')}
-                >
-                    {/* The dot is decorative for a normal stage, but a warning
-                        must not be carried by color alone; the marker changes
-                        shape too, and the label itself states the problem. */}
-                    <span className={styles.dot} aria-hidden="true">
-                        {s.warn ? '!' : (s.done ? '●' : '○')}
-                    </span>
-                    {i < stages.length - 1 ? (
-                        <span className={`${styles.spine} ${s.done ? styles.spineDone : ''}`} aria-hidden="true" />
-                    ) : null}
-                    <div className={styles.body}>
-                        <div className={styles.label}>{s.label}</div>
-                        <div className={styles.sub}>{s.sub}</div>
-                    </div>
-                </li>
-            ))}
+            {stages.map((s, i) => {
+                const current = i === currentStageIndex;
+                const stateLabel = s.done
+                    ? 'Complete'
+                    : current
+                        ? (pendingState === 'failed' ? 'Current stage: Failed' : 'Current stage')
+                        : 'Not started';
+                return (
+                    <li
+                        key={s.key}
+                        className={`${styles.row} ${s.done ? styles.rowDone : styles.rowPending}`
+                            + (s.warn ? ` ${styles.rowWarn}` : '')}
+                        aria-current={current ? 'step' : undefined}
+                    >
+                        <span className={styles.dot} aria-hidden="true">
+                            {s.warn ? '!' : (s.done ? '●' : '○')}
+                        </span>
+                        {i < stages.length - 1 ? (
+                            <span className={`${styles.spine} ${s.done ? styles.spineDone : ''}`} aria-hidden="true" />
+                        ) : null}
+                        <div className={styles.body}>
+                            <div className={styles.heading}>
+                                <div className={styles.label}>{s.label}</div>
+                                <span className={styles.state}>{stateLabel}</span>
+                            </div>
+                            <div className={styles.sub}>{s.sub}</div>
+                        </div>
+                    </li>
+                );
+            })}
         </ol>
     );
-}
-
-function short(s) {
-    if (typeof s !== 'string' || s.length <= 14) return s;
-    return `${s.slice(0, 8)}…${s.slice(-6)}`;
 }

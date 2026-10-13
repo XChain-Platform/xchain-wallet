@@ -196,7 +196,7 @@ describe('History filters', () => {
         expect(rowKeys(view)).toEqual([`${LTC}:1:${LTC_ADDRESS}`]);
     });
 
-    it('keeps date bounds ordered and treats empty bounds and today as open or inclusive', async () => {
+    it('refuses reversed bounds and treats empty bounds and today as open or inclusive', async () => {
         const { view } = mountHistory({
             [LTC]: [
                 historyRow({ actionIndex: 10, timestamp: secondsAt(0, 23), tick: 'TODAY', source: LTC_ADDRESS }),
@@ -211,9 +211,9 @@ describe('History filters', () => {
         const tomorrow = isoLocal(tomorrowDate);
 
         fireEvent.change(screen.getByLabelText('From date'), { target: { value: tomorrow } });
-        expect(screen.getByLabelText('From date')).toHaveValue(tomorrow);
-        expect(screen.getByLabelText('To date')).toHaveValue(tomorrow);
-        await screen.findByText('No matches for the current filters');
+        expect(screen.getByLabelText('From date')).toHaveValue(isoLocal(new Date(2026, 8, 14)));
+        expect(screen.getByLabelText('To date')).toHaveValue(today);
+        expect(screen.getByRole('alert')).toHaveTextContent('From date must be on or before To date.');
 
         fireEvent.change(screen.getByLabelText('From date'), { target: { value: '' } });
         await waitFor(() => expect(rowKeys(view)).toHaveLength(2));
@@ -230,7 +230,38 @@ describe('History filters', () => {
         await waitFor(() => expect(rowKeys(view)).toHaveLength(2));
     });
 
-    it('reports network and special-filter misses, and Clear filters resets and can undo them', async () => {
+    it('offers exact local-day presets and shows an active range that can be cleared', async () => {
+        const { view } = mountHistory({
+            [LTC]: [
+                historyRow({ actionIndex: 30, timestamp: secondsAt(-6), tick: 'SEVEN', source: LTC_ADDRESS }),
+                historyRow({ actionIndex: 31, timestamp: secondsAt(-7), tick: 'EIGHT', source: LTC_ADDRESS }),
+                historyRow({ actionIndex: 32, timestamp: secondsAt(-29), tick: 'THIRTY', source: LTC_ADDRESS }),
+                historyRow({ actionIndex: 33, timestamp: secondsAt(-30), tick: 'THIRTYONE', source: LTC_ADDRESS }),
+            ],
+        });
+        await waitFor(() => expect(rowKeys(view)).toHaveLength(3));
+
+        expect(screen.getByText('Day boundaries use local time.')).toBeInTheDocument();
+        expect(screen.getByText('Active range: 2026-09-14 to 2026-10-13')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: '30 days' })).toHaveAttribute('aria-pressed', 'true');
+
+        fireEvent.click(screen.getByRole('button', { name: '7 days' }));
+        await waitFor(() => expect(rowKeys(view)).toEqual([`${LTC}:30:${LTC_ADDRESS}`]));
+        expect(screen.getByLabelText('From date')).toHaveValue('2026-10-07');
+        expect(screen.getByText('Active range: 2026-10-07 to 2026-10-13')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'All' }));
+        await waitFor(() => expect(rowKeys(view)).toHaveLength(4));
+        expect(screen.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.queryByText(/^Active range:/)).not.toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: '30 days' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Clear date range' }));
+        await waitFor(() => expect(rowKeys(view)).toHaveLength(4));
+        expect(screen.queryByText(/^Active range:/)).not.toBeInTheDocument();
+    });
+
+    it('reports network and special-filter misses, and Reset filters resets and can undo them', async () => {
         const { view } = mountHistory({
             [LTC]: [
                 historyRow({ actionIndex: 20, timestamp: secondsAt(0), tick: 'ALPHA', source: LTC_ADDRESS }),
@@ -242,10 +273,10 @@ describe('History filters', () => {
         chooseOption(/^No special filters$/, 'Cross-chain only');
         chooseOption(/^All chains$/, 'Dogecoin');
 
-        expect(await screen.findByText('No matches for the current filters')).toBeInTheDocument();
+        expect(await screen.findByText('No results for these filters')).toBeInTheDocument();
         expect(globalThis.localStorage?.getItem('xc:chainFilter:history:w1')).toContain(DOGE);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
         await waitFor(() => expect(rowKeys(view)).toEqual([`${LTC}:20:${LTC_ADDRESS}`]));
         expect(screen.getByRole('button', { name: 'All chains' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'No special filters' })).toBeInTheDocument();
@@ -254,21 +285,21 @@ describe('History filters', () => {
         expect(globalThis.localStorage?.getItem('xc:chainFilter:history:w1')).toBeNull();
 
         fireEvent.click(await screen.findByRole('button', { name: 'Undo' }));
-        expect(await screen.findByText('No matches for the current filters')).toBeInTheDocument();
+        expect(await screen.findByText('No results for these filters')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Dogecoin' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Cross-chain only' })).toBeInTheDocument();
         expect(globalThis.localStorage?.getItem('xc:chainFilter:history:w1')).toContain(DOGE);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
         await waitFor(() => expect(rowKeys(view)).toHaveLength(1));
 
         chooseOption(/^All chains$/, 'Dogecoin');
-        expect(await screen.findByText('No matches for the current filters')).toBeInTheDocument();
+        expect(await screen.findByText('No results for these filters')).toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
         await waitFor(() => expect(rowKeys(view)).toHaveLength(1));
         chooseOption(/^No special filters$/, 'Cross-chain only');
-        expect(await screen.findByText('No matches for the current filters')).toBeInTheDocument();
+        expect(await screen.findByText('No results for these filters')).toBeInTheDocument();
     });
 
     it('renders rows, filters, and detail fields with a 320px layout contract', async () => {
@@ -296,7 +327,7 @@ describe('History filters', () => {
             fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
             expect(screen.getByRole('rowheader', { name: 'Amount' })).toBeInTheDocument();
 
-            const narrow = mediaBlock(historyCss, '(max-width: 399px)');
+            const narrow = mediaBlock(historyCss, 'not all and (min-width: 400px)');
             expect(ruleBody(narrow, '.dateRow')).toMatch(/flex-wrap:\s*wrap/);
             expect(ruleBody(narrow, '.dateInput')).toMatch(/box-sizing:\s*border-box/);
             expect(ruleBody(narrow, '.filterFooter > .filterDisclosure'))
