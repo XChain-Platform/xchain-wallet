@@ -98,6 +98,29 @@ describe('useNativeFiatRates', () => {
         expect(requestSignal.aborted).toBe(true);
     });
 
+    it('keeps a shared request alive until every consumer has unmounted', async () => {
+        let requestSignal;
+        configureFiatRateSource({
+            now: () => NOW,
+            explorerUrlByCoin: EXPLORER,
+            fetch: async (_url, init) => new Promise((_resolve, reject) => {
+                requestSignal = init.signal;
+                init.signal.addEventListener('abort', () => reject(
+                    Object.assign(new Error('aborted'), { name: 'AbortError' }),
+                ));
+            }),
+        });
+        const first = renderHook(() => useNativeFiatRates({ chainCoins: ['bitcoin'] }));
+        const second = renderHook(() => useNativeFiatRates({ chainCoins: ['bitcoin'] }));
+        await waitFor(() => expect(requestSignal).toBeDefined());
+
+        first.unmount();
+        expect(requestSignal.aborted).toBe(false);
+
+        second.unmount();
+        expect(requestSignal.aborted).toBe(true);
+    });
+
     it('shares one request across mounted consumers and refetches once per currency switch', async () => {
         const calls = [];
         configureFiatRateSource({

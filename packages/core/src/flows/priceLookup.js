@@ -83,8 +83,60 @@ const coinMissAt = new Map();
 // A mounted route and the Home summary can ask for the same rate before the
 // first request fills the cache. Each key owns one refresh promise so those
 // consumers share the request instead of racing identical network work.
-/** @type {Map<string, Promise<{ updated: string[] }>>} */
+/** @type {Map<string, SharedRefresh>} */
 const coinRefreshes = new Map();
+
+/**
+ * A refresh several callers share. Its own controller cancels the network
+ * work, and it fires only when every caller that joined has aborted, so one
+ * unmounting screen cannot cancel the request another screen still waits on.
+ * @typedef {{ controller: AbortController, live: number, promise: Promise<any> }} SharedRefresh
+ */
+
+function abortError() {
+    if (typeof DOMException === 'function') return new DOMException('The request was cancelled.', 'AbortError');
+    return Object.assign(new Error('The request was cancelled.'), { name: 'AbortError' });
+}
+
+/** @param {(signal: AbortSignal) => Promise<any>} run @returns {SharedRefresh} */
+function startSharedRefresh(run) {
+    const controller = new AbortController();
+    return { controller, live: 0, promise: run(controller.signal) };
+}
+
+/**
+ * Join a shared refresh. The returned promise settles with the shared result
+ * or rejects with an AbortError as soon as this caller's own signal aborts.
+ * @param {SharedRefresh} entry
+ * @param {AbortSignal} [signal]
+ */
+function joinSharedRefresh(entry, signal) {
+    entry.live += 1;
+    // A caller with no signal can never cancel, so the work always runs on.
+    if (!signal) return entry.promise;
+    let released = false;
+    const release = () => {
+        if (released) return;
+        released = true;
+        entry.live -= 1;
+        if (entry.live === 0) entry.controller.abort();
+    };
+    if (signal.aborted) {
+        release();
+        return Promise.reject(abortError());
+    }
+    return new Promise((resolve, reject) => {
+        const onAbort = () => {
+            release();
+            reject(abortError());
+        };
+        signal.addEventListener('abort', onAbort, { once: true });
+        entry.promise.then(
+            (value) => { signal.removeEventListener('abort', onAbort); resolve(value); },
+            (err) => { signal.removeEventListener('abort', onAbort); reject(err); },
+        );
+    });
+}
 
 /** @type {Set<() => void>} */
 const listeners = new Set();
@@ -306,33 +358,35 @@ export async function refreshFiatRates({
     if (wanted.length === 0) return { updated: [] };
 
     const refreshKey = (coin) => `${cacheKey(coin, fiatCurrency)}|fallback:${allowCoingeckoFallback}`;
+    if (signal?.aborted) throw abortError();
     const owned = [];
-    const pending = new Set();
+    const joined = new Set();
     for (const coin of wanted) {
         const active = coinRefreshes.get(refreshKey(coin));
-        if (active) pending.add(active);
+        if (active) joined.add(active);
         else owned.push(coin);
     }
 
     if (owned.length > 0) {
-        let refresh;
-        refresh = refreshFiatRateBatch({
+        /** @type {SharedRefresh} */
+        const refresh = startSharedRefresh((sharedSignal) => refreshFiatRateBatch({
             wanted: owned,
             fiatCurrency,
             allowCoingeckoFallback,
             fetchImpl,
             nowMs,
+            signal: sharedSignal,
         }).finally(() => {
             for (const coin of owned) {
                 const key = refreshKey(coin);
                 if (coinRefreshes.get(key) === refresh) coinRefreshes.delete(key);
             }
-        });
+        }));
         for (const coin of owned) coinRefreshes.set(refreshKey(coin), refresh);
-        pending.add(refresh);
+        joined.add(refresh);
     }
 
-    const results = await Promise.all(pending);
+    const results = await Promise.all([...joined].map((entry) => joinSharedRefresh(entry, signal)));
     const updated = new Set(results.flatMap((result) => result.updated));
     return { updated: wanted.filter((coin) => updated.has(coin)) };
 }
@@ -343,6 +397,7 @@ async function refreshFiatRateBatch({
     allowCoingeckoFallback,
     fetchImpl,
     nowMs,
+    signal,
 }) {
 
     /** @type {string[]} */
@@ -458,7 +513,7 @@ const MISS_TTL_MS = 60 * 1000;
 /** @type {Map<string, { rate: FiatRate | null, fetchedAtMs: number }>} */
 const tokenRateCache = new Map();
 
-/** @type {Map<string, Promise<{ updated: boolean }>>} */
+/** @type {Map<string, SharedRefresh>} */
 const tokenRefreshes = new Map();
 
 function tokenCacheKey(chainCoin, tick, fiatCurrency) {
@@ -556,11 +611,12 @@ export async function refreshTokenFiatRate({
         if (nowMs - hit.fetchedAtMs <= ttl) return { updated: false };
     }
     const refreshKey = `${key}|fallback:${allowCoingeckoFallback}`;
+    if (signal?.aborted) throw abortError();
     const active = tokenRefreshes.get(refreshKey);
-    if (active) return active;
+    if (active) return joinSharedRefresh(active, signal);
 
-    let refresh;
-    refresh = refreshTokenFiatRateUncached({
+    /** @type {SharedRefresh} */
+    const refresh = startSharedRefresh((sharedSignal) => refreshTokenFiatRateUncached({
         chainCoin,
         tick: t,
         nativeTicker: n,
@@ -570,11 +626,12 @@ export async function refreshTokenFiatRate({
         nowMs,
         key,
         hit,
+        signal: sharedSignal,
     }).finally(() => {
         if (tokenRefreshes.get(refreshKey) === refresh) tokenRefreshes.delete(refreshKey);
-    });
+    }));
     tokenRefreshes.set(refreshKey, refresh);
-    return refresh;
+    return joinSharedRefresh(refresh, signal);
 }
 
 async function refreshTokenFiatRateUncached({
@@ -587,6 +644,7 @@ async function refreshTokenFiatRateUncached({
     nowMs,
     key,
     hit,
+    signal,
 }) {
     // A refresh that resolved nothing keeps whatever the cache already
     // holds, exactly as the coin path does: a price from five minutes ago
