@@ -30,7 +30,7 @@ const DRILLDOWN_SECTIONS = [
     { id: 'about', title: 'About', component: 'AboutSection' },
 ];
 const INLINE_SECTIONS = [
-    { query: 'accent reduced motion', title: 'Appearance', component: 'AppearanceSection' },
+    { query: 'theme reduced motion', title: 'Appearance', component: 'AppearanceSection' },
     { query: 'fiat locale custom iso', title: 'Language & region', component: 'LanguageRegionSection' },
     { query: 'active mainnet testnet', title: 'Network', component: 'NetworkSection' },
     { query: 'desktop permission quiet hours', title: 'Notifications', component: 'NotificationsSection' },
