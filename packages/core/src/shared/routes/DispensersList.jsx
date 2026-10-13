@@ -412,7 +412,15 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                         onAction={onCreateDispenser ? () => onCreateDispenser() : undefined}
                     />
                 ) : (
-                    <EmptyState title="No matching dispensers" body="Try a different search or network filter." />
+                    <EmptyState
+                        title="No results for these filters"
+                        body="Reset the filters to see all dispensers."
+                        actionLabel="Reset filters"
+                        onAction={() => {
+                            setQuery('');
+                            setNetwork('all');
+                        }}
+                    />
                 )
             ) : (
                 <div className={local.list} role="list">

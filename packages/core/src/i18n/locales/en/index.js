@@ -300,9 +300,9 @@ export const en = {
     'history.loading': 'Loading history',
     'history.empty.noAddressesTitle': 'No addresses yet',
     'history.empty.noAddressesBody': 'Generate a receive address to populate history.',
-    'history.empty.noMatchesTitle': 'No matches for the current filters',
-    'history.empty.noMatchesBody': 'Adjust or clear the filters to see more history.',
-    'history.empty.clearFilters': 'Clear filters',
+    'history.empty.noMatchesTitle': 'No results for these filters',
+    'history.empty.noMatchesBody': 'Reset the filters to see all history.',
+    'history.empty.clearFilters': 'Reset filters',
     'history.empty.noCrossChainTitle': 'No cross-chain actions yet',
     'history.empty.noCrossChainBody':
         'Cross-chain transfers sent or received by this wallet appear here.',

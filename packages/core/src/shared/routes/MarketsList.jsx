@@ -170,8 +170,17 @@ export function MarketsList({
         return applySearch(rows);
     }, [tab, markets, watchlist, selectedAsset, search]);
 
-    const filtersHideResults = Boolean(search.trim())
-        || (tab !== 'all' && markets.length > displayMarkets.length);
+    const hasRowsBeforeSearch = useMemo(() => {
+        if (tab !== 'watchlist') return markets.length > 0;
+        if (!selectedAsset) return false;
+        const selectedTick = selectedAsset.tick.toUpperCase();
+        return watchlist.some((entry) => entry.chainId === selectedAsset.chainId
+            && (entry.tick1.toUpperCase() === selectedTick || entry.tick2.toUpperCase() === selectedTick));
+    }, [tab, markets, watchlist, selectedAsset]);
+    const filtersHideAllMarkets = displayMarkets.length === 0 && (
+        (Boolean(search.trim()) && hasRowsBeforeSearch)
+        || (tab !== 'all' && markets.length > 0)
+    );
     const resetFilters = () => {
         setSearch('');
         setTab('all');
@@ -370,20 +379,23 @@ export function MarketsList({
                         {loadError}
                     </StatusMessage>
                 ) : displayMarkets.length === 0 ? (
-                    <EmptyState
-                        title={search.trim()
-                            ? 'No matches'
-                            : tab === 'watchlist'
+                    filtersHideAllMarkets ? (
+                        <EmptyState
+                            title="No results for these filters"
+                            body="Reset the filters to see all markets."
+                            actionLabel="Reset filters"
+                            onAction={resetFilters}
+                        />
+                    ) : (
+                        <EmptyState
+                            title={tab === 'watchlist'
                                 ? 'Empty watchlist'
                                 : `No markets for ${selectedAsset.tick}`}
-                        body={search.trim()
-                            ? `No markets match "${search.trim()}".`
-                            : tab === 'watchlist'
+                            body={tab === 'watchlist'
                                 ? `Starred markets for ${selectedAsset.tick} appear here.`
                                 : 'No pairs found involving this asset on its chain.'}
-                        actionLabel={filtersHideResults ? 'Reset filters' : undefined}
-                        onAction={filtersHideResults ? resetFilters : undefined}
-                    />
+                        />
+                    )
                 ) : (
                     <div className={receiveStyles.assetCard} style={{ display: 'block', padding: 0, marginBottom: 'var(--xc-space-3)' }}>
                         <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>

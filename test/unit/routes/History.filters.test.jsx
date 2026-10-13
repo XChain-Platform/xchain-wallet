@@ -235,7 +235,7 @@ describe('History filters', () => {
         expect(screen.queryByText(/^Active range:/)).not.toBeInTheDocument();
     });
 
-    it('reports network and special-filter misses, and Clear filters resets and can undo them', async () => {
+    it('reports network and special-filter misses, and Reset filters resets and can undo them', async () => {
         const { view } = mountHistory({
             [LTC]: [
                 historyRow({ actionIndex: 20, timestamp: secondsAt(0), tick: 'ALPHA', source: LTC_ADDRESS }),
@@ -247,10 +247,10 @@ describe('History filters', () => {
         chooseOption(/^No special filters$/, 'Cross-chain only');
         chooseOption(/^All chains$/, 'Dogecoin');
 
-        expect(await screen.findByText('No matches for the current filters')).toBeInTheDocument();
+        expect(await screen.findByText('No results for these filters')).toBeInTheDocument();
         expect(globalThis.localStorage?.getItem('xc:chainFilter:history:w1')).toContain(DOGE);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
         await waitFor(() => expect(rowKeys(view)).toEqual([`${LTC}:20:${LTC_ADDRESS}`]));
         expect(screen.getByRole('button', { name: 'All chains' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'No special filters' })).toBeInTheDocument();
@@ -259,20 +259,20 @@ describe('History filters', () => {
         expect(globalThis.localStorage?.getItem('xc:chainFilter:history:w1')).toBeNull();
 
         fireEvent.click(await screen.findByRole('button', { name: 'Undo' }));
-        expect(await screen.findByText('No matches for the current filters')).toBeInTheDocument();
+        expect(await screen.findByText('No results for these filters')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Dogecoin' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Cross-chain only' })).toBeInTheDocument();
         expect(globalThis.localStorage?.getItem('xc:chainFilter:history:w1')).toContain(DOGE);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
         await waitFor(() => expect(rowKeys(view)).toHaveLength(1));
 
         chooseOption(/^All chains$/, 'Dogecoin');
-        expect(await screen.findByText('No matches for the current filters')).toBeInTheDocument();
+        expect(await screen.findByText('No results for these filters')).toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
         await waitFor(() => expect(rowKeys(view)).toHaveLength(1));
         chooseOption(/^No special filters$/, 'Cross-chain only');
-        expect(await screen.findByText('No matches for the current filters')).toBeInTheDocument();
+        expect(await screen.findByText('No results for these filters')).toBeInTheDocument();
     });
 });
