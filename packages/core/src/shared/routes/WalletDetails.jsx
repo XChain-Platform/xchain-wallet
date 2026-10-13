@@ -42,15 +42,26 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
 
-    const [wallet, setWallet] = useState(/** @type {any | null} */ (null));
-    const [accountCount, setAccountCount] = useState(/** @type {number | null} */ (null));
-    const [error, setError] = useState(/** @type {string | null} */ (null));
+    const [walletLoad, setWalletLoad] = useState(
+        /** @type {{ walletId: string | null, wallet: any | null, error: string | null }} */ (
+            { walletId: null, wallet: null, error: null }
+        ),
+    );
+    const [accountLoad, setAccountLoad] = useState(
+        /** @type {{ walletId: string | null, count: number | null }} */ (
+            { walletId: null, count: null }
+        ),
+    );
     const [exitBusy, setExitBusy] = useState(false);
     const [exitError, setExitError] = useState(/** @type {string | null} */ (null));
     const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
 
     const isDemo = isDemoWallet(walletId);
     const demoExpiry = isDemo ? getDemoWalletExpiry() : null;
+    const currentWalletLoad = walletLoad.walletId === walletId ? walletLoad : null;
+    const wallet = currentWalletLoad?.wallet || null;
+    const error = currentWalletLoad?.error || null;
+    const accountCount = accountLoad.walletId === walletId ? accountLoad.count : null;
 
     async function handleExitDemo() {
         if (exitBusy) return;
@@ -81,29 +92,46 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
     useEffect(() => {
         let cancelled = false;
         if (typeof messaging.listWallets !== 'function') {
-            setError('messaging.listWallets is not available in this shell.');
+            setWalletLoad({
+                walletId,
+                wallet: null,
+                error: 'messaging.listWallets is not available in this shell.',
+            });
             return undefined;
         }
-        messaging.listWallets()
+        Promise.resolve()
+            .then(() => messaging.listWallets())
             .then((list) => {
                 if (cancelled) return;
                 const found = Array.isArray(list) ? list.find((w) => w.id === walletId) : null;
-                if (!found) setError('Wallet not found.');
-                else setWallet(found);
+                setWalletLoad({
+                    walletId,
+                    wallet: found || null,
+                    error: found ? null : 'Wallet not found.',
+                });
             })
-            .catch((err) => { if (!cancelled) setError(err?.message || 'Failed to load wallet.'); });
+            .catch((err) => {
+                if (!cancelled) {
+                    setWalletLoad({
+                        walletId,
+                        wallet: null,
+                        error: err?.message || 'Failed to load wallet.',
+                    });
+                }
+            });
         return () => { cancelled = true; };
     }, [walletId, messaging]);
 
     useEffect(() => {
         let cancelled = false;
         if (typeof messaging.listAccounts !== 'function') return undefined;
-        messaging.listAccounts(walletId)
+        Promise.resolve()
+            .then(() => messaging.listAccounts(walletId))
             .then((list) => {
                 if (cancelled) return;
-                setAccountCount(Array.isArray(list) ? list.length : 0);
+                setAccountLoad({ walletId, count: Array.isArray(list) ? list.length : 0 });
             })
-            .catch(() => { if (!cancelled) setAccountCount(0); });
+            .catch(() => { if (!cancelled) setAccountLoad({ walletId, count: 0 }); });
         return () => { cancelled = true; };
     }, [walletId, messaging]);
 

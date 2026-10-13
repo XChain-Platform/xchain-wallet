@@ -8,18 +8,26 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import React from 'react';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 
+const pickerMounts = vi.hoisted(() => ({ next: 0 }));
+
 vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
-    TokenPicker: ({ purpose, hideOwnFilter, marker }) => (
-        <output
-            data-testid="token-picker-props"
-            data-purpose={purpose}
-            data-hide-own-filter={String(hideOwnFilter)}
-            data-marker={marker}
-        />
-    ),
+    TokenPicker: ({ purpose, hideOwnFilter, marker }) => {
+        const instance = React.useRef(null);
+        if (instance.current === null) instance.current = ++pickerMounts.next;
+        return (
+            <output
+                data-testid="token-picker-props"
+                data-purpose={purpose}
+                data-hide-own-filter={String(hideOwnFilter)}
+                data-marker={marker}
+                data-instance={instance.current}
+            />
+        );
+    },
 }));
 
 import { ReceivePicker } from '../../../packages/core/src/shared/routes/ReceivePicker.jsx';
@@ -40,5 +48,16 @@ describe('Send and Receive picker wrappers', () => {
         expect(output).toHaveAttribute('data-purpose', expectedPurpose);
         expect(output).toHaveAttribute('data-marker', 'forwarded');
         expect(output).toHaveAttribute('data-hide-own-filter', 'undefined');
+    });
+
+    it('remounts the send token list when its wallet scope changes', () => {
+        const { rerender } = render(
+            <SendPicker walletId="wallet-1" accountId="account-1" />,
+        );
+        const firstInstance = screen.getByTestId('token-picker-props').dataset.instance;
+
+        rerender(<SendPicker walletId="wallet-2" accountId="account-1" />);
+
+        expect(screen.getByTestId('token-picker-props').dataset.instance).not.toBe(firstInstance);
     });
 });
