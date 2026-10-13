@@ -200,6 +200,26 @@ describe('NotificationService', () => {
         expect(onTxConfirmed).toHaveBeenCalledWith('txOurs');
     });
 
+    it('records our confirmed transaction without notifying when tx confirmations are off', async () => {
+        const deps = makeDeps();
+        deps.settings.notifications.txConfirmations = false;
+        const onTxConfirmed = vi.fn(async () => {});
+        const svc = makeService(deps, {
+            getPendingTxids: async () => new Set(['txOurs']),
+            onTxConfirmed,
+        });
+        await svc.start();
+
+        deps.sdks['bitcoin-mainnet'].emit('addrBTC', {
+            type: 'NEW_ACTION',
+            data: { action_index: 22, source: 'addrBTC', tx_hash: 'txOurs' },
+        });
+        await flush();
+
+        expect(onTxConfirmed).toHaveBeenCalledWith('txOurs');
+        expect(deps.notify).not.toHaveBeenCalled();
+    });
+
     it('fires order-fill on ORDER_MATCH, suppressed when orderFills is off', async () => {
         const deps = makeDeps();
         const svc = makeService(deps);
@@ -215,6 +235,36 @@ describe('NotificationService', () => {
         await flush();
         expect(deps.notify).toHaveBeenCalledTimes(1);
         expect(deps.notify.mock.calls[0][0]).toMatchObject({ kind: 'order-fill' });
+    });
+
+    it('suppresses dispenser fills when dispenserFills is off', async () => {
+        const deps = makeDeps();
+        deps.settings.notifications.dispenserFills = false;
+        const svc = makeService(deps);
+        await svc.start();
+
+        deps.sdks['bitcoin-mainnet'].emit('addrBTC', {
+            type: 'DISPENSE',
+            data: { action_index: 32 },
+        });
+        await flush();
+
+        expect(deps.notify).not.toHaveBeenCalled();
+    });
+
+    it('suppresses CoinPay-required prompts when incoming receipts are off', async () => {
+        const deps = makeDeps();
+        deps.settings.notifications.incomingReceipts = false;
+        const svc = makeService(deps);
+        await svc.start();
+
+        deps.sdks['bitcoin-mainnet'].emit('addrBTC', {
+            type: 'COINPAY_REQUIRED',
+            data: { action_index: 33 },
+        });
+        await flush();
+
+        expect(deps.notify).not.toHaveBeenCalled();
     });
 
     it('dedupes the same event within the 30s window', async () => {

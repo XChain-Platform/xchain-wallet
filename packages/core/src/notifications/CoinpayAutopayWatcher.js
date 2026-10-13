@@ -112,6 +112,9 @@ export class CoinpayAutopayWatcher {
      * @param {import('../registry/index.js').ChainRegistry} deps.chainRegistry
      * @param {(walletId: string) => (object | null)} deps.getSigner
      *   pre-unlocked SoftwareSigner lookup (SignerPool.get); null = cannot sign
+     * @param {() => Promise<import('../schemas/settings.js').Settings>} deps.getSettings
+     *   read live settings before delivery so the incoming-receipts toggle
+     *   gates every CoinPay status notification
      * @param {{ reserve: Function, release: Function }} [deps.reservationLedger]
      * the host-shared ledger; optional so tests / degraded shells run without it
      * @param {(n: { kind: string, title: string, body: string, data?: object }) => (void | Promise<void>)} deps.notify
@@ -126,6 +129,7 @@ export class CoinpayAutopayWatcher {
         sdkRegistry,
         chainRegistry,
         getSigner,
+        getSettings,
         reservationLedger,
         notify,
         shellKind,
@@ -138,6 +142,7 @@ export class CoinpayAutopayWatcher {
         if (!sdkRegistry) throw new Error('CoinpayAutopayWatcher: sdkRegistry is required');
         if (!chainRegistry) throw new Error('CoinpayAutopayWatcher: chainRegistry is required');
         if (typeof getSigner !== 'function') throw new Error('CoinpayAutopayWatcher: getSigner is required');
+        if (typeof getSettings !== 'function') throw new Error('CoinpayAutopayWatcher: getSettings is required');
         if (typeof notify !== 'function') throw new Error('CoinpayAutopayWatcher: notify is required');
         if (!['desktop', 'extension', 'web'].includes(shellKind)) {
             throw new Error('CoinpayAutopayWatcher: shellKind must be desktop | extension | web');
@@ -147,6 +152,7 @@ export class CoinpayAutopayWatcher {
         this._sdkRegistry = sdkRegistry;
         this._chainRegistry = chainRegistry;
         this._getSigner = getSigner;
+        this._getSettings = getSettings;
         this._ledger = reservationLedger || null;
         this._notify = notify;
         this._shellKind = shellKind;
@@ -641,6 +647,14 @@ export class CoinpayAutopayWatcher {
     async _notifyOnce(matchIndex, reason, payload) {
         const key = `${matchIndex}:${reason}`;
         if (this._notified.has(key)) return;
+        let settings;
+        try {
+            settings = await this._getSettings();
+        } catch (e) {
+            this._log.error('CoinpayAutopayWatcher: getSettings failed', e);
+            return;
+        }
+        if (settings?.notifications?.incomingReceipts !== true) return;
         this._notified.add(key);
         try {
             await this._notify(payload);

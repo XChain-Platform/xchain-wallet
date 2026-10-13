@@ -520,6 +520,7 @@ async function buildHost() {
             sdkRegistry,
             chainRegistry,
             getSigner: (walletId) => signerPool.get(walletId),
+            getSettings: () => flowsLib.getSettings(vault),
             reservationLedger: host.reservationLedger,
             notify: chromeNotify,
             shellKind: 'extension',
