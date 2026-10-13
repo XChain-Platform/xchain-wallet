@@ -60,6 +60,7 @@ function mountDividend({
     holders = [{ address: HOLDER, amount: '500' }],
     divisibility = 8,
     walletMode = 'full',
+    feeQuote = { supported: true, valid: true, xchainFee: '0.00000000' },
 } = {}) {
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
@@ -93,6 +94,7 @@ function mountDividend({
             psbt: 'aa00', encoding: 'psbt', actionString: 'ACT', version: 1,
         }),
         preflight: vi.fn().mockResolvedValue({ verdict: 'pass', findings: [] }),
+        requoteNativeFee: vi.fn().mockResolvedValue(feeQuote),
         dividendAction: vi.fn(),
     };
     render(
@@ -222,6 +224,49 @@ describe('DividendForm Max fills a rate, not the balance', () => {
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
+    it('includes an XCHAIN protocol fee in total cost and the balance refusal', async () => {
+        const messaging = mountDividend({
+            feeQuote: {
+                supported: true,
+                valid: true,
+                xchainFee: '1.00000000',
+                requiredFeeNative: '0.00002',
+            },
+        });
+        await pickDividendToken();
+        fireEvent.change(await amountField(), { target: { value: '9.998' } });
+
+        const cost = await screen.findByTestId('dividend-cost-preview', {}, { timeout: 3000 });
+        await waitFor(() => expect(cost.textContent).toContain('Total token cost ~5,000 XCHAIN'));
+        expect(cost.textContent).toContain('includes 1 XCHAIN protocol fee');
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Total token cost is ~5,000 XCHAIN: 4,999 payout + 1 protocol fee, but this address holds 4,999 XCHAIN.',
+        );
+
+        fireEvent.click(submitButton());
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+        expect(messaging.requoteNativeFee).toHaveBeenCalledWith({
+            chainId: CHAIN,
+            source: SOURCE,
+            actionString: 'DIVIDEND|0|S19MINT|XCHAIN|9.998',
+        });
+    });
+
+    it('does not count holder shares whose individually rounded payout is zero', async () => {
+        mountDividend({
+            holders: [
+                { address: HOLDER, amount: '0.5' },
+                { address: 'bc1qsecondholder000000000000000000000', amount: '0.5' },
+            ],
+            divisibility: 0,
+        });
+        await pickDividendToken();
+        fireEvent.change(await amountField(), { target: { value: '0.5' } });
+        await expectText(/0 eligible holders/);
+        expect(document.body.textContent).not.toMatch(/2 eligible holders/);
+        await expectText(/total distribution ~0 XCHAIN/);
+    });
+
     it('keeps a fractional indivisible-token payout out of review', async () => {
         const messaging = mountDividend({
             balance: '10',
@@ -244,6 +289,9 @@ describe('DividendForm Max fills a rate, not the balance', () => {
         fireEvent.change(await amountField(), { target: { value: '9.998' } });
         fireEvent.click(submitButton());
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalled(), { timeout: 3000 });
+        expect(messaging.composeForConfirm.mock.calls[0][0].actionData.params).toEqual({
+            VERSION: '0', TICK: 'S19MINT', DIVIDEND_TICK: 'XCHAIN', AMOUNT: '9.998',
+        });
     });
 
     it('stays ungated when the holder list cannot be read', async () => {

@@ -24,8 +24,8 @@ import { AboutSection } from '../../../packages/core/src/shared/components/setti
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { setDirectUpdateProvider } from '../../../packages/core/src/flows/directUpdate.js';
 
-function lane({ notice = null, enabled = true, onEnable = () => {} } = {}) {
-    const check = vi.fn(async () => (notice ? { version: '9.9.9', notice } : null));
+function lane({ notice = null, version = '9.9.9', enabled = true, onEnable = () => {} } = {}) {
+    const check = vi.fn(async () => (notice ? { version, notice } : null));
     setDirectUpdateProvider({
         check,
         isEnabled: () => enabled,
@@ -35,8 +35,15 @@ function lane({ notice = null, enabled = true, onEnable = () => {} } = {}) {
     return check;
 }
 
-beforeEach(() => setDirectUpdateProvider(null));
-afterEach(() => { cleanup(); setDirectUpdateProvider(null); });
+beforeEach(() => {
+    setDirectUpdateProvider(null);
+    sessionStorage.clear();
+});
+afterEach(() => {
+    cleanup();
+    setDirectUpdateProvider(null);
+    sessionStorage.clear();
+});
 
 describe('UpdateNoticeBanner', () => {
     it('renders nothing, and asks nothing, with no lane installed', async () => {
@@ -62,11 +69,45 @@ describe('UpdateNoticeBanner', () => {
         expect(buttons).toEqual(['Dismiss']);
     });
 
-    it('stays dismissed for the session', async () => {
-        lane({ notice: 'XChain Wallet 9.9.9 is available.' });
-        const { container } = render(<UpdateNoticeBanner />);
+    it('stays dismissed across remounts for the same session and version', async () => {
+        const check = lane({ notice: 'XChain Wallet 9.9.9 is available.' });
+        const view = render(<UpdateNoticeBanner />);
         (await screen.findByLabelText('Dismiss update notice')).click();
-        await waitFor(() => expect(container.firstChild).toBeNull());
+        await waitFor(() => expect(view.container.firstChild).toBeNull());
+        expect(sessionStorage.getItem('xc:update-notice:dismissed-version')).toBe('9.9.9');
+
+        view.unmount();
+        const remount = render(<UpdateNoticeBanner />);
+        await waitFor(() => expect(check).toHaveBeenCalledTimes(2));
+        expect(remount.container.firstChild).toBeNull();
+    });
+
+    it('shows a later version after an earlier version was dismissed', async () => {
+        sessionStorage.setItem('xc:update-notice:dismissed-version', '9.9.9');
+        lane({
+            version: '10.0.0',
+            notice: 'XChain Wallet 10.0.0 is available.',
+        });
+
+        render(<UpdateNoticeBanner />);
+
+        expect(await screen.findByText(/10\.0\.0/)).toBeTruthy();
+    });
+
+    it('does not move focus when an asynchronous notice appears', async () => {
+        lane({ notice: 'XChain Wallet 9.9.9 is available.' });
+        render(
+            <>
+                <button type="button">Primary action</button>
+                <UpdateNoticeBanner />
+            </>,
+        );
+        const primary = screen.getByRole('button', { name: 'Primary action' });
+        primary.focus();
+
+        await screen.findByText(/9\.9\.9/);
+
+        expect(primary).toHaveFocus();
     });
 
     it('says nothing when the lane has nothing to say', async () => {

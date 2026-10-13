@@ -1,15 +1,20 @@
 .overlay {
     position: fixed;
     inset: 0;
-    z-index: 1000;
+    z-index: var(--xc-z-modal);
     background: rgba(15, 23, 42, 0.55);
     display: flex;
     justify-content: flex-end;
+    padding: env(safe-area-inset-top, 0px)
+        env(safe-area-inset-right, 0px)
+        env(safe-area-inset-bottom, 0px)
+        env(safe-area-inset-left, 0px);
 }
 
 .panel {
     width: 100%;
     max-width: 380px;
+    min-height: 0;
     background: var(--xc-surface);
     color: var(--xc-text);
     display: flex;
@@ -31,7 +36,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: var(--xc-space-3) var(--xc-space-4);
+    padding: calc(var(--xc-space-3) + env(safe-area-inset-top, 0px)) var(--xc-space-4) var(--xc-space-3);
     border-bottom: 1px solid var(--xc-border);
     flex: 0 0 auto;
 }
@@ -52,7 +57,7 @@
     color: var(--xc-on-accent);
     font-size: var(--xc-text-xs);
     font-weight: 700;
-    padding: 1px 8px;
+    padding: 1px var(--xc-space-2);
     border-radius: 999px;
     text-transform: none;
     letter-spacing: 0;
@@ -89,6 +94,7 @@
     min-height: 0;
     overflow-y: auto;
     padding: var(--xc-space-3);
+    padding-bottom: calc(var(--xc-space-3) + env(safe-area-inset-bottom, 0px));
 }
 
 .empty {
@@ -118,7 +124,7 @@
 }
 
 .info     { border-inline-start-color: var(--xc-accent-primary); }
-.warning  { border-inline-start-color: #F59E0B; }
+.warning  { border-inline-start-color: var(--xc-warning); }
 .critical { border-inline-start-color: var(--xc-danger); }
 
 .alertHead {

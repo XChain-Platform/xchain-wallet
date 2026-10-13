@@ -17,7 +17,10 @@
 
 import { useState } from 'react';
 import { Button, Input, Icon } from '@xchain-wallet/core/ui';
-import { formatWithThousands } from '../utils/amountFormat.js';
+import {
+    formatWithThousands,
+    normalizeLocalizedDecimal,
+} from '../utils/amountFormat.js';
 import { coinToFiatExact } from '../../flows/priceLookup.js';
 import { formatFiat } from './BalanceList.jsx';
 import styles from './AmountField.module.css';
@@ -81,13 +84,13 @@ export function AmountField({
     const handleChange = (event) => {
         const rawValue = String(event.target.value);
         const cursorPos = event.target.selectionStart;
-        const normalized = rawValue.replace(/[\s,]/g, '');
+        const normalized = normalizeLocalizedDecimal(rawValue);
         const normalizedCursor = typeof cursorPos === 'number'
             ? rawValue.slice(0, cursorPos).replace(/[\s,]/g, '').length
             : null;
 
-        if (normalized !== '' && !/^\d*\.?\d*$/.test(normalized)) {
-            setInputError('Enter the amount as a plain decimal number.');
+        if (normalized === null) {
+            setInputError('Enter a valid decimal amount, such as 1,234.56 or 1.234,56.');
             return;
         }
         const fraction = normalized.includes('.') ? normalized.split('.')[1] : '';
@@ -96,7 +99,8 @@ export function AmountField({
             return;
         }
         setInputError('');
-        onAmountFieldChange(normalized, normalizedCursor);
+        const usesDotDecimal = formatWithThousands('1.1').includes('.');
+        onAmountFieldChange(normalized, usesDotDecimal ? normalizedCursor : null);
     };
     const priceSourceLabel = fiatRate?.source === 'market' ? ' · DEX price' : '';
 

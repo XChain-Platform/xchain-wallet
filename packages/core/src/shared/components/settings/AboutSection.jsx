@@ -14,7 +14,7 @@
 // Items whose underlying artifact isn't yet published render with a
 // muted "not yet published" hint instead of an inert link.
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
 import { copyText } from '../../clipboard.js';
@@ -39,6 +39,10 @@ import {
 } from '../../../flows/directUpdate.js';
 import { ToggleRow } from './_settingsPrimitives.jsx';
 import { useHapticFeedback } from '../../hooks/useHaptic.js';
+import {
+    redactDiagnosticText,
+    sanitizeDiagnosticValue,
+} from '../../../flows/diagnosticDump.js';
 
 const ROW = {
     display: 'flex',
@@ -67,7 +71,7 @@ const PARAGRAPHS = {
 const PARAGRAPH = { margin: 0 };
 
 export function AboutSection() {
-    const { messaging } = useMessaging();
+    const { shell, messaging } = useMessaging();
     const haptic = useHapticFeedback();
     const [busy, setBusy] = useState(false);
     const [status, setStatus] = useState(/** @type {string | null} */ (null));
@@ -76,6 +80,7 @@ export function AboutSection() {
     const [previewOpen, setPreviewOpen] = useState(false);
     const [previewBusy, setPreviewBusy] = useState(false);
     const [licenseOpen, setLicenseOpen] = useState(false);
+    const [diagnosticMeta, setDiagnosticMeta] = useState(null);
     // Read once at mount: the provider is installed at shell boot, before any
     // settings route can render, so this cannot go stale within a session.
     const [updateLane] = useState(() => hasDirectUpdateLane());
@@ -90,8 +95,25 @@ export function AboutSection() {
             throw new Error('Diagnostic dump is not available in this shell.');
         }
         const dump = await messaging.getDiagnosticDump();
-        return JSON.stringify(dump, null, 2);
+        return JSON.stringify(prepareDiagnosticDump(dump, shell), null, 2);
     }
+
+    useEffect(() => {
+        let active = true;
+        if (typeof messaging?.getDiagnosticDump !== 'function') return undefined;
+        messaging.getDiagnosticDump().then((dump) => {
+            if (!active) return;
+            const prepared = prepareDiagnosticDump(dump, shell);
+            const platform = prepared.wallet.platform;
+            const buildHash = prepared.build?.gitCommit || prepared.build?.buildId;
+            setDiagnosticMeta({
+                platform,
+                buildHash: typeof buildHash === 'string' ? buildHash : null,
+            });
+            setPreview(JSON.stringify(prepared, null, 2));
+        }).catch(() => {});
+        return () => { active = false; };
+    }, [messaging, shell]);
 
     async function handleCopyDiagnostics() {
         if (busy) return;
@@ -145,6 +167,16 @@ export function AboutSection() {
         <div style={STACK}>
             <Row label="Version">
                 <span style={ROW_VALUE}>{WALLET_VERSION}</span>
+            </Row>
+            <Row label="Build hash">
+                <span style={diagnosticMeta?.buildHash ? ROW_VALUE : ROW_VALUE_MUTED}>
+                    {diagnosticMeta?.buildHash || 'not available'}
+                </span>
+            </Row>
+            <Row label="Platform">
+                <span style={ROW_VALUE}>
+                    {diagnosticMeta?.platform || (shell === 'popup' ? 'extension' : shell)}
+                </span>
             </Row>
             <Row label="Update channel">
                 <span style={ROW_VALUE}>{UPDATE_CHANNEL}</span>
@@ -321,34 +353,54 @@ function LicenseParagraphs({ text, ...props }) {
 }
 
 function DocLink({ path, label }) {
-    // Two kinds of target land here. Documents that ship inside the wallet
-    // bundle (LICENSE.md / NOTICE.md / SECURITY.md) are repo-relative and
-    // are still shown literally, since there is nothing to open. The
-    // verification docs now live on the hosted documentation site
-    //, so an absolute URL is rendered as a real link the user
-    // can follow instead of a path they would have to go hunting for.
     const isUrl = typeof path === 'string' && /^https?:\/\//.test(path);
+    const href = isUrl
+        ? path
+        : `https://github.com/XChain-Platform/xchain-wallet/blob/main/${path}`;
     const style = {
         color: 'var(--xc-text)',
         fontFamily: 'var(--xc-font-mono, monospace)',
         fontSize: 'var(--xc-text-xs)',
     };
-    if (isUrl) {
-        return (
-            <a
-                href={path}
-                target="_blank"
-                rel="noreferrer noopener"
-                style={{ ...style, color: 'var(--xc-accent, var(--xc-text))' }}
-            >
-                {label}
-            </a>
-        );
-    }
     return (
-        <span style={style}>
+        <a
+            href={href}
+            target="_blank"
+            rel="noreferrer noopener"
+            style={{ ...style, color: 'var(--xc-accent, var(--xc-text))' }}
+        >
             {label}
-            <span style={{ color: 'var(--xc-text-muted)', marginLeft: 6 }}>({path})</span>
-        </span>
+        </a>
     );
+}
+
+function prepareDiagnosticDump(dump, shell) {
+    const sanitized = sanitizeDiagnosticValue(dump);
+    const report = sanitized && typeof sanitized === 'object' && !Array.isArray(sanitized)
+        ? sanitized
+        : {};
+    const platform = shell === 'popup' ? 'extension' : shell;
+    const wallet = report.wallet && typeof report.wallet === 'object' ? report.wallet : {};
+    const build = report.build && typeof report.build === 'object' ? report.build : {};
+    const buildId = build.buildId || runtimeBuildHash();
+    return {
+        ...report,
+        wallet: {
+            ...wallet,
+            version: wallet.version || WALLET_VERSION,
+            platform: wallet.platform || platform,
+        },
+        build: Object.keys(build).length > 0 || buildId
+            ? { ...build, ...(buildId ? { buildId } : {}) }
+            : null,
+    };
+}
+
+function runtimeBuildHash() {
+    if (typeof document === 'undefined') return null;
+    for (const script of document.querySelectorAll('script[src]')) {
+        const match = /-([A-Za-z0-9_-]{8,})\.js(?:$|[?#])/.exec(script.src);
+        if (match) return match[1];
+    }
+    return null;
 }

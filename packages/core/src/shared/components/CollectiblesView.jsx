@@ -11,7 +11,7 @@
 import { useState } from 'react';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { EmptyState, Icon } from '@xchain-wallet/core/ui';
-import { tickerColor } from './BalanceList.jsx';
+import { isAssetImageSourceAllowed, tickerColor } from './BalanceList.jsx';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import styles from './CollectiblesView.module.css';
 
@@ -42,6 +42,7 @@ import styles from './CollectiblesView.module.css';
  * @param {(key: string, nextPinned: boolean) => void} [props.onTogglePin]
  * @param {Set<string> | null} [props.hiddenKeys]
  * @param {(key: string, nextHidden: boolean) => void} [props.onToggleHide]
+ * @param {boolean} [props.allowRemoteImages]
  */
 export function CollectiblesView({
     rows,
@@ -54,6 +55,7 @@ export function CollectiblesView({
     onTogglePin,
     hiddenKeys,
     onToggleHide,
+    allowRemoteImages = true,
 }) {
     const [hiddenExpanded, setHiddenExpanded] = useState(false);
 
@@ -95,6 +97,7 @@ export function CollectiblesView({
                         onSelect={onSelectToken}
                         onTogglePin={onTogglePin}
                         onToggleHide={onToggleHide}
+                        allowRemoteImages={allowRemoteImages}
                     />
                 ))}
             </div>
@@ -122,6 +125,7 @@ export function CollectiblesView({
                             onSelect={onSelectToken}
                             onTogglePin={onTogglePin}
                             onToggleHide={onToggleHide}
+                            allowRemoteImages={allowRemoteImages}
                         />
                     ))}
                 </div>
@@ -130,7 +134,7 @@ export function CollectiblesView({
     );
 }
 
-function CollectibleCard({ row, demo, pinned, hidden, onSelect, onTogglePin, onToggleHide }) {
+function CollectibleCard({ row, demo, pinned, hidden, onSelect, onTogglePin, onToggleHide, allowRemoteImages }) {
     const [failedImageUrl, setFailedImageUrl] = useState(null);
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
     // Fetch tick metadata to surface a real image when the row payload
@@ -140,16 +144,19 @@ function CollectibleCard({ row, demo, pinned, hidden, onSelect, onTogglePin, onT
     const assetInfo = useTokenInfo({
         chainId: row.chainId,
         tick: row.tick,
-        skip: row.kind === 'native' || hidden,
+        skip: row.kind === 'native' || hidden || !allowRemoteImages,
         demo,
     });
     const fallbackImageUrl = assetInfo && typeof assetInfo.imageUrl === 'string'
         && assetInfo.imageUrl.length > 0
         ? assetInfo.imageUrl
         : null;
-    const effectiveImageUrl = (typeof row.imageUrl === 'string' && row.imageUrl.length > 0)
+    const candidateImageUrl = (typeof row.imageUrl === 'string' && row.imageUrl.length > 0)
         ? row.imageUrl
         : fallbackImageUrl;
+    const effectiveImageUrl = isAssetImageSourceAllowed(candidateImageUrl, allowRemoteImages)
+        ? candidateImageUrl
+        : null;
     const showImage = typeof effectiveImageUrl === 'string'
         && effectiveImageUrl.length > 0
         && failedImageUrl !== effectiveImageUrl;
@@ -183,23 +190,23 @@ function CollectibleCard({ row, demo, pinned, hidden, onSelect, onTogglePin, onT
                     : undefined}
             >
                 <div className={styles.thumb}>
+                    <span
+                        className={styles.thumbLetter}
+                        style={{ background: tickerColor(row.tick) }}
+                        aria-hidden="true"
+                    >
+                        {row.tick.slice(0, 2)}
+                    </span>
                     {showImage ? (
                         <img
                             src={effectiveImageUrl}
                             alt=""
                             aria-hidden="true"
                             className={styles.thumbImg}
+                            style={{ position: 'absolute', inset: 0 }}
                             onError={() => setFailedImageUrl(effectiveImageUrl)}
                         />
-                    ) : (
-                        <span
-                            className={styles.thumbLetter}
-                            style={{ background: tickerColor(row.tick) }}
-                            aria-hidden="true"
-                        >
-                            {row.tick.slice(0, 2)}
-                        </span>
-                    )}
+                    ) : null}
                     {chainIconUrl ? (
                         <img
                             src={chainIconUrl}

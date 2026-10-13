@@ -705,6 +705,7 @@ export {
     buildExportFilename,
     filterEntriesByDateRange,
     EXPORT_COLUMNS,
+    EXPORT_COLUMN_DETAILS,
 } from './historyExport.js';
 export {
     markDemoWallet,
