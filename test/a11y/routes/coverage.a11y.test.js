@@ -73,18 +73,6 @@ const ROUTES_RENDERED_BY_AXE = [
     'ListTransferForm',
     'Loading',
     'Locked',
-    'Onboarding',
-    'OnboardingCarousel',
-    'PollDetail',
-    'Receive',
-    'Send',
-    'Settings',
-    'StakeDetail',
-    'SwapForm',
-    'TokenDetail',
-];
-
-const ROUTES_NOT_RENDERED_BY_AXE = [
     'ManageToken',
     'MarketActivity',
     'MarketView',
@@ -102,6 +90,8 @@ const ROUTES_NOT_RENDERED_BY_AXE = [
     'MySwapsView',
     'MyTokens',
     'ObligationsView',
+    'Onboarding',
+    'OnboardingCarousel',
     'OperatorDashboard',
     'OracleConsole',
     'OracleForm',
@@ -109,9 +99,11 @@ const ROUTES_NOT_RENDERED_BY_AXE = [
     'PairPartnerWallet',
     'PairSignerForm',
     'ParallelComposer',
+    'PollDetail',
     'ProjectRosterForm',
     'PsbtSignForm',
     'PublishFileForm',
+    'Receive',
     'ReceivePicker',
     'RenameAccountForm',
     'RenameWalletForm',
@@ -119,17 +111,22 @@ const ROUTES_NOT_RENDERED_BY_AXE = [
     'RouteNotFound',
     'ScanRoute',
     'SellOwnershipForm',
+    'Send',
     'SendPicker',
+    'Settings',
     'SharedListDirectory',
     'SignMessageForm',
     'SignerSelectForm',
     'SleepForm',
+    'StakeDetail',
     'StakeForm',
     'StakeNew',
     'StakingActionForm',
     'StakingList',
+    'SwapForm',
     'SweepForm',
     'TokenAdminForm',
+    'TokenDetail',
     'TokenPicker',
     'TokenWizard',
     'UnionListForm',
@@ -139,6 +136,8 @@ const ROUTES_NOT_RENDERED_BY_AXE = [
     'WalletDetails',
     'WalletPicker',
 ];
+
+const ROUTES_NOT_RENDERED_BY_AXE = [];
 
 function registeredRouteNames() {
     return Object.keys(routeModules)
@@ -175,5 +174,10 @@ describe('a11y route coverage inventory', () => {
             'DispenserForm',
             'CreateOrderForm',
         ]));
+    });
+
+    it('renders every M-Z route in the runtime axe suite', () => {
+        const mToZRoutes = registeredRouteNames().filter((name) => /^[M-Z]/.test(name));
+        expect(ROUTES_RENDERED_BY_AXE).toEqual(expect.arrayContaining(mToZRoutes));
     });
 });
