@@ -61,7 +61,8 @@ setShellCapabilities({ socksProxy: true });
 createRoot(container).render(
     <div style={{ display: 'flex', flexDirection: 'column', height: 'var(--xc-viewport-h, 100vh)' }}>
         {/* The application menu is available before unlock, so update check
-            results stay mounted above every renderer state. */}
+            results stay mounted above every renderer state. It floats over
+            the page (position: fixed), so it takes no layout space. */}
         <DesktopUpdateBanner />
         <div style={{ flex: '1 1 auto', minHeight: 0, '--xc-screen-h': '100%' }}>
             <App />
