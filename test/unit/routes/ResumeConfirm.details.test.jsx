@@ -2,13 +2,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 
 const mocks = vi.hoisted(() => ({
     confirm: vi.fn(),
     copyText: vi.fn(),
+    announce: vi.fn(),
 }));
 
 vi.mock('../../../packages/core/src/shared/hooks/useConfirmAction.js', () => ({
@@ -20,6 +21,9 @@ vi.mock('../../../packages/core/src/shared/hooks/useSignerReady.js', () => ({
 }));
 vi.mock('../../../packages/core/src/shared/clipboard.js', () => ({
     copyText: mocks.copyText,
+}));
+vi.mock('../../../packages/core/src/shared/components/ToastHost.jsx', () => ({
+    useToast: () => ({ announce: mocks.announce }),
 }));
 
 import { ResumeConfirm } from '../../../packages/core/src/shared/routes/ResumeConfirm.jsx';
@@ -64,6 +68,7 @@ function mount() {
 }
 
 beforeEach(() => {
+    vi.clearAllMocks();
     mocks.confirm.mockReset();
     mocks.copyText.mockReset();
     mocks.copyText.mockResolvedValue({ ok: true });
@@ -114,6 +119,26 @@ describe('ResumeConfirm transaction result details', () => {
         expect(explorer.getAttribute('href')).toMatch(new RegExp(`/BTC/tx/${TXID}$`));
         expect(explorer.getAttribute('target')).toBe('_blank');
         expect(explorer.getAttribute('rel')).toBe('noopener noreferrer');
+    });
+
+    it('announces copy confirmation and restores the control label', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true, advanceTimeDelta: 5 });
+        try {
+            mocks.confirm.mockResolvedValue({ txid: TXID });
+            mount();
+
+            await screen.findByRole('heading', { name: 'Broadcast pending' });
+            const button = screen.getByRole('button', { name: 'Copy from address' });
+            fireEvent.click(button);
+
+            await waitFor(() => expect(button).toHaveTextContent('Copied'));
+            expect(mocks.copyText).toHaveBeenCalledWith(FROM);
+            expect(mocks.announce).toHaveBeenCalledWith('Copied');
+            act(() => vi.advanceTimersByTime(1501));
+            expect(button).toHaveTextContent('Copy');
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('does not claim a queued transaction was broadcast or link it to an explorer', async () => {

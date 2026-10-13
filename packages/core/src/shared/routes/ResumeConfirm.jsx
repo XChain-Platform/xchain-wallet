@@ -45,6 +45,7 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
+import { useToast } from '../components/ToastHost.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -71,6 +72,7 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
     const [copied, setCopied] = useState('');
     const [copyError, setCopyError] = useState(/** @type {string | null} */(null));
     const startedRef = useRef(false);
+    const { announce } = useToast();
 
     const composed = session?.composed || {};
     const chainId = composed.chainId || session?.request?.chainId || null;
@@ -93,7 +95,9 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
         }
         setCopyError(null);
         setCopied(label);
-    }, []);
+        announce('Copied');
+        setTimeout(() => setCopied((current) => current === label ? '' : current), 1500);
+    }, [announce]);
 
     const start = useCallback(async () => {
         try {
