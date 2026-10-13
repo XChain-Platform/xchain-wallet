@@ -6,13 +6,13 @@
 
 .trigger {
     appearance: none;
-    width: 38px;
-    height: 38px;
+    width: var(--xc-control-h-md);
+    height: var(--xc-control-h-md);
     display: inline-flex;
     align-items: center;
     justify-content: center;
     border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
+    border-radius: var(--xc-control-radius);
     background: transparent;
     color: var(--xc-text-muted);
     cursor: pointer;
@@ -25,12 +25,13 @@
 .trigger:focus-visible,
 .settings:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
+    /* The compact focus gap has no spacing-token equivalent. */
     outline-offset: 2px;
 }
 
 .dot {
-    width: 12px;
-    height: 12px;
+    width: var(--xc-icon-xs);
+    height: var(--xc-icon-xs);
     border-radius: 50%;
     background: var(--xc-text-muted);
     box-shadow: var(--xc-shadow-status-halo);
@@ -63,10 +64,11 @@
 .popover {
     display: none;
     position: absolute;
-    top: calc(100% + 4px);
+    top: calc(100% + var(--xc-space-1));
     inset-inline-end: 0;
     z-index: var(--xc-z-dropdown);
-    width: min(280px, calc(100vw - 24px));
+    /* The content-width cap has no layout-token equivalent. */
+    width: min(280px, calc(100vw - var(--xc-page-gutter) - var(--xc-page-gutter)));
     box-sizing: border-box;
     padding: var(--xc-space-3);
     border: 1px solid var(--xc-border-strong);
@@ -93,6 +95,7 @@
 
 .chains {
     margin: var(--xc-space-2) 0 0;
+    /* Native list-marker indentation has no spacing-token equivalent. */
     padding-inline-start: 18px;
     color: var(--xc-text-muted);
 }
