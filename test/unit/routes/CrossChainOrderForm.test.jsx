@@ -17,6 +17,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, act as domAct, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { CreateOrderForm } from '../../../packages/core/src/shared/routes/CreateOrderForm.jsx';
 import { CrossChainOrderForm } from '../../../packages/core/src/shared/routes/CrossChainOrderForm.jsx';
 
 const DOGE = 'dogecoin-mainnet';
@@ -110,6 +111,27 @@ async function mount(props = {}, overrides = {}) {
     return { utils, calls };
 }
 
+async function mountCreate(props = {}, overrides = {}) {
+    const { messaging, calls } = recordingMessaging(overrides);
+    let utils;
+    await domAct(async () => {
+        utils = render(
+            React.createElement(
+                MessagingProvider,
+                { shell: 'web', messaging },
+                React.createElement(CreateOrderForm, {
+                    walletId: 'w',
+                    onBack() {},
+                    initialChainId: DOGE,
+                    ...props,
+                }),
+            ),
+        );
+        await drainMicrotasks();
+    });
+    return { utils, calls };
+}
+
 const setValue = (utils, label, value) => {
     fireEvent.change(utils.getByLabelText(label), { target: { value } });
 };
@@ -196,6 +218,7 @@ describe('CrossChainOrderForm', () => {
         expect(submit.args.chainId).toBe(DOGE);
         expect(submit.args.from.address).toBe(DOGE_ADDRESS.address);
         expect(submit.args.params).toMatchObject({ GIVE_COIN: 'DOGE', GET_COIN: 'BTC', GET_ADDRESS: BTC_ADDRESS.address });
+        expect(submit.args.params).toEqual(compose.args.actionData.params);
         expect(submit.args.prebuiltPsbt).toMatchObject({ psbtHex: 'aa00', encoding: 'psbt' });
         expect(calls.some((c) => c.method === 'swapAction')).toBe(false);
     });
@@ -217,6 +240,91 @@ describe('CrossChainOrderForm', () => {
         await pickChain(utils, 'Get chain', 'Litecoin');
         expect(pickerName(utils, 'Get chain')).toBe('Get chain: Litecoin');
         expect(utils.getByLabelText('Receive at').value).toBe('newest-on-litecoin-mainnet');
+    });
+
+    it('clears amounts when either token or chain changes the represented asset', async () => {
+        const { utils } = await mount({ initialChainId: DOGE }, {
+            getAddressesByChain: () => Promise.resolve({
+                [DOGE]: [DOGE_ADDRESS], [BTC]: [BTC_ADDRESS], 'litecoin-mainnet': [{ ...BTC_ADDRESS, id: 'addr-ltc-0', address: 'ltc1qexample' }],
+            }),
+            getNewestAddress: (walletId, chainId) => Promise.resolve({ address: `newest-on-${chainId}` }),
+        });
+        await fillPair(utils);
+
+        await domAct(async () => {
+            setValue(utils, 'Give token', 'OTHER');
+            setValue(utils, 'Get token', 'WANTED');
+            await drainMicrotasks();
+        });
+        expect(utils.getByLabelText(/^Give amount/).value).toBe('');
+        expect(utils.getByLabelText(/^Get amount/).value).toBe('');
+
+        await fillPair(utils);
+        await pickChain(utils, 'Get chain', 'Litecoin');
+        expect(utils.getByLabelText('Get token').value).toBe('');
+        expect(utils.getByLabelText(/^Get amount/).value).toBe('');
+        expect(utils.getByLabelText('Give token').value).toBe('JDOG');
+        expect(utils.getByLabelText(/^Give amount/).value).toBe('10');
+
+        await pickChain(utils, 'Give chain', 'Bitcoin');
+        expect(utils.getByLabelText('Give token').value).toBe('');
+        expect(utils.getByLabelText(/^Give amount/).value).toBe('');
+    });
+
+    it('dispatches only one watcher build when two submit events arrive in one render', async () => {
+        let builds = 0;
+        let finishBuild;
+        const pending = new Promise((resolve) => { finishBuild = resolve; });
+        const { utils } = await mount({ initialChainId: DOGE }, {
+            getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+            buildActionPsbtRequest: () => {
+                builds += 1;
+                return pending;
+            },
+        });
+        await fillPair(utils);
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: 'Preview' }));
+            await drainMicrotasks();
+        });
+
+        const form = utils.getByRole('button', { name: 'Create unsigned transaction' }).closest('form');
+        await domAct(async () => {
+            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            await drainMicrotasks();
+        });
+        expect(builds).toBe(1);
+        await domAct(async () => {
+            finishBuild({ psbtHex: 'unsigned-cross-chain' });
+            await drainMicrotasks();
+        });
+    });
+
+    it('ignores a duplicate full-wallet submit while compose is pending', async () => {
+        let composes = 0;
+        let rejectCompose;
+        const pending = new Promise((resolve, reject) => { rejectCompose = reject; });
+        const { utils } = await mount({ initialChainId: DOGE }, {
+            composeForConfirm: () => {
+                composes += 1;
+                return pending;
+            },
+        });
+        await fillPair(utils);
+        const form = utils.getByRole('button', { name: 'Place order' }).closest('form');
+        await domAct(async () => {
+            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            await drainMicrotasks();
+        });
+        expect(composes).toBe(1);
+        expect(utils.container.textContent).not.toMatch(/confirmation is already in progress/i);
+
+        await domAct(async () => {
+            rejectCompose(Object.assign(new Error('cancelled'), { reason: 'user-rejected' }));
+            await drainMicrotasks();
+        });
     });
 
     it('refuses a same-coin pair and points at Create order', async () => {
@@ -260,5 +368,106 @@ describe('CrossChainOrderForm', () => {
         });
         expect(utils.container.textContent).toMatch(/addresses on two different chains/);
         expect(utils.queryByRole('button', { name: 'Place order' })).toBeNull();
+    });
+});
+
+describe('CreateOrderForm state safety', () => {
+    it('clears stale values when an order side changes asset kind', async () => {
+        const { utils } = await mountCreate();
+        const ticker = utils.getByLabelText('Ticker');
+        const tokenAmount = utils.getByLabelText('Amount');
+        await domAct(async () => {
+            fireEvent.change(ticker, { target: { value: 'JDOG' } });
+            fireEvent.change(tokenAmount, { target: { value: '12' } });
+            await drainMicrotasks();
+        });
+
+        const ownership = utils.getByLabelText('Trade ownership of this ticker (not a balance)');
+        await domAct(async () => {
+            fireEvent.click(ownership);
+            fireEvent.click(ownership);
+            await drainMicrotasks();
+        });
+        expect(utils.getByLabelText('Amount').value).toBe('');
+
+        await domAct(async () => {
+            fireEvent.change(utils.getByLabelText('Amount'), { target: { value: '12' } });
+            fireEvent.click(utils.getAllByLabelText('Native DOGE')[0]);
+            await drainMicrotasks();
+        });
+        expect(utils.getAllByLabelText('Amount (DOGE)')[0].value).toBe('');
+
+        await domAct(async () => {
+            fireEvent.click(utils.getAllByLabelText('A token')[0]);
+            await drainMicrotasks();
+        });
+        expect(utils.getByLabelText('Ticker').value).toBe('');
+        expect(utils.getByLabelText('Amount').value).toBe('');
+    });
+
+    it('dispatches only one watcher build when two submit events arrive in one render', async () => {
+        let builds = 0;
+        let finishBuild;
+        const pending = new Promise((resolve) => { finishBuild = resolve; });
+        const { utils } = await mountCreate({}, {
+            getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+            buildActionPsbtRequest: () => {
+                builds += 1;
+                return pending;
+            },
+        });
+        await domAct(async () => {
+            fireEvent.change(utils.getByLabelText('Ticker'), { target: { value: 'JDOG' } });
+            fireEvent.change(utils.getByLabelText('Amount'), { target: { value: '5' } });
+            fireEvent.change(utils.getByLabelText('Amount (DOGE)'), { target: { value: '10' } });
+            await drainMicrotasks();
+        });
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: 'Preview' }));
+            await drainMicrotasks();
+        });
+
+        const form = utils.getByRole('button', { name: 'Create unsigned transaction' }).closest('form');
+        await domAct(async () => {
+            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            await drainMicrotasks();
+        });
+        expect(builds).toBe(1);
+        await domAct(async () => {
+            finishBuild({ psbtHex: 'unsigned-same-chain' });
+            await drainMicrotasks();
+        });
+    });
+
+    it('ignores a duplicate full-wallet submit while compose is pending', async () => {
+        let composes = 0;
+        let rejectCompose;
+        const pending = new Promise((resolve, reject) => { rejectCompose = reject; });
+        const { utils } = await mountCreate({}, {
+            composeForConfirm: () => {
+                composes += 1;
+                return pending;
+            },
+        });
+        await domAct(async () => {
+            fireEvent.change(utils.getByLabelText('Ticker'), { target: { value: 'JDOG' } });
+            fireEvent.change(utils.getByLabelText('Amount'), { target: { value: '5' } });
+            fireEvent.change(utils.getByLabelText('Amount (DOGE)'), { target: { value: '10' } });
+            await drainMicrotasks();
+        });
+        const form = utils.getByRole('button', { name: 'Place order' }).closest('form');
+        await domAct(async () => {
+            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            await drainMicrotasks();
+        });
+        expect(composes).toBe(1);
+        expect(utils.container.textContent).not.toMatch(/confirmation is already in progress/i);
+
+        await domAct(async () => {
+            rejectCompose(Object.assign(new Error('cancelled'), { reason: 'user-rejected' }));
+            await drainMicrotasks();
+        });
     });
 });
