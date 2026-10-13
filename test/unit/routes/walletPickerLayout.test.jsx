@@ -5,6 +5,8 @@
 
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { WalletPicker } from '../../../packages/core/src/shared/routes/WalletPicker.jsx';
@@ -12,7 +14,7 @@ import { WalletPicker } from '../../../packages/core/src/shared/routes/WalletPic
 afterEach(() => cleanup());
 
 describe('WalletPicker row layout', () => {
-    it('groups a long demo wallet name and its marked format in a wrapping text column', async () => {
+    it('truncates a long wallet name while preserving its full tooltip', async () => {
         const wallet = {
             id: 'wallet-1',
             name: 'A wallet name long enough to wrap on a narrow screen',
@@ -43,6 +45,47 @@ describe('WalletPicker row layout', () => {
         expect(row.children).toHaveLength(1);
         expect(row.firstElementChild.children).toHaveLength(2);
         expect(row.firstElementChild.textContent).toContain('Demo wallet · BIP39');
+        expect(screen.getByTitle(wallet.name)).toHaveTextContent(wallet.name);
+
+        const css = readFileSync(
+            join(process.cwd(), 'packages/core/src/shared/routes/WalletPicker.module.css'),
+            'utf8',
+        );
+        const nameRule = /\.rowName\s*\{([^}]*)\}/.exec(css)?.[1] || '';
+        expect(nameRule).toMatch(/overflow:\s*hidden/);
+        expect(nameRule).toMatch(/text-overflow:\s*ellipsis/);
+        expect(nameRule).toMatch(/white-space:\s*nowrap/);
+    });
+
+    it('marks the current wallet and keeps add and manage actions in the footer', async () => {
+        const wallet = { id: 'wallet-1', name: 'Primary', format: 'bip39' };
+        const onShowDetails = vi.fn();
+        await act(async () => {
+            render(
+                <MessagingProvider
+                    shell="popup"
+                    messaging={{ listWallets: () => Promise.resolve([wallet]) }}
+                >
+                    <WalletPicker
+                        activeWalletId={wallet.id}
+                        onSwitch={() => {}}
+                        onAddWallet={() => {}}
+                        onShowDetails={onShowDetails}
+                        onBack={() => {}}
+                    />
+                </MessagingProvider>,
+            );
+            await Promise.resolve();
+        });
+
+        expect(document.querySelector('button[aria-current="true"]')).toHaveTextContent('Primary');
+        const add = screen.getByRole('button', { name: 'Add Wallet' });
+        const manage = screen.getByRole('button', { name: 'Manage wallet' });
+        expect(add.closest('footer')).toBeTruthy();
+        expect(manage.closest('footer')).toBeTruthy();
+
+        fireEvent.click(manage);
+        expect(onShowDetails).toHaveBeenCalledWith(wallet.id);
     });
 
     it('labels imported-key wallets accurately', async () => {
@@ -105,7 +148,7 @@ describe('WalletPicker switching', () => {
 
         expect(onSwitch).toHaveBeenCalledWith('wallet-2');
         expect(onBack).not.toHaveBeenCalled();
-        expect(screen.getByRole('button', { name: 'Back' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Back to previous screen' }).disabled).toBe(true);
         expect(screen.getByRole('button', { name: 'Add Wallet' }).disabled).toBe(true);
         expect(savings.disabled).toBe(true);
         expect(savings.getAttribute('aria-busy')).toBe('true');
@@ -124,6 +167,18 @@ describe('WalletPicker switching', () => {
         expect(await screen.findByText('Switch refused')).toBeTruthy();
         expect(onBack).not.toHaveBeenCalled();
         await waitFor(() => expect(savings.disabled).toBe(false));
-        expect(screen.getByRole('button', { name: 'Back' }).disabled).toBe(false);
+        expect(screen.getByRole('button', { name: 'Back to previous screen' }).disabled).toBe(false);
+    });
+
+    it('closes from both the current selection and the Back control', async () => {
+        const onSwitch = vi.fn();
+        const { onBack } = mountPicker(onSwitch);
+        const primary = await screen.findByRole('button', { name: /Primary/ });
+
+        fireEvent.click(primary);
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+
+        expect(onSwitch).not.toHaveBeenCalled();
+        expect(onBack).toHaveBeenCalledTimes(2);
     });
 });
