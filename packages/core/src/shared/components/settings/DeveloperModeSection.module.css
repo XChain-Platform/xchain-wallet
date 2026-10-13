@@ -1,0 +1,61 @@
+.panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-3);
+    background: var(--xc-surface-raised);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+}
+
+.form,
+.list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+.list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.entry {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-2);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-sm);
+}
+
+.actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-1);
+}
+
+.active {
+    color: var(--xc-success, var(--xc-text));
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+}
+
+.compactSelect {
+    width: auto;
+    cursor: pointer;
+}
+
+.compactSelect:disabled {
+    cursor: not-allowed;
+}
+
+.descriptor {
+    font-family: var(--xc-font-mono, monospace);
+    font-size: var(--xc-text-xs);
+}
+
+.startAction {
+    align-self: flex-start;
+}

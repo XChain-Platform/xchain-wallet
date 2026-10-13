@@ -45,21 +45,29 @@
 import { useEffect, useState } from 'react';
 import { registry as registryLib, schemas, flows as flowsLib } from '@xchain-wallet/core';
 import { DEFAULT_MINER_URL } from '../../../branding/branding.js';
-import { Button } from '@xchain-wallet/core/ui';
+import {
+    Button,
+    EmptyState,
+    FormSection,
+    Input,
+    SectionHeader,
+    Select,
+    Textarea,
+} from '@xchain-wallet/core/ui';
+import { ClipboardPasteButton } from '../../../ui/ClipboardPasteButton.jsx';
 import { useMessaging } from '../../useMessaging.js';
 import { useSettings } from '../../hooks/useSettings.js';
 import { LogConsole } from '../LogConsole.jsx';
 import { DiagnosticDetails } from '../DiagnosticDetails.jsx';
 import { SignerSelectForm } from '../../routes/SignerSelectForm.jsx';
 import {
-    ROW_HINT,
-    SELECT,
     STACK,
     SettingsFieldRow,
     SettingsLoadError,
     Status,
     ToggleRow,
 } from './_settingsPrimitives.jsx';
+import styles from './DeveloperModeSection.module.css';
 
 const PROTOCOL_COIN_TICKER = {
     bitcoin: 'BTC',
@@ -138,13 +146,7 @@ export function DeveloperModeSection({ onNavigateToMint } = {}) {
     );
 }
 
-// Cluster Q FOLLOWUP 3: localhost auto-sign timeout selector.
-//
-// A two-column row (label + hint, then a <select>) mirroring ToggleRow's
-// layout. The value is the raw ms timeout persisted to settings; `off` (0)
-// disables auto-sign entirely and is the default. Disabled until Developer
-// Mode is on. The options come straight from the schema so the control can
-// never persist a value validateSettings would reject.
+// The timeout options come from the schema so the control cannot persist an unsupported value.
 function AutoSignLocalhostRow({ developerMode, value, onChange }) {
     const current = schemas.settings.AUTO_SIGN_LOCALHOST_OPTIONS.includes(value)
         ? value
@@ -154,16 +156,17 @@ function AutoSignLocalhostRow({ developerMode, value, onChange }) {
             label="Cache password for localhost auto-sign"
             hint="In Developer Mode, keep an approved localhost dApp password in memory for the selected time so later sign requests do not prompt again, then clear it when the browser closes."
         >
-            <select
+            <Select
                 value={current}
                 disabled={!developerMode}
                 onChange={(e) => onChange(Number(e.target.value))}
-                style={{ ...SELECT, cursor: developerMode ? 'pointer' : 'not-allowed', opacity: developerMode ? 1 : 0.5 }}
+                className={styles.compactSelect}
             >
+                {/* Native option elements provide the choices exposed by the style guide Select. */}
                 {schemas.settings.AUTO_SIGN_LOCALHOST_OPTIONS.map((ms) => (
                     <option key={ms} value={ms}>{AUTO_SIGN_LABELS[ms]}</option>
                 ))}
-            </select>
+            </Select>
         </SettingsFieldRow>
     );
 }
@@ -171,57 +174,34 @@ function AutoSignLocalhostRow({ developerMode, value, onChange }) {
 function LogConsoleRow({ developerMode }) {
     const [open, setOpen] = useState(false);
     return (
-        <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--xc-space-2)',
-            padding: 'var(--xc-space-3)',
-            background: 'var(--xc-surface-raised)',
-            border: '1px solid var(--xc-border)',
-            borderRadius: 'var(--xc-radius-md)',
-        }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--xc-space-2)' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                    <span style={{ fontWeight: 500, color: 'var(--xc-text)' }}>Logs and diagnostics console</span>
-                    <span style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}>
+        <section className={styles.panel}>
+            <SectionHeader
+                title="Logs and diagnostics console"
+                description={(
+                    <>
                         Process-wide ring buffer of console.* output. Useful when DevTools isn't available (popup, packaged desktop). Captures from now on; already-emitted entries are not replayed.
                         {!developerMode ? ' Turn Developer Mode on to view.' : ''}
-                    </span>
-                </div>
-                <button
-                    type="button"
-                    onClick={() => setOpen((v) => !v)}
-                    disabled={!developerMode}
-                    aria-expanded={open && developerMode}
-                    aria-controls="settings-log-console"
-                    style={{
-                        background: 'transparent',
-                        border: '1px solid var(--xc-border)',
-                        color: 'var(--xc-text)',
-                        borderRadius: 'var(--xc-radius-sm)',
-                        padding: 'var(--xc-space-1) var(--xc-space-3)',
-                        fontSize: 'var(--xc-text-xs)',
-                        cursor: developerMode ? 'pointer' : 'not-allowed',
-                        opacity: developerMode ? 1 : 0.5,
-                    }}
-                >
-                    {open ? 'Hide' : 'Show'}
-                </button>
-            </div>
+                    </>
+                )}
+                trailing={(
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        icon={null}
+                        onClick={() => setOpen((v) => !v)}
+                        disabled={!developerMode}
+                        aria-expanded={open && developerMode}
+                        aria-controls="settings-log-console"
+                    >
+                        {open ? 'Hide' : 'Show'}
+                    </Button>
+                )}
+            />
             {open && developerMode ? <div id="settings-log-console"><LogConsole /></div> : null}
-        </div>
+        </section>
     );
 }
-
-const REGTEST_BLOCK = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 'var(--xc-space-2)',
-    padding: 'var(--xc-space-3)',
-    background: 'var(--xc-surface-raised)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-md)',
-};
 
 function RegtestNetworksRow({ developerMode, fees }) {
     const regtests = chainRegistry.supportedChains()
@@ -229,21 +209,29 @@ function RegtestNetworksRow({ developerMode, fees }) {
         .sort((a, b) => a.coin.localeCompare(b.coin));
     if (regtests.length === 0) return null;
     return (
-        <div style={REGTEST_BLOCK}>
-            <div style={{ fontWeight: 600, color: 'var(--xc-text)' }}>Regtest networks</div>
-            <div style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}>
-                Activate a bundled regtest descriptor on this wallet. Seeds the per-chain fee and donation records and derives the first address on the new chain across every existing account.
-                {!developerMode ? ' Turn Developer Mode on to enable activation.' : ''}
-            </div>
-            {regtests.map((d) => (
-                <RegtestRow
-                    key={d.id}
-                    descriptor={d}
-                    isActive={Boolean(fees && fees[d.id])}
-                    disabled={!developerMode}
-                />
-            ))}
-        </div>
+        <FormSection
+            title="Regtest networks"
+            description={(
+                <>
+                    Activate a bundled regtest descriptor on this wallet. Seeds the per-chain fee and donation records and derives the first address on the new chain across every existing account.
+                    {!developerMode ? ' Turn Developer Mode on to enable activation.' : ''}
+                </>
+            )}
+            className={styles.panel}
+        >
+            {/* The style guide has no compact embedded list for network activation rows. */}
+            <ul className={styles.list}>
+                {regtests.map((d) => (
+                    <li key={d.id}>
+                        <RegtestRow
+                            descriptor={d}
+                            isActive={Boolean(fees && fees[d.id])}
+                            disabled={!developerMode}
+                        />
+                    </li>
+                ))}
+            </ul>
+        </FormSection>
     );
 }
 
@@ -338,45 +326,28 @@ export function RegtestRow({ descriptor, isActive, disabled }) {
     };
 
     return (
-        <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--xc-space-1)',
-            padding: 'var(--xc-space-2)',
-            border: '1px solid var(--xc-border)',
-            borderRadius: 'var(--xc-radius-sm)',
-        }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--xc-space-2)' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                    <span style={{ fontWeight: 500, color: 'var(--xc-text)' }}>{descriptor.displayName}</span>
-                    <span style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-xs)' }}>
-                        {descriptor.id} · explorer {descriptor.explorer?.defaultUrl}:{descriptor.explorer?.defaultPort}
-                    </span>
-                </div>
-                {isActive ? (
-                    <span style={{ color: 'var(--xc-success, var(--xc-text))', fontSize: 'var(--xc-text-xs)', fontWeight: 600 }}>Active</span>
+        <section className={styles.entry}>
+            <SectionHeader
+                as="h3"
+                title={descriptor.displayName}
+                description={`${descriptor.id} · explorer ${descriptor.explorer?.defaultUrl}:${descriptor.explorer?.defaultPort}`}
+                trailing={isActive ? (
+                    <span className={styles.active}>Active</span>
                 ) : (
-                    <button
+                    <Button
                         type="button"
+                        variant="ghost"
+                        size="sm"
+                        icon={null}
                         onClick={() => setOpen(true)}
                         disabled={disabled || open}
-                        style={{
-                            background: 'transparent',
-                            border: '1px solid var(--xc-border)',
-                            color: 'var(--xc-text)',
-                            borderRadius: 'var(--xc-radius-sm)',
-                            padding: 'var(--xc-space-1) var(--xc-space-3)',
-                            fontSize: 'var(--xc-text-xs)',
-                            cursor: disabled ? 'not-allowed' : 'pointer',
-                            opacity: disabled ? 0.5 : 1,
-                        }}
                     >
                         Activate…
-                    </button>
+                    </Button>
                 )}
-            </div>
+            />
             {open ? (
-                <form onSubmit={onActivate} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)' }}>
+                <form onSubmit={onActivate} className={styles.form}>
                     {/* SignerSelectForm renders nothing when the wallet has no
                         paired HW signer (auto-resolves to software), so software
                         wallets keep the original password-only affordance. */}
@@ -396,48 +367,24 @@ export function RegtestRow({ descriptor, isActive, disabled }) {
                             Deriving the first {descriptor.displayName} address round-trips to your hardware device. Connect it and check your device to confirm the new address when prompted; no wallet password is needed.
                         </div>
                     ) : (
-                    <input
-                        type="password"
-                        enterKeyHint="go"
+                        <Input
+                            type="password"
+                            enterKeyHint="go"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             placeholder="Wallet password"
                             autoComplete="current-password"
                             disabled={busy}
                             aria-label={`${descriptor.displayName} activation password`}
-                            style={{
-                                flex: 1,
-                                background: 'var(--xc-bg)',
-                                color: 'var(--xc-text)',
-                                border: '1px solid var(--xc-border)',
-                                borderRadius: 'var(--xc-radius-sm)',
-                                padding: 'var(--xc-space-1) var(--xc-space-2)',
-                                fontSize: 'var(--xc-text-sm)',
-                            }}
                         />
                     )}
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--xc-space-1)' }}>
-                        <button type="submit" disabled={busy || (!isHardware && password.length === 0)} style={{
-                            background: 'var(--xc-accent-primary)',
-                            borderColor: 'var(--xc-accent-primary)',
-                            color: 'var(--xc-bg)',
-                            border: '1px solid',
-                            borderRadius: 'var(--xc-radius-sm)',
-                            padding: 'var(--xc-space-1) var(--xc-space-3)',
-                            fontSize: 'var(--xc-text-xs)',
-                            cursor: busy ? 'wait' : 'pointer',
-                        }}>
+                    <div className={styles.actions}>
+                        <Button type="submit" size="sm" icon={null} disabled={busy || (!isHardware && password.length === 0)}>
                             {busy ? (isHardware ? 'Check your device…' : 'Activating…') : 'Activate'}
-                        </button>
-                        <button type="button" onClick={onCancel} disabled={busy} style={{
-                            background: 'transparent',
-                            border: '1px solid var(--xc-border)',
-                            color: 'var(--xc-text)',
-                            borderRadius: 'var(--xc-radius-sm)',
-                            padding: 'var(--xc-space-1) var(--xc-space-2)',
-                            fontSize: 'var(--xc-text-xs)',
-                            cursor: 'pointer',
-                        }}>Cancel</button>
+                        </Button>
+                        <Button type="button" variant="ghost" size="sm" icon={null} onClick={onCancel} disabled={busy}>
+                            Cancel
+                        </Button>
                     </div>
                 </form>
             ) : null}
@@ -448,7 +395,7 @@ export function RegtestRow({ descriptor, isActive, disabled }) {
             />
             {errorText ? <Status text={errorText} tone="error" /> : null}
             {walletLoadError && !errorText ? <Status text={walletLoadError} tone="error" /> : null}
-        </div>
+        </section>
     );
 }
 
@@ -509,105 +456,68 @@ function RegtestFaucetRow({ developerMode, fees, onNavigateToMint }) {
     };
 
     return (
-        <div style={REGTEST_BLOCK}>
-            <div style={{ fontWeight: 600, color: 'var(--xc-text)' }}>Regtest faucet</div>
-            <div style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}>
-                Local testing only. "Get test {coinTicker}" asks the xchain-regtest-miner to send coins
-                to your {descriptor.displayName} address directly (no signing). XCHAIN can't be funded
-                that way - it's a protocol asset, not a native coin - so "Mint test XCHAIN" opens the
-                real Mint form instead (requires some {coinTicker} already, to pay the fee).
-                {!developerMode ? ' Turn Developer Mode on to use these.' : ''}
-            </div>
-            <form onSubmit={onGetFunds} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)' }}>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <span style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-xs)' }}>Miner URL</span>
-                    <input
-                        type="text"
-                        enterKeyHint="next"
-                        autoCapitalize="off"
-                        autoCorrect="off"
-                        spellCheck={false}
-                        // The wrapping <label> associates this implicitly, which
-                        // assistive tech honours, but the repo's a11y audit only
-                        // accepts an explicit name (label= / aria-label /
-                        // aria-labelledby / placeholder / label htmlFor) - and a
-                        // named input is unambiguous either way.
-                        aria-label="Miner URL"
-                        value={minerUrl}
-                        onChange={(e) => setMinerUrl(e.target.value)}
-                        disabled={!developerMode || busy}
-                        style={{
-                            background: 'var(--xc-bg)',
-                            color: 'var(--xc-text)',
-                            border: '1px solid var(--xc-border)',
-                            borderRadius: 'var(--xc-radius-sm)',
-                            padding: 'var(--xc-space-1) var(--xc-space-2)',
-                            fontSize: 'var(--xc-text-sm)',
-                        }}
-                    />
-                </label>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <span style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-xs)' }}>Amount ({coinTicker})</span>
-                    <input
-                        type="text"
-                        inputMode="decimal"
-                        enterKeyHint="go"
-                        aria-label={`Amount (${coinTicker})`}
-                        value={amount}
-                        onChange={(e) => setAmount(e.target.value)}
-                        disabled={!developerMode || busy}
-                        style={{
-                            background: 'var(--xc-bg)',
-                            color: 'var(--xc-text)',
-                            border: '1px solid var(--xc-border)',
-                            borderRadius: 'var(--xc-radius-sm)',
-                            padding: 'var(--xc-space-1) var(--xc-space-2)',
-                            fontSize: 'var(--xc-text-sm)',
-                        }}
-                    />
-                </label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--xc-space-1)' }}>
-                    <button
+        <FormSection
+            title="Regtest faucet"
+            description={(
+                <>
+                    Local testing only. "Get test {coinTicker}" asks the xchain-regtest-miner to send coins
+                    to your {descriptor.displayName} address directly (no signing). XCHAIN can't be funded
+                    that way - it's a protocol asset, not a native coin - so "Mint test XCHAIN" opens the
+                    real Mint form instead (requires some {coinTicker} already, to pay the fee).
+                    {!developerMode ? ' Turn Developer Mode on to use these.' : ''}
+                </>
+            )}
+            className={styles.panel}
+        >
+            <form onSubmit={onGetFunds} className={styles.form}>
+                <Input
+                    type="text"
+                    label="Miner URL"
+                    enterKeyHint="next"
+                    autoCapitalize="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    aria-label="Miner URL"
+                    value={minerUrl}
+                    onChange={(e) => setMinerUrl(e.target.value)}
+                    disabled={!developerMode || busy}
+                />
+                <Input
+                    type="text"
+                    label={`Amount (${coinTicker})`}
+                    inputMode="decimal"
+                    enterKeyHint="go"
+                    aria-label={`Amount (${coinTicker})`}
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    disabled={!developerMode || busy}
+                />
+                <div className={styles.actions}>
+                    <Button
                         type="submit"
+                        size="sm"
+                        icon={null}
                         disabled={!developerMode || busy}
-                        style={{
-                            background: 'var(--xc-accent-primary)',
-                            borderColor: 'var(--xc-accent-primary)',
-                            color: 'var(--xc-bg)',
-                            border: '1px solid',
-                            borderRadius: 'var(--xc-radius-sm)',
-                            padding: 'var(--xc-space-1) var(--xc-space-3)',
-                            fontSize: 'var(--xc-text-xs)',
-                            cursor: !developerMode || busy ? 'not-allowed' : 'pointer',
-                            opacity: !developerMode || busy ? 0.5 : 1,
-                        }}
                     >
                         {busy ? 'Sending…' : `Get test ${coinTicker}`}
-                    </button>
+                    </Button>
                     {typeof onNavigateToMint === 'function' && descriptor.coin === 'bitcoin' ? (
-                        <button
+                        <Button
                             type="button"
+                            variant="ghost"
+                            size="sm"
+                            icon={null}
                             onClick={() => onNavigateToMint({ chainId: descriptor.id, tick: 'XCHAIN' })}
                             disabled={!developerMode || busy}
-                            style={{
-                                background: 'transparent',
-                                border: '1px solid var(--xc-border)',
-                                color: 'var(--xc-text)',
-                                borderRadius: 'var(--xc-radius-sm)',
-                                padding: 'var(--xc-space-1) var(--xc-space-3)',
-                                fontSize: 'var(--xc-text-xs)',
-                                cursor: !developerMode || busy ? 'not-allowed' : 'pointer',
-                                opacity: !developerMode || busy ? 0.5 : 1,
-                            }}
                         >
                             Mint test XCHAIN
-                        </button>
+                        </Button>
                     ) : null}
                 </div>
             </form>
             {statusText ? <Status text={statusText} /> : null}
             {errorText ? <Status text={errorText} tone="error" /> : null}
-        </div>
+        </FormSection>
     );
 }
 
@@ -750,116 +660,98 @@ function CustomChainsRow({ developerMode }) {
     };
 
     return (
-        <div style={REGTEST_BLOCK}>
-            <div style={{ fontWeight: 600, color: 'var(--xc-text)' }}>Custom chains</div>
-            <div style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}>
-                Plug in a non-bundled ChainDescriptor (e.g. a fork's regtest, an alt explorer). Persists across restarts. Removed chains are also un-registered immediately.
-                {!developerMode ? ' Turn Developer Mode on to manage custom chains.' : ''}
-            </div>
+        <FormSection
+            title="Custom chains"
+            description={(
+                <>
+                    Plug in a non-bundled ChainDescriptor (e.g. a fork's regtest, an alt explorer). Persists across restarts. Removed chains are also un-registered immediately.
+                    {!developerMode ? ' Turn Developer Mode on to manage custom chains.' : ''}
+                </>
+            )}
+            className={styles.panel}
+        >
             {loadError ? <Status text={loadError} tone="error" /> : null}
             {!loading && chains.length === 0 && !loadError ? (
-                <div style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-xs)' }}>
-                    No custom chains yet.
-                </div>
+                <EmptyState title="No custom chains yet." titleAs="h3" />
             ) : null}
-            {chains.map((d) => (
-                <div key={d?.id} style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: 'var(--xc-space-2)',
-                    padding: 'var(--xc-space-2)',
-                    border: '1px solid var(--xc-border)',
-                    borderRadius: 'var(--xc-radius-sm)',
-                }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                        <span style={{ fontWeight: 500, color: 'var(--xc-text)' }}>
-                            {d?.displayName || d?.id}
-                        </span>
-                        <span style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-xs)' }}>
-                            {d?.id}{d?.networkKind ? ` · ${d.networkKind}` : ''}
-                        </span>
-                    </div>
-                    <Button
-                        variant="danger"
-                        size="sm"
-                        icon={null}
-                        onClick={() => onRemove(d?.id)}
-                        disabled={!developerMode || busy}
-                        aria-label={`Remove custom chain ${d?.id}`}
-                    >Remove</Button>
-                </div>
-            ))}
+            {chains.length > 0 ? (
+                <>
+                    {/* The style guide has no compact embedded list for custom-chain rows. */}
+                    <ul className={styles.list}>
+                        {chains.map((d) => (
+                            <li key={d?.id} className={styles.entry}>
+                                <SectionHeader
+                                    as="h3"
+                                    title={d?.displayName || d?.id}
+                                    description={`${d?.id}${d?.networkKind ? ` · ${d.networkKind}` : ''}`}
+                                    trailing={(
+                                        <Button
+                                            variant="danger"
+                                            size="sm"
+                                            icon={null}
+                                            onClick={() => onRemove(d?.id)}
+                                            disabled={!developerMode || busy}
+                                            aria-label={`Remove custom chain ${d?.id}`}
+                                        >
+                                            Remove
+                                        </Button>
+                                    )}
+                                />
+                            </li>
+                        ))}
+                    </ul>
+                </>
+            ) : null}
             {open ? (
-                <form onSubmit={onAdd} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)' }}>
-                    <label htmlFor="custom-chain-descriptor" style={{ color: 'var(--xc-text)', fontWeight: 500 }}>
-                        Custom chain descriptor JSON
-                    </label>
-                    <span id="custom-chain-descriptor-hint" style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-xs)' }}>
-                        Paste a full ChainDescriptor JSON (id, coin, displayName, networkKind, derivationPaths, addressTypes, defaultAddressType, feeStrategy, supportedActions, uriScheme, wifVersionByte, explorer, encoder, hub, adsDonationAddress).
-                    </span>
-                    <textarea
+                <form onSubmit={onAdd} className={styles.form}>
+                    <Textarea
                         id="custom-chain-descriptor"
+                        label="Custom chain descriptor JSON"
+                        hint="Paste a full ChainDescriptor JSON (id, coin, displayName, networkKind, derivationPaths, addressTypes, defaultAddressType, feeStrategy, supportedActions, uriScheme, wifVersionByte, explorer, encoder, hub, adsDonationAddress)."
                         value={pasted}
                         onChange={(e) => setPasted(e.target.value)}
                         placeholder={'{\n  "id": "my-fork-regtest",\n  "coin": "myfork",\n  "networkKind": "regtest",\n  ...\n}'}
                         rows={8}
                         spellCheck={false}
                         disabled={busy}
-                        aria-describedby="custom-chain-descriptor-hint"
-                        style={{
-                            background: 'var(--xc-bg)',
-                            color: 'var(--xc-text)',
-                            border: '1px solid var(--xc-border)',
-                            borderRadius: 'var(--xc-radius-sm)',
-                            padding: 'var(--xc-space-2)',
-                            fontFamily: 'monospace',
-                            fontSize: 'var(--xc-text-xs)',
-                            resize: 'vertical',
-                        }}
+                        className={styles.descriptor}
                     />
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--xc-space-1)' }}>
-                        <button type="submit" disabled={busy || pasted.length === 0} style={{
-                            background: 'var(--xc-accent-primary)',
-                            borderColor: 'var(--xc-accent-primary)',
-                            color: 'var(--xc-bg)',
-                            border: '1px solid',
-                            borderRadius: 'var(--xc-radius-sm)',
-                            padding: 'var(--xc-space-1) var(--xc-space-3)',
-                            fontSize: 'var(--xc-text-xs)',
-                            cursor: busy ? 'wait' : 'pointer',
-                        }}>{busy ? 'Adding…' : 'Add chain'}</button>
-                        <button type="button" onClick={() => { setOpen(false); setPasted(''); setErrorText(null); }} disabled={busy} style={{
-                            background: 'transparent',
-                            border: '1px solid var(--xc-border)',
-                            color: 'var(--xc-text)',
-                            borderRadius: 'var(--xc-radius-sm)',
-                            padding: 'var(--xc-space-1) var(--xc-space-2)',
-                            fontSize: 'var(--xc-text-xs)',
-                            cursor: 'pointer',
-                        }}>Cancel</button>
+                    <ClipboardPasteButton
+                        onPaste={setPasted}
+                        disabled={busy}
+                        label="Paste custom chain descriptor"
+                    />
+                    <div className={styles.actions}>
+                        <Button type="submit" size="sm" icon={null} disabled={busy || pasted.length === 0}>
+                            {busy ? 'Adding…' : 'Add chain'}
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            icon={null}
+                            onClick={() => { setOpen(false); setPasted(''); setErrorText(null); }}
+                            disabled={busy}
+                        >
+                            Cancel
+                        </Button>
                     </div>
                 </form>
             ) : (
-                <button
+                <Button
                     type="button"
+                    variant="ghost"
+                    size="sm"
+                    icon={null}
                     onClick={() => setOpen(true)}
                     disabled={!developerMode || busy}
-                    style={{
-                        alignSelf: 'flex-start',
-                        background: 'transparent',
-                        border: '1px solid var(--xc-border)',
-                        color: 'var(--xc-text)',
-                        borderRadius: 'var(--xc-radius-sm)',
-                        padding: 'var(--xc-space-1) var(--xc-space-3)',
-                        fontSize: 'var(--xc-text-xs)',
-                        cursor: !developerMode || busy ? 'not-allowed' : 'pointer',
-                        opacity: !developerMode || busy ? 0.5 : 1,
-                    }}
-                >Add custom chain…</button>
+                    className={styles.startAction}
+                >
+                    Add custom chain…
+                </Button>
             )}
             {statusText ? <Status text={statusText} /> : null}
             {errorText ? <Status text={errorText} tone="error" /> : null}
-        </div>
+        </FormSection>
     );
 }
