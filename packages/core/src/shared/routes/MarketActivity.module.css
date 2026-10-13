@@ -48,7 +48,7 @@
 }
 
 .error {
-    color: var(--xc-status-error, var(--xc-danger, #DC2626));
+    color: var(--xc-danger);
     font-size: var(--xc-text-sm);
 }
 
@@ -112,11 +112,11 @@
     color: var(--xc-text);
     font-family: inherit;
     text-align: start;
-    cursor: pointer;
+    cursor: default;
 }
 
-.row:disabled {
-    cursor: default;
+button.row {
+    cursor: pointer;
 }
 
 button.row:hover:not(:disabled) {

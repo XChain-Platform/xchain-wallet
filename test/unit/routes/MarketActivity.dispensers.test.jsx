@@ -14,7 +14,7 @@
 // send. Rows here are shaped as the explorer's token lanes serve them.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MarketActivity } from '../../../packages/core/src/shared/routes/MarketActivity.jsx';
@@ -36,7 +36,7 @@ const DISPENSES = [
     { action_index: '31', status: 'invalid: no matching oracle price', give_tick: 'XCHAIN', give_amount: '2', get_coin: 'BTC', get_tick: null, get_amount: '0.5', timestamp: 1785186699 },
 ];
 
-function renderMarket(extra = {}) {
+function renderMarket(extra = {}, props = {}) {
     // One chain answers; the rest of the fan-out is empty, so each row renders once.
     const once = (rows) => {
         let answered = false;
@@ -59,7 +59,7 @@ function renderMarket(extra = {}) {
     render(React.createElement(
         MessagingProvider,
         { shell: 'web', messaging },
-        React.createElement(MarketActivity, { walletId: 'w1', onBack() {} }),
+        React.createElement(MarketActivity, { walletId: 'w1', onBack() {}, ...props }),
     ));
     return messaging;
 }
@@ -70,6 +70,18 @@ describe('Marketplace on explorer-shaped rows', () => {
         expect(await screen.findByText('5 XCHAIN per 0.01 BTC')).toBeInTheDocument();
         expect(screen.getAllByText('100 XCHAIN remaining').length).toBe(2);
         expect(screen.queryByText(/7 XCHAIN per/)).toBeNull();
+        expect(screen.queryByRole('button', { name: /5 XCHAIN per 0.01 BTC/ })).toBeNull();
+        expect(document.querySelector('button:disabled')).toBeNull();
+    });
+
+    it('makes an offer a button only when the route supplies a working action', async () => {
+        const onOpenDispenser = vi.fn();
+        renderMarket({}, { onOpenDispenser });
+        const label = await screen.findByText('5 XCHAIN per 0.01 BTC');
+        const button = label.closest('button');
+        expect(button).not.toBeNull();
+        fireEvent.click(button);
+        expect(onOpenDispenser).toHaveBeenCalledWith(expect.any(String), '20');
     });
 
     it('prices a Mode B offer from its oracle, never as zero coin', async () => {
