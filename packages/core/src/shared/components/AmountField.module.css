@@ -64,3 +64,17 @@
 .amountUnitSwap svg {
     flex-shrink: 0;
 }
+
+@media not all and (min-width: 400px) {
+    .amountFooter {
+        align-items: stretch;
+        flex-direction: column;
+        gap: var(--xc-space-1);
+    }
+
+    .amountFooterRight {
+        align-self: flex-end;
+        max-width: 100%;
+        text-align: end;
+    }
+}

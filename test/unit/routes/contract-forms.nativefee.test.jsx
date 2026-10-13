@@ -168,7 +168,7 @@ describe('EXECUTE carries the native-coin fee lane', () => {
         // opting out of the forfeiture risk on this chain, only knowing about it.
         expect(utils.container.textContent).toContain(NATIVE_FEE_UNVERIFIED_NOTICE);
 
-        await reviewAndApprove(utils, /^Execute/);
+        await reviewAndApprove(utils, /^Call/);
 
         const compose = calls.find((c) => c.method === 'composeForConfirm');
         expect(compose.args.encoderOpts.payFeeInNativeCoin).toBe(true);
@@ -188,7 +188,7 @@ describe('EXECUTE carries the native-coin fee lane', () => {
         // action costs no protocol fee at all.
         expect(utils.container.textContent).not.toContain(NATIVE_FEE_UNVERIFIED_NOTICE);
 
-        await reviewAndApprove(utils, /^Execute/);
+        await reviewAndApprove(utils, /^Call/);
         expect(off.calls.find((c) => c.method === 'composeForConfirm').args.encoderOpts.payFeeInNativeCoin)
             .toBeUndefined();
         expect(off.calls.find((c) => c.method === 'executeAction').args.payFeeInNativeCoin)
@@ -204,7 +204,7 @@ describe('EXECUTE carries the native-coin fee lane', () => {
         // with the choice rather than before it.
         expect(ticked.container.textContent).toContain(NATIVE_FEE_UNVERIFIED_NOTICE);
 
-        await reviewAndApprove(ticked, /^Execute/);
+        await reviewAndApprove(ticked, /^Call/);
         expect(on.calls.find((c) => c.method === 'composeForConfirm').args.encoderOpts.payFeeInNativeCoin)
             .toBe(true);
         expect(on.calls.find((c) => c.method === 'executeAction').args.payFeeInNativeCoin).toBe(true);

@@ -40,6 +40,7 @@ import { OwnerWithdrawWarning } from '../components/OwnerWithdrawWarning.jsx';
 import { ContractConsentPanel } from '../components/ContractConsentPanel.jsx';
 import { preferredSourceId } from '../addressSelection.js';
 import styles from './IssueTokenForm.module.css';
+import contractStyles from './ContractScreens.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { TokenField } from '../components/TokenField.jsx';
@@ -752,7 +753,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                             <dd className={styles.detailsValue}>
                                 <ol style={{ margin: 0, paddingLeft: '1.25rem' }}>
                                     {paramsArray.map((p, i) => (
-                                        <li key={i} style={{ fontFamily: 'monospace' }}>{p}</li>
+                                        <li key={i} className={contractStyles.monospaceValue}>{p}</li>
                                     ))}
                                 </ol>
                             </dd>
@@ -917,19 +918,21 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                         ))}
                     </Select>
                     {abiParams.map((p, i) => (
-                        <Input
-                            key={`${method}:${p.name}`}
-                            label={`${p.name} (${p.type})`}
-                            placeholder={abiPlaceholder(p.type)}
-                            inputMode={p.type === 'number' || p.type === 'amount' ? 'decimal' : undefined}
-                            value={abiParamValues[i] || ''}
-                            onChange={(e) => setAbiParam(i, e.target.value)}
-                            error={abiParamValues[i] ? abiArgumentErrors[i] || undefined : undefined}
-                            autoComplete="off"
-                            autoCapitalize="off"
-                            autoCorrect="off"
-                            spellCheck={false}
-                        />
+                        <div key={`${method}:${p.name}`} className={contractStyles.abiField}>
+                            <Input
+                                label={`${p.name} (${p.type})`}
+                                placeholder={abiPlaceholder(p.type)}
+                                inputMode={p.type === 'number' || p.type === 'amount' ? 'decimal' : undefined}
+                                value={abiParamValues[i] || ''}
+                                onChange={(e) => setAbiParam(i, e.target.value)}
+                                error={abiParamValues[i] ? abiArgumentErrors[i] || undefined : undefined}
+                                className={contractStyles.monospaceInput}
+                                autoComplete="off"
+                                autoCapitalize="off"
+                                autoCorrect="off"
+                                spellCheck={false}
+                            />
+                        </div>
                     ))}
                     <Button type="button" variant="ghost" onClick={() => setManualMode(true)}>
                         Enter method manually
@@ -952,6 +955,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                         hint="Pipe-delimited arguments, e.g. foo|42|bc1q… Leave blank for no-arg methods."
                         value={paramsText}
                         onChange={(e) => { setParamsText(e.target.value); setFormError(null); }}
+                        className={contractStyles.monospaceInput}
                         autoComplete="off"
                         autoCapitalize="off"
                         autoCorrect="off"

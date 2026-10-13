@@ -110,7 +110,7 @@ describe('TokenWizard signing address', () => {
         // field ("TICK") rather than the signer, so a user reading the error
         // alone looks at the wrong control.
         expect(screen.getByText(
-            /subtoken can only be created by the address that owns its parent/i,
+            /subtoken can only be issued by the address that owns its parent/i,
         )).toBeTruthy();
     });
 
@@ -119,7 +119,7 @@ describe('TokenWizard signing address', () => {
         await driveToChainStage('Meme token');
 
         expect(screen.queryByText(
-            /subtoken can only be created by the address that owns its parent/i,
+            /subtoken can only be issued by the address that owns its parent/i,
         )).toBeNull();
         expect(screen.getByRole('button', { name: 'Choose source address' })).toBeTruthy();
     });

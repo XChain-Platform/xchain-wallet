@@ -1,0 +1,69 @@
+.identity {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-width: 0;
+    max-width: 100%;
+    color: var(--xc-text);
+}
+
+.context {
+    align-self: flex-start;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    background: var(--xc-bg-muted);
+}
+
+.label {
+    flex: 0 0 auto;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.avatar {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 28px;
+    width: 28px;
+    height: 28px;
+    box-sizing: border-box;
+    border: 2px solid var(--xc-wallet-identity);
+    border-radius: var(--xc-radius-pill);
+    background: color-mix(in srgb, var(--xc-wallet-identity) 14%, var(--xc-surface));
+    color: var(--xc-wallet-identity);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1;
+}
+
+.active {
+    box-shadow: var(--xc-shadow-identity-ring);
+}
+
+.name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--xc-text-sm);
+    font-weight: 700;
+}
+
+@media (forced-colors: active) {
+    .avatar {
+        border-color: currentColor;
+        background: Canvas;
+        color: CanvasText;
+    }
+
+    .active {
+        outline: 2px solid Highlight;
+        outline-offset: 2px;
+        box-shadow: none;
+    }
+}

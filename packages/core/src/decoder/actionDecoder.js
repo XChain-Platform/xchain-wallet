@@ -213,7 +213,7 @@ export function decodeAction({ action, params, chainId, chainRegistry }) {
             details: [
                 ...legs.flatMap((l, i) => [
                     { label: `Burn ${i + 1}`, value: `${l.amount || '?'} ${l.tick || '?'}` },
-                    ...(l.memo ? [{ label: '  Memo', value: l.memo }] : []),
+                    ...(l.memo ? [{ label: 'Memo', value: l.memo }] : []),
                 ]),
                 ...(sharedMemo ? [{ label: 'Memo', value: sharedMemo }] : []),
             ],
@@ -1172,7 +1172,7 @@ function decodeAirdrop(p, chainSuffix) {
 
     const details = drops.flatMap((d, i) => [
         { label: `Drop ${i + 1}`, value: `${d.amount || '?'} ${d.tick || '?'} to list${d.list ? ` #${d.list}` : ''}` },
-        ...(d.memo ? [{ label: `  Memo`, value: d.memo }] : []),
+        ...(d.memo ? [{ label: 'Memo', value: d.memo }] : []),
     ]);
     if (memo && version !== '3') details.push({ label: 'Memo', value: memo });
 

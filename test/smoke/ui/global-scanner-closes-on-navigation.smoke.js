@@ -8,11 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The global QR scanner is an overlay over the content area only, so the
-// navigation stays live under it. Opened from the command palette on an LG
-// K51 (2026-10-12), it then stayed on screen, camera running, while the
-// bottom bar moved between Home and History beneath it. Navigation must
-// close it: on every view change, and on a tap of the view already shown.
+// The global QR scanner is a modal overlay over the content area. Keyboard
+// focus stays inside it while open, and navigation closes it on every view
+// change or on a tap of the view already shown.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -21,6 +19,17 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const app = readFileSync(join(here, '..', '..', '..', 'packages', 'web', 'src', 'App.jsx'), 'utf8');
+
+assert.match(
+    app,
+    /useFocusTrap\(globalScannerRef, \{\s*active: globalScannerOpen,\s*initialFocusRef: globalScannerRef,\s*\}\);/,
+    'the global scanner traps focus from its container while open',
+);
+assert.match(
+    app,
+    /ref=\{globalScannerRef\}[\s\S]{0,160}?aria-modal="true"[\s\S]{0,160}?tabIndex=\{-1\}/,
+    'the scanner dialog is a programmatic initial focus target',
+);
 
 assert.match(
     app,
