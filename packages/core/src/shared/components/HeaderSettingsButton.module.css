@@ -1,4 +1,6 @@
 .wrap {
+    --header-accent-bg-subtle: rgba(26, 123, 172, 0.10);
+
     position: relative;
     flex: 0 0 auto;
     display: inline-flex;
@@ -28,7 +30,7 @@
 .networkBadgeNonMainnet {
     color: var(--xc-accent-primary);
     border-color: var(--xc-accent-primary);
-    background: color-mix(in srgb, var(--xc-accent-primary) 10%, var(--xc-surface));
+    background: var(--header-accent-bg-subtle);
 }
 
 .networkBadgeDot {
@@ -76,7 +78,7 @@
 .trigger > button[data-active='true'] {
     color: var(--xc-accent-text);
     border-color: var(--xc-accent-primary);
-    background: color-mix(in srgb, var(--xc-accent-primary) 10%, transparent);
+    background: var(--header-accent-bg-subtle);
 }
 
 .dot {
