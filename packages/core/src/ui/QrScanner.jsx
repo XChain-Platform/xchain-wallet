@@ -36,6 +36,12 @@ import { useEffect, useRef, useState } from 'react';
  * @param {number} [props.width]         video display width; default 320
  * @param {string} [props.alt]           aria-label for the scanner surface
  */
+// Android's WebView draws a large grey play button on a <video> with no
+// poster until its first frame, which reads as a broken media player while
+// the camera starts or the permission prompt is up. A transparent pixel
+// leaves the dark box instead.
+const BLANK_POSTER = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
 /**
  * Plain words for a getUserMedia failure. The raw messages ("Permission
  * denied", "Could not start video source") say nothing about what to do.
@@ -219,6 +225,7 @@ export function QrScanner({ onFrame, autoStart = true, width = 320, alt = 'QR sc
                 height={Math.round((width * 3) / 4)}
                 playsInline
                 muted
+                poster={BLANK_POSTER}
                 style={{
                     display: error ? 'none' : 'block',
                     maxWidth: '100%',
