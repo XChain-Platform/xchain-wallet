@@ -60,6 +60,45 @@
     font-weight: 700;
 }
 
+.sortControl {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--xc-space-2);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+}
+
+.sortSelect {
+    min-height: 36px;
+    box-sizing: border-box;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-md);
+    background: var(--xc-surface);
+    color: var(--xc-text);
+    font: inherit;
+}
+
+.sortSelect:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+@media (max-width: 420px) {
+    .sortControl {
+        justify-content: space-between;
+        width: 100%;
+    }
+
+    .sortSelect {
+        min-height: 44px;
+        min-width: 0;
+        font-size: 16px;
+    }
+}
+
 /* ───── Tab panel ───── */
 
 .panel {
@@ -138,13 +177,14 @@
    Activity and DeFi rows. Accent-coloured 16px square that aligns
    with the row's first-line text. */
 .activityActionIcon {
+    --xc-icon-size: var(--xc-icon-sm);
     flex: 0 0 auto;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     color: var(--xc-accent-text);
-    width: 16px;
-    height: 16px;
+    width: var(--xc-icon-sm);
+    height: var(--xc-icon-sm);
 }
 
 /* Square token icon for any non-native token (XCHAIN, XCP, NFTs,

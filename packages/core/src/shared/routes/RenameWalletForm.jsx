@@ -12,6 +12,8 @@ import { useEffect, useRef, useState } from 'react';
 import { FormPage, Screen, Input, Icon, PageHeader } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 
+const NAME_MAX_LENGTH = 64;
+
 /**
  * RenameWalletForm: change a Wallet record's `name` field. No
  * password input, no signer needed; pure metadata update.
@@ -24,13 +26,15 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
  * @param {string} props.walletId
  * @param {string} [props.initialName]   pre-fill the input with the current name
  * @param {() => void} props.onBack
- * @param {() => void} props.onRenamed   refresh callers and return to the previous screen
+ * @param {(wallet: any) => void} props.onRenamed   refresh callers and return to the previous screen
  */
 export function RenameWalletForm({ walletId, initialName = '', onBack, onRenamed }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
 
     const [name, setName] = useState(initialName);
+    const [wallets, setWallets] = useState(/** @type {any[] | null} */ (null));
+    const [walletLoadError, setWalletLoadError] = useState(/** @type {string | null} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [busy, setBusy] = useState(false);
     const nameRef = useRef(/** @type {HTMLInputElement | null} */ (null));
@@ -43,6 +47,22 @@ export function RenameWalletForm({ walletId, initialName = '', onBack, onRenamed
         }, 0);
     }, []);
 
+    useEffect(() => {
+        let cancelled = false;
+        if (typeof messaging.listWallets !== 'function') {
+            setWalletLoadError('Wallet names could not be checked.');
+            return undefined;
+        }
+        messaging.listWallets()
+            .then((list) => {
+                if (!cancelled) setWallets(Array.isArray(list) ? list : []);
+            })
+            .catch(() => {
+                if (!cancelled) setWalletLoadError('Wallet names could not be checked.');
+            });
+        return () => { cancelled = true; };
+    }, [messaging]);
+
     async function handleSubmit(event) {
         if (event && typeof event.preventDefault === 'function') event.preventDefault();
         // Ignore a second submit while the first rename is still in flight.
@@ -53,6 +73,19 @@ export function RenameWalletForm({ walletId, initialName = '', onBack, onRenamed
             setError('Wallet name is required.');
             return;
         }
+        if (name.length > NAME_MAX_LENGTH) {
+            setError(`Wallet name must be ${NAME_MAX_LENGTH} characters or fewer.`);
+            return;
+        }
+        if (wallets === null) {
+            setError('Wallet names could not be checked.');
+            return;
+        }
+        if (wallets.some((wallet) => wallet?.id !== walletId
+            && wallet?.name?.trim().toLocaleLowerCase() === trimmed.toLocaleLowerCase())) {
+            setError(`A wallet named "${trimmed}" already exists.`);
+            return;
+        }
         // Refuse submission when this shell cannot persist the new name.
         if (typeof messaging.renameWallet !== 'function') {
             setError('messaging.renameWallet is not available in this shell.');
@@ -61,15 +94,16 @@ export function RenameWalletForm({ walletId, initialName = '', onBack, onRenamed
         setError(null);
         setBusy(true);
         try {
-            await messaging.renameWallet({ walletId, name: trimmed });
-            onRenamed();
+            const result = await messaging.renameWallet({ walletId, name: trimmed });
+            onRenamed(result?.wallet || result);
         } catch (err) {
             setError(err?.message || 'Failed to rename wallet.');
             setBusy(false);
         }
     }
 
-    const saveDisabled = busy || name.trim().length === 0;
+    const saveDisabled = busy || wallets === null || name.trim().length === 0
+        || name.length > NAME_MAX_LENGTH;
 
     const header = (
         <PageHeader
@@ -98,9 +132,10 @@ export function RenameWalletForm({ walletId, initialName = '', onBack, onRenamed
                 label="Wallet name"
                 value={name}
                 onChange={(e) => { setName(e.target.value); if (error) setError(null); }}
+                maxLength={NAME_MAX_LENGTH}
                 autoComplete="off"
-                disabled={busy}
-                error={error || undefined}
+                disabled={busy || Boolean(walletLoadError)}
+                error={error || walletLoadError || undefined}
             />
         </FormPage>
     );

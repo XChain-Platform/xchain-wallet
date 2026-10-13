@@ -11,6 +11,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Button,
+    ChainBadge,
     EmptyState,
     Icon,
     ListPage,
@@ -38,6 +39,9 @@ import { useActionProofVerification } from '../hooks/useProofVerification.js';
 import { formatFiat } from '../components/BalanceList.jsx';
 import { coinToFiatExact } from '../../flows/priceLookup.js';
 import { useToast } from '../components/ToastHost.jsx';
+import { ConfirmModal } from '../components/ConfirmModal.jsx';
+import { useConfirmModal } from '../hooks/useConfirmModal.js';
+import { tickerForCoin } from '../../registry/coinTicker.js';
 import { groupHistoryEntries } from '../utils/historyGrouping.js';
 import { normalizeHistoryRow } from '../utils/historyRow.js';
 import {
@@ -55,6 +59,7 @@ import { StalenessLabel } from '../components/StalenessLabel.jsx';
 import { flows as flowsLib } from '@xchain-wallet/core';
 import {
     applyHistoryFilters,
+    classifyEntryAction,
     classifyEntryStatus,
     ACTION_TYPE_OPTIONS,
     STATUS_OPTIONS,
@@ -63,11 +68,18 @@ import { readChainSet, writeChainSet } from '../utils/chainFilterMemory.js';
 import { contractDisplayLabel } from './contractResponseShape.js';
 import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
+import { useBackHandler } from '../../ui/backStack.js';
 import { findContactByName, withEntriesAdded } from '../utils/contactMerge.js';
 import { copyText } from '../clipboard.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
-import { formatDecimalAmount } from '../utils/amountFormat.js';
-import { formatLocalDateTime, formatRelativeTime } from '../utils/dateTime.js';
+import { transactionReceiptText } from '../utils/transactionReceipt.js';
+import {
+    formatDecimalAmount,
+    formatDisplayAmount,
+    formatHistoryAmount,
+} from '../utils/amountFormat.js';
+import { formatLocalDateTime } from '../utils/dateTime.js';
+import { RelativeTime } from '../components/RelativeTime.jsx';
 import { useHapticFeedback } from '../hooks/useHaptic.js';
 import { isNavigatorOnline, useOnlineStatus } from '../hooks/useOnlineStatus.js';
 import { readHistoryCache, writeHistoryCache } from '../utils/historyCache.js';
@@ -384,6 +396,24 @@ function pendingAmountAnnotation(entry) {
     return { direction: entry.pending.direction ?? null, outputs };
 }
 
+function historyAmountDirection(entry) {
+    const pendingDirection = entry?.pending?.direction;
+    if (pendingDirection === 'in' || pendingDirection === 'out') return pendingDirection;
+    const source = String(entry?.raw?.source ?? entry?.raw?.SOURCE ?? entry?.source ?? '');
+    const address = String(entry?.address ?? '');
+    if (!source || !address) return null;
+    return source.toLowerCase() === address.toLowerCase() ? 'out' : 'in';
+}
+
+function settledAmountAnnotation(entry) {
+    if (!entry?.blockIndex || String(entry.action || '').toUpperCase() !== 'SEND') return null;
+    const raw = entry.raw || {};
+    const amount = raw.amount ?? raw.AMOUNT ?? raw.quantity ?? raw.QUANTITY;
+    const tick = raw.tick ?? raw.TICK ?? raw.token;
+    if (amount == null || !tick) return null;
+    return { amount: String(amount), tick: String(tick), direction: historyAmountDirection(entry) };
+}
+
 /**
  * History route: §23 unified timeline + §23.5 cross-chain thread
  * rendering.
@@ -439,6 +469,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const [entries, setEntries] = useState(/** @type {HistoryEntry[]} */ ([]));
     const [historyLoaded, setHistoryLoaded] = useState(false);
     const [showingCachedHistory, setShowingCachedHistory] = useState(false);
+    const historyLoadedRef = useRef(false);
+    historyLoadedRef.current = historyLoaded;
+    const [refreshing, setRefreshing] = useState(false);
     const [addressesReload, setAddressesReload] = useState(0);
     // Cluster G FOLLOWUP 5: Unix ms of the last successful per-chain
     // history+links fan-out completion. Surfaces as a "Last synced …"
@@ -509,6 +542,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         setHistoryLoaded(Boolean(cached));
         setShowingCachedHistory(!isNavigatorOnline() && Boolean(cached));
         setLoadingChains(new Set());
+        setRefreshing(false);
         setLoadError(null);
         setIndexerWatermarkByChainId({});
         setMultisigAddress(null);
@@ -519,6 +553,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         setGroupingModeState(readPersistedGroupingMode(walletId));
         observedAtRef.current.clear();
         lastMempoolSeenRef.current.clear();
+        rememberedMempoolRef.current.clear();
         initialFocusFiredRef.current = false;
         let cancelled = false;
         setLoadError(null);
@@ -606,6 +641,12 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     // is simply absent. So the last poll that did list each transaction is
     // remembered here, and travels to the entry that outlives the row.
     const lastMempoolSeenRef = useRef(/** @type {Map<string, number>} */ (new Map()));
+    // Incoming transactions have no local PendingTx record to keep them in
+    // the list after they leave the mempool. Retain the last network entry so
+    // a successful later read can show it as dropped until confirmation takes
+    // its place. A failed read keeps the last known state and proves nothing
+    // about whether the transaction remains in the mempool.
+    const rememberedMempoolRef = useRef(/** @type {Map<string, any>} */ (new Map()));
 
     // One re-fetch rule for this mount, on the same interval the beat below
     // runs at: a `focus` bump only buys something once the rows are older than
@@ -672,6 +713,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             setEntries([]);
             setHistoryLoaded(true);
             setHistoryFetchedAt(null);
+            setRefreshing(false);
             // Nothing to fetch, so nothing lands below to release the slot a
             // focus may have claimed on the way here. `fail()` rather than
             // `succeed()`: no read happened, so the window must not move.
@@ -704,6 +746,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         const throttle = pollThrottleRef.current;
         throttle.reset();
         throttle.start();
+        setRefreshing(true);
         // A background refresh must not blank the list it is refreshing; the
         // loading state belongs to the first load only.
         if (entriesRef.current.length === 0) setLoadingChains(new Set(chainsToLoad));
@@ -713,6 +756,16 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         // isn't an empty wasteland during the demo. Real history rows
         // arrive once the user exits demo mode + funds the wallet.
         const isDemo = flowsLib.isDemoWallet(walletId);
+        const optionalRows = (promise) => promise
+            .then((response) => extractRows(response))
+            .catch((err) => {
+                // An initial load can still show confirmed rows when an older
+                // explorer lacks an optional channel. A refresh keeps every
+                // shown row when any channel fails, because an empty fallback
+                // is indistinguishable from pending activity disappearing.
+                if (historyLoadedRef.current) throw err;
+                return [];
+            });
 
         const tasks = [];
         for (const cid of chainsToLoad) {
@@ -721,6 +774,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     tasks.push(Promise.resolve({
                         chainId: cid,
                         address: a.address,
+                        addressLabel: a.label || '',
                         history: flowsLib.synthesizeDemoHistory(cid, a.address),
                         links: flowsLib.synthesizeDemoLinks(),
                     }));
@@ -730,26 +784,34 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     Promise.all([
                         messaging.getAddressHistory({ chainId: cid, address: a.address })
                             .then((r) => extractRows(r)),
-                        messaging.getLinksForAddress({ chainId: cid, address: a.address })
-                            .then((r) => extractRows(r))
-                            .catch(() => []),
+                        optionalRows(messaging.getLinksForAddress({ chainId: cid, address: a.address })),
                         // M2.1: both pending sources. Each degrades to [] on
-                        // its own, so an explorer without the unconfirmed
-                        // surface still shows our own broadcast sends, and a
-                        // shell whose messaging predates these channels shows
-                        // confirmed history exactly as it did before.
+                        // the initial load, so an explorer without the
+                        // unconfirmed surface still shows confirmed history.
+                        // Refresh failures preserve the complete shown list.
                         typeof messaging.getAddressMempool === 'function'
                             ? messaging.getAddressMempool({ chainId: cid, address: a.address })
-                                .then((r) => extractRows(r))
-                                .catch(() => [])
-                            : Promise.resolve([]),
+                                .then((r) => ({ rows: extractRows(r), ok: true }))
+                                .catch((err) => {
+                                    // A refresh keeps every shown row when the read fails.
+                                    if (historyLoadedRef.current) throw err;
+                                    return { rows: [], ok: false };
+                                })
+                            : Promise.resolve({ rows: [], ok: false }),
                         typeof messaging.getPendingTxsForAddress === 'function'
-                            ? messaging.getPendingTxsForAddress({ chainId: cid, address: a.address })
-                                .then((r) => extractRows(r))
-                                .catch(() => [])
+                            ? optionalRows(messaging.getPendingTxsForAddress({ chainId: cid, address: a.address }))
                             : Promise.resolve([]),
-                    ]).then(([history, links, mempool, pendingTxs]) => (
-                        { chainId: cid, address: a.address, history, links, mempool, pendingTxs }
+                    ]).then(([history, links, mempoolRead, pendingTxs]) => (
+                        {
+                            chainId: cid,
+                            address: a.address,
+                            addressLabel: a.label || '',
+                            history,
+                            links,
+                            mempool: mempoolRead.rows,
+                            mempoolReadOk: mempoolRead.ok,
+                            pendingTxs,
+                        }
                     )),
                 );
             }
@@ -814,7 +876,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         address: r.address,
                         link: linkMap.get(keyFor(r.chainId, aIdx)) || null,
                     });
-                    if (entry) all.push(entry);
+                    if (entry) all.push({ ...entry, receiveLabel: r.addressLabel });
                 }
             }
             // M2.1: build the pending side, then reconcile it against the
@@ -830,18 +892,27 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             const nowMs = Date.now();
             /** @type {any[]} */
             const pendingCandidates = [];
+            const currentMempoolKeys = new Set();
+            const successfulMempoolScopes = new Set();
             for (const r of perAddrResults) {
+                const scope = `${r.chainId}:${String(r.address || '').toLowerCase()}`;
+                if (r.mempoolReadOk) successfulMempoolScopes.add(scope);
                 for (const row of (r.mempool || [])) {
                     const hash = String(row?.tx_hash ?? row?.txHash ?? '');
                     if (!hash) continue;
-                    lastMempoolSeenRef.current.set(`${r.chainId}:${hash.toLowerCase()}`, nowMs);
-                    pendingCandidates.push(mempoolRowToEntry({
+                    const key = `${r.chainId}:${hash.toLowerCase()}`;
+                    currentMempoolKeys.add(key);
+                    lastMempoolSeenRef.current.set(key, nowMs);
+                    const baseEntry = mempoolRowToEntry({
                         chainId: r.chainId,
                         address: r.address,
                         row,
                         ownAddresses,
                         observedAtMs: rememberObservedAt(r.chainId, hash, nowMs),
-                    }));
+                    });
+                    const entry = baseEntry ? { ...baseEntry, receiveLabel: r.addressLabel } : baseEntry;
+                    pendingCandidates.push(entry);
+                    if (entry) rememberedMempoolRef.current.set(key, entry);
                 }
                 for (const record of (r.pendingTxs || [])) {
                     // A failed record may have no txid (it died before
@@ -853,15 +924,35 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     // its sighting from; the host's own read of the UTXO set
                     // is that sighting, on the same clock.
                     if (record.networkSeenNow) lastMempoolSeenRef.current.set(key, nowMs);
-                    pendingCandidates.push(pendingTxToEntry({
+                    pendingCandidates.push({ ...pendingTxToEntry({
                         chainId: r.chainId,
                         address: r.address,
                         pendingTx: record,
                         ownAddresses,
                         observedAtMs: rememberObservedAt(r.chainId, identity, nowMs),
                         lastMempoolSeenMs: lastMempoolSeenRef.current.get(key) ?? null,
-                    }));
+                    }), receiveLabel: r.addressLabel });
                 }
+            }
+            for (const [key, entry] of rememberedMempoolRef.current) {
+                if (currentMempoolKeys.has(key)) continue;
+                const scope = `${entry.chainId}:${String(entry.address || '').toLowerCase()}`;
+                if (!successfulMempoolScopes.has(scope)) {
+                    pendingCandidates.push(entry);
+                    continue;
+                }
+                const remembered = {
+                    ...entry,
+                    pending: {
+                        ...entry.pending,
+                        origin: 'remembered',
+                        lastMempoolSeenMs: lastMempoolSeenRef.current.get(key)
+                            ?? entry.pending.lastMempoolSeenMs
+                            ?? entry.pending.observedAtMs,
+                    },
+                };
+                rememberedMempoolRef.current.set(key, remembered);
+                pendingCandidates.push(remembered);
             }
             const merged = mergePendingEntries({ confirmed: all, pending: pendingCandidates });
             // Forget the observation times of transactions that are no longer
@@ -876,6 +967,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             for (const key of [...lastMempoolSeenRef.current.keys()]) {
                 if (!liveKeys.has(key)) lastMempoolSeenRef.current.delete(key);
             }
+            for (const key of [...rememberedMempoolRef.current.keys()]) {
+                if (!liveKeys.has(key)) rememberedMempoolRef.current.delete(key);
+            }
             merged.entries.sort(compareMergedEntries);
             const fetchedAt = Date.now();
             setEntries(merged.entries);
@@ -888,19 +982,30 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 addressesByChain,
                 fetchedAt,
             });
-        }).catch(() => {
+            setRefreshing(false);
+        }).catch((err) => {
             if (cancelled) return;
             throttle.fail();
             setLoadingChains(new Set());
-            setHistoryLoaded(true);
+            setRefreshing(false);
             const cached = readHistoryCache(walletId, accountId);
-            if (cached) {
+            if (historyLoadedRef.current) {
+                // Rows are already on screen (live or saved): keep them, say
+                // so, and name the saved copy when one exists.
+                if (cached) setShowingCachedHistory(true);
+                showToast({
+                    message: humanizeError(err, 'refresh history').message,
+                    variant: 'error',
+                });
+            } else if (cached) {
                 setEntries(cached.entries);
                 setHistoryFetchedAt(cached.fetchedAt);
+                setHistoryLoaded(true);
                 setShowingCachedHistory(true);
-                return;
+            } else {
+                setHistoryLoaded(true);
+                setLoadError('Could not load history. Try again.');
             }
-            setLoadError('Could not load history. Try again.');
         });
 
         return () => { cancelled = true; };
@@ -923,17 +1028,13 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
         .map(([cid]) => cid);
 
-    // Cluster I FOLLOWUP 6: Per-chain tip used to compute confirmation
-    // counts on confirmed rows. Derived from the highest blockIndex
-    // seen across loaded history rows (lower bound for the chain tip,
-    // since the wallet has no dedicated tip endpoint yet; explorer's
-    // /network is still a placeholder, see FOLLOWUPS.md). A user with
-    // any confirmed activity sees a meaningful count; a user with one
-    // freshly-confirmed row gets "1 confirmation" (the tip is at the
-    // row itself, which is correct).
+    // Cluster I FOLLOWUP 6: Per-chain tip used to compute confirmation counts on confirmed rows.
+    // The polled indexer watermark advances even when this wallet has no new
+    // activity. Loaded rows remain a fallback and cover a watermark that lags
+    // the history response during ingestion.
     const chainTipByChainId = useMemo(() => {
         /** @type {Record<string, number>} */
-        const tips = {};
+        const tips = { ...indexerWatermarkByChainId };
         for (const e of entries) {
             if (!e || !e.chainId) continue;
             // A record the wallet proved into a block names that block in
@@ -944,7 +1045,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             if (!(e.chainId in tips) || b > tips[e.chainId]) tips[e.chainId] = b;
         }
         return tips;
-    }, [entries]);
+    }, [entries, indexerWatermarkByChainId]);
 
     // §28.3: fetch the indexer watermark (latest processed block)
     // per loaded chain so the TxStatusTimeline's Indexed stage reflects real
@@ -976,7 +1077,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             setIndexerWatermarkByChainId(next);
         });
         return () => { cancelled = true; };
-    }, [addressesByChain, messaging, walletId, browserOnline]);
+    }, [addressesByChain, messaging, walletId, browserOnline, refreshTick]);
 
     const visibleEntries = useMemo(() => {
         let list = entries.filter((e) => enabledChains.has(e.chainId));
@@ -1375,8 +1476,27 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const header = (
         <PageHeader
             onBack={onBack}
-            backLabel="Back to home"
-            title="History"
+            backLabel={t('common.backToHome')}
+            title={t('history.title')}
+            trailing={(
+                <button
+                    type="button"
+                    className={refreshing ? styles.refreshing : undefined}
+                    aria-label={refreshing ? t('history.refreshing') : t('history.refresh')}
+                    title={refreshing ? t('history.refreshing') : t('history.refresh')}
+                    disabled={refreshing || !historyLoaded}
+                    onClick={() => {
+                        const throttle = pollThrottleRef.current;
+                        if (throttle.isInFlight()) return;
+                        throttle.reset();
+                        throttle.start();
+                        setRefreshing(true);
+                        setRefreshTick((n) => n + 1);
+                    }}
+                >
+                    <Icon.RefreshIcon />
+                </button>
+            )}
         />
     );
     const wrap = (children) => (
@@ -1392,7 +1512,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     variant="error"
                     className={styles.error}
                     recovery={{
-                        label: 'Try again',
+                        label: t('common.tryAgain'),
                         onAction: () => {
                             setLoadError(null);
                             setAddressesByChain(null);
@@ -1409,8 +1529,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     if (!addressesByChain) {
         return wrap(
             <ListPage>
-                <div role="status" aria-label="Loading history">
-                    <Skeleton.List rows={5} />
+                <div role="status" aria-label={t('history.loading')} aria-busy="true">
+                    <Skeleton.List rows={5} rowHeight={88} avatar={false} />
                 </div>
             </ListPage>,
         );
@@ -1419,9 +1539,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         return wrap(
             <ListPage>
                 <EmptyState
-                    title="No addresses yet"
-                    body="Generate a receive address to populate history."
-                    actionLabel={onReceive ? 'Receive' : undefined}
+                    title={t('history.empty.noAddressesTitle')}
+                    body={t('history.empty.noAddressesBody')}
+                    actionLabel={onReceive ? t('home.receive') : undefined}
                     onAction={onReceive}
                     icon={onReceive ? <Icon.ReceiveIcon /> : undefined}
                 />
@@ -1431,7 +1551,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
 
     return wrap(
         <ListPage toolbar={(
-            <div className={styles.filterCard} role="group" aria-label="History filters">
+            <div className={styles.filterCard} role="group" aria-label={t('history.filters.label')}>
                 <input
                     ref={searchInputRef}
                     type="search"
@@ -1440,8 +1560,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     autoCorrect="off"
                     spellCheck={false}
                     className={styles.searchInput}
-                    placeholder="Search action, address, token, txid, memo…"
-                    aria-label="Search history"
+                    placeholder={t('history.filters.searchPlaceholder')}
+                    aria-label={t('history.filters.searchLabel')}
                     value={searchQuery}
                     onChange={(ev) => setSearchQuery(ev.target.value)}
                     autoComplete="off"
@@ -1450,7 +1570,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 <div className={styles.dateRow}>
                     <input
                         type="date"
-                        aria-label="From date"
+                        aria-label={t('history.filters.fromDate')}
                         value={dateFrom}
                         max={dateTo || undefined}
                         onChange={(ev) => updateDateFrom(ev.target.value)}
@@ -1459,7 +1579,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     <span className={styles.dateSep}>→</span>
                     <input
                         type="date"
-                        aria-label="To date"
+                        aria-label={t('history.filters.toDate')}
                         value={dateTo}
                         min={dateFrom || undefined}
                         onChange={(ev) => updateDateTo(ev.target.value)}
@@ -1475,7 +1595,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         aria-expanded={moreFiltersOpen}
                         aria-controls="history-more-filters"
                     >
-                        <span>Additional details</span>
+                        <span>{t('history.filters.additionalDetails')}</span>
                         {moreFiltersOpen
                             ? <DoubleChevron direction="up" />
                             : <DoubleChevron direction="down" />}
@@ -1487,25 +1607,27 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         onClick={toggleShowFiatInHistory}
                         disabled={fiatToggleBusy}
                         aria-busy={fiatToggleBusy}
-                        title="Show the fiat equivalent for native-coin amounts"
+                        title={t('history.filters.fiatHelp')}
                     >
-                        {showFiatInHistory ? `Fiat: ${fiatCurrency}` : 'Show fiat'}
+                        {showFiatInHistory
+                            ? t('history.filters.fiatCurrency', { currency: fiatCurrency })
+                            : t('history.filters.showFiat')}
                     </button>
-                    <div className={styles.segGroup} role="radiogroup" aria-label="Grouping mode">
+                    <div className={styles.segGroup} role="radiogroup" aria-label={t('history.filters.groupingMode')}>
                         <button
                             type="button"
                             role="radio"
                             aria-checked={groupingMode === 'grouped'}
                             onClick={() => setGroupingMode('grouped')}
                             className={`${styles.segBtn} ${groupingMode === 'grouped' ? styles.segBtnActive : ''}`}
-                        >Grouped</button>
+                        >{t('history.filters.grouped')}</button>
                         <button
                             type="button"
                             role="radio"
                             aria-checked={groupingMode === 'flat'}
                             onClick={() => setGroupingMode('flat')}
                             className={`${styles.segBtn} ${groupingMode === 'flat' ? styles.segBtnActive : ''}`}
-                        >Flat</button>
+                        >{t('history.filters.flat')}</button>
                     </div>
                 </div>
 
@@ -1514,7 +1636,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         id="history-more-filters"
                         className={styles.morePanel}
                         role="group"
-                        aria-label="Advanced filters"
+                        aria-label={t('history.filters.advanced')}
                     >
                         <ChainPicker
                             activeChainIds={activeChainIds}
@@ -1530,19 +1652,19 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             options={ACTION_TYPE_OPTIONS}
                             selected={actionTypeFilter}
                             onToggle={toggleSetMember(setActionTypeFilter)}
-                            allLabel="All action types"
-                            summaryNoun="action type"
+                            allLabel={t('history.filters.allActionTypes')}
+                            summaryNoun={t('history.filters.actionType')}
                             iconForId={actionTypeIcon}
-                            menuHeader="Action types"
+                            menuHeader={t('history.filters.actionTypes')}
                         />
 
                         <CheckboxPicker
                             options={STATUS_OPTIONS}
                             selected={statusFilter}
                             onToggle={toggleSetMember(setStatusFilter)}
-                            allLabel="All statuses"
-                            summaryNoun="status"
-                            menuHeader="Status"
+                            allLabel={t('history.filters.allStatuses')}
+                            summaryNoun={t('history.filters.status')}
+                            menuHeader={t('history.filters.statusHeader')}
                         />
 
                         <CheckboxPicker
@@ -1555,10 +1677,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             onToggle={(id) => {
                                 if (id === 'crosschain') setCrossChainOnly((v) => !v);
                             }}
-                            allLabel="No special filters"
-                            summaryNoun="filter"
+                            allLabel={t('history.filters.noSpecialFilters')}
+                            summaryNoun={t('history.filters.filter')}
                             iconForId={specialFilterIcon}
-                            menuHeader="Special"
+                            menuHeader={t('history.filters.special')}
                         />
 
                         {multisigAddress ? (
@@ -1568,7 +1690,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                                 aria-pressed={multisigOnly}
                                 onClick={() => setMultisigOnly((v) => !v)}
                             >
-                                Multisig only
+                                {t('history.filters.multisigOnly')}
                             </button>
                         ) : null}
 
@@ -1597,6 +1719,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     setFormat={setExportFormat}
                     columns={exportColumns}
                     setColumns={setExportColumns}
+                    fiatCurrency={fiatCurrency}
                     visibleCount={visibleEntries.length}
                     onConfirm={() => {
                         runExport({
@@ -1612,27 +1735,27 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             ) : null}
 
             {!historyLoaded || loadingChains.size > 0 ? (
-                <div role="status" aria-label="Loading history">
-                    <Skeleton.List rows={Math.max(3, loadingChains.size)} />
+                <div role="status" aria-label={t('history.loading')} aria-busy="true">
+                    <Skeleton.List rows={Math.max(3, loadingChains.size)} rowHeight={88} avatar={false} />
                 </div>
             ) : null}
 
             {historyLoaded && visibleEntries.length === 0 && loadingChains.size === 0 ? (
                 filtersActive && entries.length > 0 ? (
                     <EmptyState
-                        title="No matches for the current filters"
-                        body="Adjust or clear the filters to see more history."
-                        actionLabel="Clear filters"
+                        title={t('history.empty.noMatchesTitle')}
+                        body={t('history.empty.noMatchesBody')}
+                        actionLabel={t('history.empty.clearFilters')}
                         onAction={clearAllFilters}
                     />
                 ) : (
                     <EmptyState
                         title={crossChainOnly
-                            ? 'No cross-chain actions yet'
-                            : 'No activity yet'}
+                            ? t('history.empty.noCrossChainTitle')
+                            : t('history.empty.noActivityTitle')}
                         body={crossChainOnly
-                            ? 'Cross-chain transfers sent or received by this wallet appear here.'
-                            : 'Once you send or receive on the selected chains, the activity feed populates.'}
+                            ? t('history.empty.noCrossChainBody')
+                            : t('history.empty.noActivityBody')}
                     />
                 )
             ) : null}
@@ -1649,8 +1772,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                                 style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}
                             >
                                 {entries.length > 0
-                                    ? 'No rows match the current filters.'
-                                    : 'There are no history rows to export.'}
+                                    ? t('history.export.noMatchingRows')
+                                    : t('history.export.noRows')}
                             </span>
                         ) : null}
                         <button
@@ -1662,7 +1785,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             onClick={() => setExportModalOpen(true)}
                             disabled={visibleEntries.length === 0}
                         >
-                            Export…
+                            {t('history.export.open')}
                         </button>
                     </div>
                 </div>
@@ -1703,6 +1826,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                                                     verify={actionVerifyMap[entry.key]}
                                                     showFiatInHistory={showFiatInHistory}
                                                     fiatCurrency={fiatCurrency}
+                                                    walletAddresses={walletAddressSet}
                                                     onDismissFailed={dismissFailedPending}
                                                     networkAvailable={browserOnline}
                                                 />
@@ -1719,7 +1843,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                                                             item.members.length,
                                                         )}
                                                     >
-                                                        Show more group entries ({Math.min(memberLimit, item.members.length).toLocaleString('en-US')} of {item.members.length.toLocaleString('en-US')} shown)
+                                                        {t('history.showMoreGroupEntries', {
+                                                            shown: Math.min(memberLimit, item.members.length).toLocaleString('en-US'),
+                                                            total: item.members.length.toLocaleString('en-US'),
+                                                        })}
                                                     </Button>
                                                 </li>
                                             ) : null}
@@ -1745,6 +1872,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             verify={actionVerifyMap[entry.key]}
                             showFiatInHistory={showFiatInHistory}
                             fiatCurrency={fiatCurrency}
+                            walletAddresses={walletAddressSet}
                             onDismissFailed={dismissFailedPending}
                             networkAvailable={browserOnline}
                         />
@@ -1754,7 +1882,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             {visibleItemCount < groupedItems.length ? (
                 <div className={styles.pagination} aria-live="polite">
                     <span className={styles.paginationCount}>
-                        {Math.min(visibleItemCount, groupedItems.length).toLocaleString('en-US')} of {groupedItems.length.toLocaleString('en-US')} history items shown
+                        {t('history.itemsShown', {
+                            shown: Math.min(visibleItemCount, groupedItems.length).toLocaleString('en-US'),
+                            total: groupedItems.length.toLocaleString('en-US'),
+                        })}
                     </span>
                     <Button
                         type="button"
@@ -1762,7 +1893,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         icon={null}
                         onClick={showMoreItems}
                     >
-                        Show more history
+                        {t('history.showMore')}
                     </Button>
                 </div>
             ) : null}
@@ -1779,6 +1910,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
     const { showToast } = useToast();
     const { settings } = useSettings();
     const [balancesHidden] = useBalancesHidden();
+    const rbfConfirm = useConfirmModal();
     const [activeDetailTab, setActiveDetailTab] = useState(/** @type {'status' | 'details' | 'raw'} */ ('status'));
 
     // Fiat equivalent, native-coin amounts only. `nativeAmountFieldOf`
@@ -1913,6 +2045,19 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
         setRbfError(null);
         setRbfDone(null);
         try {
+            const quote = await replaceFromHistoryEntry({
+                messaging, entry, strategy, walletId, descriptor: rbfDescriptor, preview: true,
+            });
+            const ticker = tickerForCoin(rbfDescriptor?.coin);
+            const confirmed = await rbfConfirm.confirm({
+                title: strategy === 'cancel' ? 'Cancel this transaction?' : 'Speed up this transaction?',
+                message: `Old fee: ${quote.originalFee} ${ticker}. `
+                    + `New fee: ${quote.replacementFee} ${ticker}. `
+                    + `Additional cost: ${quote.feeIncrease} ${ticker}.`,
+                confirmLabel: strategy === 'cancel' ? 'Broadcast cancellation' : 'Broadcast speed up',
+                danger: strategy === 'cancel',
+            });
+            if (!confirmed) return;
             const res = await replaceFromHistoryEntry({ messaging, entry, strategy, walletId, descriptor: rbfDescriptor });
             setRbfDone(`Replacement broadcast: ${res?.replacementTxHash || 'pending'}`);
             // §37.2 / Cluster D FOLLOWUP 3: a cancel gets an Undo toast.
@@ -1982,30 +2127,23 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
             onClick: () => runRbf('cancel'),
         });
     }
-    // Universal option: every entry can have a sharable link copied,
-    // so the menu is never empty (DeFi rows, in particular, hit this
-    // path since they don't have a peer or replaceable state).
-    const shareUrl = explorerPageUrl({
-        chainId: entry?.chainId,
-        kind: 'action',
-        value: entry?.actionIndex,
-        settings,
+    // Receipt sharing is deliberately narrower than the detail payload. The
+    // user opts into these six public transaction facts, never addresses,
+    // memos, contact data, wallet identifiers, or arbitrary raw fields.
+    const receipt = transactionReceiptText(entry, { settings, balancesHidden });
+    moreOptions.push({
+        id: 'copy-receipt',
+        label: 'Copy receipt',
+        icon: <Icon.CopyIcon />,
+        onClick: async () => {
+            setMoreOpen(false);
+            const { ok } = await copyText(receipt);
+            showToast({
+                message: ok ? 'Transaction receipt copied.' : 'Copy failed: clipboard unavailable',
+                variant: ok ? 'default' : 'error',
+            });
+        },
     });
-    if (shareUrl) {
-        moreOptions.push({
-            id: 'copy-link',
-            label: 'Copy action link',
-            icon: <Icon.CopyIcon />,
-            onClick: async () => {
-                setMoreOpen(false);
-                const { ok } = await copyText(shareUrl);
-                showToast({
-                    message: ok ? 'Action link copied.' : 'Copy failed: clipboard unavailable',
-                    variant: ok ? 'default' : 'error',
-                });
-            },
-        });
-    }
 
     async function handleSaveContact(event) {
         event.preventDefault();
@@ -2034,7 +2172,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
     }
 
     return (
-        <div className={styles.detailContainer} role="region" aria-label="Action detail">
+        <div className={styles.detailContainer} role="region" aria-label={t('history.detail.label')}>
             {/* M2.3: the pending branch. First, because on a pending
                 entry the thing the user came to find out is what is
                 happening to it, and because the warning states have to
@@ -2078,7 +2216,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                 the More menu independent preserves Speed up and Cancel for
                 incomplete pending records. */}
             {explorerButtons.length > 0 || moreOptions.length > 0 ? (
-                <div className={styles.detailActions} role="group" aria-label="Action options">
+                <div className={styles.detailActions} role="group" aria-label={t('history.detail.options')}>
                     {explorerButtons.map((link) => networkAvailable ? (
                         <a
                             key={link.id}
@@ -2097,7 +2235,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                             ) : (
                                 <span className={styles.detailActionIcon} aria-hidden="true">{link.icon}</span>
                             )}
-                            <span>{link.label}</span>
+                            <span>{link.label} <span aria-hidden="true">↗</span></span>
                         </a>
                     ) : (
                         <button
@@ -2130,7 +2268,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                             onClick={() => setMoreOpen((o) => !o)}
                         >
                             <span className={styles.detailActionIcon} aria-hidden="true"><Icon.MoreIcon /></span>
-                            <span>More</span>
+                            <span>{t('history.detail.more')}</span>
                         </button>
                         {moreOpen ? (
                             <div className={styles.moreMenu} role="menu">
@@ -2161,7 +2299,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                                         className={styles.moreMenuItem}
                                         disabled
                                     >
-                                        <span>No additional actions</span>
+                                        <span>{t('history.detail.noAdditionalActions')}</span>
                                     </button>
                                 )}
                             </div>
@@ -2189,7 +2327,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
             {contactSaveStage === 'editing' || contactSaveStage === 'saving' ? (
                 <form className={styles.saveContactForm} onSubmit={handleSaveContact}>
                     <label className={styles.saveContactLabel}>
-                        Save {shortenAddress(contactPeer || '')} as
+                        {t('history.contact.saveAs', { address: shortenAddress(contactPeer || '') })}
                         <input
                             type="text"
                             enterKeyHint="go"
@@ -2198,7 +2336,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                             onChange={(e) => setContactName(e.target.value)}
                             autoFocus
                             maxLength={80}
-                            placeholder="Contact name"
+                            placeholder={t('history.contact.name')}
                         />
                     </label>
                     {contactSaveError ? (
@@ -2216,7 +2354,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                             }}
                             disabled={contactSaveStage === 'saving'}
                         >
-                            Cancel
+                            {t('common.cancel')}
                         </Button>
                         <Button
                             type="submit"
@@ -2224,14 +2362,14 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                             size="sm"
                             loading={contactSaveStage === 'saving'}
                         >
-                            Save
+                            {t('history.contact.save')}
                         </Button>
                     </div>
                 </form>
             ) : null}
 
             {/* Tab strip: matches Home's HomeTabs visual rhythm. */}
-            <div className={styles.detailTabs} role="tablist" aria-label="Action detail view">
+            <div className={styles.detailTabs} role="tablist" aria-label={t('history.detail.view')}>
                 {detailTabs.map((t) => (
                     <button
                         key={t.id}
@@ -2276,7 +2414,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                             <span className={styles.rawJsonCopy}>
                                 <CopyIconButton
                                     value={decodeActionToText(rawForDisplay)}
-                                    label="Copy raw JSON"
+                                    label={t('history.detail.copyRawJson')}
                                 />
                             </span>
                             <pre className={styles.detailDecoded}>
@@ -2285,19 +2423,22 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                         </div>
                         {isLinked ? (
                             <div className={styles.detailPeerBlock}>
-                                <h4 className={styles.detailSectionHeading}>
-                                    Peer · {entry.link.peerCoinTicker} #{entry.link.peerActionIndex}
-                                </h4>
+                                <h2 className={styles.detailSectionHeading}>
+                                    {t('history.detail.peerHeading', {
+                                        ticker: entry.link.peerCoinTicker,
+                                        index: entry.link.peerActionIndex,
+                                    })}
+                                </h2>
                                 {peer?.loading ? (
-                                    <p className={styles.empty}>Loading the linked transaction…</p>
+                                    <p className={styles.empty}>{t('history.detail.loadingPeer')}</p>
                                 ) : peer?.error ? (
-                                    <p className={styles.error}>Couldn't load peer: {peer.error}</p>
+                                    <p className={styles.error}>{t('history.detail.peerError', { error: peer.error })}</p>
                                 ) : peer?.action ? (
                                     <div className={styles.rawJsonWrap}>
                                         <span className={styles.rawJsonCopy}>
                                             <CopyIconButton
                                                 value={decodeActionToText(balancesHidden ? redactAmountFields(peer.action) : peer.action)}
-                                                label="Copy peer raw JSON"
+                                                label={t('history.detail.copyPeerRawJson')}
                                             />
                                         </span>
                                         <pre className={styles.detailDecoded}>
@@ -2305,11 +2446,10 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                                         </pre>
                                     </div>
                                 ) : (
-                                    <p className={styles.empty}>
-                                        Peer chain not bundled in this wallet; open the
-                                        block explorer for {entry.link.peerCoinTicker} to
-                                        view {entry.link.peerCoinTicker} #{entry.link.peerActionIndex}.
-                                    </p>
+                                    <p className={styles.empty}>{t('history.detail.peerUnavailable', {
+                                        ticker: entry.link.peerCoinTicker,
+                                        index: entry.link.peerActionIndex,
+                                    })}</p>
                                 )}
                             </div>
                         ) : null}
@@ -2340,8 +2480,15 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                         }).catch(() => { /* main returns ok:false on failure */ });
                     }}
                 >
-                    Open in new window
+                    {t('history.detail.openNewWindow')}
                 </Button>
+            ) : null}
+            {rbfConfirm.request ? (
+                <ConfirmModal
+                    {...rbfConfirm.request}
+                    onConfirm={rbfConfirm.onConfirm}
+                    onCancel={rbfConfirm.onCancel}
+                />
             ) : null}
         </div>
     );
@@ -2389,7 +2536,9 @@ function PendingDetailPanel({ entry, balancesHidden = false, onDismissFailed }) 
     const meta = entry?.pending || null;
     const failure = failed ? failedReasonOf(meta?.error) : null;
     const desc = describePendingAction(entry);
-    const amountOf = (value) => (balancesHidden ? '•••••' : value);
+    const amountOf = (value) => (balancesHidden
+        ? '•••••'
+        : formatHistoryAmount(value, historyAmountDirection(entry)));
 
     return (
         <section
@@ -2443,12 +2592,16 @@ function PendingDetailPanel({ entry, balancesHidden = false, onDismissFailed }) 
 
             {meta?.firstSeenMs ? (
                 <p className={styles.pendingTiming}>
-                    {t('pending.detail.firstSeen', { when: formatRelativeTime(meta.firstSeenMs) })}
+                    <RelativeTime timestamp={meta.firstSeenMs}>
+                        {(when) => t('pending.detail.firstSeen', { when })}
+                    </RelativeTime>
                 </p>
             ) : null}
             {meta?.broadcastAtMs ? (
                 <p className={styles.pendingTiming}>
-                    {t('pending.detail.broadcastAt', { when: formatRelativeTime(meta.broadcastAtMs) })}
+                    <RelativeTime timestamp={meta.broadcastAtMs}>
+                        {(when) => t('pending.detail.broadcastAt', { when })}
+                    </RelativeTime>
                 </p>
             ) : null}
             {meta?.replaced && meta.replacementTxHash ? (
@@ -2463,7 +2616,7 @@ function PendingDetailPanel({ entry, balancesHidden = false, onDismissFailed }) 
                 promise under this heading: "not reported yet" would say
                 more data is coming, and none is. */}
             {settled && desc.kind === 'none' ? null : (
-                <h4 className={styles.detailSectionHeading}>{t('pending.detail.decodedHeading')}</h4>
+                <h2 className={styles.detailSectionHeading}>{t('pending.detail.decodedHeading')}</h2>
             )}
             {desc.kind === 'send' || desc.kind === 'local' ? (
                 <ul className={styles.pendingOutputs}>
@@ -2535,7 +2688,9 @@ function basicDetailRows(entry, chainTip, nativeAmount, nativeFiatValue, balance
     if (nativeAmount != null) {
         rows.push(['Amount', (
             <span>
-                {balancesHidden ? '•••••' : formatNumberWithCommas(nativeAmount)}
+                {balancesHidden
+                    ? '•••••'
+                    : formatHistoryAmount(nativeAmount, historyAmountDirection(entry))}
                 {nativeFiatValue != null ? (
                     <span className={styles.rowRelativeTime}>
                         {' '}(≈ {balancesHidden ? '•••' : formatFiat(nativeFiatValue, fiatCurrency)})
@@ -2557,21 +2712,15 @@ function basicDetailRows(entry, chainTip, nativeAmount, nativeFiatValue, balance
         <span className={`${styles.statusBubble} ${statusColorClass}`}>{statusLabel}</span>
     )]);
 
-    // Network: coin icon + full chain name (e.g. "Dogecoin Mainnet").
+    // Network uses the same badge as list rows so custom chain names and
+    // non-mainnet kinds come from the descriptor rather than id parsing.
     if (entry.chainId) {
-        const [coin = '', network = 'mainnet'] = String(entry.chainId).split('-');
-        const label = `${capitalize(coin)} ${capitalize(network)}`.trim();
+        const descriptor = chainRegistry.get(entry.chainId);
         rows.push(['Network', (
             <span className={styles.copyableValue}>
-                <img
-                    src={branding.chainIconSmallUrl(entry.chainId)}
-                    alt=""
-                    aria-hidden="true"
-                    className={styles.rowChainIcon}
-                    width={16}
-                    height={16}
-                />
-                <span>{label}</span>
+                {descriptor
+                    ? <ChainBadge descriptor={descriptor} size="sm" />
+                    : <span>{entry.chainId}</span>}
             </span>
         )]);
     }
@@ -2642,7 +2791,7 @@ function copyLabelForDetailField(key) {
     return null;
 }
 
-function CopyIconButton({ value, label = 'Copy to clipboard' }) {
+function CopyIconButton({ value, label = t('history.copy.clipboard') }) {
     const [copied, setCopied] = useState(false);
     const { showToast } = useToast();
     const haptic = useHapticFeedback();
@@ -2663,8 +2812,8 @@ function CopyIconButton({ value, label = 'Copy to clipboard' }) {
             type="button"
             onClick={handleClick}
             className={styles.copyIconButton}
-            aria-label={copied ? 'Copied' : label}
-            title={copied ? 'Copied!' : label}
+            aria-label={copied ? t('history.copy.copied') : label}
+            title={copied ? t('history.copy.copiedTitle') : label}
         >
             {copied ? <Icon.CheckIcon /> : <Icon.CopyIcon />}
         </button>
@@ -2689,7 +2838,7 @@ function fullDetailRows(entry, balancesHidden = false) {
             <CopyableValue
                 display={formatDecimalAmount(entry.actionIndex)}
                 fullValue={String(entry.actionIndex)}
-                ariaLabel="Copy action number"
+                ariaLabel={t('history.copy.actionNumber')}
             />
         )]);
     }
@@ -2703,14 +2852,14 @@ function fullDetailRows(entry, balancesHidden = false) {
     if (entry.blockIndex) rows.push(['Block', formatDecimalAmount(entry.blockIndex)]);
     else if (entry.blockIndex === 0) rows.push(['Block', 'Pending confirmation']);
     if (entry.timestamp) {
-        rows.push(['Time', formatRelativeTime(entry.timestamp) || formatTimestamp(entry.timestamp)]);
+        rows.push(['Time', <RelativeTime timestamp={entry.timestamp} />]);
     }
     if (entry.txHash) {
         rows.push(['Transaction ID', (
             <CopyableValue
                 display={entry.txHash}
                 fullValue={entry.txHash}
-                ariaLabel="Copy transaction ID"
+                ariaLabel={t('history.copy.transactionId')}
             />
         )]);
     }
@@ -2719,7 +2868,7 @@ function fullDetailRows(entry, balancesHidden = false) {
             <CopyableValue
                 display={entry.source}
                 fullValue={entry.source}
-                ariaLabel="Copy from address"
+                ariaLabel={t('history.copy.fromAddress')}
             />
         )]);
     }
@@ -2728,7 +2877,7 @@ function fullDetailRows(entry, balancesHidden = false) {
             <CopyableValue
                 display={entry.address}
                 fullValue={entry.address}
-                ariaLabel="Copy wallet address"
+                ariaLabel={t('history.copy.walletAddress')}
             />
         )]);
     }
@@ -2754,20 +2903,29 @@ function fullDetailRows(entry, balancesHidden = false) {
         if (skipKeys.has(k)) continue;
         const v = raw[k];
         let display;
-        if (balancesHidden && AMOUNT_KEY_RE.test(k)) {
+        if (isEmptyDetailValue(v)) {
+            display = '-';
+        } else if (balancesHidden && AMOUNT_KEY_RE.test(k)) {
             display = '•••••';
         } else if (isRemovedAccessListValue(k, v)) {
             display = 'none';
         } else if (isOraclePricedGetAmount(entry, raw, k, v)) {
             display = '0 (protocol placeholder; price set by oracle)';
-        } else if (v === null || v === undefined) display = '-';
-        else if (typeof v === 'number' || (typeof v === 'string' && /^-?\d+$/.test(v))) {
+        } else if (AMOUNT_KEY_RE.test(k) && /^[-+]?\d+(?:\.\d+)?$/.test(String(v))) {
+            const isPrimarySendAmount = String(entry.action || '').toUpperCase() === 'SEND'
+                && /^(amount|quantity)$/i.test(k);
+            display = isPrimarySendAmount
+                ? formatHistoryAmount(v, historyAmountDirection(entry))
+                : formatDisplayAmount(v);
+        } else if (typeof v === 'number' || (typeof v === 'string' && /^-?\d+$/.test(v))) {
             display = formatNumberWithCommas(v);
         }
         else if (typeof v === 'object') {
             try { display = JSON.stringify(v); } catch { display = String(v); }
-        } else {
+        } else if (typeof v === 'string') {
             display = detailValue(String(v), k);
+        } else {
+            display = String(v);
         }
         const copyLabel = copyLabelForDetailField(k);
         rows.push([detailFieldLabel(k), copyLabel && typeof v !== 'object' ? (
@@ -2780,6 +2938,11 @@ function fullDetailRows(entry, balancesHidden = false) {
     }
 
     return rows;
+}
+
+function isEmptyDetailValue(value) {
+    if (value == null || value === '' || (typeof value === 'number' && !Number.isFinite(value))) return true;
+    return typeof value === 'string' && /^(?:undefined|null|nan)$/i.test(value.trim());
 }
 
 function isRemovedAccessListValue(key, value) {
@@ -3013,7 +3176,9 @@ function RecipientsBlock({ entry }) {
                     title={!networkAvailable ? OFFLINE_ACTION_REASON : undefined}
                     aria-describedby={!networkAvailable ? 'history-offline-action-reason' : undefined}
                 >
-                    {isDividend ? 'Show holders' : 'Show recipients'}
+                    {isDividend
+                        ? t('history.recipients.showHolders')
+                        : t('history.recipients.showRecipients')}
                 </Button>
                 {error ? <span style={{ color: 'var(--xc-danger-fg)', fontSize: 'var(--xc-text-xs)' }} role="alert">{error}</span> : null}
             </div>
@@ -3022,7 +3187,9 @@ function RecipientsBlock({ entry }) {
     if (stage === 'loading') {
         return (
             <div style={blockStyle}>
-                <span style={headingStyle}>{isDividend ? 'Loading holders…' : 'Loading recipients…'}</span>
+                <span style={headingStyle}>{isDividend
+                    ? t('history.recipients.loadingHolders')
+                    : t('history.recipients.loadingRecipients')}</span>
             </div>
         );
     }
@@ -3030,7 +3197,7 @@ function RecipientsBlock({ entry }) {
         return (
             <div style={blockStyle}>
                 <span style={headingStyle} role="status">
-                    Saved {recipients.length} address{recipients.length === 1 ? '' : 'es'} as a single contact "{name.trim()}".
+                    {t('history.recipients.saved', { count: recipients.length, name: name.trim() })}
                 </span>
             </div>
         );
@@ -3040,7 +3207,9 @@ function RecipientsBlock({ entry }) {
     return (
         <div style={blockStyle}>
             <span style={headingStyle}>
-                {recipients.length} {isDividend ? 'holder' : 'recipient'}{recipients.length === 1 ? '' : 's'}
+                {isDividend
+                    ? t('history.recipients.holderCount', { count: recipients.length })
+                    : t('history.recipients.recipientCount', { count: recipients.length })}
             </span>
             {snapshotNote ? <span style={headingStyle}>{snapshotNote}</span> : null}
             {recipients.length > 0 ? (
@@ -3060,16 +3229,18 @@ function RecipientsBlock({ entry }) {
                     ))}
                     {recipients.length > 20 ? (
                         <div style={{ color: 'var(--xc-text-muted)', marginTop: 'var(--xc-space-1)' }}>
-                            … and {recipients.length - 20} more not shown
+                            {t('history.recipients.moreNotShown', { count: recipients.length - 20 })}
                         </div>
                     ) : null}
                 </div>
             ) : (
                 <EmptyState
-                    title={<>No {isDividend ? 'holders' : 'recipients'} found</>}
+                    title={isDividend
+                        ? t('history.recipients.noHoldersFound')
+                        : t('history.recipients.noRecipientsFound')}
                     body={isDividend
-                        ? 'Token holders appear here after balances are indexed.'
-                        : 'Matching recipients appear here after history is indexed.'}
+                        ? t('history.recipients.noHoldersBody')
+                        : t('history.recipients.noRecipientsBody')}
                     titleAs="p"
                 />
             )}
@@ -3080,7 +3251,7 @@ function RecipientsBlock({ entry }) {
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         maxLength={120}
-                        aria-label="Contact name"
+                        aria-label={t('history.contact.name')}
                         disabled={stage === 'saving'}
                         style={{
                             flex: 1,
@@ -3100,7 +3271,7 @@ function RecipientsBlock({ entry }) {
                         loading={stage === 'saving'}
                         onClick={handleSaveAll}
                     >
-                        Save {recipients.length} as one contact
+                        {t('history.recipients.saveAsContact', { count: recipients.length })}
                     </Button>
                 </div>
             ) : null}
@@ -3262,7 +3433,9 @@ function PendingAmountLabel({ entry }) {
     if (!annotation) return null;
     const amounts = annotation.outputs
         .map((o) => t('pending.amount.entry', {
-            amount: balancesHidden ? '•••••' : o.amount,
+            amount: balancesHidden
+                ? '•••••'
+                : formatHistoryAmount(o.amount, annotation.direction),
             tick: o.tick,
         }))
         .join(t('pending.amount.separator'));
@@ -3315,8 +3488,13 @@ function contractRowLabel(entry) {
     return contractDisplayLabel(raw, { chainId: entry.chainId, actionIndex: idx });
 }
 
-export function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, chainTip, indexerWatermark, walletId, verify, showFiatInHistory, fiatCurrency, onDismissFailed, networkAvailable = true }) {
+export function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, chainTip, indexerWatermark, walletId, verify, showFiatInHistory, fiatCurrency, walletAddresses, onDismissFailed, networkAvailable = true }) {
     const d = chainRegistry.get(entry.chainId);
+    const settledAmount = settledAmountAnnotation(entry);
+    const receiveLabel = entry.receiveLabel
+        && classifyEntryAction(entry, walletAddresses) === 'receive'
+        ? entry.receiveLabel
+        : '';
     return (
         <li data-history-key={entry.key}>
             <button
@@ -3329,21 +3507,15 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
                     <span className={styles.connector} aria-hidden="true" />
                 ) : null}
                 <span className={styles.rowHeader}>
-                    {d ? (
-                        <img
-                            src={branding.chainIconSmallUrl(d.id)}
-                            alt=""
-                            aria-hidden="true"
-                            className={styles.rowChainIcon}
-                            width={16}
-                            height={16}
-                        />
-                    ) : null}
+                    {d ? <ChainBadge descriptor={d} size="sm" /> : <span>{entry.chainId}</span>}
                     <span className={styles.actionBadge}>{actionDisplayLabel(entry.action)}</span>
                     {entry.link ? (
                         <span
                             className={styles.crosschainBadge}
-                            title={`Linked to ${entry.link.peerCoinTicker} #${entry.link.peerActionIndex}`}
+                            title={t('history.row.linkedTo', {
+                                ticker: entry.link.peerCoinTicker,
+                                index: entry.link.peerActionIndex,
+                            })}
                         >
                             🔗
                         </span>
@@ -3353,9 +3525,12 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
                         <VerifiedBadge status={verify.status} reason={verify.reason} size="sm" />
                     ) : null}
                 </span>
-                <span className={styles.rowSourceAddress}>
+                <span className={styles.rowSourceAddress} title={entry.source || undefined}>
                     {entry.source || '-'}
                 </span>
+                {receiveLabel ? (
+                    <span className={styles.rowReceiveLabel}>{t('history.row.receivedAt', { label: receiveLabel })}</span>
+                ) : null}
                 {contractRowLabel(entry) ? (
                     <span className={styles.rowContractLabel}>
                         {contractRowLabel(entry)}
@@ -3364,10 +3539,22 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
                 <span className={styles.rowMeta}>
                     {entry.blockIndex ? (
                         <>
-                            <span>Block {formatDecimalAmount(entry.blockIndex)}</span>
+                            <span>{t('history.row.block', {
+                                block: formatDecimalAmount(entry.blockIndex),
+                            })}</span>
+                            {settledAmount ? (
+                                <span
+                                    className={styles.pendingAmount}
+                                    data-history-amount={settledAmount.direction || 'unknown'}
+                                >
+                                    {formatHistoryAmount(settledAmount.amount, settledAmount.direction)} {settledAmount.tick}
+                                </span>
+                            ) : null}
                             {chainTip ? (
                                 <span className={styles.confirmationsPill}>
-                                    {Math.max(0, chainTip - Number(entry.blockIndex) + 1)} Confirms
+                                    {t('history.row.confirmations', {
+                                        count: Math.max(0, chainTip - Number(entry.blockIndex) + 1),
+                                    })}
                                 </span>
                             ) : null}
                         </>
@@ -3378,12 +3565,10 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
                         </>
                     )}
                     {entry.timestamp ? (
-                        <span
+                        <RelativeTime
                             className={styles.rowRelativeTime}
-                            title={formatTimestamp(entry.timestamp)}
-                        >
-                            {formatRelativeTime(entry.timestamp)}
-                        </span>
+                            timestamp={entry.timestamp}
+                        />
                     ) : null}
                 </span>
             </button>
@@ -3434,27 +3619,11 @@ function GroupCard({ item, expanded, onToggle }) {
             aria-expanded={expanded}
         >
             <span className={styles.rowHeader}>
-                {d ? (
-                    <img
-                        src={branding.chainIconSmallUrl(d.id)}
-                        alt=""
-                        aria-hidden="true"
-                        className={styles.rowChainIcon}
-                        width={16}
-                        height={16}
-                    />
-                ) : null}
+                {d ? <ChainBadge descriptor={d} size="sm" /> : <span>{item.leader.chainId}</span>}
                 {isLinkPair && peerDescriptor && peerDescriptor !== d ? (
                     <>
                         <span className={styles.linkPairConnector} aria-hidden="true">↔</span>
-                        <img
-                            src={branding.chainIconSmallUrl(peerDescriptor.id)}
-                            alt=""
-                            aria-hidden="true"
-                            className={styles.rowChainIcon}
-                            width={16}
-                            height={16}
-                        />
+                        <ChainBadge descriptor={peerDescriptor} size="sm" />
                     </>
                 ) : null}
                 <span className={styles.actionBadge}>{groupBadgeLabel(item.subkind)}</span>
@@ -3462,12 +3631,12 @@ function GroupCard({ item, expanded, onToggle }) {
                     <span className={styles.groupCount}>{item.members.length}</span>
                 ) : null}
             </span>
-            <span className={styles.rowSummary}>{displaySummary}</span>
+            <span className={styles.rowSummary} title={displaySummary}>{displaySummary}</span>
             <span className={styles.rowMeta}>
                 {newest?.timestamp ? (
-                    <span title={formatTimestamp(newest.timestamp)}>
-                        Latest {formatRelativeTime(newest.timestamp)}
-                    </span>
+                    <RelativeTime timestamp={newest.timestamp}>
+                        {(when) => t('history.group.latest', { when })}
+                    </RelativeTime>
                 ) : '-'}
                 <span className={styles.groupChevron} aria-hidden="true">
                     <DoubleChevron direction={expanded ? 'up' : 'down'} />
@@ -3601,12 +3770,12 @@ function shortenAddress(addr) {
  */
 function StatusPill({ status }) {
     if (status === 'confirmed') {
-        return <span className={`${styles.statusPill} ${styles.statusPillSuccess}`} title="Confirmed">Confirmed</span>;
+        return <span className={`${styles.statusPill} ${styles.statusPillSuccess}`} title={t('history.status.confirmed')}>{t('history.status.confirmed')}</span>;
     }
     if (status === 'failed') {
-        return <span className={`${styles.statusPill} ${styles.statusPillError}`} title="Failed">Failed</span>;
+        return <span className={`${styles.statusPill} ${styles.statusPillError}`} title={t('history.status.failed')}>{t('history.status.failed')}</span>;
     }
-    return <span className={`${styles.statusPill} ${styles.statusPillPending}`} title="Pending">Pending</span>;
+    return <span className={`${styles.statusPill} ${styles.statusPillPending}`} title={t('history.status.pending')}>{t('history.status.pending')}</span>;
 }
 
 function formatTimestamp(ts) {
@@ -3950,7 +4119,7 @@ function ChainPicker({ activeChainIds, chainRegistry, enabledChains, onChange })
                     ) : (
                         <span className={styles.chainPickerAllIcon} aria-hidden="true">⛓</span>
                     )}
-                    <span>{selectedDesc ? selectedDesc.displayName : 'All chains'}</span>
+                    <span>{selectedDesc ? selectedDesc.displayName : t('history.filters.allChains')}</span>
                 </span>
                 <SingleChevron direction="down" />
             </button>
@@ -3965,7 +4134,7 @@ function ChainPicker({ activeChainIds, chainRegistry, enabledChains, onChange })
                             onClick={() => choose('all')}
                         >
                             <span className={styles.chainPickerAllIcon} aria-hidden="true">⛓</span>
-                            <span>All chains</span>
+                            <span>{t('history.filters.allChains')}</span>
                         </button>
                     </li>
                     {activeChainIds.map((cid) => {
@@ -4021,6 +4190,7 @@ function runExport({ entries, scope, format, columns, fiatCurrency }) {
 const MODAL_SCRIM = {
     position: 'fixed',
     inset: 0,
+    padding: 'env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px)',
     background: 'rgba(0, 0, 0, 0.45)',
     display: 'flex',
     alignItems: 'center',
@@ -4072,6 +4242,7 @@ function ExportModal({
     onClose,
     format, setFormat,
     columns, setColumns,
+    fiatCurrency,
     visibleCount,
     onConfirm,
 }) {
@@ -4079,6 +4250,7 @@ function ExportModal({
     // closing hands focus back to the opener.
     const dialogRef = useRef(null);
     useFocusTrap(dialogRef, { active: true });
+    useBackHandler(onClose);
     useEffect(() => {
         function onKey(e) { if (e.key === 'Escape') onClose(); }
         document.addEventListener('keydown', onKey);
@@ -4104,12 +4276,12 @@ function ExportModal({
                 style={MODAL_CARD}
                 role="dialog"
                 aria-modal="true"
-                aria-label="Export history"
+                aria-label={t('history.export.title')}
             >
-                <h2 style={{ margin: 0, fontSize: 'var(--xc-text-base)' }}>Export history</h2>
+                <h2 style={{ margin: 0, fontSize: 'var(--xc-text-base)' }}>{t('history.export.title')}</h2>
 
                 <fieldset style={MODAL_FIELDSET}>
-                    <legend style={MODAL_LEGEND}>Format</legend>
+                    <legend style={MODAL_LEGEND}>{t('history.export.format')}</legend>
                     <label style={MODAL_LABEL}>
                         <input
                             type="radio"
@@ -4118,7 +4290,7 @@ function ExportModal({
                             checked={format === 'csv'}
                             onChange={() => setFormat('csv')}
                         />
-                        CSV (RFC-4180; compact, opens in spreadsheets)
+                        {t('history.export.csv')}
                     </label>
                     <label style={MODAL_LABEL}>
                         <input
@@ -4128,37 +4300,48 @@ function ExportModal({
                             checked={format === 'json'}
                             onChange={() => setFormat('json')}
                         />
-                        JSON (preserves the full row including link / raw)
+                        {t('history.export.json')}
                     </label>
                 </fieldset>
 
                 <fieldset style={MODAL_FIELDSET}>
-                    <legend style={MODAL_LEGEND}>Columns</legend>
-                    {flowsLib.EXPORT_COLUMNS.map((col) => (
-                        <label key={col} style={MODAL_LABEL}>
-                            <input
-                                type="checkbox"
-                                checked={columns.has(col)}
-                                onChange={() => toggleColumn(col)}
-                            />
-                            <span style={{ fontFamily: 'var(--xc-font-mono, monospace)', fontSize: 'var(--xc-text-xs)' }}>{col}</span>
-                        </label>
-                    ))}
+                    <legend style={MODAL_LEGEND}>{t('history.export.columns')}</legend>
+                    {flowsLib.EXPORT_COLUMNS.map((col) => {
+                        const detail = flowsLib.EXPORT_COLUMN_DETAILS[col];
+                        const label = col === 'fiatCurrency'
+                            ? `${detail.label} (${String(fiatCurrency || 'USD').trim().toUpperCase()})`
+                            : detail.label;
+                        return (
+                            <label key={col} style={MODAL_LABEL} title={detail.description}>
+                                <input
+                                    type="checkbox"
+                                    checked={columns.has(col)}
+                                    onChange={() => toggleColumn(col)}
+                                />
+                                <span>
+                                    <span style={{ fontSize: 'var(--xc-text-sm)' }}>{label}</span>
+                                    <span style={{ display: 'block', color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-xs)' }}>
+                                        {detail.description}
+                                    </span>
+                                </span>
+                            </label>
+                        );
+                    })}
                 </fieldset>
 
                 <p style={{ margin: 0, fontSize: 'var(--xc-text-sm)' }}>
-                    {visibleCount.toLocaleString()} filtered row{visibleCount === 1 ? '' : 's'} will be exported.
+                    {t('history.export.rowCount', { count: visibleCount })}
                 </p>
 
                 <div style={MODAL_ACTIONS}>
-                    <button type="button" className={styles.chip} onClick={onClose}>Cancel</button>
+                    <button type="button" className={styles.chip} onClick={onClose}>{t('common.cancel')}</button>
                     <button
                         type="button"
                         className={styles.chip}
                         onClick={onConfirm}
                         disabled={visibleCount === 0 || columns.size === 0}
                     >
-                        Export
+                        {t('history.export.confirm')}
                     </button>
                 </div>
             </div>

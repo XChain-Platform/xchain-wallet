@@ -1900,7 +1900,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>Dispensing</dt>
                 <dd className={styles.detailsValue}>
-                    {formatNum(giveAmount)} {giveTick || '?'} per fill
+                    {giveAmount == null && !giveTick
+                        ? '-'
+                        : `${formatNum(giveAmount)} ${detailText(giveTick)} per fill`}
                 </dd>
                 <dt className={styles.detailsLabel}>Payment</dt>
                 <dd className={styles.detailsValue}>
@@ -1915,13 +1917,15 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                                     ? `${fiatCode} via oracle ${oracleAddress}: no current price (stale)`
                                     : `${fiatCode} via oracle ${oracleAddress}…`))
                             : `${fiatAmount} ${fiatCode}`)
-                        : `${formatNum(getAmount)} ${getTick || getCoin || '?'}${getTick ? ' (token)' : getCoin ? ' (native coin)' : ''}`}
+                        : getAmount == null && !getTick && !getCoin
+                            ? '-'
+                            : `${formatNum(getAmount)} ${detailText(getTick || getCoin)}${getTick ? ' (token)' : getCoin ? ' (native coin)' : ''}`}
                 </dd>
                 {escrowRemaining != null ? (
                     <>
                         <dt className={styles.detailsLabel}>Balance</dt>
                         <dd className={styles.detailsValue}>
-                            {formatNum(escrowRemaining)} {giveTick || ''} in escrow
+                            {formatNum(escrowRemaining)} {detailText(giveTick)} in escrow
                         </dd>
                     </>
                 ) : null}
@@ -1969,7 +1973,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 ) : null}
                 <dt className={styles.detailsLabel}>Status</dt>
                 <dd className={styles.detailsValue}>
-                    {isClosing ? 'closing (1-hour window)' : (liveStatus || 'unknown')}
+                    {isClosing ? 'closing (1-hour window)' : detailText(liveStatus)}
                 </dd>
                 {currentExpiration ? (
                     <>
@@ -2053,7 +2057,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         title="View on the XChain explorer"
                     >
                         <img src={branding.logoUrl()} alt="" aria-hidden="true" className={local.quickActionLogo} />
-                        <span>XChain</span>
+                        <span>XChain <span aria-hidden="true">↗</span></span>
                     </a>
                 ) : null}
                 <div className={local.quickActionMoreWrap} ref={moreWrapRef}>
@@ -2409,12 +2413,19 @@ function remainingFillsFrom(escrowRemaining, giveAmount) {
 }
 
 function formatNum(v) {
-    if (v == null || v === '') return '?';
+    if (v == null || v === '' || (typeof v === 'number' && !Number.isFinite(v))) return '-';
     const s = String(v);
+    if (/^(?:undefined|null|nan)$/i.test(s.trim())) return '-';
     const [int, frac] = s.split('.');
     if (!/^\d+$/.test(int)) return s;
     const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
     return frac != null ? `${grouped}.${frac}` : grouped;
+}
+
+function detailText(value) {
+    if (value == null || value === '' || (typeof value === 'number' && !Number.isFinite(value))) return '-';
+    const text = String(value).trim();
+    return !text || /^(?:undefined|null|nan)$/i.test(text) ? '-' : text;
 }
 
 // Format a Unix timestamp (seconds; tolerates ms) as a short local
