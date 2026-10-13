@@ -78,6 +78,11 @@ export function normalizeProtocolFee(fee) {
 
     if (typeof fee !== 'object') return UNKNOWN;
 
+    // A refused quote carries no usable fee verdict. Amount fields can still
+    // be present on error responses, but presenting them as priced or free
+    // turns a failed preflight into a successful-looking row.
+    if (fee.supported === false || fee.valid === false) return UNKNOWN;
+
     // An explicit `free` verdict is the quote's own answer and outranks the
     // amount beside it (they agree in practice; when they disagree the verdict
     // is the one the pricing code computed).

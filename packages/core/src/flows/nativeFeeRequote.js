@@ -83,9 +83,15 @@ const DEFAULT_TOLERANCE_MAX = 1.10;
  * @returns {NativeFeeRequoteComparison}
  */
 export function compareNativeFeeQuote({ composed, fresh } = {}) {
-    const paidSats = intOrNull(composed && composed.requiredFeeSats);
+    const rawPaidSats = composed && composed.requiredFeeSats;
+    const paidSats = intOrNull(rawPaidSats);
     const base = { paidSats: paidSats || 0, expectedSats: null, minSats: null, maxSats: null, coin: null, reason: null };
-    if (!paidSats || paidSats <= 0) return { ...base, verdict: 'none' };
+    if (rawPaidSats === null || rawPaidSats === undefined || paidSats === 0) {
+        return { ...base, verdict: 'none' };
+    }
+    if (paidSats === null) {
+        return { ...base, verdict: 'unavailable', reason: 'composed quote carries an invalid amount' };
+    }
 
     const coin = fresh && typeof fresh.coin === 'string' ? fresh.coin : null;
     if (!fresh || typeof fresh !== 'object') return { ...base, verdict: 'unavailable', reason: 'no quote' };
@@ -98,6 +104,10 @@ export function compareNativeFeeQuote({ composed, fresh } = {}) {
     }
     if (fresh.valid === false) {
         return { ...base, coin, verdict: 'unavailable', reason: fresh.error || 'not priceable' };
+    }
+    const identityMismatch = quoteIdentityMismatch(composed, fresh);
+    if (identityMismatch) {
+        return { ...base, coin, verdict: 'unavailable', reason: identityMismatch };
     }
 
     const quotedExpectedSats = intOrNull(fresh.requiredFeeSats);
@@ -114,11 +124,19 @@ export function compareNativeFeeQuote({ composed, fresh } = {}) {
     const quotedMaxSats = boundSats(
         fresh.maxAcceptable, quotedExpectedSats, fresh.toleranceMax, DEFAULT_TOLERANCE_MAX, Math.floor,
     );
+    if (!Number.isSafeInteger(quotedMinSats)
+        || !Number.isSafeInteger(quotedMaxSats)
+        || quotedMinSats < 0
+        || quotedMaxSats < quotedMinSats) {
+        return { ...base, coin, verdict: 'unavailable', reason: 'quote carries an invalid acceptance band' };
+    }
     // A composed quote records the relay floor only when its fee was rounded up to dust.
     // Keep that floor on the fresh band while the action still carries a positive fee.
-    const dustThresholdSats = quotedExpectedSats > 0
-        ? intOrNull(composed && composed.dustThresholdSats)
-        : null;
+    const rawDustThreshold = composed && composed.dustThresholdSats;
+    const dustThresholdSats = quotedExpectedSats > 0 ? intOrNull(rawDustThreshold) : null;
+    if (quotedExpectedSats > 0 && rawDustThreshold != null && dustThresholdSats === null) {
+        return { ...base, coin, verdict: 'unavailable', reason: 'composed quote carries an invalid dust threshold' };
+    }
     const expectedSats = dustThresholdSats
         ? Math.max(quotedExpectedSats, dustThresholdSats)
         : quotedExpectedSats;
@@ -197,8 +215,8 @@ export function satsFromNativeDecimal(value) {
     const [whole, frac = ''] = s.split('.');
     // Refuse sub-satoshi precision; truncating it would lower a band floor.
     if (/[1-9]/.test(frac.slice(8))) return null;
-    const sats = Number(whole) * 1e8 + Number((frac + '00000000').slice(0, 8));
-    return Number.isSafeInteger(sats) ? sats : null;
+    const sats = BigInt(whole) * 100000000n + BigInt((frac + '00000000').slice(0, 8));
+    return sats <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(sats) : null;
 }
 
 // One end of the acceptance band in satoshis: the quote's own figure when it
@@ -213,6 +231,33 @@ function boundSats(quoted, expectedSats, tolerance, fallbackTolerance, round) {
 }
 
 function intOrNull(value) {
-    const n = Number(value);
-    return Number.isFinite(n) ? Math.round(n) : null;
+    let n;
+    if (typeof value === 'bigint') {
+        n = value;
+    } else if (typeof value === 'number') {
+        if (!Number.isSafeInteger(value)) return null;
+        n = BigInt(value);
+    } else if (typeof value === 'string' && /^\d+$/.test(value.trim())) {
+        n = BigInt(value.trim());
+    } else {
+        return null;
+    }
+    return n >= 0n && n <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(n) : null;
+}
+
+function quoteIdentityMismatch(composed, fresh) {
+    for (const field of ['chainId', 'feeDestination']) {
+        const before = composed?.[field];
+        const after = fresh?.[field];
+        if (typeof before === 'string' && before
+            && typeof after === 'string' && after
+            && before !== after) {
+            return `quote ${field} does not match the composed transaction`;
+        }
+    }
+    const beforeCoin = typeof composed?.coin === 'string' ? composed.coin.trim().toUpperCase() : '';
+    const afterCoin = typeof fresh?.coin === 'string' ? fresh.coin.trim().toUpperCase() : '';
+    return beforeCoin && afterCoin && beforeCoin !== afterCoin
+        ? 'quote coin does not match the composed transaction'
+        : null;
 }
