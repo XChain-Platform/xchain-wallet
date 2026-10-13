@@ -86,6 +86,17 @@ describe('DesktopUpdateBanner', () => {
         expect(card.style.maxWidth).not.toBe('');
     });
 
+    it('keeps the floating card inside the device safe-area insets', () => {
+        const bridge = installBridge();
+        render(React.createElement(DesktopUpdateBanner));
+        bridge.emit({ type: 'available', info: { version: '0.339.0' } });
+
+        const card = screen.getByRole('status');
+        expect(card.style.top).toContain('env(safe-area-inset-top');
+        expect(card.style.left).toContain('env(safe-area-inset-left');
+        expect(card.style.right).toContain('env(safe-area-inset-right');
+    });
+
     it('shows no version at all rather than a version the feed made up', () => {
         const bridge = installBridge();
         render(React.createElement(DesktopUpdateBanner));
