@@ -1569,7 +1569,16 @@ export function createBackgroundHost(deps) {
         if (req?.walletMode === 'watcher' || req?.walletMode === 'signer') {
             await updateSettings(vault, { walletMode: req.walletMode });
         }
-        const pooled = await sessionSigner(req, vault, signerPool);
+        const wallet = await vault.wallets.get(walletId);
+        if (!wallet) {
+            throw new Error(`pairing: no wallet with id "${walletId}"`);
+        }
+        // A standalone xpub export confirms the password every time. Public
+        // keys cannot spend, but they reveal the account's complete address
+        // history, so an unlocked session alone does not authorize disclosure.
+        const pooled = req?.publicExport === true
+            ? null
+            : await sessionSigner(req, vault, signerPool);
         const signer = pooled
             || await unlockWallet({
                 vault,
@@ -1580,7 +1589,7 @@ export function createBackgroundHost(deps) {
                 sdkRegistry,
             });
         try {
-            return await fn(signer, await getSettings(vault));
+            return await fn(signer, await getSettings(vault), wallet);
         } finally {
             // The pool owns the lifecycle of a pooled signer; only a signer
             // we unlocked ourselves gets locked here.
@@ -1602,12 +1611,30 @@ export function createBackgroundHost(deps) {
 
     host.register('pairing.payload', async (req, deps) => {
         const { chainRegistry } = deps;
-        return withPairingSigner(req, deps, async (signer, settings) => {
+        return withPairingSigner(req, deps, async (signer, settings, wallet) => {
             const keys = await collectPairingKeys({
                 signer,
                 chainRegistry,
                 chainIds: pairingChainIds(req, settings, chainRegistry),
+                accountIndex: Number.isInteger(req?.accountIndex) && req.accountIndex >= 0
+                    ? req.accountIndex
+                    : 0,
+                format: wallet.format,
             });
+            if (req?.publicExport === true) {
+                const publicKeys = keys
+                    .filter((key) => /^(?:xpub|tpub)[1-9A-HJ-NP-Za-km-z]+$/.test(key?.xpub || ''))
+                    .map((key) => ({
+                        chainId: key.chainId,
+                        addressType: key.addressType,
+                        path: key.path,
+                        xpub: key.xpub,
+                    }));
+                if (publicKeys.length === 0) {
+                    throw new Error('pairing.payload: this wallet has no extended public keys to export');
+                }
+                return { payload: { keys: publicKeys }, encoded: null };
+            }
             const payload = buildPairingPayload({
                 walletMode: settings?.walletMode,
                 keys,
@@ -1619,11 +1646,12 @@ export function createBackgroundHost(deps) {
 
     host.register('pairing.pair', async (req, deps) => {
         const { vault, chainRegistry } = deps;
-        return withPairingSigner(req, deps, async (signer, settings) => {
+        return withPairingSigner(req, deps, async (signer, settings, wallet) => {
             const keys = await collectPairingKeys({
                 signer,
                 chainRegistry,
                 chainIds: pairingChainIds(req, settings, chainRegistry),
+                format: wallet.format,
             });
             const local = buildPairingPayload({
                 walletMode: settings?.walletMode,
