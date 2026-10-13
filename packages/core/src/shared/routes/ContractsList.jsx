@@ -450,7 +450,7 @@ function Section({ title, children }) {
 function ChainFilterBar({ chains, value, onChange }) {
     return (
         <div role="tablist" aria-label="Chain filter" style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
-            <button
+            <Button
                 type="button"
                 role="tab"
                 aria-selected={value === 'all'}
@@ -459,11 +459,11 @@ function ChainFilterBar({ chains, value, onChange }) {
                 style={{ padding: '0.25rem 0.5rem' }}
             >
                 All
-            </button>
+            </Button>
             {chains.map((cid) => {
                 const d = chainRegistry.get(cid);
                 return (
-                    <button
+                    <Button
                         type="button"
                         role="tab"
                         key={cid}
@@ -474,7 +474,7 @@ function ChainFilterBar({ chains, value, onChange }) {
                         style={{ padding: '0.25rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
                     >
                         {d ? <ChainBadge descriptor={d} size="sm" /> : <span>{cid}</span>}
-                    </button>
+                    </Button>
                 );
             })}
         </div>
@@ -531,7 +531,7 @@ function ChainGroup({
                         )
                     ) : (
                         state.rows.map((row, i) => (
-                            <button
+                            <Button
                                 key={String(rowKey(row)) + ':' + i}
                                 type="button"
                                 className={styles.entry}
@@ -539,7 +539,7 @@ function ChainGroup({
                                 onClick={() => onOpenContract(chainId, String(rowKey(row)))}
                             >
                                 {renderRow(row)}
-                            </button>
+                            </Button>
                         ))
                     )}
                 </>

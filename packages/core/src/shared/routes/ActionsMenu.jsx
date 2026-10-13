@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { Icon, ListPage, PageHeader, Screen, SectionHeader } from '@xchain-wallet/core/ui';
+import { Button, Icon, ListPage, PageHeader, Screen, SectionHeader } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import styles from './ActionsMenu.module.css';
@@ -81,7 +81,7 @@ export function ActionsMenu({ entries, onBack }) {
                                         : undefined;
                                     return (
                                         <li key={entry.id} className={styles.listItem}>
-                                            <button
+                                            <Button
                                                 type="button"
                                                 className={styles.entry}
                                                 onClick={entry.disabled ? undefined : entry.onSelect}
@@ -106,7 +106,7 @@ export function ActionsMenu({ entries, onBack }) {
                                                         </span>
                                                     ) : null}
                                                 </span>
-                                            </button>
+                                            </Button>
                                         </li>
                                     );
                                 })}

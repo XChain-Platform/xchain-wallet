@@ -554,13 +554,13 @@ export function DeployContractForm({ walletId, onBack }) {
                     return (
                         <li key={`${entry.message}-${index}`} className={styles.validationItem}>
                             {entry.line ? (
-                                <button
+                                <Button
                                     type="button"
                                     className={styles.validationLink}
                                     onClick={() => moveToCodeLine(entry.line)}
                                 >
                                     {content}
-                                </button>
+                                </Button>
                             ) : (
                                 <div className={styles.validationText}>{content}</div>
                             )}

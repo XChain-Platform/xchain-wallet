@@ -586,7 +586,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     : undefined
             }
             trailing={mode === 'list' ? (
-                <button
+                <Button
                     type="button"
                     className={picker.addButton}
                     onClick={() => { setActiveId(null); startEdit(null); }}
@@ -594,7 +594,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     title="Add contact"
                 >
                     <Icon.PlusIcon />
-                </button>
+                </Button>
             ) : null}
         />
     );
@@ -761,7 +761,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
 
                 <div className={picker.actionsWrap} ref={actionsRef}>
                     <div className={picker.quickActions} role="group" aria-label="Contact actions">
-                        <button
+                        <Button
                             type="button"
                             className={picker.quickAction}
                             onClick={() => startAction('send')}
@@ -771,8 +771,8 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                         >
                             <span className={picker.quickActionIcon} aria-hidden="true"><Icon.SendIcon /></span>
                             <span>Send</span>
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                             type="button"
                             className={picker.quickAction}
                             onClick={() => startAction('message')}
@@ -782,16 +782,16 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                         >
                             <span className={picker.quickActionIcon} aria-hidden="true"><Icon.MessageIcon /></span>
                             <span>Message</span>
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                             type="button"
                             className={picker.quickAction}
                             onClick={() => startEdit(active)}
                         >
                             <span className={picker.quickActionIcon} aria-hidden="true"><Icon.PencilIcon /></span>
                             <span>Edit</span>
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                             type="button"
                             className={picker.quickAction}
                             onClick={() => handleDelete(active.id)}
@@ -800,7 +800,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                         >
                             <span className={picker.quickActionIcon} aria-hidden="true"><Icon.TrashIcon /></span>
                             <span>{deleting === `contact:${active.id}` ? 'Deleting…' : 'Delete'}</span>
-                        </button>
+                        </Button>
                     </div>
                     {addrPicker ? (
                         <ul className={picker.addrMenu} role="menu" aria-label="Choose an address">
@@ -809,7 +809,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                             </li>
                             {active.entries.map((e, i) => (
                                 <li key={i}>
-                                    <button
+                                    <Button
                                         type="button"
                                         role="menuitem"
                                         className={picker.addrMenuItem}
@@ -818,7 +818,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                                         <ChainCoinIcon chain={resolvedChain(e)} address={e.address} />
                                         <span className={picker.addressText} title={e.address}>{e.address}</span>
                                         {e.label ? <span style={{ color: 'var(--xc-fg-muted)', marginLeft: '0.25rem' }}>({e.label})</span> : null}
-                                    </button>
+                                    </Button>
                                 </li>
                             ))}
                         </ul>
@@ -828,7 +828,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 <SectionHeader
                     title="Addresses"
                     trailing={(
-                        <button
+                        <Button
                             type="button"
                             className={picker.addAddressBtn}
                             onClick={() => { setAddAddrValue(''); setAddAddrError(null); setAddAddrOpen(true); }}
@@ -836,7 +836,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                             title="Add address"
                         >
                             <Icon.PlusIcon />
-                        </button>
+                        </Button>
                     )}
                 />
 
@@ -847,7 +847,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                                 <ChainCoinIcon chain={resolvedChain(e)} address={e.address} />
                                 <span className={picker.addressText} title={e.address}>{e.address}</span>
                                 {e.label ? <span style={{ color: 'var(--xc-fg-muted)', marginLeft: '0.25rem' }}>({e.label})</span> : null}
-                                <button
+                                <Button
                                     type="button"
                                     className={picker.addressDeleteBtn}
                                     onClick={() => handleDeleteAddress(i)}
@@ -857,7 +857,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                                     title="Delete address"
                                 >
                                     <Icon.XIcon />
-                                </button>
+                                </Button>
                             </li>
                         );
                     })}
@@ -962,9 +962,9 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     {typeof onOpenBackup === 'function' ? (
                         <>
                             {' '}
-                            <button type="button" className={picker.linkButton} onClick={() => setNudgeDismissed(true)}>
+                            <Button type="button" className={picker.linkButton} onClick={() => setNudgeDismissed(true)}>
                                 Not now
-                            </button>
+                            </Button>
                         </>
                     ) : null}
                 </StatusMessage>
@@ -992,7 +992,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                             entry,
                         ])).values()];
                         return (
-                            <button
+                            <Button
                                 key={c.id}
                                 type="button"
                                 role="listitem"
@@ -1009,7 +1009,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                                         />
                                     ))}
                                 </span>
-                            </button>
+                            </Button>
                         );
                     })}
                 </div>

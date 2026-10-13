@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { ChainBadge, EmptyState, Icon, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, ChainBadge, EmptyState, Icon, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -303,7 +303,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
             titleIcon={<Icon.TokenIcon />}
             title="My dispensers"
             trailing={onCreateDispenser ? (
-                <button
+                <Button
                     type="button"
                     className={local.addBtn}
                     onClick={() => onCreateDispenser()}
@@ -311,7 +311,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                     title="Create dispenser"
                 >
                     <Icon.PlusIcon />
-                </button>
+                </Button>
             ) : undefined}
         />
     );
@@ -469,7 +469,7 @@ function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, chainCl
         ? (closeEta ? `Closing · ${closeEta.shortCountdown}` : 'Closing')
         : status;
     return (
-        <button
+        <Button
             type="button"
             className={local.row}
             role="listitem"
@@ -533,7 +533,7 @@ function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, chainCl
                     {badge}
                 </span>
             </div>
-        </button>
+        </Button>
     );
 }
 

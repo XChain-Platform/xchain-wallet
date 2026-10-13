@@ -1844,13 +1844,13 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
 
                     {recipients.invalid.length > 0 ? (
                         <div className={styles.hint}>
-                            <button
+                            <Button
                                 type="button"
                                 className={styles.back}
                                 onClick={() => setShowInvalid((s) => !s)}
                             >
                                 {showInvalid ? 'Hide' : 'Show'} {recipients.invalid.length} invalid
-                            </button>
+                            </Button>
                             {showInvalid ? (
                                 <ul>
                                     {recipients.invalid.map((a, i) => (
@@ -2110,7 +2110,7 @@ function ExistingListPickerScreen({ variant, messaging, chainId, addresses, onSe
                         key={String(row.action_index)}
                         style={{ padding: 'var(--xc-space-2) 0', borderBottom: '1px solid var(--xc-border)' }}
                     >
-                        <button
+                        <Button
                             type="button"
                             className={styles.back}
                             style={{ width: '100%', textAlign: 'left' }}
@@ -2118,7 +2118,7 @@ function ExistingListPickerScreen({ variant, messaging, chainId, addresses, onSe
                         >
                             {isTick ? 'Token' : 'Address'} list #{row.action_index ?? '?'}
                             {status !== 'valid' ? ` (${status})` : ''}
-                        </button>
+                        </Button>
                     </li>
                 );
             })}
