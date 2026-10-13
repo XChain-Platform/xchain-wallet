@@ -18,6 +18,8 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
     TIER_RAIL_MIN_PX,
     TIER_FULL_MIN_PX,
@@ -125,6 +127,15 @@ describe('layout tiers', () => {
                 expect(screen.getByTestId('route')).toBeInTheDocument();
                 cleanup();
             }
+        });
+
+        it('caps a compact header stack so route content remains visible', () => {
+            const css = readFileSync(join(
+                process.cwd(),
+                'packages/core/src/shared/components/LeftNav.module.css',
+            ), 'utf8');
+            expect(css).toMatch(/\.layout\[data-xc-tier='compact'\] \.header\s*\{[^}]*max-height:\s*45%/s);
+            expect(css).toMatch(/\.layout\[data-xc-tier='compact'\] \.header\s*\{[^}]*overflow-y:\s*auto/s);
         });
     });
 });

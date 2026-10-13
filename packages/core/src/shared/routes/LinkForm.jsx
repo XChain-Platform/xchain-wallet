@@ -110,6 +110,12 @@ export function LinkForm({ walletId, onBack }) {
     const [hwStatus, setHwStatus] = useState('idle');
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
+    const mountedRef = useRef(true);
+
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => { mountedRef.current = false; };
+    }, []);
 
     const [previewCache, setPreviewCache] = useState(
         /** @type {Record<string, { loading: boolean, action: any | null, error: string | null }>} */ ({}),
@@ -194,36 +200,40 @@ export function LinkForm({ walletId, onBack }) {
     useEffect(() => {
         if (!chain1Id || !/^\d+$/.test(actionIndex1)) return;
         const key = `${chain1Id}:${actionIndex1}`;
-        if (previewCache[key]) return;
+        if (previewCache[key]?.loading || previewCache[key]?.action) return;
         const t = setTimeout(() => {
             setPreviewCache((p) => ({ ...p, [key]: { loading: true, action: null, error: null } }));
             messaging.getActionByIndex({ chainId: chain1Id, actionIndex: actionIndex1 })
                 .then((action) => {
+                    if (!mountedRef.current) return;
                     setPreviewCache((p) => ({ ...p, [key]: { loading: false, action, error: null } }));
                 })
                 .catch((err) => {
+                    if (!mountedRef.current) return;
                     setPreviewCache((p) => ({ ...p, [key]: { loading: false, action: null, error: err?.message || String(err) } }));
                 });
         }, 350);
         return () => clearTimeout(t);
-    }, [chain1Id, actionIndex1, messaging, previewCache]);
+    }, [chain1Id, actionIndex1, messaging]);
 
     useEffect(() => {
         if (!chain2Id || !/^\d+$/.test(actionIndex2)) return;
         const key = `${chain2Id}:${actionIndex2}`;
-        if (previewCache[key]) return;
+        if (previewCache[key]?.loading || previewCache[key]?.action) return;
         const t = setTimeout(() => {
             setPreviewCache((p) => ({ ...p, [key]: { loading: true, action: null, error: null } }));
             messaging.getActionByIndex({ chainId: chain2Id, actionIndex: actionIndex2 })
                 .then((action) => {
+                    if (!mountedRef.current) return;
                     setPreviewCache((p) => ({ ...p, [key]: { loading: false, action, error: null } }));
                 })
                 .catch((err) => {
+                    if (!mountedRef.current) return;
                     setPreviewCache((p) => ({ ...p, [key]: { loading: false, action: null, error: err?.message || String(err) } }));
                 });
         }, 350);
         return () => clearTimeout(t);
-    }, [chain2Id, actionIndex2, messaging, previewCache]);
+    }, [chain2Id, actionIndex2, messaging]);
 
     // Focus the password field when we land on the review stage so the
     // user can sign without reaching for the mouse.
@@ -235,6 +245,17 @@ export function LinkForm({ walletId, onBack }) {
 
     const trimmedMemo = memo.trim();
     const memoTooLong = memoLengthError(trimmedMemo);
+    const preview1 = chain1Id && /^\d+$/.test(actionIndex1)
+        ? previewCache[`${chain1Id}:${actionIndex1}`]
+        : null;
+    const preview2 = chain2Id && /^\d+$/.test(actionIndex2)
+        ? previewCache[`${chain2Id}:${actionIndex2}`]
+        : null;
+    const previewPending = Boolean(
+        actionIndex1 && actionIndex2
+        && /^\d+$/.test(actionIndex1) && /^\d+$/.test(actionIndex2)
+        && (!preview1 || preview1.loading || !preview2 || preview2.loading),
+    );
 
     const validationError = useMemo(() => {
         if (memoTooLong) return memoTooLong;
@@ -242,11 +263,15 @@ export function LinkForm({ walletId, onBack }) {
         if (!actionIndex1 || !actionIndex2) return null;
         if (!/^\d+$/.test(actionIndex1)) return 'The action number on chain A must be a whole number.';
         if (!/^\d+$/.test(actionIndex2)) return 'The action number on chain B must be a whole number.';
-        if (ticker1 === ticker2 && actionIndex1 === actionIndex2) {
+        if (ticker1 === ticker2 && BigInt(actionIndex1) === BigInt(actionIndex2)) {
             return 'Cannot link an action to itself.';
         }
+        if (preview1?.error) return 'Could not verify the action on chain A. Check the number and try again.';
+        if (preview2?.error) return 'Could not verify the action on chain B. Check the number and try again.';
+        if (preview1 && !preview1.loading && !preview1.action) return 'No action was found on chain A at that number.';
+        if (preview2 && !preview2.loading && !preview2.action) return 'No action was found on chain B at that number.';
         return null;
-    }, [ticker1, ticker2, actionIndex1, actionIndex2, memoTooLong]);
+    }, [ticker1, ticker2, actionIndex1, actionIndex2, memoTooLong, preview1, preview2]);
 
     const { isWatcherMode } = useWalletMode();
 
@@ -375,6 +400,10 @@ export function LinkForm({ walletId, onBack }) {
         }
         if (validationError) {
             setFormError(validationError);
+            return;
+        }
+        if (previewPending) {
+            setFormError('Wait for both action previews to finish loading.');
             return;
         }
         if (!actionIndex1 || !actionIndex2) {
@@ -691,11 +720,12 @@ export function LinkForm({ walletId, onBack }) {
                 <Button
                     type="submit"
                     variant="primary"
-                    loading={actionConfirm.composing}
-                    disabled={actionConfirm.composing}
+                    loading={actionConfirm.composing || previewPending}
+                    disabled={actionConfirm.composing || previewPending}
                 >
                     {actionConfirm.composing
                         ? 'Preparing review…'
+                        : previewPending ? 'Looking up actions…'
                         : singleEncode ? 'Link' : 'Review'}
                 </Button>
             )}
@@ -709,18 +739,18 @@ export function LinkForm({ walletId, onBack }) {
                     title="Chain A"
                     chainIds={chainIds}
                     chainId={chain1Id}
-                    onChainChange={setChain1Id}
+                    onChainChange={(value) => { setChain1Id(value); setFormError(null); }}
                     actionIndex={actionIndex1}
-                    onActionIndexChange={setActionIndex1}
+                    onActionIndexChange={(value) => { setActionIndex1(value); setFormError(null); }}
                     previewCache={previewCache}
                 />
                 <SidePanel
                     title="Chain B"
                     chainIds={chainIds}
                     chainId={chain2Id}
-                    onChainChange={setChain2Id}
+                    onChainChange={(value) => { setChain2Id(value); setFormError(null); }}
                     actionIndex={actionIndex2}
-                    onActionIndexChange={setActionIndex2}
+                    onActionIndexChange={(value) => { setActionIndex2(value); setFormError(null); }}
                     previewCache={previewCache}
                 />
             </div>

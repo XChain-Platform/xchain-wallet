@@ -111,10 +111,12 @@ describe('form-level error placement', () => {
 
         for (const [name, clearHandler] of files) {
             const pages = formPages(join(routesDir, name));
-            const page = pages.find((candidate) => references(attribute(candidate, 'status'), 'formError'));
-            expect(page, `${name} formError status`).toBeTruthy();
+            const candidates = pages.filter((candidate) => references(attribute(candidate, 'status'), 'formError'));
+            expect(candidates.length, `${name} formError status`).toBeGreaterThan(0);
+            // A file may hold a read-only review page that shows formError with no
+            // editable fields; the editable page is the one that must clear it.
             expect(
-                references(attribute(page, 'onChangeCapture'), clearHandler),
+                candidates.some((page) => references(attribute(page, 'onChangeCapture'), clearHandler)),
                 `${name} change clearing`,
             ).toBe(true);
             if (name === 'TokenWizard.jsx') {

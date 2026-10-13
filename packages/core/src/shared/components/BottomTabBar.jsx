@@ -8,9 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Icon } from '@xchain-wallet/core/ui';
-import { formatBadgeCount } from './LeftNav.jsx';
+import { formatBadgeCount, isNavItemActive } from './LeftNav.jsx';
 import styles from './BottomTabBar.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 
@@ -51,28 +51,24 @@ import { useBackHandler } from '../../ui/backStack.js';
  */
 
 const PRIMARY_TABS = [
-    { id: 'home', label: 'Home', Icon: Icon.HomeIcon, group: ['home', 'token-detail', 'addresses', 'wallet-picker', 'account-picker', 'wallet-details', 'wallet-rename', 'account-rename', 'add-account', 'add-wallet'] },
-    { id: 'history', label: 'History', Icon: Icon.HistoryIcon, group: ['history'] },
+    { id: 'home', label: 'Home', Icon: Icon.HomeIcon },
+    { id: 'history', label: 'History', Icon: Icon.HistoryIcon },
     // `spendable` marks the two rows signer mode promises are gone.
-    { id: 'send', label: 'Send', Icon: Icon.SendIcon, group: ['send'], spendable: true },
-    { id: 'scan', label: 'Scan', Icon: Icon.ScanIcon, group: ['scan'] },
+    { id: 'send', label: 'Send', Icon: Icon.SendIcon, spendable: true },
+    { id: 'scan', label: 'Scan', Icon: Icon.ScanIcon },
 ];
 
 const SHEET_PRIMARY = [
-    { id: 'receive', label: 'Receive', Icon: Icon.ReceiveIcon, group: ['receive'], spendable: true },
-    { id: 'markets', label: 'DEX', Icon: Icon.MarketIcon, group: ['markets', 'market'], requiresDex: true },
-    { id: 'dispensers-list', label: 'Dispensers', Icon: Icon.DollarIcon, group: ['dispensers-list', 'dispenser-detail', 'dispenser-explorer', 'dispenser'] },
-    { id: 'contracts-list', label: 'Contracts', Icon: Icon.ContractIcon, group: ['contracts-list', 'contract-detail', 'contract-deploy', 'contract-execute', 'contract-deposit', 'contract-withdraw', 'staking-dashboard', 'stake-detail', 'stake-new', 'stake-form', 'staking-unstake', 'staking-claim', 'staking-delegate', 'staking-revoke', 'operator-dashboard'], requiresVm: true },
-    { id: 'messaging', label: 'Messaging', Icon: Icon.MessageIcon, group: ['messaging', 'compose-message'] },
-    { id: 'contacts', label: 'Contacts', Icon: Icon.UsersIcon, group: ['contacts'] },
-    { id: 'lists', label: 'Lists', Icon: Icon.TokenListIcon, group: ['lists', 'list-detail', 'list-create', 'list-fork'] },
+    { id: 'receive', label: 'Receive', Icon: Icon.ReceiveIcon, spendable: true },
+    { id: 'markets', label: 'DEX', Icon: Icon.MarketIcon, requiresDex: true },
+    { id: 'dispensers-list', label: 'Dispensers', Icon: Icon.DollarIcon },
+    { id: 'contracts-list', label: 'Contracts', Icon: Icon.ContractIcon, requiresVm: true },
+    { id: 'messaging', label: 'Messaging', Icon: Icon.MessageIcon },
+    { id: 'contacts', label: 'Contacts', Icon: Icon.UsersIcon },
+    { id: 'lists', label: 'Lists', Icon: Icon.TokenListIcon },
     // PC-15: COINPAY obligations queue; a pending count also dots the More tab.
     { id: 'obligations', label: 'Payments due', Icon: Icon.ClockIcon, group: ['obligations'] },
 ];
-
-function isActive(view, group) {
-    return group.includes(view);
-}
 
 export function BottomTabBar({
     currentView,
@@ -86,6 +82,8 @@ export function BottomTabBar({
     badges = {},
 }) {
     const [sheetOpen, setSheetOpen] = useState(false);
+    const moreTriggerRef = useRef(null);
+    const sheetWasOpen = useRef(false);
     // The system Back gesture closes this before it leaves the screen.
     useBackHandler(sheetOpen ? () => setSheetOpen(false) : undefined);
 
@@ -106,6 +104,11 @@ export function BottomTabBar({
         if (sheetOpen) setSheetOpen(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentView]);
+
+    useEffect(() => {
+        if (sheetWasOpen.current && !sheetOpen) moreTriggerRef.current?.focus();
+        sheetWasOpen.current = sheetOpen;
+    }, [sheetOpen]);
 
     // Esc closes the sheet (sheet acts as a transient overlay).
     useEffect(() => {
@@ -134,12 +137,17 @@ export function BottomTabBar({
     // Messaging lives behind "More", so any unread inside the sheet also needs a
     // dot on the More tab itself or the user would never see it while collapsed.
     const sheetHasUnread = sheetRows.some((row) => badges[row.id] > 0);
+    const activeSheetRow = sheetRows.find((row) => isNavItemActive(row.id, currentView));
+    const moreActive = Boolean(activeSheetRow)
+        || isNavItemActive('settings', currentView)
+        || currentView === 'menu'
+        || currentView === 'alerts';
 
     return (
         <>
             <nav className={styles.bar} aria-label="Bottom navigation">
                 {primaryTabs.map((tab) => {
-                    const active = isActive(currentView, tab.group);
+                    const active = !moreActive && isNavItemActive(tab.id, currentView);
                     return (
                         <button
                             key={tab.id}
@@ -156,8 +164,10 @@ export function BottomTabBar({
                     );
                 })}
                 <button
+                    ref={moreTriggerRef}
                     type="button"
-                    className={`${styles.tab} ${sheetOpen ? styles.tabActive : ''}`}
+                    className={`${styles.tab} ${sheetOpen || moreActive ? styles.tabActive : ''}`}
+                    aria-current={moreActive ? 'page' : undefined}
                     aria-expanded={sheetOpen ? 'true' : 'false'}
                     aria-controls="xc-bottom-sheet"
                     onClick={() => setSheetOpen((v) => !v)}
@@ -190,14 +200,17 @@ export function BottomTabBar({
                         <div className={styles.handle} aria-hidden="true" />
                         <ul className={styles.sheetList} role="list">
                             {sheetRows.map((row) => {
-                                const active = isActive(currentView, row.group);
+                                const active = isNavItemActive(row.id, currentView);
                                 return (
                                     <li key={row.id}>
                                         <button
                                             type="button"
                                             className={`${styles.sheetItem} ${active ? styles.sheetItemActive : ''}`}
                                             aria-current={active ? 'page' : undefined}
-                                            onClick={() => onSelect(row.id)}
+                                            onClick={() => {
+                                                setSheetOpen(false);
+                                                onSelect(row.id);
+                                            }}
                                         >
                                             <span className={styles.sheetIcon} aria-hidden="true">
                                                 <row.Icon />
@@ -220,7 +233,10 @@ export function BottomTabBar({
                                     <button
                                         type="button"
                                         className={styles.sheetItem}
-                                        onClick={onOpenWalletPicker}
+                                        onClick={() => {
+                                            setSheetOpen(false);
+                                            onOpenWalletPicker();
+                                        }}
                                     >
                                         <span className={styles.sheetIcon} aria-hidden="true">
                                             <Icon.MoreIcon />
@@ -234,7 +250,10 @@ export function BottomTabBar({
                                     <button
                                         type="button"
                                         className={styles.sheetItem}
-                                        onClick={onOpenSettings}
+                                        onClick={() => {
+                                            setSheetOpen(false);
+                                            onOpenSettings();
+                                        }}
                                     >
                                         <span className={styles.sheetIcon} aria-hidden="true">
                                             <Icon.GearIcon />
@@ -248,7 +267,10 @@ export function BottomTabBar({
                                     <button
                                         type="button"
                                         className={styles.sheetItem}
-                                        onClick={onLock}
+                                        onClick={() => {
+                                            setSheetOpen(false);
+                                            onLock();
+                                        }}
                                     >
                                         <span className={styles.sheetIcon} aria-hidden="true">
                                             <Icon.LockIcon />

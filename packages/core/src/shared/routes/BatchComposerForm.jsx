@@ -230,33 +230,41 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     // Resolve each row's params; the first parse error blocks compose.
     const parsedRows = useMemo(() => rows.map((r) => ({ row: r, ...parseRowParams(r.paramsJson) })), [rows]);
 
-    const composeError = useMemo(() => {
-        for (let i = 0; i < parsedRows.length; i += 1) {
-            const pr = parsedRows[i];
-            if (!pr.row.action) return `Step ${i + 1}: pick an action.`;
-            if (pr.error) return `Step ${i + 1}: ${pr.error}`;
-            // Recheck the chain here, since a chain switch keeps the rows already queued.
-            if (!isActionOfferedOnChain(chainRegistry, chainId, pr.row.action)) {
-                const chainName = chainRegistry.get(chainId)?.displayName || chainId;
-                return `Step ${i + 1}: ${actionDisplayLabel(pr.row.action)} is not available on ${chainName}.`;
-            }
-            if (!isActionDataOfferedInBuild({ action: pr.row.action, params: pr.params }, { hasDexSurface })) {
-                return `Step ${i + 1}: ${actionDisplayLabel(pr.row.action)} is not available in this build.`;
-            }
+    const rowErrors = useMemo(() => parsedRows.map((pr, i) => {
+        if (!pr.row.action) return `Step ${i + 1}: pick an action.`;
+        if (pr.error) return `Step ${i + 1}: ${pr.error}`;
+        // A chain switch keeps queued rows, so every row is checked against
+        // the chain that will receive the batch.
+        if (!isActionOfferedOnChain(chainRegistry, chainId, pr.row.action)) {
+            const chainName = chainRegistry.get(chainId)?.displayName || chainId;
+            return `Step ${i + 1}: ${actionDisplayLabel(pr.row.action)} is not available on ${chainName}.`;
         }
-        // Pass params through (same shape goReview sends the SDK at compose
-        // time, ~line 216): validateBatchConstraints classifies ISSUE by
-        // params.TICK, so a live check with action-only entries would
-        // treat every ISSUE as top-level and warn on legal parent+child
-        // batches the chain accepts. A row whose TICK is not typed yet
-        // still classifies top-level (conservative), never the reverse.
+        if (!isActionDataOfferedInBuild({ action: pr.row.action, params: pr.params }, { hasDexSurface })) {
+            return `Step ${i + 1}: ${actionDisplayLabel(pr.row.action)} is not available in this build.`;
+        }
+        return null;
+    }), [parsedRows, hasDexSurface, chainId]);
+
+    const constraintError = useMemo(() => {
+        if (rowErrors.some(Boolean)) return null;
+        // Params stay attached because ISSUE constraints distinguish a parent
+        // ticker from its child tickers.
         const subActions = parsedRows.map((pr) => ({ action: pr.row.action, params: pr.params }));
         const constraintErrors = flowsLib.validateBatchConstraints(subActions);
         return constraintErrors.length > 0 ? constraintErrors[0] : null;
-    }, [parsedRows, hasDexSurface, chainId]);
+    }, [parsedRows, rowErrors]);
+
+    const composeError = useMemo(() => {
+        for (let i = 0; i < parsedRows.length; i += 1) {
+            if (rowErrors[i]) return rowErrors[i];
+        }
+        return constraintError;
+    }, [parsedRows, rowErrors, constraintError]);
 
     const updateRow = (i, patch) => setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
-    const addRow = () => setRows((rs) => [...rs, blankRow()]);
+    const addRow = () => setRows((rs) => (
+        rs.length >= flowsLib.BATCH_WEIGHT_BUDGET ? rs : [...rs, blankRow()]
+    ));
     const removeRow = (i) => setRows((rs) => rs.filter((_, idx) => idx !== i));
 
     async function goReview() {
@@ -559,7 +567,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                 uses the dedicated publisher instead.
                 </>
             )}
-            status={composeError ? <StatusMessage variant="error" className={styles.error}>{composeError}</StatusMessage> : null}
+            status={constraintError ? <StatusMessage variant="error" className={styles.error}>{constraintError}</StatusMessage> : null}
             actions={<Button type="button" variant="primary" onClick={goReview} disabled={Boolean(composeError)}>Review</Button>}
         >
             <label className={styles.pickerLabel}>
@@ -628,6 +636,11 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                                     spellCheck={false}
                                 />
                             </label>
+                            {rowErrors[i] ? (
+                                <StatusMessage variant="error" className={styles.error}>
+                                    {rowErrors[i]}
+                                </StatusMessage>
+                            ) : null}
                             <div className={styles.actions} style={{ justifyContent: 'flex-end' }}>
                                 <Button type="button" variant="ghost" onClick={() => removeRow(i)} disabled={rows.length <= 1}>
                                     Remove
@@ -638,8 +651,20 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                 ))}
             </ul>
             <div className={styles.actions} style={{ justifyContent: 'flex-start' }}>
-                <Button type="button" variant="secondary" onClick={addRow}>+ Add action</Button>
+                <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={addRow}
+                    disabled={rows.length >= flowsLib.BATCH_WEIGHT_BUDGET}
+                >
+                    + Add action
+                </Button>
             </div>
+            {rows.length >= flowsLib.BATCH_WEIGHT_BUDGET ? (
+                <p className={styles.hint}>
+                    {flowsLib.BATCH_WEIGHT_BUDGET} actions is the most one batch carries.
+                </p>
+            ) : null}
         </FormPage>,
     );
 }

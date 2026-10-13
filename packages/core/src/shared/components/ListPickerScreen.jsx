@@ -98,6 +98,11 @@ export function ListPickerScreen({
                     seen.add(key);
                     return true;
                 });
+                // A rejected LIST action cannot enforce an access filter and
+                // must not be offered as a bindable allow-list or block-list.
+                // Pending lists are not rejected and stay selectable.
+                uniq = uniq.filter((row) => !row.status
+                    || ['valid', 'pending'].includes(String(row.status).trim().toLowerCase()));
                 if (filterType) {
                     const keep = await Promise.all(uniq.map(async (row) => {
                         if (String(row.type) === String(filterType)) return true;

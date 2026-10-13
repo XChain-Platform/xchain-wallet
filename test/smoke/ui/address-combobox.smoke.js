@@ -89,9 +89,12 @@ assert.match(
     'mousedown preventDefault keeps focus / lets state settle',
 );
 
-// --- onPaste pass-through (§29.5) ----------------------------------------
+// --- onPaste handling (§29.5) --------------------------------------------
 
-assert.match(cmp, /onPaste=\{onPaste\}/, 'onPaste passed through to <Input>');
+assert.match(cmp, /onPaste=\{\(e\) => \{/, 'onPaste wrapper is wired to <Input>');
+assert.match(cmp, /onPaste\?\.\(e\)/, 'onPaste wrapper invokes the host handler');
+assert.match(cmp, /if \(e\.defaultPrevented\) return/, 'host handlers can consume URI paste');
+assert.match(cmp, /pasted\.trim\(\)/, 'unconsumed paste trims surrounding whitespace');
 
 // --- CSS module hooks ----------------------------------------------------
 

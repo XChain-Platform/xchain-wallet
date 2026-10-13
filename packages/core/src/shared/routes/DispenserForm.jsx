@@ -80,6 +80,7 @@ import {
     dispenserAddressVerdict,
     readDispenserAddressStanding,
 } from '../../flows/dispenserAddressStanding.js';
+import { listInBothSlots, listInBothSlotsMessage } from '../../flows/accessListSlots.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -311,7 +312,12 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
     useEffect(() => {
         setFormError(null);
-    }, [addressMode, existingAddressId]);
+    }, [
+        chainId, fromAddressId, ticker, giveAmount, escrow, payWith, getTick,
+        getTokenAmount, triggerPrice, oracleAddress, fiatCode, fiatAmount,
+        expMode, expInput, allowListIdx, blockListIdx, addressMode,
+        existingAddressId, outsideAddress, feePick, payFeeInNativeCoin,
+    ]);
 
     // Cluster P FOLLOWUP 5: form-draft persistence. Persists every
     // user-visible composition field (chain / source / give terms /
@@ -665,6 +671,12 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         const tick = ticker.trim().toUpperCase() || 'TOKEN';
         const per = giveAmount.trim() || '?';
         const esc = escrow.trim() || '?';
+        if (payWith === 'token') {
+            const paymentTick = getTick.trim().toUpperCase() || 'TOKEN';
+            const paymentAmount = getTokenAmount.trim() || '?';
+            const fillsNote = fillsEstimate !== null ? ` The dispenser holds about ${fillsEstimate} fills.` : '';
+            return `You will lock ${esc} ${tick}. Each time someone sends ${paymentAmount} ${paymentTick}, they will receive ${per} ${tick}.${fillsNote}`;
+        }
         if (oracleAddress.trim() && fiatCode) {
             // The oracle's usage fee, if it charges one, is a real payment leaving this
             // transaction, so say so here rather than letting it appear only as
@@ -678,7 +690,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         const coin = coinTicker || 'coin';
         const fillsNote = fillsEstimate !== null ? ` The dispenser holds about ${fillsEstimate} fills.` : '';
         return `You will lock ${esc} ${tick}. Each time someone sends ${trig} ${coin}, they will receive ${per} ${tick}.${fillsNote}`;
-    }, [ticker, giveAmount, escrow, triggerPrice, oracleAddress, fiatCode, fiatAmount, coinTicker, fillsEstimate]);
+    }, [ticker, giveAmount, escrow, payWith, getTick, getTokenAmount, triggerPrice, oracleAddress, fiatCode, fiatAmount, coinTicker, fillsEstimate]);
 
     const actionParams = useMemo(() => {
         /** @type {Record<string, string>} */
@@ -762,7 +774,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
     async function handleReview(event) {
         event.preventDefault();
-        if (derivingGetAddress) return;
+        if (derivingGetAddress || actionConfirm.composing) return;
         if (!chainId || !fromAddress) {
             setFormError('Pick a source address first.');
             return;
@@ -777,12 +789,12 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             return;
         }
         const ga = giveAmount.trim();
-        if (!ga || Number(ga) <= 0) {
+        if (!isPositiveDecimal(ga)) {
             setFormError('Per-fill give amount must be a positive number.');
             return;
         }
         const esc = escrow.trim();
-        if (!esc || Number(esc) <= 0) {
+        if (!isPositiveDecimal(esc)) {
             setFormError('Escrow amount must be a positive number.');
             return;
         }
@@ -800,9 +812,39 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             if (!isPositiveDecimal(getTokenAmount)) {
                 setFormError('Enter a positive token amount buyers pay per fill.'); return;
             }
-        } else if (!oracle && !fa && !trig) {
-            setFormError('Set a trigger price, or enable fiat / oracle pricing under Advanced.');
-            return;
+        } else {
+            if (!oracle && !fa && !trig) {
+                setFormError('Set a trigger price, or enable fiat / oracle pricing under Advanced.');
+                return;
+            }
+            if (oracle) {
+                const oracleFormatError = outsideAddressError(oracle, descriptor);
+                if (oracleFormatError) { setFormError(`Oracle address: ${oracleFormatError}`); return; }
+                if (!fiatCode) {
+                    setFormError('Oracle pricing needs a fiat currency. Pick one under Advanced.');
+                    return;
+                }
+            }
+            if (fa && !fiatCode) {
+                setFormError('Fiat pricing needs a fiat currency. Pick one under Advanced.');
+                return;
+            }
+            if (fiatCode && !oracle && !fa) {
+                setFormError('Enter a fiat amount, add an oracle address, or set Priced in fiat to none.');
+                return;
+            }
+            if (fa && !isValidFiatAmount(fa)) {
+                setFormError('Fiat amount can have at most 2 decimal places, like 12.34 or 3.');
+                return;
+            }
+            if (!oracle && trig && !isPositiveDecimal(trig)) {
+                setFormError('Trigger price must be a positive number.');
+                return;
+            }
+            if (priceNotes.block) {
+                setFormError(PRICE_BELOW_FLOOR_ERROR);
+                return;
+            }
         }
         if (expMode === 'custom') {
             const raw = expInput.trim();
@@ -810,20 +852,8 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             const unix = localInputToUnix(raw);
             if (!unix || unix <= Math.floor(Date.now() / 1000)) { setFormError('Expiration must be in the future.'); return; }
         }
-        if (trig && !isPositiveDecimal(trig)) {
-            setFormError('Trigger price must be a positive number.');
-            return;
-        }
-        if (priceNotes.block) {
-            setFormError(PRICE_BELOW_FLOOR_ERROR);
-            return;
-        }
-        if (oracle && !fiatCode) {
-            setFormError('Oracle pricing needs a fiat currency. Pick one under Advanced.');
-            return;
-        }
-        if (fa && !isValidFiatAmount(fa)) {
-            setFormError('Fiat amount can have at most 2 decimal places, like 12.34 or 3.');
+        if (listInBothSlots({ allowList: allowListIdx, blockList: blockListIdx })) {
+            setFormError(listInBothSlotsMessage(allowListIdx));
             return;
         }
         if (addressMode === 'existing' && !existingAddress) {
@@ -1108,11 +1138,10 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         variant="primary"
                         loading={stage === 'submitting'}
                         disabled={
-                            isWatcherMode
-                                ? false
-                                : hw
-                                    ? hwStatus !== 'available'
-                                    : (!signerReady && password.length === 0)
+                            stage === 'submitting'
+                            || (!isWatcherMode && (hw
+                                ? hwStatus !== 'available'
+                                : (!signerReady && password.length === 0)))
                         }
                     >
                         {isWatcherMode
@@ -1146,7 +1175,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                             <AddressText address={fromAddress.address} />
                         )}
                     </dd>
-                    {(decoded?.details || []).map((d) => (
+                    {(decoded?.details || []).filter((d) => d.label !== 'Dispenser address').map((d) => (
                         <DetailRow key={d.label} label={d.label} value={d.value} />
                     ))}
                     <DetailRow

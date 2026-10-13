@@ -879,7 +879,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
             <button
                 type="button"
                 onClick={() => setShowAdvanced((v) => !v)}
-                style={{ background: 'none', border: 0, padding: '0.25rem 0', color: 'var(--xc-accent-primary)', cursor: 'pointer', font: 'inherit' }}
+                style={{ background: 'none', border: 0, padding: '0.25rem 0', color: 'var(--xc-accent-text)', cursor: 'pointer', font: 'inherit' }}
             >
                 {showAdvanced ? 'Hide advanced options' : 'Advanced options (receive address, lists)'}
             </button>
