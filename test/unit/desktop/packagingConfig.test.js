@@ -23,6 +23,18 @@ function trueEntitlements(name) {
     return [...xml.matchAll(/<key>([^<]+)<\/key>\s*<true\/>/g)].map((match) => match[1]);
 }
 
+describe('desktop Electron fuses', () => {
+    it('locks down Node entry points and protects packaged browser data', () => {
+        expect(config.electronFuses).toEqual({
+            runAsNode: false,
+            enableNodeOptionsEnvironmentVariable: false,
+            enableNodeCliInspectArguments: false,
+            enableCookieEncryption: true,
+            enableEmbeddedAsarIntegrityValidation: true,
+        });
+    });
+});
+
 describe('desktop macOS packaging', () => {
     it('packages the QR camera consent text and least-privilege hardened runtime entitlements', () => {
         expect(config.mac.hardenedRuntime).toBe(true);
