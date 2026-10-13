@@ -54,7 +54,7 @@ import { DialogsSection } from './sections/DialogsSection.jsx';
 // pattern lands in two routes or you want to codify a one-off as
 // canonical going forward.
 
-const SECTIONS = [
+export const SECTIONS = [
     { id: 'color-palette',         label: 'Color palette',          Component: ColorPaletteSection },
     { id: 'typography',            label: 'Typography',             Component: TypographySection },
     { id: 'spacing',               label: 'Spacing & radii',        Component: SpacingSection },
