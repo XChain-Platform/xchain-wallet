@@ -121,7 +121,7 @@ const WIPE_COPY = {
 /**
  * @param {object} props
  * @param {'corrupt' | 'locked' | 'unavailable' | 'evicted'} props.kind
- * @param {() => void} [props.onRetry] defaults to reloading the app
+ * @param {() => void | Promise<void>} [props.onRetry] defaults to reloading the app
  * @param {() => Promise<void>} [props.wipe] injectable for tests
  */
 export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
@@ -137,10 +137,18 @@ export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
     const [confirmText, setConfirmText] = useState('');
     const [busy, setBusy] = useState(false);
     const [wipeError, setWipeError] = useState(/** @type {string | null} */ (null));
+    const [retryError, setRetryError] = useState(/** @type {string | null} */ (null));
 
-    function handleRetry() {
-        if (onRetry) { onRetry(); return; }
-        if (typeof window !== 'undefined') window.location.reload();
+    async function handleRetry() {
+        setRetryError(null);
+        try {
+            if (onRetry) await onRetry();
+            else if (typeof window !== 'undefined') window.location.reload();
+            return true;
+        } catch {
+            setRetryError('Could not try again. Check your connection, then retry.');
+            return false;
+        }
     }
 
     async function handleWipe() {
@@ -150,7 +158,8 @@ export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
         setWipeError(null);
         try {
             await wipe();
-            handleRetry();
+            const retried = await handleRetry();
+            if (!retried) setBusy(false);
         } catch {
             setWipeError(wipeCopy.failed);
             setBusy(false);
@@ -177,9 +186,12 @@ export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
                         </p>
 
                         {offersRetry ? (
-                            <Button type="button" variant="primary" block onClick={handleRetry}>
+                            <Button type="button" variant="primary" block onClick={() => { void handleRetry(); }}>
                                 {t('common.tryAgain')}
                             </Button>
+                        ) : null}
+                        {retryError ? (
+                            <StatusMessage variant="error">{retryError}</StatusMessage>
                         ) : null}
 
                         {/* Offered for `corrupt` and `evicted` alone. On `locked` the

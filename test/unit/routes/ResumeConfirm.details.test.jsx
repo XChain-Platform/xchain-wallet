@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { RESUME_TTL_MS } from '../../../packages/core/src/flows/confirmResume.js';
 
 const mocks = vi.hoisted(() => ({
     confirm: vi.fn(),
@@ -71,6 +72,28 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('ResumeConfirm transaction result details', () => {
+    it('revalidates the stored request when approval happens after its TTL', async () => {
+        const staleSession = session();
+        const sendToken = vi.fn().mockResolvedValue({ txid: TXID });
+        mocks.confirm.mockImplementation(async ({ onApprove }) => {
+            staleSession.createdAt = Date.now() - RESUME_TTL_MS - 1;
+            return onApprove({}, staleSession.composed);
+        });
+        const messaging = {
+            sendToken,
+            clearConfirmSession: vi.fn().mockResolvedValue(undefined),
+        };
+
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <ResumeConfirm session={staleSession} onDone={vi.fn()} onCancel={vi.fn()} />
+            </MessagingProvider>,
+        );
+
+        expect(await screen.findByText(/session is not resumable/i)).toBeTruthy();
+        expect(sendToken).not.toHaveBeenCalled();
+    });
+
     it('returns to home from the page header', async () => {
         const onDone = vi.fn();
         mocks.confirm.mockResolvedValue({ txid: TXID });

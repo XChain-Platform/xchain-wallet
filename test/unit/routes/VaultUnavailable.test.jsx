@@ -249,4 +249,14 @@ describe('VaultUnavailable: retry', () => {
         fireEvent.click(screen.getByRole('button', { name: /try again/i }));
         expect(onRetry).toHaveBeenCalledTimes(1);
     });
+
+    it('handles an asynchronous retry failure without leaking its rejection', async () => {
+        const onRetry = vi.fn().mockRejectedValue(new Error('raw retry failure'));
+        renderScreen({ kind: 'locked', onRetry });
+
+        fireEvent.click(screen.getByRole('button', { name: /try again/i }));
+
+        expect(await screen.findByText(/could not try again/i)).toBeTruthy();
+        expect(screen.queryByText(/raw retry failure/i)).toBeNull();
+    });
 });

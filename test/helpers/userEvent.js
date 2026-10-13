@@ -29,17 +29,19 @@ function focusableElements() {
 function pressKey(key, init = {}) {
     const target = document.activeElement || document.body;
     const proceeds = fireEvent.keyDown(target, { key, ...init });
-    if (
-        proceeds
+    // A printable key types exactly one character into an editable text field,
+    // between keydown and keyup as a browser does.
+    const types = proceeds
         && key.length === 1
-        && (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)
+        && (target instanceof HTMLTextAreaElement
+            || (target instanceof HTMLInputElement && !['checkbox', 'radio'].includes(target.type)))
         && !target.readOnly
-        && !target.disabled
-    ) {
-        fireEvent.change(target, { target: { value: `${target.value}${key}` } });
+        && !target.disabled;
+    if (types) {
+        fireEvent.input(target, { target: { value: `${target.value}${key}` } });
     }
     fireEvent.keyUp(target, { key, ...init });
-    if (!proceeds) return;
+    if (!proceeds || types) return;
 
     if (target instanceof HTMLSelectElement && (key === 'ArrowDown' || key === 'ArrowUp')) {
         const delta = key === 'ArrowDown' ? 1 : -1;
@@ -47,12 +49,6 @@ function pressKey(key, init = {}) {
         if (next !== target.selectedIndex) {
             fireEvent.change(target, { target: { value: target.options[next].value } });
         }
-        return;
-    }
-
-    if (key.length === 1 && target instanceof HTMLInputElement
-        && !['checkbox', 'radio'].includes(target.type)) {
-        fireEvent.input(target, { target: { value: `${target.value}${key}` } });
         return;
     }
 
