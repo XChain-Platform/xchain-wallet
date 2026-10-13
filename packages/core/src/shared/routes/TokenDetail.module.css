@@ -7,6 +7,14 @@
     flex: 0 0 auto;
 }
 
+.headerTitle {
+    display: block;
+    max-width: min(60vw, 32rem);
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.2;
+}
+
 
 
 /* Body sizing mirrors Home.module.css exactly so the two routes share
@@ -959,6 +967,17 @@
 
 .creatorCell {
     font-family: var(--xc-font-mono, monospace);
+    overflow-wrap: anywhere;
+}
+
+.copyableValue,
+.holdersAddrWrap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: var(--xc-space-2);
+    min-width: 0;
 }
 
 .lockedFlag {
@@ -997,11 +1016,14 @@
     justify-content: space-between;
     gap: var(--xc-space-2);
     font-size: var(--xc-text-sm);
+    align-items: center;
+    flex-wrap: wrap;
 }
 
 .holdersAddr {
     font-family: var(--xc-font-mono, monospace);
     color: var(--xc-text);
+    overflow-wrap: anywhere;
 }
 
 .holdersQty {

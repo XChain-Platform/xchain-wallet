@@ -13,7 +13,7 @@
 // gets a plain message in the chart's place and no range tabs.
 
 import { describe, it, expect, vi, afterEach, beforeAll, afterAll } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import React from 'react';
 
 vi.mock('../../../packages/core/src/flows/demoMode.js', async (importOriginal) => {
@@ -67,10 +67,14 @@ describe('TokenDetail price history', () => {
         expect(screen.queryByRole('tablist', { name: 'Chart range' })).toBeNull();
     });
 
-    it('still draws a synthesized chart for the demo wallet', async () => {
+    it('draws selectable synthesized ranges only for the demo wallet', async () => {
         renderDetail('demo-wallet');
         const chart = await screen.findByRole('img', { name: 'Price trend' });
         expect(chart.querySelector('polyline').getAttribute('points').length).toBeGreaterThan(10);
+        const ranges = screen.getByRole('tablist', { name: 'Chart range' });
+        expect(ranges).toBeTruthy();
+        fireEvent.click(screen.getByRole('tab', { name: '24h' }));
+        expect(screen.getByLabelText('24h price chart')).toBeTruthy();
         expect(screen.queryByText('No price history yet')).toBeNull();
     });
 });
