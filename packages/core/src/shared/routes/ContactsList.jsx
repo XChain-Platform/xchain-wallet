@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, FormPage, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useToast } from '../components/ToastHost.jsx';
@@ -72,7 +72,6 @@ function ChainCoinIcon({ chain }) {
 export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPrefill, onScanPrefillConsumed, onOpenBackup }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
     const { showToast } = useToast();
     const confirmDialog = useConfirmModal();
 
@@ -487,13 +486,9 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
         />
     );
 
-    // `card` controls the raised inner card used by the form/detail views
-    // in the full (desktop) variant. The list view passes card=false so its
-    // contacts card sits directly on the screen background, exactly like the
-    // Home balances list (no card-in-card).
-    const wrap = (children, { card = true } = {}) => (
+    const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull && card ? <div className={styles.card}>{children}</div> : children}
+            {children}
             {confirmDialog.request ? (
                 <ConfirmModal
                     {...confirmDialog.request}
@@ -534,7 +529,18 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
         // Litecoin / Dogecoin / Unknown) and stored on the entry's chain.
         const entry0 = formEntries[0];
         return wrap(
-            <form onSubmit={handleSave} noValidate>
+            <FormPage
+                label="New contact"
+                onSubmit={handleSave}
+                status={submitError ? (
+                    <p role="alert" className={styles.error} style={{ marginTop: '0.5rem' }}>{submitError}</p>
+                ) : null}
+                actions={(
+                    <Button type="submit" variant="primary" loading={submitting}>
+                        Save
+                    </Button>
+                )}
+            >
                 <Input label="Name" value={formName} onChange={(e) => setFormName(e.target.value)} />
                 <Input
                     label="Address"
@@ -560,15 +566,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                         onChange={(e) => setFormNotes(e.target.value)}
                     />
                 </div>
-                {submitError ? (
-                    <p role="alert" className={styles.error} style={{ marginTop: '0.5rem' }}>{submitError}</p>
-                ) : null}
-                <div className={picker.formActions}>
-                    <Button type="submit" variant="primary" block loading={submitting}>
-                        Save
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -577,7 +575,18 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
         // formEntries (populated from the contact by startEdit). Addresses are
         // managed from the detail view, not this form.
         return wrap(
-            <form onSubmit={handleSave} noValidate>
+            <FormPage
+                label="Edit contact"
+                onSubmit={handleSave}
+                status={submitError ? (
+                    <p role="alert" className={styles.error} style={{ marginTop: '0.5rem' }}>{submitError}</p>
+                ) : null}
+                actions={(
+                    <Button type="submit" variant="primary" loading={submitting}>
+                        Save
+                    </Button>
+                )}
+            >
                 <Input label="Name" value={formName} onChange={(e) => setFormName(e.target.value)} />
                 <div className={picker.notesField}>
                     <label className={picker.notesLabel}>Notes</label>
@@ -588,15 +597,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                         onChange={(e) => setFormNotes(e.target.value)}
                     />
                 </div>
-                {submitError ? (
-                    <p role="alert" className={styles.error} style={{ marginTop: '0.5rem' }}>{submitError}</p>
-                ) : null}
-                <div className={picker.formActions}>
-                    <Button type="submit" variant="primary" block loading={submitting}>
-                        Save
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -618,7 +619,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             else runAction(action, primary);
         };
         return wrap(
-            <>
+            <ListPage>
                 {notice ? <StatusMessage variant="success">{notice}</StatusMessage> : null}
                 <div className={picker.infoCard}>
                     <div style={{ fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)', fontWeight: 700, marginBottom: '0.25rem' }}>Name</div>
@@ -695,25 +696,20 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     ) : null}
                 </div>
 
-                <div className={picker.tabsRow} role="tablist">
-                    <button
-                        type="button"
-                        role="tab"
-                        aria-selected="true"
-                        className={`${picker.tab} ${picker.tabActive}`}
-                    >
-                        <span className={picker.tabLabel}>Addresses</span>
-                    </button>
-                    <button
-                        type="button"
-                        className={picker.addAddressBtn}
-                        onClick={() => { setAddAddrValue(''); setAddAddrError(null); setAddAddrOpen(true); }}
-                        aria-label="Add address"
-                        title="Add address"
-                    >
-                        <Icon.PlusIcon />
-                    </button>
-                </div>
+                <SectionHeader
+                    title="Addresses"
+                    trailing={(
+                        <button
+                            type="button"
+                            className={picker.addAddressBtn}
+                            onClick={() => { setAddAddrValue(''); setAddAddrError(null); setAddAddrOpen(true); }}
+                            aria-label="Add address"
+                            title="Add address"
+                        >
+                            <Icon.PlusIcon />
+                        </button>
+                    )}
+                />
 
                 <ul className={picker.tabPanel} style={{ listStyle: 'none', padding: 0, margin: 'var(--xc-space-2) 0 0' }}>
                     {active.entries.map((e, i) => {
@@ -769,16 +765,17 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                         </div>
                     </div>
                 ) : null}
-            </>,
+            </ListPage>,
         );
     }
 
     // mode === 'list'
     return wrap(
-        <>
-            <div className={picker.toolbar}>
+        <ListPage
+            toolbar={(
+                <>
                 <input
-                    type="text"
+                    type="search"
                     className={picker.search}
                     placeholder="Search"
                     value={query}
@@ -798,7 +795,9 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     <option value="name">A to Z</option>
                     <option value="newest">Newest</option>
                 </select>
-            </div>
+                </>
+            )}
+        >
             {duplicateGroups.length > 0 ? (
                 <StatusMessage
                     id="contacts-duplicate-names"
@@ -832,9 +831,12 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 </StatusMessage>
             ) : null}
             {contacts.length === 0 ? (
-                <div className={picker.emptyCard}>No contacts yet. Tap + to add one and label addresses across the inbox and history.</div>
+                <EmptyState
+                    title="No contacts yet."
+                    body="Tap + to add one and label addresses across the inbox and history."
+                />
             ) : filteredContacts.length === 0 ? (
-                <div className={picker.emptyCard}>No contacts match your filters.</div>
+                <EmptyState title="No contacts match your filters." />
             ) : (
                 <div className={picker.list} role="list" aria-label="Contacts">
                     {filteredContacts.map((c) => {
@@ -858,8 +860,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     })}
                 </div>
             )}
-        </>,
-        { card: false },
+        </ListPage>,
     );
 }
 

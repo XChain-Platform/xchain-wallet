@@ -13,6 +13,8 @@ import { useProtectedScreen } from '../utils/screenGuard.js';
 import {
     Screen,
     PageHeader,
+    FormPage,
+    ListPage,
     Button,
     Input,
     ChainBadge,
@@ -69,7 +71,6 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
 
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [stage, setStage] = useState(
         /** @type {'explain' | 'create' | 'submitting' | 'backup' | 'done'} */ ('explain'),
@@ -194,13 +195,13 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            {children}
         </Screen>
     );
 
     if (stage === 'explain') {
         return wrap(
-            <>
+            <ListPage>
                 <h2 className={styles.successTitle}>Why migrate?</h2>
                 <p style={explainParagraphStyle}>
                     Your current wallet uses the Counterwallet / FreeWallet
@@ -227,7 +228,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                         Continue
                     </Button>
                 </div>
-            </>,
+            </ListPage>,
         );
     }
 
@@ -236,7 +237,20 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
     // the only moment it exists outside the vault.
     if (stage === 'backup') {
         return wrap(
-            <>
+            <FormPage
+                label="Back up new recovery phrase"
+                onSubmit={(event) => {
+                    event.preventDefault();
+                    if (!wroteItDown) return;
+                    setMnemonic(null);
+                    setStage('done');
+                }}
+                actions={(
+                    <Button type="submit" variant="primary" disabled={!wroteItDown}>
+                        Continue to sweep
+                    </Button>
+                )}
+            >
                 <h2 className={styles.successTitle}>Write down your recovery phrase</h2>
                 <p style={explainParagraphStyle}>
                     These 12 words are the only way to restore your new BIP39
@@ -244,7 +258,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                     somewhere safe. Anyone who has them can spend your funds,
                     and nobody can recover them for you.
                 </p>
-                {mnemonic ? <MnemonicGrid mnemonic={mnemonic} variant={isFull ? 'full' : 'small'} /> : null}
+                {mnemonic ? <MnemonicGrid mnemonic={mnemonic} variant={variant === 'full' ? 'full' : 'small'} /> : null}
                 <label className={styles.hint} style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'center', margin: 'var(--xc-space-3) 0' }}>
                     <input
                         type="checkbox"
@@ -253,22 +267,13 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                     />
                     I have written down my recovery phrase.
                 </label>
-                <div className={styles.actions}>
-                    <Button
-                        variant="primary"
-                        disabled={!wroteItDown}
-                        onClick={() => { setMnemonic(null); setStage('done'); }}
-                    >
-                        Continue to sweep
-                    </Button>
-                </div>
-            </>,
+            </FormPage>,
         );
     }
 
     if (stage === 'done') {
         return wrap(
-            <>
+            <ListPage>
                 <h2 className={styles.successTitle}>New BIP39 wallet ready</h2>
                 <p className={styles.hint}>
                     Your legacy wallet is untouched. To complete the migration,
@@ -325,12 +330,25 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={handleDone}>Done</Button>
                 </div>
-            </>,
+            </ListPage>,
         );
     }
 
     return wrap(
-        <form onSubmit={handleCreate} noValidate>
+        <FormPage
+            label="Create BIP39 wallet"
+            onSubmit={handleCreate}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={stage === 'submitting'}
+                    disabled={stage === 'submitting'}
+                >
+                    {stage === 'submitting' ? 'Creating wallet…' : 'Create BIP39 wallet'}
+                </Button>
+            )}
+        >
             <Input
                 label="New wallet name"
                 value={name}
@@ -366,16 +384,6 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                 We'll generate a fresh BIP39 recovery phrase when you submit.
                 Your legacy wallet password is not needed here.
             </p>
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    loading={stage === 'submitting'}
-                    disabled={stage === 'submitting'}
-                >
-                    {stage === 'submitting' ? 'Creating wallet…' : 'Create BIP39 wallet'}
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }
