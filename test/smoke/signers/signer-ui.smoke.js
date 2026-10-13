@@ -215,7 +215,9 @@ for (const [shell, appPath, offersTrezor] of [
 ]) {
     const app = readFileSync(appPath, 'utf8');
     assert.ok(
-        /import\s*\{\s*PairSignerForm\s*\}/.test(app),
+        (/import\s*\{\s*PairSignerForm\s*\}/.test(app)
+            // Startup code split: the route loads on first open.
+            || /const\s+PairSignerForm\s*=\s*lazyRoute\(\s*\(\)\s*=>\s*import\([^)]*PairSignerForm\.jsx['"]\)/.test(app)),
         `${shell} App.jsx imports PairSignerForm`,
     );
     assert.ok(
@@ -232,7 +234,8 @@ for (const [shell, appPath, offersTrezor] of [
     );
     if (offersTrezor) {
         assert.ok(
-            /import\s*\{\s*pairTrezorSigner\s*\}/.test(app)
+            (/import\s*\{\s*pairTrezorSigner\s*\}/.test(app)
+                || /const\s+pairTrezorSigner\s*=\s*\([^)]*\)\s*=>\s*import\(/.test(app))
                 && /pairTrezor=\{pairTrezorSigner\}/.test(app),
             `${shell} App.jsx imports + injects the Trezor factory`,
         );
@@ -261,13 +264,13 @@ assert.ok(
     'popup App.jsx does NOT import the (deleted) Trezor factory: Trezor is dropped from the MV3 extension',
 );
 assert.ok(
-    /from ['"]\.\.\/signers\/ledgerFactory\.js['"]/.test(extAppSrc),
-    'popup App.jsx still imports the Ledger factory via relative path',
+    /(from|import\() *['"]\.\.\/signers\/ledgerFactory\.js['"]/.test(extAppSrc),
+    'popup App.jsx still imports the Ledger factory via relative path (static or on first use)',
 );
 
 const webAppSrc = readFileSync(join(web, 'src', 'App.jsx'), 'utf8');
 assert.ok(
-    /from ['"]\.\/signers\/trezorFactory\.js['"]/.test(webAppSrc),
+    /(from|import\() *['"]\.\/signers\/trezorFactory\.js['"]/.test(webAppSrc),
     'web App.jsx uses relative path to trezorFactory',
 );
 
