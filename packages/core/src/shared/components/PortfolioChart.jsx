@@ -36,9 +36,9 @@ export const RANGES = [
  * Portfolio performance chart for Home.
  *
  * Sums each row's current fiat value into a single time series sized
- * by the active range. For native rows with a real CoinGecko sparkline
- * we use it for 24h / 7d; everything else falls through to the same
- * deterministic walk TokenDetail uses on tokens without a history feed.
+ * by the active range. Native rows chart their real CoinGecko sparkline
+ * (24h / 7d). A real wallet charts nothing else; only the demo wallet
+ * fills the gaps with the deterministic walk Sparkline.jsx provides.
  * Each row's contribution is scaled so its series ends at the row's
  * current fiat value, which means the series end always equals the
  * portfolio total and stays in sync with TotalBalanceHero.
@@ -53,8 +53,13 @@ export function PortfolioChart({ rows, walletId }) {
     const fiatCurrency = settings?.fiatCurrency || 'USD';
     const [hidden] = useBalancesHidden();
     const [chartVisible] = usePortfolioChartVisible();
-    const [rangeId, setRangeId] = useState('30d');
-    const range = RANGES.find((r) => r.id === rangeId) || RANGES[2];
+    // Only 24h and 7d have recorded prices behind them, so a real wallet
+    // offers just those and opens on 7d; the longer ranges exist for the
+    // demo wallet's synthesized walk.
+    const isDemo = isDemoWallet(walletId);
+    const ranges = isDemo ? RANGES : RANGES.filter((r) => r.realCapable);
+    const [rangeId, setRangeId] = useState(isDemo ? '30d' : '7d');
+    const range = ranges.find((r) => r.id === rangeId) || ranges[ranges.length - 1];
 
     // Pull native price entries (with sparkline) for any native row in
     // the displayed set. Mirrors TotalBalanceHero's fetch pattern.
@@ -71,8 +76,6 @@ export function PortfolioChart({ rows, walletId }) {
 
     // A demo wallet prices itself from its own fixtures, like every other
     // number on this screen (see TotalBalanceHero for the whole argument).
-    const isDemo = isDemoWallet(walletId);
-
     const [priceMap, setPriceMap] = useState(/** @type {Record<string, any>} */ ({}));
     useEffect(() => {
         if (isDemo) {
@@ -107,8 +110,8 @@ export function PortfolioChart({ rows, walletId }) {
     const seedId = isDemo ? DEMO_CHART_SEED : walletId;
 
     const series = useMemo(
-        () => buildPortfolioSeries(rows, priceMap, seedId, range),
-        [rows, priceMap, seedId, range],
+        () => buildPortfolioSeries(rows, priceMap, seedId, range, isDemo),
+        [rows, priceMap, seedId, range, isDemo],
     );
 
     const hasData = Array.isArray(series) && series.length >= 2;
@@ -152,13 +155,13 @@ export function PortfolioChart({ rows, walletId }) {
                 <div className={styles.placeholder}>No price history for this range yet.</div>
             )}
             <div className={styles.ranges} role="tablist" aria-label="Chart range">
-                {RANGES.map((r) => (
+                {ranges.map((r) => (
                     <button
                         key={r.id}
                         type="button"
                         role="tab"
-                        aria-selected={r.id === rangeId ? 'true' : 'false'}
-                        className={`${styles.range} ${r.id === rangeId ? styles.rangeActive : ''}`}
+                        aria-selected={r.id === range.id ? 'true' : 'false'}
+                        className={`${styles.range} ${r.id === range.id ? styles.rangeActive : ''}`}
                         onClick={() => setRangeId(r.id)}
                     >
                         {r.label}
@@ -171,7 +174,7 @@ export function PortfolioChart({ rows, walletId }) {
 
 // `seedId` is the wallet's own id for a real wallet and a constant for a
 // demo one; it only ever feeds the synthesized walk's seed.
-function buildPortfolioSeries(rows, priceMap, seedId, range) {
+function buildPortfolioSeries(rows, priceMap, seedId, range, synthesize) {
     if (!Array.isArray(rows) || rows.length === 0) return null;
     const points = range.points;
     if (points < 2) return null;
@@ -180,7 +183,7 @@ function buildPortfolioSeries(rows, priceMap, seedId, range) {
     for (const row of rows) {
         const current = fiatValueOf(row);
         if (current === null || current === 0) continue;
-        const rowSeries = seriesForRow(row, current, priceMap, seedId, range);
+        const rowSeries = seriesForRow(row, current, priceMap, seedId, range, synthesize);
         if (!rowSeries) continue;
         anyContrib = true;
         for (let i = 0; i < points; i += 1) sums[i] += rowSeries[i];
@@ -188,7 +191,7 @@ function buildPortfolioSeries(rows, priceMap, seedId, range) {
     return anyContrib ? sums : null;
 }
 
-function seriesForRow(row, current, priceMap, seedId, range) {
+function seriesForRow(row, current, priceMap, seedId, range, synthesize) {
     // Native row + real CoinGecko sparkline → scale into the row's
     // current fiat value. The series always ends at `current`, so the
     // summed chart's last point equals the portfolio total exactly.
@@ -208,7 +211,11 @@ function seriesForRow(row, current, priceMap, seedId, range) {
             }
         }
     }
-    // Otherwise synthesize. Seeded so re-renders stay stable but each
+    // A real wallet charts only recorded prices (§45.4: never fabricate a
+    // number), so a row with no recorded history sits out; with none left
+    // the card says there is no history yet.
+    if (!synthesize) return null;
+    // A demo wallet synthesizes. Seeded so re-renders stay stable but each
     // (wallet, row, range) combination gets its own walk shape.
     const key = `${seedId || '_'}|${row.chainId || ''}|${row.kind === 'native' ? 'native' : row.tick}|${range.id}|${current.toFixed(2)}`;
     const { sparkline } = synthesizeTokenChart(key, current, range.points);
