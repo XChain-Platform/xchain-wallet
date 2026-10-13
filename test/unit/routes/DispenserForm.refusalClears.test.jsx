@@ -91,7 +91,8 @@ async function refuseCreate(utils) {
         fireEvent.click(utils.getByRole('button', { name: 'Create' }));
         await drainMicrotasks();
     });
-    expect(utils.getByText(/network would refuse a dispenser at this address/i)).toBeInTheDocument();
+    // An unclassified compose error reaches the user as the generic house line.
+    expect(utils.getByText(/Something went wrong\. Try again\./)).toBeInTheDocument();
 }
 
 describe('DispenserForm stale address refusal', () => {
@@ -121,10 +122,10 @@ describe('DispenserForm stale address refusal', () => {
 
         await refuseCreate(utils);
         await pickAddress(utils, SECOND.address);
-        expect(utils.queryByText(/network would refuse a dispenser at this address/i)).not.toBeInTheDocument();
+        expect(utils.queryByText(/Something went wrong\. Try again\./)).not.toBeInTheDocument();
 
         await refuseCreate(utils);
         await pickAddress(utils, SOURCE.address);
-        expect(utils.queryByText(/network would refuse a dispenser at this address/i)).not.toBeInTheDocument();
+        expect(utils.queryByText(/Something went wrong\. Try again\./)).not.toBeInTheDocument();
     });
 });
