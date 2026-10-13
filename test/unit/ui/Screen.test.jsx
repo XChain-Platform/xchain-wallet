@@ -5,6 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { Profiler } from 'react';
 
 import { Screen, ScrollRestoration } from '../../../packages/core/src/ui/Screen.jsx';
 import styles from '../../../packages/core/src/ui/Screen.module.css';
@@ -44,6 +45,26 @@ describe('<Screen>', () => {
 });
 
 describe('<ScrollRestoration>', () => {
+    it('keeps consumers idle when a parent rerenders the same route', () => {
+        let commits = 0;
+        const child = (
+            <Profiler id="screen" onRender={() => { commits += 1; }}>
+                <Screen>Stable route</Screen>
+            </Profiler>
+        );
+        const view = render(
+            <ScrollRestoration routeKey="stable">{child}</ScrollRestoration>,
+        );
+        const initialCommits = commits;
+
+        view.rerender(
+            <ScrollRestoration routeKey="stable">{child}</ScrollRestoration>,
+        );
+
+        expect(initialCommits).toBe(1);
+        expect(commits).toBe(initialCommits);
+    });
+
     it('restores each route key to its last scroll offset', () => {
         const view = render(
             <ScrollRestoration routeKey="first">

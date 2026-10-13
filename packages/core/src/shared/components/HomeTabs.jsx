@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { memo, useEffect, useId, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { Button, ChainBadge, Icon } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import {
@@ -24,8 +24,8 @@ import {
 } from './BalanceList.jsx';
 import balanceStyles from './BalanceList.module.css';
 import { CollectiblesView } from './CollectiblesView.jsx';
-import { TotalBalanceHero } from './TotalBalanceHero.jsx';
-import { PortfolioChart } from './PortfolioChart.jsx';
+import { TotalBalanceHero as TotalBalanceHeroBase } from './TotalBalanceHero.jsx';
+import { PortfolioChart as PortfolioChartBase } from './PortfolioChart.jsx';
 import { RouteErrorBoundary } from './RouteErrorBoundary.jsx';
 import { HomeFilterBar } from './HomeFilterBar.jsx';
 import {
@@ -50,6 +50,9 @@ import { tickerForCoin } from '../../registry/coinTicker.js';
 import { formatRelativeTime } from '../utils/dateTime.js';
 import { compareDecimalStrings } from '../utils/amountFormat.js';
 import styles from './HomeTabs.module.css';
+
+const TotalBalanceHero = memo(TotalBalanceHeroBase);
+const PortfolioChart = memo(PortfolioChartBase);
 
 const BALANCE_SORT_STORAGE_KEY = 'xc:balances:sort';
 const BALANCE_SORT_OPTIONS = new Set(['value', 'name', 'change']);
@@ -169,6 +172,7 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
     // the only control showing why the Tokens list is empty.
     const [filterOpen, setFilterOpen] = useState(() => tokenQuery.trim().length > 0);
     const canFilter = typeof onNetworkFilterChange === 'function' && typeof onTokenQueryChange === 'function';
+    const toggleFilter = useCallback(() => setFilterOpen((value) => !value), []);
     const { messaging } = useMessaging();
 
     useEffect(() => {
@@ -377,7 +381,7 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
                     onRefresh={onRefresh}
                     refreshing={refreshing}
                     filterOpen={filterOpen}
-                    onToggleFilter={canFilter ? () => setFilterOpen((v) => !v) : undefined}
+                    onToggleFilter={canFilter ? toggleFilter : undefined}
                     onCommandPalette={onCommandPalette}
                     onOpenSettings={onOpenSettings}
                     onLockWallet={onLockWallet}

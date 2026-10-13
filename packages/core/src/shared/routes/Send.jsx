@@ -865,6 +865,23 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         return `Looks ${pct}% similar to ${sourceLabel}: ${hit.match.address}. Double-check this is the address you mean.`;
     }, [toAddress, suggestions]);
 
+    const primaryRecipientNovelty = useMemo(() => {
+        const thresholdText = String(settings?.grace?.testSendThresholdSats ?? '0').trim();
+        const threshold = /^\d+$/.test(thresholdText) ? BigInt(thresholdText) : 0n;
+        if (threshold <= 0n) return null;
+        const dest = toAddress.trim();
+        const desc = chainId ? chainRegistry.get(chainId) : null;
+        if (!dest || !desc?.coin) return null;
+        const nativeTicker = nativeTickerFor(desc);
+        if (!nativeTicker || tick.trim().toUpperCase() !== nativeTicker) return null;
+        return checkRecipientNovelty({
+            address: dest,
+            chainCoin: desc.coin,
+            contacts,
+            historyRows,
+        });
+    }, [settings, toAddress, tick, chainId, contacts, historyRows]);
+
     // §21.4 test-send gate. Active when:
     //   - threshold > 0 (Settings → Safety → Test-send warning)
     //   - the send is a native-coin send (tick matches descriptor.coin
@@ -889,20 +906,14 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             : exactSatsBigIntFromDecimalString(amount, desc);
         if (amountSats === null || amountSats <= 0n) return null;
         if (amountSats <= threshold) return null;
-        const novelty = checkRecipientNovelty({
-            address: dest,
-            chainCoin: desc.coin,
-            contacts,
-            historyRows,
-        });
-        if (!novelty.novel) return null;
+        if (!primaryRecipientNovelty?.novel) return null;
         if (testedThisSession.has(dest)) return null;
         return {
             amountSats,
             threshold,
             ticker: nativeTicker,
         };
-    }, [settings, toAddress, tick, amount, chainId, contacts, historyRows, testedThisSession]);
+    }, [settings, toAddress, tick, amount, chainId, primaryRecipientNovelty, testedThisSession]);
 
     // §29.2 Max + §29.3 fiat toggle.
     // Fiat rate for the approximate-value preview + the optional fiat-entry mode.
@@ -2068,6 +2079,18 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     }
 
     const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
+    const hasNovelSendRecipient = useMemo(() => {
+        const desc = chainId ? chainRegistry.get(chainId) : null;
+        if (!isHwSource || !desc?.coin) return false;
+        const sendLegs = [{ to: toAddress }, ...extraLegs.map((leg) => ({ to: leg.to }))];
+        const recipientNovel = sendLegs.some((leg) => leg.to.trim() && checkRecipientNovelty({
+            address: leg.to,
+            chainCoin: desc.coin,
+            contacts,
+            historyRows,
+        }).novel === true);
+        return recipientNovel;
+    }, [isHwSource, toAddress, extraLegs, chainId, contacts, historyRows]);
     const hwSignerInfo = useSignerInfo({
         walletId,
         signerId: isHwSource ? fromAddress?.signerId : null,
@@ -2091,30 +2114,17 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             && tick.trim().toUpperCase() === nativeTicker
             && sats !== null && sats > 0n;
         const amountSats = isNativeSend ? sats : 0n;
-        let recipientNovel = false;
-        // PC-52: ANY never-seen recipient makes the send novel, not just the
-        // first row. The cross-check exists so a hardware user verifies an
-        // unfamiliar address on the device, and a multi-recipient send has more
-        // addresses to get wrong, not fewer.
-        if (desc?.coin) {
-            recipientNovel = sendLegs.some((leg) => leg.to && checkRecipientNovelty({
-                address: leg.to,
-                chainCoin: desc.coin,
-                contacts,
-                historyRows,
-            }).novel === true);
-        }
         return classifySignRisk({
             signerKind: fromAddress?.source,
             amountSats,
-            recipientNovel,
+            recipientNovel: hasNovelSendRecipient,
             multisig: false, // Send.jsx is single-sig; multisig flow is separate.
             settings: {
                 testSendThresholdSats: settings?.grace?.testSendThresholdSats ?? '0',
                 alwaysRequireHwExplicitConfirm: settings?.privacy?.alwaysRequireHwExplicitConfirm === true,
             },
         });
-    }, [isHwSource, fromAddress?.source, chainId, tick, amount, sendLegs, contacts, historyRows, settings]);
+    }, [isHwSource, fromAddress?.source, chainId, tick, amount, hasNovelSendRecipient, settings]);
     // Reset the confirm state whenever the requirement flips on, so a
     // user can't carry a stale "yes" through a recipient/amount change.
     // Editing ANY recipient row counts as that change (PC-52).
