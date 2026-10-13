@@ -286,6 +286,13 @@
     justify-content: center;
 }
 
+.quickActionReason {
+    color: var(--xc-text-muted);
+    font-size: 0.65rem;
+    font-weight: 500;
+    line-height: 1.2;
+}
+
 /* "More" entry in the 4-up quick-actions grid. Wrapper is a flex
    container so the inner button stretches to the grid cell's height,
    matching the three buttons next to it. The dropdown anchors to the
