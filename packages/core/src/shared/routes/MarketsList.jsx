@@ -102,7 +102,10 @@ export function MarketsList({
         };
         messaging.getMarkets({ chainId: selectedAsset.chainId })
             .then((resp) => applyResult(extractRows(resp)))
-            .catch(() => applyResult([]))
+            .catch(() => {
+                applyResult([]);
+                if (!cancelled) setLoadError('Could not load markets. Try again.');
+            })
             .finally(() => {
                 if (!cancelled) setLoading(false);
             });
@@ -252,6 +255,7 @@ export function MarketsList({
             {selectedAsset ? (
                 <div style={{
                     display: 'flex',
+                    flexWrap: 'wrap',
                     alignItems: 'center',
                     gap: 'var(--xc-space-2)',
                     marginBottom: 'var(--xc-space-3)',
@@ -263,7 +267,7 @@ export function MarketsList({
                         placeholder="Search"
                         aria-label="Search markets"
                         style={{
-                            flex: '1 1 auto',
+                            flex: '1 1 140px',
                             minWidth: 0,
                             padding: 'var(--xc-space-2) var(--xc-space-3)',
                             border: '1px solid var(--xc-border)',
@@ -376,7 +380,7 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, lastPrice, change24h, 
         : tick1;
     const changeNum = change24h ? parseFloat(String(change24h).replace(/[^\d.+-]/g, '')) : NaN;
     const changeColor = Number.isFinite(changeNum)
-        ? (changeNum > 0 ? 'var(--xc-success, #16a34a)' : changeNum < 0 ? 'var(--xc-danger, #dc2626)' : 'var(--xc-text-muted)')
+        ? (changeNum > 0 ? 'var(--xc-success)' : changeNum < 0 ? 'var(--xc-danger)' : 'var(--xc-text-muted)')
         : 'var(--xc-text-muted)';
     // Depth intensity: same accent hue, more saturated background as
     // depth grows. Five tiers tuned to feel meaningful from 1 → 30+.

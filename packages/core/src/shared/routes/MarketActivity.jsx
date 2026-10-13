@@ -262,29 +262,31 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                 const onClick = typeof onOpenDispenser === 'function' && actionIndex
                                     ? () => onOpenDispenser(chainId, actionIndex)
                                     : undefined;
+                                const content = (
+                                    <>
+                                        <TickerIcon chainId={chainId} tick={tick} size={32} />
+                                        <span className={styles.rowText}>
+                                            <span className={styles.rowTitle}>
+                                                {isDispenserPriceStale(row)
+                                                    ? dispenserRateLabel(row)
+                                                    : row.give_amount
+                                                        ? dispenserRateLabel(row, oracleFeedsFor(chainId, row))
+                                                        : 'Open dispenser'}
+                                            </span>
+                                            <span className={styles.rowSub}>
+                                                {remaining != null ? `${formatDecimal(remaining)} ${tick} remaining` : ''}
+                                            </span>
+                                        </span>
+                                        {onClick ? <Icon.ForwardIcon /> : null}
+                                    </>
+                                );
                                 return (
                                     <li key={`${chainId}:${actionIndex}`}>
-                                        <button
-                                            type="button"
-                                            className={styles.row}
-                                            onClick={onClick}
-                                            disabled={!onClick}
-                                        >
-                                            <TickerIcon chainId={chainId} tick={tick} size={32} />
-                                            <span className={styles.rowText}>
-                                                <span className={styles.rowTitle}>
-                                                    {isDispenserPriceStale(row)
-                                                        ? dispenserRateLabel(row)
-                                                        : row.give_amount
-                                                            ? dispenserRateLabel(row, oracleFeedsFor(chainId, row))
-                                                            : 'Open dispenser'}
-                                                </span>
-                                                <span className={styles.rowSub}>
-                                                    {remaining != null ? `${formatDecimal(remaining)} ${tick} remaining` : ''}
-                                                </span>
-                                            </span>
-                                            {onClick ? <Icon.ForwardIcon /> : null}
-                                        </button>
+                                        {onClick ? (
+                                            <button type="button" className={styles.row} onClick={onClick}>
+                                                {content}
+                                            </button>
+                                        ) : <div className={styles.row}>{content}</div>}
                                     </li>
                                 );
                             })}

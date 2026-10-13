@@ -277,3 +277,32 @@ describe('BridgeMoveForm: unhappy path - amount above balance', () => {
         expect(moveButton()).not.toBeDisabled();
     });
 });
+
+describe('BridgeMoveForm: invalid action fields', () => {
+    it('blocks zero and incomplete decimal amounts before confirmation', async () => {
+        mount();
+        await waitFor(
+            () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
+            WAIT,
+        );
+        fireEvent.change(amountInput(), { target: { value: '0' } });
+        expect(await screen.findByText('Enter a positive amount to move.')).toBeInTheDocument();
+        expect(moveButton()).toBeDisabled();
+
+        fireEvent.change(amountInput(), { target: { value: '.' } });
+        expect(screen.getByText('Enter a positive amount to move.')).toBeInTheDocument();
+        expect(moveButton()).toBeDisabled();
+    });
+
+    it('blocks memo delimiters that cannot be serialized', async () => {
+        mount();
+        await waitFor(
+            () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
+            WAIT,
+        );
+        fireEvent.change(amountInput(), { target: { value: '1' } });
+        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'left|right' } });
+        expect(await screen.findByText('Memo cannot contain "|" or ";".')).toBeInTheDocument();
+        expect(moveButton()).toBeDisabled();
+    });
+});

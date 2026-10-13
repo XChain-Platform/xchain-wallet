@@ -1,0 +1,86 @@
+// Copyright © 2025-2026 Dankest, LLC
+// Based on XChain Platform by Dankest, LLC - https://dankest.llc
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import React from 'react';
+import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { PlaceOrderPanel } from '../../../packages/core/src/shared/components/PlaceOrderPanel.jsx';
+
+const CHAIN = 'bitcoin-mainnet';
+const ADDRESS = {
+    id: 'a1', address: 'bc1qexample', publicKey: '02ab', derivationPath: "m/84'/0'/0'/0/0", source: 'hd', signerId: 's1',
+};
+
+afterEach(() => cleanup());
+
+function mount(props = {}, overrides = {}) {
+    const messaging = {
+        getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
+        getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: ADDRESS.id }),
+        getWalletBalances: vi.fn().mockResolvedValue({}),
+        getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+        signerReady: vi.fn().mockResolvedValue({ ready: true }),
+        getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
+        composeForConfirm: vi.fn(),
+        ...overrides,
+    };
+    render(
+        <MessagingProvider shell="desktop" messaging={messaging}>
+            <PlaceOrderPanel walletId="w" chainId={CHAIN} tick1="XCHAIN" tick2="BTC" {...props} />
+        </MessagingProvider>,
+    );
+    return messaging;
+}
+
+describe('PlaceOrderPanel validation', () => {
+    it('rejects numeric syntax that cannot be serialized as a protocol decimal', async () => {
+        const messaging = mount({ prefillPrice: '1e3' });
+        await waitFor(() => expect(screen.getByLabelText('Price (BTC)').value).toBe('1e3'));
+        fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '2' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Place buy order' }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('Price and size must be positive numbers.');
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('accepts grouped decimal entry and uses theme tokens for side controls', async () => {
+        mount();
+        const price = await screen.findByLabelText('Price (BTC)');
+        fireEvent.change(price, { target: { value: '1,234.5' } });
+        expect(price.value).toBe('1234.5');
+
+        const buy = screen.getByRole('button', { name: 'Buy XCHAIN' });
+        const sell = screen.getByRole('button', { name: 'Sell XCHAIN' });
+        expect(buy.style.background).toBe('var(--xc-success)');
+        expect(sell.style.background).toBe('var(--xc-danger)');
+        expect(buy.style.color).toBe('var(--xc-on-accent)');
+    });
+
+    it('builds an unsigned order from a watch-only address', async () => {
+        const watchAddress = { ...ADDRESS, source: 'watch' };
+        const onOrderPlaced = vi.fn();
+        const buildActionPsbtRequest = vi.fn().mockResolvedValue({
+            psbtHex: 'aa00', encoding: 'psbt', fromAddress: watchAddress.address, chainId: CHAIN,
+        });
+        mount({ onOrderPlaced }, {
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [watchAddress] }),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+            buildActionPsbtRequest,
+        });
+
+        fireEvent.change(await screen.findByLabelText('Price (BTC)'), { target: { value: '2' } });
+        fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '3' } });
+        fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Create unsigned transaction' }));
+
+        expect(await screen.findByLabelText('Unsigned transaction hex')).toHaveValue('aa00');
+        expect(buildActionPsbtRequest).toHaveBeenCalledWith(expect.objectContaining({
+            chainId: CHAIN,
+            actionData: expect.objectContaining({ action: 'ORDER' }),
+        }));
+        expect(onOrderPlaced).not.toHaveBeenCalled();
+    });
+});

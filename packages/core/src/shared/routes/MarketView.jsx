@@ -116,7 +116,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
     const lastPrice = stats.lastPrice;
     const changePct = stats.changePct;
     const changeColor = Number.isFinite(changePct)
-        ? (changePct > 0 ? 'var(--xc-success, #16a34a)' : changePct < 0 ? 'var(--xc-danger, #dc2626)' : 'var(--xc-text-muted)')
+        ? (changePct > 0 ? 'var(--xc-success)' : changePct < 0 ? 'var(--xc-danger)' : 'var(--xc-text-muted)')
         : 'var(--xc-text-muted)';
 
     const header = (
