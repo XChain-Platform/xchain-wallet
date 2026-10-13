@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { EmptyState, MultisigBadge, VerifiedBadge, Icon, ListRow } from '@xchain-wallet/core/ui';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
@@ -484,50 +484,9 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
 });
 
 function FitAmount({ children, title }) {
-    const containerRef = useRef(null);
-    const innerRef = useRef(null);
-    const [scale, setScale] = useState(1);
-
-    useLayoutEffect(() => {
-        const container = containerRef.current;
-        const inner = innerRef.current;
-        if (!container || !inner) return undefined;
-        let cancelled = false;
-        const measure = () => {
-            if (cancelled) return;
-            inner.style.transform = 'scale(1)';
-            const available = Math.max(0, container.clientWidth - 2);
-            const required = inner.scrollWidth;
-            const next = available > 0 && required > available ? available / required : 1;
-            inner.style.transform = `scale(${next})`;
-            setScale(next);
-        };
-        measure();
-        document.fonts?.ready?.then(measure);
-        if (typeof ResizeObserver === 'undefined') {
-            window.addEventListener('resize', measure);
-            return () => {
-                cancelled = true;
-                window.removeEventListener('resize', measure);
-            };
-        }
-        const observer = new ResizeObserver(measure);
-        observer.observe(container);
-        return () => {
-            cancelled = true;
-            observer.disconnect();
-        };
-    }, [children]);
-
     return (
-        <span ref={containerRef} className={styles.amountFit} title={title}>
-            <span
-                ref={innerRef}
-                className={styles.amountFitInner}
-                style={{ transform: `scale(${scale})` }}
-            >
-                {children}
-            </span>
+        <span className={styles.amountFit} title={title}>
+            {children}
         </span>
     );
 }

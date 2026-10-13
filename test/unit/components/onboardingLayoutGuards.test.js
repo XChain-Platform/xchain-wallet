@@ -51,10 +51,11 @@ const carouselCss = readFileSync(
 
 describe('onboarding and Home layout guards', () => {
     it('contains long balance values inside narrow rows', () => {
-        expect(balanceCss).toMatch(/\.amounts\s*\{[^}]*min-width:\s*0;[^}]*max-width:\s*55%;/s);
-        // Long amounts shrink to fit on one line (see longContentLayout.test.jsx)
-        // and long names ellipsize, rather than wrapping anywhere.
-        expect(balanceCss).toMatch(/\.amountFit\s*\{[^}]*overflow:\s*hidden;[^}]*white-space:\s*nowrap;/s);
+        expect(balanceCss).toMatch(/\.body\s*\{[^}]*flex:\s*1 1 0;/s);
+        expect(balanceCss).toMatch(/\.amounts\s*\{[^}]*min-width:\s*0;[^}]*max-width:\s*calc\(100% - 48px - var\(--xc-space-3\) - var\(--xc-space-3\)\);/s);
+        // The label yields space first. Values that still exceed the row show
+        // an ellipsis and expose the complete string through their title.
+        expect(balanceCss).toMatch(/\.amountFit\s*\{[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap;/s);
         expect(balanceCss).toMatch(/\.name\s*\{[^}]*text-overflow:\s*ellipsis;/s);
         expect(walletPickerCss).toMatch(/\.rowText\s*>\s*span\s*\{[^}]*text-overflow:\s*ellipsis;/s);
         // The hero amount takes a full-width grid row of its own below the

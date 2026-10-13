@@ -44,31 +44,37 @@ afterEach(() => {
 });
 
 describe('long content layout', () => {
-    it('ellipsizes balance labels while fitting every digit of a huge amount', () => {
+    it('gives every digit of a 15-digit balance priority at 360px', () => {
         const displayName = 'A token name long enough to occupy every narrow balance-row label lane';
-        const quantity = '12345678901234567890123456789012345678901234567890';
-        const formattedQuantity = formatAtomicAmount(quantity, 0);
+        const quantity = '100000000000000';
+        const formattedQuantity = formatAtomicAmount(quantity, 7);
 
         render(
-            <BalanceList
-                rows={[{
-                    chainId: 'bitcoin-mainnet',
-                    tick: 'EXTRAORDINARILYLONGTICKER',
-                    kind: 'token',
-                    displayName,
-                    quantity,
-                    divisibility: 0,
-                    fiatRate: null,
-                }]}
-                onSelectToken={() => {}}
-            />,
+            <div style={{ width: 360 }}>
+                <BalanceList
+                    rows={[{
+                        chainId: 'bitcoin-mainnet',
+                        tick: 'EXTRAORDINARILYLONGTICKER',
+                        kind: 'token',
+                        displayName,
+                        quantity,
+                        divisibility: 7,
+                        fiatRate: null,
+                    }]}
+                    onSelectToken={() => {}}
+                />
+            </div>,
         );
 
+        expect(formattedQuantity.replace(/\D/g, '')).toHaveLength(15);
         expect(screen.getByTitle(displayName)).toHaveTextContent(displayName);
         expect(screen.getByTitle('EXTRAORDINARILYLONGTICKER')).toBeInTheDocument();
         expect(screen.getByTitle(formattedQuantity)).toHaveTextContent(formattedQuantity);
         expect(rule(balanceCss, '.name')).toMatch(/text-overflow:\s*ellipsis/);
-        expect(rule(balanceCss, '.amountFitInner')).toMatch(/transform-origin:\s*right center/);
+        expect(rule(balanceCss, '.body')).toMatch(/flex:\s*1 1 0/);
+        expect(rule(balanceCss, '.amounts')).toMatch(/max-width:\s*calc\(100% - 48px - var\(--xc-space-3\) - var\(--xc-space-3\)\)/);
+        expect(rule(balanceCss, '.qty')).toMatch(/font-variant-numeric:\s*tabular-nums/);
+        expect(rule(balanceCss, '.amountFit')).toMatch(/text-overflow:\s*ellipsis/);
         expect(rule(balanceCss, '.qty')).not.toMatch(/text-overflow:\s*ellipsis/);
     });
 
