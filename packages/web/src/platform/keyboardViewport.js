@@ -26,11 +26,13 @@
 // the app header and a page title bar above it, the bar left the field about
 // 40pt of room on an iPhone 17 Pro.
 //
-// Android's WebView shrinks the window instead, so the shell refits on its
-// own but the tab bar rode up above the keyboard, a strip of tappable tabs
-// between the field and the keys (LG K51, 2026-10-12). There the keyboard is
-// read as "a text field has focus and the window is clearly shorter than its
-// full height at this width", and only the tab bar is hidden.
+// Android's WebView shrinks the window instead. The shell follows innerHeight
+// explicitly because WebView 102 resolves 100vh against the screen behind the
+// native system-bar padding: the bar is painted into the navigation bar while
+// the accessibility tree is clipped at the WebView's visible bottom edge (LG
+// K51, 2026-10-13). This Android-only override keeps the shell and its absolute
+// bottom bar inside that edge. The focused-field check still hides the bar
+// while the keyboard is open.
 
 /**
  * Below this the difference is browser chrome settling, not a keyboard. The
@@ -130,6 +132,7 @@ export function installKeyboardViewport(win = window) {
     const vv = win.visualViewport;
     if (!vv) return () => {};
     const root = win.document.documentElement;
+    const isAndroid = win.Capacitor?.getPlatform?.() === 'android';
     let fitted = false;
     let resized = false;
     // Tallest window seen at the current width: a rotation changes both, a
@@ -138,6 +141,12 @@ export function installKeyboardViewport(win = window) {
     let fullHeight = win.innerHeight;
 
     const update = () => {
+        if (isAndroid) {
+            root.style.setProperty(
+                '--xc-viewport-h',
+                `calc(${Math.round(win.innerHeight)}px - env(safe-area-inset-top, 0px))`,
+            );
+        }
         if (win.innerWidth !== fullWidth) {
             fullWidth = win.innerWidth;
             fullHeight = win.innerHeight;
@@ -170,7 +179,7 @@ export function installKeyboardViewport(win = window) {
                 win.requestAnimationFrame(() => revealInScroller(active, win));
             }
         } else if (fitted) {
-            root.style.removeProperty('--xc-viewport-h');
+            if (!isAndroid) root.style.removeProperty('--xc-viewport-h');
             root.removeAttribute('data-xc-keyboard');
             fitted = false;
             if (win.scrollY !== 0) win.scrollTo(0, 0);
@@ -179,20 +188,25 @@ export function installKeyboardViewport(win = window) {
 
     vv.addEventListener('resize', update);
     vv.addEventListener('scroll', update);
+    if (isAndroid) win.addEventListener('resize', update);
     win.addEventListener('scroll', update, { passive: true });
     // Focus moving off a field with the keyboard still up (or onto one after
     // the resize) changes the answer without a resize event.
     win.document.addEventListener('focusin', update);
     win.document.addEventListener('focusout', update);
+    if (isAndroid) update();
     return () => {
         vv.removeEventListener('resize', update);
         vv.removeEventListener('scroll', update);
+        if (isAndroid) win.removeEventListener('resize', update);
         win.removeEventListener('scroll', update);
         win.document.removeEventListener('focusin', update);
         win.document.removeEventListener('focusout', update);
         if (resized) root.removeAttribute('data-xc-keyboard');
-        if (fitted) {
+        if (fitted || isAndroid) {
             root.style.removeProperty('--xc-viewport-h');
+        }
+        if (fitted) {
             root.removeAttribute('data-xc-keyboard');
         }
     };
