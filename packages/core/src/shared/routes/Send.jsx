@@ -32,7 +32,7 @@ import {
 } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { explorerCoinCode } from '../../registry/coinTicker.js';
-import { formatFiat, tickerColor } from '../components/BalanceList.jsx';
+import { coinFromChainId, formatFiat, tickerColor } from '../components/BalanceList.jsx';
 import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -144,6 +144,7 @@ import { useToast } from '../components/ToastHost.jsx';
 import { copyText } from '../clipboard.js';
 import { AmountField } from '../components/AmountField.jsx';
 import { TokenField } from '../components/TokenField.jsx';
+import { TokenPicker } from './TokenPicker.jsx';
 import { useHaptic } from '../hooks/useHaptic.js';
 import { useFormDraft } from '../hooks/useFormDraft.js';
 import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
@@ -359,6 +360,12 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         /** @type {Array<{ id: string, to: string, amount: string, tick: string }>} */ ([]),
     );
     const [perRecipientToken, setPerRecipientToken] = useState(false);
+    const [recipientErrors, setRecipientErrors] = useState(
+        /** @type {Record<string, { to?: string, amount?: string, tick?: string }>} */ ({}),
+    );
+    const [tokenPickerRecipientId, setTokenPickerRecipientId] = useState(
+        /** @type {string | null} */ (null),
+    );
     const [fiatAmount, setFiatAmount] = useState('');
     const [password, setPassword] = useState('');
     // Live mirror of `password` so the confirm-modal's onApprove closure
@@ -716,9 +723,33 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
     }, []);
     const updateRecipient = useCallback((id, patch) => {
         setExtraLegs((prev) => prev.map((leg) => (leg.id === id ? { ...leg, ...patch } : leg)));
+        setRecipientErrors((prev) => {
+            const current = prev[id];
+            if (!current) return prev;
+            const nextForRow = { ...current };
+            for (const field of Object.keys(patch)) {
+                const fixed = field === 'amount'
+                    ? isPositiveDecimalAmount(patch[field])
+                    : field === 'to'
+                        ? String(patch[field] || '').trim().length > 0
+                        : true;
+                if (fixed) delete nextForRow[field];
+            }
+            const next = { ...prev };
+            if (Object.keys(nextForRow).length > 0) next[id] = nextForRow;
+            else delete next[id];
+            return next;
+        });
     }, []);
     const removeRecipient = useCallback((id) => {
         setExtraLegs((prev) => prev.filter((leg) => leg.id !== id));
+        setRecipientErrors((prev) => {
+            if (!prev[id]) return prev;
+            const next = { ...prev };
+            delete next[id];
+            return next;
+        });
+        setTokenPickerRecipientId((current) => (current === id ? null : current));
     }, []);
     // A native tick pays real outputs instead of writing an action, so it has
     // no multi-recipient form (flows/sendLegs.js refuses it, and the refusal is
@@ -1496,27 +1527,27 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
             setFormError(nativeMultiSendBlock);
             return;
         }
+        const nextRecipientErrors = {};
         for (let i = 0; i < extraLegs.length; i += 1) {
             const leg = extraLegs[i];
             const label = `Recipient ${i + 2}`;
+            const rowErrors = {};
             if (!leg.to.trim()) {
-                setFormError(`${label}: address is required.`);
-                return;
-            }
-            const legAddressError = destinationAddressError(leg.to, descriptor);
-            if (legAddressError) {
-                setFormError(`${label}: ${legAddressError}`);
-                return;
-            }
-            if (perRecipientToken && !leg.tick.trim()) {
-                setFormError(`${label}: token is required.`);
-                return;
+                rowErrors.to = `${label}: address is required.`;
+            } else {
+                const legAddressError = destinationAddressError(leg.to, descriptor);
+                if (legAddressError) rowErrors.to = `${label}: ${legAddressError}`;
             }
             const legAmount = String(leg.amount).trim();
             if (!isPositiveDecimalAmount(legAmount)) {
-                setFormError(`${label}: amount must be a positive number.`);
-                return;
+                rowErrors.amount = `${label}: amount must be a positive number.`;
             }
+            if (Object.keys(rowErrors).length > 0) nextRecipientErrors[leg.id] = rowErrors;
+        }
+        setRecipientErrors(nextRecipientErrors);
+        if (Object.keys(nextRecipientErrors).length > 0) {
+            setFormError(null);
+            return;
         }
         // PC-26: no unlock key held for a gated tick = the network would
         // reject the send anyway; stop it here with the recovery path
@@ -2389,6 +2420,27 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         );
     }
 
+    if (tokenPickerRecipientId) {
+        const recipientIndex = extraLegs.findIndex((leg) => leg.id === tokenPickerRecipientId);
+        return (
+            <TokenPicker
+                purpose="send"
+                walletId={walletId}
+                title={`Select token for recipient ${recipientIndex + 2}`}
+                networkFilter={coinFromChainId(chainId)}
+                kindFilter="tokens"
+                kindLocked
+                onSelect={(selection) => {
+                    updateRecipient(tokenPickerRecipientId, {
+                        tick: String(selection.tick || '').toUpperCase(),
+                    });
+                    setTokenPickerRecipientId(null);
+                }}
+                onBack={() => setTokenPickerRecipientId(null)}
+            />
+        );
+    }
+
     // stage === 'form'
     const draftBanner = draft.hasDraft() && !draftPending ? (
         <StatusMessage
@@ -2595,19 +2647,20 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                                 onChange={(e) => updateRecipient(leg.id, { to: e.target.value })}
                                 suggestions={suggestions}
                                 placeholder="Enter or paste an address or name..."
-                                error={leg.to.trim() && destinationAddressError(leg.to, descriptor)
-                                    ? destinationAddressError(leg.to, descriptor)
-                                    : undefined}
+                                error={recipientErrors[leg.id]?.to
+                                    || (leg.to.trim() && destinationAddressError(leg.to, descriptor)
+                                        ? destinationAddressError(leg.to, descriptor)
+                                        : undefined)}
                             />
                             {perRecipientToken ? (
-                                <Input
-                                    label="Token"
-                                    aria-label={`Recipient ${i + 2} token`}
-                                    hint="Tick. Leave as the token above to send the same one."
-                                    value={leg.tick}
-                                    onChange={(e) => updateRecipient(leg.id, { tick: e.target.value })}
-                                    autoComplete="off"
-                                    autoCapitalize="characters"
+                                <TokenField
+                                    label={`Recipient ${i + 2} token`}
+                                    value={chainId && (leg.tick.trim() || tick.trim()) ? {
+                                        chainId,
+                                        tick: (leg.tick.trim() || tick.trim()).toUpperCase(),
+                                    } : null}
+                                    onOpenPicker={() => setTokenPickerRecipientId(leg.id)}
+                                    error={recipientErrors[leg.id]?.tick}
                                 />
                             ) : null}
                             <Input
@@ -2617,6 +2670,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                                 value={leg.amount}
                                 onChange={(e) => updateRecipient(leg.id, { amount: e.target.value })}
                                 autoComplete="off"
+                                error={recipientErrors[leg.id]?.amount}
                             />
                         </div>
                     ))}
