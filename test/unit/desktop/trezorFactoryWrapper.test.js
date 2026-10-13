@@ -128,4 +128,33 @@ describe('desktop Trezor factory wrapper', () => {
 
         await expect(getTrezorConnect()).rejects.toThrow('bridge window was refused');
     });
+
+    it('removes bridge message listeners when the bridge is reset', async () => {
+        const addEventListener = vi.spyOn(window, 'addEventListener');
+        const removeEventListener = vi.spyOn(window, 'removeEventListener');
+        const bridgeWindow = {
+            closed: false,
+            postMessage: vi.fn(),
+            close: vi.fn(),
+        };
+        vi.spyOn(window, 'open').mockReturnValue(bridgeWindow);
+
+        const connectPromise = getTrezorConnect();
+        const listeners = addEventListener.mock.calls
+            .filter(([type]) => type === 'message')
+            .map(([, listener]) => listener);
+        expect(listeners).toHaveLength(2);
+
+        emitMessage(bridgeWindow, { type: 'xchain-trezor-bridge-ready' });
+        await vi.waitFor(() => expect(bridgeWindow.postMessage).toHaveBeenCalledOnce());
+        const initRequest = bridgeWindow.postMessage.mock.calls[0][0];
+        emitMessage(bridgeWindow, { id: initRequest.id, ok: true, result: undefined });
+        await connectPromise;
+
+        resetTrezorConnect();
+
+        for (const listener of listeners) {
+            expect(removeEventListener).toHaveBeenCalledWith('message', listener);
+        }
+    });
 });
