@@ -220,8 +220,8 @@
 
 .licenseParagraph {
     margin: 0 0 var(--xc-space-2);
-    text-align: justify;
-    hyphens: manual;
+    text-align: start;
+    hyphens: none;
 }
 
 .licenseParagraph:last-child {

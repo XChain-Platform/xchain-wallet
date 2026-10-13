@@ -76,8 +76,8 @@ const SHEET_PRIMARY = [
 
 function bottomTabOwner(currentView, primaryTabs = PRIMARY_TABS) {
     const routeGroup = activeLeftNavItem(currentView);
-    if (routeGroup === 'settings') return 'more';
-    return primaryTabs.some((tab) => tab.id === routeGroup) ? routeGroup : 'home';
+    if (currentView === 'account-picker') return 'more';
+    return primaryTabs.some((tab) => tab.id === routeGroup) ? routeGroup : 'more';
 }
 
 function scrollMainToTop() {
