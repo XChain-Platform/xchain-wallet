@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { forwardRef, useId, useState } from 'react';
+import { forwardRef, useEffect, useId, useState } from 'react';
 import styles from './Input.module.css';
 import { localTimeZoneNote } from './localTimeZoneNote.js';
 
@@ -35,16 +35,41 @@ import { localTimeZoneNote } from './localTimeZoneNote.js';
  * @property {'md' | 'lg'} [size]   field size: 'md' (36px, default) or 'lg' (48px hero field). Mirrors Button's size API.
  */
 export const Input = forwardRef(function Input(
-    { label, hint, error, id, size = 'md', type = 'text', onKeyDown, onKeyUp, onFocus, onBlur, ...rest },
+    {
+        label,
+        hint,
+        error,
+        id,
+        size = 'md',
+        type = 'text',
+        value,
+        defaultValue,
+        maxLength,
+        className,
+        onChange,
+        onKeyDown,
+        onKeyUp,
+        onFocus,
+        onBlur,
+        'aria-invalid': externalInvalid,
+        'aria-describedby': externalDescribedBy,
+        ...rest
+    },
     ref,
 ) {
     const autoId = useId();
     const inputId = id || autoId;
-    const hintId = hint ? `${inputId}-hint` : undefined;
-    const errorId = error ? `${inputId}-error` : undefined;
+    const [dismissedError, setDismissedError] = useState(null);
+    const visibleError = error && error !== dismissedError ? error : null;
+    const hintId = hint && !visibleError ? `${inputId}-hint` : undefined;
+    const errorId = visibleError ? `${inputId}-error` : undefined;
     const capsLockId = `${inputId}-capslock`;
     const isDateTime = type === 'datetime-local';
     const zoneId = isDateTime ? `${inputId}-zone` : undefined;
+    const counterId = maxLength != null ? `${inputId}-counter` : undefined;
+    const initialValue = value ?? defaultValue ?? '';
+    const [uncontrolledLength, setUncontrolledLength] = useState(() => String(initialValue).length);
+    const characterCount = value === undefined ? uncontrolledLength : String(value ?? '').length;
 
     const isPassword = type === 'password';
     const [capsLockOn, setCapsLockOn] = useState(false);
@@ -52,12 +77,19 @@ export const Input = forwardRef(function Input(
     const showCapsLock = isPassword && focused && capsLockOn;
 
     const describedBy = [
+        externalDescribedBy,
         hintId,
         errorId,
         zoneId,
+        counterId,
         showCapsLock ? capsLockId : undefined,
     ].filter(Boolean).join(' ') || undefined;
-    const inputClass = `${styles.input} ${error ? styles.invalid : ''}`.trim();
+    const inputClass = [styles.input, visibleError ? styles.invalid : '', className]
+        .filter(Boolean).join(' ');
+
+    useEffect(() => {
+        if (!error) setDismissedError(null);
+    }, [error]);
 
     const readCapsLock = (event) => {
         if (!isPassword) return;
@@ -84,6 +116,11 @@ export const Input = forwardRef(function Input(
         if (isPassword) setFocused(false);
         onBlur?.(event);
     };
+    const handleChange = (event) => {
+        setUncontrolledLength(event.currentTarget.value.length);
+        if (error) setDismissedError(error);
+        onChange?.(event);
+    };
 
     return (
         <div className={`${styles.field} ${styles[size] || ''}`.trim()}>
@@ -97,22 +134,31 @@ export const Input = forwardRef(function Input(
                 id={inputId}
                 type={type}
                 className={inputClass}
-                aria-invalid={error ? 'true' : undefined}
+                aria-invalid={visibleError ? 'true' : externalInvalid}
                 aria-describedby={describedBy}
+                value={value}
+                defaultValue={defaultValue}
+                maxLength={maxLength}
+                onChange={handleChange}
                 onKeyDown={handleKeyDown}
                 onKeyUp={handleKeyUp}
                 onFocus={handleFocus}
                 onBlur={handleBlur}
                 {...rest}
             />
-            {hint && !error ? (
+            {hint && !visibleError ? (
                 <div id={hintId} className={styles.hint}>{hint}</div>
             ) : null}
             {isDateTime ? (
-                <div id={zoneId} className={styles.hint}>{localTimeZoneNote(rest.value)}</div>
+                <div id={zoneId} className={styles.hint}>{localTimeZoneNote(value)}</div>
             ) : null}
-            {error ? (
-                <div id={errorId} className={styles.error} role="alert">{error}</div>
+            {visibleError ? (
+                <div id={errorId} className={styles.error} role="alert">{visibleError}</div>
+            ) : null}
+            {maxLength != null ? (
+                <div id={counterId} className={styles.counter} aria-live="polite">
+                    {characterCount} / {maxLength}
+                </div>
             ) : null}
             {showCapsLock ? (
                 <div
