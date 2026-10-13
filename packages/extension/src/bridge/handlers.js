@@ -93,6 +93,12 @@ function defaultAssetUrl(path) {
     return typeof url === 'string' ? url : '';
 }
 
+function approvalRequester(req) {
+    return Number.isInteger(req?.requesterTabId)
+        ? { requesterTabId: req.requesterTabId }
+        : {};
+}
+
 /**
  * Turn a chain descriptor's `icon` (a bare branding filename such as
  * `bitcoin-mainnet-icon-20.png`) into a URL a dApp can fetch cross-origin.
@@ -286,6 +292,7 @@ export function registerBridgeHandlers(host, opts = {}) {
                 appIcon,
                 requestedChains,
                 accountOptions,
+                ...approvalRequester(req),
             });
         }
         if (!decision || !decision.approved) {
@@ -483,6 +490,7 @@ export function registerBridgeHandlers(host, opts = {}) {
             origin: req.origin,
             kind: 'signMessage',
             chainId: req.chainId,
+            ...approvalRequester(req),
             payload: {
                 address: req.address,
                 message: req.message,
@@ -540,6 +548,7 @@ export function registerBridgeHandlers(host, opts = {}) {
             origin: req.origin,
             kind: 'signPsbt',
             chainId: req.chainId,
+            ...approvalRequester(req),
             payload: { psbtHex: req.psbtHex, signingPaths: req.signingPaths },
         });
         if (!decision?.approved) throw new UserRejectedError('signPsbt');
@@ -598,6 +607,7 @@ export function registerBridgeHandlers(host, opts = {}) {
             origin: req.origin,
             kind: 'coSign',
             chainId: req.chainId,
+            ...approvalRequester(req),
             payload: {
                 accountId: account.id,
                 aggregateAddress: account.aggregateAddress,
@@ -667,6 +677,7 @@ export function registerBridgeHandlers(host, opts = {}) {
             groupDecision = await approvals.parallel({
                 origin: req.origin,
                 kind: 'parallel',
+                ...approvalRequester(req),
                 actions: actions.map((a) => ({
                     chainId: a?.chainId,
                     action: a?.action,
@@ -685,6 +696,7 @@ export function registerBridgeHandlers(host, opts = {}) {
                 origin: req.origin,
                 appName: req.appName,
                 appIcon: req.appIcon,
+                ...approvalRequester(req),
                 chainId: action?.chainId,
                 action: action?.action,
                 params: action?.params,
@@ -734,6 +746,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         const decision = await approvals.signIn({
             origin: req.origin,
             kind: 'signIn',
+            ...approvalRequester(req),
             ...(req.chainId ? { chainId: req.chainId } : {}),
             payload: {
                 appId: req.appId,
@@ -960,6 +973,7 @@ async function executeSignAction(req, deps, ctx) {
             origin: req.origin,
             kind: 'signAction',
             chainId: req.chainId,
+            ...approvalRequester(req),
             action: actionName,
             payload: approvalPayload(actionName, {
                 params, toAddress, tick: sendTick, amount: sendAmount, spendFromAddress,

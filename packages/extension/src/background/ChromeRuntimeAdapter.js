@@ -154,8 +154,19 @@ export function attachChromeRuntime(host, chromeRuntime, opts = {}) {
                 try { onWebSender(sender.tab.id, senderOrigin); } catch { /* best-effort */ }
             }
         }
+        const requesterTabId = !trusted && Number.isInteger(sender?.tab?.id)
+            ? sender.tab.id
+            : null;
+        const routedMessage = requesterTabId == null
+            || !message?.request
+            || typeof message.request !== 'object'
+            ? message
+            : {
+                ...message,
+                request: { ...message.request, requesterTabId },
+            };
         Promise.resolve()
-            .then(() => host.handle(message))
+            .then(() => host.handle(routedMessage))
             .then((response) => sendResponse(publishedError(response, trusted)))
             .catch((err) => {
                 // host.handle already serializes errors; this catch guards

@@ -13,8 +13,10 @@ import {
     ApprovalBroker,
     approvalBadgeText,
 } from '../../../packages/extension/src/background/approvalBroker.js';
+import { attachChromeRuntime } from '../../../packages/extension/src/background/ChromeRuntimeAdapter.js';
 
 afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
 });
 
@@ -40,6 +42,30 @@ function harness() {
         await Promise.resolve();
     };
     return { action, broker, flushBadge, removed, windows };
+}
+
+function failureHarness({ timeoutMs = 60_000 } = {}) {
+    const tabRemoved = [];
+    const suspended = [];
+    const remove = vi.fn(async () => {});
+    vi.stubGlobal('chrome', {
+        action: { setBadgeText: vi.fn(async () => {}) },
+        runtime: {
+            getURL: (path) => `chrome-extension://wallet/${path}`,
+            onSuspend: { addListener: (fn) => suspended.push(fn) },
+        },
+        tabs: { onRemoved: { addListener: (fn) => tabRemoved.push(fn) } },
+        windows: {
+            create: vi.fn(async () => ({ id: 41 })),
+            remove,
+            onRemoved: { addListener: vi.fn() },
+        },
+    });
+    const broker = new ApprovalBroker({
+        newId: () => 'failure-request',
+        timeoutMs,
+    });
+    return { broker, remove, suspended, tabRemoved };
 }
 
 describe('ApprovalBroker action badge', () => {
@@ -122,4 +148,94 @@ describe('ApprovalBroker action badge', () => {
         expect(teardown).toContain('approvalBroker.cancelAll()');
     });
 
+});
+
+describe('ApprovalBroker failure paths', () => {
+    it('binds web approval requests to the browser-derived tab id', async () => {
+        let listener;
+        const runtime = {
+            id: 'wallet',
+            onMessage: {
+                addListener: vi.fn((fn) => { listener = fn; }),
+                removeListener: vi.fn(),
+            },
+        };
+        const host = { handle: vi.fn(async () => ({ ok: true, result: {} })) };
+        attachChromeRuntime(host, runtime);
+
+        listener(
+            {
+                type: 'bridge.connect',
+                request: {
+                    origin: 'https://dapp.test',
+                    requesterTabId: 999,
+                },
+            },
+            { url: 'https://dapp.test/page', tab: { id: 17 } },
+            vi.fn(),
+        );
+
+        await vi.waitFor(() => expect(host.handle).toHaveBeenCalledWith({
+            type: 'bridge.connect',
+            request: {
+                origin: 'https://dapp.test',
+                requesterTabId: 17,
+            },
+        }));
+    });
+
+    it('rejects and drains an approval when its requesting tab closes', async () => {
+        const { broker, remove, tabRemoved } = failureHarness();
+        const pending = broker.signMessage({
+            origin: 'https://dapp.test',
+            requesterTabId: 17,
+        });
+        await Promise.resolve();
+
+        expect(broker.fetch('failure-request')?.payload).toEqual({
+            origin: 'https://dapp.test',
+        });
+        tabRemoved[0](17);
+
+        await expect(pending).resolves.toEqual({ approved: false });
+        expect(broker._pendingSize()).toBe(0);
+        await vi.waitFor(() => expect(remove).toHaveBeenCalledWith(41));
+    });
+
+    it('rejects and drains an approval when its deadline expires', async () => {
+        vi.useFakeTimers();
+        const { broker, remove } = failureHarness({ timeoutMs: 1_000 });
+        const pending = broker.connect({ origin: 'https://dapp.test' });
+        await Promise.resolve();
+
+        await vi.advanceTimersByTimeAsync(1_000);
+
+        await expect(pending).resolves.toEqual({ approved: false });
+        expect(broker._pendingSize()).toBe(0);
+        expect(remove).toHaveBeenCalledWith(41);
+    });
+
+    it('rejects and drains an open approval when the wallet locks', async () => {
+        const { broker, remove } = failureHarness();
+        const pending = broker.signAction({ origin: 'https://dapp.test' });
+        await Promise.resolve();
+
+        await broker.cancelAll();
+
+        await expect(pending).resolves.toEqual({ approved: false });
+        expect(broker._pendingSize()).toBe(0);
+        expect(remove).toHaveBeenCalledWith(41);
+    });
+
+    it('rejects and drains an open approval before the background suspends', async () => {
+        const { broker, remove, suspended } = failureHarness();
+        const pending = broker.signPsbt({ origin: 'https://dapp.test' });
+        await Promise.resolve();
+
+        suspended[0]();
+
+        await expect(pending).resolves.toEqual({ approved: false });
+        expect(broker._pendingSize()).toBe(0);
+        await vi.waitFor(() => expect(remove).toHaveBeenCalledWith(41));
+    });
 });

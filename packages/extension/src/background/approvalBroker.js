@@ -55,9 +55,14 @@ import { sessionRandomUUID } from './uuid.js';
  * @property {() => string} [newId]                          randomUUID replacement for tests
  * @property {(path: string) => string} [getUrl]             chrome.runtime.getURL replacement
  * @property {BrokerWindowDeps} [windows]                    chrome.windows replacement
+ * @property {{ onRemoved?: { addListener(fn: (tabId: number) => void): void } }} [tabs] chrome.tabs replacement
+ * @property {{ onSuspend?: { addListener(fn: () => void): void } }} [runtime] chrome.runtime replacement
  * @property {{ setBadgeText?: (details: { text: string }) => Promise<void> | void }} [action] chrome.action replacement
  * @property {string} [approvalPath]                         default 'approval.html'
  * @property {{ width?: number, height?: number }} [windowSize]
+ * @property {number} [timeoutMs]
+ * @property {(fn: () => void, delay: number) => any} [setTimer]
+ * @property {(timer: any) => void} [clearTimer]
  */
 
 /**
@@ -67,7 +72,11 @@ import { sessionRandomUUID } from './uuid.js';
  * @property {unknown} payload
  * @property {{ promise: Promise<any>, resolve: (v: any) => void, reject: (err: any) => void }} deferred
  * @property {number | null} windowId
+ * @property {number | null} requesterTabId
+ * @property {any} timeout
  */
+
+export const APPROVAL_TIMEOUT_MS = 5 * 60 * 1000;
 
 export class ApprovalBroker {
     /** @param {BrokerRuntimeDeps} [deps] */
@@ -82,7 +91,12 @@ export class ApprovalBroker {
             /** @type {BrokerWindowDeps | undefined} */ (
                 globalThis.chrome?.windows
             );
+        this._tabs = deps.tabs ?? globalThis.chrome?.tabs;
+        this._runtime = deps.runtime ?? globalThis.chrome?.runtime;
         this._action = deps.action ?? globalThis.chrome?.action;
+        this._timeoutMs = deps.timeoutMs ?? APPROVAL_TIMEOUT_MS;
+        this._setTimer = deps.setTimer ?? setTimeout;
+        this._clearTimer = deps.clearTimer ?? clearTimeout;
         this._approvalPath = deps.approvalPath ?? 'approval.html';
         this._windowSize = {
             width: deps.windowSize?.width ?? 400,
@@ -96,6 +110,14 @@ export class ApprovalBroker {
         if (this._windows?.onRemoved?.addListener) {
             this._onWindowRemoved = this._onWindowRemoved.bind(this);
             this._windows.onRemoved.addListener(this._onWindowRemoved);
+        }
+        if (this._tabs?.onRemoved?.addListener) {
+            this._onTabRemoved = this._onTabRemoved.bind(this);
+            this._tabs.onRemoved.addListener(this._onTabRemoved);
+        }
+        if (this._runtime?.onSuspend?.addListener) {
+            this._onRuntimeSuspend = this._onRuntimeSuspend.bind(this);
+            this._runtime.onSuspend.addListener(this._onRuntimeSuspend);
         }
     }
 
@@ -140,6 +162,7 @@ export class ApprovalBroker {
         const entry = this._pending.get(id);
         if (!entry) return false;
         this._pending.delete(id);
+        this._clearTimer(entry.timeout);
         this._queueBadgeUpdate();
         entry.deferred.resolve(result);
         if (entry.windowId != null && this._windows?.remove) {
@@ -164,6 +187,7 @@ export class ApprovalBroker {
         this._queueBadgeUpdate();
 
         await Promise.all(entries.map(async (entry) => {
+            this._clearTimer(entry.timeout);
             entry.deferred.resolve({ approved: false });
             if (entry.windowId == null || !this._windows?.remove) return;
             try {
@@ -182,13 +206,29 @@ export class ApprovalBroker {
     _request(kind, payload) {
         const id = this._newId();
         const deferred = makeDeferred();
+        const requesterTabId = Number.isInteger(payload?.requesterTabId)
+            ? payload.requesterTabId
+            : null;
+        const popupPayload = requesterTabId == null
+            ? payload
+            : omitRequesterTabId(payload);
         /** @type {PendingEntry} */
-        const entry = { id, kind, payload, deferred, windowId: null };
+        const entry = {
+            id,
+            kind,
+            payload: popupPayload,
+            deferred,
+            windowId: null,
+            requesterTabId,
+            timeout: null,
+        };
         this._pending.set(id, entry);
+        entry.timeout = this._setTimer(() => this._rejectPending(id), this._timeoutMs);
         this._queueBadgeUpdate();
 
         if (!this._windows?.create) {
             this._pending.delete(id);
+            this._clearTimer(entry.timeout);
             this._queueBadgeUpdate();
             deferred.reject(
                 new Error(
@@ -219,7 +259,10 @@ export class ApprovalBroker {
                 }
             })
             .catch((err) => {
+                const current = this._pending.get(id);
+                if (!current) return;
                 this._pending.delete(id);
+                this._clearTimer(current.timeout);
                 this._queueBadgeUpdate();
                 deferred.reject(err);
             });
@@ -232,12 +275,38 @@ export class ApprovalBroker {
         for (const [id, entry] of this._pending) {
             if (entry.windowId === windowId) {
                 this._pending.delete(id);
+                this._clearTimer(entry.timeout);
                 this._queueBadgeUpdate();
                 // Convention: window-closed-without-decision = rejected.
                 entry.deferred.resolve({ approved: false });
                 break;
             }
         }
+    }
+
+    /** @param {number} tabId */
+    _onTabRemoved(tabId) {
+        for (const [id, entry] of this._pending) {
+            if (entry.requesterTabId === tabId) this._rejectPending(id);
+        }
+    }
+
+    _onRuntimeSuspend() {
+        void this.cancelAll();
+    }
+
+    /** @param {string} id */
+    _rejectPending(id) {
+        const entry = this._pending.get(id);
+        if (!entry) return false;
+        this._pending.delete(id);
+        this._clearTimer(entry.timeout);
+        this._queueBadgeUpdate();
+        entry.deferred.resolve({ approved: false });
+        if (entry.windowId != null && this._windows?.remove) {
+            Promise.resolve(this._windows.remove(entry.windowId)).catch(() => {});
+        }
+        return true;
     }
 
     _queueBadgeUpdate() {
@@ -264,4 +333,9 @@ function makeDeferred() {
     let reject = () => {};
     const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
     return { promise, resolve, reject };
+}
+
+function omitRequesterTabId(payload) {
+    const { requesterTabId: _requesterTabId, ...rest } = payload;
+    return rest;
 }
