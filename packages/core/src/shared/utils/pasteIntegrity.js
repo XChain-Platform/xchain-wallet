@@ -25,6 +25,7 @@
 
 import { sha256 } from '@noble/hashes/sha2';
 import { bytesToHex } from '@noble/hashes/utils';
+import { t } from '../../i18n/index.js';
 
 /**
  * SHA-256 hex over the UTF-8 bytes of `text`. Stable across runs;
@@ -91,6 +92,6 @@ export async function checkPasteIntegrity({ pastedText, clipboard } = {}) {
         pastedHash,
         reread,
         rereadHash,
-        reason: 'Clipboard contents changed between paste and re-read.',
+        reason: t('flows.pasteIntegrity.changed'),
     };
 }

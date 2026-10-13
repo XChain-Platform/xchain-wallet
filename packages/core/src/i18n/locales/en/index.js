@@ -459,7 +459,79 @@ export const en = {
     'pending.amount.moving': 'moves {amounts}',
     'pending.amount.caveat': 'Pending, not yet validated by the service: {summary}',
 
-    // --- errors ---------------------------------------------------
+    // --- flow status and error copy -------------------------------
+    'flows.biometric.browserUnsupported':
+        'This browser does not support the sign-in technology biometric unlock needs.',
+    'flows.biometric.deviceUnavailable':
+        'This device has no built-in fingerprint, face, or PIN unlock that this browser can use. Set one up in your system settings, then come back.',
+    'flows.biometric.probeFailed':
+        'This browser could not check whether a built-in unlock method is available.',
+    'flows.biometric.genericUnavailable': 'Biometric unlock is not available on this device.',
+
+    'flows.dispenserAddress.self':
+        'This is the source address itself, so it can always host its own dispenser.',
+    'flows.dispenserAddress.preference':
+        'Allowed: this address lets anyone open a dispenser on it.',
+    'flows.dispenserAddress.fresh':
+        'Allowed: this address has no on-chain history, so anyone may open the first dispenser on it.',
+    'flows.dispenserAddress.origin':
+        'Allowed: your source address opened a dispenser here before, so it may open another.',
+    'flows.dispenserAddress.ownerOnly': 'This address only lets its owner open dispensers.',
+    'flows.dispenserAddress.unknown':
+        'Could not confirm this address accepts your dispenser; the network will decide. If it refuses, the network fee is lost.',
+
+    'flows.pairPartner.unavailableHelp':
+        'Pairing applies to Watcher and Signer wallets. Pick one of those modes first, then pair this wallet with its other half.',
+    'flows.pairPartner.pairSigner': 'Pair a signer',
+    'flows.pairPartner.pairWatcher': 'Pair a watcher',
+    'flows.pairPartner.watcherHelp':
+        'This wallet watches your coins and builds unsigned transactions. Pair it with the offline wallet that holds the same recovery phrase and signs them.',
+    'flows.pairPartner.signerHelp':
+        'This wallet signs transactions offline. Pair it with the online wallet that holds the same recovery phrase and watches your coins.',
+    'flows.pairPartner.modeMismatch':
+        'This wallet is in {localMode} mode, so its partner must be in {partnerMode} mode. The wallet you scanned is in {scannedMode} mode.',
+    'flows.pairPartner.noSharedChains':
+        'The two wallets have no chain in common, so there is nothing to compare. Switch on at least one matching chain in both wallets and try again.',
+    'flows.pairPartner.seedMismatch':
+        'These two wallets were made from different recovery phrases ({chains} does not match). Restore both halves from the same phrase and pair again.',
+    'flows.pairPartner.paired':
+        'Paired. Both wallets come from the same recovery phrase and agree on {count, plural, one {# chain} other {# chains}}.',
+
+    'flows.protocolFee.freeLabel': 'This action has no protocol fee',
+    'flows.protocolFee.freeHint':
+        'Only the network fee applies, so there is nothing to pay on top of it.',
+    'flows.protocolFee.forfeit':
+        'The fee is sent on-chain and is not refunded if the network rejects this transaction.',
+    'flows.protocolFee.conditionalForfeit':
+        'If this action charges one, it is sent on-chain and is not refunded if the network rejects this transaction.',
+    'flows.protocolFee.amount': "This action's protocol fee is {amount} XCHAIN.",
+    'flows.protocolFee.paidIn': 'Protocol fee is paid in {ticker}',
+    'flows.protocolFee.paidInPlural': 'Protocol fees are paid in {ticker}',
+    'flows.protocolFee.onlyWay':
+        '{ticker} is the only way to pay a protocol fee on this chain.',
+    'flows.protocolFee.unverifiedNotice':
+        'The amount is exact, but the network does not check contract actions in advance, so it cannot tell you beforehand whether this one will be accepted. If it is rejected, the fee is still spent.',
+    'flows.protocolFee.toggleLabel': 'Pay protocol fee in {ticker} instead of XCHAIN',
+
+    'flows.rbf.unsupportedBuild': 'RBF replacement is not supported by this build.',
+    'flows.rbf.noEntry': 'No entry to replace.',
+    'flows.rbf.noHash': 'No transaction hash on this entry.',
+    'flows.rbf.alreadyConfirmed': 'Already confirmed.',
+    'flows.rbf.actionUnsupported': '{action} actions are not RBF-replaceable.',
+    'flows.rbf.notAllowed': 'This transaction did not allow fee replacement.',
+    'flows.rbf.nothingToUndo': 'Nothing to undo.',
+    'flows.rbf.cancelConfirmed': 'The cancellation already confirmed.',
+
+    'flows.signRisk.alwaysConfirm':
+        "You've set the wallet to always require explicit cross-check confirm on hardware signs.",
+    'flows.signRisk.multisig':
+        'Multisig contributions deserve an explicit cross-check. Your cosigners trust this signature.',
+    'flows.signRisk.firstRecipient':
+        "First-time recipient. Confirm the address on your device matches what's shown here.",
+    'flows.signRisk.largeAmount':
+        'Large amount ({amount} sats). Confirm both path and address on your device.',
+
+    'flows.pasteIntegrity.changed': 'Clipboard contents changed between paste and re-read.',
 };
 
 // Default export so the lazy locale loader (`import.meta.glob(..., {

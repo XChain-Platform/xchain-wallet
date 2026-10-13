@@ -22,6 +22,8 @@
 // final word; this verdict exists so the user learns the answer while still
 // on the form, from reads the wallet already makes.
 
+import { t } from '../i18n/index.js';
+
 export const OWNER_ONLY_REFUSAL = 'This address only lets its owner open dispensers.';
 
 /**
@@ -49,28 +51,28 @@ export function dispenserAddressVerdict({ address, source, preference, seen, ori
     if (!target) return null;
     // Opening on SOURCE itself is always allowed; nothing else is consulted.
     if (source && target === String(source).trim()) {
-        return { kind: 'self', allowed: true, message: 'This is the source address itself, so it can always host its own dispenser.' };
+        return { kind: 'self', allowed: true, message: t('flows.dispenserAddress.self') };
     }
     // Rule (a): the address opted in to hosting anyone's dispenser.
     if (preference === 2) {
-        return { kind: 'preference', allowed: true, message: 'Allowed: this address lets anyone open a dispenser on it.' };
+        return { kind: 'preference', allowed: true, message: t('flows.dispenserAddress.preference') };
     }
     // Rule (b): an address with no history can be claimed by the first opener.
     if (seen === false) {
-        return { kind: 'fresh', allowed: true, message: 'Allowed: this address has no on-chain history, so anyone may open the first dispenser on it.' };
+        return { kind: 'fresh', allowed: true, message: t('flows.dispenserAddress.fresh') };
     }
     // Rule (c): the source opened a dispenser here before.
     if (origin === true) {
-        return { kind: 'origin', allowed: true, message: 'Allowed: your source address opened a dispenser here before, so it may open another.' };
+        return { kind: 'origin', allowed: true, message: t('flows.dispenserAddress.origin') };
     }
     // Refuse only when every rule was read and each one failed.
     if (preference !== null && preference !== undefined && seen === true && origin === false) {
-        return { kind: 'refused', allowed: false, message: OWNER_ONLY_REFUSAL };
+        return { kind: 'refused', allowed: false, message: t('flows.dispenserAddress.ownerOnly') };
     }
     return {
         kind: 'unknown',
         allowed: true,
-        message: 'Could not confirm this address accepts your dispenser; the network will decide. If it refuses, the network fee is lost.',
+        message: t('flows.dispenserAddress.unknown'),
     };
 }
 
