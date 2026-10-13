@@ -32,6 +32,28 @@ describe('STYLE_GUIDE component contracts', () => {
         expect(guide).toContain('`sm` (28px minimum height)');
     });
 
+    it('uses shared Button variants for shared call-to-action controls', () => {
+        const amountField = read('packages/core/src/shared/components/AmountField.jsx');
+        const alertsOverlay = read('packages/core/src/shared/components/AlertsOverlay.jsx');
+        const alertsRoute = read('packages/core/src/shared/routes/AlertsRoute.jsx');
+        const menuRoute = read('packages/core/src/shared/routes/MenuRoute.jsx');
+        const amountFieldCss = read('packages/core/src/shared/components/AmountField.module.css');
+        const alertsCss = read('packages/core/src/shared/components/AlertsOverlay.module.css');
+        const menuCss = read('packages/core/src/shared/components/HeaderActionMenu.module.css');
+
+        expect(amountField).toMatch(/<Button[\s\S]*?aria-label="Use max available amount"/);
+        expect(alertsOverlay).toMatch(/<Button[\s\S]*?a\.action\.label/);
+        expect(alertsRoute).toMatch(/<Button[\s\S]*?a\.action\.label/);
+        expect(menuRoute).toMatch(/<Button[\s\S]*?variant="danger"[\s\S]*?Lock wallet/);
+        expect(amountField).not.toContain('className={styles.amountMaxInline}');
+        expect(alertsOverlay).not.toContain('className={styles.alertAction}');
+        expect(alertsRoute).not.toContain('className={styles.alertAction}');
+        expect(menuRoute).not.toContain('className={menuStyles.lockBtn}');
+        expect(amountFieldCss).not.toMatch(/\.amountMaxInline\s*\{/);
+        expect(alertsCss).not.toMatch(/\.alertAction\s*\{/);
+        expect(menuCss).not.toMatch(/\.lockBtn\s*\{/);
+    });
+
     it('documents the shared Input size prop instead of inline big-field values', () => {
         const source = read('packages/core/src/ui/Input.jsx');
         const css = read('packages/core/src/ui/Input.module.css');

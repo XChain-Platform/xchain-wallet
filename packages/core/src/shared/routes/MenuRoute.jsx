@@ -15,7 +15,7 @@
 // dead code, its trigger was never rendered). It still reuses
 // `HeaderActionMenu.module.css` for row styling.
 
-import { Screen, PageHeader, Icon } from '@xchain-wallet/core/ui';
+import { Button, Screen, PageHeader, Icon } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { LayoutModeToggle } from '../components/LayoutModeToggle.jsx';
 import menuStyles from '../components/HeaderActionMenu.module.css';
@@ -156,17 +156,15 @@ export function MenuRoute({
             <LayoutModeToggle />
             {typeof onLock === 'function' ? (
                 <div className={menuStyles.lockBlock}>
-                    <button
-                        type="button"
-                        className={menuStyles.lockBtn}
+                    <Button
+                        variant="danger"
+                        block
+                        icon={<Icon.LockIcon />}
                         onClick={onLock}
                         disabled={locking}
                     >
-                        <span className={menuStyles.rowIcon} aria-hidden="true">
-                            <Icon.LockIcon />
-                        </span>
-                        <span className={menuStyles.rowLabel}>Lock wallet</span>
-                    </button>
+                        Lock wallet
+                    </Button>
                 </div>
             ) : null}
         </Screen>

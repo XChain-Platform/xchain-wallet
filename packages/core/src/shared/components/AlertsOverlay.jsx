@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef } from 'react';
-import { Icon } from '@xchain-wallet/core/ui';
+import { Button, Icon } from '@xchain-wallet/core/ui';
 import styles from './AlertsOverlay.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
@@ -83,13 +83,15 @@ export function AlertsOverlay({ alerts, onClose }) {
                                     </div>
                                     <div className={styles.alertMessage}>{a.message}</div>
                                     {a.action ? (
-                                        <button
-                                            type="button"
-                                            className={styles.alertAction}
+                                        <Button
+                                            variant="primary"
+                                            size="sm"
+                                            icon={null}
                                             onClick={() => { a.action.onSelect(); onClose(); }}
+                                            style={{ alignSelf: 'flex-start' }}
                                         >
                                             {a.action.label}
-                                        </button>
+                                        </Button>
                                     ) : null}
                                 </li>
                             ))}
