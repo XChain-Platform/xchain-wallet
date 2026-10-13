@@ -87,6 +87,59 @@ afterEach(() => {
 });
 
 describe('form drafts across auto-lock', () => {
+    it('restores every non-secret field of a multi-recipient Send', async () => {
+        const messaging = createMessaging();
+        const first = mountForm('send', messaging);
+        fireEvent.change(await screen.findByLabelText(/^To$/), {
+            target: { value: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4' },
+        });
+        fireEvent.change(screen.getByLabelText(/^Token$/), { target: { value: 'XCP' } });
+        fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '2.5' } });
+        fireEvent.click(await screen.findByRole('button', { name: /Add recipient/i }));
+        fireEvent.change(screen.getByLabelText(/Recipient 2 address/i), {
+            target: { value: 'bc1qsecondrecipient0000000000000000000000000' },
+        });
+        fireEvent.change(screen.getByLabelText(/Recipient 2 amount/i), {
+            target: { value: '1.25' },
+        });
+        fireEvent.click(screen.getByRole('switch', { name: /different token/i }));
+
+        const storageKey = `xc:formdraft:send:${WALLET_ID}`;
+        await waitFor(() => {
+            const saved = JSON.parse(localStorage.getItem(storageKey));
+            expect(saved.values).toMatchObject({
+                toAddress: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4',
+                tick: 'XCP',
+                amount: '2.5',
+                perRecipientToken: true,
+                extraLegs: [{
+                    to: 'bc1qsecondrecipient0000000000000000000000000',
+                    amount: '1.25',
+                }],
+            });
+            expect(saved.values).not.toHaveProperty('password');
+            expect(saved.values).not.toHaveProperty('gatedScanPassword');
+        });
+
+        first.unmount();
+        mountForm('send', messaging);
+        fireEvent.click(await screen.findByRole('button', { name: 'Restore' }));
+
+        await waitFor(() => {
+            expect(document.getElementById('send-destination')).toHaveValue(
+                'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4',
+            );
+            expect(screen.getByLabelText(/^Token$/)).toHaveValue('XCP');
+            expect(document.getElementById('send-amount')).toHaveValue('2.5');
+            expect(screen.getByLabelText(/Recipient 2 address/i)).toHaveValue(
+                'bc1qsecondrecipient0000000000000000000000000',
+            );
+            expect(screen.getByLabelText(/Recipient 2 amount/i)).toHaveValue('1.25');
+            expect(screen.getByRole('switch', { name: /different token/i })).toBeChecked();
+        });
+        expect(messaging.sendToken).not.toHaveBeenCalled();
+    });
+
     it.each([
         {
             kind: 'send',

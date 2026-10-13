@@ -64,9 +64,16 @@ assert.ok(/from '\.\.\/hooks\/useFormDraft\.js'/.test(sendSrc),
     'Send.jsx imports useFormDraft');
 assert.ok(/useFormDraft\(\{ view: 'send', walletId\b/.test(sendSrc),
     'Send.jsx initialises useFormDraft with view=send and walletId');
-assert.ok(/draft\.save\(\{ chainId, toAddress, tick, amount, memo \}\)/.test(sendSrc),
-    'Send.jsx auto-saves the user-visible composition fields');
-assert.ok(!/draft\.save[\s\S]{0,200}password/.test(sendSrc),
+const sendDraftFields = sendSrc.match(/draft\.save\(\{([\s\S]*?)\}\);/)?.[1] || '';
+for (const field of [
+    'chainId', 'fromAddressId', 'pickedSourceChain', 'toAddress', 'tick',
+    'amount', 'memo', 'amountInputMode', 'fiatAmount', 'extraLegs',
+    'perRecipientToken',
+]) {
+    assert.match(sendDraftFields, new RegExp(`\\b${field}\\b`),
+        `Send.jsx auto-saves the non-secret composition field "${field}"`);
+}
+assert.ok(!/password/i.test(sendDraftFields),
     'Send.jsx never persists password into the draft');
 assert.ok(/draft\.clear\(\);[\s\S]{0,80}setStage\('done'\)/.test(sendSrc),
     'Send.jsx clears the draft after a successful broadcast');

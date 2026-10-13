@@ -526,17 +526,52 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     const [draftPending, setDraftPending] = useState(() => !draft.hasDraft());
     useEffect(() => {
         if (stage !== 'form' || !draftPending) return;
-        draft.save({ chainId, toAddress, tick, amount, memo });
-    }, [stage, draftPending, draft, chainId, toAddress, tick, amount, memo]);
+        draft.save({
+            chainId,
+            fromAddressId,
+            pickedSourceChain,
+            toAddress,
+            tick,
+            amount,
+            memo,
+            amountInputMode,
+            fiatAmount,
+            extraLegs,
+            perRecipientToken,
+        });
+    }, [
+        stage, draftPending, draft, chainId, fromAddressId, pickedSourceChain,
+        toAddress, tick, amount, memo, amountInputMode, fiatAmount, extraLegs,
+        perRecipientToken,
+    ]);
     const restoreDraft = useCallback(() => {
         const v = draft.load();
         if (!v) { setDraftPending(false); return; }
         cancelMax();
         if (typeof v.chainId === 'string') setChainId(v.chainId);
+        if (typeof v.fromAddressId === 'string') setFromAddressId(v.fromAddressId);
+        if (typeof v.pickedSourceChain === 'string') setPickedSourceChain(v.pickedSourceChain);
         if (typeof v.toAddress === 'string') setToAddress(v.toAddress);
         if (typeof v.tick === 'string') setTick(v.tick);
         if (typeof v.amount === 'string') setAmount(v.amount);
         if (typeof v.memo === 'string') setMemo(v.memo);
+        if (v.amountInputMode === 'coin' || v.amountInputMode === 'fiat') {
+            setAmountInputMode(v.amountInputMode);
+        }
+        if (typeof v.fiatAmount === 'string') setFiatAmount(v.fiatAmount);
+        if (Array.isArray(v.extraLegs)) {
+            setExtraLegs(v.extraLegs.slice(0, MAX_SEND_LEGS - 1).flatMap((leg) => (
+                leg && typeof leg.id === 'string'
+                    ? [{
+                        id: leg.id,
+                        to: typeof leg.to === 'string' ? leg.to : '',
+                        amount: typeof leg.amount === 'string' ? leg.amount : '',
+                        tick: typeof leg.tick === 'string' ? leg.tick : '',
+                    }]
+                    : []
+            )));
+        }
+        if (typeof v.perRecipientToken === 'boolean') setPerRecipientToken(v.perRecipientToken);
         setDraftPending(true);
     }, [draft, cancelMax]);
     const dismissDraft = useCallback(() => {

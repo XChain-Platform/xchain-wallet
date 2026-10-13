@@ -18,6 +18,11 @@ function appPlugin() {
     return plugin && typeof plugin.addListener === 'function' ? plugin : null;
 }
 
+function isNativeShell() {
+    const cap = /** @type {any} */ (globalThis).Capacitor;
+    return typeof cap?.isNativePlatform === 'function' && cap.isNativePlatform();
+}
+
 /**
  * Connects Capacitor's authoritative active state to the shared idle timer.
  * Initial and duplicate active notifications are ignored, so one background
@@ -46,7 +51,7 @@ export function useNativeAppLifecycle({
 
     useEffect(() => {
         const plugin = appPlugin();
-        if (!plugin) return undefined;
+        if (!isNativeShell()) return undefined;
         let disposed = false;
         let inactive = false;
 
@@ -68,15 +73,26 @@ export function useNativeAppLifecycle({
             }
         };
 
-        let handle;
-        try {
-            handle = Promise.resolve(plugin.addListener('appStateChange', onStateChange))
-                .catch(() => null);
-        } catch (_err) {
-            handle = null;
+        const onPause = () => onStateChange({ isActive: false });
+        const onResume = () => onStateChange({ isActive: true });
+        document.addEventListener('pause', onPause);
+        document.addEventListener('resume', onResume);
+
+        let handle = null;
+        if (plugin) {
+            try {
+                // A full App plugin supplies state changes while the document
+                // events cover native shells that only bundle Capacitor core.
+                handle = Promise.resolve(plugin.addListener('appStateChange', onStateChange))
+                    .catch(() => null);
+            } catch (_err) {
+                handle = null;
+            }
         }
         return () => {
             disposed = true;
+            document.removeEventListener('pause', onPause);
+            document.removeEventListener('resume', onResume);
             Promise.resolve(handle)
                 .then((listener) => listener?.remove?.())
                 .catch(() => { /* already removed */ });
