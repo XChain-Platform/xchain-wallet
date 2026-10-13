@@ -58,7 +58,11 @@ export function ReachabilityBanner({ chainIds, intervalMs, confirmMs, startupGra
             aria-atomic="true"
             className={`${styles.banner} ${overall === 'offline' ? styles.offline : styles.degraded}`}
         >
-            <span className={styles.icon} aria-hidden="true">
+            <span
+                className={styles.icon}
+                aria-hidden="true"
+                style={{ fontSize: 'var(--xc-icon-md)' }}
+            >
                 {overall === 'offline' ? '⛔' : '⚠'}
             </span>
             <div className={styles.body}>

@@ -17,12 +17,13 @@
     align-items: center;
     justify-content: space-between;
     gap: var(--xc-space-2);
-    padding: var(--xc-space-2) var(--xc-space-3);
+    padding: var(--xc-card-pad);
     border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
+    border-radius: var(--xc-card-radius);
     background: var(--xc-surface-raised);
     color: var(--xc-text);
     font-size: var(--xc-text-sm);
+    line-height: 1.4;
     box-shadow: var(--xc-shadow-toast);
     animation: undo-toast-in 160ms ease-out;
 }

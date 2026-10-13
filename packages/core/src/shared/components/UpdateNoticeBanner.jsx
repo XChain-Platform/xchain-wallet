@@ -32,6 +32,7 @@ import {
     checkForUpdateNotice,
     hasDirectUpdateLane,
 } from '../../flows/directUpdate.js';
+import { Button } from '../../ui/index.js';
 
 const DISMISSED_VERSION_KEY = 'xc:update-notice:dismissed-version';
 
@@ -81,32 +82,41 @@ export function UpdateNoticeBanner() {
             aria-live="polite"
             style={{
                 display: 'flex',
-                alignItems: 'flex-start',
+                alignItems: 'center',
                 gap: 'var(--xc-space-2)',
-                padding: 'var(--xc-space-2) var(--xc-space-3)',
+                padding: 'var(--xc-card-pad)',
                 background: 'var(--xc-surface-raised)',
                 border: '1px solid var(--xc-border)',
-                borderRadius: 'var(--xc-radius-md)',
+                borderRadius: 'var(--xc-card-radius)',
                 fontSize: 'var(--xc-text-sm)',
+                lineHeight: 1.4,
                 color: 'var(--xc-text)',
             }}
         >
-            <span aria-hidden="true">⬆</span>
-            <div style={{ flex: 1 }}>{notice.notice}</div>
-            <button
-                type="button"
-                onClick={dismiss}
-                aria-label="Dismiss update notice"
+            <span
+                aria-hidden="true"
                 style={{
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--xc-text-muted)',
-                    cursor: 'pointer',
-                    fontSize: 'var(--xc-text-sm)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: 'var(--xc-icon-md)',
+                    height: 'var(--xc-icon-md)',
+                    fontSize: 'var(--xc-icon-md)',
+                    flexShrink: 0,
                 }}
             >
+                ⬆
+            </span>
+            <div style={{ flex: 1 }}>{notice.notice}</div>
+            <Button
+                size="sm"
+                variant="secondary"
+                icon={null}
+                onClick={dismiss}
+                aria-label="Dismiss update notice"
+            >
                 Dismiss
-            </button>
+            </Button>
         </div>
     );
 }
