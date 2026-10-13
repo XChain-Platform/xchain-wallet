@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { EmptyState, Icon, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, branding as brandingLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { DispenserBadge } from '../components/DispenserBadge.jsx';
@@ -22,6 +22,7 @@ import marketsStyles from './MarketsList.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 const NATIVE_TICKER_BY_COIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
+const MARKET_WINDOW_SIZE = 100;
 function nativeTickerFor(descriptor) {
     if (!descriptor?.coin) return null;
     return NATIVE_TICKER_BY_COIN[descriptor.coin] || descriptor.coin.toUpperCase();
@@ -61,6 +62,10 @@ export function MarketsList({
     const [marketsReload, setMarketsReload] = useState(0);
     const [tab, setTab] = useState(/** @type {'all' | 'popular' | 'watchlist'} */ ('popular'));
     const [search, setSearch] = useState('');
+    const [marketWindow, setMarketWindow] = useState(() => ({
+        scope: '',
+        count: MARKET_WINDOW_SIZE,
+    }));
 
     const loadWatchlist = useCallback(async () => {
         try {
@@ -166,6 +171,22 @@ export function MarketsList({
         });
         return applySearch(rows);
     }, [tab, markets, watchlist, selectedAsset, search]);
+    const marketListScope = [selectedAssetKey, tab, search].join('\u0000');
+    const visibleMarketCount = marketWindow.scope === marketListScope
+        ? marketWindow.count
+        : MARKET_WINDOW_SIZE;
+    const renderedMarkets = displayMarkets.slice(0, visibleMarketCount);
+
+    const showMoreMarkets = () => {
+        setMarketWindow((current) => ({
+            scope: marketListScope,
+            count: Math.min(
+                displayMarkets.length,
+                (current.scope === marketListScope ? current.count : MARKET_WINDOW_SIZE)
+                    + MARKET_WINDOW_SIZE,
+            ),
+        }));
+    };
 
     const toggleStar = useCallback(async (chainId, tick1, tick2) => {
         const key = `${chainId}::${tick1}::${tick2}`;
@@ -366,9 +387,10 @@ export function MarketsList({
                                 : 'No pairs found involving this asset on its chain.'}
                     />
                 ) : (
+                    <>
                     <div className={receiveStyles.assetCard} style={{ display: 'block', padding: 0, marginBottom: 'var(--xc-space-3)' }}>
                         <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                            {displayMarkets.map((m, idx) => (
+                            {renderedMarkets.map((m, idx) => (
                                 <MarketRow
                                     key={`${m.tick1}::${m.tick2}`}
                                     chainId={selectedAsset.chainId}
@@ -386,6 +408,17 @@ export function MarketsList({
                             ))}
                         </ul>
                     </div>
+                    {visibleMarketCount < displayMarkets.length ? (
+                        <div className={marketsStyles.pagination} aria-live="polite">
+                            <span className={marketsStyles.paginationCount}>
+                                {Math.min(visibleMarketCount, displayMarkets.length).toLocaleString('en-US')} of {displayMarkets.length.toLocaleString('en-US')} markets shown
+                            </span>
+                            <Button type="button" variant="secondary" icon={null} onClick={showMoreMarkets}>
+                                Show more markets
+                            </Button>
+                        </div>
+                    ) : null}
+                    </>
                 )}
             </ListPage>
         </Screen>
