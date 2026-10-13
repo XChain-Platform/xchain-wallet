@@ -57,7 +57,9 @@ afterEach(() => cleanup());
 describe('Send from an address holding no coin', () => {
     it('warns before Send when the native balance is zero', async () => {
         mount('0');
-        expect(await screen.findByText(/This address holds no BTC/, {}, { timeout: 10_000 })).toBeTruthy();
+        const warning = await screen.findByText(/wallet has no coins to send yet/i, {}, { timeout: 10_000 });
+        expect(warning.textContent).toMatch(/Use Receive/i);
+        expect(warning.textContent).not.toMatch(/pick the address/i);
     }, 20_000);
 
     it('stays quiet when the address holds coin', async () => {
