@@ -7,6 +7,7 @@ describe('submitFailureMessage commit fee rejection', () => {
     it.each([
         'min relay fee not met',
         'fee too low',
+        'insufficient fee',
     ])('replaces wrapped "%s" wording with house-voice copy', (reason) => {
         const message = submitFailureMessage(
             new Error(`broadcast failed (commit): Encoder RPC error: ${reason}`),

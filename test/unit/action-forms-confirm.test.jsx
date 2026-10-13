@@ -42,6 +42,8 @@ import { StakeForm } from '../../packages/core/src/shared/routes/StakeForm.jsx';
 import { StakingActionForm } from '../../packages/core/src/shared/routes/StakingActionForm.jsx';
 import { ContractFundsForm } from '../../packages/core/src/shared/routes/ContractFundsForm.jsx';
 import { ContractStakeForm } from '../../packages/core/src/shared/routes/ContractStakeForm.jsx';
+import { CreateBetFeedForm } from '../../packages/core/src/shared/routes/CreateBetFeedForm.jsx';
+import { CreateOrderForm } from '../../packages/core/src/shared/routes/CreateOrderForm.jsx';
 import { ControllerBindForm } from '../../packages/core/src/shared/routes/ControllerBindForm.jsx';
 import { DeployContractForm } from '../../packages/core/src/shared/routes/DeployContractForm.jsx';
 import { ExecuteContractForm } from '../../packages/core/src/shared/routes/ExecuteContractForm.jsx';
@@ -291,6 +293,52 @@ function expectSingleEncode(calls, { action, params, submitMethod }) {
 const setValue = (utils, label, value) => {
     fireEvent.change(utils.getByLabelText(label), { target: { value } });
 };
+
+async function mountFilledForm({ Form, props, steps = [], fill }) {
+    const { messagingOverrides, ...formProps } = props;
+    const { messaging, calls } = recordingMessaging(messagingOverrides);
+    let utils;
+    await domAct(async () => {
+        utils = render(
+            React.createElement(
+                MessagingProvider,
+                { shell: 'web', messaging },
+                React.createElement(Form, {
+                    walletId: 'w',
+                    chainId: CHAIN,
+                    onBack() {},
+                    ...formProps,
+                }),
+            ),
+        );
+        await drainMicrotasks();
+    });
+    for (const step of [...steps, ...(fill ? [fill] : [])]) {
+        // eslint-disable-next-line no-await-in-loop
+        await domAct(async () => {
+            step(utils);
+            await drainMicrotasks();
+        });
+    }
+    return { calls, utils };
+}
+
+async function clickAction(utils, label) {
+    await domAct(async () => {
+        fireEvent.click(utils.getByRole('button', { name: label }));
+        await drainMicrotasks();
+    });
+}
+
+async function approveAction(utils) {
+    await domAct(async () => {
+        const approve = Array.from(utils.container.querySelectorAll('button'))
+            .find((button) => /approve/i.test(button.textContent || '') && !button.disabled);
+        if (!approve) throw new Error('no enabled Approve button on the confirm page');
+        fireEvent.click(approve);
+        await drainMicrotasks();
+    });
+}
 
 // TokenField opens the shared TokenPicker screen; these two steps open it
 // and pick the row for `tick` out of the mocked wallet balances.
@@ -1336,5 +1384,192 @@ describe('A migrated form maps its Approve failure through the one helper', () =
         expect(text).toContain('has no BTC to spend');
         expect(text, 'the encoder developer string never reaches the screen')
             .not.toContain('no spendable UTXOs');
+    });
+});
+
+const PROTOCOL_FAILURE_FORMS = [
+    {
+        name: 'issue',
+        Form: IssueTokenForm,
+        props: {},
+        actionLabel: 'Issue token',
+        composeMethod: 'composeForConfirm',
+        submitMethod: 'issueToken',
+        fill: (u) => {
+            setValue(u, 'Ticker', 'RETRYISSUE');
+            setValue(u, 'Supply', '1000');
+        },
+        expectValues: (u) => {
+            expect(u.getByLabelText('Ticker').value).toBe('RETRYISSUE');
+            expect(u.getByLabelText('Supply').value).toBe('1000');
+        },
+    },
+    {
+        name: 'dispenser',
+        Form: DispenserForm,
+        props: { initialChainId: CHAIN, initialTick: 'JDOG' },
+        actionLabel: 'Create',
+        composeMethod: 'composeForConfirm',
+        submitMethod: 'dispenserAction',
+        fill: (u) => {
+            setValue(u, /^Give amount/, '10');
+            setValue(u, /^Escrow amount/, '100');
+            setValue(u, /^Trigger price/, '0.001');
+        },
+        expectValues: (u) => {
+            expect(u.getByLabelText(/^Give amount/).value).toBe('10');
+            expect(u.getByLabelText(/^Escrow amount/).value).toBe('100');
+            expect(u.getByLabelText(/^Trigger price/).value).toBe('0.001');
+        },
+    },
+    {
+        name: 'order',
+        Form: CreateOrderForm,
+        props: { initialChainId: CHAIN },
+        actionLabel: 'Place order',
+        composeMethod: 'composeForConfirm',
+        submitMethod: 'orderAction',
+        fill: (u) => {
+            setValue(u, 'Ticker', 'JDOG');
+            setValue(u, 'Amount', '5');
+            setValue(u, 'Amount (BTC)', '0.01');
+        },
+        expectValues: (u) => {
+            expect(u.getByLabelText('Ticker').value).toBe('JDOG');
+            expect(u.getByLabelText('Amount').value).toBe('5');
+            expect(u.getByLabelText('Amount (BTC)').value).toBe('0.01');
+        },
+    },
+    {
+        name: 'bet',
+        Form: CreateBetFeedForm,
+        props: { presetTick: 'JDOG' },
+        actionLabel: 'Review market',
+        composeMethod: 'composeBetForConfirm',
+        submitMethod: 'createMarketAction',
+        fill: (u) => {
+            const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16);
+            setValue(u, 'What is being bet on', 'Will retry work?');
+            setValue(u, 'Outcome 0', 'Yes');
+            setValue(u, 'Outcome 1', 'No');
+            setValue(u, 'Betting closes', tomorrow);
+        },
+        expectValues: (u) => {
+            expect(u.getByLabelText('What is being bet on').value).toBe('Will retry work?');
+            expect(u.getByLabelText('Outcome 0').value).toBe('Yes');
+            expect(u.getByLabelText('Outcome 1').value).toBe('No');
+            expect(u.getByLabelText('Betting closes').value).not.toBe('');
+        },
+    },
+    {
+        name: 'vote',
+        Form: DelegateVoteForm,
+        props: { presetTick: 'JDOG' },
+        actionLabel: 'Delegate votes',
+        composeMethod: 'composeVoteForConfirm',
+        submitMethod: 'delegateVoteAction',
+        fill: (u) => {
+            setValue(u, 'Delegate to address', 'bc1qdelegate');
+            setValue(u, 'Memo (optional)', 'keep my vote');
+        },
+        expectValues: (u) => {
+            expect(u.getByLabelText('Delegate to address').value).toBe('bc1qdelegate');
+            expect(u.getByLabelText('Memo (optional)').value).toBe('keep my vote');
+        },
+    },
+    {
+        name: 'stake',
+        Form: StakeForm,
+        props: {},
+        actionLabel: 'Stake',
+        composeMethod: 'composeForConfirm',
+        submitMethod: 'stakeAction',
+        fill: (u) => {
+            setValue(u, /^Amount/, '25');
+            setValue(u, 'Signing public key', 'a'.repeat(64));
+        },
+        expectValues: (u) => {
+            expect(u.getByLabelText(/^Amount/).value).toBe('25');
+            expect(u.getByLabelText('Signing public key').value).toBe('a'.repeat(64));
+        },
+    },
+];
+
+const SUBMIT_FAILURES = [
+    {
+        name: 'insufficient network fee',
+        makeError: () => new Error('broadcast failed (commit): Encoder RPC error: insufficient fee'),
+        shown: 'The network rejected this transaction because its fee is too low.',
+        hidden: 'broadcast failed',
+    },
+    {
+        name: 'network error',
+        makeError: () => new Error('Failed to fetch'),
+        shown: /The network is unreachable\. Check your connection and try again\./,
+        hidden: 'Failed to fetch',
+    },
+    {
+        name: 'signer cancellation',
+        makeError: () => new Error('User cancelled signing on the device.'),
+        shown: 'Signing was cancelled. Nothing was signed. Review the details and try again when you are ready.',
+        hidden: 'User cancelled signing on the device.',
+    },
+];
+
+function expectFailureBesideAction(utils, spec, shown, hidden) {
+    const message = utils.getByText(shown);
+    const action = utils.getByRole('button', { name: spec.actionLabel });
+    expect(message.closest('form')).toBe(action.closest('form'));
+    expect(utils.container.textContent || '').not.toContain(hidden);
+    spec.expectValues(utils);
+}
+
+describe.each(PROTOCOL_FAILURE_FORMS)('$name form submit failures', (spec) => {
+    it('shows a boundary-crossed protocol refusal and can compose again', async () => {
+        const reason = 'This token symbol is already registered.';
+        const refusal = Object.assign(new Error(`Encoder RPC error: ${reason}`), {
+            name: 'SDKEncoderError',
+        });
+        const compose = vi.fn()
+            .mockRejectedValueOnce(refusal)
+            .mockResolvedValue({ ...COMPOSED });
+        const { utils } = await mountFilledForm({
+            Form: spec.Form,
+            props: {
+                ...spec.props,
+                messagingOverrides: { [spec.composeMethod]: compose },
+            },
+            fill: spec.fill,
+        });
+
+        await clickAction(utils, spec.actionLabel);
+        expectFailureBesideAction(utils, spec, reason, 'Encoder RPC error');
+
+        await clickAction(utils, spec.actionLabel);
+        expect(utils.container.querySelector('[data-testid="confirm-source"]')).toBeTruthy();
+        expect(compose).toHaveBeenCalledTimes(2);
+        await clickAction(utils, 'Reject');
+    });
+
+    it.each(SUBMIT_FAILURES)('shows $name, keeps values, and retries', async (failure) => {
+        const submit = vi.fn()
+            .mockRejectedValueOnce(failure.makeError())
+            .mockResolvedValue({ txid: `retry-${spec.name}` });
+        const { utils } = await driveThroughConfirm({
+            Form: spec.Form,
+            props: {
+                ...spec.props,
+                messagingOverrides: { [spec.submitMethod]: submit },
+            },
+            actionLabel: spec.actionLabel,
+            fill: spec.fill,
+        });
+
+        expectFailureBesideAction(utils, spec, failure.shown, failure.hidden);
+
+        await clickAction(utils, spec.actionLabel);
+        await approveAction(utils);
+        expect(submit).toHaveBeenCalledTimes(2);
+        expect(utils.queryByText(failure.shown)).toBe(null);
     });
 });
