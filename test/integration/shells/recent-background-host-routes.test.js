@@ -24,6 +24,8 @@ const SOURCE = 'bcrt1qsource';
 const DESTINATION = 'bcrt1qdestination';
 const ORIGINAL_TX = 'aa'.repeat(32);
 const INPUT_TX = '11'.repeat(32);
+const ALICE = `02${'aa'.repeat(32)}`;
+const BOB = `03${'bb'.repeat(32)}`;
 
 function collection(initial = []) {
     const rows = new Map(initial.map((row) => [row.id, structuredClone(row)]));
@@ -82,12 +84,145 @@ function makeHost(overrides = {}) {
 
 const call = (host, type, request) => host.handle({ type, request });
 
+function vaultLockedError() {
+    return Object.assign(new Error('wallet is locked'), { name: 'VaultLockedError' });
+}
+
 afterEach(() => {
     submittedActions.length = 0;
     vi.unstubAllGlobals();
 });
 
 describe('recent background host routes across extension, web, and desktop shells', () => {
+    it('addresses.newest returns the latest derivable address and rejects invalid or locked reads', async () => {
+        const newest = {
+            id: 'address-watch-8',
+            accountId: 'account-1',
+            chain: 'bitcoin',
+            network: 'regtest',
+            address: 'bcrt1qwatch8',
+            addressType: 'p2wpkh',
+            source: 'watch-only',
+            derivationPath: "m/84'/1'/0'/0/8",
+        };
+        const vault = makeVault({
+            accounts: collection([{ id: 'account-1', walletId: 'wallet-1' }]),
+            addresses: collection([
+                {
+                    ...newest,
+                    id: 'address-hd-7',
+                    address: 'bcrt1qhd7',
+                    source: 'hd',
+                    derivationPath: "m/84'/1'/0'/0/7",
+                },
+                newest,
+                {
+                    ...newest,
+                    id: 'address-imported-9',
+                    address: 'bcrt1qimported9',
+                    source: 'imported',
+                    derivationPath: "m/84'/1'/0'/0/9",
+                },
+            ]),
+        });
+        const descriptor = { id: CHAIN, coin: 'bitcoin', networkKind: 'regtest' };
+        const registry = {
+            get: (id) => id === CHAIN ? descriptor : null,
+            list: () => [descriptor],
+            supportedChains: () => [descriptor],
+        };
+        const host = makeHost({ vault, chainRegistry: registry });
+
+        expect(await call(host, 'addresses.newest', {
+            walletId: 'wallet-1',
+            chainId: CHAIN,
+            addressType: 'p2wpkh',
+        })).toEqual({ ok: true, result: newest });
+        const invalid = await call(host, 'addresses.newest', { walletId: 'wallet-1' });
+        expect(invalid).toMatchObject({
+            ok: false,
+            error: { message: expect.stringContaining('chainId is required') },
+        });
+
+        const lockedHost = makeHost({
+            vault: makeVault({
+                accounts: { findBy: async () => { throw vaultLockedError(); } },
+            }),
+            chainRegistry: registry,
+        });
+        expect(await call(lockedHost, 'addresses.newest', {
+            walletId: 'wallet-1',
+            chainId: CHAIN,
+            addressType: 'p2wpkh',
+        })).toMatchObject({ ok: false, error: { name: 'VaultLockedError' } });
+    });
+
+    it('multisigSign.finalize returns the finalized session and rejects invalid or locked reads', async () => {
+        const createdAt = '2026-10-13T12:00:00.000Z';
+        const session = {
+            schemaVersion: 1,
+            id: 'session-1',
+            walletId: 'wallet-1',
+            chainId: CHAIN,
+            scheme: 'p2wsh-multisig',
+            threshold: 2,
+            cosignerPubkeys: [ALICE, BOB],
+            msgHash: 'ab'.repeat(32),
+            psbtHex: '70736274ff',
+            actionSummary: 'Send 0.01 BTC',
+            nonces: [],
+            aggNonce: null,
+            partialSigs: [],
+            aggregatedSchnorrSig: null,
+            signatures: [],
+            status: 'ready-to-finalize',
+            finalizedTxHex: null,
+            txid: null,
+            createdAt,
+            updatedAt: createdAt,
+        };
+        const sessions = collection([session]);
+        const finalizeMultisigPsbt = vi.fn(async () => ({
+            txHex: '02000000000100',
+            txid: 'finalized-txid',
+        }));
+        const sdk = { wallet: { finalizeMultisigPsbt } };
+        const host = makeHost({
+            vault: makeVault({ multisigSigningSessions: sessions }),
+            sdkRegistry: { get: () => sdk, for: () => sdk },
+        });
+
+        const accepted = await call(host, 'multisigSign.finalize', { sessionId: session.id });
+        expect(accepted).toEqual({
+            ok: true,
+            result: {
+                ...session,
+                finalizedTxHex: '02000000000100',
+                txid: 'finalized-txid',
+                status: 'finalized',
+                updatedAt: expect.any(String),
+            },
+        });
+        expect(finalizeMultisigPsbt).toHaveBeenCalledWith(session.psbtHex);
+
+        const invalid = await call(host, 'multisigSign.finalize', {});
+        expect(invalid).toMatchObject({
+            ok: false,
+            error: { message: expect.stringContaining('sessionId is required') },
+        });
+
+        const lockedHost = makeHost({
+            vault: makeVault({
+                multisigSigningSessions: {
+                    get: async () => { throw vaultLockedError(); },
+                },
+            }),
+        });
+        expect(await call(lockedHost, 'multisigSign.finalize', {
+            sessionId: session.id,
+        })).toMatchObject({ ok: false, error: { name: 'VaultLockedError' } });
+    });
+
     it('wallet.labelSyncRestoreResult returns a task result and refuses a missing token', async () => {
         const host = makeHost();
         const token = startLabelSyncRestoreTask({
