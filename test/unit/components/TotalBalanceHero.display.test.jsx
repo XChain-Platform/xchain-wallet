@@ -67,6 +67,7 @@ describe('TotalBalanceHero privacy', () => {
         });
 
         expect(screen.getByText('•••••')).toBeInTheDocument();
+        expect(screen.getByLabelText('Balance hidden')).toBeInTheDocument();
         expect(screen.queryByText('$1,234.56')).toBeNull();
         expect(screen.queryByText(/not priced/)).toBeNull();
         expect(screen.queryByRole('status')).toBeNull();
@@ -86,6 +87,7 @@ describe('TotalBalanceHero fiat formatting', () => {
 
         expect(screen.getByText('$1,256.56')).toBeInTheDocument();
         expect(screen.getByText('1 token not priced')).toBeInTheDocument();
+        expect(screen.getByLabelText('1,256.56 US dollars')).toBeInTheDocument();
     });
 
     it('uses locale currency placement and keeps the ISO code as the suffix', async () => {
@@ -93,6 +95,7 @@ describe('TotalBalanceHero fiat formatting', () => {
 
         expect(await screen.findByText(/1\.234,56\s€/)).toBeInTheDocument();
         expect(screen.getByText('EUR')).toBeInTheDocument();
+        expect(screen.getByLabelText(/1\.234,56 Euro/)).toBeInTheDocument();
     });
 
     it('does not repeat a currency code when Intl exposes it as the symbol', async () => {

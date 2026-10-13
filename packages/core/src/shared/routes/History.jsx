@@ -77,7 +77,9 @@ import {
     formatDecimalAmount,
     formatDisplayAmount,
     formatHistoryAmount,
+    formatHistoryAmountForSpeech,
 } from '../utils/amountFormat.js';
+import { formatFiatAmountForSpeech } from '../utils/fiatAmountFormat.js';
 import { formatLocalDateTime } from '../utils/dateTime.js';
 import { RelativeTime } from '../components/RelativeTime.jsx';
 import { useHapticFeedback } from '../hooks/useHaptic.js';
@@ -2637,8 +2639,19 @@ function basicDetailRows(entry, chainTip, nativeAmount, nativeFiatValue, balance
     // amounts never reach here, so there's no coin-rate-on-token bug to
     // replicate.
     if (nativeAmount != null) {
+        const nativeTick = NATIVE_TICKER_BY_COIN[coinOfChainId(entry.chainId)] || '';
+        const amountSpeech = balancesHidden
+            ? 'Amount hidden'
+            : formatHistoryAmountForSpeech(
+                nativeAmount,
+                nativeTick,
+                historyAmountDirection(entry),
+            );
+        const fiatSpeech = nativeFiatValue != null && !balancesHidden
+            ? formatFiatAmountForSpeech(nativeFiatValue, fiatCurrency)
+            : '';
         rows.push(['Amount', (
-            <span>
+            <span aria-label={`${amountSpeech}${fiatSpeech ? `, approximately ${fiatSpeech}` : ''}`}>
                 {balancesHidden
                     ? '•••••'
                     : formatHistoryAmount(nativeAmount, historyAmountDirection(entry))}
@@ -2866,7 +2879,16 @@ function fullDetailRows(entry, balancesHidden = false) {
             const isPrimarySendAmount = String(entry.action || '').toUpperCase() === 'SEND'
                 && /^(amount|quantity)$/i.test(k);
             display = isPrimarySendAmount
-                ? formatHistoryAmount(v, historyAmountDirection(entry))
+                ? (
+                    <span aria-label={formatHistoryAmountForSpeech(
+                        v,
+                        raw.tick ?? raw.TICK ?? raw.token ?? '',
+                        historyAmountDirection(entry),
+                    )}
+                    >
+                        {formatHistoryAmount(v, historyAmountDirection(entry))}
+                    </span>
+                )
                 : formatDisplayAmount(v);
         } else if (typeof v === 'number' || (typeof v === 'string' && /^-?\d+$/.test(v))) {
             display = formatNumberWithCommas(v);
@@ -3488,6 +3510,11 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
                                 <span
                                     className={styles.pendingAmount}
                                     data-history-amount={settledAmount.direction || 'unknown'}
+                                    aria-label={formatHistoryAmountForSpeech(
+                                        settledAmount.amount,
+                                        settledAmount.tick,
+                                        settledAmount.direction,
+                                    )}
                                 >
                                     {formatHistoryAmount(settledAmount.amount, settledAmount.direction)} {settledAmount.tick}
                                 </span>

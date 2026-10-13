@@ -113,7 +113,7 @@ describe('BalanceList ordering and visibility', () => {
         render(<BalanceList rows={[row('LONG', { displayName })]} onSelectToken={() => {}} />);
 
         expect(screen.getByTitle(displayName)).toHaveTextContent(displayName);
-        expect(screen.getByRole('button', { name: `Open ${displayName} details` })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: (name) => name.startsWith(`Open ${displayName} details, `) })).toBeInTheDocument();
     });
 
     it('keeps a decorative avatar under slow or broken token artwork', () => {
@@ -143,7 +143,7 @@ describe('BalanceList ordering and visibility', () => {
         );
 
         expect(document.querySelector(`img[src="${imageUrl}"]`)).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Open PRIVATE token details' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Open PRIVATE token details, / }));
         expect(onSelectToken).toHaveBeenCalledWith(expect.objectContaining({ imageUrl: null }));
     });
 

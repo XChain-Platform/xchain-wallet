@@ -88,6 +88,51 @@ describe('History usability', () => {
         expect(onClick).toHaveBeenCalledOnce();
     });
 
+    it('announces signed settled amounts as sent or received phrases', () => {
+        render(provider(
+            {},
+            <ul>
+                <EntryRow
+                    entry={{
+                        key: 'bitcoin-mainnet:sent',
+                        action: 'SEND',
+                        actionIndex: '12',
+                        blockIndex: 100,
+                        chainId: CHAIN,
+                        source: ADDRESS,
+                        address: ADDRESS,
+                        raw: { amount: '2', tick: 'BTC' },
+                    }}
+                    selected={false}
+                    showConnector={false}
+                    onClick={() => {}}
+                    peerCache={{}}
+                    walletId="wallet-a"
+                />
+                <EntryRow
+                    entry={{
+                        key: 'bitcoin-mainnet:received',
+                        action: 'SEND',
+                        actionIndex: '13',
+                        blockIndex: 101,
+                        chainId: CHAIN,
+                        source: 'bc1qsender',
+                        address: ADDRESS,
+                        raw: { amount: '3.5', tick: 'BTC' },
+                    }}
+                    selected={false}
+                    showConnector={false}
+                    onClick={() => {}}
+                    peerCache={{}}
+                    walletId="wallet-a"
+                />
+            </ul>,
+        ));
+
+        expect(screen.getByLabelText('Sent 2 BTC')).toHaveTextContent('-2 BTC');
+        expect(screen.getByLabelText('Received 3.5 BTC')).toHaveTextContent('+3.5 BTC');
+    });
+
     it('labels a history address row with its chain and non-mainnet kind', () => {
         render(provider(
             {},

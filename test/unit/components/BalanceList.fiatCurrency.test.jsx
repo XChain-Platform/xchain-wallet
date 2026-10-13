@@ -15,8 +15,12 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { BalanceList, formatFiat } from '../../../packages/core/src/shared/components/BalanceList.jsx';
 import { CollectiblesView } from '../../../packages/core/src/shared/components/CollectiblesView.jsx';
+import { formatFiatAmountForSpeech } from '../../../packages/core/src/shared/utils/fiatAmountFormat.js';
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    window.localStorage.clear();
+});
 
 describe('formatFiat', () => {
     it('keeps USD as the default', () => {
@@ -34,6 +38,11 @@ describe('formatFiat', () => {
     it('still renders an unknown code', () => {
         expect(formatFiat('5', 'NOTACODE')).toBe('5 NOTACODE');
     });
+
+    it('uses currency names for spoken fiat values', () => {
+        expect(formatFiatAmountForSpeech('1234.5', 'EUR')).toBe('1,234.50 euros');
+        expect(formatFiatAmountForSpeech('0.004', 'GBP')).toBe('less than 0.01 British pounds');
+    });
 });
 
 describe('BalanceList rows', () => {
@@ -45,6 +54,34 @@ describe('BalanceList rows', () => {
         render(<BalanceList rows={rows} fiatCurrency="EUR" />);
         expect(screen.getByText('€40,000.00')).toBeTruthy();
         expect(screen.queryByText('$40,000.00')).toBeNull();
+        expect(screen.getByLabelText('0.50000000 BTC')).toBeTruthy();
+        expect(screen.getByLabelText('40,000.00 euros')).toBeTruthy();
+    });
+
+    it('keeps the amount and named fiat value in a clickable row name', () => {
+        const rows = [{
+            kind: 'native', chainId: 'bitcoin-mainnet', tick: 'BTC', quantity: '50000000',
+            divisibility: 8, fiatRate: 80000, displayName: 'Bitcoin',
+        }];
+        render(<BalanceList rows={rows} fiatCurrency="EUR" onSelectToken={() => {}} />);
+
+        expect(screen.getByRole('button', {
+            name: 'Open Bitcoin details, 0.50000000 BTC, 40,000.00 euros',
+        })).toBeTruthy();
+    });
+
+    it('does not expose hidden amounts through the row name', () => {
+        window.localStorage.setItem('xc:balancesHidden', '1');
+        const rows = [{
+            kind: 'native', chainId: 'bitcoin-mainnet', tick: 'BTC', quantity: '50000000',
+            divisibility: 8, fiatRate: 80000, displayName: 'Bitcoin',
+        }];
+        render(<BalanceList rows={rows} fiatCurrency="EUR" onSelectToken={() => {}} />);
+
+        expect(screen.getByRole('button', {
+            name: 'Open Bitcoin details, balance hidden',
+        })).toBeTruthy();
+        expect(screen.queryByLabelText(/40,000|0\.50000000/)).toBeNull();
     });
 
     it('shows no fiat for an unpriced token and labels a DEX-priced token', () => {
