@@ -200,7 +200,7 @@ describe('BackupSection label publication confirmation', () => {
             fireEvent.click(await screen.findByTestId('confirm-approve'));
             fireEvent.click(await screen.findByRole('button', { name: 'Copy txid' }));
 
-            expect(await screen.findByText(/Copy is not available here/)).toBeTruthy();
+            expect(await screen.findByText(/Copy failed: the clipboard is unavailable/)).toBeTruthy();
         } finally {
             if (prior) Object.defineProperty(navigator, 'clipboard', prior);
             else delete navigator.clipboard;

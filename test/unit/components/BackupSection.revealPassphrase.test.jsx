@@ -74,13 +74,13 @@ describe('BackupSection reveal: stored 25th-word passphrase', () => {
         mount(revealMnemonicRequest);
         await revealSeed();
 
-        const wordsBtn = screen.getByText(/abandon abandon/).closest('button');
-        const passBtn = screen.getByText('my 25th word').closest('button');
+        const wordsBtn = screen.getByRole('button', { name: 'Reveal recovery phrase' });
+        const passBtn = screen.getByRole('button', { name: 'Reveal passphrase' });
         expect(wordsBtn.style.filter).toBe('blur(8px)');
         expect(passBtn.style.filter).toBe('blur(8px)');
 
         // One toggle (the recovery-phrase button's own reveal control) uncovers both.
-        fireEvent.click(screen.getByLabelText('Reveal recovery phrase'));
+        fireEvent.click(wordsBtn);
         expect(wordsBtn.style.filter).toBe('none');
         expect(passBtn.style.filter).toBe('none');
     });
