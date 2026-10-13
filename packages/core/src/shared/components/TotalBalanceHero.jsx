@@ -21,6 +21,7 @@ import { synthesizeDemoNativePrices } from '../../flows/demoFixtures.js';
 import styles from './TotalBalanceHero.module.css';
 import { compareDecimalStrings } from '../utils/amountFormat.js';
 import { formatFiatAmount as formatFiatValue } from '../utils/fiatAmountFormat.js';
+import { percentChangeDisplay } from '../utils/percentFormat.js';
 
 /**
  * Hero block at the top of Home: total fiat value across every
@@ -135,6 +136,7 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
         && change24h
         && Number.isFinite(change24h.delta)
         && Number.isFinite(change24h.pct);
+    const changeDisplay = hasChange ? percentChangeDisplay(change24h.pct) : null;
     const showMeta = !hidden && (hasChange || hasUnpriced || hasSync);
 
     return (
@@ -242,14 +244,15 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                         {hasChange ? (
                             <span
                                 className={
-                                    change24h.delta > 0 ? styles.changePositive
-                                        : change24h.delta < 0 ? styles.changeNegative
+                                    changeDisplay.direction === 'positive' ? styles.changePositive
+                                        : changeDisplay.direction === 'negative' ? styles.changeNegative
                                         : styles.changeNeutral
                                 }
+                                aria-label={`${changeDisplay.label}; ${formatFiatAmount(Math.abs(change24h.delta), fiatCurrency, fiatLocale)}`}
                             >
-                                {change24h.delta > 0 ? '▲' : change24h.delta < 0 ? '▼' : '-'}{' '}
+                                {changeDisplay.direction === 'positive' ? '▲' : changeDisplay.direction === 'negative' ? '▼' : '-'}{' '}
                                 {formatFiatAmount(Math.abs(change24h.delta), fiatCurrency, fiatLocale)}{' '}
-                                ({change24h.pct > 0 ? '+' : ''}{change24h.pct.toFixed(2)}%)
+                                ({changeDisplay.text})
                             </span>
                         ) : null}
                         {hasUnpriced ? (

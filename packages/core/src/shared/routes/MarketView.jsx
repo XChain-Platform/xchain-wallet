@@ -22,6 +22,7 @@ import { TickerIcon } from '../components/TickerIcon.jsx';
 import { sampleMatchesFor } from '../../market/sampleMarketData.js';
 import { normalizeMarketHistoryRowExact } from '../../market/history_rows.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
+import { percentChangeDisplay } from '../utils/percentFormat.js';
 import {
     compareDecimalStrings,
     divideDecimalStrings,
@@ -124,9 +125,10 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
     const stats = useMemo(() => derive24hStats(historyRows, tick1, tick2), [historyRows, tick1, tick2]);
     const lastPrice = stats.lastPrice;
     const changePct = stats.changePct;
-    const changeColor = Number.isFinite(changePct)
-        ? (changePct > 0 ? 'var(--xc-success)' : changePct < 0 ? 'var(--xc-danger)' : 'var(--xc-text-muted)')
-        : 'var(--xc-text-muted)';
+    const changeDisplay = percentChangeDisplay(changePct);
+    const changeColor = changeDisplay?.direction === 'positive'
+        ? 'var(--xc-success)'
+        : changeDisplay?.direction === 'negative' ? 'var(--xc-danger)' : 'var(--xc-text-muted)';
     const marketKey = `${chainId}:${tick1}:${tick2}`;
 
     const header = (
@@ -192,12 +194,15 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
                 <span style={{ fontSize: 'var(--xc-text-lg)', fontWeight: 700, color: 'var(--xc-text)' }}>
                     {formatPrice(lastPrice)} <span style={{ fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)', fontWeight: 500 }}>{tick2}</span>
                 </span>
-                {Number.isFinite(changePct) ? (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 'var(--xc-text-sm)', fontWeight: 600, color: changeColor }}>
-                        {formatChangePct(changePct)}
-                        {changePct !== 0 ? (
+                {changeDisplay ? (
+                    <span
+                        aria-label={`24-hour change. ${changeDisplay.label}`}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 'var(--xc-text-sm)', fontWeight: 600, color: changeColor }}
+                    >
+                        {changeDisplay.text}
+                        {changeDisplay.direction !== 'neutral' ? (
                             <span aria-hidden="true" style={{ fontSize: '0.8em', lineHeight: 1 }}>
-                                {changePct > 0 ? '▲' : '▼'}
+                                {changeDisplay.direction === 'positive' ? '▲' : '▼'}
                             </span>
                         ) : null}
                     </span>
@@ -366,12 +371,6 @@ function formatPrice(n) {
     if (compareDecimalStrings(n, '1') >= 0) return roundDecimalString(n, 4);
     if (compareDecimalStrings(n, '0.01') >= 0) return roundDecimalString(n, 6);
     return roundDecimalString(n, 8);
-}
-
-function formatChangePct(n) {
-    if (!Number.isFinite(n)) return '';
-    const sign = n > 0 ? '+' : '';
-    return `${sign}${n.toFixed(2)}%`;
 }
 
 function formatVolume(n) {

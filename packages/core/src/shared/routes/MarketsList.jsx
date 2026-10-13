@@ -19,6 +19,7 @@ import styles from './IssueTokenForm.module.css';
 import receiveStyles from './Receive.module.css';
 import receivePickerStyles from './TokenPicker.module.css';
 import marketsStyles from './MarketsList.module.css';
+import { percentChangeDisplay } from '../utils/percentFormat.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const NATIVE_TICKER_BY_COIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
@@ -413,9 +414,10 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, lastPrice, change24h, 
         : tick1.toUpperCase() === selUpper ? tick2
         : tick1;
     const changeNum = change24h ? parseFloat(String(change24h).replace(/[^\d.+-]/g, '')) : NaN;
-    const changeColor = Number.isFinite(changeNum)
-        ? (changeNum > 0 ? 'var(--xc-success)' : changeNum < 0 ? 'var(--xc-danger)' : 'var(--xc-text-muted)')
-        : 'var(--xc-text-muted)';
+    const changeDisplay = percentChangeDisplay(changeNum);
+    const changeColor = changeDisplay?.direction === 'positive'
+        ? 'var(--xc-success)'
+        : changeDisplay?.direction === 'negative' ? 'var(--xc-danger)' : 'var(--xc-text-muted)';
     // Depth intensity: same accent hue, more saturated background as
     // depth grows. Five tiers tuned to feel meaningful from 1 → 30+.
     const depthPct = typeof depth === 'number' && Number.isFinite(depth)
@@ -478,18 +480,21 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, lastPrice, change24h, 
                 gap: '2px',
             }}>
                 {change24h ? (
-                    <span style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 2,
-                        fontSize: 'var(--xc-text-sm)',
-                        fontWeight: 600,
-                        color: changeColor,
-                    }}>
-                        {change24h}
-                        {Number.isFinite(changeNum) && changeNum !== 0 ? (
+                    <span
+                        aria-label={changeDisplay ? `24-hour change. ${changeDisplay.label}` : undefined}
+                        style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 2,
+                            fontSize: 'var(--xc-text-sm)',
+                            fontWeight: 600,
+                            color: changeColor,
+                        }}
+                    >
+                        {changeDisplay?.text ?? change24h}
+                        {changeDisplay && changeDisplay.direction !== 'neutral' ? (
                             <span aria-hidden="true" style={{ fontSize: '0.8em', lineHeight: 1 }}>
-                                {changeNum > 0 ? '▲' : '▼'}
+                                {changeDisplay.direction === 'positive' ? '▲' : '▼'}
                             </span>
                         ) : null}
                     </span>
