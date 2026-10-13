@@ -27,6 +27,7 @@
 // hook so the parent can gate Submit on `status === 'available'`.
 
 import { useSignerStatus } from '../hooks/useSignerStatus.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { DerivationPathCrossCheck } from './DerivationPathCrossCheck.jsx';
 import { HwFirmwareBanner } from './HwFirmwareBanner.jsx';
 import styles from './HwSignBlock.module.css';
@@ -120,7 +121,7 @@ export function HwSignBlock({
  * @param {string | undefined} chainId
  * @param {string | null} detail
  */
-function statusCopy(status, signerKind, chainId, detail) {
+export function statusCopy(status, signerKind, chainId, detail) {
     switch (status) {
         case 'available':
             return 'Ready to sign. Confirm on your device when you tap Send.';
@@ -134,11 +135,11 @@ function statusCopy(status, signerKind, chainId, detail) {
                 : 'Device is locked. Unlock it and try again.';
         case 'disconnected':
             return detail
-                ? `Device not detected. ${detail}`
+                ? `Device not detected. ${userFacingMessage(detail, 'Plug in and unlock, then try again.')}`
                 : 'Device not detected. Plug in and unlock.';
         case 'error':
             return detail
-                ? `Couldn't reach device. ${detail}`
+                ? `Couldn't reach device. ${userFacingMessage(detail, 'Check the connection and try again.')}`
                 : "Couldn't reach device.";
         default:
             return '';

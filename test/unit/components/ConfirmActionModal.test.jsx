@@ -207,6 +207,13 @@ describe('ConfirmActionModal', () => {
         expect(screen.getByTestId('confirm-error').textContent).toMatch(/Something broke/);
     });
 
+    it('replaces internal error identifiers with plain copy', () => {
+        render(<ConfirmActionModal {...base({ error: 'SDKEncoderError: INSUFFICIENT_FUNDS' })} />);
+        const text = screen.getByTestId('confirm-error').textContent;
+        expect(text).toMatch(/wallet service returned no explanation/i);
+        expect(text).not.toMatch(/SDKEncoderError|INSUFFICIENT_FUNDS/);
+    });
+
     it('explains when a failed request carries no diagnostic message', () => {
         render(<ConfirmActionModal {...base({ error: {} })} />);
         expect(screen.getByTestId('confirm-error').textContent)
