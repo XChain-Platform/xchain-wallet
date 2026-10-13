@@ -113,8 +113,8 @@ assert.match(
 );
 assert.match(
     formRender,
-    /type="submit"[\s\S]{0,200}disabled=\{!!testSendGate\}/,
-    'compose-form Send button disabled while the gate is up',
+    /type="submit"[\s\S]{0,200}disabled=\{networkOffline \|\| !!testSendGate\}/,
+    'compose-form Send button disabled while offline or while the gate is up',
 );
 assert.match(
     sendSrc,

@@ -12,6 +12,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, branding as brandingLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useReachability } from '../hooks/useReachability.js';
 import { DispenserBadge } from '../components/DispenserBadge.jsx';
 import { tickerColor } from '../components/BalanceList.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
@@ -55,6 +56,8 @@ export function MarketsList({
 }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
+    const { overall: reachabilityOverall } = useReachability({});
+    const networkOffline = reachabilityOverall === 'offline';
     const tabsId = useId();
 
     const [markets, setMarkets] = useState(/** @type {Array<{ tick1: string, tick2: string, lastPrice?: string, change24h?: string, depth?: number }>} */ ([]));
@@ -465,6 +468,7 @@ export function MarketsList({
                                         depth={m.depth}
                                         starred={watchlistKeySet.has(`${selectedAsset.chainId}::${m.tick1}::${m.tick2}`)}
                                         onOpen={() => onOpenMarket(selectedAsset.chainId, m.tick1, m.tick2)}
+                                        openDisabled={networkOffline}
                                         onToggleStar={() => toggleStar(selectedAsset.chainId, m.tick1, m.tick2)}
                                         first={idx === 0}
                                     />
@@ -504,10 +508,11 @@ export function MarketsList({
  * @param {string} [props.change24h]
  * @param {number} [props.depth]
  * @param {boolean} [props.starred]
+ * @param {boolean} [props.openDisabled]
  * @param {() => void} props.onOpen
  * @param {() => void} props.onToggleStar
  */
-function MarketRow({ chainId, selectedTick, tick1, tick2, name1, name2, lastPrice, change24h, depth, starred, onOpen, onToggleStar, first }) {
+function MarketRow({ chainId, selectedTick, tick1, tick2, name1, name2, lastPrice, change24h, depth, starred, openDisabled, onOpen, onToggleStar, first }) {
     const selUpper = String(selectedTick || '').toUpperCase();
     // Show the icon for the OTHER side of the pair, the side the user
     // didn't pick. Falls back to tick1 if neither side matches.
@@ -561,6 +566,8 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, name1, name2, lastPric
             <button
                 type="button"
                 onClick={onOpen}
+                disabled={openDisabled}
+                title={openDisabled ? 'Opening a market needs a network connection' : undefined}
                 aria-label={`Open ${otherName || otherTick} market`}
                 data-market-result="true"
                 style={{

@@ -207,6 +207,7 @@ import { useFormDraft } from '../hooks/useFormDraft.js';
 import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { useUndoSend } from '../hooks/useUndoSend.js';
+import { useReachability } from '../hooks/useReachability.js';
 import { useFormLeaveGuard } from '../hooks/useFormLeaveGuard.js';
 import { useDispenserDestination, dispenserDestinationNotice } from '../hooks/useDispenserDestination.js';
 import {
@@ -352,6 +353,8 @@ function normalizePastedRecipient(value) {
  */
 export function Send({ walletId, accountId, onBack, prefill = null, onDone, onChangeAsset, onViewHistory, onReceive }) {
     const { messaging, shell } = useMessaging();
+    const { overall: reachabilityOverall } = useReachability({});
+    const networkOffline = reachabilityOverall === 'offline';
     // Unlocked software session signs without a password.
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
@@ -1951,6 +1954,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
 
     function handleReview(event) {
         event.preventDefault();
+        if (networkOffline) return;
         setValidationAttempt((attempt) => attempt + 1);
         if (!chainId || !fromAddress) {
             setFormError('Choose the address to send from.');
@@ -2275,7 +2279,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
+        if (networkOffline || stage === 'submitting') return;
         if (!isWatcherMode) {
             if (!isHwSource && !signerReady && password.length === 0) return;
             if (isHwSource && hwStatus !== 'available') return;
@@ -2817,6 +2821,10 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     >
                         {submitError}
                     </StatusMessage>
+                ) : networkOffline ? (
+                    <StatusMessage variant="warning">
+                        Sending needs a network connection. Your cached balance remains available.
+                    </StatusMessage>
                 ) : null}
                 actions={(
                     <Button
@@ -2824,7 +2832,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                         variant="primary"
                         loading={stage === 'submitting'}
                         disabled={
-                            !!testSendGate
+                            networkOffline
+                            || !!testSendGate
                             || (isWatcherMode
                                 ? false
                                 : isHwSource
@@ -2832,6 +2841,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                                         || (signRisk.requireExplicitConfirm && !hwExplicitConfirmed))
                                     : (!signerReady && password.length === 0))
                         }
+                        title={networkOffline ? 'Sending needs a network connection' : undefined}
                     >
                         {isWatcherMode
                             ? t('send.review.submitAction', { label: t('send.review.createUnsigned') })
@@ -3125,12 +3135,17 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                             : undefined
                     }
                 />
+            ) : networkOffline ? (
+                <StatusMessage variant="warning">
+                    Sending needs a network connection. Your cached balance remains available.
+                </StatusMessage>
             ) : null}
             actions={(
                 <Button
                     type="submit"
                     variant="primary"
-                    disabled={!!testSendGate}
+                    disabled={networkOffline || !!testSendGate}
+                    title={networkOffline ? 'Sending needs a network connection' : undefined}
                 >
                     {t('send.title')}
                 </Button>

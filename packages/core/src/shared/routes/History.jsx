@@ -88,6 +88,7 @@ import { formatFiatAmountForSpeech } from '../utils/fiatAmountFormat.js';
 import { formatLocalDateTime } from '../utils/dateTime.js';
 import { RelativeTime } from '../components/RelativeTime.jsx';
 import { useHapticFeedback } from '../hooks/useHaptic.js';
+import { useReachability } from '../hooks/useReachability.js';
 import { useLongOperationStatus } from '../hooks/useLongOperationStatus.js';
 import { isNavigatorOnline, useOnlineStatus } from '../hooks/useOnlineStatus.js';
 import { readHistoryCache, writeHistoryCache } from '../utils/historyCache.js';
@@ -477,6 +478,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
     const { showToast } = useToast();
+    const { overall: reachabilityOverall } = useReachability({});
+    const networkOffline = reachabilityOverall === 'offline';
     const browserOnline = useOnlineStatus();
 
     const [addressesByChain, setAddressesByChain] = useState(
@@ -1583,8 +1586,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     type="button"
                     className={refreshing ? styles.refreshing : undefined}
                     aria-label={refreshing ? t('history.refreshing') : t('history.refresh')}
-                    title={refreshing ? t('history.refreshing') : t('history.refresh')}
-                    disabled={refreshing || !historyLoaded}
+                    title={networkOffline
+                        ? 'Refreshing history needs a network connection'
+                        : refreshing ? t('history.refreshing') : t('history.refresh')}
+                    disabled={networkOffline || refreshing || !historyLoaded}
                     onClick={() => {
                         const throttle = pollThrottleRef.current;
                         if (throttle.isInFlight()) return;

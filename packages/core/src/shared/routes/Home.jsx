@@ -18,6 +18,7 @@ import { useSettings } from '../hooks/useSettings.js';
 import { useProofVerification } from '../hooks/useProofVerification.js';
 import { useEscrowedBalances } from '../hooks/useEscrowedBalances.js';
 import { isNavigatorOnline, useOnlineStatus } from '../hooks/useOnlineStatus.js';
+import { useReachability } from '../hooks/useReachability.js';
 import { useWalletFilters } from '../hooks/useWalletFilters.js';
 import { HomeTabs } from '../components/HomeTabs.jsx';
 import { buildBalanceRows, detectSpamCandidates } from '../components/BalanceList.jsx';
@@ -191,6 +192,8 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
     const browserOnline = useOnlineStatus();
+    const { overall: reachabilityOverall } = useReachability({});
+    const networkActionsAvailable = browserOnline && reachabilityOverall !== 'offline';
     const { showToast } = useToast();
 
     const [wallets, setWallets] = useState(/** @type {any[] | null} */ (null));
@@ -352,7 +355,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // entry appends here and keeps More alive on its own.
     const runNetworkAction = useCallback((label, action) => {
         if (typeof action !== 'function') return;
-        if (!browserOnline) {
+        if (!networkActionsAvailable) {
             showToast({
                 message: `${label} needs a network connection. Your cached balances are still available.`,
                 variant: 'error',
@@ -360,7 +363,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             return;
         }
         action();
-    }, [browserOnline, showToast]);
+    }, [networkActionsAvailable, showToast]);
 
     const homeMoreActions = useMemo(() => {
         const out = [];
@@ -1045,7 +1048,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 {!isDemoActive ? (
                     <SendQuickAction
                         onSend={onSend}
-                        browserOnline={browserOnline}
+                        networkActionsAvailable={networkActionsAvailable}
                         onOffline={() => runNetworkAction('Sending', onSend)}
                     />
                 ) : null}
@@ -1065,8 +1068,8 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         type="button"
                         className={styles.quickAction}
                         onClick={() => runNetworkAction('Exchange', onExchange)}
-                        aria-disabled={!browserOnline ? 'true' : undefined}
-                        title={!browserOnline ? 'Exchange needs a network connection' : undefined}
+                        aria-disabled={!networkActionsAvailable ? 'true' : undefined}
+                        title={!networkActionsAvailable ? 'Exchange needs a network connection' : undefined}
                     >
                         <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MarketIcon /></span>
                         <span>Exchange</span>
@@ -1119,8 +1122,8 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             </div>
         </div>
     ), [
-        browserOnline, homeMoreActions, homeMoreOpen, isDemoActive, onExchange, onReceive, onSend,
-        quickActionsReason, runNetworkAction,
+        homeMoreActions, homeMoreOpen, isDemoActive, networkActionsAvailable, onExchange,
+        onReceive, onSend, quickActionsReason, runNetworkAction,
     ]);
 
     const accountList = Array.isArray(accounts) ? [...accounts].sort((a, b) => a.index - b.index) : [];
@@ -1490,14 +1493,14 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     );
 }
 
-function SendQuickAction({ onSend, browserOnline, onOffline }) {
+function SendQuickAction({ onSend, networkActionsAvailable, onOffline }) {
     const content = (
         <>
             <span className={styles.quickActionIcon} aria-hidden="true"><Icon.SendIcon /></span>
             <span>Send</span>
         </>
     );
-    if (!browserOnline && onSend) {
+    if (!networkActionsAvailable && onSend) {
         return (
             <button
                 type="button"

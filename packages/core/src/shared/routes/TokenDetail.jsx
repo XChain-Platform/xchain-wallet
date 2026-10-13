@@ -31,6 +31,7 @@ import { useSettings } from '../hooks/useSettings.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { usePortfolioChartVisible } from '../hooks/usePortfolioChartVisible.js';
 import { useOnlineStatus } from '../hooks/useOnlineStatus.js';
+import { useReachability } from '../hooks/useReachability.js';
 import { coinFromChainId, formatFiat } from '../components/BalanceList.jsx';
 import { BridgeOriginTick } from './BridgeOriginBadge.jsx';
 import { parseBridgedTick, bridgeDisplayTick, coinDisplay } from './BridgeTick.js';
@@ -111,6 +112,8 @@ export function TokenDetail({
     const walletModeReady = settings !== null;
     const isWatcherMode = settings?.walletMode === 'watcher';
     const browserOnline = useOnlineStatus();
+    const { overall: reachabilityOverall } = useReachability({});
+    const networkActionsAvailable = browserOnline && reachabilityOverall !== 'offline';
     const variant = screenVariantFor(shell);
     const tabsId = useId();
 
@@ -390,8 +393,8 @@ export function TokenDetail({
     const secondaryCode = showFiatPrimary ? tick : (fiatAvailable ? fiatCurrency : '');
     const sendDisabledReason = safeBigInt(quantity) <= 0n
         ? 'No balance to send.'
-        : !browserOnline ? 'Send needs a network connection.' : null;
-    const tradeDisabledReason = !browserOnline ? 'Trade needs a network connection.' : null;
+        : !networkActionsAvailable ? 'Send needs a network connection.' : null;
+    const tradeDisabledReason = !networkActionsAvailable ? 'Trade needs a network connection.' : null;
 
     if (tokenMissing) {
         return (
