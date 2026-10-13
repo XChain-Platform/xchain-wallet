@@ -185,7 +185,7 @@ async function drainMicrotasks(rounds = 12) {
  * @param {(utils: any) => void} [spec.fill]
  * @param {Array<(utils: any) => void>} [spec.steps]   extra interactions, each flushed on its own (picker screens need a render between clicks)
  */
-async function driveThroughConfirm({ Form, props, actionLabel, fill, steps = [], hw = false }) {
+async function driveThroughConfirm({ Form, props, actionLabel, fill, steps = [], hw = false, afterClick = null }) {
     const { messagingOverrides, ...formProps } = props;
     // The same drive, sourced from a paired device instead of an HD
     // key. Auto-select only picks `source === 'hd'`, so the hardware address
@@ -229,6 +229,12 @@ async function driveThroughConfirm({ Form, props, actionLabel, fill, steps = [],
         fireEvent.click(button);
         await drainMicrotasks();
     });
+    if (afterClick) {
+        await domAct(async () => {
+            afterClick(utils);
+            await drainMicrotasks();
+        });
+    }
 
     // #40, asserted here rather than per form ON PURPOSE: every test in this
     // file drives a different form through this one helper, so the From row is
@@ -663,7 +669,8 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: TokenWizard,
             props: {},
-            actionLabel: 'Issue token',
+            actionLabel: 'Review token',
+            afterClick: (utils) => fireEvent.click(utils.getByRole('button', { name: 'Continue to confirmation' })),
             steps: [
                 (utils) => fireEvent.click(utils.getByRole('button', { name: /Custom/ })),
                 (utils) => fireEvent.click(utils.getByRole('button', { name: 'Next' })),
@@ -716,7 +723,11 @@ describe('Action forms confirm via the single-encode pipeline', () => {
 
         expect(utils.queryByLabelText('Password')).toBeNull();
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Issue token' }));
+            fireEvent.click(utils.getByRole('button', { name: 'Review token' }));
+            await drainMicrotasks();
+        });
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: 'Continue to confirmation' }));
             await drainMicrotasks();
         });
 
