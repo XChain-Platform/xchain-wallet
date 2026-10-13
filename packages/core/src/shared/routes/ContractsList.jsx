@@ -328,14 +328,19 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                     value={chainFilter}
                     onChange={setChainFilter}
                 />
-                <Input
-                    type="search"
-                    placeholder="Filter by name or number"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    aria-label="Filter contracts"
-                    style={{ flex: '1 1 200px', minWidth: 0 }}
-                />
+                {/* The flex sizing sits on a wrapper: Input renders its own column
+                    wrapper, so a flex-basis on the <input> itself became the
+                    field height (200px) instead of its width; the negative margin
+                    cancels the field's own bottom margin so the row stays centred. */}
+                <div style={{ flex: '1 1 200px', minWidth: 0, marginBottom: 'calc(var(--xc-space-3) * -1)' }}>
+                    <Input
+                        type="search"
+                        placeholder="Filter by name or number"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        aria-label="Filter contracts"
+                    />
+                </div>
                 {onDeploy ? (
                     <Button variant="primary" onClick={onDeploy} style={{ flex: '0 0 auto' }}>
                         + Publish contract
@@ -476,7 +481,7 @@ function ContractRow({ row, chainId }) {
     const owner = row.source || row.SOURCE || row.owner || row.OWNER;
     const status = String(row.status || row.STATUS || '(unknown)');
     return (
-        <>
+        <span className={styles.entryText}>
             <span className={styles.entryLabel}>
                 {contractDisplayLabel(row, { chainId, actionIndex: row.action_index })}
             </span>
@@ -486,21 +491,21 @@ function ContractRow({ row, chainId }) {
                 ) : null}
                 status {status}
             </span>
-        </>
+        </span>
     );
 }
 
 function InteractionRow({ row, chainId }) {
     const kinds = Array.from(row.kinds || []).sort().join(' + ');
     return (
-        <>
+        <span className={styles.entryText}>
             <span className={styles.entryLabel}>
                 {contractDisplayLabel(row, { chainId, actionIndex: row.contract_action_index })}
             </span>
             <span className={styles.entryDescription}>
                 {kinds || '(none)'} · last block {row.latestBlock || '?'}
             </span>
-        </>
+        </span>
     );
 }
 

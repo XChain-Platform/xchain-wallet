@@ -639,9 +639,9 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                 />
             ) : null}
 
-            <fieldset style={{ border: '1px solid var(--border, #ccc)', padding: '0.5rem', borderRadius: '4px', marginBottom: '0.75rem' }}>
+            <fieldset style={{ border: '1px solid var(--xc-border)', padding: '0.5rem', borderRadius: '4px', marginBottom: '0.75rem' }}>
                 <legend style={{ padding: '0 0.25rem' }}>Mode</legend>
-                <p style={{ fontSize: '0.85rem', margin: '0 0 0.5rem', color: 'var(--muted, #666)' }}>
+                <p style={{ fontSize: '0.85rem', margin: '0 0 0.5rem', color: 'var(--xc-text-muted)' }}>
                     Auto-set from the signing pubkey below; flip if you want to override.
                 </p>
                 <label style={{ display: 'block', marginBottom: '0.25rem' }}>
@@ -663,7 +663,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                     /> Top up an existing stake
                 </label>
                 {detectStatus !== 'idle' ? (
-                    <p style={{ fontSize: '0.8rem', margin: '0.5rem 0 0', color: 'var(--muted, #666)' }}>
+                    <p style={{ fontSize: '0.8rem', margin: '0.5rem 0 0', color: 'var(--xc-text-muted)' }}>
                         {detectStatus === 'checking' && 'Checking the network for an existing stake…'}
                         {detectStatus === 'new' && '✓ No existing stake for this pubkey; defaulting to New stake.'}
                         {detectStatus === 'topup' && '✓ Existing stake found; defaulting to Top up. (Choose New stake to force-reject as duplicate.)'}
@@ -693,11 +693,11 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
 
             {qualifyReadout ? (
                 <div style={{
-                    border: '1px solid var(--border, #ccc)',
+                    border: '1px solid var(--xc-border)',
                     borderRadius: '4px',
                     padding: '0.5rem 0.75rem',
                     marginBottom: '0.75rem',
-                    background: 'var(--xc-bg-muted, transparent)',
+                    background: 'var(--xc-bg-muted)',
                 }}>
                     <p style={{ fontSize: '0.85rem', fontWeight: 600, margin: '0 0 0.5rem' }}>
                         Capabilities this stake unlocks
@@ -716,24 +716,24 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                             >
                                 <span
                                     aria-hidden="true"
-                                    style={{ color: r.qualifies ? 'var(--xc-success, #16a34a)' : 'var(--muted, #999)' }}
+                                    style={{ color: r.qualifies ? 'var(--xc-success)' : 'var(--xc-text-muted)' }}
                                 >
                                     {r.qualifies ? '✓' : '○'}
                                 </span>
                                 <span style={{
                                     flex: 1,
-                                    color: r.qualifies ? 'var(--xc-text, inherit)' : 'var(--muted, #777)',
+                                    color: r.qualifies ? 'var(--xc-text)' : 'var(--xc-text-muted)',
                                 }}>
                                     {r.label}
                                     <span className="sr-only">{r.qualifies ? ' (qualifies)' : ' (not yet)'}</span>
                                 </span>
-                                <span style={{ color: 'var(--muted, #777)', fontVariantNumeric: 'tabular-nums' }}>
+                                <span style={{ color: 'var(--xc-text-muted)', fontVariantNumeric: 'tabular-nums' }}>
                                     {r.minStake} XCHAIN
                                 </span>
                             </li>
                         ))}
                     </ul>
-                    <p style={{ fontSize: '0.75rem', color: 'var(--muted, #777)', margin: '0.5rem 0 0' }}>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--xc-text-muted)', margin: '0.5rem 0 0' }}>
                         {qualifyReadout.hasTopup
                             ? `Based on your total stake of ${qualifyReadout.projected} XCHAIN for this pubkey (existing + this top-up). `
                             : ''}

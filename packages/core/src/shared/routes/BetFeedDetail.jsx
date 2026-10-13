@@ -464,7 +464,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
                         const pool = trimAmountTail(p.pool ?? 0) || '0';
                         const bets = Number(p.bet_count || 0);
                         return (
-                            <div key={i} className={styles.card} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}>
+                            <div key={i} className={styles.card} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
                                 <span>{i}: {label}</span>
                                 <span>{pool} ({share}, {bets} bet{bets === 1 ? '' : 's'})</span>
                             </div>

@@ -20,9 +20,9 @@ const chainRegistry = registryLib.defaultRegistry();
 // Poll lifecycle -> pill colour. open = live (amber), finalized = decided (green),
 // failed_quorum = did not pass (red). No shared Badge component, so use a plain span.
 function statusColor(status) {
-    if (status === 'finalized') return { bg: '#1b5e20', fg: '#fff' };
-    if (status === 'failed_quorum') return { bg: '#8e1c1c', fg: '#fff' };
-    return { bg: '#8a6d00', fg: '#fff' };
+    if (status === 'finalized') return { bg: 'color-mix(in srgb, var(--xc-success) 18%, transparent)', fg: 'var(--xc-success)' };
+    if (status === 'failed_quorum') return { bg: 'var(--xc-danger-bg)', fg: 'var(--xc-danger-text)' };
+    return { bg: 'var(--xc-warning-bg)', fg: 'var(--xc-warning-text)' };
 }
 // Poll lifecycle code -> plain-language pill label. Mirrors statusColor:
 // open = live, finalized = decided, failed_quorum = did not pass. Unknown
@@ -144,7 +144,7 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
                                 className={styles.card}
                                 style={{ textAlign: 'left', cursor: 'pointer', width: '100%' }}
                             >
-                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                                     <strong>#{String(id)} · {p.tick || 'n/a'}</strong>
                                     <StatusPill status={p.poll_status} />
                                 </div>

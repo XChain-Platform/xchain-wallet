@@ -216,6 +216,6 @@
 }
 
 .statusCooldown {
-    background: color-mix(in srgb, var(--xc-warning, #B45309) 14%, transparent);
-    color: var(--xc-warning, #B45309);
+    background: color-mix(in srgb, var(--xc-warning) 14%, transparent);
+    color: var(--xc-warning);
 }

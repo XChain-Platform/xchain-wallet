@@ -48,7 +48,7 @@
    visible on the staking root, on the validator rows they belong to). */
 .rewardChip {
     font-size: var(--xc-text-xs);
-    color: var(--xc-success, #2f9e63);
+    color: var(--xc-success);
     font-weight: 600;
     white-space: nowrap;
 }
@@ -121,7 +121,7 @@
     width: 20px;
     height: 20px;
     border-radius: 50%;
-    background: #FFFFFF;
+    background: var(--xc-surface);
     box-shadow: 0 0 0 1.5px var(--xc-surface);
     object-fit: cover;
     display: block;
@@ -176,18 +176,18 @@
 }
 
 .status_active {
-    background: rgba(34, 197, 94, 0.15);
-    color: var(--xc-success, #22C55E);
+    background: color-mix(in srgb, var(--xc-success) 15%, transparent);
+    color: var(--xc-success);
 }
 
 .status_cooldown {
-    background: rgba(234, 179, 8, 0.15);
-    color: var(--xc-warning, #B45309);
+    background: var(--xc-warning-bg);
+    color: var(--xc-warning-text);
 }
 
 .status_pending {
-    background: rgba(59, 130, 246, 0.15);
-    color: var(--xc-info, #2563EB);
+    background: color-mix(in srgb, var(--xc-accent-primary) 15%, transparent);
+    color: var(--xc-accent-primary);
 }
 
 .amount {
@@ -227,7 +227,7 @@
     gap: 0.75rem;
     padding: 0.75rem;
     margin-bottom: 0.75rem;
-    border: 1px solid var(--color-border, #d6dbe1);
+    border: 1px solid var(--xc-border);
     border-radius: 8px;
-    background: var(--color-surface-raised, rgba(0, 0, 0, 0.02));
+    background: var(--xc-surface-raised);
 }

@@ -113,7 +113,7 @@
     width: 20px;
     height: 20px;
     border-radius: 50%;
-    background: #FFFFFF;
+    background: var(--xc-surface);
     box-shadow: 0 0 0 1.5px var(--xc-surface);
     object-fit: cover;
     display: block;
@@ -166,13 +166,13 @@
 }
 
 .status_valid {
-    background: rgba(34, 197, 94, 0.15);
-    color: var(--xc-success, #22C55E);
+    background: color-mix(in srgb, var(--xc-success) 15%, transparent);
+    color: var(--xc-success);
 }
 
 .status_invalid {
-    background: rgba(220, 38, 38, 0.15);
-    color: var(--xc-danger);
+    background: var(--xc-danger-bg);
+    color: var(--xc-danger-text);
 }
 
 /* Circular header "+" button that opens the Create list form (same

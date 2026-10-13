@@ -148,7 +148,7 @@ export function MyLists({ walletId, activeAccountId, onOpenList, onCreateList, o
     const loadErrors = useMemo(() => (
         Object.entries(listsByChain)
             .filter(([, s]) => s.error)
-            .map(([cid, s]) => `${chainRegistry.get(cid)?.displayName || cid}: ${s.error}`)
+            .map(([cid, s]) => chainRegistry.get(cid)?.displayName || cid)
     ), [listsByChain]);
 
     const visibleRows = useMemo(() => {
@@ -244,7 +244,9 @@ export function MyLists({ walletId, activeAccountId, onOpenList, onCreateList, o
             </div>
             {loadErrors.length > 0 ? (
                 <StatusMessage variant="error" className={styles.entryDescription}>
-                    Couldn't load some lists. {loadErrors.join('; ')}
+                    {/* Names the chains only: the raw fetch error carries API paths and
+                        HTTP codes that mean nothing to the user. */}
+                    Couldn't load your lists for {loadErrors.join(', ')}. Try again in a moment.
                 </StatusMessage>
             ) : null}
             {anyLoading && visibleRows.length === 0 ? (

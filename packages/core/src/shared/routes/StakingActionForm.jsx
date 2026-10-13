@@ -800,7 +800,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
 
             {isUnstake ? (
                 <>
-                    <p style={{ fontSize: '0.85rem', margin: '0 0 0.5rem', color: 'var(--muted, #666)' }}>
+                    <p style={{ fontSize: '0.85rem', margin: '0 0 0.5rem', color: 'var(--xc-text-muted)' }}>
                         The amount you choose enters the cooldown and is returned after it; anything left stays staked under the signing key below.
                     </p>
                     {stakedKeys.length > 1 ? (
@@ -829,7 +829,7 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                     />
                 </>
             ) : (
-                <p style={{ fontSize: '0.9rem', color: 'var(--muted, #666)' }}>
+                <p style={{ fontSize: '0.9rem', color: 'var(--xc-text-muted)' }}>
                     Claimed rewards land in your balance, and rewards continue to accrue after the claim. Any amount you leave unclaimed stays pending.
                 </p>
             )}

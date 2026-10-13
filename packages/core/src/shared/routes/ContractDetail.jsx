@@ -206,7 +206,7 @@ export function ContractDetail({
         <Screen variant={variant} header={header}>
             <div className={isFull ? styles.listFull : styles.listPopup}>
                 <section>
-                    <header style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                    <header style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
                         <h2 style={{ fontSize: '1rem', margin: 0 }}>{heading}</h2>
                         {descriptor ? <ChainBadge descriptor={descriptor} size="md" /> : null}
                     </header>
@@ -381,7 +381,7 @@ export function ContractDetail({
 function Section({ title, rightSlot, children }) {
     return (
         <section style={{ marginBottom: '1rem' }}>
-            <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+            <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
                 <h2 style={{ fontSize: '1rem', margin: '0.5rem 0' }}>{title}</h2>
                 {rightSlot}
             </header>
