@@ -22,6 +22,7 @@
 
 .toggle {
     appearance: none;
+    min-height: var(--xc-tap-min);
     background: var(--xc-bg);
     color: var(--xc-text);
     cursor: pointer;

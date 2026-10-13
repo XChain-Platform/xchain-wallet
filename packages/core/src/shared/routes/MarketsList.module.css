@@ -47,6 +47,7 @@
 .marketButton {
     display: flex;
     align-items: center;
+    min-height: var(--xc-tap-min);
     gap: var(--xc-space-2);
     flex: 1;
     min-width: 0;

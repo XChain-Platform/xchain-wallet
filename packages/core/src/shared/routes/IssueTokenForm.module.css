@@ -171,6 +171,9 @@
 }
 
 .listMemberToggle label {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--xc-tap-min);
     cursor: pointer;
 }
 

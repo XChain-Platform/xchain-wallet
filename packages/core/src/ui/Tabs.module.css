@@ -27,6 +27,7 @@
     justify-content: center;
     gap: var(--xc-space-2);
     height: 100%;
+    min-height: var(--xc-tap-min);
     padding: 0 var(--xc-space-3);
     border: 0;
     border-bottom: 2px solid transparent;
