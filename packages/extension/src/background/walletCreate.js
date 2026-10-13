@@ -12,7 +12,7 @@
 //
 // Mirror of the web shell's `createWalletLocal` / `importMnemonicLocal`
 // from hostBridge.js: derive a fresh master key from the user's
-// password, build a blank Vault, run the core flow, save kdfParams to
+// password, build a blank Vault, run the matching core flow, save kdfParams to
 // the meta slot, and trigger the background's `onUnlocked` callback so
 // the host listener attaches. Idempotence-guarded.
 //
@@ -123,11 +123,13 @@ export async function handleWalletCreateWithMnemonic(request, deps) {
 export async function handleWalletImport(request, deps) {
     const password = /** @type {any} */ (request)?.password;
     const mnemonic = /** @type {any} */ (request)?.mnemonic;
+    const wif = /** @type {any} */ (request)?.wif;
+    const importingWif = typeof wif === 'string' && wif.trim().length > 0;
     if (typeof password !== 'string' || password.length === 0) {
         throw new Error('wallet.import: password is required');
     }
-    if (typeof mnemonic !== 'string' || mnemonic.trim().length === 0) {
-        throw new Error('wallet.import: mnemonic is required');
+    if (!importingWif && (typeof mnemonic !== 'string' || mnemonic.trim().length === 0)) {
+        throw new Error('wallet.import: recovery phrase or WIF private key is required');
     }
     await assertFreshVault(deps);
     const {
@@ -135,7 +137,11 @@ export async function handleWalletImport(request, deps) {
         bip39Passphrase = '',
         activeChainIds = DEFAULT_ACTIVE_CHAIN_IDS,
         origin,
+        chainId,
     } = /** @type {any} */ (request);
+    if (importingWif && (typeof chainId !== 'string' || chainId.length === 0)) {
+        throw new Error('wallet.import: chainId is required for a WIF private key');
+    }
 
     const kdfParams = cryptoLib.makeFreshKdfParams();
     const masterKey = cryptoLib.deriveMasterKey(password, kdfParams);
@@ -149,20 +155,31 @@ export async function handleWalletImport(request, deps) {
         });
         try {
             await vault.open();
-            const result = await flows.importMnemonic({
-                password,
-                mnemonic,
-                vault,
-                chainRegistry: deps.chainRegistry,
-                sdkRegistry: deps.sdkRegistry,
-                activeChainIds,
-                name,
-                bip39Passphrase,
-                origin,
-                kdfParams,
-            });
+            const result = importingWif
+                ? await flows.importSingleWif({
+                    password,
+                    wif: wif.trim(),
+                    chainId,
+                    vault,
+                    chainRegistry: deps.chainRegistry,
+                    sdkRegistry: deps.sdkRegistry,
+                    name,
+                    kdfParams,
+                })
+                : await flows.importMnemonic({
+                    password,
+                    mnemonic,
+                    vault,
+                    chainRegistry: deps.chainRegistry,
+                    sdkRegistry: deps.sdkRegistry,
+                    activeChainIds,
+                    name,
+                    bip39Passphrase,
+                    origin,
+                    kdfParams,
+                });
             await vault.save();
-            format = result.format;
+            format = result.format ?? result.wallet.format;
             walletId = result.wallet.id;
         } finally {
             // Vault kept its own copy of the key; close zeros that copy.
@@ -178,7 +195,7 @@ export async function handleWalletImport(request, deps) {
     if (typeof deps.onUnlocked === 'function') {
         await deps.onUnlocked();
     }
-    if (origin !== 'created' && typeof deps.startLabelSyncRestore === 'function') {
+    if (!importingWif && origin !== 'created' && typeof deps.startLabelSyncRestore === 'function') {
         labelSyncToken = deps.startLabelSyncRestore({
             walletId,
             password,

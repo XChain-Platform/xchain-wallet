@@ -56,7 +56,7 @@ const desktopAppSrc = readFileSync(
 
 assert.match(
     homeSrc,
-    /import \{ WALLET_MODE_DEFAULT \} from '\.\.\/\.\.\/schemas\/settings\.js';/,
+    /import \{[^}]*\bWALLET_MODE_DEFAULT\b[^}]*\} from '\.\.\/\.\.\/schemas\/settings\.js';/,
     'Home.jsx imports WALLET_MODE_DEFAULT from schemas/settings',
 );
 assert.match(

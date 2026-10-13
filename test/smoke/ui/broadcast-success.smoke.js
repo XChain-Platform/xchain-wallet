@@ -19,10 +19,12 @@ const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 const core = join(wsRoot, 'packages', 'core');
 const sendJsx = join(core, 'src', 'shared', 'routes', 'Send.jsx');
+const broadcastJsx = join(core, 'src', 'shared', 'routes', 'BroadcastForm.jsx');
 const sendCss = join(core, 'src', 'shared', 'routes', 'Send.module.css');
 
 assert.ok(existsSync(sendJsx), 'Send.jsx exists');
 const send = readFileSync(sendJsx, 'utf8');
+const broadcast = readFileSync(broadcastJsx, 'utf8');
 const css = readFileSync(sendCss, 'utf8');
 
 // --- 1. Done stage renders the new success card ---------------------------
@@ -34,6 +36,8 @@ assert.ok(/t\('send\.success\.broadcastPending'\)/.test(send),
     'Done stage uses "Broadcast pending" copy (§28.4 status timeline language)');
 assert.ok(/role="status"\s+aria-live="polite"/.test(send),
     'Done stage announces success via role=status + aria-live=polite');
+assert.ok(/role="status"\s+aria-live="polite"\s+aria-atomic="true"/.test(send),
+    'Done stage announces the pending result as one atomic update');
 
 // --- 2. Send-another resets state -----------------------------------------
 
@@ -53,7 +57,32 @@ assert.ok(/t\('send\.success\.viewOnExplorer'\)/.test(send),
 assert.ok(/target="_blank"/.test(send) && /rel="noopener noreferrer"/.test(send),
     'Explorer link opens in a new tab with noopener noreferrer');
 
-// --- 4. Copy-txid affordance is wired to the clipboard ------------------
+// --- 4. BROADCAST actions expose the same transaction essentials -------
+
+assert.ok(/Your action was broadcast but is not confirmed yet/.test(broadcast),
+    'BROADCAST success explains that confirmation is still pending');
+assert.ok(/<CopyButton value=\{txid\} label="Copy transaction ID" \/>/.test(broadcast),
+    'BROADCAST success makes the transaction ID copyable');
+assert.ok(/explorerPageUrl\(\{[\s\S]*?kind: 'transaction',[\s\S]*?value: txid/.test(broadcast),
+    'BROADCAST success builds a chain-scoped transaction explorer URL');
+assert.ok(/Broadcast another/.test(broadcast),
+    'BROADCAST success offers a repeat path');
+
+// --- 5. Shell completion callbacks return Home -------------------------
+
+for (const appPath of [
+    join(wsRoot, 'packages', 'web', 'src', 'App.jsx'),
+    join(wsRoot, 'packages', 'extension', 'src', 'popup', 'App.jsx'),
+    join(wsRoot, 'packages', 'desktop', 'renderer', 'App.jsx'),
+]) {
+    const app = readFileSync(appPath, 'utf8');
+    assert.ok(/<Send[\s\S]*?onDone=\{\(\) => \{[\s\S]*?setUnlockedView\('home'\)/.test(app),
+        `${appPath} sends Done to Home`);
+    assert.ok(/<BroadcastForm[\s\S]*?onDone=\{formDone\}/.test(app),
+        `${appPath} sends BROADCAST Done through the Home callback`);
+}
+
+// --- 6. Copy-txid affordance is wired to the clipboard ------------------
 
 // Copies go through the shared copyText helper, which owns the native
 // plugin / browser split; the Done stage reports a failed copy in a toast.
@@ -62,7 +91,7 @@ assert.ok(/import \{ copyText \} from '\.\.\/clipboard\.js'/.test(send)
         && /Copy failed: clipboard unavailable/.test(send),
     'Done stage copy-txid goes through copyText and toasts a failed copy');
 
-// --- 5. CSS additions ----------------------------------------------------
+// --- 7. CSS additions ----------------------------------------------------
 
 for (const cls of [
     'successCard',

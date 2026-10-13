@@ -181,6 +181,14 @@
     color: var(--xc-text-muted);
 }
 
+.duration {
+    max-width: 18rem;
+    text-align: end;
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    overflow-wrap: anywhere;
+}
+
 /* Circular header "+" button that opens the new-stake flow (same
    affordance as the dispenser list / messaging inbox). */
 .addBtn {
@@ -214,4 +222,43 @@
     border: 1px solid var(--xc-border);
     border-radius: 8px;
     background: var(--xc-surface-raised);
+}
+
+@media not all and (min-width: 400px) {
+    .row {
+        display: grid;
+        grid-template-columns: 40px minmax(0, 1fr);
+        align-items: start;
+        gap: var(--xc-space-2);
+    }
+
+    .iconWrap {
+        width: 40px;
+        height: 40px;
+    }
+
+    .trailing {
+        grid-column: 2;
+        align-items: flex-start;
+        min-width: 0;
+    }
+
+    .amount,
+    .duration {
+        max-width: 100%;
+        white-space: normal;
+        text-align: start;
+        overflow-wrap: anywhere;
+    }
+
+    .rewardChip {
+        max-width: 100%;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+
+    .claimable {
+        align-items: stretch;
+        flex-direction: column;
+    }
 }

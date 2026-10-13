@@ -167,7 +167,11 @@ describe('happy path', () => {
         expect(consent.payments).toHaveLength(1);
         expect(consent.payments[0]).toMatchObject({ orderMatchActionIndex: '900', txid: 'paytx1' });
 
-        expect(notify).toHaveBeenCalledWith(expect.objectContaining({ kind: 'coinpaid'.replace('coinpaid', 'coinpay-autopaid') }));
+        expect(notify).toHaveBeenCalledWith(expect.objectContaining({
+            kind: 'coinpay-autopaid',
+            title: 'Auto-pay complete',
+            body: 'Paid 0.005 BTC for order #500.',
+        }));
         // Broadcast alone never releases the hold.
         expect(ledger.release).not.toHaveBeenCalled();
     });
@@ -307,6 +311,8 @@ describe('signing fallbacks', () => {
         expect(ledger.reserve).not.toHaveBeenCalled();
         expect(notify).toHaveBeenCalledWith(expect.objectContaining({
             kind: 'coinpay-autopay-manual',
+            title: 'Auto-pay is disarmed',
+            body: '0.005 BTC is due for order #500. Unlock to use auto-pay, or open Payments due.',
             data: expect.objectContaining({ reason: 'locked', urgency: 'high' }),
         }));
         expect(watcher.statusSnapshot()).toMatchObject({ payer: true, armed: 1, unsignable: ['w1'] });
@@ -378,7 +384,8 @@ describe('duplicate and failure defenses', () => {
         expect(ledger.reserve).toHaveBeenCalledTimes(1);
         expect(ledger.release).toHaveBeenCalledTimes(1); // nothing left the wallet
         expect(notify).toHaveBeenCalledWith(expect.objectContaining({
-            title: 'Match found, balance short',
+            title: 'Not enough BTC for auto-pay',
+            body: 'Order #500 needs 0.005 BTC. Fund its address or open Payments due.',
             data: expect.objectContaining({ reason: 'balance-short' }),
         }));
         // Retry allowed on the next cycle (attempt freed); notification deduped.
