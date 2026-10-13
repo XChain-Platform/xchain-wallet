@@ -228,6 +228,9 @@ describe('MyOrdersView: fills', () => {
         expect(within(row).getByText('Remaining 200 of 500 DOGESWAP')).toBeTruthy();
         expect(within(row).getByRole('button', { name: 'Edit' })).toBeTruthy();
         expect(within(row).getByRole('button', { name: 'Cancel' })).toBeTruthy();
+        expect(row.className).toMatch(/row/);
+        expect(within(row).getByRole('button', { name: 'Timeline' }).parentElement.className)
+            .toMatch(/rowActions/);
     });
 
     it('leaves an unmatched order with a future expiration Open with both buttons', async () => {

@@ -40,6 +40,7 @@ import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
 import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';
 import { Loading } from '@xchain-wallet/core/shared/routes/Loading.jsx';
 import { VaultUnavailable } from '@xchain-wallet/core/shared/routes/VaultUnavailable.jsx';
+import { RouteNotFound } from '@xchain-wallet/core/shared/routes/RouteNotFound.jsx';
 import { storage as coreStorageLib } from '@xchain-wallet/core';
 import { Onboarding } from '@xchain-wallet/core/shared/routes/Onboarding.jsx';
 import { CreateWallet } from '@xchain-wallet/core/shared/routes/CreateWallet.jsx';
@@ -85,6 +86,7 @@ import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/Que
 import { DemoBanner } from '@xchain-wallet/core/shared/components/DemoBanner.jsx';
 import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar.jsx';
 import { FullLayoutWithNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
+import { ScrollRestoration } from '@xchain-wallet/core/ui/Screen.jsx';
 import { Receive } from '@xchain-wallet/core/shared/routes/Receive.jsx';
 import { Send } from '@xchain-wallet/core/shared/routes/Send.jsx';
 import { SendPicker } from '@xchain-wallet/core/shared/routes/SendPicker.jsx';
@@ -169,7 +171,13 @@ import {
     applySurfaceStateEvent,
     attachSurfaceStateListener,
 } from '../shared/surfaceStateSync.js';
-import { createLaunchRouteState, shellForExtensionView } from './launchState.js';
+import {
+    createLaunchRouteState,
+    isToolbarPopupView,
+    openExtensionTab,
+    parseExtensionHandoff,
+    shellForExtensionView,
+} from './launchState.js';
 
 const lazyRoute = (load, name) => lazy(() => load().then((module) => ({ default: module[name] })));
 
@@ -213,30 +221,46 @@ const pairLedgerSigner = (...args) => import('../signers/ledgerFactory.js')
 
 export function App() {
     const shell = shellForExtensionView();
+    const canOpenInTab = isToolbarPopupView();
     return (
         <MessagingProvider shell={shell} messaging={messaging}>
             <ToastHost>
                 <ReachabilityBanner />
                 <RouteErrorBoundary>
-                    <AppInner />
+                    <AppInner canOpenInTab={canOpenInTab} />
                 </RouteErrorBoundary>
             </ToastHost>
         </MessagingProvider>
     );
 }
 
-function AppInner() {
+function AppInner({ canOpenInTab }) {
     const [status, setStatus] = useState(/** @type {any} */ ({ state: 'loading' }));
     const [surfaceStateRevision, setSurfaceStateRevision] = useState(0);
+    const [extensionHandoff] = useState(() => (
+        typeof window === 'undefined' ? null : parseExtensionHandoff(window.location.search)
+    ));
+    const openInTab = useCallback((handoff) => openExtensionTab(handoff), []);
     // A demo graduation wipes the vault and reloads, so the lane
     // the user picked (create / import / FreeWallet) is handed across the
     // reload here. One-shot read: it never survives to hijack a later visit.
     const [onboardingStep, setOnboardingStep] = useState(
         /** @returns {'welcome' | 'create' | 'import' | 'import-freewallet' | 'pair-partner'} */
-        () => takePostDemoIntent() || 'welcome',
+        () => takePostDemoIntent()
+            || (extensionHandoff?.flow === 'import'
+                ? (extensionHandoff.variant === 'freewallet' ? 'import-freewallet' : 'import')
+                : 'welcome'),
     );
     const [unlockedView, setUnlockedView] = useState(
-        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'bridge-settings' | 'bridge-move' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'resume-confirm' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'list-share' | 'list-transfer' | 'list-rename' | 'list-union' | 'shared-lists' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-order' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'scan' | 'settings' | 'connected-sites'} */ ('home'),
+        /** @type {'home' | 'send' | 'receive' | 'receive-picker' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'bridge-settings' | 'bridge-move' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'resume-confirm' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'list-share' | 'list-transfer' | 'list-rename' | 'list-union' | 'shared-lists' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-order' | 'cross-chain-templates' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'wallet-rename' | 'account-rename' | 'scan' | 'settings' | 'connected-sites'} */ (
+            extensionHandoff?.flow === 'backup'
+                ? 'settings'
+                : extensionHandoff?.flow === 'hardware'
+                    ? 'pair-signer'
+                    : extensionHandoff?.flow === 'import' && extensionHandoff.mode === 'add'
+                        ? 'add-wallet'
+                        : 'home'
+        ),
     );
     const [tokenDetailRef, setTokenDetailRef] = useState(
         /** @type {{ chainId: string, tick: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string } | null} */ (null),
@@ -398,7 +422,7 @@ function AppInner() {
     const [wallets, setWallets] = useState(/** @type {Array<{id: string, name: string}>} */ ([]));
     // Which Settings section a palette deep-link should open; cleared on exit.
     const [settingsInitialSection, setSettingsInitialSection] = useState(
-        /** @type {string | null} */ (null),
+        /** @type {string | null} */ (extensionHandoff?.flow === 'backup' ? 'backup' : null),
     );
     const [walletPickerReturnView, setWalletPickerReturnView] = useState(
         /** @type {'home' | 'settings'} */ ('home'),
@@ -462,10 +486,22 @@ function AppInner() {
     // The route guard remains armed until the wallet becomes active because
     // per-wallet last-view restoration runs after the unlock refresh.
     const launchRouteState = useRef(createLaunchRouteState());
+    const handoffRouteArmed = useRef(false);
+    if (!handoffRouteArmed.current && (
+        ['backup', 'hardware'].includes(extensionHandoff?.flow)
+        || (extensionHandoff?.flow === 'import' && extensionHandoff.mode === 'add')
+    )) {
+        launchRouteState.current.remember(extensionHandoff.flow === 'backup'
+            ? 'settings'
+            : extensionHandoff.flow === 'hardware'
+                ? 'pair-signer'
+                : 'add-wallet');
+        handoffRouteArmed.current = true;
+    }
 
     const refresh = useCallback(() => {
         setStatus({ state: 'loading' });
-        setOnboardingStep('welcome');
+        if (extensionHandoff?.flow !== 'import') setOnboardingStep('welcome');
         setUnlockedView('home');
         getSessionStatus()
             .then((next) => {
@@ -484,7 +520,7 @@ function AppInner() {
                     errorKind: coreStorageLib.vaultErrorKind(err),
                 }),
             );
-    }, []);
+    }, [extensionHandoff]);
 
     useEffect(() => { refresh(); }, [refresh]);
 
@@ -819,6 +855,10 @@ function AppInner() {
                     <ImportWallet
                         onBack={() => setOnboardingStep('welcome')}
                         onImported={refresh}
+                        initialLane={extensionHandoff?.flow === 'import' ? extensionHandoff.lane : undefined}
+                        onOpenInTab={canOpenInTab ? ({ lane }) => openInTab({
+                            flow: 'import', mode: 'fresh', variant: 'default', lane,
+                        }) : undefined}
                     />
                 );
             }
@@ -828,6 +868,9 @@ function AppInner() {
                         variant="freewallet"
                         onBack={() => setOnboardingStep('welcome')}
                         onImported={refresh}
+                        onOpenInTab={canOpenInTab ? ({ lane }) => openInTab({
+                            flow: 'import', mode: 'fresh', variant: 'freewallet', lane,
+                        }) : undefined}
                     />
                 );
             }
@@ -1398,6 +1441,7 @@ function AppInner() {
                         onPaired={() => setUnlockedView('actions')}
                         onSignerPaired={registerLocalSigner}
                         onSignerUnpaired={unregisterLocalSigner}
+                        onOpenInTab={canOpenInTab ? () => openInTab({ flow: 'hardware' }) : undefined}
                     />
                 );
             }
@@ -2451,6 +2495,7 @@ function AppInner() {
                         }
                         initialSubpageId={settingsInitialSection}
                         onNavigateToMint={handleFaucetMint}
+                        onOpenBackupInTab={canOpenInTab ? () => openInTab({ flow: 'backup' }) : undefined}
                     />
                 );
             }
@@ -2557,6 +2602,10 @@ function AppInner() {
                             mode="add"
                             onBack={() => setOnboardingStep('welcome')}
                             onImported={refresh}
+                            initialLane={extensionHandoff?.flow === 'import' ? extensionHandoff.lane : undefined}
+                            onOpenInTab={canOpenInTab ? ({ lane }) => openInTab({
+                                flow: 'import', mode: 'add', variant: 'default', lane,
+                            }) : undefined}
                         />
                     );
                 }
@@ -2567,6 +2616,9 @@ function AppInner() {
                             variant="freewallet"
                             onBack={() => setOnboardingStep('welcome')}
                             onImported={refresh}
+                            onOpenInTab={canOpenInTab ? ({ lane }) => openInTab({
+                                flow: 'import', mode: 'add', variant: 'freewallet', lane,
+                            }) : undefined}
                         />
                     );
                 }
@@ -2582,6 +2634,9 @@ function AppInner() {
                         }}
                     />
                 );
+            }
+            if (unlockedView !== 'home') {
+                return <RouteNotFound onHome={() => setUnlockedView('home')} />;
             }
             return (
                 <Fragment key={`${activeWalletId}:${activeAccountId || 'all'}`}>
@@ -2661,6 +2716,7 @@ function AppInner() {
             })();
             return (
                 <FullLayoutWithNav
+                    routeKey={`${unlockedView}:${palette.navigationKey}`}
                     bottomBar={(
                         <BottomTabBar
                             currentView={unlockedView}
@@ -2678,14 +2734,16 @@ function AppInner() {
                         <DemoBanner activeWalletId={activeWalletId} onExited={refresh} />
                     ) : null}
                     <WatchOnlyBadge visible={isWatcherMode} />
-                    <RouteErrorBoundary
-                        resetKey={`${unlockedView}:${palette.navigationKey}`}
-                        onHome={() => setUnlockedView('home')}
-                    >
-                        <Suspense fallback={<Skeleton.List rows={5} />}>
-                            <Fragment key={`${palette.navigationKey}:${surfaceStateRevision}`}>{routeNode}</Fragment>
-                        </Suspense>
-                    </RouteErrorBoundary>
+                    <ScrollRestoration routeKey={unlockedView}>
+                        <RouteErrorBoundary
+                            resetKey={`${unlockedView}:${palette.navigationKey}`}
+                            onHome={() => setUnlockedView('home')}
+                        >
+                            <Suspense fallback={<Skeleton.List rows={5} />}>
+                                <Fragment key={`${palette.navigationKey}:${surfaceStateRevision}`}>{routeNode}</Fragment>
+                            </Suspense>
+                        </RouteErrorBoundary>
+                    </ScrollRestoration>
                     {messageSentNotice ? (
                         <NoticeModal
                             title="Message sent"

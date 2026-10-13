@@ -25,9 +25,9 @@ import { markDemoWallet, clearDemoWalletId } from '../../../packages/core/src/fl
 // 0.5 BTC at $80,000: a valued row, so the chart has something to draw.
 const ROWS = [{ kind: 'native', chainId: 'bitcoin-mainnet', tick: 'BTC', quantity: '50000000', divisibility: 8, fiatRate: 80000 }];
 
-function mount(walletId, prices, rows = ROWS) {
+function mount(walletId, prices, rows = ROWS, settings = {}) {
     const messaging = {
-        getSettings: vi.fn(async () => ({})),
+        getSettings: vi.fn(async () => settings),
         getNativePricesRequest: vi.fn(async () => prices),
     };
     render(
@@ -100,6 +100,22 @@ describe('PortfolioChart on a real wallet', () => {
         expect(document.querySelector('svg polyline').getAttribute('stroke'))
             .toBe('var(--xc-text-muted)');
         expect(screen.getByRole('img', { name: /^Portfolio performance chart\..*\(0\.00%\)/ })).toBeInTheDocument();
+    });
+
+    it('requests and formats chart history in the selected fiat currency', async () => {
+        const messaging = mount(
+            'real-wallet-1',
+            { prices: { 'bitcoin-mainnet': { sparkline: [70000, 71000] } } },
+            ROWS,
+            { fiatCurrency: 'EUR' },
+        );
+
+        await waitFor(() => expect(messaging.getNativePricesRequest).toHaveBeenCalledWith({
+            chainIds: ['bitcoin-mainnet'],
+            includeSparkline: true,
+            fiatCurrency: 'EUR',
+        }));
+        expect(await screen.findByText(/€/)).toBeInTheDocument();
     });
 });
 

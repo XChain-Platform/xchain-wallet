@@ -140,6 +140,13 @@ export function installKeyboardViewport(win = window) {
     let fullWidth = win.innerWidth;
     let fullHeight = win.innerHeight;
 
+    const revealActive = () => {
+        const active = win.document.activeElement;
+        if (active && active !== win.document.body) {
+            win.requestAnimationFrame(() => revealInScroller(active, win));
+        }
+    };
+
     const update = () => {
         if (isAndroid) {
             root.style.setProperty(
@@ -161,6 +168,7 @@ export function installKeyboardViewport(win = window) {
                 if (open) root.setAttribute('data-xc-keyboard', 'open');
                 else root.removeAttribute('data-xc-keyboard');
             }
+            if (open) revealActive();
             return;
         }
         if (covered > 0) {
@@ -174,10 +182,7 @@ export function installKeyboardViewport(win = window) {
             if (win.scrollY !== 0 || vv.offsetTop !== 0) win.scrollTo(0, 0);
             // WebKit revealed the field against the full-height shell, before
             // it shrank; reveal it again inside the scroller that is left.
-            const active = win.document.activeElement;
-            if (active && active !== win.document.body) {
-                win.requestAnimationFrame(() => revealInScroller(active, win));
-            }
+            revealActive();
         } else if (fitted) {
             if (!isAndroid) root.style.removeProperty('--xc-viewport-h');
             root.removeAttribute('data-xc-keyboard');

@@ -63,9 +63,16 @@ function extractRows(resp) {
 // A side's human label: ownership, a token amount, or a native-coin amount
 // (empty tick = the chain's native coin).
 function sideLabel(tick, coin, amount, ownership) {
-    if (Number(ownership) === 1) return `ownership of ${tick || '?'}`;
-    const unit = tick || coin || '';
-    return `${amount ?? ''} ${unit}`.trim();
+    if (Number(ownership) === 1) return `ownership of ${detailText(tick)}`;
+    const amountText = detailText(amount);
+    const unitText = detailText(tick || coin);
+    return amountText === '-' && unitText === '-' ? '-' : `${amountText} ${unitText}`;
+}
+
+function detailText(value) {
+    if (value == null || value === '' || (typeof value === 'number' && !Number.isFinite(value))) return '-';
+    const text = String(value).trim();
+    return !text || /^(?:undefined|null|nan)$/i.test(text) ? '-' : text;
 }
 
 function isNativeGive(row) {
@@ -374,7 +381,7 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
                     </div>
                     <div className={L.rowMeta}>
                         {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : it.chainId}
-                        {' · #'}{it.row.action_index}
+                        {' · #'}{detailText(it.row.action_index)}
                         {' · '}<AddressText address={it.owner.address} />
                     </div>
                     {remaining ? <div className={L.rowDetail}>Remaining {remaining} of {give}</div> : null}
@@ -423,11 +430,13 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
         <>
             <SectionHeader title="Open" />
             {openItems.length > 0 ? (
+                /* Safari needs an explicit list role because this class removes list styling. */
                 <ul className={L.list} role="list" aria-label="Open orders">{openItems.map(renderRow)}</ul>
             ) : <EmptyState title="No open orders" body="Open DEX orders appear here." titleAs="p" />}
             {closedItems.length > 0 ? (
                 <>
                     <SectionHeader title="Closed" />
+                    {/* Safari needs an explicit list role because this class removes list styling. */}
                     <ul className={L.list} role="list" aria-label="Closed orders">{closedItems.map(renderRow)}</ul>
                 </>
             ) : null}
@@ -634,7 +643,7 @@ function OrderActionPanel({
                 <dt className={F.detailsLabel}>Chain</dt>
                 <dd className={F.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
                 <dt className={F.detailsLabel}>Order</dt>
-                <dd className={F.detailsValue}>#{row.action_index}</dd>
+                <dd className={F.detailsValue}>#{detailText(row.action_index)}</dd>
                 <dt className={F.detailsLabel}>From</dt>
                 <dd className={F.detailsValue}><AddressText address={owner.address} /></dd>
             </dl>

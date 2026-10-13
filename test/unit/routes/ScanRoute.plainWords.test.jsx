@@ -19,6 +19,17 @@ vi.mock('@xchain-wallet/core/ui', async (importOriginal) => {
 afterEach(() => cleanup());
 
 describe('ScanRoute paste fallback wording', () => {
+    it('keeps one main landmark when rendered inside the app screen', () => {
+        render(
+            <main>
+                <ScanRoute embedded onClassified={vi.fn()} onBack={vi.fn()} />
+            </main>,
+        );
+
+        expect(screen.getAllByRole('main')).toHaveLength(1);
+        expect(screen.getByRole('region', { name: 'Scan' })).toBeInTheDocument();
+    });
+
     it('labels the paste box and button in plain words', () => {
         render(<ScanRoute onClassified={vi.fn()} onBack={vi.fn()} />);
         expect(screen.getByText('Or paste it here')).toBeInTheDocument();

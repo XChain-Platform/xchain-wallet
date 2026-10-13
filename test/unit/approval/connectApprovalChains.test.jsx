@@ -40,6 +40,7 @@ const { ConnectApproval } = await import(
 
 const template = BUNDLED_DESCRIPTORS.find((d) => d.id === 'bitcoin-regtest');
 const bundled = BUNDLED_DESCRIPTORS[0];
+const notRequested = BUNDLED_DESCRIPTORS.find((d) => d.id !== bundled.id);
 const label = (d) => `Allow ${d.displayName} ${d.networkKind}`;
 const custom = (id, displayName) => ({ ...template, id, displayName });
 
@@ -60,12 +61,13 @@ afterEach(() => {
 });
 
 describe('ConnectApproval chain checklist', () => {
-    it('shows the site origin before a safely labeled dApp name', () => {
+    it('shows the host ending before the full origin and safely labels the dApp name', () => {
+        const longOrigin = 'https://wallet.example.com.login.account.security.attacker.test';
         const { container } = render(
             <ConnectApproval
                 id="identity"
                 payload={{
-                    origin: 'https://dapp.test',
+                    origin: longOrigin,
                     appName: 'XChain Wallet\u202Esecurity',
                     requestedChains: [bundled.id],
                 }}
@@ -74,11 +76,14 @@ describe('ConnectApproval chain checklist', () => {
         );
 
         const text = container.textContent;
-        expect(text.indexOf('https://dapp.test')).toBeLessThan(text.indexOf('The site calls itself'));
+        expect(text.indexOf('security.attacker.test')).toBeLessThan(text.indexOf(longOrigin));
+        expect(screen.getByTestId('request-origin-host-ending').textContent)
+            .toBe('security.attacker.test');
+        expect(screen.getByTestId('request-origin-full').textContent).toBe(longOrigin);
         expect(screen.getByText('XChain Wallet␦security')).toBeTruthy();
         expect(screen.queryByText('XChain Wallet\u202Esecurity')).toBeNull();
         expect(screen.getByText('The site calls itself')).toBeTruthy();
-        expect(screen.getByText('Site origin')).toBeTruthy();
+        expect(screen.getByText('Requesting site')).toBeTruthy();
         expect(screen.queryByText('Verified site')).toBeNull();
     });
 
@@ -94,8 +99,39 @@ describe('ConnectApproval chain checklist', () => {
             />,
         );
 
-        expect(screen.getAllByText('https://safe.test␦.example')).toHaveLength(2);
+        expect(screen.getByTestId('request-origin-full').textContent)
+            .toBe('https://safe.test␦.example');
         expect(screen.queryByText('https://safe.test\u202E.example')).toBeNull();
+    });
+
+    it('lists the granted capabilities and only offers chains the site requested', () => {
+        mount([bundled.id]);
+
+        const permissions = screen.getByRole('region', { name: 'Requested permissions' });
+        expect(permissions.textContent).toContain('addresses and balances');
+        expect(permissions.textContent).toContain('only the chains you select');
+        expect(permissions.textContent).toContain('before signing any message or transaction');
+        expect(screen.getByLabelText(label(bundled))).toBeTruthy();
+        expect(screen.queryByLabelText(label(notRequested))).toBeNull();
+        expect(screen.queryByRole('checkbox', { name: /message signatures/i })).toBeNull();
+    });
+
+    it('rejects in one click while both decisions are enabled', () => {
+        const onReject = vi.fn();
+        render(
+            <ConnectApproval
+                id="reject"
+                payload={{ origin: 'https://dapp.test', requestedChains: [bundled.id] }}
+                onReject={onReject}
+            />,
+        );
+
+        const reject = screen.getByRole('button', { name: 'Reject' });
+        const connect = screen.getByRole('button', { name: 'Connect' });
+        expect(reject).not.toBeDisabled();
+        expect(connect).not.toBeDisabled();
+        fireEvent.click(reject);
+        expect(onReject).toHaveBeenCalledTimes(1);
     });
 
     it('offers and pre-selects a user-added chain that arrives with the settings read', async () => {
@@ -180,6 +216,7 @@ describe('ConnectApproval account checklist', () => {
 
         expect(submitted).toHaveLength(1);
         expect(submitted[0].accounts).toEqual(['acct-1', 'acct-2']);
+        expect(submitted[0].canSignMessage).toBe(false);
     });
 
     it('disables Connect while no account is ticked', () => {
