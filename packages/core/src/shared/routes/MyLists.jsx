@@ -260,6 +260,7 @@ function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, on
             <div className={local.searchField}>
                 <Input
                     type="search"
+                    size="md"
                     enterKeyHint="search"
                     autoCapitalize="off"
                     className={local.search}
