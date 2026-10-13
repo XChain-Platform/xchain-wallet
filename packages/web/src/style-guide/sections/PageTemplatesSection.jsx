@@ -24,14 +24,14 @@ export function PageTemplatesSection() {
                     <ul style={{ margin: '8px 0 0 16px', padding: 0, lineHeight: 1.6 }}>
                         <li><strong><code>&lt;FormPage&gt;</code></strong>: the screen is a form. Narrow viewport (&lt; 600px): fields bare on the page gutter. Wide (&ge; 600px): one centred 560px card. The action row closes the form and wraps.</li>
                         <li><strong><code>&lt;FormSection&gt;</code></strong>: a titled part of a long form. Narrow: bare, divided by its heading. Wide, in <code>&lt;FormPage sectioned&gt;</code>: one card per section.</li>
-                        <li><strong><code>&lt;ListPage&gt;</code></strong>: the screen shows things (list, table, card grid, read-only detail rows). Fills the content width up to the scrollbar at every width; optional toolbar that wraps.</li>
+                        <li><strong><code>&lt;ListPage&gt;</code></strong>: the screen shows things (list, table, card grid, read-only detail rows). Fills compact panes and centres at a 48rem maximum in wider panes; optional toolbar that wraps.</li>
                         <li><strong><code>&lt;EmptyState&gt;</code></strong>: the one empty state, centred: icon (optional), title, one line of body, optional action.</li>
                         <li><strong><code>&lt;SectionHeader&gt;</code></strong>: titles a group inside a page (an h2 by default).</li>
                     </ul>
                 </>}
                 when={<>Pick by what the screen is for. Fill in and submit: FormPage. Look at, pick from, or drill into: ListPage. A detail screen with an edit button is a ListPage; the edit screen it opens is a FormPage.</>}
                 sizing={<>The breakpoint is a viewport media query at 600px, not a container query (the Android WebView 102 the app ships to has none) and not the shell: a phone browser gets the narrow form, a wide desktop window the card. The sidebar nav appears at 640px, so 600 to 639px is the bottom tab bar with a carded form.</>}
-                doRule={<>✓ One template per screen · drop the <code>isFull ? styles.card : …</code> wrapper when converting, the template owns it · let lists fill to the scrollbar</>}
+                doRule={<>✓ One template per screen · drop the <code>isFull ? styles.card : …</code> wrapper when converting, the template owns it · let the shared list measure handle pane widths</>}
                 dontRule={<>✗ Decide card or bare in JS from the shell or a width check · box a list into the 560px form column · write a per-route empty-state block</>}
                 supersedes={<>Per-route <code>.card</code> / <code>.listCard</code> / <code>.wrapFull</code> wrappers chosen by <code>screenVariantFor(shell)</code>, and <code>EmptyStateNudge</code>.</>}
             />

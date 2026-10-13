@@ -83,15 +83,26 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         /** @type {string | null} */ (null),
     );
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const firstQuizInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const stageFormRef = useRef(/** @type {HTMLFormElement | null} */ (null));
 
     // The clipboard auto-clear that used to live here is gone with the copy
     // button it existed for (, decided 2026-08-01): the phrase cannot
     // be copied, so there is nothing to clear.
 
     useEffect(() => {
-        if (stage === 'password') {
-            setTimeout(() => passwordRef.current?.focus(), 0);
-        }
+        const id = setTimeout(() => {
+            if (stage === 'password') passwordRef.current?.focus();
+            else if (stage === 'verify') firstQuizInputRef.current?.focus();
+            else {
+                const heading = stageFormRef.current?.querySelector('h1');
+                if (heading instanceof HTMLElement) {
+                    heading.tabIndex = -1;
+                    heading.focus();
+                }
+            }
+        }, 0);
+        return () => clearTimeout(id);
     }, [stage]);
 
     function handlePasswordSubmit(event) {
@@ -200,8 +211,8 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                 type="button"
                 onClick={onBack}
                 className={pickerStyles.iconBtn}
-                aria-label="Back"
-                title="Back"
+                aria-label="Back to wallet setup"
+                title="Back to wallet setup"
                 disabled={stage === 'persisting'}
             >
                 <Icon.BackIcon />
@@ -224,7 +235,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         );
         return (
             <Screen variant={variant} header={screenHeader}>
-                <FormPage label="Automatic Donation System">
+                <FormPage ref={stageFormRef} label="Automatic Donation System">
                     {noticeBody}
                 </FormPage>
             </Screen>
@@ -244,7 +255,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         );
         return (
             <Screen variant={variant} header={screenHeader}>
-                <FormPage label="Wallet creation status">
+                <FormPage ref={stageFormRef} label="Wallet creation status">
                     {persistingBody}
                 </FormPage>
             </Screen>
@@ -254,6 +265,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     if (stage === 'verify') {
         const verifyBody = (
             <FormPage
+                ref={stageFormRef}
                 label="Verify recovery phrase"
                 onSubmit={handleSubmitVerify}
                 status={(
@@ -301,6 +313,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     {quizPositions.map((p) => (
                         <li key={p} className={styles.quizRow}>
                             <Input
+                                ref={p === quizPositions[0] ? firstQuizInputRef : undefined}
                                 label={`Word ${p}`}
                                 value={quizAnswers[p] || ''}
                                 onChange={(e) => {
@@ -328,6 +341,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     if (stage === 'mnemonic') {
         const mnemonicBody = (
             <FormPage
+                ref={stageFormRef}
                 label="Recovery phrase"
                 status={persistError ? (
                     <StatusMessage variant="error" className={styles.error}>{persistError}</StatusMessage>
@@ -391,15 +405,27 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         );
     }
 
+    const passwordStepDisabledReason = password.length === 0
+        ? 'Enter a password to continue.'
+        : confirm.length === 0
+            ? 'Confirm your password to continue.'
+            : null;
     const formBody = (
         <FormPage
+            ref={stageFormRef}
             label="Create wallet"
             onSubmit={handlePasswordSubmit}
+            status={passwordStepDisabledReason ? (
+                <StatusMessage id="create-wallet-disabled-reason">
+                    {passwordStepDisabledReason}
+                </StatusMessage>
+            ) : null}
             actions={(
                 <Button
                     type="submit"
                     variant="primary"
-                    disabled={password.length === 0 || confirm.length === 0}
+                    disabled={Boolean(passwordStepDisabledReason)}
+                    aria-describedby={passwordStepDisabledReason ? 'create-wallet-disabled-reason' : undefined}
                     icon={<Icon.MigrateIcon />}
                 >
                     Next

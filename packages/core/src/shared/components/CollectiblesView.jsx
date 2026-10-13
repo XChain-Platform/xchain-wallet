@@ -203,6 +203,8 @@ function CollectibleCard({ row, demo, pinned, hidden, onSelect, onTogglePin, onT
                             alt=""
                             aria-hidden="true"
                             className={styles.thumbImg}
+                            loading="lazy"
+                            decoding="async"
                             style={{ position: 'absolute', inset: 0 }}
                             onError={() => setFailedImageUrl(effectiveImageUrl)}
                         />
@@ -214,6 +216,8 @@ function CollectibleCard({ row, demo, pinned, hidden, onSelect, onTogglePin, onT
                             aria-hidden="true"
                             title={row.chainDisplayName}
                             className={styles.chainOverlay}
+                            loading="lazy"
+                            decoding="async"
                         />
                     ) : null}
                 </div>

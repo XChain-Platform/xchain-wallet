@@ -539,8 +539,8 @@
     width: 3rem;
     height: 3rem;
     border-radius: 999px;
-    background: var(--xc-success, #2c7a3d);
-    color: #fff;
+    background: var(--xc-success-fill);
+    color: var(--xc-on-success);
     font-size: 1.5rem;
     font-weight: 700;
 }

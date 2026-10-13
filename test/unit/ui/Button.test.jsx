@@ -9,8 +9,10 @@
 // contact legal@dankest.llc.
 
 import { describe, it, expect, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Button } from '../../../packages/core/src/ui/Button.jsx';
+import { SendIcon } from '../../../packages/core/src/ui/icons/index.jsx';
 
 describe('<Button>', () => {
     it('renders children as label', () => {
@@ -50,5 +52,18 @@ describe('<Button>', () => {
     it('forwards arbitrary props like aria-label', () => {
         render(<Button aria-label="Advance">→</Button>);
         expect(screen.getByRole('button')).toHaveAttribute('aria-label', 'Advance');
+    });
+
+    it('uses the shared size scale and hides decorative icons', () => {
+        render(<Button size="sm" icon={<SendIcon />}>Send</Button>);
+        const icon = screen.getByRole('button').querySelector('svg');
+        const css = readFileSync('packages/core/src/ui/Button.module.css', 'utf8');
+
+        expect(icon).toHaveAttribute('width', 'var(--xc-icon-size, var(--xc-icon-md))');
+        expect(icon).toHaveAttribute('height', 'var(--xc-icon-size, var(--xc-icon-md))');
+        expect(icon).toHaveAttribute('aria-hidden', 'true');
+        expect(icon).toHaveAttribute('focusable', 'false');
+        expect(css).toMatch(/\.sm\s*\{[^}]*--xc-icon-size:\s*var\(--xc-icon-sm\)/s);
+        expect(css).toMatch(/\.md\s*\{[^}]*--xc-icon-size:\s*var\(--xc-icon-md\)/s);
     });
 });
