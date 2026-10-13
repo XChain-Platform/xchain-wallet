@@ -61,10 +61,10 @@ export function ShortcutHelp({ open, onClose, overrides }) {
                         <Icon.XIcon />
                     </button>
                 </header>
-                <div className={styles.body}>
+                <div className={styles.body} role="region" aria-label="Shortcut list" tabIndex={0}>
                     {SHORTCUT_GROUPS.map((group) => (
                         <section key={group} className={styles.group}>
-                            <h3 className={styles.groupTitle}>{group}</h3>
+                            <h2 className={styles.groupTitle}>{group}</h2>
                             <dl className={styles.list}>
                                 {shortcuts.filter((s) => s.group === group).map((s) => (
                                     <div key={s.id} className={styles.row}>

@@ -80,7 +80,7 @@ export function PlatformSwitcher({ current }) {
             {open ? (
                 <div className={styles.menu} role="menu" aria-label="XChain platform sites">
                     {links.map((p) => (p.key === current ? (
-                        <div key={p.key} className={styles.here} aria-current="page">
+                        <div key={p.key} className={styles.here} role="group" aria-current="page">
                             <span>{p.label}</span>
                             <span className={styles.hereTag}>you are here</span>
                         </div>

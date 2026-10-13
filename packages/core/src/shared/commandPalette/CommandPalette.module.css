@@ -137,7 +137,8 @@
     text-overflow: ellipsis;
 }
 
-.rowActive .rowSubtitle { color: var(--xc-text-inverted); opacity: 0.85; }
+/* Full-strength text: fading it 15% dropped the subtitle under 4.5:1 on the accent. */
+.rowActive .rowSubtitle { color: var(--xc-text-inverted); }
 
 .empty {
     padding: var(--xc-space-5) var(--xc-space-4);

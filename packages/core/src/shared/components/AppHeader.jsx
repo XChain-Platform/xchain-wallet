@@ -85,7 +85,9 @@ export function AppHeader({
         || networkWired;
 
     return (
-        <header className={styles.bar} role="banner">
+        // A labelled region, not a second banner: each screen's Screen header already
+        // is the page banner, and a document may hold only one.
+        <div className={styles.bar} role="region" aria-label="App header">
             <div className={styles.left}>
                 <img
                     src={branding.logoUrl()}
@@ -150,7 +152,7 @@ export function AppHeader({
                     </button>
                 ) : null}
             </div>
-        </header>
+        </div>
     );
 }
 

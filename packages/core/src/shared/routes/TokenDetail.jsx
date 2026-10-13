@@ -690,7 +690,7 @@ function SupplyChart({ points, divisibility, tick }) {
     const latest = formatAmount(String(Math.round(points[points.length - 1].supply)), divisibility);
     return (
         <section aria-label="Supply over time">
-            <h3 className={styles.sectionTitle}>Supply over time</h3>
+            <h2 className={styles.sectionTitle}>Supply over time</h2>
             <svg
                 className={styles.supplyChart}
                 viewBox={`0 0 ${W} ${H}`}
@@ -1083,7 +1083,7 @@ function InfoPanel({ isNative, assetInfo, hasDescription }) {
         <div className={`${styles.infoCard} ${styles.aboutCard}`}>
             {hasDescription ? (
                 <div className={styles.metaBlock}>
-                    <h4 className={styles.metaBlockTitle}>About</h4>
+                    <h2 className={styles.metaBlockTitle}>About</h2>
                     <p className={styles.descriptionBody}>{assetInfo.description}</p>
                 </div>
             ) : null}
@@ -1092,7 +1092,7 @@ function InfoPanel({ isNative, assetInfo, hasDescription }) {
             {hasContacts ? <ContactsBlock contacts={assetInfo.contacts} /> : null}
             {hasLinks ? (
                 <div className={styles.metaBlock}>
-                    <h4 className={styles.metaBlockTitle}>Links</h4>
+                    <h2 className={styles.metaBlockTitle}>Links</h2>
                     <LinksAndFiles assetInfo={assetInfo} />
                 </div>
             ) : null}
@@ -1105,7 +1105,7 @@ function InfoPanel({ isNative, assetInfo, hasDescription }) {
 function DnsBlock({ dns }) {
     return (
         <div className={styles.metaBlock}>
-            <h4 className={styles.metaBlockTitle}>DNS</h4>
+            <h2 className={styles.metaBlockTitle}>DNS</h2>
             <table className={styles.metaTable}>
                 <tbody>
                     {dns.map((r, i) => (
@@ -1305,7 +1305,7 @@ function MediaSubpanel({ kind, images, audio, video, files }) {
 function OwnerBlock({ owner }) {
     return (
         <div className={styles.metaBlock}>
-            <h4 className={styles.metaBlockTitle}>Owner</h4>
+            <h2 className={styles.metaBlockTitle}>Owner</h2>
             <table className={styles.metaTable}>
                 <tbody>
                     {owner.name ? (
@@ -1343,7 +1343,7 @@ const CONTACT_LABELS = {
 function ContactsBlock({ contacts }) {
     return (
         <div className={styles.metaBlock}>
-            <h4 className={styles.metaBlockTitle}>Contact</h4>
+            <h2 className={styles.metaBlockTitle}>Contact</h2>
             <table className={styles.metaTable}>
                 <tbody>
                     {contacts.map((c, i) => {
@@ -1379,7 +1379,7 @@ const CATEGORY_LABELS = { main: 'Category', sub: 'Subcategory', other: 'Other' }
 function CategoriesBlock({ categories }) {
     return (
         <div className={styles.metaBlock}>
-            <h4 className={styles.metaBlockTitle}>Categories</h4>
+            <h2 className={styles.metaBlockTitle}>Categories</h2>
             <table className={styles.metaTable}>
                 <tbody>
                     {categories.map((c, i) => (
@@ -1397,7 +1397,7 @@ function CategoriesBlock({ categories }) {
 function PgpsigBlock({ pgpsig }) {
     return (
         <div className={styles.metaBlock}>
-            <h4 className={styles.metaBlockTitle}>PGP signature</h4>
+            <h2 className={styles.metaBlockTitle}>PGP signature</h2>
             <pre className={styles.pgpsigBlock}>{pgpsig}</pre>
         </div>
     );
@@ -1928,7 +1928,7 @@ function GatedGroupCard({
 
     return (
         <div className={styles.metaBlock}>
-            <h4 className={styles.metaBlockTitle}>{heading}</h4>
+            <h2 className={styles.metaBlockTitle}>{heading}</h2>
             {description ? (
                 <p className={styles.descriptionBody}>{description}</p>
             ) : null}
