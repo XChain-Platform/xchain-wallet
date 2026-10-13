@@ -1,15 +1,3 @@
-.rowEditor label {
-    min-width: 0;
-}
-
-.rowEditor select,
-.rowEditor textarea {
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-    box-sizing: border-box;
-}
-
 .acknowledgement {
     align-items: flex-start;
 }

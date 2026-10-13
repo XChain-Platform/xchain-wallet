@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, ChainPicker, EmptyState, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -749,6 +749,7 @@ export function PublishFileForm({ walletId, onBack }) {
         >
             <div role="radiogroup" aria-label="Publish mode">
                 <label className={styles.checkRow}>
+                    {/* The kit has no radio primitive, so the native control preserves radiogroup behavior. */}
                     <input
                         type="radio"
                         name="publish-mode"
@@ -762,6 +763,7 @@ export function PublishFileForm({ walletId, onBack }) {
                     </span>
                 </label>
                 <label className={styles.checkRow}>
+                    {/* The kit has no radio primitive, so the native control preserves radiogroup behavior. */}
                     <input
                         type="radio"
                         name="publish-mode"
@@ -783,13 +785,11 @@ export function PublishFileForm({ walletId, onBack }) {
                     ) : ownedTokensError && ownedTokens.length === 0 ? (
                         <StatusMessage variant="error" className={styles.error}>{ownedTokensError}</StatusMessage>
                     ) : ownedTokens.length === 0 ? (
-                        <p className={styles.hint}>
-                            This wallet doesn't own any tokens. Only a token's
-                            owner can publish gated files against it (that's a
-                            protocol rule, it stops strangers gating spam to your
-                            token). Create a token first, then publish gated
-                            content for its holders.
-                        </p>
+                        <EmptyState
+                            title="No owned tokens"
+                            titleAs="h3"
+                            body="This wallet doesn't own any tokens. Only a token's owner can publish gated files against it (that's a protocol rule, it stops strangers gating spam to your token). Create a token first, then publish gated content for its holders."
+                        />
                     ) : (
                         <>
                             {ownedTokensError ? (
@@ -802,12 +802,12 @@ export function PublishFileForm({ walletId, onBack }) {
                                 {ownedTokens.map((t) => {
                                     const d = chainRegistry.get(t.chainId);
                                     return (
-                                        <button
+                                        <Button
                                             key={`${t.chainId}:${t.tick}`}
                                             type="button"
                                             role="listitem"
-                                            className={styles.checkRow}
-                                            style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 'var(--xc-space-2)', cursor: 'pointer' }}
+                                            variant="secondary"
+                                            block
                                             onClick={() => setGatePick({
                                                 chainId: t.chainId,
                                                 tick: t.tick,
@@ -817,7 +817,7 @@ export function PublishFileForm({ walletId, onBack }) {
                                             <TickerIcon tick={t.tick} chainId={t.chainId} size={20} />
                                             <code>{t.tick}</code>
                                             {d ? <ChainBadge descriptor={d} size="sm" /> : t.chainId}
-                                        </button>
+                                        </Button>
                                     );
                                 })}
                             </div>
@@ -835,7 +835,7 @@ export function PublishFileForm({ walletId, onBack }) {
                     />
 
                     <div style={{ margin: 'var(--xc-space-3) 0' }}>
-                        <input
+                        <Input
                             ref={fileInputRef}
                             type="file"
                             onChange={handlePickFile}
@@ -907,6 +907,7 @@ export function PublishFileForm({ walletId, onBack }) {
                     />
 
                     <label className={styles.checkRow}>
+                        {/* The kit has no checkbox primitive, so the native control preserves checkbox semantics. */}
                         <input
                             type="checkbox"
                             checked={ackForever}

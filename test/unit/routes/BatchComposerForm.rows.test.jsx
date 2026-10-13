@@ -47,28 +47,28 @@ describe('BatchComposerForm rows', () => {
         const add = await screen.findByRole('button', { name: /Add action/ });
         fireEvent.click(add);
 
-        expect(screen.getAllByRole('group')).toHaveLength(2);
+        expect(screen.getAllByRole('region', { name: /Step \d/ })).toHaveLength(2);
         const remove = screen.getAllByRole('button', { name: 'Remove' });
         expect(remove[0]).not.toBeDisabled();
         expect(remove[1]).not.toBeDisabled();
         fireEvent.click(remove[1]);
-        expect(screen.getAllByRole('group')).toHaveLength(1);
+        expect(screen.getAllByRole('region', { name: /Step \d/ })).toHaveLength(1);
         expect(screen.getByRole('button', { name: 'Remove' })).toBeDisabled();
     });
 
     it('shows validation beside the affected row and retracts it when the field is fixed', async () => {
         mount();
         fireEvent.click(await screen.findByRole('button', { name: /Add action/ }));
-        const rows = screen.getAllByRole('group');
+        const rows = screen.getAllByRole('region', { name: /Step \d/ });
         const second = within(rows[1]);
 
         expect(second.getByText('Step 2: pick an action.')).toBeInTheDocument();
-        fireEvent.change(second.getByLabelText('Action'), { target: { value: 'SEND' } });
+        fireEvent.change(second.getByRole('combobox', { name: 'Action' }), { target: { value: 'SEND' } });
         expect(second.queryByText('Step 2: pick an action.')).toBeNull();
 
-        fireEvent.change(second.getByLabelText('Params (JSON object)'), { target: { value: '{' } });
+        fireEvent.change(second.getByRole('textbox', { name: 'Params (JSON object)' }), { target: { value: '{' } });
         expect(second.getByText(/Step 2: params JSON parse error/)).toBeInTheDocument();
-        fireEvent.change(second.getByLabelText('Params (JSON object)'), {
+        fireEvent.change(second.getByRole('textbox', { name: 'Params (JSON object)' }), {
             target: { value: '{"VERSION":"0"}' },
         });
         expect(second.queryByText(/Step 2:/)).toBeNull();
@@ -76,10 +76,10 @@ describe('BatchComposerForm rows', () => {
 
     it('reviews every queued action and displays one batch network-fee selector', async () => {
         const messaging = mount();
-        const firstAction = await screen.findByLabelText('Action');
+        const firstAction = await screen.findByRole('combobox', { name: 'Action' });
         fireEvent.change(firstAction, { target: { value: 'SEND' } });
         fireEvent.click(screen.getByRole('button', { name: /Add action/ }));
-        const actions = screen.getAllByLabelText('Action');
+        const actions = screen.getAllByRole('combobox', { name: 'Action' });
         fireEvent.change(actions[1], { target: { value: 'BROADCAST' } });
         fireEvent.click(screen.getByRole('button', { name: 'Review' }));
 
