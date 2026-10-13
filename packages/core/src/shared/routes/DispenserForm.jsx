@@ -1118,10 +1118,20 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     }
 
     if (stage === 'review' || stage === 'submitting') {
+        // Cluster P FOLLOWUP 4: hardware and watcher failures offer Edit
+        // because changing form inputs is the recovery path.
         return wrap(
             <FormPage
                 label="Review dispenser"
                 onSubmit={handleSubmit}
+                status={(isWatcherMode || hw) && submitError ? (
+                    <StatusMessage
+                        variant="error"
+                        recovery={{ label: 'Edit', onAction: () => { setSubmitError(null); setStage('form'); } }}
+                    >
+                        {submitError}
+                    </StatusMessage>
+                ) : null}
                 actions={(
                     <Button
                         type="submit"
@@ -1212,23 +1222,6 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 )}
-                {(isWatcherMode || hw) && submitError ? (
-                    <StatusMessage
-                        variant="error"
-                        recovery={
-                            // Cluster P FOLLOWUP 4: encoder /
-                            // network / device errors are recoverable
-                            // by returning to the form stage and
-                            // adjusting an input or re-staging the HW
-                            // device. Wrong-password isn't reachable
-                            // here (no password input in HW / watcher
-                            // modes).
-                            { label: 'Edit', onAction: () => { setSubmitError(null); setStage('form'); } }
-                        }
-                    >
-                        {submitError}
-                    </StatusMessage>
-                ) : null}
             </FormPage>,
         );
     }
@@ -1416,6 +1409,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         <FormPage
             label="Create dispenser"
             onSubmit={handleReview}
+            onChangeCapture={() => { if (formError) setFormError(null); }}
             status={formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
             actions={(
                 <Button

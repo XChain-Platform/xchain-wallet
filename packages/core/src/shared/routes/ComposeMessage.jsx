@@ -750,9 +750,7 @@ export function ComposeMessage({
                 label="Review message"
                 onSubmit={handleSubmit}
                 status={hw && submitError ? (
-                    <p role="alert" style={{ margin: '0.25rem 0 0', color: 'var(--xc-danger-fg)', fontSize: '0.75rem' }}>
-                        {submitError}
-                    </p>
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button

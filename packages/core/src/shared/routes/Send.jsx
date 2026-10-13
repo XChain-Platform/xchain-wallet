@@ -2285,6 +2285,19 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                 id="send-review-form"
                 label="Review send"
                 onSubmit={handleSubmit}
+                status={submitError ? (
+                    <StatusMessage
+                        variant="error"
+                        details={submitErrorDetail || undefined}
+                        recovery={
+                            submitErrorCause === 'insufficient_funds' && sourceBalance && parseFloat(sourceBalance.amount || '0') > 0
+                                ? { label: 'Use Max', onAction: () => { setStage('form'); onMax(); } }
+                                : undefined
+                        }
+                    >
+                        {submitError}
+                    </StatusMessage>
+                ) : null}
                 actions={(
                     <Button
                         type="submit"
@@ -2445,38 +2458,8 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                         }}
                         autoComplete="current-password"
                         disabled={stage === 'submitting'}
-                        error={submitError || undefined}
                     />
                 )}
-                {/*
-                  * The password Input (the branch above, shown only when the
-                  * wallet is LOCKED) carries submitError on its `error` prop.
-                  * Every other path needs this banner -- including the unlocked
-                  * software path, which previously had no error surface at all,
-                  * so a failed send simply vanished.
-                  */}
-                {submitError && (isWatcherMode || isHwSource || signerReady) ? (
-                    <StatusMessage
-                        variant="error"
-                        recovery={
-                            submitErrorCause === 'insufficient_funds' && sourceBalance && parseFloat(sourceBalance.amount || '0') > 0
-                                ? { label: 'Use Max', onAction: () => { setStage('form'); onMax(); } }
-                                : undefined
-                        }
-                    >
-                        {submitError}
-                        {submitErrorDetail ? (
-                            <details style={{ marginTop: 'var(--xc-space-1)' }}>
-                                <summary style={{ cursor: 'pointer', fontSize: 'var(--xc-text-sm)', opacity: 0.85 }}>
-                                    Technical details
-                                </summary>
-                                <span style={{ fontSize: 'var(--xc-text-sm)', wordBreak: 'break-word' }}>
-                                    {submitErrorDetail}
-                                </span>
-                            </details>
-                        ) : null}
-                    </StatusMessage>
-                ) : null}
             </FormPage>,
         );
     }
@@ -2568,6 +2551,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
             id="send-form"
             label="Send"
             onSubmit={handleReview}
+            onChangeCapture={() => { if (formError) setFormError(null); }}
             status={formError ? (
                 <StatusMessage
                     variant="error"

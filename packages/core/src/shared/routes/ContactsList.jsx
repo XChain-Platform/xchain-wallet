@@ -576,7 +576,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 label="New contact"
                 onSubmit={handleSave}
                 status={submitError ? (
-                    <p role="alert" className={styles.error} style={{ marginTop: '0.5rem' }}>{submitError}</p>
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button type="submit" variant="primary" loading={submitting}>
@@ -622,7 +622,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 label="Edit contact"
                 onSubmit={handleSave}
                 status={submitError ? (
-                    <p role="alert" className={styles.error} style={{ marginTop: '0.5rem' }}>{submitError}</p>
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
                 actions={(
                     <Button type="submit" variant="primary" loading={submitting}>

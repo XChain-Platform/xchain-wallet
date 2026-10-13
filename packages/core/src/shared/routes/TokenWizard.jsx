@@ -699,6 +699,7 @@ export function TokenWizard({ walletId, onBack }) {
                 warnings: advancedIssueWarnings(advanced),
             },
             formError,
+            onEdit: () => { if (formError) setFormError(null); },
             onSubmit: handleDetailsSubmit,
             submitLabel: 'Review token',
         })}
@@ -1211,7 +1212,7 @@ function renderDetailsStage({
     mintStopBlock, setMintStopBlock,
     payFeeInNativeCoin, setPayFeeInNativeCoin, coinTicker, nativeFeeMandatory,
     advancedPanel,
-    formError, onSubmit, submitLabel = 'Preview', submitLoading = false,
+    formError, onEdit, onSubmit, submitLabel = 'Preview', submitLoading = false,
 }) {
     const resolved = resolveTemplate(template);
     const show = TEMPLATE_FIELDS[resolved] || TEMPLATE_FIELDS.custom;
@@ -1220,6 +1221,7 @@ function renderDetailsStage({
         <FormPage
             label="Token details"
             onSubmit={onSubmit}
+            onChangeCapture={onEdit}
             intro={<>Template: <strong>{resolved}</strong></>}
             status={formError ? (
                 <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>

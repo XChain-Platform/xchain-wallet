@@ -551,6 +551,9 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
             <FormPage
                 label="Review list"
                 onSubmit={handleSubmit}
+                status={(isWatcherMode || hw) && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
                 actions={(
                     <>
                         <Button
@@ -614,7 +617,6 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 )}
-                {(isWatcherMode || hw) && submitError ? (<StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>) : null}
             </FormPage>,
         );
     }
@@ -675,6 +677,8 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         <FormPage
             label="Create list"
             onSubmit={handleReview}
+            onChangeCapture={() => { if (formError) setFormError(null); }}
+            status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
             actions={(
                 <Button
                     type="submit"
@@ -881,7 +885,6 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 A bigger list is a bigger transaction: the network fee rises with the number of items. The exact fee is set when you broadcast.
             </p>
 
-            {formError ? (<StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>) : null}
         </FormPage>,
     );
 }

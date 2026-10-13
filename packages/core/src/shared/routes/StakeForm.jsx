@@ -513,6 +513,9 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
             <FormPage
                 label="Review stake"
                 onSubmit={handleSubmit}
+                status={(isWatcherMode || isHwSource) && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
                 actions={(
                     <Button
                         type="submit"
@@ -585,9 +588,6 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 )}
-                {(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
-                ) : null}
             </FormPage>,
         );
     }
@@ -638,6 +638,10 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
         <FormPage
             label="Stake XCHAIN"
             onSubmit={handleReview}
+            onChangeCapture={() => { if (formError) setFormError(null); }}
+            status={formError ? (
+                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+            ) : null}
             actions={(
                 <Button
                     type="submit"
@@ -788,9 +792,6 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                 />
             ) : null}
 
-            {formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
-            ) : null}
         </FormPage>,
     );
 }
