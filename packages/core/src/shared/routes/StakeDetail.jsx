@@ -110,13 +110,18 @@ export function StakeDetail({
     // Quick-action "More" popover.
     const [moreOpen, setMoreOpen] = useState(false);
     const moreWrapRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+    const moreButtonRef = useRef(/** @type {HTMLButtonElement | null} */ (null));
     useEffect(() => {
         if (!moreOpen) return undefined;
         const onDown = (e) => {
             if (moreWrapRef.current?.contains(e.target)) return;
             setMoreOpen(false);
         };
-        const onKey = (e) => { if (e.key === 'Escape') setMoreOpen(false); };
+        const onKey = (e) => {
+            if (e.key !== 'Escape') return;
+            setMoreOpen(false);
+            moreButtonRef.current?.focus();
+        };
         window.addEventListener('mousedown', onDown);
         window.addEventListener('keydown', onKey);
         return () => {
@@ -400,6 +405,7 @@ export function StakeDetail({
                     </button>
                     <div className={local.quickActionMoreWrap} ref={moreWrapRef}>
                         <button
+                            ref={moreButtonRef}
                             type="button"
                             className={local.quickAction}
                             aria-haspopup="menu"
@@ -469,6 +475,7 @@ export function StakeDetail({
                     </button>
                     <div className={local.quickActionMoreWrap} ref={moreWrapRef}>
                         <button
+                            ref={moreButtonRef}
                             type="button"
                             className={local.quickAction}
                             aria-haspopup="menu"
