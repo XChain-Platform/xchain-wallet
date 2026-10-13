@@ -1612,7 +1612,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     <StatusMessage>{priceNotes.fiatWarning}</StatusMessage>
                     <Input
                         label="Oracle address (optional)"
-                        hint="User-oracle (PRICE v1) address for fiat pricing. Requires a fiat currency. If the oracle charges a usage fee you pay it once, now, from this transaction; the amount scales with the escrow you lock. Paste the full address, not a ^id reference."
+                        hint="Oracle address used for fiat pricing. If it charges a usage fee, you pay it now based on the escrow amount. Enter the full address."
                         value={oracleAddress}
                         onChange={(e) => setOracleAddress(e.target.value)}
                         autoComplete="off"

@@ -689,7 +689,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
 
             <AmountField
                 label="Amount"
-                hint="How much XCHAIN to stake. You don't pick capabilities; each one activates automatically once your total stake reaches its threshold, so a larger stake can unlock more."
+                hint="Amount to stake. Capabilities activate automatically when your total stake reaches their thresholds."
                 amount={amount}
                 tick="XCHAIN"
                 onAmountFieldChange={(rawValue) => {

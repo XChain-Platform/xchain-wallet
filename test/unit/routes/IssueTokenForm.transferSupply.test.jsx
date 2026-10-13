@@ -141,6 +141,6 @@ describe('IssueTokenForm ownership transfer versus supply transfer', () => {
     it('says on the form itself that ownership and the minted tokens move separately', async () => {
         mountForm();
         await screen.findByLabelText('Ticker');
-        expect(screen.getByText(/the minted tokens stay with the issuing address/i)).toBeTruthy();
+        expect(screen.getByText(/Transferring ownership does not move the minted tokens/i)).toBeTruthy();
     });
 });

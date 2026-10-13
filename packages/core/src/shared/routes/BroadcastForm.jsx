@@ -1002,7 +1002,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
             />
             <Input
                 label="Value (optional)"
-                hint="Numeric oracle value; pairs with a feed fee for a v1 oracle."
+                hint="Numeric value published by this oracle."
                 inputMode="decimal"
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
@@ -1010,7 +1010,7 @@ export function BroadcastForm({ walletId, onBack, initialChainId, initialTick, i
             />
             <Input
                 label="Feed fee (optional, %)"
-                hint="Oracle / dispenser usage fee as a percentage. Leave blank to skip."
+                hint="Usage fee charged to dispensers that use this oracle. Leave blank for none."
                 inputMode="decimal"
                 value={feedFee}
                 onChange={(e) => setFeedFee(e.target.value)}

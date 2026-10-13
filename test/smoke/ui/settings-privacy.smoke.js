@@ -69,7 +69,7 @@ assert.match(src, /\{!shellCapabilities\(\)\.socksProxy && \(/,
     'the non-proxying shells render an explicit unavailable row');
 const unavailGate = src.indexOf('!shellCapabilities().socksProxy && (');
 const unavailBlock = src.slice(unavailGate, unavailGate + 700);
-assert.match(unavailBlock, /Not available on this platform/,
+assert.match(unavailBlock, /available only in the desktop app/,
     'the unavailable row names the platform limit in the hint');
 assert.match(unavailBlock, /checked=\{false\}/,
     'the unavailable row never draws a switch in the on position');

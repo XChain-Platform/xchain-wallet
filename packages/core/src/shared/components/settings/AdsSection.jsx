@@ -90,7 +90,7 @@ export function AdsSection() {
         <div style={STACK}>
             <ToggleRow
                 label="Automatic Donation System"
-                hint="Sets aside a small amount on each outgoing transaction and sends it as one donation once it reaches the amount you choose below."
+                hint="Counts a small donation for each outgoing transaction. Once the total reaches your threshold, a later transaction sends it."
                 checked={Boolean(settings.ads.enabled)}
                 onChange={onToggleEnabled}
             />
@@ -155,7 +155,7 @@ export function AdsSection() {
                                 {triggerIsDefault ? ' · default' : ' · custom'}
                                 <InfoTip
                                     aria="Trigger threshold help"
-                                    label="The wallet sets aside a small amount per chain and sends it as one donation transaction once it reaches this amount. Waiting for a bigger amount means one network fee covers a bigger donation; set it too high and the donation never fires before you stop using the wallet. 'default' follows this release's recommended amount (future releases may retune it); clear the field to go back to it."
+                                    label="Amount that builds up before the donation is added to your next transaction. A higher threshold means fewer network fees. Clear to use the recommended amount."
                                 />
                             </span>
                             <input

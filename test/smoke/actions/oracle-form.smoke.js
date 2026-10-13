@@ -42,7 +42,8 @@ assert.match(form, /pairConsumers/, 'consumers listed before signing');
 assert.match(form, /oracleConsumers/, 'consumer lookup wired');
 assert.match(form, /oracleFeeds/, 'published-pairs list wired');
 assert.match(form, /activationCountdownText/, 'effective-at countdown shown');
-assert.match(form, /A fraction, not a percentage/, 'fee field states the unit');
+assert.match(form, /0\.01 means 1%/, 'fee field explains the fractional unit');
+assert.match(form, /fee scales with escrow/, 'fee field explains how the charge is sized');
 
 // The publish rule that used to be documented backwards: the FIRST price is
 // delayed too. A surface that says otherwise sends operators to a dispenser

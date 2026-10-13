@@ -87,19 +87,19 @@ export function DeveloperModeSection({ onNavigateToMint } = {}) {
         <div style={STACK}>
             <ToggleRow
                 label="Developer Mode"
-                hint="Reveals regtest networks in chain pickers and custom-endpoint editors."
+                hint="Unlocks test networks, custom chains, preview tools, local app controls, and diagnostics."
                 checked={Boolean(settings.developerMode)}
                 onChange={(v) => onToggle('developerMode', v)}
             />
             <ToggleRow
                 label="Learn Mode"
-                hint="Adds explanatory copy on confirmation screens for users new to bitcoin / XChain mechanics."
+                hint="Adds plain-language explanations to confirmation screens."
                 checked={Boolean(settings.learnMode)}
                 onChange={(v) => onToggle('learnMode', v)}
             />
             <ToggleRow
                 label="Show variant popover"
-                hint="Web app only. Shows the floating layout-variant switcher (small / full / sidebar / extension preview) for previewing shells. Requires Developer Mode."
+                hint="Web app only. Shows a floating switcher for previewing each wallet layout. Requires Developer Mode."
                 checked={Boolean(settings.showVariantBadge)}
                 disabled={!settings.developerMode}
                 onChange={(v) => onToggle('showVariantBadge', v)}
@@ -113,7 +113,7 @@ export function DeveloperModeSection({ onNavigateToMint } = {}) {
             <CustomChainsRow developerMode={Boolean(settings.developerMode)} />
             <ToggleRow
                 label="Auto-approve localhost dApps"
-                hint="Skip the bridge.connect prompt for http://localhost / 127.0.0.1 / [::1] origins. Requires Developer Mode. Signing is a separate opt-in below."
+                hint="Lets local development apps connect without asking first. Signing still requires the separate setting below."
                 checked={Boolean(settings.autoApproveLocalhost)}
                 disabled={!settings.developerMode}
                 onChange={(v) => onToggle('autoApproveLocalhost', v)}

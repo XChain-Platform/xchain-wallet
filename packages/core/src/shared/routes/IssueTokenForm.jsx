@@ -940,7 +940,7 @@ export function IssueTokenForm({ walletId, onBack }) {
             <AddressField
                 label="Transfer ownership to (optional)"
                 icon="contacts"
-                hint="Leave blank to keep control. This hands over the right to manage the token; the minted tokens stay with the issuing address unless you also send them below."
+                hint="Leave blank to keep control. Transferring ownership does not move the minted tokens; use the field below to send those too."
                 value={transferTo}
                 onChange={(e) => setTransferTo(e.target.value)}
                 onIconClick={() => { setContactsTarget('owner'); setContactsPickerOpen(true); }}

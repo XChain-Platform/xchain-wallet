@@ -719,7 +719,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
             ) : null}
             <Input
                 label="Usage fee (optional)"
-                hint="A fraction, not a percentage: 0.01 means 1%. Charged once to whoever opens a dispenser against this oracle, sized from the escrow they fund. Leave empty to charge nothing."
+                hint="Fraction charged when someone opens a dispenser with this oracle. For example, 0.01 means 1%. The fee scales with escrow. Leave blank for none."
                 inputMode="decimal"
                 value={fee}
                 onChange={(e) => setFee(e.target.value)}

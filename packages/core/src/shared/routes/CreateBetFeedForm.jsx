@@ -669,7 +669,7 @@ export function CreateBetFeedForm({
             <Input
                 label="Betting closes"
                 type="datetime-local"
-                hint="Set this comfortably BEFORE the event starts. Block timestamps can lag real time by up to about two hours, so a deadline set too close lets late information be bet on."
+                hint="Close betting well before the event. Block times can trail real time by about two hours, so a late deadline may allow bets after it starts."
                 value={deadlineInput}
                 onChange={(e) => setDeadlineInput(e.target.value)}
             />
@@ -678,7 +678,7 @@ export function CreateBetFeedForm({
                 label="Time to publish the result"
                 value={windowPreset}
                 onChange={(e) => setWindowPreset(e.target.value)}
-                hint="After betting closes you have this long to publish the winning outcome. Miss it and the network refunds every bet automatically, and you earn nothing."
+                hint="Time to publish the result after betting closes. If it expires, every bet is refunded and you earn nothing."
             >
                 {WINDOW_PRESETS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
             </Select>
@@ -703,7 +703,7 @@ export function CreateBetFeedForm({
 
             <Input
                 label="Your fee (optional)"
-                hint={`Your cut of the pot as a percent, e.g. 1.5 for 1.5%. Up to ${MAX_FEE_PCT}%. Taken only when you publish a result; a cancelled, void or expired market pays you nothing.`}
+                hint={`Your share of the pot, such as 1.5 for 1.5%. Up to ${MAX_FEE_PCT}%. Paid only when you publish a result; cancelled, void, and expired markets pay nothing.`}
                 value={feePct}
                 onChange={(e) => setFeePct(e.target.value)}
                 inputMode="decimal"
@@ -780,7 +780,7 @@ export function CreateBetFeedForm({
                 <>
                     <Input
                         label="Only these addresses may bet"
-                        hint="The number of an on-chain address list. Membership is checked when a bet is placed, so removing someone later does not undo a bet they already made."
+                        hint="Address list number. Membership is checked when each bet is placed, so later removals do not cancel existing bets."
                         value={allowList}
                         onChange={(e) => setAllowList(e.target.value)}
                         inputMode="numeric"

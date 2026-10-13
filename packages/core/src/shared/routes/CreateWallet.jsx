@@ -492,8 +492,8 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     />
                     <span>Add a BIP39 passphrase (advanced)</span>
                     <InfoTip
-                        aria="BIP39 passphrase help"
-                        label="An optional 25th word that mixes with your recovery phrase to derive a different wallet. Someone who learns your recovery phrase but not the passphrase cannot reach your funds. You enter it once here; the wallet stores it, protected by your password. You will need it again only to restore this wallet somewhere else. If you forget it, the wallet is unrecoverable; it cannot be reset. Hardware wallets handle passphrases on the device itself."
+                        aria="Passphrase help"
+                        label="Creates a different wallet from the same recovery phrase. You need it for recovery. Lose it and the wallet cannot be recovered. Hardware wallets handle it."
                     />
                 </label>
                 {showPassphrase ? (

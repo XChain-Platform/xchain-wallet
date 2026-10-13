@@ -1357,7 +1357,7 @@ export function DeployContractForm({ walletId, onBack }) {
 
             <Input
                 label="Gas limit"
-                hint="Upper bound of VM gas publishing and subsequent calls may consume."
+                hint="Maximum computation allowed when deploying or calling the contract."
                 inputMode="numeric"
                 value={gasLimit}
                 onChange={(e) => setGasLimit(e.target.value)}
@@ -1366,7 +1366,7 @@ export function DeployContractForm({ walletId, onBack }) {
 
             <Input
                 label="Constructor params (optional)"
-                hint="Pipe-delimited values passed to the contract's constructor."
+                hint="Values passed to the contract when it is created. Separate them with |."
                 value={constructorParams}
                 onChange={(e) => setConstructorParams(e.target.value)}
                 autoComplete="off"
@@ -1374,7 +1374,7 @@ export function DeployContractForm({ walletId, onBack }) {
 
             <Input
                 label="Cooldown blocks (optional)"
-                hint="Set to enable contract-staking. Blocks between an unstake and token release (1–100000). Leave blank for a non-stakeable contract."
+                hint="Enables contract staking and sets the blocks between unstaking and token release (1–100000). Leave blank to disable staking."
                 inputMode="numeric"
                 value={cooldownBlocks}
                 onChange={(e) => setCooldownBlocks(e.target.value)}
@@ -1383,7 +1383,7 @@ export function DeployContractForm({ walletId, onBack }) {
 
             <Input
                 label="Slash destination (optional)"
-                hint='Where slashed tokens go. Enter an address or "BURN" to route to the chain burn address. Defaults to BURN when cooldown is set. Locked when published and cannot change later.'
+                hint="Address that receives slashed tokens. Enter BURN or leave blank to destroy them. Cannot change after deployment."
                 value={slashDestination}
                 onChange={(e) => setSlashDestination(e.target.value)}
                 autoComplete="off"

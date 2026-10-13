@@ -70,7 +70,7 @@ export function PrivacySection() {
             {shellCapabilities().socksProxy && (
                 <ToggleRow
                     label="Tor routing"
-                    hint="Send the wallet's requests through a local Tor SOCKS5 proxy (127.0.0.1:9050), so the servers it talks to see Tor rather than your address. Tor must already be running: if it is not reachable, requests fail rather than quietly going direct."
+                    hint="Routes wallet requests through Tor at 127.0.0.1:9050. Tor must already be running; requests fail if it cannot be reached."
                     checked={settings.privacy.torRouting}
                     onChange={(v) => onToggle('torRouting', v)}
                 />
@@ -88,7 +88,7 @@ export function PrivacySection() {
             {!shellCapabilities().socksProxy && (
                 <ToggleRow
                     label="Tor routing"
-                    hint="Not available on this platform. A web page cannot open a SOCKS connection at all, and a browser extension could only send your entire browser through the proxy rather than just the wallet. The desktop app can do it: install it there to route the wallet's requests through Tor."
+                    hint="Tor routing is available only in the desktop app. This platform cannot proxy only the wallet's requests."
                     checked={false}
                     disabled
                     onChange={() => {}}
@@ -102,50 +102,50 @@ export function PrivacySection() {
                    remaining balance sits on the new address and the address you
                    sent from reads zero. Users who are not told that report it
                    as lost funds. */
-                hint="Use a fresh change address for every send. Improves chain-analysis resistance. Your leftover balance moves to the new address, which appears in your address list as “Change #N”."
+                hint="Uses a fresh address for change after each send, making transactions harder to link. Your remaining balance appears under a new Change address."
                 checked={settings.privacy.changeAddressRotation}
                 onChange={(v) => onToggle('changeAddressRotation', v)}
             />
             <ToggleRow
                 label="Hide small balances"
-                hint="Collapse balances under the dust threshold from balance / portfolio views."
+                hint="Hides tiny balances from balance and portfolio views."
                 checked={settings.privacy.hideSmallBalances}
                 onChange={(v) => onToggle('hideSmallBalances', v)}
             />
             <ToggleRow
                 label="Blur sensitive data on blur"
-                hint="When enabled, mnemonic / QR / balance surfaces blur out while the wallet window is unfocused."
+                hint="Blurs recovery phrases, QR codes, and balances while the wallet is not focused."
                 checked={Boolean(settings.privacy.blurOnBlur)}
                 onChange={(v) => onToggle('blurOnBlur', v)}
             />
             <ToggleRow
                 label="Labels survive restore"
                 /* Spec §19.5.2: the extension background host reads this flag to queue label batches; Backup publishes by hand in every shell. */
-                hint="In the browser extension, queue label changes so they can be published on-chain and restored on another device. In every app you can publish labels by hand from Backup."
+                hint="In the browser extension, queues label changes for encrypted backup and restore. You can also publish them manually from Backup."
                 checked={Boolean(settings.privacy.labelsSurviveRestore)}
                 onChange={(v) => onToggle('labelsSurviveRestore', v)}
             />
             <ToggleRow
                 label="Haptic feedback"
-                hint="Vibration pulses on success / error / tap events when the device supports the Vibration API. Reduced-motion (OS-level) also suppresses haptics."
+                hint="Vibrates for success, errors, and taps on supported devices. Your reduced-motion setting also turns this off."
                 checked={settings.privacy.hapticsEnabled !== false}
                 onChange={(v) => onToggle('hapticsEnabled', v)}
             />
             <ToggleRow
                 label="Native coin price data"
-                hint="Sends a request to api.coingecko.com to display USD price, market cap, 24-hour change, and a 7-day chart for Bitcoin, Litecoin, and Dogecoin on the coin detail page. Reveals to that third party that you're using this wallet. Disable to hide the stats strip and chart with zero network calls."
+                hint="Allows CoinGecko lookups for fiat values, market data, charts, and price alerts. CoinGecko can learn that you use this wallet. Turn off to stop these requests."
                 checked={settings.privacy.priceDataEnabled !== false}
                 onChange={(v) => onToggle('priceDataEnabled', v)}
             />
             <ToggleRow
                 label="Fetch token metadata"
-                hint="When a token's description points at a Token Information Standard (TIS) JSON document, the wallet downloads it and renders the embedded artwork, audio, video, website, and social links on the token detail page. Reveals to the host of that document (and any embedded media URLs, including IPFS gateways and third-party CDNs) that you're looking at this token. Disable to render only the on-chain fields with zero extra network calls."
+                hint="Loads artwork, media, and links referenced by token descriptions. Their hosts can learn which token you view. Turn off to show only on-chain details."
                 checked={settings.privacy.metadataFetchEnabled !== false}
                 onChange={(v) => onToggle('metadataFetchEnabled', v)}
             />
             <ToggleRow
                 label="Always require hardware cross-check confirm"
-                hint={`Forces the explicit "I've verified path + address" checkbox on every hardware-wallet sign, regardless of amount or recipient. The wallet already requires it for risky signs (large amounts, first-time recipients, multisig). Turn this on to require it on every HW sign.`}
+                hint="Requires you to confirm the path and address on every hardware-wallet signature. Risky signatures already require this check."
                 checked={settings.privacy.alwaysRequireHwExplicitConfirm === true}
                 onChange={(v) => onToggle('alwaysRequireHwExplicitConfirm', v)}
             />

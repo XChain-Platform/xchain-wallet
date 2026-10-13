@@ -147,11 +147,8 @@ export function AboutSection() {
                 <ToggleRow
                     label="Check for new versions"
                     hint={
-                        'You installed this app directly, so nothing updates it for you.'
-                        + ' Once a day the wallet asks our download site whether a newer'
-                        + ' version exists, and tells you if there is one. It never'
-                        + ' downloads or installs anything, and the request says nothing'
-                        + ' about you or your wallet.'
+                        'Checks our download site once a day and alerts you to new versions.'
+                        + ' It does not download or install them or send wallet data.'
                     }
                     checked={updateCheck}
                     onChange={(next) => {

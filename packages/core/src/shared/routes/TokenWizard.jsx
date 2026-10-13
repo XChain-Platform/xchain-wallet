@@ -1206,7 +1206,7 @@ function renderDetailsStage({
             {show.displayName ? (
                 <Input
                     label="Display name (optional)"
-                    hint="UI label, not stored on-chain."
+                    hint="Shown only in this wallet; not saved on-chain."
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
                     autoComplete="off"
@@ -1248,8 +1248,8 @@ function renderDetailsStage({
                 <Input
                     label="Image URL"
                     hint={isEdition
-                        ? 'The artwork every copy shares, stored on-chain in the description. Use a stable URL (IPFS, your own host).'
-                        : "The collectible's image, stored on-chain in the description. Use a stable URL (IPFS, your own host)."}
+                        ? 'URL for the artwork shared by every copy. The URL is saved on-chain, so use a stable host such as IPFS.'
+                        : "URL for the collectible's image. The URL is saved on-chain, so use a stable host such as IPFS."}
                     value={imageUrl}
                     onChange={(e) => setImageUrl(e.target.value)}
                     autoComplete="off"
@@ -1313,7 +1313,7 @@ function renderDetailsStage({
             {show.transferTo ? (
                 <Input
                     label="Transfer ownership to (optional)"
-                    hint="Leave blank to keep control. This hands over the right to manage the token; the minted tokens stay with the issuing address unless you also send them below."
+                    hint="Leave blank to keep control. Transferring ownership does not move the minted tokens; use the field below to send those too."
                     value={transferTo}
                     onChange={(e) => setTransferTo(e.target.value)}
                     autoComplete="off"

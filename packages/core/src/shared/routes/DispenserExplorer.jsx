@@ -194,7 +194,7 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                     role="textbox"
                     label={searchMode === 'token' ? 'Token ticker' : 'Address'}
                     hint={searchMode === 'token'
-                        ? 'Ticker name (e.g. MYTOKEN) or TICK_ID reference (e.g. ^1234).'
+                        ? 'Ticker name, such as MYTOKEN, or a token reference from the explorer.'
                         : 'Dispenser address or source address.'}
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}

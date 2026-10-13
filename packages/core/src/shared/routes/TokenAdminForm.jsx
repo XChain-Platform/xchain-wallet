@@ -1622,7 +1622,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     </p>
                     <Input
                         label="Minimum confirmations (optional)"
-                        hint="How many blocks to wait on this chain after a transfer is locked, before its copy is created on the other chain. Waiting longer protects against this chain rewriting its recent blocks, which cannot be undone once a copy exists; the cost is slower transfers. Values below the platform default have no effect."
+                        hint="Blocks to wait before copying a locked transfer to the other chain. Longer waits are safer but slower. Values below the platform default have no effect."
                         value={bridgeMinDepth}
                         onChange={(e) => setBridgeMinDepth(e.target.value)}
                         disabled={bridgeFrozen}

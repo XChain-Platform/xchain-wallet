@@ -83,7 +83,7 @@ export function DerivationPathCrossCheck({
                     Derivation path
                     <InfoTip
                         aria="Derivation path help"
-                        label="The BIP32 path that locates this account inside your seed. Different paths produce different addresses from the same seed. Verify it matches what your device displays so the host can't trick the device into signing for a different sub-account."
+                        label="Locates this account within your recovery phrase. Compare it with your device to make sure you sign from the intended account."
                     />
                 </dt>
                 <dd className={styles.value}><code className={styles.path}>{path}</code></dd>

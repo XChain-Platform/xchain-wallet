@@ -2794,7 +2794,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                             Replace-by-fee
                             <InfoTip
                                 aria="Replace-by-fee help"
-                                label="Replace-by-fee (BIP125) lets you re-broadcast this transaction later at a higher fee, speeding up or cancelling it before it confirms."
+                                label="Allows this unconfirmed transaction to be replaced with one that pays a higher fee, so it can confirm sooner or be cancelled."
                             />
                         </span>
                         <span className={styles.rbfHint}>

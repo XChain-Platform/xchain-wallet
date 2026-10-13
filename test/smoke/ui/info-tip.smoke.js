@@ -64,7 +64,7 @@ const integrations = [
     // Match any aria string: the point is that FeeSelector MOUNTS an InfoTip, not
     // what that tip's aria label happens to be worded as this month.
     { src: feeSelSrc, file: 'FeeSelector.jsx', match: /<InfoTip\s+aria="[^"]+"/ },
-    { src: createSrc, file: 'CreateWallet.jsx', match: /aria="BIP39 passphrase help"/ },
+    { src: createSrc, file: 'CreateWallet.jsx', match: /aria="Passphrase help"/ },
     { src: dpSrc, file: 'DerivationPathCrossCheck.jsx', match: /aria="Derivation path help"/ },
     { src: adsSrc, file: 'AdsSection.jsx', match: /aria="Trigger threshold help"/ },
 ];

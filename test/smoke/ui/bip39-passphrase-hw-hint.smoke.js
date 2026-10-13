@@ -32,9 +32,9 @@ const importSrc = read('packages/core/src/shared/routes/ImportWallet.jsx');
 // 1. CreateWallet's existing BIP39 InfoTip extends its label to
 //    mention the HW-on-device caveat alongside the entropy /
 //    forget-warning text the v0.210.0 copy already surfaced.
-assert.ok(/aria="BIP39 passphrase help"/.test(createSrc),
+assert.ok(/aria="Passphrase help"/.test(createSrc),
     'CreateWallet keeps its BIP39 passphrase InfoTip aria');
-assert.ok(/Hardware wallets handle passphrases on the device itself/.test(createSrc),
+assert.ok(/Hardware wallets handle it/.test(createSrc),
     'CreateWallet InfoTip mentions hardware wallets handle passphrases on-device');
 
 // 2. ImportWallet imports the InfoTip primitive (it didn't before
@@ -42,11 +42,11 @@ assert.ok(/Hardware wallets handle passphrases on the device itself/.test(create
 //    toggle.
 assert.ok(/InfoTip/.test(importSrc),
     'ImportWallet imports InfoTip from core/ui');
-assert.ok(/aria="BIP39 passphrase help"/.test(importSrc),
+assert.ok(/aria="Passphrase help"/.test(importSrc),
     'ImportWallet ships a BIP39 passphrase InfoTip');
-assert.ok(/Hardware wallets \(Trezor \/ Ledger\) handle passphrases on the device itself/.test(importSrc),
+assert.ok(/For a hardware wallet, enter it on the device/.test(importSrc),
     'ImportWallet InfoTip mentions HW devices handle passphrases on-device');
-assert.ok(/pair a hardware wallet via Add Account → Hardware Signer/.test(importSrc),
+assert.ok(/pair through Add Account/.test(importSrc),
     'ImportWallet InfoTip points users to the correct HW pairing lane');
 
 // 3. The ImportWallet InfoTip lives inside the existing

@@ -105,8 +105,8 @@ describe('AboutSection: the switch exists only where the lane does', () => {
     it('explains the request in plain language, naming no API and no vendor', () => {
         lane();
         about();
-        const hint = screen.getByText(/nothing updates it for you/i).textContent;
-        expect(hint).toMatch(/never downloads or installs anything/i);
+        const hint = screen.getByText(/Checks our download site once a day/i).textContent;
+        expect(hint).toMatch(/does not download or install them or send wallet data/i);
         expect(hint).not.toMatch(/Play|Google|API|endpoint|JSON|semver/i);
     });
 });
