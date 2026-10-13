@@ -7,7 +7,7 @@
 .form {
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-3);
+    gap: var(--xc-form-gap);
     width: 100%;
     min-width: 0;
     margin: 0;
@@ -22,14 +22,10 @@
 }
 
 .body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-form-gap);
     min-width: 0;
-}
-
-/* Inputs carry their own bottom margin; the form's gap already spaces the
-   last field from the action row. */
-.body > :last-child,
-.sectionBody > :last-child {
-    margin-bottom: 0;
 }
 
 .status > * {
@@ -53,7 +49,7 @@
 .section {
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-3);
+    gap: var(--xc-form-gap);
     min-width: 0;
     margin: 0;
 }
@@ -64,12 +60,13 @@
 }
 
 .sectioned > .body {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-4);
+    gap: var(--xc-section-gap);
 }
 
 .sectionBody {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-form-gap);
     min-width: 0;
 }
 

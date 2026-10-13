@@ -297,11 +297,15 @@ Defined in `packages/core/src/ui/tokens.css`. Use the token instead of repeating
 |---|---|---|
 | `--xc-space-1` | 4px | gap inside compact controls |
 | `--xc-space-2` | 8px | gap between sibling controls |
-| `--xc-space-3` | 12px | default field margin, compact card padding |
+| `--xc-space-3` | 12px | compact card and tab padding |
 | `--xc-space-4` | 16px | large-input horizontal padding |
 | `--xc-space-5` | 20px | loose cluster spacing |
 | `--xc-space-6` | 24px | card outer padding |
 | `--xc-space-8` | 32px | section breaks and page-level rhythm |
+| `--xc-form-gap` | `var(--xc-space-4)` | gap between form fields |
+| `--xc-label-gap` | `var(--xc-space-1)` | gap from a field label to its control |
+| `--xc-help-gap` | `var(--xc-space-1)` | gap from a control to help or error text |
+| `--xc-section-gap` | `var(--xc-space-6)` | gap between form sections |
 | `--xc-page-gutter` | 12px compact, 16px rail, 24px full | the sole inline page inset, applied by `Screen.body` |
 | `--xc-page-top` | 12px compact, 16px rail/full, 8px short landscape | the sole page-content top inset, applied by `Screen.body` |
 | `--xc-text-xs` | 0.6875rem | metadata, hint text |
