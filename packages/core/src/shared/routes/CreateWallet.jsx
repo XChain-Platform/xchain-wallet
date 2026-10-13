@@ -379,7 +379,9 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                             : 'Enter the requested words to confirm your recovery phrase.'}
                     </p>
                 </header>
+                {/* The ordered quiz stays native because the kit has no semantic form-list primitive. */}
                 <ol className={styles.quizList}>
+                    {/* Native list items preserve the quiz order within the form. */}
                     {quizPositions.map((p) => (
                         <li key={p} className={styles.quizRow}>
                             <Input
@@ -457,6 +459,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     shared clipboards.
                 </p>
                 <label className={styles.confirmRow}>
+                    {/* The kit has no checkbox primitive for this confirmation. */}
                     <input
                         type="checkbox"
                         checked={saved}
@@ -564,6 +567,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
             <fieldset className={styles.wordCountRow}>
                 <legend className={styles.wordCountLegend}>Recovery phrase length</legend>
                 <label className={styles.wordCountOption}>
+                    {/* Native radios preserve this mutually exclusive fieldset without a kit equivalent. */}
                     <input
                         type="radio"
                         name="word-count"
@@ -575,6 +579,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     <span className={styles.wordCountHint}>Recommended: secure and easier to back up</span>
                 </label>
                 <label className={styles.wordCountOption}>
+                    {/* Native radios preserve this mutually exclusive fieldset without a kit equivalent. */}
                     <input
                         type="radio"
                         name="word-count"
@@ -588,6 +593,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
             </fieldset>
             <div className={styles.advancedRow}>
                 <label className={styles.advancedToggle}>
+                    {/* The kit has no checkbox primitive for this boolean option. */}
                     <input
                         type="checkbox"
                         checked={showPassphrase}

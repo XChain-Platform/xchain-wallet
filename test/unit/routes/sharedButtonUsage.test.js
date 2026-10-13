@@ -162,5 +162,23 @@ describe('trade form style guide primitives', () => {
         expect(placeOrder).toMatch(/<Select[\s\S]*label="Expiration"/);
         expect(placeOrder.match(/<button\b/g)).toHaveLength(2);
         expect(placeOrder.match(/Native buttons retain segmented-toggle pressed behavior/g)).toHaveLength(2);
+    it('uses style-guide controls throughout wallet setup routes', () => {
+        const importSource = readFileSync(
+            resolve(process.cwd(), 'packages/core/src/shared/routes/ImportWallet.jsx'),
+            'utf8',
+        );
+        const createSource = readFileSync(
+            resolve(process.cwd(), 'packages/core/src/shared/routes/CreateWallet.jsx'),
+            'utf8',
+        );
+
+        expect(importSource).toMatch(/\bTextarea\b/);
+        expect(importSource).toMatch(
+            /import\s+\{\s*ClipboardPasteButton\s*\}\s+from\s+'\.\.\/\.\.\/ui\/ClipboardPasteButton\.jsx'/,
+        );
+        expect(importSource).not.toMatch(/<textarea\b|<select\b/);
+        expect(importSource.match(/<button\b/g)).toHaveLength(3);
+        expect(importSource.match(/role="tab"/g)).toHaveLength(3);
+        expect(createSource).not.toMatch(/<button\b|<textarea\b|<select\b/);
     });
 });
