@@ -24,11 +24,9 @@
 // worst defect this surface can have, because the user reads the text and the
 // payer scans the code.
 //
-// The residual also says "BIP21", and that is now stale in a way worth
-// recording: `Receive.jsx` builds a BIP21 `bitcoin:`/`litecoin:` URI only as a
-// FALLBACK, for a chain the registry has no coin code for. The real payload is
-// the `xchain:CODE/send?to=…` shape from `uri/xchainUri.js`, which carries the
-// amount, tick and fee preference BIP21 has no slot for.
+// Receive emits the coin's BIP21-style scheme for every network. Optional
+// parameters preserve the exact network and fee preference for XChain while
+// external wallets can still read the standard address and amount fields.
 //
 // NOT COVERED HERE, and left honestly rather than quietly: the token switch
 // (it navigates to the picker route, which is its own surface) and Copy/Share
@@ -42,6 +40,7 @@
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
     REGTEST_ADDRESS_RE,
+    REGTEST_CHAIN_ID,
     REGTEST_COIN,
     readReceiveAddress,
     switchToRegtest,
@@ -49,6 +48,11 @@ import {
 
 const PASSWORD = 'regtestpassword123';
 const REQUEST_AMOUNT = '0.25';
+const URI_SCHEME = {
+    RBTC: 'bitcoin',
+    RLTC: 'litecoin',
+    RDOGE: 'dogecoin',
+}[REGTEST_COIN];
 
 /**
  * Reads the QR the user is actually looking at.
@@ -93,13 +97,13 @@ async function expectQr(page, predicate, message) {
     return last;
 }
 
-function parseXchainUri(raw) {
-    const match = /^xchain:([A-Za-z0-9]+)\/([a-z]+)\?(.*)$/.exec(raw);
+function parsePaymentUri(raw) {
+    const match = /^([a-z][a-z0-9+.-]*):([^?]+)(?:\?(.*))?$/.exec(raw);
     if (!match) return null;
     return {
-        code: match[1],
-        action: match[2],
-        params: Object.fromEntries(new URLSearchParams(match[3])),
+        scheme: match[1],
+        address: match[2],
+        params: Object.fromEntries(new URLSearchParams(match[3] || '')),
     };
 }
 
@@ -128,17 +132,18 @@ test.describe('Receive: the request the payer actually scans', () => {
 
     test('the QR encodes the address on screen, and the amount and fee the form was given', async ({ page }) => {
         await test.step('bare request: the code carries THIS address and nothing invented', async () => {
-            const raw = await expectQr(page, (v) => v.startsWith('xchain:'),
-                'the Receive QR never decoded to an xchain: URI');
-            const uri = parseXchainUri(raw);
+            const raw = await expectQr(page, (v) => v.startsWith(`${URI_SCHEME}:`),
+                `the Receive QR never decoded to a ${URI_SCHEME}: URI`);
+            const uri = parsePaymentUri(raw);
             expect(uri, `the Receive QR decoded to something unparseable: ${raw}`).not.toBeNull();
-            expect(uri.action, 'the receive QR does not ask the scanning wallet to SEND').toBe('send');
+            expect(uri.scheme).toBe(URI_SCHEME);
+            expect(uri.params.chain).toBe(REGTEST_CHAIN_ID);
 
             // THE ASSERTION THIS FILE EXISTS FOR. The user reads the Address
             // field; the payer scans the code. If those two ever disagree the
             // money goes somewhere the user never saw, and every other check on
             // this screen would still pass.
-            expect(uri.params.to,
+            expect(uri.address,
                 'the QR encodes a DIFFERENT address than the one displayed on screen - a payer '
                 + 'scanning this code would pay somewhere the user never saw')
                 .toBe(ownAddress);
@@ -153,10 +158,10 @@ test.describe('Receive: the request the payer actually scans', () => {
             await page.getByRole('textbox', { name: /^Amount/ }).fill(REQUEST_AMOUNT);
 
             const raw = await expectQr(page,
-                (v) => parseXchainUri(v)?.params?.amount !== undefined,
+                (v) => parsePaymentUri(v)?.params?.amount !== undefined,
                 'the QR never picked up the requested amount, so a payer scanning it would be '
                 + 'asked for nothing while the screen shows a request');
-            const uri = parseXchainUri(raw);
+            const uri = parsePaymentUri(raw);
 
             // Compared as a NUMBER as well as a string: a formatter that ships
             // "0.250000000" or "25000000" (sats) would still be "present", and
@@ -165,11 +170,11 @@ test.describe('Receive: the request the payer actually scans', () => {
                 'the requested amount reached the QR in a different form than the user typed')
                 .toBe(REQUEST_AMOUNT);
             expect(Number(uri.params.amount)).toBeCloseTo(Number(REQUEST_AMOUNT), 8);
-            expect(uri.params.to, 'the address changed when an amount was typed').toBe(ownAddress);
+            expect(uri.address, 'the address changed when an amount was typed').toBe(ownAddress);
         });
 
         await test.step('the fee slider is part of the REQUEST, not just decoration', async () => {
-            const before = parseXchainUri(await decodeReceiveQr(page))?.params?.feePriority;
+            const before = parsePaymentUri(await decodeReceiveQr(page))?.params?.feePriority;
             expect(before,
                 'the Receive QR carries no fee preference at all, so the slider on this screen '
                 + 'changes nothing a payer will ever see')
@@ -196,16 +201,16 @@ test.describe('Receive: the request the payer actually scans', () => {
 
             const raw = await expectQr(page,
                 (v) => {
-                    const p = parseXchainUri(v)?.params?.feePriority;
+                    const p = parsePaymentUri(v)?.params?.feePriority;
                     return p !== undefined && p !== before;
                 },
                 `the QR still asks for "${before}" after the fee slider was moved, so the control `
                 + 'changes nothing the payer will ever see');
-            const uri = parseXchainUri(raw);
+            const uri = parsePaymentUri(raw);
             expect(uri.params.feePriority).not.toBe(before);
             // Everything else must survive the move. A re-encode that drops the
             // amount is the kind of bug a fee assertion alone cannot see.
-            expect(uri.params.to).toBe(ownAddress);
+            expect(uri.address).toBe(ownAddress);
         });
     });
 
@@ -215,7 +220,11 @@ test.describe('Receive: the request the payer actually scans', () => {
     // a superseded request - and the campaign's Session-1 note only ever
     // established that the image re-renders, never that its CONTENT changed.
     test('the code is re-encoded when the request changes, not merely repainted', async ({ page }) => {
-        const bare = await expectQr(page, (v) => v.startsWith('xchain:'), 'no initial QR');
+        const bare = await expectQr(
+            page,
+            (v) => v.startsWith(`${URI_SCHEME}:`),
+            'no initial QR',
+        );
 
         await page.getByRole('textbox', { name: /^Amount/ }).fill('1.5');
         const withAmount = await expectQr(page, (v) => v !== bare,
@@ -226,12 +235,12 @@ test.describe('Receive: the request the payer actually scans', () => {
             'the QR content was NOT re-encoded when the amount changed from 1.5 to 2.5, so the '
             + 'payer would be asked for the previous amount');
 
-        expect(parseXchainUri(changed)?.params?.amount).toBe('2.5');
+        expect(parsePaymentUri(changed)?.params?.amount).toBe('2.5');
 
         // And clearing it returns to a bare request rather than stranding the
         // last amount on the code.
         await page.getByRole('textbox', { name: /^Amount/ }).fill('');
-        await expectQr(page, (v) => parseXchainUri(v)?.params?.amount === undefined,
+        await expectQr(page, (v) => parsePaymentUri(v)?.params?.amount === undefined,
             'clearing the amount left the old one stranded on the QR, so a payer would still be '
             + 'asked for it');
     });
