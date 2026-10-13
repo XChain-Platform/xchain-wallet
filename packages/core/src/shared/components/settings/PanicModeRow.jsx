@@ -80,7 +80,7 @@ export function PanicModeRow() {
     };
     const dangerButtonStyle = {
         ...buttonStyle,
-        borderColor: 'var(--xc-danger)',
+        border: '1px solid var(--xc-danger)',
         color: 'var(--xc-danger)',
         fontWeight: 600,
     };

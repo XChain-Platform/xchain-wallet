@@ -89,7 +89,7 @@ for (const fn of ['privacySummary', 'safetySummary', 'feesSummary', 'endpointsSu
 // ─── 6. Summary semantics: sample assertions ─────────────────────
 
 // privacy: counts the on flags
-assert.match(src, /flags\.filter\(\(k\) => Boolean\(p\[k\]\)\)\.length/, 'privacy summary counts on flags');
+assert.match(src, /offByDefault\.filter\(\(k\) => p\[k\] === true\)\.length/, 'privacy summary counts on flags');
 // fees: counts strategy === 'custom'
 assert.match(src, /strategy === 'custom'/, 'fees summary detects custom strategy');
 // endpoints: counts custom flag
