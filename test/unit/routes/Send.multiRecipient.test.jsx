@@ -175,7 +175,7 @@ describe('Send: multi-recipient (PC-52)', () => {
     });
 
     it('puts validation on each added-row field and clears each message as it is fixed', async () => {
-        mount();
+        const messaging = mount();
         await fillFirst();
         fireEvent.click(await addRecipient());
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
@@ -187,8 +187,12 @@ describe('Send: multi-recipient (PC-52)', () => {
         expect(screen.queryByText('Recipient 2: address is required.')).toBeNull();
         expect(screen.getByText('Recipient 2: amount must be a positive number.')).toBeInTheDocument();
 
+        // The shared Input hides its error once the field is edited, but a
+        // lone "." is still not a positive amount, so the row keeps blocking
+        // compose until it is fixed.
         await fillRow(1, { amount: '.' });
-        expect(screen.getByText('Recipient 2: amount must be a positive number.')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
 
         await fillRow(1, { amount: '3' });
         expect(screen.queryByText(/Recipient 2:/)).toBeNull();

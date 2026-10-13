@@ -504,7 +504,9 @@ describe('§5.5 ConfirmActionModal: PSBT variant', () => {
             password=""
             onPasswordChange={() => {}}
         />);
-        expect(utils.getByText('Sign transaction')).toBeTruthy();
+        // The approve button repeats the headline, so check each place by role.
+        expect(utils.getByTestId('confirm-modal')).toHaveAttribute('aria-label', 'Confirm Sign transaction');
+        expect(utils.getByRole('button', { name: 'Sign transaction' })).toBeTruthy();
     });
 
     it('foregrounds the supplied PSBT panel and still shows the report', () => {

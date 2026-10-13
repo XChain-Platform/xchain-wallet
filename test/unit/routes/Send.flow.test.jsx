@@ -157,7 +157,7 @@ describe('Send flow with mocked messaging', () => {
         expect(within(confirm).getByTestId('action-intent')).toHaveTextContent(`Send ${AMOUNT} BTC`);
         expect(within(confirm).getByTestId('action-intent')).toHaveTextContent(`TokenBTC`);
         expect(within(confirm).getByTestId('action-intent')).toHaveTextContent(`Amount${AMOUNT}`);
-        expect(within(confirm).getByTestId('action-intent')).toHaveTextContent(`Destination${TO}`);
+        expect(within(confirm).getByTestId('action-intent')).toHaveTextContent(`To${TO}`);
         expect(within(confirm).getByTestId('confirm-fee')).toHaveTextContent('Network fee: 0.00001234 BTC');
         expect(within(confirm).getByLabelText('Password')).toBeInTheDocument();
 
@@ -212,7 +212,7 @@ describe('Send flow with mocked messaging', () => {
         expect(review).toHaveTextContent('Network fee');
         expect(within(review).queryByLabelText('Password')).not.toBeInTheDocument();
 
-        fireEvent.click(within(review).getByRole('button', { name: 'Create unsigned transaction' }));
+        fireEvent.click(within(review).getByRole('button', { name: 'Create unsigned transaction: send' }));
 
         await waitFor(() => expect(messaging.buildSendPsbtRequest).toHaveBeenCalledTimes(1));
         expect(messaging.buildSendPsbtRequest).toHaveBeenCalledWith(expect.objectContaining({
