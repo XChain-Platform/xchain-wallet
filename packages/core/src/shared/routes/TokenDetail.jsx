@@ -292,6 +292,7 @@ export function TokenDetail({
         return null;
     }, [assetInfo, rowImageUrl, isNative, chainId]);
 
+    const pageTitle = displayName || bridgeDisplayTick(tick, coinFromChainId(chainId)).label;
     const header = (
         <PageHeader
             onBack={onBack}
@@ -299,8 +300,8 @@ export function TokenDetail({
             // and the origin chain are both on the Details panel below, so the
             // page never hides which asset this really is.
             title={(
-                <span className={styles.headerTitle}>
-                    {displayName || bridgeDisplayTick(tick, coinFromChainId(chainId)).label}
+                <span className={styles.headerTitle} title={pageTitle}>
+                    {pageTitle}
                 </span>
             )}
             titleIcon={headerIconUrl ? (

@@ -9,9 +9,10 @@
 
 .headerTitle {
     display: block;
-    max-width: min(60vw, 32rem);
-    white-space: normal;
-    overflow-wrap: anywhere;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     line-height: 1.2;
 }
 

@@ -3256,7 +3256,7 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
                         <VerifiedBadge status={verify.status} reason={verify.reason} size="sm" />
                     ) : null}
                 </span>
-                <span className={styles.rowSourceAddress}>
+                <span className={styles.rowSourceAddress} title={entry.source || undefined}>
                     {entry.source || '-'}
                 </span>
                 {contractRowLabel(entry) ? (
@@ -3364,7 +3364,7 @@ function GroupCard({ item, expanded, onToggle }) {
                     <span className={styles.groupCount}>{item.members.length}</span>
                 ) : null}
             </span>
-            <span className={styles.rowSummary}>{displaySummary}</span>
+            <span className={styles.rowSummary} title={displaySummary}>{displaySummary}</span>
             <span className={styles.rowMeta}>
                 {newest?.timestamp ? (
                     <span title={formatTimestamp(newest.timestamp)}>

@@ -119,8 +119,9 @@
 .name {
     font-weight: 600;
     color: var(--xc-text);
-    overflow-wrap: anywhere;
-    white-space: normal;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     min-width: 0;
 }
 
@@ -149,7 +150,6 @@
     color: var(--xc-text);
     line-height: 1.1;
     max-width: 100%;
-    overflow-wrap: anywhere;
     text-align: end;
 }
 
@@ -159,8 +159,20 @@
     font-weight: 600;
     font-family: var(--xc-font-mono);
     max-width: 100%;
-    overflow-wrap: anywhere;
     text-align: end;
+}
+
+.amountFit {
+    display: block;
+    width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.amountFitInner {
+    display: inline-block;
+    white-space: nowrap;
+    transform-origin: right center;
 }
 
 /* Q-1 residual: a balance the wallet could not read. Muted and lighter than a
