@@ -452,6 +452,21 @@ assert.match(
     /padding-top: env\(safe-area-inset-top/,
     'the shared stylesheet insets the top safe area',
 );
+// In an iPadOS 26 resizable window the close/minimise/resize controls sit
+// outside the plain safe area, so env(safe-area-inset-top) reads 0 there and
+// the header logo drew under them. The native shell tops the safe area up to
+// UIKit's corner-adapted value, which the body padding above then honours.
+const windowControls = readFileSync(join(ios, 'App', 'App', 'MainViewController.swift'), 'utf8');
+assert.match(
+    windowControls,
+    /override func viewDidLayoutSubviews\(\)[\s\S]*?clearWindowControls\(\)/,
+    'MainViewController re-checks the window-control inset on every layout pass',
+);
+assert.match(
+    windowControls,
+    /edgeInsets\(for: \.safeArea\(cornerAdaptation: \.vertical\)\)[\s\S]*?additionalSafeAreaInsets\.top = /,
+    'MainViewController raises the safe area to clear the iPadOS window controls',
+);
 
 // --- 12. The submission runbook agrees with the repo it describes -------
 //
