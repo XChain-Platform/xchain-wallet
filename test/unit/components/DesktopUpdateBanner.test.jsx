@@ -96,7 +96,7 @@ describe('DesktopUpdateBanner', () => {
         await act(async () => { screen.getByRole('button', { name: /download update/i }).click(); });
 
         const text = screen.getByRole('status').textContent;
-        expect(text).toContain('could not be downloaded or verified');
+        expect(text).toContain("couldn't be downloaded or verified");
         expect(text).toContain('wallet is untouched');
         expect(text).not.toContain('manifest says');
     });
@@ -120,7 +120,7 @@ describe('DesktopUpdateBanner', () => {
         bridge.emit({ type: 'error', userInitiated: true, info: { message: 'feed unavailable' } });
 
         const text = screen.getByRole('status').textContent;
-        expect(text).toContain('Could not check for updates');
+        expect(text).toContain("Couldn't check for updates");
         expect(text).not.toContain('could not be verified');
         expect(text).not.toContain('feed unavailable');
     });

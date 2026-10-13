@@ -55,7 +55,7 @@ describe('desktop update banner lifecycle', () => {
         bridge.emit({ type: 'rejected', info: { reason: 'remote controlled text' } });
 
         const text = screen.getByRole('status').textContent;
-        expect(text).toContain('could not be downloaded or verified');
+        expect(text).toContain("couldn't be downloaded or verified");
         expect(text).not.toContain('remote controlled text');
     });
 

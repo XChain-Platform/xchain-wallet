@@ -2714,7 +2714,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                                     type="button"
                                     className={styles.successLink}
                                     onClick={copyTxid}
-                                    aria-label={t('send.success.copyTransactionId')}
+                                    aria-label={t('common.copyTransactionId')}
                                 >
                                     {t('send.success.copy')}
                                 </button>
@@ -2824,7 +2824,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     </StatusMessage>
                 ) : networkOffline ? (
                     <StatusMessage variant="warning">
-                        Sending needs a network connection. Your cached balance remains available.
+                        {t('send.offline.body')}
                     </StatusMessage>
                 ) : null}
                 actions={(
@@ -2842,7 +2842,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                                         || (signRisk.requireExplicitConfirm && !hwExplicitConfirmed))
                                     : (!signerReady && password.length === 0))
                         }
-                        title={networkOffline ? 'Sending needs a network connection' : undefined}
+                        title={networkOffline ? t('send.offline.title') : undefined}
                     >
                         {isWatcherMode
                             ? t('send.review.submitAction', { label: t('send.review.createUnsigned') })
@@ -3124,7 +3124,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 />
             ) : networkOffline ? (
                 <StatusMessage variant="warning">
-                    Sending needs a network connection. Your cached balance remains available.
+                    {t('send.offline.body')}
                 </StatusMessage>
             ) : null}
             actions={(
@@ -3132,7 +3132,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     type="submit"
                     variant="primary"
                     disabled={networkOffline || !!testSendGate}
-                    title={networkOffline ? 'Sending needs a network connection' : undefined}
+                    title={networkOffline ? t('send.offline.title') : undefined}
                 >
                     {t('send.title')}
                 </Button>
@@ -3671,7 +3671,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     <input
                         type="checkbox"
                         role="switch"
-                        aria-label={t('send.rbf.enabledLabel')}
+                        aria-label={t('send.rbf.label')}
                         checked={rbfForSend}
                         disabled={!rbfSupported}
                         onChange={(e) => setRbfEnabled(e.target.checked)}

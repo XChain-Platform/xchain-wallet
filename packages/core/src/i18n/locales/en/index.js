@@ -40,6 +40,7 @@ export const en = {
     'common.backToHome': 'Back to home',
     'common.cancel': 'Cancel',
     'common.clear': 'Clear',
+    'common.copyTransactionId': 'Copy transaction ID',
     'common.tryAgain': 'Try again',
     'common.openNetworkSettings': 'Open Network settings',
     'common.done': 'Done',
@@ -56,7 +57,7 @@ export const en = {
     'send.empty.body': 'Receive funds on this chain before creating a send.',
     'send.review': 'Review and send',
     'send.backToEdit': 'Edit payment',
-    'send.memoForbiddenChars': 'A memo cannot include a vertical bar (|) or semicolon (;).',
+    'send.memoForbiddenChars': "A memo can't include a vertical bar (|) or semicolon (;).",
     'send.passwordHint': 'Enter your wallet password to sign this transaction.',
     'send.txid': 'Transaction ID',
     'send.testGate.title': 'First payment to this address. Send a small test first?',
@@ -65,14 +66,13 @@ export const en = {
     'send.testGate.sendSmall': 'Send a small test first',
     'send.testGate.continue': 'Continue with the full amount',
     'send.signerMode':
-        'This wallet is in signer mode. It can sign transactions from a watch-only wallet, but it cannot send them to the network. To send from this device, change the mode under Settings, Wallet mode.',
+        "This wallet is in signer mode. It can sign transactions from a watch-only wallet, but it can't send them to the network. To send from this device, change the mode under Settings, Wallet mode.",
     'send.networkFeeValue': 'Network fee: {amount} {ticker}',
     'send.queued.body':
-        "Your transaction is signed but could not reach the network. It is waiting in the queued-transactions banner and only goes out when you broadcast it from there. The wallet reminds you when the network is back. Don't send this payment again.",
+        "Your transaction is signed but couldn't reach the network. It's waiting in the queued-transactions banner and only goes out when you broadcast it from there. The wallet reminds you when the network is back. Don't send this payment again.",
     'send.success.broadcastPending': 'Broadcast pending',
     'send.success.broadcastPendingBody':
-        'The network accepted your transaction. It is waiting for confirmation, which usually takes a few blocks. You can leave this screen.',
-    'send.success.copyTransactionId': 'Copy transaction ID',
+        "The network accepted your transaction. It's waiting for confirmation, which usually takes a few blocks. You can leave this screen.",
     'send.success.copy': 'Copy',
     'send.success.viewOnExplorer': 'View in block explorer',
     'send.success.sendAnother': 'Send another',
@@ -105,7 +105,6 @@ export const en = {
     'send.advanced.changeHint': 'Any leftover native coin returns here.',
     'send.advanced.availableCount': '{count} available',
     'send.advanced.selectAll': 'Select all',
-    'send.advanced.clearSelection': 'Clear',
     'send.advanced.dust': 'Dust',
     'send.advanced.dustTitle': 'Below the {sats} sat dust threshold',
     'send.advanced.summaryLabel': 'Coin control summary',
@@ -119,7 +118,7 @@ export const en = {
     'send.watcherMode':
         'Watch-only mode creates a transaction without signing or sending it. Move the result to your signer wallet to sign and send it.',
     'send.watcherHardware':
-        'This address is paired with {device}, but a watch-only wallet cannot sign. Pair the same {device} with your signer wallet to sign the transaction.',
+        "This address is paired with {device}, but a watch-only wallet can't sign. Pair the same {device} with your signer wallet to sign the transaction.",
     'send.walletUnlocked': 'Wallet unlocked. No password needed.',
     'send.useMax': 'Use max',
     'send.fromAddress': 'From address',
@@ -130,7 +129,9 @@ export const en = {
     'send.source.choose': 'Choose source address',
     'send.source.hint': 'Only what this address holds can be sent.',
     'send.source.noAddress': 'No address on this chain. Use Receive to generate one first.',
-    'send.destination.placeholder': 'Enter or paste an address or contact name',
+    'send.offline.body': 'Sending needs a network connection. Your cached balance remains available.',
+    'send.offline.title': 'Sending needs a network connection',
+    'send.destination.placeholder': 'Enter or paste an address or name…',
     'send.paste.checkLabel': 'Check pasted recipient',
     'send.paste.checkHint': 'Compare the first and last 6 characters.',
     'send.saveRecipient.open': 'Save recipient',
@@ -158,9 +159,9 @@ export const en = {
     'send.gated.ready':
         'This token includes protected content. Its unlock key will be attached securely so the recipient can open the content. You can send it only to an address that has already made a transaction.',
     'send.gated.partial':
-        'This token includes {total, plural, one {# protected content pack} other {# protected content packs}}, but this wallet has unlock keys for only {available}. The recipient cannot open the missing {missingCount, plural, one {pack} other {packs}}: {missing}… You can continue, or recover the missing keys by opening the content once from the address that received it.',
+        "This token includes {total, plural, one {# protected content pack} other {# protected content packs}}, but this wallet has unlock keys for only {available}. The recipient can't open the missing {missingCount, plural, one {pack} other {packs}}: {missing}… You can continue, or recover the missing keys by opening the content once from the address that received it.",
     'send.gated.blocked':
-        'This token includes protected content, but this wallet has none of its unlock keys. The network will reject a payment without the key, and the recipient will not be able to open the content.',
+        "This token includes protected content, but this wallet has none of its unlock keys. The network will reject a payment without the key, and the recipient won't be able to open the content.",
     'send.gated.softwareSigner':
         'Recovering the key requires a software wallet because it must decrypt messages with the private key. Use a software wallet that holds this address to recover the key.',
     'send.gated.passwordLabel': 'Wallet password',
@@ -176,9 +177,8 @@ export const en = {
         'Before confirmation, you can replace this transaction with one that pays a higher network fee. This can speed it up or cancel it.',
     'send.rbf.enabledHint':
         'You can speed up or cancel this transaction by paying a higher network fee before confirmation.',
-    'send.rbf.unsupported': 'Changing the network fee later is not supported on {chain}.',
+    'send.rbf.unsupported': "Changing the network fee later isn't supported on {chain}.",
     'send.rbf.thisChain': 'this chain',
-    'send.rbf.enabledLabel': 'Allow a higher network fee later',
     // M2.4: the success card's in-wallet link to the merged History entry.
     // The entry exists the moment this card does (built from the wallet's
     // own pending record), but the network has not necessarily reported it
@@ -193,7 +193,7 @@ export const en = {
     'shell.markets.back': 'Back to markets',
     'shell.privateKeyQr': 'Private key QR',
     'shell.messageSent': 'Message sent',
-    'shell.cannotOpenLink': 'Cannot open link',
+    'shell.cannotOpenLink': "Can't open link",
     'shell.unknownState': 'unknown state "{state}"',
 
     // --- desktop update banner ----------------------------------
@@ -206,9 +206,9 @@ export const en = {
     'desktopUpdate.verifying': 'Verifying the downloaded update…',
     'desktopUpdate.ready': 'Update is ready to restart.',
     'desktopUpdate.restartBlocked': 'Finish the current wallet operation before restarting.',
-    'desktopUpdate.checkError': 'Could not check for updates. Check your connection and try again.',
+    'desktopUpdate.checkError': "Couldn't check for updates. Check your connection and try again.",
     'desktopUpdate.installError':
-        'This update could not be downloaded or verified, so it was not installed. '
+        "This update couldn't be downloaded or verified, so it wasn't installed. "
         + 'Your wallet is untouched. See docs.xchain.io for steps to verify a release.',
     'desktopUpdate.download': 'Download update',
     'desktopUpdate.restart': 'Restart to update',
@@ -280,6 +280,7 @@ export const en = {
     'history.offline.cached': 'You are offline. Showing the last saved history. Network actions will be available when your connection returns.',
     'history.offline.empty': 'You are offline. Connect to load history and use network actions.',
     'history.offline.refreshFailed': "History didn't refresh. Showing the last saved history.",
+    'history.offline.refreshTitle': 'Refreshing history needs a network connection',
     'history.showMore': 'Show more history',
     'history.itemsShown':
         '{shown, number} of {total, plural, one {# history item} other {# history items}} shown',
@@ -353,7 +354,6 @@ export const en = {
     'history.copy.copied': 'Copied',
     'history.copy.copiedTitle': 'Copied!',
     'history.copy.actionNumber': 'Copy action number',
-    'history.copy.transactionId': 'Copy transaction ID',
     'history.copy.fromAddress': 'Copy from address',
     'history.copy.walletAddress': 'Copy address',
     'history.recipients.showHolders': 'Show holders',
@@ -441,11 +441,11 @@ export const en = {
     'pending.detail.awaitingNetworkHelp':
         'The transaction has been sent. It can take a minute before the network reports it.',
     'pending.detail.seenHelp':
-        'The network has this transaction, but it is still waiting to be added to its permanent record.',
+        "The network has this transaction, but it's still waiting to be added to its permanent record.",
     'pending.detail.notSeenHelp':
-        'The network has not reported this transaction since it was sent, so it may never have arrived.',
+        "The network hasn't reported this transaction since it was sent, so it may never have arrived.",
     'pending.detail.droppedHelp':
-        'The network reported this transaction earlier but no longer does, and it is not in the permanent record.',
+        "The network reported this transaction earlier but no longer does, and it isn't in the permanent record.",
     'pending.detail.replacedHelp':
         'This wallet replaced this transaction with a newer one. Follow the replacement instead.',
     'pending.detail.notValidated': 'Pending, not yet validated by the service.',
@@ -475,29 +475,6 @@ export const en = {
     'pending.amount.moving': 'moves {amounts}',
     'pending.amount.caveat': 'Pending, not yet validated by the service: {summary}',
 
-    // --- count labels --------------------------------------------
-    'cosigner.allowedRecipientCount':
-        '{count, plural, one {# address} other {# addresses}}',
-    'cosigner.windowActionCount':
-        '{count, plural, one {# action} other {# actions}}',
-    'cosigner.rollingActionLimit':
-        '{count, plural, one {# action} other {# actions}} per {hours}h',
-    'governance.poll.turnout':
-        '{quorum} of supply and at least {count, plural, one {# voter} other {# voters}}.',
-    'governance.poll.callbackDelay':
-        ' It runs {count, plural, one {# block} other {# blocks}} after the poll closes.',
-    'contracts.stateKeyCount':
-        '{count, plural, one {# state key} other {# state keys}}. Tap Expand to view.',
-    'airdrop.underlyingTokenNoun':
-        '{count, plural, one {token} other {tokens}}',
-    'airdrop.holderCountsUnavailable':
-        'Holder counts unavailable for {count, plural, one {# token} other {# tokens}}',
-    'airdrop.someHolderCountsUnavailable':
-        'Holder counts unavailable for {failed, number} of {total, plural, one {# token} other {# tokens}}',
-    'sleep.durationBlocks':
-        '{count, plural, one {# block} other {# blocks}}',
-    'tokenDetail.fileCount':
-        '{count, plural, one {# file} other {# files}}',
     // --- browser extension ---------------------------------------
     'extension.approval.loading': 'Loading approval request…',
     'extension.approval.unsupported': 'Unsupported approval request type.',
@@ -507,7 +484,6 @@ export const en = {
     'extension.connect.title': 'Connect to XChain Wallet?',
     'extension.connect.approve': 'Connect',
     'extension.connect.declaredName': 'The site calls itself',
-    'extension.connect.lede': 'This site wants to connect to your wallet.',
     'extension.connect.permissions': 'Requested permissions',
     'extension.connect.permission.accounts':
         'View the accounts you select, including their addresses and balances',
@@ -541,31 +517,21 @@ export const en = {
     'extension.sign.action': 'Action',
     'extension.sign.action.reading': 'Reading this action…',
     'extension.sign.action.unavailable':
-        'This action could not be described. Approve only if you know exactly what it does.',
-    'extension.sign.from': 'From',
-    'extension.sign.details': 'Details ({count})',
+        "This action couldn't be described. Approve only if you know exactly what it does.",
     'extension.sign.signInTo': 'Sign in to',
     'extension.sign.warningNoun.signIn': 'sign-in',
     'extension.sign.oneTimeCode': 'One-time code',
     'extension.sign.controlCharacters':
         'Control characters are displayed safely. The original {noun} text is what you will sign.',
-    'extension.sign.technicalDetails': 'Technical details',
     'extension.sign.coSignRequest': 'Co-sign request',
     'extension.sign.decodingRequest': 'Decoding request…',
     'extension.sign.trustSource': 'Only approve it if you trust the source.',
     'extension.sign.agentAccount': 'Agent account',
     'extension.sign.coSignerAccount': 'Co-signer account',
-    'extension.sign.to': 'To',
     'extension.sign.policyRefusal': 'The co-signer will refuse it even if you approve.',
     'extension.sign.confirmThreshold':
         'Above the policy confirm-threshold: review carefully before approving.',
 
-    'extension.popup.markets.selectAsset': 'Select coin or token',
-    'extension.popup.markets.back': 'Back to markets',
-    'extension.popup.privateKeyQr': 'Private key QR',
-    'extension.popup.messageSent': 'Message sent',
-    'extension.popup.cannotOpenLink': 'Cannot open link',
-    'extension.popup.unknownState': 'unknown state "{state}"',
 
     // --- errors ---------------------------------------------------
 };

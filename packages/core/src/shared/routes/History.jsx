@@ -1621,7 +1621,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     className={refreshing ? styles.refreshing : undefined}
                     aria-label={refreshing ? t('history.refreshing') : t('history.refresh')}
                     title={networkOffline
-                        ? 'Refreshing history needs a network connection'
+                        ? t('history.offline.refreshTitle')
                         : refreshing ? t('history.refreshing') : t('history.refresh')}
                     disabled={networkOffline || refreshing || !historyLoaded}
                     onClick={() => {
@@ -3084,7 +3084,7 @@ function fullDetailRows(entry, balancesHidden = false) {
             <CopyableValue
                 display={entry.txHash}
                 fullValue={entry.txHash}
-                ariaLabel={t('history.copy.transactionId')}
+                ariaLabel={t('common.copyTransactionId')}
             />
         )]);
     }

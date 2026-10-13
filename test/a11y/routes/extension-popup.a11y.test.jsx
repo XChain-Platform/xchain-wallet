@@ -195,14 +195,14 @@ describe('extension popup main-screen accessibility', () => {
         const { container } = renderPopup(
             <Receive walletId={WALLET.id} accountId={ACCOUNT.id} onBack={() => {}} />,
         );
-        await screen.findByRole('textbox', { name: 'Copy payment request for receive address' });
+        await screen.findByRole('textbox', { name: 'Copy payment link for receive address' });
         await expectNoSeriousAxeViolations(container);
     });
 
     it('scans a Chrome-delivered approval request at popup size', async () => {
         window.history.replaceState(null, '', '/approval.html?id=approval-1');
         const { container } = render(<Router />);
-        await screen.findByText('Connection request');
+        await screen.findByText('Connect to XChain Wallet?');
         await screen.findByLabelText('Share Main');
         await expectNoSeriousAxeViolations(container);
     });

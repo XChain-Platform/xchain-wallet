@@ -279,14 +279,14 @@ describe('History shows unconfirmed transactions', () => {
     it('refreshes confirmation counts from the advancing indexer watermark', async () => {
         const { messaging } = mountHistory({ history: [confirmedRow(CONFIRMED_HASH)] });
         messaging.getIndexerWatermark.mockResolvedValue({ watermark: 7710 });
-        await waitFor(() => expect(screen.getByText('4 Confirms')).toBeTruthy());
+        await waitFor(() => expect(screen.getByText('4 Confirmations')).toBeTruthy());
 
         vi.useFakeTimers({ toFake: ['Date'] });
         messaging.getIndexerWatermark.mockResolvedValue({ watermark: 7712 });
         vi.setSystemTime(Date.now() + BALANCE_POLL_INTERVAL_MS);
         window.dispatchEvent(new Event('focus'));
         await waitFor(() => expect(messaging.getIndexerWatermark).toHaveBeenCalledTimes(2));
-        await waitFor(() => expect(screen.getByText('6 Confirms')).toBeTruthy());
+        await waitFor(() => expect(screen.getByText('6 Confirmations')).toBeTruthy());
     });
 });
 

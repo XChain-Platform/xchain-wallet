@@ -168,7 +168,7 @@ describe('extension popup connection approval flow', () => {
         cleanup();
         window.history.replaceState(null, '', '/approval.html?id=request-1');
         render(<Router />);
-        expect(await screen.findByText('Connection request')).toBeInTheDocument();
+        expect(await screen.findByText('Connect to XChain Wallet?')).toBeInTheDocument();
         expect(screen.getByText('https://approved.example')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
 

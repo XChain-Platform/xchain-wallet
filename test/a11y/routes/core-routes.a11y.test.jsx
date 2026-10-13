@@ -125,7 +125,7 @@ describe('high-use route accessibility', () => {
         const { container } = renderRoute(
             <Receive walletId="wallet-1" onBack={() => {}} />,
         );
-        await screen.findByRole('textbox', { name: 'Copy payment request for receive address' });
+        await screen.findByRole('textbox', { name: 'Copy payment link for receive address' });
         await expectNoSeriousAxeViolations(container);
     });
 

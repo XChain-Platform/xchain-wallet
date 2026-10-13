@@ -172,10 +172,10 @@ assert.match(
 );
 assert.match(
     signSrc,
-    /t\('extension\.sign\.details', \{ count: decoded\.details\.length \}\)/,
+    /t\('send\.review\.details', \{ count: decoded\.details\.length \}\)/,
     'toggle shows the row count',
 );
-assert.equal(en['extension.sign.details'], 'Details ({count})', 'English details label stays exact');
+assert.equal(en['send.review.details'], 'Details ({count})', 'English details label stays exact');
 
 // --- 4. SignApproval CSS hooks -----------------------------------------
 

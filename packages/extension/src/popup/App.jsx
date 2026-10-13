@@ -1537,8 +1537,8 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                     <ReceivePicker
                         walletId={activeWalletId}
                         accountId={activeAccountId || undefined}
-                        title={t('extension.popup.markets.selectAsset')}
-                        backLabel={t('extension.popup.markets.back')}
+                        title={t('shell.markets.selectAsset')}
+                        backLabel={t('shell.markets.back')}
                         hideOwnFilter
                         onBack={() => setUnlockedView('markets')}
                         onSelect={(sel) => {
@@ -1962,7 +1962,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                     <ViewPrivateKey
                         walletId={activeWalletId}
                         address={privateKeyAddress}
-                        renderQR={({ value }) => <KeyQR value={value} alt={t('extension.popup.privateKeyQr')} />}
+                        renderQR={({ value }) => <KeyQR value={value} alt={t('shell.privateKeyQr')} />}
                         onBack={() => {
                             setPrivateKeyAddress(null);
                             setUnlockedView('addresses');
@@ -2826,25 +2826,15 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                     >
                         <Fragment key={`${palette.navigationKey}:${surfaceStateRevision}`}>{routeNode}</Fragment>
                     </ShellRouteOutlet>
-                    <ScrollRestoration routeKey={unlockedView}>
-                        <RouteErrorBoundary
-                            resetKey={`${unlockedView}:${palette.navigationKey}`}
-                            onHome={() => setUnlockedView('home')}
-                        >
-                            <Suspense fallback={<Skeleton.List rows={5} />}>
-                                <Fragment key={`${palette.navigationKey}:${surfaceStateRevision}`}>{routeNode}</Fragment>
-                            </Suspense>
-                        </RouteErrorBoundary>
-                    </ScrollRestoration>
                     {messageSentNotice ? (
                         <NoticeModal
-                            title={t('extension.popup.messageSent')}
+                            title={t('shell.messageSent')}
                             onClose={() => setMessageSentNotice(false)}
                         />
                     ) : null}
                     {deepLinkNotice ? (
                         <NoticeModal
-                            title={t('extension.popup.cannotOpenLink')}
+                            title={t('shell.cannotOpenLink')}
                             message={deepLinkNotice}
                             onClose={() => setDeepLinkNotice(null)}
                         />
@@ -2860,6 +2850,6 @@ function AppInner({ canOpenInTab, titleEnabled }) {
             );
         }
         default:
-            return <Loading error={t('extension.popup.unknownState', { state: status.state })} />;
+            return <Loading error={t('shell.unknownState', { state: status.state })} />;
     }
 }

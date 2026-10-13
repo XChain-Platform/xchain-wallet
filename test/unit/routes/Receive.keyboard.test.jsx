@@ -147,7 +147,7 @@ describe('Receive keyboard operation', () => {
         addressType.focus();
         const expected = [
             screen.getByRole('button', { name: 'Generate new address' }),
-            screen.getByRole('textbox', { name: 'Copy payment request for receive address' }),
+            screen.getByRole('textbox', { name: 'Copy payment link for receive address' }),
             screen.getByRole('button', { name: 'Choose receive address' }),
             screen.getByRole('textbox', { name: 'Address label' }),
             screen.getByRole('button', { name: /^Token:/ }),

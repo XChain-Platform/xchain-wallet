@@ -53,12 +53,12 @@ describe('Onboarding route accessibility', () => {
     it('scans every explainer step and the welcome choice', async () => {
         acceptLicense();
         const { container } = renderOnboarding();
-        await screen.findByText('You hold the keys');
+        await screen.findByText('Your keys, your wallet');
         await expectNoSeriousAxeViolations(container);
 
         for (const title of [
-            'Your recovery phrase is everything',
-            'Sending is final',
+            'Protect your recovery phrase',
+            'Review before you send',
             'Built for the XChain Platform',
         ]) {
             fireEvent.click(screen.getByRole('button', { name: 'Next' }));

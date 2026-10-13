@@ -15,7 +15,6 @@ import {
     decoder as decoderLib,
     flows as flowsLib,
 } from '@xchain-wallet/core';
-import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
@@ -475,10 +474,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
                     <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
                     <DetailRow label="Wake condition" value={wakeCondition} />
                     {resumeMode === 'until' ? (
-                        <DetailRow
-                            label="Duration"
-                            value={t('sleep.durationBlocks', { count: Number(durationBlocks) })}
-                        />
+                        <DetailRow label="Duration" value={`${Number(durationBlocks).toLocaleString('en-US')} blocks`} />
                     ) : null}
                     <DetailRow
                         label="Network fee"

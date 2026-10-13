@@ -933,14 +933,14 @@ function SignSummary({ kind, payload, decoded, intentLoading, sourceAddress = nu
                             asks for approval has to name it. */}
                         {sourceAddress ? (
                             <>
-                                <p className={shared.summaryLabel} style={{ marginTop: 8 }}>{t('extension.sign.from')}</p>
+                                <p className={shared.summaryLabel} style={{ marginTop: 8 }}>{t('send.fields.from')}</p>
                                 <pre className={shared.summaryValue} data-testid="sign-approval-source">{sourceAddress}</pre>
                             </>
                         ) : null}
                         {decoded.details.length > 0 ? (
                             <details className={styles.details}>
                                 <summary className={styles.detailsToggle}>
-                                    {t('extension.sign.details', { count: decoded.details.length })}
+                                    {t('send.review.details', { count: decoded.details.length })}
                                 </summary>
                                 <dl className={styles.detailsList}>
                                     {decoded.details.map((row) => (
@@ -1054,7 +1054,7 @@ function coSignPolicySentence(policyReason) {
 function CoSignTechnicalDetails({ testId, text }) {
     return (
         <details className={styles.details} data-testid={testId}>
-            <summary className={styles.detailsToggle}>{t('extension.sign.technicalDetails')}</summary>
+            <summary className={styles.detailsToggle}>{t('pending.detail.technicalDetails')}</summary>
             <code style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{text}</code>
         </details>
     );
@@ -1112,7 +1112,7 @@ function CoSignIntentSummary({ loading, error, preview }) {
                     </p>
                     {dests.length > 0 ? (
                         <>
-                            <p className={shared.summaryLabel}>{t('extension.sign.to')}</p>
+                            <p className={shared.summaryLabel}>{t('send.fields.to')}</p>
                             <p className={shared.summaryValue} style={{ whiteSpace: 'normal' }}>{dests.join(', ')}</p>
                         </>
                     ) : null}
