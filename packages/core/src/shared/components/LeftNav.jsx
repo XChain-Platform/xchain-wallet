@@ -336,17 +336,22 @@ function skipToMain(e) {
  * of overflowing the document.
  *
  * The `header` slot (§49 / Cluster G FOLLOWUP 4) renders persistent
- * banners (queued broadcasts, …) above the route content so they
- * survive route changes, so Home no longer has to mount them itself.
+ * chrome above the route content so it survives route changes, so Home
+ * no longer has to mount it itself. The `notices` slot below it holds
+ * the stacked banners (queued broadcasts, reachability, …). Only the
+ * notices scroll when the stack grows past its compact-tier cap: the
+ * header row hosts anchored popovers (the settings gear, the scan menu),
+ * and a scroll box around it would clip them to its own height.
  *
  * @param {object} props
  * @param {import('react').ReactNode} props.nav
  * @param {import('react').ReactNode} [props.bottomBar]
  * @param {import('react').ReactNode} [props.header]
+ * @param {import('react').ReactNode} [props.notices]
  * @param {string} [props.routeKey]
  * @param {import('react').ReactNode} props.children
  */
-export function FullLayoutWithNav({ nav, bottomBar, header, children }) {
+export function FullLayoutWithNav({ nav, bottomBar, header, notices, children }) {
     const { routeKey } = arguments[0];
     const [layoutRef, tier] = useLayoutTier();
     const previousRouteKeyRef = useRef(routeKey);
@@ -386,6 +391,7 @@ export function FullLayoutWithNav({ nav, bottomBar, header, children }) {
             {sidebar ? <aside className={styles.sidebar}>{sidebar}</aside> : null}
             <div className={styles.main}>
                 {header ? <div className={styles.header}>{header}</div> : null}
+                {notices ? <div className={styles.notices}>{notices}</div> : null}
                 <div className={styles.mainBody}>{children}</div>
             </div>
             {bar ? <div className={styles.bottomBarSlot}>{bar}</div> : null}

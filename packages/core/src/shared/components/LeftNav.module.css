@@ -63,15 +63,24 @@
     --xc-screen-h: 100%;
 }
 
-/* §49 / Cluster G FOLLOWUP 4: persistent header slot for banners
-   (QueuedBroadcastBanner, etc) that should survive route changes. The
-   slot collapses when no header is supplied (parent renders nothing). */
+/* §49 / Cluster G FOLLOWUP 4: persistent header slot for chrome that
+   should survive route changes. The slot collapses when no header is
+   supplied (parent renders nothing). It must never clip: the app header
+   row anchors the settings popover and the scan menu below itself, so an
+   overflow box here would cut them down to the row's own height. */
 .header {
     flex: 0 0 auto;
 }
 
+/* Stacked banners (QueuedBroadcastBanner, ReachabilityBanner, ...) under
+   the header row. They are the part that can grow, so the cap lives here
+   rather than on .header. */
+.notices {
+    flex: 0 0 auto;
+}
+
 /* Keep stacked notices from consuming the route on phone-sized layouts. */
-.layout[data-xc-tier='compact'] .header {
+.layout[data-xc-tier='compact'] .notices {
     max-height: 45%;
     overflow-y: auto;
     overscroll-behavior: contain;

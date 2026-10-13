@@ -2754,23 +2754,23 @@ function AppInner() {
                         />
                     }
                     header={
-                        <>
-                            <AppHeader
-                                onCommandPalette={palette.openPalette}
-                                onLock={handleNavLock}
-                                isWatcherMode={isWatcherMode}
-                                onOpenNetworkSettings={() => openSettingsSection('network-endpoints')}
-                            />
-                            {activeWalletId ? (
-                                <>
-                                    {/* Cluster J FOLLOWUP 2: DemoBanner persists across every
-                                        unlocked view via the shared layout header slot. */}
-                                    <DemoBanner activeWalletId={activeWalletId} onExited={refresh} />
-                                    <QueuedBroadcastBanner walletId={activeWalletId} />
-                                    {isDemoWallet(activeWalletId) ? null : <ReachabilityBanner />}
-                                </>
-                            ) : null}
-                        </>
+                        <AppHeader
+                            onCommandPalette={palette.openPalette}
+                            onLock={handleNavLock}
+                            isWatcherMode={isWatcherMode}
+                            onOpenNetworkSettings={() => openSettingsSection('network-endpoints')}
+                        />
+                    }
+                    notices={
+                        activeWalletId ? (
+                            <>
+                                {/* Cluster J FOLLOWUP 2: DemoBanner persists across every
+                                    unlocked view via the shared layout notices slot. */}
+                                <DemoBanner activeWalletId={activeWalletId} onExited={refresh} />
+                                <QueuedBroadcastBanner walletId={activeWalletId} />
+                                {isDemoWallet(activeWalletId) ? null : <ReachabilityBanner />}
+                            </>
+                        ) : null
                     }
                 >
                     <ScrollRestoration routeKey={unlockedView}>

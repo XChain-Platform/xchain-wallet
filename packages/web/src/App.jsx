@@ -2962,9 +2962,17 @@ function AppInner() {
                                     // not pass this, so they render no switcher.
                                     platformCurrent="wallet"
                                 />
+                            </>
+                        ) : null
+                    }
+                    notices={
+                        activeWalletId ? (
+                            <>
                                 {/* Cluster J FOLLOWUP 2: DemoBanner persists across every
-                                    unlocked view via the shared layout header slot, not
-                                    just Home. */}
+                                    unlocked view via the shared layout notices slot, not
+                                    just Home. The notices sit apart from the header row
+                                    so their compact-tier scroll cap cannot clip the
+                                    header popovers. */}
                                 <DemoBanner activeWalletId={activeWalletId} onExited={refresh} />
                                 <QueuedBroadcastBanner walletId={activeWalletId} />
                                 {isDemoWallet(activeWalletId) ? null : <ReachabilityBanner />}

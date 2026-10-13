@@ -75,6 +75,9 @@ test.describe('keyboard shortcut residuals', () => {
         await page.keyboard.press('h');
         await expect(nav(page).getByRole('button', { name: 'History', exact: true }))
             .toHaveAttribute('aria-current', 'page');
+        // History is a deferred route: the nav marks it current before the
+        // screen (and its shortcut listener) has mounted, so wait for it.
+        await expect(page.getByRole('searchbox', { name: 'Search history' })).toBeVisible();
 
         await page.keyboard.press('/');
         await expect(page.getByRole('searchbox', { name: 'Search history' })).toBeFocused();
