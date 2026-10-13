@@ -173,16 +173,22 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
             // Show the phrase BEFORE the sweep screen: the next step tells the
             // user to move real balances into this wallet.
             setStage('backup');
-            if (onMigrated) onMigrated(id);
         } catch (err) {
             setError(err?.message || 'Failed to create BIP39 wallet.');
             setStage('create');
         }
     }
 
-        const header = (
+    function handleDone() {
+        if (newWalletId && onMigrated) onMigrated(newWalletId);
+        onBack();
+    }
+
+    const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={stage === 'submitting' || stage === 'backup'
+                ? undefined
+                : stage === 'done' ? handleDone : onBack}
             title={stage === 'done' ? 'BIP39 wallet created' : 'Upgrade recovery phrase'}
         />
     );
@@ -317,7 +323,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                     })}
                 </dl>
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Done</Button>
+                    <Button variant="primary" onClick={handleDone}>Done</Button>
                 </div>
             </>,
         );

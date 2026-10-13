@@ -553,7 +553,11 @@ export function ImportWallet({ onBack, onImported, variant: importVariant = 'def
                     ) : (
                         <p className={styles.backupHint}>Or drop a backup file onto the box below, paste its contents, or scan a backup pointer.</p>
                     )}
+                    <label className={styles.mnemonicLabel} htmlFor="xc-backup-content">
+                        Backup file contents
+                    </label>
                     <textarea
+                        id="xc-backup-content"
                         {...backupDrop.rootProps}
                         className={mnemonicClass}
                         value={backupContent}

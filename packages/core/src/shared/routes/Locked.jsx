@@ -295,8 +295,8 @@ export function Locked({ onUnlocked }) {
         if (busy || password.length === 0 || isLockedOut) return;
         setBusy(true);
         setError(null);
-        await nextPaint();
         try {
+            await nextPaint();
             const reply = await messaging.unlockWallet(password);
             afterUnlock(reply, password);
         } catch (err) {
