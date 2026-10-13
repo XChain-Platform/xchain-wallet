@@ -88,7 +88,13 @@ describe('T through Z route keyboard flows', () => {
         const bitcoin = await screen.findByRole('button', { name: /^Select Bitcoin\b/ });
         const token = screen.getByRole('button', { name: /^Select Keyboard Token\b/ });
 
-        expect(tabStops(view.container)).toEqual([back, search, network, allTab, bitcoin, token]);
+        // Balance rows are one roving tab stop; each row's pin button stays reachable.
+        expect(tabStops(view.container)).toEqual([
+            back, search, network, allTab, bitcoin,
+            screen.getByRole('button', { name: 'Pin BTC' }),
+            screen.getByRole('button', { name: 'Pin KEYS' }),
+        ]);
+        expect(token).toHaveAttribute('tabindex', '-1');
         expect(screen.getByRole('tab', { name: 'Coins' })).toHaveAttribute('tabindex', '-1');
         expect(screen.getByRole('tab', { name: 'Tokens' })).toHaveAttribute('tabindex', '-1');
 

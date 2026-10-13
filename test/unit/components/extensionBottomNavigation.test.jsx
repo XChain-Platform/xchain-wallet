@@ -79,7 +79,7 @@ describe('extension bottom navigation', () => {
         render(<NavigationHarness onLock={onLock} />);
         fireEvent.click(screen.getByRole('button', { name: 'More' }));
 
-        const sheet = screen.getByRole('dialog', { name: 'More navigation' });
+        const sheet = screen.getByRole('dialog', { name: 'More' });
         expect(sheet).toContainElement(screen.getByRole('heading', { name: 'More', level: 2 }));
         expect(bottomBarCss).toMatch(
             /calc\(var\(--xc-space-3\) \+ env\(safe-area-inset-bottom, var\(--xc-space-3\)\)\)/,

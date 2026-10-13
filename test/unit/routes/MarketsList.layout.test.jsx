@@ -56,9 +56,11 @@ describe('MarketsList narrow layout', () => {
         await user.keyboard('{Enter}');
         expect(onOpenMarket).toHaveBeenCalledWith('bitcoin-mainnet', 'BTC', 'PEPE');
 
-        for (const name of ['All', 'Popular', 'Watchlist']) {
-            await user.tab();
-            expect(screen.getByRole('tab', { name })).toHaveFocus();
+        // The market kind tabs are one roving tab stop on the selected tab.
+        await user.tab();
+        expect(screen.getByRole('tab', { name: 'Popular' })).toHaveFocus();
+        for (const name of ['All', 'Watchlist']) {
+            expect(screen.getByRole('tab', { name })).toHaveAttribute('tabindex', '-1');
         }
 
         await user.tab();

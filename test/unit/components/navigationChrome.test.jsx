@@ -226,7 +226,7 @@ describe('More sheet dismissal', () => {
         await settleFocus();
 
         const receive = screen.getByRole('button', { name: 'Receive' });
-        const lock = screen.getByRole('button', { name: 'Lock' });
+        const lock = screen.getByRole('button', { name: 'Lock wallet' });
         expect(receive).toHaveFocus();
 
         lock.focus();
