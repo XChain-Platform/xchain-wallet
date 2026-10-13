@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Input, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, EmptyState, FeeSelector, FormPage, Input, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib, airdrop as airdropLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -88,7 +88,6 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -487,7 +486,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            {children}
         </Screen>
     );
 
@@ -562,7 +561,25 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
 
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
+            <FormPage
+                label="Review list"
+                onSubmit={handleSubmit}
+                actions={(
+                    <>
+                        <Button type="button" variant="ghost" onClick={() => setStage('form')} disabled={stage === 'submitting'}>
+                            Back
+                        </Button>
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            loading={stage === 'submitting'}
+                            disabled={isWatcherMode ? false : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
+                        >
+                            {isWatcherMode ? 'Create unsigned transaction' : hw ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}` : 'Publish list'}
+                        </Button>
+                    </>
+                )}
+            >
                 <p className={styles.summary}>{decoded?.summary}</p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Chain</dt>
@@ -606,20 +623,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     />
                 )}
                 {(isWatcherMode || hw) && submitError ? (<StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>) : null}
-                <div className={styles.actions}>
-                    <Button type="button" variant="ghost" onClick={() => setStage('form')} disabled={stage === 'submitting'}>
-                        Back
-                    </Button>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={isWatcherMode ? false : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
-                    >
-                        {isWatcherMode ? 'Create unsigned transaction' : hw ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}` : 'Publish list'}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -674,7 +678,20 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
 
     // stage === 'form'
     return wrap(
-        <form onSubmit={handleReview} noValidate>
+        <FormPage
+            label="Create list"
+            onSubmit={handleReview}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={actionConfirm.composing}
+                    disabled={actionConfirm.composing}
+                >
+                    {actionConfirm.composing ? 'Preparing review…' : singleEncode ? 'Publish list' : 'Review'}
+                </Button>
+            )}
+        >
             <NetworkField
                 value={chainId}
                 onChange={(cid) => { setChainId(cid); setFromAddressId(null); }}
@@ -872,18 +889,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
             </p>
 
             {formError ? (<StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>) : null}
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    block
-                    loading={actionConfirm.composing}
-                    disabled={actionConfirm.composing}
-                >
-                    {actionConfirm.composing ? 'Preparing review…' : singleEncode ? 'Publish list' : 'Review'}
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }
 
@@ -903,7 +909,6 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
  * @param {() => void} props.onBack
  */
 function ContactAddressPickerScreen({ variant, messaging, chainCoin, onAdd, onBack }) {
-    const isFull = variant === 'full';
     const [contacts, setContacts] = useState(/** @type {any[] | null} */ (null));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [checked, setChecked] = useState(/** @type {Set<string>} */ (new Set()));
@@ -941,14 +946,14 @@ function ContactAddressPickerScreen({ variant, messaging, chainCoin, onAdd, onBa
     const header = <PageHeader onBack={onBack} title="Add from Contacts" />;
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            <ListPage>{children}</ListPage>
         </Screen>
     );
 
     if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
     if (!contacts) return wrap(<p className={styles.hint}>Loading contacts…</p>);
     if (rows.length === 0) {
-        return wrap(<p className={styles.hint}>No matching contact addresses on this chain.</p>);
+        return wrap(<EmptyState title="No matching contact addresses on this chain." />);
     }
 
     return wrap(
@@ -971,7 +976,6 @@ function ContactAddressPickerScreen({ variant, messaging, chainCoin, onAdd, onBa
                 <Button
                     type="button"
                     variant="primary"
-                    block
                     disabled={checked.size === 0}
                     onClick={() => onAdd(rows.filter((r) => checked.has(r.key)).map((r) => r.address))}
                 >
