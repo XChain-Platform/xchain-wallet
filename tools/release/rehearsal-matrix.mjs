@@ -184,8 +184,8 @@ export const LANES = [
         os: 'linux',
         arch: 'arm64',
         format: 'AppImage',
-        device: 'linux-arm64 CI runner (Ubuntu 24.04)',
-        note: 'Own pointer (stable-linux-arm64.yml); shares it with the arm64 deb.',
+        device: 'Ubuntu 24.04 arm64 Parallels VM on the Mac Studio (GNOME desktop, clean profile)',
+        note: 'Own pointer (stable-linux-arm64.yml); shares it with the arm64 deb. The update is watched on a desktop VM because a CI runner has no screen to watch it on.',
     },
     {
         id: 'linux-x64-deb',
