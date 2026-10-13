@@ -76,17 +76,17 @@ assert.match(
     'fiat → coin conversion when typing in fiat mode, through the tick-gated rate',
 );
 
-// The gate itself, and the one place the RAW coin rate is still correct: the
-// network fee, which is paid in the native coin whatever token is being sent.
+// The per-tick lookup supplies a token's own rate or null. The raw coin rate
+// remains correct for the network fee, which is paid in the native coin.
 assert.match(
     sendSrc,
-    /amountFiatRate = useMemo\(\s*\n?\s*\(\) => fiatRateForTick\(/,
-    'the amount-side rate is gated on the tick',
+    /amountFiatRate = useTickFiatRate\(\{[\s\S]*?tick,[\s\S]*?nativeTicker:/,
+    'the amount-side rate is resolved for the selected tick',
 );
 assert.match(
     sendSrc,
     /fiatRate={amountFiatRate}/,
-    'AmountField receives the tick-gated rate, so a token send shows no fiat',
+    'AmountField receives the per-tick rate, so unpriced tokens show no fiat',
 );
 
 // --- fiat preview hint ------------------------------------------------

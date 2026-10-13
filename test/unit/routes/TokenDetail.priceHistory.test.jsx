@@ -42,9 +42,9 @@ afterAll(() => { globalThis.ResizeObserver = savedResizeObserver; });
 
 const CHAIN = 'bitcoin-regtest';
 
-function renderDetail(walletId) {
+function renderDetail(walletId, { assetInfo, tokenProps } = {}) {
     const messaging = {
-        getTokenInfo: vi.fn().mockResolvedValue({ creator: 'bcrt1qx', marketPrice: '0.5', totalSupply: '1000' }),
+        getTokenInfo: vi.fn().mockResolvedValue(assetInfo ?? { creator: 'bcrt1qx', marketPrice: '0.5', totalSupply: '1000' }),
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [] }),
         getHoldersForToken: vi.fn().mockResolvedValue({ data: [] }),
         listGatedContent: vi.fn().mockResolvedValue([]),
@@ -55,6 +55,7 @@ function renderDetail(walletId) {
         { shell: 'web', messaging },
         React.createElement(TokenDetail, {
             walletId, chainId: CHAIN, tick: 'PRICEPROBE', kind: 'token', quantity: '10', onBack() {},
+            ...tokenProps,
         }),
     ));
 }
@@ -109,6 +110,11 @@ describe('TokenDetail price history', () => {
     it('shows a message and no synthesized line for a real wallet', async () => {
         renderDetail('real-wallet');
         expect(await screen.findByText('No price history yet')).toBeTruthy();
+        expect(screen.getByText('Price (DEX)')).toBeTruthy();
+        expect(screen.getByText('0.5 BTC')).toBeTruthy();
+        const balance = screen.getByRole('region', { name: 'PRICEPROBE balance' });
+        expect(balance.textContent).not.toContain('$');
+        expect(balance.textContent).not.toContain('USD');
         expect(screen.queryByRole('img', { name: 'Price trend' })).toBeNull();
         expect(screen.queryByRole('tablist', { name: 'Chart range' })).toBeNull();
     });
@@ -118,5 +124,16 @@ describe('TokenDetail price history', () => {
         const chart = await screen.findByRole('img', { name: 'Price trend' });
         expect(chart.querySelector('polyline').getAttribute('points').length).toBeGreaterThan(10);
         expect(screen.queryByText('No price history yet')).toBeNull();
+    });
+
+    it('keeps a DEX-derived fiat rate labelled when token metadata has no market price', async () => {
+        renderDetail('real-wallet', {
+            assetInfo: { creator: 'bcrt1qx' },
+            tokenProps: { fiatRate: 2, fiatRateSource: 'market', divisibility: 0 },
+        });
+
+        expect(await screen.findByText('Price (DEX)')).toBeTruthy();
+        expect(screen.getByText('$2.00')).toBeTruthy();
+        expect(screen.getByText(/DEX price/)).toBeTruthy();
     });
 });

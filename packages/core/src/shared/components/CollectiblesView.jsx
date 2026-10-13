@@ -156,6 +156,7 @@ function CollectibleCard({ row, pinned, hidden, onSelect, onTogglePin, onToggleH
             displayName: row.displayName,
             divisibility: row.divisibility,
             fiatRate: row.fiatRate,
+            fiatRateSource: row.fiatRateSource,
             quantity: row.quantity,
         })
         : undefined;

@@ -2039,6 +2039,7 @@ function AppInner() {
                         displayName={tokenDetailRef.displayName}
                         divisibility={tokenDetailRef.divisibility}
                         fiatRate={tokenDetailRef.fiatRate}
+                        fiatRateSource={tokenDetailRef.fiatRateSource}
                         quantity={tokenDetailRef.quantity}
                         imageUrl={tokenDetailRef.imageUrl}
                         onBack={() => setUnlockedView('home')}

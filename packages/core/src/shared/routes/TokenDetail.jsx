@@ -36,6 +36,7 @@ import {
     multiplyDecimalStrings,
 } from '../utils/amountFormat.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
+import { tickerForCoin } from '../../registry/coinTicker.js';
 import styles from './TokenDetail.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -65,6 +66,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {string} [props.displayName]               human-readable name (defaults to ticker)
  * @param {number} [props.divisibility]
  * @param {number | null} [props.fiatRate]           selected fiat currency per token if known
+ * @param {string | null} [props.fiatRateSource]     rate source, including `market` for DEX-derived prices
  * @param {string} [props.quantity]                  atomic-unit balance string
  * @param {() => void} props.onBack
  * @param {() => void} [props.onSend]                navigate to Send route
@@ -80,6 +82,7 @@ export function TokenDetail({
     displayName,
     divisibility = 8,
     fiatRate = null,
+    fiatRateSource = null,
     quantity = '0',
     imageUrl: rowImageUrl = null,
     onBack,
@@ -327,6 +330,12 @@ export function TokenDetail({
     }
 
     const fiatAvailable = fiat != null && isFinite(fiat);
+    const hasDexPrice = !isNative && (
+        fiatRateSource === 'market'
+        || (assetInfo?.marketPrice != null
+            && Number.isFinite(Number(assetInfo.marketPrice))
+            && Number(assetInfo.marketPrice) > 0)
+    );
     // Amount + unit code are kept separate so the unit can render as a
     // smaller styled span next to the digits (matches the Home total-
     // balance hero treatment). For BTC the code is the tick ticker;
@@ -419,6 +428,7 @@ export function TokenDetail({
                                     <AutoShrinkText>
                                         {`≈ ${secondaryAmount}`}
                                         <span className={styles.balanceHeroNoteCode}>{secondaryCode}</span>
+                                        {hasDexPrice ? ' · DEX price' : ''}
                                     </AutoShrinkText>
                                 </span>
                             </div>
@@ -459,6 +469,7 @@ export function TokenDetail({
                             chainId={chainId}
                             hasMarketData={hasMarketData}
                             fiatRate={fiatRate}
+                            fiatRateSource={fiatRateSource}
                             fiatCurrency={fiatCurrency}
                         />
                     </div>
@@ -745,7 +756,7 @@ function NativePriceAlertEntry({ walletId, chainId, currentPrice, fiatCurrency }
 // this message instead of a synthesized walk.
 const NO_PRICE_HISTORY = 'No price history yet';
 
-function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, tick, chainId, fiatRate, fiatCurrency }) {
+function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, tick, chainId, fiatRate, fiatRateSource, fiatCurrency }) {
     // Always render the KPI strip with the same shape. Placeholders
     // fill in for missing data so the structure stays consistent
     // whether the price oracle is disabled, still loading, or simply
@@ -759,6 +770,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
     const range = CHART_RANGES.find((r) => r.id === rangeId) || CHART_RANGES[2];
 
     let priceCell = 'N/A';
+    let priceLabel = 'Price';
     let marketCapCell = 'N/A';
     let floorCell = 'N/A';
     let pctTone24h;
@@ -850,6 +862,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
     const nativeTick = nativeTickerOf(chainId);
     const marketPriceNum = assetInfo?.marketPrice != null ? Number(assetInfo.marketPrice) : null;
     if (marketPriceNum != null && Number.isFinite(marketPriceNum)) {
+        priceLabel = 'Price (DEX)';
         priceCell = `${assetInfo.marketPrice} ${nativeTick}`;
         if (assetInfo.totalSupply != null) {
             const supply = String(assetInfo.totalSupply).replace(/[,_]/g, '');
@@ -869,6 +882,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
             sparkline = synth.sparkline;
         }
     } else if (typeof fiatRate === 'number' && isFinite(fiatRate) && fiatRate > 0) {
+        if (fiatRateSource === 'market') priceLabel = 'Price (DEX)';
         priceCell = formatFiat(fiatRate, fiatCurrency);
         if (isDemo) {
             const synth = synthesizeTokenChart(`${chainId}|${tick}|fiat|${range.id}`, fiatRate, range.points);
@@ -885,7 +899,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
     return (
         <>
             <section className={styles.stats}>
-                <StatCell label="Price" value={priceCell} />
+                <StatCell label={priceLabel} value={priceCell} />
                 <StatCell label="Market cap" value={marketCapCell} />
                 <StatCell label="24h" value={pct24h} tone={pctTone24h} />
             </section>
@@ -2128,7 +2142,7 @@ function kindLabel(kind) {
 
 function nativeTickerOf(chainId) {
     const desc = chainRegistry.get(chainId);
-    return desc?.coin ? desc.coin.toUpperCase() : '';
+    return tickerForCoin(desc?.coin);
 }
 
 function shorten(addr) {

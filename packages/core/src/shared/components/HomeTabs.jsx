@@ -35,7 +35,13 @@ import { useCollectibleKeys } from '../hooks/useCollectibleKeys.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { useMessaging } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
-import { useNativeFiatRates, priceNativeRows } from '../hooks/useFiatRate.js';
+import {
+    useNativeFiatRates,
+    useTokenFiatRates,
+    priceNativeRows,
+    priceTokenRows,
+} from '../hooks/useFiatRate.js';
+import { tickerForCoin } from '../../registry/coinTicker.js';
 import styles from './HomeTabs.module.css';
 
 /**
@@ -102,7 +108,29 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
         allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
         refreshKey: balancesFetchedAt,
     });
-    const allRows = useMemo(() => priceNativeRows(builtRows, nativeRates), [builtRows, nativeRates]);
+    const tokenRequests = useMemo(() => {
+        if (settingsLoading || isDemoWallet(walletId)) return [];
+        return builtRows
+            .filter((r) => r.kind !== 'native' && typeof r.fiatRate !== 'number')
+            .map((r) => {
+                const descriptor = chainRegistry.get(r.chainId);
+                return {
+                    chainCoin: descriptor?.coin,
+                    tick: r.tick,
+                    nativeTicker: tickerForCoin(descriptor?.coin),
+                };
+            });
+    }, [builtRows, chainRegistry, settingsLoading, walletId]);
+    const tokenRates = useTokenFiatRates({
+        tokens: tokenRequests,
+        fiatCurrency: settings?.fiatCurrency || 'USD',
+        allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
+        refreshKey: balancesFetchedAt,
+    });
+    const allRows = useMemo(
+        () => priceTokenRows(priceNativeRows(builtRows, nativeRates), tokenRates),
+        [builtRows, nativeRates, tokenRates],
+    );
     const filteredRows = useMemo(() => {
         if (networkFilter === 'all') return allRows;
         return allRows.filter((r) => coinFromChainId(r.chainId) === networkFilter);
