@@ -550,7 +550,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                                             background: isOutgoing
                                                 ? 'var(--xc-accent-primary)'
                                                 : 'var(--xc-bg-muted)',
-                                            color: isOutgoing ? '#FFFFFF' : 'var(--xc-text)',
+                                            color: isOutgoing ? 'var(--xc-on-accent)' : 'var(--xc-text)',
                                         }}
                                     >
                                         {m.text !== null ? m.text : encryptedPlaceholder()}

@@ -784,7 +784,7 @@ export function ComposeMessage({
                     signerInfo={hwSignerInfo}
                 />
                 {hw && submitError ? (
-                    <p role="alert" style={{ margin: '0.25rem 0 0', color: '#ef5350', fontSize: '0.75rem' }}>
+                    <p role="alert" style={{ margin: '0.25rem 0 0', color: 'var(--xc-danger)', fontSize: '0.75rem' }}>
                         {submitError}
                     </p>
                 ) : null}
@@ -921,7 +921,7 @@ export function ComposeMessage({
                 <div
                     role="alert"
                     style={{
-                        border: '1px solid #f59e0b',
+                        border: '1px solid var(--xc-warning)',
                         borderRadius: '4px',
                         padding: '0.5rem',
                         marginTop: '0.25rem',
@@ -956,7 +956,7 @@ export function ComposeMessage({
                             {handshakeError ? (
                                 <p
                                     role="alert"
-                                    style={{ margin: '0.5rem 0 0', color: '#ef5350', fontSize: '0.8rem' }}
+                                    style={{ margin: '0.5rem 0 0', color: 'var(--xc-danger)', fontSize: '0.8rem' }}
                                 >
                                     {handshakeError}
                                 </p>

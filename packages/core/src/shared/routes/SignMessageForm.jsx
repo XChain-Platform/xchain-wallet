@@ -228,7 +228,7 @@ export function SignMessageForm({ walletId, onBack }) {
         if (!addressId) { setError('Pick an address.'); return; }
         if (message.length === 0) { setError('Type a message to sign.'); return; }
         if (typeof messaging.signMessageRequest !== 'function') {
-            setError('messaging.signMessageRequest is not available in this shell.');
+            setError('Message signing is not available in this app.');
             return;
         }
         // The password is collected ON the confirm page (§5.5 message

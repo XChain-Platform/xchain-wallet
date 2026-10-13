@@ -37,6 +37,8 @@
 import { useEffect, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
 
+const NOOP = () => {};
+
 /**
  * @param {object} props
  * @param {string} props.walletId
@@ -46,6 +48,7 @@ import { useMessaging } from '../useMessaging.js';
  */
 export function SignerSelectForm({ walletId, value, onChange, disabled = false }) {
     const { messaging } = useMessaging();
+    const emitChange = typeof onChange === 'function' ? onChange : NOOP;
     const [signers, setSigners] = useState(/** @type {any[] | null} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
 
@@ -77,9 +80,9 @@ export function SignerSelectForm({ walletId, value, onChange, disabled = false }
     // changes (e.g., a device was just unpaired).
     useEffect(() => {
         if (signers && signers.length === 0 && value !== null) {
-            onChange(null);
+            emitChange(null);
         }
-    }, [signers, value, onChange]);
+    }, [signers, value, emitChange]);
 
     if (!signers || signers.length === 0) {
         // Either still loading (we don't render a placeholder; the
@@ -125,7 +128,7 @@ export function SignerSelectForm({ walletId, value, onChange, disabled = false }
                                     value={opt.id ?? 'software'}
                                     checked={checked}
                                     disabled={disabled}
-                                    onChange={() => onChange(opt.id)}
+                                    onChange={() => emitChange(opt.id)}
                                     style={RADIO_STYLE}
                                 />
                                 <span style={CARD_TEXT_STYLE}>

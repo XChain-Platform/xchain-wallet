@@ -834,7 +834,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                         wallet, or hand the raw hex to any other broadcaster.
                     </p>
                 )}
-                <div style={{ display: 'flex', gap: 'var(--xc-space-2)' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--xc-space-2)' }}>
                     {broadcastState !== 'broadcast' && broadcastState !== 'queued' ? (
                         <Button
                             variant="primary"

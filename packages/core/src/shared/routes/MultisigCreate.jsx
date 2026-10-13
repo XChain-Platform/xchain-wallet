@@ -310,8 +310,8 @@ export function MultisigCreate({ walletId, onBack }) {
     return wrap(
         <>
             <p className={styles.hint} style={{ textAlign: 'left' }}>
-                Multisig is Bitcoin-only at launch (§10.3). Pick the BTC
-                network this multisig configuration belongs to, then add at
+                Multisig is currently available only on Bitcoin networks. Pick
+                the network this multisig configuration belongs to, then add at
                 least 2 cosigners. The current wallet contributes the
                 "local" cosigner; external cosigners come in via xpub paste
                 or hardware-pairing. To join someone else's multisig, open

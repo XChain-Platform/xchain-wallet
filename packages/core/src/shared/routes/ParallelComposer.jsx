@@ -677,7 +677,7 @@ function SummaryList({ rows }) {
                         {' - '}
                         <StatusPill status={r.status} />
                         {r.txid ? <> · <code style={{ fontSize: '0.75rem' }}>{shortenTxid(r.txid)}</code></> : null}
-                        {r.error ? <> · <span style={{ color: '#b00' }}>{r.error}</span></> : null}
+                        {r.error ? <> · <span style={{ color: 'var(--xc-danger)' }}>{r.error}</span></> : null}
                     </li>
                 );
             })}

@@ -113,6 +113,7 @@
 .requestActions {
     display: flex;
     flex-direction: row;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--xc-space-2);
 }
@@ -262,13 +263,11 @@
     overflow: hidden;
 }
 
-/* Scrollable conversation list inside the card. */
+/* The page owns scrolling so the conversation list stays in the same scroll flow. */
 .convList {
     list-style: none;
     padding: 0;
     margin: 0;
-    max-height: 60vh;
-    overflow-y: auto;
 }
 
 /* One chat row: line 1 = name/address + relative time; line 2 = preview. */
