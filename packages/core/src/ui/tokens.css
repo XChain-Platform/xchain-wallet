@@ -83,15 +83,19 @@
     --xc-text-muted: #5F7086;
     --xc-text-inverted: #FFFFFF;
 
-    /* Labels sitting on an accent or danger fill. In the normal palettes both
-     * are white; the forced-colors block re-pairs them with the system color
-     * of the fill they sit on (Canvas on LinkText, MarkText on Mark), which is
-     * what keeps button labels readable in Windows high-contrast mode. */
+    /* Labels sitting on accent, danger, or success fills. In the normal
+     * palettes they are white; the forced-colors block re-pairs them with
+     * the matching system on-color (Canvas on LinkText, MarkText on Mark),
+     * which keeps button labels readable in Windows high-contrast mode. */
     --xc-on-accent: #FFFFFF;
     --xc-on-danger: #FFFFFF;
+    --xc-on-success: #FFFFFF;
     --xc-danger: #DC2626;
     --xc-danger-bg: rgba(220, 38, 38, 0.10);
     --xc-danger-text: #7F1D1D;
+    --xc-info: #1A7BAC;
+    --xc-info-bg: rgba(26, 123, 172, 0.10);
+    --xc-info-text: #134B6E;
     /* Darkened from #D97706 (2.74:1 on its own badge bg) to clear AA. */
     --xc-warning: #A8500A;
     --xc-warning-bg: rgba(217, 119, 6, 0.10);
@@ -102,6 +106,7 @@
      * (--xc-success-bg over --xc-bg-muted, not pure white), just under
      * 4.5:1, so it is darkened one more step here. */
     --xc-success: #146F34;
+    --xc-success-fill: #146F34;
     --xc-focus-ring: rgba(26, 123, 172, 0.45);
     --xc-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
     --xc-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
@@ -164,6 +169,9 @@
         --xc-text-inverted: #0B0F17;
         --xc-danger-bg: rgba(252, 165, 165, 0.14);
         --xc-danger-text: #FCA5A5;
+        --xc-info: #4AA8D8;
+        --xc-info-bg: rgba(74, 168, 216, 0.14);
+        --xc-info-text: #7DD3FC;
         --xc-warning-bg: rgba(252, 211, 77, 0.14);
         --xc-warning-text: #FCD34D;
         --xc-success-bg: rgba(74, 222, 128, 0.14);
@@ -171,6 +179,7 @@
         --xc-danger-fg: #F87171;
         --xc-warning: #F59E0B;
         --xc-success: #4ADE80;
+        --xc-success-fill: #146F34;
         --xc-focus-ring: rgba(30, 144, 199, 0.6);
         --xc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
         --xc-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
@@ -189,6 +198,9 @@
     --xc-text-inverted: #0B0F17;
     --xc-danger-bg: rgba(252, 165, 165, 0.14);
     --xc-danger-text: #FCA5A5;
+    --xc-info: #4AA8D8;
+    --xc-info-bg: rgba(74, 168, 216, 0.14);
+    --xc-info-text: #7DD3FC;
     --xc-warning-bg: rgba(252, 211, 77, 0.14);
     --xc-warning-text: #FCD34D;
     --xc-success-bg: rgba(74, 222, 128, 0.14);
@@ -196,6 +208,7 @@
     --xc-danger-fg: #F87171;
     --xc-warning: #F59E0B;
     --xc-success: #4ADE80;
+    --xc-success-fill: #146F34;
     --xc-focus-ring: rgba(30, 144, 199, 0.6);
     --xc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
     --xc-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
@@ -260,8 +273,11 @@
         --xc-text: #000000;
         --xc-text-muted: #1F2937;
         --xc-danger: #B91C1C;
+        --xc-info: #134B6E;
+        --xc-info-text: #134B6E;
         --xc-warning: #92400E;
         --xc-success: #166534;
+        --xc-success-fill: #166534;
         --xc-accent-primary: #134B6E;
         --xc-accent-primary-hover: #0B304A;
         --xc-focus-ring: rgba(15, 23, 42, 0.85);
@@ -280,8 +296,11 @@
             --xc-text: #FFFFFF;
             --xc-text-muted: #E5EAF2;
             --xc-danger: #FCA5A5;
+            --xc-info: #93C5FD;
+            --xc-info-text: #93C5FD;
             --xc-warning: #FCD34D;
             --xc-success: #86EFAC;
+            --xc-success-fill: #166534;
             --xc-accent-primary: #93C5FD;
             --xc-accent-text: #93C5FD;
             --xc-danger-fg: #FCA5A5;
@@ -303,8 +322,11 @@
         --xc-text: #FFFFFF;
         --xc-text-muted: #E5EAF2;
         --xc-danger: #FCA5A5;
+        --xc-info: #93C5FD;
+        --xc-info-text: #93C5FD;
         --xc-warning: #FCD34D;
         --xc-success: #86EFAC;
+        --xc-success-fill: #166534;
         --xc-accent-primary: #93C5FD;
         --xc-accent-text: #93C5FD;
         --xc-danger-fg: #FCA5A5;
@@ -331,9 +353,21 @@
         --xc-accent-primary-hover: VisitedText;
         --xc-on-accent: Canvas;
         --xc-danger: Mark;
+        --xc-danger-bg: Canvas;
+        --xc-danger-text: Mark;
+        --xc-info: LinkText;
+        --xc-info-bg: Canvas;
+        --xc-info-text: LinkText;
+        --xc-warning: Mark;
+        --xc-warning-bg: Canvas;
+        --xc-warning-text: Mark;
+        --xc-success: LinkText;
+        --xc-success-bg: Canvas;
+        --xc-success-fill: LinkText;
         --xc-accent-text: LinkText;
         --xc-danger-fg: Mark;
         --xc-on-danger: MarkText;
+        --xc-on-success: Canvas;
         --xc-focus-ring: Highlight;
     }
 }

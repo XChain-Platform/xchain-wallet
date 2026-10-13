@@ -117,8 +117,8 @@
     gap: var(--xc-space-2);
 }
 
-.info     { border-inline-start-color: var(--xc-accent-primary); }
-.warning  { border-inline-start-color: #F59E0B; }
+.info     { border-inline-start-color: var(--xc-info); }
+.warning  { border-inline-start-color: var(--xc-warning); }
 .critical { border-inline-start-color: var(--xc-danger); }
 
 .alertHead {
@@ -133,6 +133,17 @@
     color: var(--xc-text);
     font-size: var(--xc-text-sm);
 }
+
+.severity {
+    color: var(--xc-info-text);
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.warning .severity { color: var(--xc-warning-text); }
+.critical .severity { color: var(--xc-danger-text); }
 
 .alertMessage {
     font-size: var(--xc-text-sm);
