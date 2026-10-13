@@ -89,14 +89,20 @@ async function installRaceProbe(page) {
         const original = `    const handleSwitchWallet = (id) => {
         setActiveAccountId(null);
         setActiveWalletId(id);
-        if (id) writeActiveWallet(id);
+        if (id) writeActiveWallet(id, walletList.find((wallet) => wallet.id === id)?.name);
     };`;
-        const replacement = `${original}
-    globalThis.__xchainE2ESwitchWallet = handleSwitchWallet;`;
-        if (!source.includes(original)) {
+        // Vite serves a .jsx module re-printed by esbuild, so its indentation
+        // differs from the file on disk; match the statements, not the spacing.
+        const seam = new RegExp(
+            original.trim()
+                .replace(/[.*+?^${}()|[\]\\]/g, (ch) => `\\${ch}`)
+                .replace(/\s+/g, '\\s*'),
+        );
+        if (!seam.test(source)) {
             throw new Error('The web wallet switch seam changed; update the race probe.');
         }
-        await route.fulfill({ response, body: source.replace(original, replacement) });
+        const body = source.replace(seam, (match) => `${match}\nglobalThis.__xchainE2ESwitchWallet = handleSwitchWallet;`);
+        await route.fulfill({ response, body });
     });
 }
 
