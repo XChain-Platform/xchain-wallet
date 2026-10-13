@@ -80,11 +80,11 @@
 }
 
 .sortSelect {
-    min-height: 36px;
+    min-height: var(--xc-control-h-md);
     box-sizing: border-box;
     padding: var(--xc-space-2) var(--xc-space-3);
     border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
+    border-radius: var(--xc-control-radius);
     background: var(--xc-surface);
     color: var(--xc-text);
     font: inherit;
@@ -115,11 +115,11 @@
         align-self: center;
         justify-content: center;
         gap: var(--xc-space-1);
-        min-height: 36px;
+        min-height: var(--xc-control-h-md);
         margin-inline-start: var(--xc-space-1);
         padding: 0 var(--xc-space-2);
         border: 1px solid var(--xc-border-strong);
-        border-radius: var(--xc-radius-md);
+        border-radius: var(--xc-control-radius);
         background: var(--xc-surface);
         color: var(--xc-text);
     }
@@ -149,8 +149,8 @@
     }
 
     .sortCompactIcon {
-        width: var(--xc-icon-sm);
-        height: var(--xc-icon-sm);
+        width: var(--xc-control-icon-sm, var(--xc-icon-sm));
+        height: var(--xc-control-icon-sm, var(--xc-icon-sm));
     }
 
     .sortCompactIcon > svg {

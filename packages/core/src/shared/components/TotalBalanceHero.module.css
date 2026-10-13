@@ -51,9 +51,10 @@
     background: color-mix(in srgb, var(--xc-on-accent) 15%, transparent);
     border: none;
     color: var(--xc-on-accent);
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
+    width: var(--xc-control-h-sm);
+    height: var(--xc-control-h-sm);
+    border-radius: var(--xc-control-radius);
+    --xc-icon-size: var(--xc-control-icon-sm, var(--xc-icon-sm));
     display: inline-flex;
     align-items: center;
     justify-content: center;

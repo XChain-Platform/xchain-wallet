@@ -47,9 +47,10 @@
     background: transparent;
     border: none;
     color: var(--xc-text-muted);
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
+    width: var(--xc-control-h-sm);
+    height: var(--xc-control-h-sm);
+    border-radius: var(--xc-control-radius);
+    --xc-icon-size: var(--xc-control-icon-sm, var(--xc-icon-sm));
     cursor: pointer;
     display: inline-flex;
     align-items: center;
@@ -129,8 +130,8 @@
 
 .rowIcon {
     flex: 0 0 auto;
-    width: 24px;
-    height: 24px;
+    width: var(--xc-control-icon-lg, var(--xc-icon-lg));
+    height: var(--xc-control-icon-lg, var(--xc-icon-lg));
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -146,8 +147,8 @@
 .rowChevron {
     flex: 0 0 auto;
     color: var(--xc-text-muted);
-    width: 16px;
-    height: 16px;
+    width: var(--xc-control-icon-sm, var(--xc-icon-sm));
+    height: var(--xc-control-icon-sm, var(--xc-icon-sm));
     display: inline-flex;
     align-items: center;
     justify-content: center;

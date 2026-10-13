@@ -34,6 +34,15 @@
     flex: 0 0 auto;
 }
 
+.right > button,
+.actionSlot > button,
+.scanTrigger > button {
+    width: var(--xc-control-h-md);
+    height: var(--xc-control-h-md);
+    border-radius: var(--xc-control-radius);
+    --xc-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
+}
+
 /* Compact shells keep every global action available on a second row. The
    header grows with that row instead of widening the 320px content area. */
 :global([data-xc-tier='compact']) .bar {
@@ -112,6 +121,7 @@
 }
 
 .scanItemIcon {
+    --xc-icon-size: var(--xc-control-icon-sm, var(--xc-icon-sm));
     flex: 0 0 auto;
     display: inline-flex;
     align-items: center;
@@ -149,7 +159,6 @@
     }
 
     .phoneCondensed .networkSlot > div > button {
-        width: 28px;
         border-color: transparent;
     }
 
