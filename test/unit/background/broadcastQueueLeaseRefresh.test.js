@@ -114,6 +114,38 @@ describe('web queue store without the vault lease', () => {
         expect(hexes(await b.list(W))).toEqual(['late']);
     });
 
+    async function expectRouteHoldsLease(dispatchRoute) {
+        const harness = __createWebVaultMultiTabHarnessForTests();
+        const a = harness.createTab();
+        const b = harness.createTab();
+
+        await a.acquire();
+        const network = deferred();
+        const route = dispatchRoute(a, async () => {
+            await network.promise;
+            return a.failureHook(W)(entry('late'));
+        });
+        await a.release();
+        expect(a.state()).toEqual({ hasLease: true, releaseDeferred: true });
+        await expect(b.acquire()).rejects.toThrow();
+
+        network.resolve();
+        expect(await route).toBe(true);
+        await a.whenReleased();
+        expect(a.state()).toEqual({ hasLease: false, releaseDeferred: false });
+
+        await b.acquire();
+        expect(hexes(await b.list(W))).toEqual(['late']);
+    }
+
+    it('holds the lease while broadcast.signedTx runs, so its failure hook writes under it', async () => {
+        await expectRouteHoldsLease((tab, run) => tab.dispatch('broadcast.signedTx', run));
+    });
+
+    it('holds the lease while messaging.handshake runs, so its failure hook writes under it', async () => {
+        await expectRouteHoldsLease((tab, run) => tab.dispatch('messaging.handshake', run));
+    });
+
     it('does not hold the lease for a route that cannot queue signed bytes', async () => {
         const harness = __createWebVaultMultiTabHarnessForTests();
         const a = harness.createTab();
