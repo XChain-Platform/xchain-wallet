@@ -46,7 +46,12 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange }) 
             if (popoverRef.current?.contains(e.target)) return;
             setOpen(false);
         };
-        const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+        const onKey = (e) => {
+            if (e.key !== 'Escape') return;
+            setOpen(false);
+            setQuery('');
+            triggerRef.current?.focus();
+        };
         window.addEventListener('mousedown', onClick);
         window.addEventListener('keydown', onKey);
         return () => {
@@ -85,6 +90,12 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange }) 
     const triggerIconUrl = value === 'all'
         ? null
         : branding.chainIconSmallUrl(entries.find((e) => e.coin === value)?.chainId || '');
+    const selectNetwork = (coin) => {
+        onChange(coin);
+        setOpen(false);
+        setQuery('');
+        triggerRef.current?.focus();
+    };
 
     return (
         <div className={styles.wrap}>
@@ -141,7 +152,7 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange }) 
                                 role="option"
                                 aria-selected={value === 'all' ? 'true' : 'false'}
                                 className={`${styles.item} ${value === 'all' ? styles.itemActive : ''}`}
-                                onClick={() => { onChange('all'); setOpen(false); setQuery(''); }}
+                                onClick={() => selectNetwork('all')}
                                 title="All networks"
                             >
                                 <span className={styles.itemIcon} aria-hidden="true">
@@ -160,7 +171,7 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange }) 
                                         role="option"
                                         aria-selected={value === e.coin ? 'true' : 'false'}
                                         className={`${styles.item} ${value === e.coin ? styles.itemActive : ''}`}
-                                        onClick={() => { onChange(e.coin); setOpen(false); setQuery(''); }}
+                                        onClick={() => selectNetwork(e.coin)}
                                         title={e.label}
                                     >
                                         <span className={styles.itemIcon} aria-hidden="true">

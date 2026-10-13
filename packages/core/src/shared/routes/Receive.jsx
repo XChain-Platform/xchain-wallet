@@ -609,7 +609,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     }, [activeChainId, addressType, generating, messaging, walletId, accountId]);
 
     const saveAddressLabel = useCallback(async () => {
-        if (!address?.id || labelSaving) return;
+        if (!address?.id || labelSaving || labelDraft.trim() === (address.label || '')) return;
         if (typeof messaging.setAddressLabel !== 'function') {
             setLabelError('This app cannot save address labels.');
             return;
@@ -637,7 +637,18 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         } finally {
             setLabelSaving(false);
         }
-    }, [address?.id, labelDraft, labelSaving, messaging]);
+    }, [address?.id, address?.label, labelDraft, labelSaving, messaging]);
+
+    const onLabelKeyDown = useCallback((event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            saveAddressLabel();
+        } else if (event.key === 'Escape') {
+            event.preventDefault();
+            setLabelDraft(address?.label || '');
+            setLabelError(null);
+        }
+    }, [address?.label, saveAddressLabel]);
 
     // QR image actions. Copy writes the rendered PNG when the clipboard can
     // accept images. Share always offers the payment request, and attaches
@@ -913,6 +924,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                         label="Address label"
                         value={labelDraft}
                         onChange={(event) => setLabelDraft(event.target.value)}
+                        onKeyDown={onLabelKeyDown}
                         placeholder="Add a label"
                         autoComplete="off"
                         error={labelError || undefined}
