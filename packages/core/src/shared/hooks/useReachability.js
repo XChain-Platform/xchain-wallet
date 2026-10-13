@@ -76,6 +76,49 @@ const CHAIN_ID_KEY_SEP = '\u0000';
 const DEFAULT_STARTUP_GRACE_MS = 8000;
 const chainRegistry = registryLib.defaultRegistry();
 
+function isDocumentHidden() {
+    return typeof document !== 'undefined' && document.visibilityState === 'hidden';
+}
+
+// ReachabilityBanner and QueuedBroadcastBanner use the same host transport.
+// Their matching probes share one request and reuse its answer for the
+// documented interval, so mounting both banners does not double the traffic.
+const readsByMessaging = new WeakMap();
+
+function sharedReachabilityRead({ messaging, chainIdsKey, chainIds, intervalMs, force }) {
+    let reads = readsByMessaging.get(messaging);
+    if (!reads) {
+        reads = new Map();
+        readsByMessaging.set(messaging, reads);
+    }
+    let read = reads.get(chainIdsKey);
+    if (!read) {
+        read = { lastStartedAt: null, inFlight: null, result: null };
+        reads.set(chainIdsKey, read);
+    }
+    if (read.inFlight) return read.inFlight;
+    const now = Date.now();
+    const age = read.lastStartedAt === null ? Infinity : now - read.lastStartedAt;
+    if (!force && age >= 0 && age < intervalMs) return Promise.resolve(read.result);
+
+    read.lastStartedAt = now;
+    const inFlight = Promise.resolve()
+        .then(() => messaging.checkReachabilityRequest({ chainIds }))
+        .then((result) => {
+            read.result = result;
+            return result;
+        })
+        .catch((error) => {
+            read.lastStartedAt = null;
+            throw error;
+        })
+        .finally(() => {
+            if (read.inFlight === inFlight) read.inFlight = null;
+        });
+    read.inFlight = inFlight;
+    return inFlight;
+}
+
 /**
  * @param {object} [opts]
  * @param {number} [opts.intervalMs]   Polling interval; default 30s.
@@ -151,7 +194,7 @@ export function useReachability(opts = {}) {
     // chain-set change mid-session does not re-open the grace window.
     const mountedAtRef = useRef(Date.now());
 
-    const probe = useCallback(async () => {
+    const probe = useCallback(async (force = false) => {
         if (typeof messaging?.checkReachabilityRequest !== 'function') {
             // No host endpoint. Leave state at "unknown" so the
             // banner can hide rather than fabricate "offline".
@@ -171,7 +214,13 @@ export function useReachability(opts = {}) {
         setLoading(true);
         setError(null);
         try {
-            const result = await messaging.checkReachabilityRequest({ chainIds });
+            const result = await sharedReachabilityRead({
+                messaging,
+                chainIdsKey,
+                chainIds,
+                intervalMs,
+                force,
+            });
             if (!isCurrent()) return;
             failuresRef.current = 0;
             const rows = Array.isArray(result?.perChain) ? result.perChain : [];
@@ -214,7 +263,7 @@ export function useReachability(opts = {}) {
             if (confirmRef.current === null) {
                 confirmRef.current = setTimeout(() => {
                     confirmRef.current = null;
-                    if (mountedRef.current) probeRef.current?.();
+                    if (mountedRef.current && !isDocumentHidden()) probeRef.current?.(true);
                 }, graceLeft + confirmMs);
             }
         } catch (err) {
@@ -232,13 +281,13 @@ export function useReachability(opts = {}) {
                 // that is not the user's connection. Confirm before saying so.
                 retryRef.current = setTimeout(() => {
                     retryRef.current = null;
-                    if (mountedRef.current) probeRef.current?.();
+                    if (mountedRef.current && !isDocumentHidden()) probeRef.current?.(true);
                 }, failureRetryMs);
             }
         } finally {
             if (isCurrent()) setLoading(false);
         }
-    }, [messaging, chainIds, failureRetryMs, confirmMs, startupGraceMs]);
+    }, [messaging, chainIdsKey, chainIds, intervalMs, failureRetryMs, confirmMs, startupGraceMs]);
 
     probeRef.current = probe;
 
@@ -249,7 +298,7 @@ export function useReachability(opts = {}) {
         // though it had already been corroborated.
         failuresRef.current = 0;
         provisionalRef.current = null;
-        probe();
+        probe(true);
     }, [probe]);
 
     useEffect(() => {
@@ -264,13 +313,12 @@ export function useReachability(opts = {}) {
             setLoading(false);
             provisionalRef.current = null;
         }
-        probe();
-        const hidden = () => typeof document !== 'undefined' && document.visibilityState === 'hidden';
+        if (!isDocumentHidden()) probe();
         if (intervalMs > 0) {
             // A hidden app shows no banner, so the poll skips its beats until it is seen again.
-            pollRef.current = setInterval(() => { if (!hidden()) probe(); }, intervalMs);
+            pollRef.current = setInterval(() => { if (!isDocumentHidden()) probe(); }, intervalMs);
         }
-        const onVisible = () => { if (!hidden()) probe(); };
+        const onVisible = () => { if (!isDocumentHidden()) probe(); };
         if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisible);
         return () => {
             mountedRef.current = false;
