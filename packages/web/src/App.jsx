@@ -74,6 +74,7 @@ import { buildBalanceRows } from '@xchain-wallet/core/shared/components/BalanceL
 import { loadDisplayBalances } from '@xchain-wallet/core/shared/utils/displayBalances.js';
 import { useKeyboardShortcuts } from '@xchain-wallet/core/shared/keyboard/useKeyboardShortcuts.js';
 import { ShortcutHelp } from '@xchain-wallet/core/shared/keyboard/ShortcutHelp.jsx';
+import { dismissAllOverlays } from '@xchain-wallet/core/ui/backStack.js';
 import { MenuRoute } from '@xchain-wallet/core/shared/routes/MenuRoute.jsx';
 import { AlertsRoute } from '@xchain-wallet/core/shared/routes/AlertsRoute.jsx';
 import { registry as registryLib } from '@xchain-wallet/core';
@@ -99,6 +100,7 @@ import * as messaging from './messaging.js';
 import { getSessionStatus, listWallets, lockWallet, listAccounts } from './messaging.js';
 import { deepLinkRoute } from '../../desktop/renderer/deepLinkRoute.js';
 import { subscribeToNativeDeepLinks } from './deeplinks/nativeDeepLinks.js';
+import { canApplyNativeIntent, useNativeAppLifecycle } from './platform/nativeAppLifecycle.js';
 import { ExtensionBanner } from './components/ExtensionBanner.jsx';
 import { useActiveVariant, shellForVariant } from './devVariant.js';
 import { DevVariantBadge } from './DevVariantBadge.jsx';
@@ -275,6 +277,10 @@ function AppInner() {
     // the palette hook, the dispatcher, and the help modal below.
     const { settings } = useSettings();
     const [status, setStatus] = useState(/** @type {any} */ ({ state: 'loading' }));
+    const statusStateRef = useRef(status.state);
+    statusStateRef.current = status.state;
+    const nativeSuspendedRef = useRef(false);
+    const [nativeResumeKey, setNativeResumeKey] = useState(0);
     // A demo graduation wipes the vault and reloads, so the lane
     // the user picked (create / import / FreeWallet) is handed across the
     // reload here. One-shot read: it never survives to hijack a later visit.
@@ -641,9 +647,12 @@ function AppInner() {
         getSessionStatus()
             .then((next) => {
                 setStatus(next);
-                if (next?.state === 'unlocked' && pendingUriView.current) {
-                    setUnlockedView(pendingUriView.current);
-                    pendingUriView.current = null;
+                if (next?.state === 'unlocked') {
+                    nativeSuspendedRef.current = false;
+                    if (pendingUriView.current) {
+                        setUnlockedView(pendingUriView.current);
+                        pendingUriView.current = null;
+                    }
                 }
                 // Settings are only decryptable once unlocked. Notify
                 // useSettings instances mounted above this boundary (e.g.
@@ -698,8 +707,16 @@ function AppInner() {
                 setContractRef(route.contractRef);
                 setExecutePrefill(route.executePrefill);
             }
-            setUnlockedView(route.view);
-            pendingUriView.current = route.view;
+            const canNavigate = canApplyNativeIntent(
+                statusStateRef.current,
+                nativeSuspendedRef.current,
+            );
+            if (canNavigate) {
+                setUnlockedView(route.view);
+                pendingUriView.current = null;
+            } else {
+                pendingUriView.current = route.view;
+            }
         } catch {
             // The shared router returns an error route for malformed input;
             // this remains defensive against an unexpected parser failure.
@@ -893,10 +910,30 @@ function AppInner() {
     // the timer: a wallet parked on those screens never locked. The policy
     // hook owns the timeout, the demo-wallet skip and the extension
     // service-worker backstop report. Do not move it into a route.
-    useAutoLockPolicy({
+    const autoLock = useAutoLockPolicy({
         sessionState: status.state,
         activeWalletId,
         onLocked: refresh,
+    });
+    useNativeAppLifecycle({
+        checkAutoLock: autoLock.checkNow,
+        onBackground: () => {
+            nativeSuspendedRef.current = true;
+            setGlobalScannerOpen(false);
+            setUnlockedView((view) => (view === 'scan' ? 'home' : view));
+            palette.closePalette();
+            setShortcutHelpOpen(false);
+            dismissAllOverlays();
+        },
+        onUnlockedResume: () => {
+            nativeSuspendedRef.current = false;
+            if (statusStateRef.current !== 'unlocked') return;
+            if (pendingUriView.current) {
+                setUnlockedView(pendingUriView.current);
+                pendingUriView.current = null;
+            }
+            setNativeResumeKey((key) => key + 1);
+        },
     });
 
     switch (status.state) {
@@ -2673,6 +2710,7 @@ function AppInner() {
                         above Home, so Home must not mount a second one. */}
                     <Home
                         activeWalletId={activeWalletId}
+                        resumeKey={nativeResumeKey}
                         demoBannerInHeader
                         networkFilter={globalNetworkFilter}
                         onNetworkFilterChange={setGlobalNetworkFilter}
