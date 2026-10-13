@@ -821,6 +821,7 @@ function DryRunForm({ busy, error, onCancel, onSubmit }) {
                 onChange={(e) => setMn(e.target.value)}
                 placeholder="Recovery phrase, words separated by spaces"
                 rows={3}
+                autoComplete="off"
                 aria-label="Recovery phrase to test"
                 style={{ ...passwordStyle, fontFamily: 'var(--xc-font-mono)', resize: 'vertical' }}
             />
@@ -1107,6 +1108,7 @@ function BackupExportResult({ result, onDone }) {
                 value={location}
                 onChange={(e) => { setLocation(e.target.value); setPointer(''); setPointerError(null); }}
                 aria-label="Backup file HTTPS address"
+                autoComplete="off"
                 style={passwordStyle}
             />
             {pointerError ? <Status text={pointerError} tone="error" /> : null}

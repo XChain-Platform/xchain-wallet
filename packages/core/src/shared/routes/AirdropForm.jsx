@@ -1720,6 +1720,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                             spellCheck={false}
                             autoCapitalize="none"
                             autoCorrect="off"
+                            autoComplete="off"
                         />
                     </label>
                     <div className={styles.fromLine}>

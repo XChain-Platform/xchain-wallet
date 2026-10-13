@@ -1359,6 +1359,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     aria-label="Search history"
                     value={searchQuery}
                     onChange={(ev) => setSearchQuery(ev.target.value)}
+                    autoComplete="off"
                 />
 
                 <div className={styles.dateRow}>

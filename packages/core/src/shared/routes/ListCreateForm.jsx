@@ -746,6 +746,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                             spellCheck={false}
                             autoCapitalize="none"
                             autoCorrect="off"
+                            autoComplete="off"
                         />
                     </label>
                     {/* Wraps, and drives a hidden file input from a real
@@ -755,6 +756,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                         <input
                             {...recipientsDrop.pickerProps}
                             aria-label="Upload CSV of addresses"
+                            autoComplete="off"
                         />
                         <Button type="button" variant="ghost" onClick={recipientsDrop.openFilePicker}>
                             Upload CSV

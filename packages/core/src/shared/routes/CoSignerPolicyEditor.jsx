@@ -548,6 +548,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                             value={row.address}
                             onChange={(e) => patchRow('allowedDestinations', i, { address: e.target.value.trim() })}
                             placeholder="bc1q…"
+                            autoComplete="off"
                         />
                         <Button type="button" variant="ghost" onClick={() => removeRow('allowedDestinations', i)}>Remove</Button>
                     </div>
@@ -571,6 +572,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                             value={row.address}
                             onChange={(e) => patchRow('allowedOutputs', i, { address: e.target.value.trim() })}
                             placeholder="bc1q…"
+                            autoComplete="off"
                         />
                         <Input
                             label="Max value (optional)"
