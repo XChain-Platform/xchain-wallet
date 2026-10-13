@@ -37,6 +37,7 @@ import {
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { blurNumberInputOnWheel } from '../utils/formInput.js';
 import styles from './AddAddressModal.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -290,11 +291,13 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
                                 type="number"
                                 inputMode="numeric"
                                 enterKeyHint="go"
+                                autoComplete="off"
                                 aria-label="Number of addresses"
                                 min={1}
                                 max={MAX_ADDRESSES}
                                 value={count}
                                 onChange={(e) => { setCount(e.target.value); setError(null); }}
+                                onWheel={blurNumberInputOnWheel}
                                 disabled={busy}
                             />
                         </label>

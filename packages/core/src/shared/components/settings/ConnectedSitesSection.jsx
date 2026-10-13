@@ -41,6 +41,7 @@ import {
     SIGN_THROTTLE_DEFAULT_BURST,
     SIGN_THROTTLE_DEFAULT_WINDOW_MS,
 } from '../../../flows/signThrottle.js';
+import { blurNumberInputOnWheel } from '../../utils/formInput.js';
 
 const ACTION_BTN = {
     background: 'transparent',
@@ -504,6 +505,7 @@ function SignThrottlePanel() {
                         type="number"
                         inputMode="numeric"
                         enterKeyHint="next"
+                        autoComplete="off"
                         min={SIGN_THROTTLE_BURST_MIN}
                         max={SIGN_THROTTLE_BURST_MAX}
                         step={1}
@@ -512,6 +514,7 @@ function SignThrottlePanel() {
                             setBurstInput(e.target.value);
                             if (error) setError(null);
                         }}
+                        onWheel={blurNumberInputOnWheel}
                         placeholder={String(SIGN_THROTTLE_DEFAULT_BURST)}
                         aria-label="Sign-throttle burst (max requests per window)"
                         style={FIELD}
@@ -522,8 +525,9 @@ function SignThrottlePanel() {
                     <input
                         id="sign-throttle-window"
                         type="number"
-                        inputMode="numeric"
+                        inputMode="decimal"
                         enterKeyHint="go"
+                        autoComplete="off"
                         min={SIGN_THROTTLE_WINDOW_MS_MIN / 1000}
                         max={SIGN_THROTTLE_WINDOW_MS_MAX / 1000}
                         step={0.001}
@@ -532,6 +536,7 @@ function SignThrottlePanel() {
                             setWindowSecondsInput(e.target.value);
                             if (error) setError(null);
                         }}
+                        onWheel={blurNumberInputOnWheel}
                         placeholder={String(SIGN_THROTTLE_DEFAULT_WINDOW_MS / 1000)}
                         aria-label="Sign-throttle window in seconds"
                         style={FIELD}

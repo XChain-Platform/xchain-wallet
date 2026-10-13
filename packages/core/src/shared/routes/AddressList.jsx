@@ -27,6 +27,7 @@ import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useHapticFeedback } from '../hooks/useHaptic.js';
 import { useProtectedScreen } from '../utils/screenGuard.js';
+import { blurNumberInputOnWheel } from '../utils/formInput.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
 import {
@@ -766,6 +767,8 @@ export function AddressList({
                         label="Derivation index"
                         type="number"
                         inputMode="numeric"
+                        enterKeyHint="go"
+                        autoComplete="off"
                         min={0}
                         max={0x7fffffff}
                         step={1}
@@ -774,6 +777,7 @@ export function AddressList({
                             setAdvancedDerivationIndex(e.target.value);
                             setAdvancedError(null);
                         }}
+                        onWheel={blurNumberInputOnWheel}
                         hint="Use the exact external address index you want to derive."
                         disabled={advancedBusy}
                         autoFocus
