@@ -533,6 +533,12 @@
     word-break: break-word;
 }
 
+.supplyState {
+    display: block;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+}
+
 .metadataHint {
     margin: var(--xc-space-2) 0 0;
     font-size: var(--xc-text-xs);

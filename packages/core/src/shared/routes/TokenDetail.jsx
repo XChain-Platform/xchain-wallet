@@ -35,6 +35,7 @@ import {
     decimalFromBaseUnits,
     formatAtomicAmount,
     formatDecimalAmount,
+    formatTokenQuantity,
     formatWithThousands,
     multiplyDecimalStrings,
 } from '../utils/amountFormat.js';
@@ -1106,7 +1107,14 @@ function DetailsPanel({
                     ) : null}
                     <tr className={styles.metaRow}>
                         <th scope="row">Total supply</th>
-                        <td>{formatTotalSupply(isNative, chainId, assetInfo)}</td>
+                        <td>
+                            {formatTotalSupply(isNative, chainId, assetInfo, divisibility)}
+                            {!isNative && assetInfo ? (
+                                <span className={styles.supplyState}>
+                                    {assetInfo.locked ? 'Locked supply' : 'Unlocked supply'}
+                                </span>
+                            ) : null}
+                        </td>
                     </tr>
                     <tr className={styles.metaRow}>
                         <th scope="row">Current balance</th>
@@ -1746,15 +1754,16 @@ const NATIVE_SUPPLY_BY_COIN = {
     dogecoin: 'No cap (inflationary)',
 };
 
-function formatTotalSupply(isNative, chainId, assetInfo) {
+function formatTotalSupply(isNative, chainId, assetInfo, divisibility) {
     if (isNative) {
         const coin = chainId.split('-')[0];
         return NATIVE_SUPPLY_BY_COIN[coin] || 'N/A';
     }
     const totalSupply = detailText(assetInfo?.totalSupply);
     if (totalSupply === '-') return totalSupply;
+    const total = formatTokenQuantity(totalSupply, divisibility);
     const maxSupply = detailText(assetInfo?.maxSupply);
-    return maxSupply === '-' ? totalSupply : `${totalSupply} / ${maxSupply}`;
+    return maxSupply === '-' ? total : `${total} / ${formatTokenQuantity(maxSupply, divisibility)}`;
 }
 
 function detailText(value) {

@@ -14,6 +14,7 @@ import { describe, it, expect } from 'vitest';
 import {
     formatWithThousands,
     normalizeAmountFieldInput,
+    formatTokenQuantity,
     normalizeLocalizedDecimal,
     countNonCommaBefore,
     formatDisplayAmount,
@@ -45,6 +46,20 @@ describe('shared/amountFormat display policy', () => {
         ['zero', '0.00000000', 'out', '0'],
     ])('applies the %s History sign once', (_label, value, direction, expected) => {
         expect(formatHistoryAmount(value, direction, 'en-US')).toBe(expected);
+    });
+});
+
+describe('shared/amountFormat formatTokenQuantity', () => {
+    it.each([
+        ['divisible value', '1234567.123456789', 8, '1,234,567.12345679'],
+        ['binary float noise', '0.30000000000000004', 8, '0.3'],
+        ['divisible whole value', '1000000', 8, '1,000,000'],
+        ['indivisible value', '9007199254740993', 0, '9,007,199,254,740,993'],
+        ['indivisible decimal noise', '41.00000000000001', 0, '41'],
+        ['unknown divisibility', '1000000.12500000', null, '1,000,000.125'],
+        ['very large supply', '123456789012345678901234567890.5', 8, '123,456,789,012,345,678,901,234,567,890.5'],
+    ])('formats a %s exactly', (_label, value, divisibility, expected) => {
+        expect(formatTokenQuantity(value, divisibility, 'en-US')).toBe(expected);
     });
 });
 
