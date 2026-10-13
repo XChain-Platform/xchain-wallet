@@ -191,6 +191,14 @@ export function DeployContractForm({ walletId, onBack }) {
         /** @type {{ ok: boolean, msg: string, warnings: object[], errors: object[] } | null} */ (null),
     );
     const codeRef = useRef(/** @type {HTMLTextAreaElement | null} */ (null));
+    const latestCodeRef = useRef(code);
+    latestCodeRef.current = code;
+    const validationRequestRef = useRef(0);
+    const sizeRequestRef = useRef(0);
+    const gasRequestRef = useRef(0);
+    const [validationBusy, setValidationBusy] = useState(false);
+    const [sizeBusy, setSizeBusy] = useState(false);
+    const [gasBusy, setGasBusy] = useState(false);
     const [sizeInfo, setSizeInfo] = useState(
         /** @type {{ bytes: number, withinLimit: boolean } | null} */ (null),
     );
@@ -473,9 +481,13 @@ export function DeployContractForm({ walletId, onBack }) {
 
     async function handleValidate() {
         if (!chainId) return;
+        const source = code;
+        const request = ++validationRequestRef.current;
         setFormError(null);
+        setValidationBusy(true);
         try {
-            const res = await messaging.validateContractCode({ chainId, code });
+            const res = await messaging.validateContractCode({ chainId, code: source });
+            if (validationRequestRef.current !== request || latestCodeRef.current !== source) return;
             const warnings = normalizeValidationDiagnostics(res?.warnings);
             if (res?.valid) {
                 setValidation({ ok: true, msg: 'Syntax OK.', warnings, errors: [] });
@@ -491,12 +503,15 @@ export function DeployContractForm({ walletId, onBack }) {
                 });
             }
         } catch (e) {
+            if (validationRequestRef.current !== request || latestCodeRef.current !== source) return;
             setValidation({
                 ok: false,
                 msg: 'Validation failed.',
                 warnings: [],
                 errors: normalizeValidationDiagnostics(e),
             });
+        } finally {
+            if (validationRequestRef.current === request) setValidationBusy(false);
         }
     }
 
@@ -554,25 +569,41 @@ export function DeployContractForm({ walletId, onBack }) {
 
     async function handleCheckSize() {
         if (!chainId) return;
+        const source = code;
+        const request = ++sizeRequestRef.current;
+        setFormError(null);
+        setSizeBusy(true);
         try {
-            const res = await messaging.checkContractCodeSize({ chainId, code });
+            const res = await messaging.checkContractCodeSize({ chainId, code: source });
+            if (sizeRequestRef.current !== request || latestCodeRef.current !== source) return;
             setSizeInfo(res);
         } catch (e) {
+            if (sizeRequestRef.current !== request || latestCodeRef.current !== source) return;
             setFormError(e?.message || 'Size check failed.');
+        } finally {
+            if (sizeRequestRef.current === request) setSizeBusy(false);
         }
     }
 
     async function handleSuggestGas() {
         if (!chainId) return;
+        const source = code;
+        const request = ++gasRequestRef.current;
+        setFormError(null);
+        setGasBusy(true);
         try {
             // sdk.contracts.suggestGasLimit returns { suggested, rationale };
             // pull the scalar out (rendering the object crashed the form).
-            const { suggested, rationale } = await messaging.suggestContractGasLimit({ chainId, code });
+            const { suggested, rationale } = await messaging.suggestContractGasLimit({ chainId, code: source });
+            if (gasRequestRef.current !== request || latestCodeRef.current !== source) return;
             setSuggestedGas(suggested);
             setSuggestedRationale(rationale || null);
             if (!gasLimit) setGasLimit(String(suggested));
         } catch (e) {
+            if (gasRequestRef.current !== request || latestCodeRef.current !== source) return;
             setFormError(e?.message || 'Gas suggestion failed.');
+        } finally {
+            if (gasRequestRef.current === request) setGasBusy(false);
         }
     }
 
@@ -587,8 +618,8 @@ export function DeployContractForm({ walletId, onBack }) {
             return;
         }
         const gas = String(gasLimit).trim() || (suggestedGas ? String(suggestedGas) : '');
-        if (!gas || Number.isNaN(Number(gas)) || Number(gas) <= 0) {
-            setFormError('Gas limit must be a positive number. Tap "Suggest gas" for a heuristic estimate.');
+        if (!/^\d+$/.test(gas) || !/[1-9]/.test(gas)) {
+            setFormError('Gas limit must be a positive whole number. Tap "Suggest gas" for a heuristic estimate.');
             return;
         }
         if (validation?.ok === false) {
@@ -609,6 +640,19 @@ export function DeployContractForm({ walletId, onBack }) {
             }
         } else if (slashDestination.trim() !== '') {
             setFormError('Slash destination requires a cooldown duration (otherwise the contract is not stakeable).');
+            return;
+        }
+        const constructorParts = String(constructorParams).split('|').map((part) => part.trim());
+        if (constructorParams.trim() && constructorParts.some((part) => part === '')) {
+            setFormError('Constructor arguments cannot be blank between "|" separators.');
+            return;
+        }
+        if (constructorParts.some((part) => part.includes(';'))) {
+            setFormError('Constructor arguments cannot contain ";".');
+            return;
+        }
+        if (cooldownBlocks.trim() !== '' && constructorParts.filter(Boolean).length > 1) {
+            setFormError('A stake-enabled contract accepts one constructor argument. Pack multiple values into one argument or remove the staking settings.');
             return;
         }
         setFormError(null);
@@ -840,9 +884,12 @@ export function DeployContractForm({ walletId, onBack }) {
         setStage('form');
     }
 
-        const header = (
+    const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={stage === 'review'
+                ? () => { setSubmitError(null); setStage('form'); }
+                : onBack}
+            backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
                     ? 'Review publish'
                     : `Publish contract${descriptor ? ` on ${descriptor.displayName}` : ''}`}
@@ -919,11 +966,11 @@ export function DeployContractForm({ walletId, onBack }) {
                         type="submit"
                         variant="primary"
                         loading={stage === 'submitting'}
-                        disabled={
+                        disabled={stage === 'submitting' || (
                             isWatcherMode
                                 ? false
                                 : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)
-                        }
+                        )}
                     >
                         {isWatcherMode
                             ? 'Create unsigned transaction'
@@ -1270,6 +1317,13 @@ export function DeployContractForm({ walletId, onBack }) {
                         setCode(e.target.value);
                         setValidation(null);
                         setSizeInfo(null);
+                        validationRequestRef.current += 1;
+                        sizeRequestRef.current += 1;
+                        gasRequestRef.current += 1;
+                        setValidationBusy(false);
+                        setSizeBusy(false);
+                        setGasBusy(false);
+                        setFormError(null);
                     }}
                     rows={10}
                     spellCheck={false}
@@ -1287,13 +1341,31 @@ export function DeployContractForm({ walletId, onBack }) {
             </label>
 
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
-                <Button type="button" variant="ghost" onClick={handleValidate} disabled={!code.trim()}>
+                <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={handleValidate}
+                    loading={validationBusy}
+                    disabled={!code.trim() || validationBusy}
+                >
                     Validate code
                 </Button>
-                <Button type="button" variant="ghost" onClick={handleCheckSize} disabled={!code.trim()}>
+                <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={handleCheckSize}
+                    loading={sizeBusy}
+                    disabled={!code.trim() || sizeBusy}
+                >
                     Estimate size
                 </Button>
-                <Button type="button" variant="ghost" onClick={handleSuggestGas} disabled={!code.trim()}>
+                <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={handleSuggestGas}
+                    loading={gasBusy}
+                    disabled={!code.trim() || gasBusy}
+                >
                     Suggest gas
                 </Button>
             </div>
@@ -1360,7 +1432,7 @@ export function DeployContractForm({ walletId, onBack }) {
                 hint="Upper bound of VM gas publishing and subsequent calls may consume."
                 inputMode="numeric"
                 value={gasLimit}
-                onChange={(e) => setGasLimit(e.target.value)}
+                onChange={(e) => { setGasLimit(e.target.value); setFormError(null); }}
                 autoComplete="off"
             />
 
@@ -1368,7 +1440,7 @@ export function DeployContractForm({ walletId, onBack }) {
                 label="Constructor params (optional)"
                 hint="Pipe-delimited values passed to the contract's constructor."
                 value={constructorParams}
-                onChange={(e) => setConstructorParams(e.target.value)}
+                onChange={(e) => { setConstructorParams(e.target.value); setFormError(null); }}
                 autoComplete="off"
             />
 

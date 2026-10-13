@@ -177,7 +177,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
 
     useEffect(() => {
         if (!chainId || !oracleAddress) { setFeeds(null); return undefined; }
-        if (flowsLib.isDemoWallet(walletId)) return undefined;
+        if (flowsLib.isDemoWallet(walletId)) { setFeeds([]); return undefined; }
         if (typeof messaging?.oracleFeeds !== 'function') { setFeeds([]); return undefined; }
         let cancelled = false;
         setFeedsError(null);
@@ -200,7 +200,10 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
     );
     useEffect(() => {
         if (!chainId || !oracleAddress) { setConsumers(null); return undefined; }
-        if (flowsLib.isDemoWallet(walletId)) return undefined;
+        if (flowsLib.isDemoWallet(walletId)) {
+            setConsumers({ supported: false, dispensers: [] });
+            return undefined;
+        }
         if (typeof messaging?.oracleConsumers !== 'function') {
             setConsumers({ supported: false, dispensers: [] });
             return undefined;
@@ -629,6 +632,8 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
 
             {feeds == null ? (
                 <p className={styles.hint}>Loading…</p>
+            ) : feedsError ? (
+                <StatusMessage variant="error" className={styles.error}>{feedsError}</StatusMessage>
             ) : feeds.length === 0 ? (
                 <p className={styles.hint}>
                     This address has not published any prices yet. The first one you publish starts
@@ -662,7 +667,6 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                     })}
                 </ul>
             )}
-            {feedsError ? <p className={styles.hint}>{feedsError}</p> : null}
             </FormSection>
 
             <FormSection title="Publish a price">

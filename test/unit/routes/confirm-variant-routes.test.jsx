@@ -106,6 +106,22 @@ function findButton(utils, re) {
 }
 
 describe('§5.5 PsbtSignForm routes through the PSBT confirm variant', () => {
+    it('watcher mode never offers a password or a signing action', async () => {
+        const { messaging, calls } = recordingMessaging({
+            getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+        });
+        let utils;
+        await domAct(async () => {
+            utils = mount(PsbtSignForm, messaging);
+            await drainMicrotasks();
+        });
+
+        expect(utils.queryByLabelText(/Password/i)).toBeNull();
+        expect(utils.container.textContent).toContain('Watcher mode creates unsigned transactions');
+        expect(findButton(utils, /Sign transaction/i)).toBeUndefined();
+        expect(calls.some((c) => c.method === 'signPsbtUserInitiated')).toBe(false);
+    });
+
     async function drive(parseResult) {
         const { messaging, calls } = recordingMessaging({
             parsePsbtRequest: (args) => {
@@ -220,6 +236,22 @@ describe('§5.5 PsbtSignForm routes through the PSBT confirm variant', () => {
 });
 
 describe('§5.5 SignMessageForm routes through the message confirm variant', () => {
+    it('watcher mode never offers a password or a signing action', async () => {
+        const { messaging, calls } = recordingMessaging({
+            getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+        });
+        let utils;
+        await domAct(async () => {
+            utils = mount(SignMessageForm, messaging);
+            await drainMicrotasks();
+        });
+
+        expect(utils.queryByLabelText(/Password/i)).toBeNull();
+        expect(utils.container.textContent).toContain('Watcher mode does not sign messages');
+        expect(findButton(utils, /Sign message/i)).toBeUndefined();
+        expect(calls.some((c) => c.method === 'signMessageRequest')).toBe(false);
+    });
+
     async function drive(message) {
         const { messaging, calls } = recordingMessaging({
             signMessageRequest: (args) => {

@@ -19,7 +19,13 @@ import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
-import { readMsgRead, writeMsgRead, writeMsgUnread } from '../utils/msgReadMemory.js';
+import {
+    readMsgRead,
+    readMsgRequestDeclined,
+    writeMsgRead,
+    writeMsgRequestDeclined,
+    writeMsgUnread,
+} from '../utils/msgReadMemory.js';
 import styles from './IssueTokenForm.module.css';
 import local from './MessagingInbox.module.css';
 
@@ -82,6 +88,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     // the seen-set at the moment a thread is opened, so the thread can still show
     // where the unread run began even after we mark its messages seen.
     const [readMap, setReadMap] = useState(/** @type {Record<string, string[]>} */ ({}));
+    const [declinedRequestIds, setDeclinedRequestIds] = useState(/** @type {string[]} */ ([]));
     const [unreadFrom, setUnreadFrom] = useState(/** @type {Set<string> | null} */ (null));
     const firstUnreadRef = useRef(/** @type {HTMLLIElement | null} */ (null));
     // In-page conversation filters: free-text search (address or contact name)
@@ -106,10 +113,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
         messaging.getAddressesByChain(walletId, activeAccountId)
             .then((byChain) => {
                 if (cancelled) return;
-                setAddressesByChain(byChain);
-                if (!byChain || Object.keys(byChain).length === 0) {
-                    setLoadError('No addresses yet. Use Receive to generate one before reading messages.');
-                }
+                setAddressesByChain(byChain || {});
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
@@ -126,6 +130,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     // Load this account's read marks once the wallet/account scope is known.
     useEffect(() => {
         setReadMap(readMsgRead(walletId, activeAccountId));
+        setDeclinedRequestIds(readMsgRequestDeclined(walletId, activeAccountId));
     }, [walletId, activeAccountId]);
 
     useEffect(() => {
@@ -271,16 +276,30 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     // (format-1, sharing our key back) originates from that same address.
     const handshakeRequesters = useMemo(() => {
         const seen = new Set();
+        const declined = new Set(declinedRequestIds);
+        const accepted = new Set(messages
+            .filter((m) => m.format === 1 && ownerSet.has(m.from) && m.to && !ownerSet.has(m.to))
+            .map((m) => m.to));
         const out = [];
         for (const m of messages) {
             if (m.format !== 0 || !ownerSet.has(m.to)) continue;
             const who = m.from;
-            if (!who || ownerSet.has(who) || seen.has(who)) continue;
+            if (!who || ownerSet.has(who) || seen.has(who) || accepted.has(who)) continue;
+            const id = requestId(m);
+            if (declined.has(id)) continue;
             seen.add(who);
-            out.push({ from: who, ownerAddress: m.to });
+            out.push({ id, from: who, ownerAddress: m.to });
         }
         return out;
-    }, [messages, ownerSet]);
+    }, [messages, ownerSet, declinedRequestIds]);
+
+    function handleRequestDeclined(id) {
+        setDeclinedRequestIds((prev) => {
+            const next = (prev.includes(id) ? prev : [...prev, id]).slice(-500);
+            writeMsgRequestDeclined(walletId, activeAccountId, next);
+            return next;
+        });
+    }
     const conversations = useMemo(
         () => buildConversations(conversableMessages, ownerSet),
         [conversableMessages, ownerSet],
@@ -651,6 +670,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                                     walletId={walletId}
                                     variant={variant}
                                     contactName={contactsByAddress[r.from]}
+                                    onDecline={() => handleRequestDeclined(r.id)}
                                     onMessage={onCompose ? () => onCompose({
                                         chainId: record.chainId,
                                         fromAddressId: record.id,
@@ -779,16 +799,27 @@ function ThreadComposer({ value, onChange, onSubmit }) {
  * session signer isn't already unlocked.
  *
  * @param {object} props
- * @param {{ from: string, ownerAddress: string }} props.request
+ * @param {{ id: string, from: string, ownerAddress: string }} props.request
  * @param {any} props.record                 owner address record (incl. chainId)
  * @param {boolean} props.signerReady
  * @param {any} props.messaging
  * @param {string} props.walletId
  * @param {'small'|'full'} props.variant
  * @param {string} [props.contactName]
+ * @param {() => void} props.onDecline
  * @param {(() => void) | null} [props.onMessage]
  */
-function SessionRequestRow({ request, record, signerReady, messaging, walletId, variant, contactName, onMessage }) {
+function SessionRequestRow({
+    request,
+    record,
+    signerReady,
+    messaging,
+    walletId,
+    variant,
+    contactName,
+    onDecline,
+    onMessage,
+}) {
     const [stage, setStage] = useState(/** @type {'idle' | 'sending' | 'sent'} */ ('idle'));
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [watcherResult, setWatcherResult] = useState(/** @type {any | null} */ (null));
@@ -882,8 +913,13 @@ function SessionRequestRow({ request, record, signerReady, messaging, walletId, 
                     <Button variant="primary" onClick={handleShare} loading={stage === 'sending'}>
                         Share my key
                     </Button>
+                    <Button variant="ghost" onClick={onDecline} disabled={stage === 'sending'}>
+                        Decline
+                    </Button>
                     {onMessage ? (
-                        <Button variant="ghost" onClick={onMessage}>Message</Button>
+                        <Button variant="ghost" onClick={onMessage} disabled={stage === 'sending'}>
+                            Message
+                        </Button>
                     ) : null}
                 </div>
             )}
@@ -892,6 +928,11 @@ function SessionRequestRow({ request, record, signerReady, messaging, walletId, 
             ) : null}
         </li>
     );
+}
+
+function requestId(message) {
+    if (typeof message?.txid === 'string' && message.txid) return message.txid;
+    return [message?.chainId || message?.chain || '', message?.from || '', message?.to || '', message?.timestamp || ''].join(':');
 }
 
 // The conversation key for a message: whichever endpoint is not ours.

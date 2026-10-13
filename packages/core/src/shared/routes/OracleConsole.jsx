@@ -16,9 +16,11 @@ import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hook
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
+import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { outcomeLabelsOf } from '../utils/betOutcomeLabels.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import styles from './IssueTokenForm.module.css';
+import consoleStyles from './OracleConsole.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -43,13 +45,28 @@ function countdown(targetSec, nowSec) {
     const n = Number(targetSec);
     if (!Number.isFinite(n)) return null;
     const d = n - nowSec;
-    if (d <= 0) return 'passed';
+    if (d <= 0) return 'in the past';
     const days = Math.floor(d / 86400);
     const hours = Math.floor((d % 86400) / 3600);
     const mins = Math.floor((d % 3600) / 60);
-    if (days > 0) return `in ${days}d ${hours}h`;
-    if (hours > 0) return `in ${hours}h ${mins}m`;
-    return `in ${mins}m`;
+    if (days > 0) return `in ${days} ${days === 1 ? 'day' : 'days'} and ${hours} ${hours === 1 ? 'hour' : 'hours'}`;
+    if (hours > 0) return `in ${hours} ${hours === 1 ? 'hour' : 'hours'} and ${mins} ${mins === 1 ? 'minute' : 'minutes'}`;
+    return `in ${mins} ${mins === 1 ? 'minute' : 'minutes'}`;
+}
+
+function marketStatusLabel(status) {
+    if (status === 'open') return 'Taking bets';
+    if (status === 'closed') return 'Betting closed, waiting for your result';
+    if (status === 'resolved') return 'Settled';
+    if (status === 'resolved_void') return 'Void, everyone refunded';
+    if (status === 'cancelled') return 'Cancelled, everyone refunded';
+    if (status === 'expired') return 'Expired unresolved, everyone refunded';
+    const words = String(status || 'unknown').trim().replace(/[_-]+/g, ' ').toLowerCase();
+    return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+function countdownLabel(targetSec, nowSec) {
+    return countdown(targetSec, nowSec) || 'at an unavailable time';
 }
 
 /**
@@ -84,17 +101,23 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
     const [password, setPassword] = useState('');
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {{mode: string, feedIndex: string, txid: string | null, queued: boolean} | null} */ (null));
+    const [refreshing, setRefreshing] = useState(false);
+    const loadSequence = useRef(0);
 
     useEffect(() => {
         const t = setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 30000);
         return () => clearInterval(t);
     }, []);
 
-    const load = useCallback(async () => {
+    const load = useCallback(async (background = false) => {
+        const sequence = ++loadSequence.current;
         if (typeof messaging?.getAddressesByChain !== 'function' || typeof messaging?.betFeeds !== 'function') {
-            setRows([]); return;
+            setError('Markets are unavailable in this wallet.');
+            if (!background) setRows([]);
+            return;
         }
-        setRows(null);
+        if (background) setRefreshing(true);
+        else setRows(null);
         setError(null);
         try {
             const chains = (await messaging.getAddressesByChain(walletId, accountId)) || {};
@@ -105,7 +128,12 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
             const results = await Promise.all(pairs.map((p) => messaging
                 .betFeeds({ chainId: p.chainId, query: p.address, type: 'source', opts: { limit: 100 } })
                 .then((r) => ({ p, feeds: extractRows(r) }))
-                .catch(() => ({ p, feeds: [] }))));
+                .catch((requestError) => ({ p, feeds: [], requestError }))));
+            if (sequence !== loadSequence.current) return;
+            const failures = results.filter((entry) => entry.requestError);
+            if (pairs.length > 0 && failures.length === pairs.length) {
+                throw new Error('No market source answered.');
+            }
             const seen = new Set();
             const all = [];
             for (const r of results) {
@@ -121,13 +149,30 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
             const rank = (f) => (f.feed_status === 'closed' ? 0 : f.feed_status === 'open' ? 1 : 2);
             all.sort((a, b) => (rank(a) - rank(b)) || (Number(b.action_index || 0) - Number(a.action_index || 0)));
             setRows(all);
-        } catch (err) {
-            setError(err?.message || 'Failed to load your markets.');
-            setRows([]);
+            if (failures.length > 0) {
+                setError(background
+                    ? 'Some markets could not be refreshed. The available markets are shown below.'
+                    : 'Some markets could not be loaded. The available markets are shown below.');
+            }
+        } catch {
+            if (sequence !== loadSequence.current) return;
+            setError(background
+                ? 'Could not refresh your markets. The last known markets are still shown.'
+                : 'Could not load your markets. Check your connection and try again.');
+            if (!background) setRows([]);
+        } finally {
+            if (sequence === loadSequence.current) setRefreshing(false);
         }
     }, [walletId, accountId, messaging]);
 
-    useEffect(() => { load(); }, [load]);
+    useEffect(() => {
+        load(false);
+        const timer = setInterval(() => load(true), 30_000);
+        return () => {
+            clearInterval(timer);
+            loadSequence.current += 1;
+        };
+    }, [load]);
 
     const fromAddress = active?.owner || null;
     const isHw = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
@@ -182,6 +227,16 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
         setFormError(null);
         setResult(null);
         try {
+            if (isWatcherMode) {
+                const res = await messaging.buildBetActionPsbtRequest({
+                    chainId: feed.chainId,
+                    from,
+                    builder,
+                    params,
+                });
+                setResult(res);
+                return;
+            }
             const res = await actionConfirm.run({
                 chainId: feed.chainId,
                 from,
@@ -210,7 +265,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
             setAllowList('');
             setBlockList('');
             setPassword('');
-            load();
+            load(true);
         } catch (err) {
             if (isUserRejection(err)) return;
             // These oracle actions are not fee-bearing, so this form has
@@ -257,27 +312,32 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
         );
     }
 
-    if (error) {
+    if (result?.psbtHex && !result?.txid) {
         return wrap(
             <ListPage>
-                <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>
-            </ListPage>,
-        );
-    }
-    if (!rows) return wrap(<ListPage><p>Loading your markets…</p></ListPage>);
-    if (rows.length === 0) {
-        return wrap(
-            <ListPage>
-                <EmptyState
-                    title="No markets yet"
-                    body="You have not created any betting markets."
+                <WatcherResultPanel
+                    result={result}
+                    onBuildAnother={() => { setResult(null); setActive(null); }}
+                    onDone={onBack}
                 />
             </ListPage>,
         );
     }
 
     return wrap(
-        <ListPage>
+        <ListPage toolbar={(
+            <Button type="button" variant="ghost" disabled={refreshing} onClick={() => load(true)}>
+                {refreshing ? 'Refreshing markets…' : 'Refresh markets'}
+            </Button>
+        )}>
+            {error ? <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage> : null}
+            {!rows ? <p>Loading your markets…</p> : null}
+            {rows && rows.length === 0 && !error ? (
+                <EmptyState
+                    title="No markets yet"
+                    body="You have not created any betting markets."
+                />
+            ) : null}
             {formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
             {result ? (
                 <div className={styles.listCard} data-testid="oracle-result">
@@ -304,7 +364,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                     )}
                 </div>
             ) : null}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {rows && rows.length > 0 ? <div className={consoleStyles.marketList}>
                 {rows.map((f) => {
                     const key = `${f.chainId}:${f.action_index}`;
                     const labels = outcomesOf(f);
@@ -316,10 +376,10 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                         && String(f.source || '') === String(f.owner?.address || '');
                     const isActive = active && `${active.chainId}:${active.action_index}` === key;
                     return (
-                        <div key={key} className={styles.listCard}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                                <strong>#{String(f.action_index)} {f.label || '(untitled)'}</strong>
-                                <span className={styles.hint}>{f.feed_status}</span>
+                        <div key={key} className={`${styles.listCard} ${consoleStyles.card}`}>
+                            <div className={consoleStyles.marketHeader}>
+                                <strong className={consoleStyles.marketTitle}>Market number: #{String(f.action_index)}; {f.label || 'Untitled market'}</strong>
+                                <span className={styles.hint}>Market status: {marketStatusLabel(f.feed_status)}</span>
                             </div>
                             {/* Only while those two clocks still mean something. A
                                 terminal market kept counting down to a close that
@@ -328,10 +388,10 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                 if unresolved", printed beside the word `cancelled`. */}
                             {canCancel ? (
                                 <div className={styles.hint}>
-                                    Betting closes {countdown(f.deadline, nowSec)} · refunds everyone {countdown(f.expire_at, nowSec)} if unresolved
+                                    Betting closes {countdownLabel(f.deadline, nowSec)}; refunds everyone {countdownLabel(f.expire_at, nowSec)} if unresolved
                                 </div>
                             ) : null}
-                            <div className={styles.actions} style={{ gap: '0.5rem' }}>
+                            <div className={`${styles.actions} ${consoleStyles.actionRow}`}>
                                 {onOpenMarket ? (
                                     <Button variant="ghost" onClick={() => onOpenMarket(f.chainId, f.action_index)}>View market</Button>
                                 ) : null}
@@ -341,8 +401,8 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                 ) : null}
                             </div>
 
-                            {!isWatcherMode && (canResolve || canCancel || canEdit) ? (
-                                <div className={styles.actions} style={{ gap: '0.5rem' }}>
+                            {(canResolve || canCancel || canEdit) ? (
+                                <div className={`${styles.actions} ${consoleStyles.actionRow}`}>
                                     {canEdit ? (
                                         <Button
                                             variant="ghost"
@@ -365,20 +425,8 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                 </div>
                             ) : null}
 
-                            {/* Say why the buttons are gone. Removing them silently leaves an
-                                oracle staring at a market it opened with no way to finish it and
-                                no reason given, and the cost of not knowing is real: an
-                                unresolved market refunds every bet at expiry and earns no fee.
-                                CreateBetFeedForm already says this plainly for its own case. */}
-                            {isWatcherMode && (canResolve || canCancel || canEdit) ? (
-                                <div className={styles.hint}>
-                                    This wallet is in watcher mode, so it cannot edit, resolve, or cancel this market.
-                                    It cannot resolve or cancel, or edit its lists, without the key that opened it.
-                                </div>
-                            ) : null}
-
                             {isActive && active.mode === 'edit' ? (
-                                <div style={{ marginTop: '0.5rem' }}>
+                                <div className={consoleStyles.inlineForm}>
                                     <p className={styles.hint}>
                                         Leave a field blank to keep its current list, enter 0 to detach it, or enter
                                         a list action index to replace it. Changes affect future bets only.
@@ -397,7 +445,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                         onChange={(e) => setBlockList(e.target.value)}
                                         inputMode="numeric"
                                     />
-                                    {!isHw && !signerReady ? (
+                                    {!isWatcherMode && !isHw && !signerReady ? (
                                         <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
                                     ) : null}
                                     <Button
@@ -409,13 +457,13 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                             blockList: blockList.trim(),
                                         })}
                                     >
-                                        Review list edit
+                                        {isWatcherMode ? 'Create unsigned transaction' : 'Review list edit'}
                                     </Button>
                                 </div>
                             ) : null}
 
                             {isActive && active.mode === 'resolve' ? (
-                                <div style={{ marginTop: '0.5rem' }}>
+                                <div className={consoleStyles.inlineForm}>
                                     <div className={styles.hint}>Which outcome actually happened?</div>
                                     {/* Same colour-only selection as the place-bet picker, and worse
                                         consequences: this choice pays the whole pot out one way and
@@ -425,7 +473,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                             <Button key={i} variant={outcome === i ? 'primary' : 'ghost'} aria-pressed={outcome === i} onClick={() => setOutcome(i)}>{l}</Button>
                                         ))}
                                     </div>
-                                    {!isHw && !signerReady ? (
+                                    {!isWatcherMode && !isHw && !signerReady ? (
                                         <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
                                     ) : null}
                                     <p className={styles.hint}>
@@ -439,14 +487,14 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                             feedActionIndex: f.action_index, outcome,
                                         })}
                                     >
-                                        Review resolve
+                                        {isWatcherMode ? 'Create unsigned transaction' : 'Review resolve'}
                                     </Button>
                                 </div>
                             ) : null}
 
                             {isActive && active.mode === 'cancel' ? (
-                                <div style={{ marginTop: '0.5rem' }}>
-                                    {!isHw && !signerReady ? (
+                                <div className={consoleStyles.inlineForm}>
+                                    {!isWatcherMode && !isHw && !signerReady ? (
                                         <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
                                     ) : null}
                                     <p className={styles.hint}>
@@ -459,18 +507,18 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                                             feedActionIndex: f.action_index,
                                         })}
                                     >
-                                        Review cancel
+                                        {isWatcherMode ? 'Create unsigned transaction' : 'Review cancel'}
                                     </Button>
                                 </div>
                             ) : null}
                         </div>
                     );
                 })}
-            </div>
-            <p className={styles.hint}>
+            </div> : null}
+            {rows && rows.length > 0 ? <p className={styles.hint}>
                 Your record as an oracle is public and tied to this address. Leaving a market unresolved
                 refunds everyone, but it stays visible to anyone deciding whether to bet with you again.
-            </p>
+            </p> : null}
         </ListPage>,
     );
 }

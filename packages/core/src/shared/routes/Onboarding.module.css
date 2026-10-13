@@ -150,7 +150,7 @@
 .demoError {
     margin: var(--xc-space-2) 0 0;
     font-size: var(--xc-text-xs);
-    color: var(--xc-danger);
+    color: var(--xc-danger-fg);
     text-align: center;
 }
 

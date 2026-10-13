@@ -41,4 +41,52 @@ describe('PriceAlertForm', () => {
         fireEvent.click(button);
         expect(await screen.findByRole('alert')).toHaveTextContent('Save failed');
     });
+
+    it('replaces backend details with actionable save wording', async () => {
+        render(<PriceAlertForm
+            lockedChainId="bitcoin-mainnet"
+            onCreate={vi.fn().mockRejectedValue(new Error('saveAlert: vault is required'))}
+        />);
+
+        fireEvent.change(screen.getByLabelText('Target price'), { target: { value: '10' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Add alert' }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('Could not save the alert. Try again.');
+        expect(screen.queryByText(/vault is required/)).toBeNull();
+    });
+
+    it('explains an invalid zero target and does not submit it', () => {
+        const onCreate = vi.fn();
+        render(<PriceAlertForm lockedChainId="bitcoin-mainnet" onCreate={onCreate} />);
+
+        fireEvent.change(screen.getByLabelText('Target price'), { target: { value: '0' } });
+
+        expect(screen.getByRole('alert')).toHaveTextContent('Enter a price greater than zero.');
+        expect(screen.getByRole('button', { name: 'Add alert' })).toBeDisabled();
+        expect(onCreate).not.toHaveBeenCalled();
+    });
+
+    it('prefills an existing alert and submits edited values', async () => {
+        const onCreate = vi.fn().mockResolvedValue(undefined);
+        render(<PriceAlertForm
+            initialAlert={{ chainId: 'bitcoin-mainnet', direction: 'below', targetFiat: 65000 }}
+            fiatCurrency="eur"
+            onCreate={onCreate}
+            onCancel={vi.fn()}
+        />);
+
+        expect(screen.getByLabelText('Coin').value).toBe('bitcoin-mainnet');
+        expect(screen.getByLabelText('Direction').value).toBe('below');
+        expect(screen.getByLabelText('Target price').value).toBe('65000');
+
+        fireEvent.change(screen.getByLabelText('Target price'), { target: { value: '64000' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+        await waitFor(() => expect(onCreate).toHaveBeenCalledWith({
+            chainId: 'bitcoin-mainnet',
+            direction: 'below',
+            targetFiat: 64000,
+            fiatCurrency: 'eur',
+        }));
+    });
 });

@@ -37,14 +37,22 @@ const REGTEST_SETTINGS = {
     activeNetwork: 'regtest',
     fees: { 'bitcoin-regtest': { strategy: 'normal' } },
 };
-const ADDRESS = { id: 'a1', address: 'bcrt1qexample', addressType: 'p2wpkh' };
+const ADDRESS = {
+    id: 'a1',
+    address: 'bcrt1qexample',
+    addressType: 'p2wpkh',
+    derivationPath: "m/84'/0'/0'/0/0",
+    source: 'hd',
+    label: 'Daily deposits',
+};
 const BROWSER_TEXT = "Failed to execute 'write' on 'Clipboard': Document is not focused.";
 
-function renderReceive() {
+function renderReceive(overrides = {}) {
     const messaging = {
         getSettings: async () => REGTEST_SETTINGS,
         getAddressesByChain: async () => ({ 'bitcoin-regtest': [ADDRESS] }),
         getNewestAddress: async () => ADDRESS,
+        ...overrides,
     };
     return render(
         <MessagingProvider shell="web" messaging={messaging}>
@@ -72,7 +80,8 @@ async function clickWhenEnabled(name) {
 let consoleError;
 beforeEach(() => {
     showToast.mockClear();
-    qrToDataURL.mockClear();
+    qrToDataURL.mockReset();
+    qrToDataURL.mockResolvedValue('data:image/png;base64,iVBORw0KGgo=');
     consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 
@@ -162,5 +171,94 @@ describe('Receive QR copy and share toasts', () => {
         await Promise.resolve();
         expect(showToast).not.toHaveBeenCalled();
         expect(consoleError).not.toHaveBeenCalled();
+    });
+});
+
+describe('Receive address handling', () => {
+    it('switches supported address types, generates that type, shows its label, and copies its request', async () => {
+        const legacy = {
+            id: 'a2',
+            address: 'mlegacyexample',
+            addressType: 'p2pkh',
+            derivationPath: "m/44'/0'/0'/0/2",
+            source: 'hd',
+            label: 'Legacy deposits',
+        };
+        const generated = {
+            id: 'a3',
+            address: 'mnewlegacyexample',
+            addressType: 'p2pkh',
+            derivationPath: "m/44'/0'/0'/0/3",
+            source: 'hd',
+            label: 'BTC Address #4',
+        };
+        const generateReceiveAddress = vi.fn(async () => generated);
+        const writeText = vi.fn(async () => {});
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: { writeText },
+        });
+        renderReceive({
+            getAddressesByChain: async () => ({ 'bitcoin-regtest': [ADDRESS, legacy] }),
+            generateReceiveAddress,
+        });
+
+        expect(await screen.findByLabelText('Daily deposits')).toHaveValue(ADDRESS.address);
+        fireEvent.change(screen.getByLabelText('Address type'), { target: { value: 'p2pkh' } });
+        expect(await screen.findByLabelText('Legacy deposits')).toHaveValue(legacy.address);
+
+        fireEvent.click(screen.getByRole('button', { name: /Generate new address/ }));
+        await waitFor(() => expect(generateReceiveAddress).toHaveBeenCalledWith({
+            walletId: 'w1',
+            accountId: 'acct-1',
+            chainId: 'bitcoin-regtest',
+            addressType: 'p2pkh',
+        }));
+        const generatedField = await screen.findByLabelText('BTC Address #4');
+        expect(generatedField).toHaveValue(generated.address);
+
+        fireEvent.click(generatedField);
+        await waitFor(() => expect(writeText).toHaveBeenCalled());
+        expect(writeText.mock.calls.at(-1)[0]).toContain(`bitcoin:${generated.address}?`);
+        expect(qrToDataURL.mock.calls.at(-1)[0]).toContain(`bitcoin:${generated.address}?`);
+    });
+
+    it('shows amount validation and never encodes a rejected value', async () => {
+        renderReceive();
+        const amount = await screen.findByRole('textbox', { name: /^Amount/ });
+
+        fireEvent.change(amount, { target: { value: '1.123456789' } });
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('at most 8 decimal places');
+        expect(amount).toHaveValue('');
+        expect(qrToDataURL.mock.calls.some(([value]) => value.includes('1.123456789'))).toBe(false);
+
+        fireEvent.change(amount, { target: { value: '1.12345678' } });
+        await waitFor(() => expect(screen.queryByText(/at most 8 decimal places/)).toBeNull());
+        await waitFor(() => expect(qrToDataURL.mock.calls.some(
+            ([value]) => value.includes('amount=1.12345678'),
+        )).toBe(true));
+    });
+
+    it('hides an old QR while the current payment request is still rendering', async () => {
+        /** @type {Array<(value: string) => void>} */
+        const resolveQr = [];
+        qrToDataURL.mockImplementation(() => new Promise((resolve) => resolveQr.push(resolve)));
+        renderReceive();
+
+        await waitFor(() => expect(resolveQr).toHaveLength(1));
+        resolveQr[0]('data:image/png;base64,aW5pdGlhbA==');
+        expect(await screen.findByRole('img', { name: /QR code for/ })).toBeInTheDocument();
+
+        fireEvent.change(screen.getByRole('textbox', { name: /^Amount/ }), {
+            target: { value: '2' },
+        });
+        await waitFor(() => expect(resolveQr).toHaveLength(2));
+        expect(screen.queryByRole('img', { name: /QR code for/ })).toBeNull();
+        expect(screen.getByText('Rendering QR…')).toBeInTheDocument();
+
+        resolveQr[1]('data:image/png;base64,Y3VycmVudA==');
+        const currentQr = await screen.findByRole('img', { name: /QR code for/ });
+        expect(currentQr).toHaveAttribute('src', 'data:image/png;base64,Y3VycmVudA==');
     });
 });

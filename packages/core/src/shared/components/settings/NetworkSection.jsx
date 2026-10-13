@@ -21,10 +21,14 @@
 // and won't re-derive when settings.activeNetwork changes. A reload is
 // the cheapest robust path to a fully consistent post-switch UI.
 
+import { useState } from 'react';
 import { useSettings } from '../../hooks/useSettings.js';
+import { useConfirmModal } from '../../hooks/useConfirmModal.js';
 import { useMessaging } from '../../useMessaging.js';
+import { userFacingMessage } from '../../utils/userFacingMessage.js';
 import { NETWORKS, NETWORK_DEFAULT } from '../../../schemas/settings.js';
 import { ROW, SELECT, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
+import { ConfirmModal } from '../ConfirmModal.jsx';
 
 const NETWORK_OPTIONS = /** @type {const} */ ([
     { value: 'mainnet', label: 'Mainnet' },
@@ -35,6 +39,9 @@ const NETWORK_OPTIONS = /** @type {const} */ ([
 export function NetworkSection({ activeWallet } = {}) {
     const { settings, loading, error, update } = useSettings();
     const { messaging } = useMessaging();
+    const confirmDialog = useConfirmModal();
+    const [switching, setSwitching] = useState(false);
+    const [switchError, setSwitchError] = useState(/** @type {string|null} */ (null));
     const walletId = activeWallet?.id;
 
     if (loading) return <Status text="Loading…" />;
@@ -57,6 +64,16 @@ export function NetworkSection({ activeWallet } = {}) {
     const onChange = async (next) => {
         if (!NETWORKS.includes(next)) return;
         if (next === current) return;
+        const nextLabel = NETWORK_OPTIONS.find((option) => option.value === next)?.label || next;
+        const currentLabel = NETWORK_OPTIONS.find((option) => option.value === current)?.label || current;
+        const confirmed = await confirmDialog.confirm({
+            title: `Switch to ${nextLabel}?`,
+            message: `The wallet will reload and show ${nextLabel} chains. Your ${currentLabel} balances and chain settings stay unchanged.`,
+            confirmLabel: 'Switch network',
+        });
+        if (!confirmed) return;
+        setSwitchError(null);
+        setSwitching(true);
         try {
             // Prefer the host route that ALSO derives the first
             // address on each chain of the network being switched to.
@@ -71,24 +88,40 @@ export function NetworkSection({ activeWallet } = {}) {
             }
             if (typeof window !== 'undefined') window.location.reload();
         } catch (err) {
-            // eslint-disable-next-line no-console
-            console.error('activeNetwork update failed:', err);
+            setSwitchError(userFacingMessage(err, 'Could not switch networks. Try again.'));
+        } finally {
+            setSwitching(false);
         }
     };
 
     return (
-        <div style={ROW}>
-            <span style={{ color: 'var(--xc-text-muted)' }}>Network</span>
-            <select
-                value={current}
-                onChange={(e) => onChange(e.target.value)}
-                aria-label="Active network"
-                style={SELECT}
-            >
-                {options.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-            </select>
-        </div>
+        <>
+            <div style={ROW}>
+                <span style={{ color: 'var(--xc-text-muted)' }}>Network</span>
+                <select
+                    value={current}
+                    onChange={(e) => onChange(e.target.value)}
+                    aria-label="Active network"
+                    style={SELECT}
+                    disabled={switching || Boolean(confirmDialog.request)}
+                >
+                    {options.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                </select>
+            </div>
+            {switchError ? (
+                <div role="alert" style={{ color: 'var(--xc-danger, #c33)', fontSize: 'var(--xc-text-xs)' }}>
+                    {switchError}
+                </div>
+            ) : null}
+            {confirmDialog.request ? (
+                <ConfirmModal
+                    {...confirmDialog.request}
+                    onConfirm={confirmDialog.onConfirm}
+                    onCancel={confirmDialog.onCancel}
+                />
+            ) : null}
+        </>
     );
 }

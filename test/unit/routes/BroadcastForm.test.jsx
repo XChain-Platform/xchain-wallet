@@ -52,6 +52,8 @@ function droppedFields(params) {
 
 const ADDRESS = 'bc1qexampleexampleexampleexampleexampleex';
 const LTC_CHAIN = 'litecoin-regtest';
+const LEGACY_TX = '0200000001aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa03000000474830450221001111111111111111111111111111111111111111111111111111111111110121023333333333333333333333333333333333333333333333333333333333333333fdffffff0240e20100000000001976a914444444444444444444444444444444444444444488ac00000000000000001c6a1a58434841494eabababababababababababababababababababab00000000';
+const SEGWIT_TX = '02000000000102aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0000000000ffffffffbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb07000000171600145555555555555555555555555555555555555555feffffff0300f2052a01000000160014666666666666666666666666666666666666666622020000000000002251207777777777777777777777777777777777777777777777777777777777777777e70300000000000017a914888888888888888888888888888888888888888887022830450221222222222222222222222222222222222222222222222222222222222222222222222201210299999999999999999999999999999999999999999999999999999999999999990000350c00';
 const ADDRESSES = {
     'bitcoin-mainnet': [
         {
@@ -79,11 +81,13 @@ const LTC_ADDRESSES = {
 };
 
 let composeForConfirm;
+let broadcastSignedTxRequest;
 
 function mountForm(chainId = 'bitcoin-mainnet', addresses = ADDRESSES) {
     composeForConfirm = vi.fn().mockResolvedValue({
         psbt: 'aa00', encoding: 'psbt', actionString: 'ACT', version: 0,
     });
+    broadcastSignedTxRequest = vi.fn().mockResolvedValue({ txid: 'deadbeef' });
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue(addresses),
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
@@ -92,6 +96,7 @@ function mountForm(chainId = 'bitcoin-mainnet', addresses = ADDRESSES) {
         composeForConfirm,
         preflight: vi.fn().mockResolvedValue({ verdict: 'pass', findings: [] }),
         broadcastAction: vi.fn().mockResolvedValue({ txid: 'deadbeef' }),
+        broadcastSignedTxRequest,
     };
     // Anything else the form's hooks reach for (native-fee quotes, signer
     // status) answers empty rather than throwing: this suite is about the
@@ -142,7 +147,10 @@ async function composedParams() {
     return composeForConfirm.mock.calls[0][0].actionData.params;
 }
 
-beforeEach(() => { composeForConfirm = undefined; });
+beforeEach(() => {
+    composeForConfirm = undefined;
+    broadcastSignedTxRequest = undefined;
+});
 afterEach(() => cleanup());
 
 describe('BroadcastForm keeps the typed body on the wire', () => {
@@ -249,6 +257,70 @@ describe('BroadcastForm validates decimal fields before compose', () => {
 
         expect(await screen.findByText('Feed fee must be a non-negative number.')).toBeTruthy();
         expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+});
+
+describe('BroadcastForm broadcasts a pasted signed transaction safely', () => {
+    async function openRawTransaction(raw) {
+        fireEvent.click(await screen.findByLabelText('Signed transaction'));
+        fireEvent.change(screen.getByLabelText('Signed transaction hex'), { target: { value: raw } });
+        fireEvent.click(screen.getByRole('button', { name: 'Preview transaction' }));
+    }
+
+    it('ignores whitespace, validates the transaction, and previews its outputs without inventing a fee', async () => {
+        mountForm();
+        const spaced = LEGACY_TX.match(/.{1,32}/g).join(' \n');
+        await openRawTransaction(spaced);
+
+        expect(await screen.findByText(/spends 1 input and creates 2 outputs/)).toBeTruthy();
+        expect(screen.getByText(/0\.00123456 BTC to P2PKH script/)).toBeTruthy();
+        expect(screen.getByText(/Cannot be calculated from raw transaction data/)).toBeTruthy();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Broadcast transaction' }));
+        expect(await screen.findByText('Transaction broadcast')).toBeTruthy();
+        expect(broadcastSignedTxRequest).toHaveBeenCalledWith({
+            walletId: 'w',
+            chainId: 'bitcoin-mainnet',
+            txHex: LEGACY_TX,
+        });
+        expect(screen.getByRole('button', { name: 'Copy transaction ID' })).toBeTruthy();
+        expect(screen.getByRole('link', { name: 'View on explorer' }).getAttribute('href'))
+            .toBe('https://explorer.xchain.io/BTC/tx/deadbeef');
+    });
+
+    it.each([
+        ['non-hex data', '00zz', /hexadecimal characters only/],
+        ['an incomplete byte', 'abc', /complete bytes/],
+        ['a truncated transaction', LEGACY_TX.slice(0, -8), /not a complete signed transaction/],
+    ])('rejects %s before broadcast', async (_case, raw, message) => {
+        mountForm();
+        await openRawTransaction(raw);
+
+        expect(await screen.findByText(message)).toBeTruthy();
+        expect(broadcastSignedTxRequest).not.toHaveBeenCalled();
+    });
+
+    it('blocks an output type that the selected coin does not support', async () => {
+        mountForm(LTC_CHAIN, LTC_ADDRESSES);
+        await openRawTransaction(SEGWIT_TX);
+
+        expect(await screen.findByText(/Taproot output, which Litecoin does not support/)).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Broadcast transaction' })).toBeDisabled();
+        expect(broadcastSignedTxRequest).not.toHaveBeenCalled();
+    });
+
+    it('turns the node rejection into a useful reason', async () => {
+        mountForm();
+        broadcastSignedTxRequest.mockRejectedValueOnce(new Error(
+            'Transaction broadcast failed: bad-txns-inputs-missingorspent (code -25)',
+        ));
+        await openRawTransaction(LEGACY_TX);
+        await screen.findByText(/spends 1 input/);
+        fireEvent.click(screen.getByRole('button', { name: 'Broadcast transaction' }));
+
+        expect(await screen.findByText(
+            'The node rejected this transaction because an input is missing or already spent.',
+        )).toBeTruthy();
     });
 });
 

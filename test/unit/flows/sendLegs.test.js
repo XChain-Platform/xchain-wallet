@@ -316,6 +316,13 @@ describe('summaries and totals', () => {
             { tick: 'DOGE', amount: '0.00000002' },
         ])).toEqual([{ tick: 'DOGE', amount: '90000000.00000003' }]);
     });
+
+    it('keeps all 18 token decimal places in totals', () => {
+        expect(totalsByTick([
+            { tick: 'PRECISE', amount: '1.000000000000000001' },
+            { tick: 'PRECISE', amount: '0.000000000000000009' },
+        ])).toEqual([{ tick: 'PRECISE', amount: '1.00000000000000001' }]);
+    });
 });
 
 // The load-bearing check: the params this module builds, run through the REAL

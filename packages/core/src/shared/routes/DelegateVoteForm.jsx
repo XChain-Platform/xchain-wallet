@@ -92,6 +92,7 @@ export function DelegateVoteForm({ mode: initialMode = 'delegate', walletId, cha
 
     useEffect(() => {
         let cancelled = false;
+        setLoadError(null);
         Promise.all([
             messaging.getAddressesByChain(walletId),
             typeof messaging.getActiveAddresses === 'function'
@@ -107,6 +108,7 @@ export function DelegateVoteForm({ mode: initialMode = 'delegate', walletId, cha
                     return;
                 }
                 setFromAddressId(sourceId);
+                setLoadError(null);
             })
             .catch((err) => { if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.'); });
         return () => { cancelled = true; };
@@ -481,7 +483,7 @@ export function DelegateVoteForm({ mode: initialMode = 'delegate', walletId, cha
                     type="submit"
                     variant="primary"
                     loading={actionConfirm.composing}
-                    disabled={!fromAddress || !tick.trim() || (!isClear && !delegateTo.trim()) || actionConfirm.composing}
+                    disabled={actionConfirm.composing}
                 >
                     {singleEncode ? verb : 'Preview'}
                 </Button>

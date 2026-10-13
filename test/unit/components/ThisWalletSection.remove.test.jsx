@@ -24,13 +24,14 @@ vi.mock('../../../packages/core/src/shared/utils/wipeWalletStorage.js', () => ({
 const ACTIVE_WALLET = { id: 'wallet-active', name: 'Active Wallet' };
 const OTHER_WALLET = { id: 'wallet-other', name: 'Other Wallet' };
 
-function mount(walletsAfterRemoval) {
+function mount(walletsAfterRemoval, overrides = {}) {
     const reload = vi.fn();
     const messaging = {
         getSettings: vi.fn().mockResolvedValue({}),
         listConnectedSites: vi.fn().mockResolvedValue([]),
         removeWallet: vi.fn().mockResolvedValue({ removed: { wallet: 1 } }),
         listWallets: vi.fn().mockResolvedValue(walletsAfterRemoval),
+        ...overrides,
     };
 
     render(
@@ -83,6 +84,26 @@ describe('ThisWalletSection removal completion', () => {
         expect(messaging.removeWallet).toHaveBeenCalledWith({ walletId: ACTIVE_WALLET.id });
     });
 
+    it('locks confirmation and Settings navigation while removal is in flight', async () => {
+        let finishRemoval;
+        mount([OTHER_WALLET], {
+            removeWallet: vi.fn(() => new Promise((resolve) => {
+                finishRemoval = resolve;
+            })),
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Remove…' }));
+        const input = screen.getByLabelText('Confirm wallet name');
+        fireEvent.change(input, { target: { value: ACTIVE_WALLET.name } });
+        fireEvent.click(screen.getByRole('button', { name: 'Remove permanently' }));
+
+        expect(input.disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Cancel' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Back to settings' }).disabled).toBe(true);
+
+        finishRemoval({ removed: { wallet: 1 } });
+        await screen.findByText('Wallet removed.');
+    });
+
     it('selects another wallet after removing the active wallet', async () => {
         const { messaging, reload } = mount([OTHER_WALLET]);
 
@@ -110,5 +131,18 @@ describe('ThisWalletSection removal completion', () => {
         expect(reload).toHaveBeenCalledOnce();
         expect(screen.queryByRole('button', { name: 'Remove…' })).toBeNull();
         expect(screen.queryByRole('button', { name: 'Remove permanently' })).toBeNull();
+    });
+
+    it('clears the removed selection and reloads when fallback selection fails', async () => {
+        const { reload } = mount([], {
+            listWallets: vi.fn().mockRejectedValue(new Error('List failed')),
+        });
+
+        await removeActiveWallet();
+
+        expect(await screen.findByText(/could not finish switching wallets: List failed/)).toBeTruthy();
+        expect(globalThis.localStorage.getItem('xc:activeWallet')).toBeNull();
+        expect(reload).toHaveBeenCalledOnce();
+        expect(wipeWalletStorage).not.toHaveBeenCalled();
     });
 });

@@ -46,9 +46,41 @@ import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
-import { formatWithThousands } from '../utils/amountFormat.js';
+import { compareDecimalStrings, formatWithThousands } from '../utils/amountFormat.js';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+function isPositiveDecimal(value) {
+    const text = String(value).trim();
+    return /^\d+(?:\.\d+)?$/.test(text) && /[1-9]/.test(text);
+}
+
+function abiArgumentError(param, value) {
+    const name = param?.name || 'Argument';
+    const type = String(param?.type || '').toLowerCase();
+    const text = String(value ?? '').trim();
+    if (!text) return `${name} is required.`;
+    if (text.includes('|') || text.includes(';')) {
+        return `${name} cannot contain "|" or ";".`;
+    }
+    if (type === 'amount' && !isPositiveDecimal(text)) {
+        return `${name} must be a positive decimal amount.`;
+    }
+    if (type === 'number' && !/^-?(?:\d+(?:\.\d+)?|\.\d+)$/.test(text)) {
+        return `${name} must be a decimal number.`;
+    }
+    if (type === 'bool' && text !== 'true' && text !== 'false') {
+        return `${name} must be true or false.`;
+    }
+    if (type === 'json') {
+        try {
+            JSON.parse(text);
+        } catch (err) {
+            return `${name} contains invalid JSON: ${err?.message || String(err)}`;
+        }
+    }
+    return null;
+}
 
 /**
  * EXECUTE contract method form (§42.4).
@@ -404,13 +436,15 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
     const abiActive = Boolean(contractAbi) && !manualMode;
     const abiSpec = abiActive && method && contractAbi.methods[method] ? contractAbi.methods[method] : null;
     const abiParams = Array.isArray(abiSpec?.params) ? abiSpec.params : [];
-    const abiIncomplete = abiParams.length > 0 && abiParamValues.some((v) => !String(v).trim());
+    const abiArgumentErrors = abiParams.map((param, index) => abiArgumentError(param, abiParamValues[index]));
+    const abiIncomplete = abiArgumentErrors.some(Boolean);
 
     function selectAbiMethod(name) {
         setMethod(name);
         const count = ((contractAbi.methods[name] || {}).params || []).length;
         setAbiParamValues(new Array(count).fill(''));
         setParamsText('');
+        setFormError(null);
     }
 
     function setAbiParam(i, value) {
@@ -418,6 +452,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
         next[i] = value;
         setAbiParamValues(next);
         setParamsText(next.join('|'));
+        setFormError(null);
     }
 
     // Placeholder text per declared param type; purely an input hint, the
@@ -458,6 +493,23 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
             setFormError('Method name is required.');
             return;
         }
+        if (method.includes('|') || method.includes(';')) {
+            setFormError('Method name cannot contain "|" or ";".');
+            return;
+        }
+        if (abiActive) {
+            const argumentError = abiArgumentErrors.find(Boolean);
+            if (argumentError) {
+                setFormError(argumentError);
+                return;
+            }
+        } else if (paramsText.trim()) {
+            const manualParts = paramsText.split('|').map((part) => part.trim());
+            if (manualParts.some((part) => part === '')) {
+                setFormError('Arguments cannot be blank between "|" separators.');
+                return;
+            }
+        }
         // Validator forbids pipes/semicolons inside each PARAM, which
         // our split eliminates; it also forbids them at the field
         // boundaries. Nothing we can do about those except surface
@@ -476,8 +528,15 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 return;
             }
             const q = depositQuantity.trim();
-            if (!q || Number.isNaN(Number(q)) || Number(q) <= 0) {
+            if (!isPositiveDecimal(q)) {
                 setFormError('Deposit amount must be a positive number.');
+                return;
+            }
+            if (depositBalance != null && compareDecimalStrings(q, depositBalance) === 1) {
+                setFormError(
+                    `Deposit amount exceeds the ${formatWithThousands(depositBalance)} `
+                    + `${depositTick.trim().toUpperCase()} available.`,
+                );
                 return;
             }
         }
@@ -578,7 +637,10 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
 
     const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={stage === 'review'
+                ? () => { setSubmitError(null); setStage('form'); }
+                : onBack}
+            backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
                     ? 'Review contract call'
                     : `Call contract #${contractActionIndex}`}
@@ -644,11 +706,11 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                         type="submit"
                         variant="primary"
                         loading={stage === 'submitting'}
-                        disabled={
+                        disabled={stage === 'submitting' || (
                             isWatcherMode
                                 ? false
                                 : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)
-                        }
+                        )}
                     >
                         {isWatcherMode
                             ? 'Create unsigned transaction'
@@ -862,6 +924,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                             inputMode={p.type === 'number' || p.type === 'amount' ? 'decimal' : undefined}
                             value={abiParamValues[i] || ''}
                             onChange={(e) => setAbiParam(i, e.target.value)}
+                            error={abiParamValues[i] ? abiArgumentErrors[i] || undefined : undefined}
                             autoComplete="off"
                             autoCapitalize="off"
                             autoCorrect="off"
@@ -878,7 +941,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                         label="Method"
                         hint="Name of the contract method to call."
                         value={method}
-                        onChange={(e) => setMethod(e.target.value)}
+                        onChange={(e) => { setMethod(e.target.value); setFormError(null); }}
                         autoComplete="off"
                         autoCapitalize="off"
                         autoCorrect="off"
@@ -888,7 +951,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                         label="Params (optional)"
                         hint="Pipe-delimited arguments, e.g. foo|42|bc1q… Leave blank for no-arg methods."
                         value={paramsText}
-                        onChange={(e) => setParamsText(e.target.value)}
+                        onChange={(e) => { setParamsText(e.target.value); setFormError(null); }}
                         autoComplete="off"
                         autoCapitalize="off"
                         autoCorrect="off"

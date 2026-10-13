@@ -13,10 +13,10 @@
 // Three states:
 //
 //   not configured   "Set duress passphrase" reveals an inline form.
-//                    The user types a candidate twice; on submit the
-//                    passphrase is hashed with a fresh 16-byte salt
-//                    and stored in localStorage. Plaintext is never
-//                    persisted.
+//                    The user confirms the current wallet password and types
+//                    a different candidate twice; on submit the passphrase is
+//                    hashed with a fresh 16-byte salt and stored in
+//                    localStorage. Plaintext is never persisted.
 //
 //   configured       "Configured. Disable". A single click wipes the
 //                    stored hash. There is intentionally no "view"
@@ -26,13 +26,12 @@
 //   error            `<StatusMessage variant="error">` (role="alert") with a
 //                    one-click "Try again" recovery on storage-write failure.
 //
-// The row deliberately doesn't ask for the wallet password to enable
-// or disable the duress passphrase. Anyone with the wallet open is
-// already trusted enough to lock it; rotating the duress passphrase
-// is a routine operation, not a privileged one.
+// Setup verifies the current wallet password so a duress passphrase cannot
+// equal it. Disable remains available to the unlocked session.
 
 import { useRef, useState } from 'react';
 import { StatusMessage } from '@xchain-wallet/core/ui';
+import { useMessaging } from '../../useMessaging.js';
 import {
     isDuressConfigured,
     setDuressPassphrase,
@@ -41,20 +40,27 @@ import {
 import { ROW, ROW_HINT } from './_settingsPrimitives.jsx';
 
 export function DuressPassphraseRow() {
+    const { messaging } = useMessaging();
     const [configured, setConfigured] = useState(isDuressConfigured());
     const [showForm, setShowForm] = useState(false);
+    const [currentPassword, setCurrentPassword] = useState('');
     const [pass, setPass] = useState('');
     const [confirm, setConfirm] = useState('');
+    const [busy, setBusy] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
-    // Only the storage-write failure is retryable by re-running with
-    // the same inputs. The validation messages ("pick a passphrase", "do not
-    // match") are fixed by editing a field, so those leave retryRef null and
-    // the alert renders without a misleading "Try again" button.
+    // Operational failures are retryable with the same inputs. Validation and
+    // an incorrect current password require an edit, so those leave retryRef
+    // null and the alert renders without a misleading "Try again" button.
     const retryRef = useRef(/** @type {null | (() => void)} */ (null));
 
-    function attemptSet() {
+    async function attemptSet() {
+        if (busy) return;
         setError(null);
         retryRef.current = null;
+        if (currentPassword.length === 0) {
+            setError('Enter your current wallet password.');
+            return;
+        }
         if (pass.length === 0) {
             setError('Pick a passphrase.');
             return;
@@ -63,15 +69,28 @@ export function DuressPassphraseRow() {
             setError('Passphrases do not match.');
             return;
         }
+        if (pass === currentPassword) {
+            setError('Duress passphrase must differ from your wallet password.');
+            return;
+        }
+        setBusy(true);
         try {
+            await messaging.unlockWallet(currentPassword);
             setDuressPassphrase(pass);
             setConfigured(true);
             setShowForm(false);
+            setCurrentPassword('');
             setPass('');
             setConfirm('');
         } catch (err) {
-            retryRef.current = attemptSet;
-            setError(err?.message || 'Could not save the duress passphrase.');
+            if (err?.name === 'InvalidPasswordError') {
+                setError('Current wallet password is incorrect.');
+            } else {
+                retryRef.current = attemptSet;
+                setError(err?.message || 'Could not save the duress passphrase.');
+            }
+        } finally {
+            setBusy(false);
         }
     }
 
@@ -135,6 +154,16 @@ export function DuressPassphraseRow() {
                 <input
                     type="password"
                     enterKeyHint="next"
+                    value={currentPassword}
+                    onChange={(e) => { setCurrentPassword(e.target.value); if (error) setError(null); }}
+                    placeholder="Current wallet password"
+                    autoComplete="current-password"
+                    aria-label="Current wallet password"
+                    style={inputStyle}
+                />
+                <input
+                    type="password"
+                    enterKeyHint="next"
                     value={pass}
                     onChange={(e) => { setPass(e.target.value); if (error) setError(null); }}
                     placeholder="Duress passphrase"
@@ -163,17 +192,24 @@ export function DuressPassphraseRow() {
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--xc-space-2)' }}>
                     <button
                         type="button"
-                        onClick={() => { setShowForm(false); setPass(''); setConfirm(''); setError(null); }}
+                        onClick={() => {
+                            setShowForm(false);
+                            setCurrentPassword('');
+                            setPass('');
+                            setConfirm('');
+                            setError(null);
+                        }}
                         style={buttonStyle}
+                        disabled={busy}
                     >
                         Cancel
                     </button>
                     <button
                         type="submit"
                         style={{ ...buttonStyle, fontWeight: 600 }}
-                        disabled={pass.length === 0 || confirm.length === 0}
+                        disabled={busy || currentPassword.length === 0 || pass.length === 0 || confirm.length === 0}
                     >
-                        Save
+                        {busy ? 'Verifying…' : 'Save'}
                     </button>
                 </div>
             </form>

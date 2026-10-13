@@ -21,6 +21,7 @@ const wsRoot = join(here, '..', '..', '..');
 const core = join(wsRoot, 'packages', 'core');
 const ext = join(wsRoot, 'packages', 'extension');
 const web = join(wsRoot, 'packages', 'web');
+const desktop = join(wsRoot, 'packages', 'desktop');
 
 // --- 1. useReachability hook ---------------------------------------------
 
@@ -62,8 +63,10 @@ assert.ok(/overall !== ['"]degraded['"] && overall !== ['"]offline['"]/.test(ban
     'ReachabilityBanner hides when overall is normal');
 assert.ok(/role="status"/.test(banner),
     'ReachabilityBanner uses role="status" for screen readers');
-assert.ok(/Retry/.test(banner),
-    'ReachabilityBanner exposes a Retry button');
+assert.ok(/Try again/.test(banner),
+    'ReachabilityBanner exposes a plain-language retry button');
+assert.ok(/aria-atomic="true"/.test(banner),
+    'ReachabilityBanner announces each complete state message');
 
 const css = readFileSync(cssPath, 'utf8');
 assert.ok(/\.degraded\b/.test(css), 'CSS defines a .degraded variant');
@@ -82,12 +85,13 @@ assert.ok(/checkReachability,/.test(bg),
 for (const file of [
     join(ext, 'src', 'popup', 'messaging.js'),
     join(web, 'src', 'messaging.js'),
+    join(desktop, 'renderer', 'messaging.js'),
 ]) {
     const src = readFileSync(file, 'utf8');
     assert.ok(/export function checkReachabilityRequest\b/.test(src),
-        `${file.includes('extension') ? 'extension' : 'web'} messaging exports checkReachabilityRequest`);
+        `${file.includes('extension') ? 'extension' : (file.includes('desktop') ? 'desktop' : 'web')} messaging exports checkReachabilityRequest`);
     assert.ok(/sendMessage\(\s*['"]reachability\.check['"]/.test(src),
-        `${file.includes('extension') ? 'extension' : 'web'} messaging routes to "reachability.check"`);
+        `${file.includes('extension') ? 'extension' : (file.includes('desktop') ? 'desktop' : 'web')} messaging routes to "reachability.check"`);
 }
 
 // --- 4. Both shells mount the banner above the route surface ------------
@@ -95,6 +99,7 @@ for (const file of [
 for (const [name, file] of [
     ['extension', join(ext, 'src', 'popup', 'App.jsx')],
     ['web', join(web, 'src', 'App.jsx')],
+    ['desktop', join(desktop, 'renderer', 'App.jsx')],
 ]) {
     const src = readFileSync(file, 'utf8');
     assert.ok(/from ['"]@xchain-wallet\/core\/shared\/components\/ReachabilityBanner\.jsx['"]/.test(src),
@@ -102,5 +107,9 @@ for (const [name, file] of [
     assert.ok(/<ReachabilityBanner\b/.test(src),
         `${name} App renders <ReachabilityBanner />`);
 }
+
+const desktopApp = readFileSync(join(desktop, 'renderer', 'App.jsx'), 'utf8');
+assert.ok(/<ToastHost>[\s\S]*?<AppInner \/>[\s\S]*?<\/ToastHost>/.test(desktopApp),
+    'desktop mounts the notification host used by queued send feedback');
 
 console.log('reachability-banner smoke OK');

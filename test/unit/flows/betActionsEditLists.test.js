@@ -125,6 +125,10 @@ function routeHarness(feeds, settings = { walletMode: 'full' }) {
                 betParams: { version: 4, ...args.params },
             });
         },
+        buildBetActionPsbtRequest: (args) => {
+            calls.push({ method: 'buildBetActionPsbtRequest', args });
+            return Promise.resolve({ psbtHex: '70736274ff00', chainId: args.chainId });
+        },
         sendMessage: (method, args) => {
             calls.push({ method, args });
             return Promise.resolve({ txid: 'edit' });
@@ -210,15 +214,26 @@ describe('OracleConsole owner-only open-feed editor', () => {
         expect(submit.args.prebuiltPsbt).toBeTruthy();
     });
 
-    it('keeps the editor unavailable in watcher mode', async () => {
-        const { messaging } = routeHarness([openOwned], { walletMode: 'watcher' });
+    it('builds an unsigned list edit in watcher mode without a password', async () => {
+        const { messaging, calls } = routeHarness([openOwned], { walletMode: 'watcher' });
         let utils;
         await domAct(async () => {
             utils = mountConsole(messaging);
             await drain();
         });
-        expect(buttonsNamed(utils, 'Edit lists')).toHaveLength(0);
-        expect(utils.container.textContent).toContain('cannot edit, resolve, or cancel');
+        fireEvent.click(buttonsNamed(utils, 'Edit lists')[0]);
+        fireEvent.change(utils.getByLabelText('New allow-list index'), { target: { value: '81' } });
+        expect(utils.queryByLabelText('Password')).toBeNull();
+        await domAct(async () => {
+            fireEvent.click(buttonsNamed(utils, 'Create unsigned transaction')[0]);
+            await drain();
+        });
+        expect(calls.find((call) => call.method === 'buildBetActionPsbtRequest')?.args).toMatchObject({
+            builder: 'editFeedListsParams',
+            params: { feedActionIndex: '42', allowList: '81', blockList: '' },
+        });
+        expect(calls.some((call) => call.method === 'editBetFeedListsAction')).toBe(false);
+        expect(utils.getByLabelText('Unsigned transaction hex')).toBeTruthy();
     });
 });
 
