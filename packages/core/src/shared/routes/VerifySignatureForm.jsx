@@ -34,6 +34,7 @@ import {
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSupportedChains } from '../hooks/useSupportedChains.js';
+import { t } from '../../i18n/index.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -108,7 +109,7 @@ export function VerifySignatureForm({ onBack }) {
     }
 
     const header = (
-        <PageHeader onBack={onBack} backDisabled={busy} title="Verify signature" />
+        <PageHeader onBack={onBack} backDisabled={busy} title={t('verifySignature.title')} />
     );
 
     const disabledReason = address.trim().length === 0
@@ -143,9 +144,9 @@ export function VerifySignatureForm({ onBack }) {
                         fontWeight: 600,
                     }}
                 >
-                    {result === 'valid' ? 'Valid signature. Signature matches this message and address.' : null}
-                    {result === 'invalid' ? 'Invalid signature. Signature does not match this message and address.' : null}
-                    {result === 'malformed' ? 'Malformed signature. Enter a base64-encoded signature.' : null}
+                    {result === 'valid' ? t('verifySignature.valid') : null}
+                    {result === 'invalid' ? t('verifySignature.invalid') : null}
+                    {result === 'malformed' ? t('verifySignature.malformed') : null}
                 </div>
             ) : null}
         </>
@@ -167,15 +168,15 @@ export function VerifySignatureForm({ onBack }) {
                         setResult(null);
                         if (error) setError(null);
                     }}
-                    label="Chain"
+                    label={t('verifySignature.chain')}
                 />
             </div>
             <Input
-                label="Address"
+                label={t('verifySignature.address')}
                 value={address}
                 onChange={(e) => { setAddress(e.target.value); setResult(null); if (error) setError(null); }}
                 autoComplete="off"
-                placeholder="The address that produced the signature"
+                placeholder={t('verifySignature.addressPlaceholder')}
             />
             <div style={{ marginBottom: 'var(--xc-space-3)' }}>
                 <label
@@ -187,15 +188,15 @@ export function VerifySignatureForm({ onBack }) {
                         marginBottom: 4,
                     }}
                 >
-                    Message
+                    {t('verifySignature.message')}
                 </label>
                 <textarea
                     id="verify-message"
                     value={message}
                     onChange={(e) => { setMessage(e.target.value); setResult(null); if (error) setError(null); }}
-                    placeholder="The exact text that was signed"
+                    placeholder={t('verifySignature.messagePlaceholder')}
                     rows={5}
-                    aria-label="Message"
+                    aria-label={t('verifySignature.message')}
                     style={{
                         width: '100%',
                         background: 'var(--xc-bg)',
@@ -219,15 +220,15 @@ export function VerifySignatureForm({ onBack }) {
                         marginBottom: 4,
                     }}
                 >
-                    Signature
+                    {t('verifySignature.signature')}
                 </label>
                 <textarea
                     id="verify-signature"
                     value={signature}
                     onChange={(e) => { setSignature(e.target.value); setResult(null); if (error) setError(null); }}
-                    placeholder="Base64 signature blob"
+                    placeholder={t('verifySignature.signaturePlaceholder')}
                     rows={3}
-                    aria-label="Signature"
+                    aria-label={t('verifySignature.signature')}
                     style={{
                         width: '100%',
                         background: 'var(--xc-bg)',
@@ -247,7 +248,7 @@ export function VerifySignatureForm({ onBack }) {
     return (
         <Screen variant={variant} header={header}>
             <FormPage
-                label="Verify signature"
+                label={t('verifySignature.title')}
                 onSubmit={handleSubmit}
                 status={status}
                 actions={(
@@ -258,7 +259,7 @@ export function VerifySignatureForm({ onBack }) {
                         disabled={Boolean(disabledReason)}
                         aria-describedby={disabledReason ? 'verify-signature-disabled-reason' : undefined}
                     >
-                        {busy ? 'Verifying…' : 'Verify signature'}
+                        {busy ? t('verifySignature.verifying') : t('verifySignature.title')}
                     </Button>
                 )}
             >

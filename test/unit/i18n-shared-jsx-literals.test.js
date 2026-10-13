@@ -19,13 +19,24 @@ const sources = import.meta.glob(
     { query: '?raw', import: 'default', eager: true },
 );
 
+const migratedRouteFiles = new Set([
+    'VaultUnavailable.jsx',
+    'VerifySignatureForm.jsx',
+    'WalletDetails.jsx',
+    'WalletPicker.jsx',
+]);
+
 describe('shared route localization', () => {
     test('screens using t() keep user-facing JSX copy in the locale dictionary', () => {
         const violations = [];
         const missingKeys = [];
 
         for (const [file, source] of Object.entries(sources)) {
-            if (!/\bt\s*\(/.test(source)) continue;
+            const migratedRoute = migratedRouteFiles.has(file.split('/').at(-1));
+            if (!migratedRoute && !/\bt\s*\(/.test(source)) continue;
+            if (migratedRoute && !/\bt\s*\(/.test(source)) {
+                violations.push(`${file}: migrated route no longer uses t()`);
+            }
             for (const match of source.matchAll(/\bt\(\s*'([^']+)'/g)) {
                 if (!(match[1] in en)) missingKeys.push(`${file}: ${match[1]}`);
             }
