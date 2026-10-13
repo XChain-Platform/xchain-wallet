@@ -111,7 +111,7 @@ describe('MarketsList narrow layout', () => {
 
         const search = screen.getByRole('searchbox', { name: 'Search markets' });
         fireEvent.change(search, { target: { value: 'missing' } });
-        expect(screen.getByText('No matches')).toBeInTheDocument();
+        expect(screen.getByText('No results for these filters')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
         expect(search).toHaveValue('');
         expect(screen.getByText('TOKEN0')).toBeInTheDocument();
