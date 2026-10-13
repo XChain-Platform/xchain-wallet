@@ -1255,6 +1255,52 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         return decoderLib.balancesFromSdk(previewBalances.sdkShape).find((b) => b.tick === tickUpper) || null;
     }, [previewBalances.sdkShape, tick]);
 
+    const [otherAddressHasTick, setOtherAddressHasTick] = useState(
+        /** @type {boolean | null} */ (null),
+    );
+    useEffect(() => {
+        const tickUpper = tick.trim().toUpperCase();
+        if (!chainId || !fromAddress || !addressesByChain || !tickUpper
+            || previewBalances.loading || previewBalances.error || !previewBalances.sdkShape) {
+            setOtherAddressHasTick(null);
+            return undefined;
+        }
+        if (sourceBalance) {
+            const held = compareDecimalStrings(String(sourceBalance.amount || '0'), '0');
+            if (held === null || held > 0) {
+                setOtherAddressHasTick(null);
+                return undefined;
+            }
+        }
+
+        const others = (addressesByChain[chainId] || [])
+            .filter((address) => address.address !== fromAddress.address);
+        if (others.length === 0) {
+            setOtherAddressHasTick(false);
+            return undefined;
+        }
+
+        let cancelled = false;
+        setOtherAddressHasTick(null);
+        Promise.all(others.map((address) =>
+            messaging.getAddressBalances(chainId, address.address)))
+            .then((balancesByAddress) => {
+                if (cancelled) return;
+                const hasTick = balancesByAddress.some((sdkShape) => {
+                    const balance = decoderLib.balancesFromSdk(sdkShape)
+                        .find((row) => String(row.tick || '').toUpperCase() === tickUpper);
+                    if (!balance) return false;
+                    const held = compareDecimalStrings(String(balance.amount || '0'), '0');
+                    return held !== null && held > 0;
+                });
+                setOtherAddressHasTick(hasTick);
+            })
+            .catch(() => {
+                if (!cancelled) setOtherAddressHasTick(null);
+            });
+        return () => { cancelled = true; };
+    }, [chainId, fromAddress, addressesByChain, tick, previewBalances, sourceBalance, messaging]);
+
     // The asset picker is wallet-scoped, the funding is address-scoped, and this
     // is where they disagree. A WARNING rather than a refusal, deliberately: the only
     // evidence is a balance read, and a lagging or failed one must never be able to block
@@ -1272,9 +1318,12 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
             const held = compareDecimalStrings(String(sourceBalance.amount || '0'), '0');
             if (held === null || held > 0) return null;
         }
+        if (otherAddressHasTick === false) {
+            return 'This wallet has no coins to send yet. Use Receive to add funds first.';
+        }
         return `This address holds no ${tickUpper}. A send spends from one address, not from the `
             + 'whole wallet, so pick the address that holds it in the From field above.';
-    }, [previewBalances, sourceBalance, tick]);
+    }, [previewBalances, sourceBalance, tick, otherAddressHasTick]);
 
     // Max is a round trip now, so the button has to be able to say it is
     // working. The wait is one encoder call, but it is a real one.
