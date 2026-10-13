@@ -99,11 +99,15 @@
     color: color-mix(in srgb, var(--xc-on-accent) 55%, transparent);
 }
 
+/* The 24h change and the not-priced count together run past a 411px phone,
+   and an ellipsis there hid the count. Wrap instead: the summary takes a
+   second line and the sync time drops below it when space runs out. */
 .meta {
     display: flex;
+    flex-wrap: wrap;
     align-items: baseline;
     justify-content: space-between;
-    gap: var(--xc-space-2);
+    gap: var(--xc-space-1) var(--xc-space-2);
     font-size: var(--xc-text-sm);
     font-weight: 600;
     line-height: 1.2;
@@ -112,9 +116,7 @@
 .metaLeft {
     flex: 1 1 auto;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
 }
 
 .metaRight {
