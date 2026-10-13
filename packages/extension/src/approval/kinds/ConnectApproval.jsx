@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Screen, Button, ChainBadge } from '@xchain-wallet/core/ui';
+import { Screen, ListPage, Button, ChainBadge } from '@xchain-wallet/core/ui';
 import { useBackHandler } from '@xchain-wallet/core/ui/backStack.js';
 import { i18n, registry as registryLib } from '@xchain-wallet/core';
 import { useSupportedChains } from '@xchain-wallet/core/shared/hooks/useSupportedChains.js';
@@ -177,91 +177,99 @@ export function ConnectApproval({ id, payload, onReject }) {
                 </div>
             }
         >
-            <OriginIdentity origin={payload?.origin || ''} label={t('extension.approval.requestingSite')}>
-                {appName ? (
-                    <>
-                        <p className={styles.declaredNameLabel}>{t('extension.connect.declaredName')}</p>
-                        <p className={styles.declaredName}>{appName}</p>
-                    </>
-                ) : null}
-            </OriginIdentity>
-            <p className={styles.lede}>
-                {CONNECT_SITE_WARNING}
-            </p>
-
-            <section className={styles.permissions} aria-label={t('extension.connect.permissions')}>
-                <p className={styles.permissionsTitle}>{t('extension.connect.permissions')}</p>
-                <ul className={styles.permissionsList}>
-                    <li>{t('extension.connect.permission.accounts')}</li>
-                    <li>{t('extension.connect.permission.chains')}</li>
-                    <li>{t('extension.connect.permission.signing')}</li>
-                </ul>
-            </section>
-
-            <fieldset className={styles.fieldset}>
-                <legend className={styles.legend}>{t('extension.connect.chains')}</legend>
-                <p className={styles.hint}>
-                    {hasRequestedChains
-                        ? t('extension.connect.chains.requestedHint')
-                        : t('extension.connect.chains.hint')}
+            <ListPage>
+                <div className={styles.identity}>
+                    <OriginIdentity
+                        origin={payload?.origin || ''}
+                        label={t('extension.approval.requestingSite')}
+                        embedded
+                    >
+                        {appName ? (
+                            <>
+                                <p className={styles.declaredNameLabel}>{t('extension.connect.declaredName')}</p>
+                                <p className={styles.declaredName}>{appName}</p>
+                            </>
+                        ) : null}
+                    </OriginIdentity>
+                </div>
+                <p className={styles.lede}>
+                    {CONNECT_SITE_WARNING}
                 </p>
-                <ul className={styles.chainList}>
-                    {offeredChains.map((d) => {
-                        const checked = approvedChains.includes(d.id);
-                        return (
-                            <li key={d.id} className={styles.chainRow}>
-                                <label className={styles.chainLabel}>
-                                    <input
-                                        type="checkbox"
-                                        checked={checked}
-                                        onChange={() => toggleChain(d.id)}
-                                        aria-label={t('extension.connect.chains.allow', {
-                                            chain: d.displayName,
-                                            network: d.networkKind,
-                                        })}
-                                    />
-                                    <ChainBadge descriptor={d} size="sm" />
-                                </label>
-                            </li>
-                        );
-                    })}
-                </ul>
-            </fieldset>
 
-            <fieldset className={styles.fieldset}>
-                <legend className={styles.legend}>{t('accountPicker.title')}</legend>
-                {accountOptions.length > 0 ? (
-                    <>
-                        <p className={styles.hint}>
-                            {t('extension.connect.accounts.hint')}
-                        </p>
-                        <ul className={styles.chainList}>
-                            {accountOptions.map((a) => {
-                                const name = neutralizeControlText(a.name || a.id, { maxLength: 80 });
-                                return (
-                                    <li key={a.id} className={styles.chainRow}>
-                                        <label className={styles.chainLabel}>
-                                            <input
-                                                type="checkbox"
-                                                checked={approvedAccounts.includes(a.id)}
-                                                onChange={() => toggleAccount(a.id)}
-                                                aria-label={t('extension.connect.accounts.share', { name })}
-                                            />
-                                            <span>{name}</span>
-                                        </label>
-                                    </li>
-                                );
-                            })}
-                        </ul>
-                    </>
-                ) : (
+                <section className={styles.permissions} aria-label={t('extension.connect.permissions')}>
+                    <p className={styles.permissionsTitle}>{t('extension.connect.permissions')}</p>
+                    <ul className={styles.permissionsList}>
+                        <li>{t('extension.connect.permission.accounts')}</li>
+                        <li>{t('extension.connect.permission.chains')}</li>
+                        <li>{t('extension.connect.permission.signing')}</li>
+                    </ul>
+                </section>
+
+                <fieldset className={styles.fieldset}>
+                    <legend className={styles.legend}>{t('extension.connect.chains')}</legend>
                     <p className={styles.hint}>
-                        {t('extension.connect.accounts.primary')}
+                        {hasRequestedChains
+                            ? t('extension.connect.chains.requestedHint')
+                            : t('extension.connect.chains.hint')}
                     </p>
-                )}
-            </fieldset>
+                    <ul className={styles.chainList}>
+                        {offeredChains.map((d) => {
+                            const checked = approvedChains.includes(d.id);
+                            return (
+                                <li key={d.id} className={styles.chainRow}>
+                                    <label className={styles.chainLabel}>
+                                        <input
+                                            type="checkbox"
+                                            checked={checked}
+                                            onChange={() => toggleChain(d.id)}
+                                            aria-label={t('extension.connect.chains.allow', {
+                                                chain: d.displayName,
+                                                network: d.networkKind,
+                                            })}
+                                        />
+                                        <ChainBadge descriptor={d} size="sm" />
+                                    </label>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                </fieldset>
 
-            {error ? <div className={shared.error} role="alert">{error}</div> : null}
+                <fieldset className={styles.fieldset}>
+                    <legend className={styles.legend}>{t('accountPicker.title')}</legend>
+                    {accountOptions.length > 0 ? (
+                        <>
+                            <p className={styles.hint}>
+                                {t('extension.connect.accounts.hint')}
+                            </p>
+                            <ul className={styles.chainList}>
+                                {accountOptions.map((a) => {
+                                    const name = neutralizeControlText(a.name || a.id, { maxLength: 80 });
+                                    return (
+                                        <li key={a.id} className={styles.chainRow}>
+                                            <label className={styles.chainLabel}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={approvedAccounts.includes(a.id)}
+                                                    onChange={() => toggleAccount(a.id)}
+                                                    aria-label={t('extension.connect.accounts.share', { name })}
+                                                />
+                                                <span>{name}</span>
+                                            </label>
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+                        </>
+                    ) : (
+                        <p className={styles.hint}>
+                            {t('extension.connect.accounts.primary')}
+                        </p>
+                    )}
+                </fieldset>
+
+                {error ? <div className={shared.error} role="alert">{error}</div> : null}
+            </ListPage>
         </Screen>
     );
 }

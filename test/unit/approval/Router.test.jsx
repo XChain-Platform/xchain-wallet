@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@xchain-wallet/core/ui', () => ({
     Screen: ({ children }) => <main>{children}</main>,
+    ListPage: ({ children }) => <div data-testid="list-page">{children}</div>,
 }));
 vi.mock('@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx', () => ({
     RouteErrorBoundary: ({ children }) => children,
@@ -57,9 +58,10 @@ afterEach(() => {
 });
 
 describe('approval Router', () => {
-    it('reports a missing request id without messaging the background', async () => {
+    it('wraps a missing-id summary in ListPage without messaging the background', async () => {
         await renderRoute('');
 
+        expect(screen.getByTestId('list-page')).toContainElement(screen.getByRole('alert'));
         expect(screen.getByRole('alert').textContent).toBe('Missing approval id in URL.');
         expect(mocks.fetchApproval).not.toHaveBeenCalled();
     });

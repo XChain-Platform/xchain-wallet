@@ -1,3 +1,7 @@
+.identity {
+    margin-bottom: var(--xc-space-3);
+}
+
 .declaredNameLabel {
     margin: 0;
     color: var(--xc-text-muted);
@@ -25,11 +29,7 @@
 }
 
 .permissions {
-    padding: var(--xc-space-3);
     margin: 0 0 var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-bg-muted);
 }
 
 .permissionsTitle {
@@ -50,9 +50,9 @@
 }
 
 .fieldset {
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    padding: var(--xc-space-3);
+    min-width: 0;
+    border: 0;
+    padding: 0;
     margin: 0 0 var(--xc-space-3);
 }
 
@@ -62,7 +62,7 @@
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    padding: 0 var(--xc-space-1);
+    padding: 0;
 }
 
 .hint {
