@@ -30,7 +30,7 @@ async function mountWith(accounts, overrides = {}) {
                     walletId="w1"
                     activeAccountId={overrides.activeAccountId ?? null}
                     onSwitch={overrides.onSwitch || (() => {})}
-                    onAddAccount={() => {}}
+                    onAddAccount={overrides.onAddAccount || (() => {})}
                     onRenameAccount={overrides.onRenameAccount}
                     onBack={overrides.onBack || (() => {})}
                 />
@@ -87,6 +87,28 @@ describe('AccountPicker row subtitle', () => {
         expect(onRenameAccount).toHaveBeenCalledWith(account);
     });
 
+    it('marks the current account and puts add and manage actions in the footer', async () => {
+        const account = { id: 'a3', index: 2, name: 'Savings' };
+        const onAddAccount = vi.fn();
+        const onRenameAccount = vi.fn();
+        const { container } = await mountWith([account], {
+            activeAccountId: account.id,
+            onAddAccount,
+            onRenameAccount,
+        });
+
+        expect(rowFor(container, account.name)).toHaveAttribute('aria-current', 'true');
+        const add = screen.getByRole('button', { name: 'Add Account' });
+        const manage = screen.getByRole('button', { name: 'Manage account' });
+        expect(add.closest('footer')).toBeTruthy();
+        expect(manage.closest('footer')).toBeTruthy();
+
+        fireEvent.click(add);
+        fireEvent.click(manage);
+        expect(onAddAccount).toHaveBeenCalledOnce();
+        expect(onRenameAccount).toHaveBeenCalledWith(account);
+    });
+
     it('switches an inactive account and returns through the supplied route', async () => {
         const onSwitch = vi.fn();
         const onBack = vi.fn();
@@ -99,6 +121,23 @@ describe('AccountPicker row subtitle', () => {
 
         expect(onSwitch).toHaveBeenCalledWith('a2');
         expect(onBack).toHaveBeenCalledOnce();
+    });
+
+    it('closes without switching when the current account or Back is selected', async () => {
+        const account = { id: 'a2', index: 1, name: 'Savings' };
+        const onSwitch = vi.fn();
+        const onBack = vi.fn();
+        const { container } = await mountWith([account], {
+            activeAccountId: account.id,
+            onSwitch,
+            onBack,
+        });
+
+        fireEvent.click(rowFor(container, account.name));
+        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+
+        expect(onSwitch).not.toHaveBeenCalled();
+        expect(onBack).toHaveBeenCalledTimes(2);
     });
 
     it('reports a list failure without rendering an empty account state', async () => {

@@ -1,7 +1,4 @@
-/* Header for WalletPicker / AccountPicker - back arrow on the left,
-   title centered, plus icon on the right. Compact icon-only buttons
-   at the edges replace the text "← Back" / bottom "Add" row in the
-   ActionsMenu shape. */
+/* Legacy picker header helpers retained for detail routes that share this file. */
 .header {
     display: grid;
     grid-template-columns: 40px 1fr 40px;
@@ -101,11 +98,59 @@
 .rowText {
     min-width: 0;
     max-width: 100%;
+    overflow: hidden;
 }
 
 .rowText > span {
+    width: 100%;
     max-width: 100%;
-    overflow-wrap: anywhere;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.rowLabel {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+}
+
+.rowName {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.currentMark {
+    flex: 0 0 auto;
+    display: inline-flex;
+    color: var(--xc-accent-text);
+}
+
+.rowCurrent {
+    border-color: var(--xc-accent-primary);
+    background: color-mix(in srgb, var(--xc-accent-primary) 8%, var(--xc-surface-raised));
+}
+
+.footerActions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--xc-space-2);
+}
+
+.footerActions > :only-child {
+    grid-column: 1 / -1;
+}
+
+.footerActions button {
+    min-height: var(--xc-tap-min);
+}
+
+@media (max-width: 359px) {
+    .footerActions {
+        grid-template-columns: 1fr;
+    }
 }
 
 .rowMenuBtn {
