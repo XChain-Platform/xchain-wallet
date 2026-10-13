@@ -24,6 +24,7 @@ vi.mock('../../../packages/web/src/style-guide/frames.jsx', async (importOrigina
     return {
         ...frames,
         ViewFrame: ({ children }) => children,
+        ViewportFrame: ({ children }) => children,
         WidthTriptych: ({ render: renderExample }) => Object.values(frames.VIEWS).map((exampleView) => (
             <div key={exampleView.id}>{renderExample(exampleView)}</div>
         )),
@@ -91,5 +92,21 @@ describe('style-guide theme colors', () => {
             const css = readFileSync(path, 'utf8');
             expect(css, path).not.toMatch(/#[\da-f]{3,8}\b|\brgba?\(|\bhsla?\(/i);
         }
+    });
+});
+
+describe('page-template gutter guidance', () => {
+    it('previews every layout tier and marks the Screen body gutter', () => {
+        const page = readFileSync(join(styleGuideRoot, 'StyleGuidePage.jsx'), 'utf8');
+        const examples = readFileSync(join(styleGuideRoot, 'sections/templateExamples.jsx'), 'utf8');
+        const list = readFileSync(join(styleGuideRoot, 'sections/ListPageSection.jsx'), 'utf8');
+
+        expect(page).toContain("{ id: 'compact', label: 'Compact', width: 360, note: '12px gutter' }");
+        expect(page).toContain("{ id: 'rail', label: 'Rail', width: 768, note: '16px gutter' }");
+        expect(page).toContain("{ id: 'full', label: 'Full', width: 1024, note: '24px gutter' }");
+        expect(examples).toContain("insetInline: 'var(--xc-page-gutter)'");
+        expect(examples.match(/<PageGutterGuide \/>/g)).toHaveLength(4);
+        expect(list).toContain("Width 100% of Screen's content box, with no maximum.");
+        expect(list).not.toContain('48rem');
     });
 });
