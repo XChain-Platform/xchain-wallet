@@ -191,6 +191,13 @@ assert.match(
     /androidx\.core\.content\.FileProvider[\s\S]*?android:exported="false"/,
     'the FileProvider is not exported',
 );
+for (const component of manifest.matchAll(/<(activity|receiver|provider)\b([\s\S]*?)\/?>(?:\s*<\/\1>)?/g)) {
+    assert.match(
+        component[2],
+        /android:exported="(?:true|false)"/,
+        `every ${component[1]} declares android:exported explicitly`,
+    );
+}
 
 // --- 6. No Firebase / Play Services -----------------------------------
 
@@ -525,17 +532,34 @@ assert.deepEqual(
     [
         'android.permission.CAMERA',
         'android.permission.INTERNET',
+        'android.permission.POST_NOTIFICATIONS',
         'android.permission.USE_BIOMETRIC',
         'android.permission.USE_FINGERPRINT',
     ],
-    'exactly four permissions: internet, camera (QR), and the two spellings of'
-    + ' biometric. Every addition here is store-review surface (§5) and has to'
+    'exactly five permissions: internet, camera (QR), notifications, and the two'
+    + ' spellings of biometric. Every addition here is store-review surface (§5) and has to'
     + ' earn its place against a shipped feature.',
+);
+assert.doesNotMatch(
+    manifest,
+    /android\.permission\.(?:READ_EXTERNAL_STORAGE|WRITE_EXTERNAL_STORAGE|MANAGE_EXTERNAL_STORAGE)/,
+    'legacy and broad storage permissions stay out of the manifest',
 );
 assert.match(
     manifest,
     /USE_FINGERPRINT"\s*\n?\s*android:maxSdkVersion="27"/,
     'the legacy fingerprint permission is capped at API 27',
+);
+const qrScanner = readFileSync(join(wsRoot, 'packages', 'core', 'src', 'ui', 'QrScanner.jsx'), 'utf8');
+assert.match(
+    qrScanner,
+    /data-testid="qr-scanner-camera-rationale"[\s\S]*?uses the camera only to scan QR codes[\s\S]*?paste the code instead/,
+    'the JS shell explains camera use and the paste alternative before Android prompts',
+);
+assert.match(
+    qrScanner,
+    /cameraRationaleAccepted[\s\S]*?!cameraRationaleAccepted[\s\S]*?getUserMedia/,
+    'the Android rationale gate runs before getUserMedia requests camera permission',
 );
 
 // --- 10. S3: deep links, camera, ceremony -----------------------------
@@ -1430,7 +1454,7 @@ console.log(
     + ' Class 3 only, invalidated by enrollment, CryptoObject-bound, with no device-credential'
     + ' fallback; vault writes fsync before an atomic rename and refuse to overwrite an unreadable'
     + ' vault; ciphertext unreadable while the device is locked; permissions are exactly internet,'
-    + ' camera and the two biometric spellings, the legacy one capped at API 27.'
+    + ' camera, notifications and the two biometric spellings, the legacy one capped at API 27.'
     + ' S3: auto-verified App Links scoped to the same xchain.io/wallet/link/ prefix the parser unwraps'
     + ' and the iOS association claims, leaving the listings\' own /wallet/privacy/ and /wallet/support/'
     + ' URLs to the browser, plus inbound xchain and payment schemes and no'
