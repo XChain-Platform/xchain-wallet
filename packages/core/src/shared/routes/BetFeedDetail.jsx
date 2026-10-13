@@ -109,6 +109,18 @@ function trimZeros(v) {
     return s.replace(/0+$/, '').replace(/\.$/, '');
 }
 
+export function betAmountError(value, minimum) {
+    const stake = String(value ?? '').trim();
+    if (!/^\d+(\.\d+)?$/.test(stake) || compareDecimalStrings(stake, '0') !== 1) {
+        return 'Enter a positive bet amount using digits and an optional decimal point.';
+    }
+    const min = String(minimum ?? '').trim();
+    if (min && compareDecimalStrings(stake, min) === -1) {
+        return `This market requires a minimum bet of ${min}.`;
+    }
+    return null;
+}
+
 function fmtTime(unix) {
     if (unix === null || unix === undefined) return 'n/a';
     const n = Number(unix);
@@ -275,7 +287,7 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
     useEffect(() => {
         let cancelled = false;
         setProjected(null);
-        if (!feed || outcome === null || !amount) return undefined;
+        if (!feed || outcome === null || betAmountError(amount, feed.min_amount)) return undefined;
         if (typeof messaging.betProjectPayout !== 'function') return undefined;
         messaging.betProjectPayout({
             chainId,
@@ -315,7 +327,8 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
     async function placeBet() {
         if (!fromAddress) { setFormError('No address on this chain to bet from.'); return; }
         if (outcome === null) { setFormError('Choose an outcome.'); return; }
-        if (!amount.trim() || Number(amount) <= 0) { setFormError('Enter a positive bet amount.'); return; }
+        const amountProblem = betAmountError(amount, feed?.min_amount);
+        if (amountProblem) { setFormError(amountProblem); return; }
         setFormError(null);
         const from = sourceDescriptor();
         try {
@@ -574,13 +587,13 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onBa
                                 rounding warning below is really about. */}
                             {projected ? (
                                 <div className={styles.hint} data-testid="bet-projection">
-                                    {Number(projected.payout) > 0 ? (
+                                    {compareDecimalStrings(projected.payout, '0') === 1 ? (
                                         <p>
                                             If <strong>{outcomes[outcome] ?? `outcome ${outcome}`}</strong> wins, this
                                             stake pays about{' '}
-                                            <strong>{projected.payout}{feed.tick ? ` ${feed.tick}` : ''}</strong>
+                                            <strong>{trimAmountTail(projected.payout)}{feed.tick ? ` ${feed.tick}` : ''}</strong>
                                             {projected.profit !== undefined ? (
-                                                Number(projected.profit) < 0
+                                                compareDecimalStrings(projected.profit, '0') === -1
                                                     ? <>, which is {trimZeros(projected.profit).replace('-', '')} less than you staked</>
                                                     : <>, a profit of {trimZeros(projected.profit)}</>
                                             ) : null}
