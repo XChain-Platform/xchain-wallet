@@ -295,6 +295,13 @@
     justify-content: center;
 }
 
+.quickActionContent {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--xc-space-1);
+}
+
 .quickActionReason {
     color: var(--xc-text-muted);
     font-size: 0.65rem;
@@ -422,6 +429,16 @@
     padding: var(--xc-space-3) var(--xc-space-4);
 }
 
+.priceAlertCard {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+.priceAlertCard > button {
+    align-self: flex-start;
+}
+
 /* Pulls the market card up under the balance hero's box-shadow halo so
    the visible gap above the chart matches the gap to the quick-action
    row below it. Mirrors the same offset PortfolioChart uses on Home.
@@ -448,15 +465,6 @@
     margin-top: var(--xc-space-4);
     padding-top: var(--xc-space-4);
     border-top: 1px solid var(--xc-border);
-}
-
-.sectionTitle {
-    margin: 0;
-    font-size: var(--xc-text-xs);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--xc-text-muted);
-    font-weight: 600;
 }
 
 /* ───── Per-tab content ───── */
@@ -548,13 +556,6 @@
     font-size: var(--xc-text-xs);
 }
 
-.metadataHint {
-    margin: var(--xc-space-2) 0 0;
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    font-style: italic;
-}
-
 .infoStack {
     display: flex;
     flex-direction: column;
@@ -587,15 +588,6 @@
 .aboutCard > .metaBlock + .metaBlock {
     padding-top: var(--xc-space-2);
     border-top: 1px solid var(--xc-border);
-}
-
-.metaBlockTitle {
-    margin: 0;
-    font-size: var(--xc-text-xs);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--xc-text-muted);
-    font-weight: 700;
 }
 
 .pgpsigBlock {
@@ -845,6 +837,18 @@
     text-decoration: none;
     font-size: var(--xc-text-sm);
     font-weight: 600;
+}
+
+.fileLinkContent {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    width: 100%;
+    min-width: 0;
+}
+
+.fileButton > span {
+    width: 100%;
 }
 
 .fileLink:hover,
