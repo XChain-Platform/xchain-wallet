@@ -117,6 +117,7 @@ export function TokenPicker({
     const [hiddenTokens, setHiddenTokens] = useState(/** @type {string[]} */ ([]));
     const [pinnedTokens, setPinnedTokens] = useState(/** @type {string[]} */ ([]));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const [balanceReload, setBalanceReload] = useState(0);
 
     const [networkFilterLocal, setNetworkFilterLocal] = useState('all');
     const networkFilter = networkFilterProp ?? networkFilterLocal;
@@ -199,7 +200,7 @@ export function TokenPicker({
             }
         })();
         return () => { cancelled = true; };
-    }, [walletId, accountId, messaging, isReceive]);
+    }, [walletId, accountId, messaging, isReceive, balanceReload]);
 
     const allRows = useMemo(() => {
         const rowsFromBalances = buildBalanceRows(balances, chainRegistry);
@@ -276,6 +277,8 @@ export function TokenPicker({
     // with a per-component cache keyed by `${chainId}::${query}`.
     const [platformResults, setPlatformResults] = useState(/** @type {any[]} */ ([]));
     const [platformBusy, setPlatformBusy] = useState(false);
+    const [platformError, setPlatformError] = useState(/** @type {string | null} */ (null));
+    const [platformReload, setPlatformReload] = useState(0);
     const platformCacheRef = useRef(/** @type {Map<string, any>} */ (new Map()));
 
     const localKeySet = useMemo(() => {
@@ -295,11 +298,13 @@ export function TokenPicker({
         ) {
             setPlatformResults([]);
             setPlatformBusy(false);
+            setPlatformError(null);
             return undefined;
         }
         let cancelled = false;
         setPlatformResults([]);
         setPlatformBusy(true);
+        setPlatformError(null);
         const handle = setTimeout(async () => {
             const chainIds = Object.keys(addressesByChain).filter((chainId) => (
                 networkFilter === 'all' || coinFromChainId(chainId) === networkFilter
@@ -310,13 +315,12 @@ export function TokenPicker({
                     const cacheKey = `${chainId}::${query}`;
                     if (cache.has(cacheKey)) return { chainId, hits: cache.get(cacheKey) };
                     try {
-                        const hits = await messaging.searchTokens({ chainId, query });
+                        const hits = await messaging.searchTokens({ chainId, query, limit: 50 });
                         const normalized = Array.isArray(hits) ? hits : [];
                         cache.set(cacheKey, normalized);
-                        return { chainId, hits: normalized };
+                        return { chainId, hits: normalized, failed: false };
                     } catch {
-                        cache.set(cacheKey, []);
-                        return { chainId, hits: [] };
+                        return { chainId, hits: [], failed: true };
                     }
                 }));
                 if (cancelled) return;
@@ -330,6 +334,9 @@ export function TokenPicker({
                     }
                 }
                 setPlatformResults(sortByChainThenAsset(found));
+                if (lookups.some(({ failed }) => failed)) {
+                    setPlatformError('Could not search all platform tokens. Try again.');
+                }
             } finally {
                 if (!cancelled) setPlatformBusy(false);
             }
@@ -338,7 +345,16 @@ export function TokenPicker({
             cancelled = true;
             clearTimeout(handle);
         };
-    }, [isReceive, tokenQuery, kindFilter, networkFilter, addressesByChain, messaging, localKeySet]);
+    }, [isReceive, tokenQuery, kindFilter, networkFilter, addressesByChain, messaging, localKeySet, platformReload]);
+
+    const resetFilters = () => {
+        setTokenQuery('');
+        setNetworkFilter('all');
+        if (!kindLocked) setKindFilter('all');
+    };
+    const filtersActive = Boolean(tokenQuery.trim())
+        || networkFilter !== 'all'
+        || (!kindLocked && kindFilter !== 'all');
 
     const handleSelect = (tok) => onSelect?.({
         chainId: tok.chainId,
@@ -460,7 +476,13 @@ export function TokenPicker({
     const body = (
         <ListPage toolbar={toolbar}>
             {loadError ? (
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage
+                    variant="error"
+                    className={styles.error}
+                    recovery={{ label: 'Try again', onAction: () => setBalanceReload((value) => value + 1) }}
+                >
+                    {loadError}
+                </StatusMessage>
             ) : null}
             {balances === null && !loadError ? (
                 <div role="status" aria-label="Loading balances">
@@ -485,19 +507,30 @@ export function TokenPicker({
                             // avoids.
                             showChain={networkFilter === 'all'}
                         />
-                    ) : (platformResults.length === 0 && !platformBusy) ? (
+                    ) : (platformResults.length === 0 && !platformBusy && !platformError) ? (
                         <EmptyState
                             title={emptyTitle}
                             body={emptyBody}
+                            actionLabel={filtersActive ? 'Reset filters' : undefined}
+                            onAction={filtersActive ? resetFilters : undefined}
                         />
                     ) : null}
-                    {(platformResults.length > 0 || platformBusy) ? (
+                    {(platformResults.length > 0 || platformBusy || platformError) ? (
                         <div className={styles.platformSection}>
                             <SectionHeader title="On the platform" />
                             {platformBusy && platformResults.length === 0 ? (
                                 <div role="status" aria-label="Searching platform">
                                     <Skeleton.List rows={1} />
                                 </div>
+                            ) : null}
+                            {platformError ? (
+                                <StatusMessage
+                                    variant="error"
+                                    className={styles.error}
+                                    recovery={{ label: 'Try again', onAction: () => setPlatformReload((value) => value + 1) }}
+                                >
+                                    {platformError}
+                                </StatusMessage>
                             ) : null}
                             {platformResults.length > 0 ? (
                                 <BalanceList
