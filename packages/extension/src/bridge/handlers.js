@@ -1534,10 +1534,23 @@ async function walletIdForAddress(vault, addressOrId) {
     const all = await vault.addresses.list();
     const match = all.find((a) => a.id === addressOrId || a.address === addressOrId);
     if (!match) return undefined;
-    if (match.signerId) return match.signerId;
+    const softwareSource = match.source === undefined
+        || match.source === 'hd' || match.source === 'imported-wif';
+    // A software address's signerId is its wallet id, but an add-mode restore
+    // re-mints the wallet id and leaves signerId naming the source device's
+    // wallet. Trust it only when that wallet is in this vault; otherwise the
+    // account (or the importing wallet) still names the owner.
+    let wallets = null;
+    if (match.signerId) {
+        if (!softwareSource) return match.signerId;
+        wallets = await vault.wallets.list();
+        if (wallets.some((w) => w.id === match.signerId)) return match.signerId;
+    }
     if (!match.accountId) {
-        const wallets = await vault.wallets.list();
-        return wallets[0]?.id;
+        wallets ??= await vault.wallets.list();
+        const importer = wallets.find((w) => Array.isArray(w.importedKeys)
+            && w.importedKeys.some((k) => k?.addressId === match.id));
+        return importer?.id ?? wallets[0]?.id;
     }
     const account = await vault.accounts.get(match.accountId);
     return account?.walletId;
