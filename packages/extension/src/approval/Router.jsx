@@ -9,12 +9,15 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useState } from 'react';
+import { i18n } from '@xchain-wallet/core';
 import { Screen } from '@xchain-wallet/core/ui';
 import { RouteErrorBoundary } from '@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx';
 import { fetchApproval, resolveApproval } from './messaging.js';
 import { ConnectApproval } from './kinds/ConnectApproval.jsx';
 import { SignApproval } from './kinds/SignApproval.jsx';
 import styles from './approval.module.css';
+
+const { t } = i18n;
 
 function getRequestId() {
     const params = new URLSearchParams(window.location.search);
@@ -73,7 +76,7 @@ function ApprovalRoute() {
     if (!data) {
         return (
             <Screen variant="popup">
-                <p aria-live="polite">Loading approval request…</p>
+                <p aria-live="polite">{t('extension.approval.loading')}</p>
             </Screen>
         );
     }

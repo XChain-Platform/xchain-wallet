@@ -27,13 +27,14 @@
 import { Fragment, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Skeleton } from '@xchain-wallet/core/ui';
 import { RouteErrorBoundary } from '@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { i18n, registry as registryLib } from '@xchain-wallet/core';
 import { deepLinkRoute } from '../../../desktop/renderer/deepLinkRoute.js';
 import { withResolvedIssuer } from '@xchain-wallet/core/shared/utils/tokenDetailIssuer.js';
 
 // Resolves coin-code URIs (xchain:TBTC/...) to chainIds in the boot-time
 // deep-link parse; same instance pattern as the web shell's App.jsx.
 const APP_CHAIN_REGISTRY = registryLib.defaultRegistry();
+const { t } = i18n;
 import { useAutoLockPolicy } from '@xchain-wallet/core/shared/hooks/useAutoLockPolicy.js';
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
 import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';
@@ -1475,8 +1476,8 @@ function AppInner({ canOpenInTab }) {
                     <ReceivePicker
                         walletId={activeWalletId}
                         accountId={activeAccountId || undefined}
-                        title="Select coin or token"
-                        backLabel="Back to markets"
+                        title={t('extension.popup.markets.selectAsset')}
+                        backLabel={t('extension.popup.markets.back')}
                         hideOwnFilter
                         onBack={() => setUnlockedView('markets')}
                         onSelect={(sel) => {
@@ -1900,7 +1901,7 @@ function AppInner({ canOpenInTab }) {
                     <ViewPrivateKey
                         walletId={activeWalletId}
                         address={privateKeyAddress}
-                        renderQR={({ value }) => <KeyQR value={value} alt="Private key QR" />}
+                        renderQR={({ value }) => <KeyQR value={value} alt={t('extension.popup.privateKeyQr')} />}
                         onBack={() => {
                             setPrivateKeyAddress(null);
                             setUnlockedView('addresses');
@@ -2757,13 +2758,13 @@ function AppInner({ canOpenInTab }) {
                     </ScrollRestoration>
                     {messageSentNotice ? (
                         <NoticeModal
-                            title="Message sent"
+                            title={t('extension.popup.messageSent')}
                             onClose={() => setMessageSentNotice(false)}
                         />
                     ) : null}
                     {deepLinkNotice ? (
                         <NoticeModal
-                            title="Cannot open link"
+                            title={t('extension.popup.cannotOpenLink')}
                             message={deepLinkNotice}
                             onClose={() => setDeepLinkNotice(null)}
                         />
@@ -2779,6 +2780,6 @@ function AppInner({ canOpenInTab }) {
             );
         }
         default:
-            return <Loading error={`unknown state "${status.state}"`} />;
+            return <Loading error={t('extension.popup.unknownState', { state: status.state })} />;
     }
 }

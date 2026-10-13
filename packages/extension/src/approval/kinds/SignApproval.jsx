@@ -11,6 +11,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Screen, Button, Input, ChainBadge, Icon } from '@xchain-wallet/core/ui';
 import {
+    i18n,
     registry as registryLib,
     decoder as decoderLib,
 } from '@xchain-wallet/core';
@@ -52,6 +53,7 @@ import shared from '../approval.module.css';
 import styles from './SignApproval.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const { t } = i18n;
 
 // Cache of `^id` -> resolved ticker name, keyed by chain. A ticker id is
 // immutable, so entries never expire. Resolves a single compaction reference
@@ -629,7 +631,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                         onClick={onReject}
                         disabled={busy}
                     >
-                        Reject
+                        {t('extension.approval.reject')}
                     </Button>
                     {!watcherMode ? (
                         <Button
@@ -654,17 +656,17 @@ export function SignApproval({ id, kind, payload, onReject }) {
             ) : null}
 
             {origin ? (
-                <section className={styles.source} aria-label="Source">
+                <section className={styles.source} aria-label={t('extension.sign.source')}>
                     <OriginIdentity
                         origin={payload?.origin || ''}
-                        label="Requesting site"
+                        label={t('extension.approval.requestingSite')}
                         headingClassName={styles.sourceLabel}
                         originClassName={styles.sourceOrigin}
                         embedded
                         as="div"
                     >
                         {appName ? (
-                            <p className={styles.sourceApp}>The site calls itself: {appName}</p>
+                            <p className={styles.sourceApp}>{t('extension.sign.declaredName', { name: appName })}</p>
                         ) : null}
                     </OriginIdentity>
                 </section>
@@ -683,11 +685,11 @@ export function SignApproval({ id, kind, payload, onReject }) {
             />
 
             {kind === 'signIn' ? (
-                <fieldset className={shared.summary} aria-label="Sign in as">
-                    <legend className={shared.summaryLabel}>Sign in as</legend>
+                <fieldset className={shared.summary} aria-label={t('extension.sign.signInAs')}>
+                    <legend className={shared.summaryLabel}>{t('extension.sign.signInAs')}</legend>
                     {signInAddresses.length === 0 ? (
                         <p className={shared.error} role="alert">
-                            This site has no address it may sign in with.
+                            {t('extension.sign.noSignInAddress')}
                         </p>
                     ) : signInAddresses.map((c, i) => {
                         const d = chainRegistry.get(c.chainId);
@@ -791,7 +793,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                     {watcherCopy}
                 </p>
             ) : walletMode === null ? (
-                <p role="status">Checking wallet mode…</p>
+                <p role="status">{t('extension.sign.checkingWalletMode')}</p>
             ) : (
                 <form
                     id="sign-approval-form"
@@ -802,8 +804,8 @@ export function SignApproval({ id, kind, payload, onReject }) {
                     <Input
                         ref={inputRef}
                         type="password"
-                        label="Password"
-                        hint="Required to sign. Your password stays in this window."
+                        label={t('common.password')}
+                        hint={t('extension.sign.passwordHint')}
                         value={password}
                         onChange={(e) => {
                             setPassword(e.target.value);
@@ -821,7 +823,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                                 onChange={(e) => setSavePermanent(e.target.checked)}
                                 disabled={busy}
                             />
-                            <span>Always allow this site. You can revoke this in Connected sites.</span>
+                            <span>{t('extension.sign.alwaysAllow')}</span>
                         </label>
                     ) : null}
                 </form>
@@ -873,11 +875,11 @@ function SignSummary({ kind, payload, decoded, intentLoading, sourceAddress = nu
         case 'signMessage':
             return (
                 <div className={shared.summary}>
-                    <p className={shared.summaryLabel}>Message</p>
-                    <HardenedSignedText value={inner.message} warningNoun="message" />
+                    <p className={shared.summaryLabel}>{t('extension.sign.message')}</p>
+                    <HardenedSignedText value={inner.message} warningNoun={t('extension.sign.warningNoun.message')} />
                     {inner.address ? (
                         <>
-                            <p className={shared.summaryLabel} style={{ marginTop: 8 }}>Signer</p>
+                            <p className={shared.summaryLabel} style={{ marginTop: 8 }}>{t('extension.sign.signer')}</p>
                             <pre className={shared.summaryValue}>{inner.address}</pre>
                         </>
                     ) : null}
@@ -890,7 +892,7 @@ function SignSummary({ kind, payload, decoded, intentLoading, sourceAddress = nu
             // paths (when the dApp scoped the request to specific inputs).
             return Array.isArray(inner.signingPaths) && inner.signingPaths.length > 0 ? (
                 <div className={shared.summary}>
-                    <p className={shared.summaryLabel}>Signing paths</p>
+                    <p className={shared.summaryLabel}>{t('extension.sign.signingPaths')}</p>
                     <pre className={shared.summaryValue}>
                         {inner.signingPaths.join('\n')}
                     </pre>
@@ -904,11 +906,11 @@ function SignSummary({ kind, payload, decoded, intentLoading, sourceAddress = nu
             if (!decoded) {
                 return (
                     <div className={shared.summary}>
-                        <p className={shared.summaryLabel}>{actionDisplayLabel(payload?.action) || 'Action'}</p>
+                        <p className={shared.summaryLabel}>{actionDisplayLabel(payload?.action) || t('extension.sign.action')}</p>
                         <p className={shared.summaryValue} style={{ whiteSpace: 'normal' }}>
                             {intentLoading
-                                ? 'Reading this action…'
-                                : 'This action could not be described. Approve only if you know exactly what it does.'}
+                                ? t('extension.sign.action.reading')
+                                : t('extension.sign.action.unavailable')}
                         </p>
                     </div>
                 );
@@ -916,7 +918,7 @@ function SignSummary({ kind, payload, decoded, intentLoading, sourceAddress = nu
             return (
                 <>
                     <div className={shared.summary}>
-                        <p className={shared.summaryLabel}>{actionDisplayLabel(payload?.action) || 'Action'}</p>
+                        <p className={shared.summaryLabel}>{actionDisplayLabel(payload?.action) || t('extension.sign.action')}</p>
                         <p
                             className={shared.summaryValue}
                             style={{ whiteSpace: 'normal', fontFamily: 'var(--xc-font-sans)', fontSize: 13, lineHeight: 1.4 }}
@@ -929,14 +931,14 @@ function SignSummary({ kind, payload, decoded, intentLoading, sourceAddress = nu
                             asks for approval has to name it. */}
                         {sourceAddress ? (
                             <>
-                                <p className={shared.summaryLabel} style={{ marginTop: 8 }}>From</p>
+                                <p className={shared.summaryLabel} style={{ marginTop: 8 }}>{t('extension.sign.from')}</p>
                                 <pre className={shared.summaryValue} data-testid="sign-approval-source">{sourceAddress}</pre>
                             </>
                         ) : null}
                         {decoded.details.length > 0 ? (
                             <details className={styles.details}>
                                 <summary className={styles.detailsToggle}>
-                                    Details ({decoded.details.length})
+                                    {t('extension.sign.details', { count: decoded.details.length })}
                                 </summary>
                                 <dl className={styles.detailsList}>
                                     {decoded.details.map((row) => (
@@ -962,13 +964,13 @@ function SignSummary({ kind, payload, decoded, intentLoading, sourceAddress = nu
         case 'signIn':
             return (
                 <div className={shared.summary}>
-                    <p className={shared.summaryLabel}>Sign in to</p>
+                    <p className={shared.summaryLabel}>{t('extension.sign.signInTo')}</p>
                     <HardenedSignedText
                         value={inner.appId || payload?.origin || ''}
-                        warningNoun="sign-in"
+                        warningNoun={t('extension.sign.warningNoun.signIn')}
                     />
-                    <p className={shared.summaryLabel} style={{ marginTop: 8 }}>One-time code</p>
-                    <HardenedSignedText value={inner.nonce} warningNoun="sign-in" />
+                    <p className={shared.summaryLabel} style={{ marginTop: 8 }}>{t('extension.sign.oneTimeCode')}</p>
+                    <HardenedSignedText value={inner.nonce} warningNoun={t('extension.sign.warningNoun.signIn')} />
                 </div>
             );
         default:
@@ -984,7 +986,7 @@ function HardenedSignedText({ value, warningNoun }) {
             <pre className={shared.summaryValue}>{display}</pre>
             {display !== original ? (
                 <p className={styles.textWarning}>
-                    Control characters are displayed safely. The original {warningNoun} text is what you will sign.
+                    {t('extension.sign.controlCharacters', { noun: warningNoun })}
                 </p>
             ) : null}
         </>
@@ -1050,7 +1052,7 @@ function coSignPolicySentence(policyReason) {
 function CoSignTechnicalDetails({ testId, text }) {
     return (
         <details className={styles.details} data-testid={testId}>
-            <summary className={styles.detailsToggle}>Technical details</summary>
+            <summary className={styles.detailsToggle}>{t('extension.sign.technicalDetails')}</summary>
             <code style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{text}</code>
         </details>
     );
@@ -1066,8 +1068,8 @@ function CoSignIntentSummary({ loading, error, preview }) {
     if (loading) {
         return (
             <div className={shared.summary}>
-                <p className={shared.summaryLabel}>Co-sign request</p>
-                <p className={shared.summaryValue} style={{ whiteSpace: 'normal' }}>Decoding request…</p>
+                <p className={shared.summaryLabel}>{t('extension.sign.coSignRequest')}</p>
+                <p className={shared.summaryValue} style={{ whiteSpace: 'normal' }}>{t('extension.sign.decodingRequest')}</p>
             </div>
         );
     }
@@ -1077,7 +1079,7 @@ function CoSignIntentSummary({ loading, error, preview }) {
                 <ul className={styles.warnings} role="alert">
                     <li>
                         {coSignErrorSentence(error)}
-                        {' '}Only approve it if you trust the source.
+                        {' '}{t('extension.sign.trustSource')}
                     </li>
                 </ul>
                 {error && isDeveloperMessage(error) ? (
@@ -1092,15 +1094,15 @@ function CoSignIntentSummary({ loading, error, preview }) {
 
     return (
         <div className={shared.summary}>
-            <p className={shared.summaryLabel}>Agent account</p>
+            <p className={shared.summaryLabel}>{t('extension.sign.agentAccount')}</p>
             <p className={shared.summaryValue} style={{ whiteSpace: 'normal' }}>
-                {acct.name || 'Co-signer account'}
+                {acct.name || t('extension.sign.coSignerAccount')}
                 {acct.aggregateAddress ? ` (${acct.aggregateAddress})` : ''}
             </p>
 
             {preview.decodeOk ? (
                 <>
-                    <p className={shared.summaryLabel}>Action</p>
+                    <p className={shared.summaryLabel}>{t('extension.sign.action')}</p>
                     <p className={shared.summaryValue} style={{ whiteSpace: 'normal' }}>
                         {actionDisplayLabel(preview.action) || preview.action}
                         {preview.amount !== undefined ? ` ${preview.amount}` : ''}
@@ -1108,7 +1110,7 @@ function CoSignIntentSummary({ loading, error, preview }) {
                     </p>
                     {dests.length > 0 ? (
                         <>
-                            <p className={shared.summaryLabel}>To</p>
+                            <p className={shared.summaryLabel}>{t('extension.sign.to')}</p>
                             <p className={shared.summaryValue} style={{ whiteSpace: 'normal' }}>{dests.join(', ')}</p>
                         </>
                     ) : null}
@@ -1129,7 +1131,7 @@ function CoSignIntentSummary({ loading, error, preview }) {
                     <ul className={styles.warnings} role="alert">
                         <li>
                             {coSignPolicySentence(preview.policyReason)}
-                            {' '}The co-signer will refuse it even if you approve.
+                            {' '}{t('extension.sign.policyRefusal')}
                         </li>
                     </ul>
                     {preview.policyReason ? (
@@ -1139,7 +1141,7 @@ function CoSignIntentSummary({ loading, error, preview }) {
             ) : null}
             {preview.decodeOk && preview.policyOk && preview.needsConfirmation ? (
                 <p className={shared.summaryValue} style={{ whiteSpace: 'normal' }}>
-                    Above the policy confirm-threshold: review carefully before approving.
+                    {t('extension.sign.confirmThreshold')}
                 </p>
             ) : null}
         </div>

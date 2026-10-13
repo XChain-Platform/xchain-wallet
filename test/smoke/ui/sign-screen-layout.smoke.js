@@ -38,6 +38,7 @@ const signSrc = readFileSync(signPath, 'utf8');
 const signCss = readFileSync(signCssPath, 'utf8');
 const sendSrc = readFileSync(sendPath, 'utf8');
 const sendCss = readFileSync(sendCssPath, 'utf8');
+const { en } = await import(join(wsRoot, 'packages', 'core', 'src', 'i18n', 'locales', 'en', 'index.js'));
 
 // --- 1. Approve-button label semantics (SignApproval) -------------------
 
@@ -130,9 +131,10 @@ assert.match(
 // misrepresent the original bytes that remain in the signing payload.
 assert.match(
     signSrc,
-    /summaryLabel[^>]*>One-time code</,
-    'signIn summary labels the challenge "One-time code"',
+    /t\('extension\.sign\.oneTimeCode'\)/,
+    'signIn summary translates the challenge label',
 );
+assert.equal(en['extension.sign.oneTimeCode'], 'One-time code', 'English challenge label stays exact');
 assert.doesNotMatch(
     signSrc,
     /summaryLabel[^>]*>Nonce</,
@@ -140,17 +142,19 @@ assert.doesNotMatch(
 );
 assert.match(
     signSrc,
-    /<HardenedSignedText value=\{inner\.nonce\} warningNoun="sign-in" \/>/,
+    /<HardenedSignedText value=\{inner\.nonce\} warningNoun=\{t\('extension\.sign\.warningNoun\.signIn'\)\} \/>/,
     'the challenge value renders through signed-text hardening',
 );
+assert.equal(en['extension.sign.warningNoun.signIn'], 'sign-in', 'English warning noun stays exact');
 
 // --- 2. dApp Source block (SignApproval) --------------------------------
 
 assert.match(
     signSrc,
-    /<section className=\{styles\.source\} aria-label="Source">/,
+    /<section className=\{styles\.source\} aria-label=\{t\('extension\.sign\.source'\)\}>/,
     'Source block uses a labelled <section>',
 );
+assert.equal(en['extension.sign.source'], 'Source', 'English Source label stays exact');
 assert.match(
     signSrc,
     /\{origin \?/,
@@ -179,9 +183,10 @@ assert.match(
 );
 assert.match(
     signSrc,
-    /Details \(\{decoded\.details\.length\}\)/,
+    /t\('extension\.sign\.details', \{ count: decoded\.details\.length \}\)/,
     'toggle shows the row count',
 );
+assert.equal(en['extension.sign.details'], 'Details ({count})', 'English details label stays exact');
 
 // --- 4. SignApproval CSS hooks -----------------------------------------
 

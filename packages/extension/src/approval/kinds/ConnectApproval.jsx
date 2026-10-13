@@ -10,7 +10,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Screen, Button, ChainBadge } from '@xchain-wallet/core/ui';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { i18n, registry as registryLib } from '@xchain-wallet/core';
 import { useSupportedChains } from '@xchain-wallet/core/shared/hooks/useSupportedChains.js';
 import { neutralizeControlText } from '@xchain-wallet/core/shared/utils/textHardening.js';
 import { OriginIdentity } from '@xchain-wallet/core/shared/components/OriginIdentity.jsx';
@@ -19,6 +19,7 @@ import shared from '../approval.module.css';
 import styles from './ConnectApproval.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const { t } = i18n;
 
 /**
  * Connect approval (§43.3 / §43.4): grants a dApp the right to call
@@ -153,13 +154,13 @@ export function ConnectApproval({ id, payload, onReject }) {
             variant="popup"
             header={
                 <div className={shared.header}>
-                    <span className={shared.title}>Connection request</span>
+                    <span className={shared.title}>{t('extension.connect.title')}</span>
                 </div>
             }
             footer={
                 <div className={shared.footer}>
                     <Button variant="danger" block onClick={onReject} disabled={busy}>
-                        Reject
+                        {t('extension.approval.reject')}
                     </Button>
                     <Button
                         variant="primary"
@@ -168,38 +169,38 @@ export function ConnectApproval({ id, payload, onReject }) {
                         loading={busy}
                         disabled={approvedChains.length === 0 || accountsMissing}
                     >
-                        Connect
+                        {t('extension.connect.approve')}
                     </Button>
                 </div>
             }
         >
-            <OriginIdentity origin={payload?.origin || ''} label="Requesting site">
+            <OriginIdentity origin={payload?.origin || ''} label={t('extension.approval.requestingSite')}>
                 {appName ? (
                     <>
-                        <p className={styles.declaredNameLabel}>The site calls itself</p>
+                        <p className={styles.declaredNameLabel}>{t('extension.connect.declaredName')}</p>
                         <p className={styles.declaredName}>{appName}</p>
                     </>
                 ) : null}
             </OriginIdentity>
             <p className={styles.lede}>
-                This site wants to connect to your wallet.
+                {t('extension.connect.lede')}
             </p>
 
-            <section className={styles.permissions} aria-label="Requested permissions">
-                <p className={styles.permissionsTitle}>Requested permissions</p>
+            <section className={styles.permissions} aria-label={t('extension.connect.permissions')}>
+                <p className={styles.permissionsTitle}>{t('extension.connect.permissions')}</p>
                 <ul className={styles.permissionsList}>
-                    <li>View the accounts you select, including their addresses and balances</li>
-                    <li>Use only the chains you select below</li>
-                    <li>Ask separately before signing any message or transaction</li>
+                    <li>{t('extension.connect.permission.accounts')}</li>
+                    <li>{t('extension.connect.permission.chains')}</li>
+                    <li>{t('extension.connect.permission.signing')}</li>
                 </ul>
             </section>
 
             <fieldset className={styles.fieldset}>
-                <legend className={styles.legend}>Chains</legend>
+                <legend className={styles.legend}>{t('extension.connect.chains')}</legend>
                 <p className={styles.hint}>
                     {hasRequestedChains
-                        ? 'Narrow the chains this site requested. You can change this later.'
-                        : 'Pick which chains this site can see. You can change this later.'}
+                        ? t('extension.connect.chains.requestedHint')
+                        : t('extension.connect.chains.hint')}
                 </p>
                 <ul className={styles.chainList}>
                     {offeredChains.map((d) => {
@@ -211,7 +212,10 @@ export function ConnectApproval({ id, payload, onReject }) {
                                         type="checkbox"
                                         checked={checked}
                                         onChange={() => toggleChain(d.id)}
-                                        aria-label={`Allow ${d.displayName} ${d.networkKind}`}
+                                        aria-label={t('extension.connect.chains.allow', {
+                                            chain: d.displayName,
+                                            network: d.networkKind,
+                                        })}
                                     />
                                     <ChainBadge descriptor={d} size="sm" />
                                 </label>
@@ -222,11 +226,11 @@ export function ConnectApproval({ id, payload, onReject }) {
             </fieldset>
 
             <fieldset className={styles.fieldset}>
-                <legend className={styles.legend}>Accounts</legend>
+                <legend className={styles.legend}>{t('extension.connect.accounts')}</legend>
                 {accountOptions.length > 0 ? (
                     <>
                         <p className={styles.hint}>
-                            Pick which accounts this site can see.
+                            {t('extension.connect.accounts.hint')}
                         </p>
                         <ul className={styles.chainList}>
                             {accountOptions.map((a) => {
@@ -238,7 +242,7 @@ export function ConnectApproval({ id, payload, onReject }) {
                                                 type="checkbox"
                                                 checked={approvedAccounts.includes(a.id)}
                                                 onChange={() => toggleAccount(a.id)}
-                                                aria-label={`Share ${name}`}
+                                                aria-label={t('extension.connect.accounts.share', { name })}
                                             />
                                             <span>{name}</span>
                                         </label>
@@ -249,7 +253,7 @@ export function ConnectApproval({ id, payload, onReject }) {
                     </>
                 ) : (
                     <p className={styles.hint}>
-                        This site will see your wallet's primary account.
+                        {t('extension.connect.accounts.primary')}
                     </p>
                 )}
             </fieldset>

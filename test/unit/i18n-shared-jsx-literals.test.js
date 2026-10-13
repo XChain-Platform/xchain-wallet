@@ -14,13 +14,26 @@ import { describe, expect, test } from 'vitest';
 import { en } from '../../packages/core/src/i18n/locales/en/index.js';
 import { findViolations } from '../../tools/eslint/rules/no-jsx-literal-strings.js';
 
-const sources = import.meta.glob(
-    '../../packages/core/src/shared/**/*.jsx',
+const extensionSources = import.meta.glob(
+    '../../packages/extension/src/**/*.jsx',
     { query: '?raw', import: 'default', eager: true },
 );
+const sources = {
+    ...import.meta.glob(
+        '../../packages/core/src/shared/**/*.jsx',
+        { query: '?raw', import: 'default', eager: true },
+    ),
+    ...extensionSources,
+};
 
-describe('shared route localization', () => {
+describe('shared route and extension localization', () => {
     test('screens using t() keep user-facing JSX copy in the locale dictionary', () => {
+        expect(Object.keys(extensionSources)).toEqual(expect.arrayContaining([
+            '../../packages/extension/src/approval/Router.jsx',
+            '../../packages/extension/src/approval/kinds/ConnectApproval.jsx',
+            '../../packages/extension/src/approval/kinds/SignApproval.jsx',
+            '../../packages/extension/src/popup/App.jsx',
+        ]));
         const violations = [];
         const missingKeys = [];
 
