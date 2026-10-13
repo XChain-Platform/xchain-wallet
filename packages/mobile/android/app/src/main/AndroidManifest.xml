@@ -127,6 +127,7 @@
         -->
         <receiver
             android:name="androidx.profileinstaller.ProfileInstallReceiver"
+            android:exported="false"
             tools:node="remove" />
 
         <provider
@@ -144,6 +145,13 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!--
+      Android 13+ notification delivery. The shared settings screen requests
+      this runtime permission only when the user chooses to enable desktop
+      notifications.
+    -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!--
       Biometric unlock (S2). Both are normal-protection: granted at

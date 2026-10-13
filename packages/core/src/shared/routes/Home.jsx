@@ -18,6 +18,7 @@ import { useSettings } from '../hooks/useSettings.js';
 import { useProofVerification } from '../hooks/useProofVerification.js';
 import { useEscrowedBalances } from '../hooks/useEscrowedBalances.js';
 import { isNavigatorOnline, useOnlineStatus } from '../hooks/useOnlineStatus.js';
+import { useWalletFilters } from '../hooks/useWalletFilters.js';
 import { HomeTabs } from '../components/HomeTabs.jsx';
 import { buildBalanceRows, detectSpamCandidates } from '../components/BalanceList.jsx';
 import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
@@ -30,11 +31,18 @@ import { PanicFreezeNotice } from '../safety/PanicFreezeNotice.jsx';
 import { ResumeConfirmCard } from '../components/ResumeConfirmCard.jsx';
 import { Settings } from './Settings.jsx';
 import { AddAddressModal } from './AddAddressModal.jsx';
-import { WALLET_MODE_DEFAULT } from '../../schemas/settings.js';
+import {
+    pinnedTokensForWallet,
+    pinnedTokensPatchForWallet,
+    WALLET_MODE_DEFAULT,
+} from '../../schemas/settings.js';
 import { humanizeError } from '../utils/humanizeError.js';
+import { writeActiveWallet } from '../utils/activeWalletMemory.js';
 import { loadDisplayBalances } from '../utils/displayBalances.js';
+import { readBalanceCache, writeBalanceCache } from '../utils/balanceCache.js';
 import { explorerReadFailure, rateLimitedMessage } from '../../sdk/explorerErrors.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
+import { startVisibleInterval } from '../utils/visibleInterval.js';
 import styles from './Home.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 import {
@@ -168,6 +176,7 @@ const { BALANCE_POLL_INTERVAL_MS } = flowsLib;
  * @param {string | null} [props.activeAccountId]          App-level active BIP44 account; when supplied, Home is read-only with respect to account selection
  * @param {(accountId: string) => void} [props.onSwitchAccount]   App-level setter for the active account (still used internally if a future inline picker lands)
  * @param {() => void} [props.onLockWallet]   locks the wallet; only shells with no header (the extension popup and side panel) pass it, and Home then shows a lock button
+ * @param {number} [props.resumeKey]          changes once per unlocked native-app resume
  *
  * §40 actions are NOT a Home prop. Home used to accept an `extraActions`
  * array "for the small-mode drawer" and never rendered it, so the web
@@ -178,7 +187,7 @@ const { BALANCE_POLL_INTERVAL_MS } = flowsLib;
  * "More actions" row (MenuRoute) or the command palette. Add entries
  * there, not here.
  */
-export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onExchange, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onSignPsbt, onSignMessage, onVerifySignature, activeWalletId: activeWalletIdProp, activeAccountId: activeAccountIdProp, onSwitchAccount, onSelectToken, onSelectEntry, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp, tokenQuery: tokenQueryProp, onTokenQueryChange: onTokenQueryChangeProp, onCommandPalette, onOpenSettings, onLockWallet, demoBannerInHeader = false }) {
+export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onExchange, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onSignPsbt, onSignMessage, onVerifySignature, activeWalletId: activeWalletIdProp, activeAccountId: activeAccountIdProp, onSwitchAccount, onSelectToken, onSelectEntry, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp, tokenQuery: tokenQueryProp, onTokenQueryChange: onTokenQueryChangeProp, onCommandPalette, onOpenSettings, onLockWallet, resumeKey = 0, demoBannerInHeader = false }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
@@ -218,24 +227,53 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // Unread-message count for the active wallet + account, surfaced as a Home
     // alert and a dot on the Messaging button (see useMessagingUnread).
     const messagingUnread = useMessagingUnread(activeWalletId, activeAccountId);
+    const initialBalanceCacheRef = useRef(/** @type {{ value: ReturnType<typeof readBalanceCache> } | undefined} */ (undefined));
+    if (!initialBalanceCacheRef.current) {
+        initialBalanceCacheRef.current = {
+            value: readBalanceCache(activeWalletId, activeAccountId),
+        };
+    }
+    const initialBalanceCache = initialBalanceCacheRef.current.value;
     const [balances, setBalances] = useState(
-        /** @type {Record<string, any[]> | null} */ (null),
+        /** @type {Record<string, any[]> | null} */ (initialBalanceCache?.balances || null),
     );
     const balancesRef = useRef(/** @type {Record<string, any[]> | null} */ (null));
     balancesRef.current = balances;
-    const balancesScopeRef = useRef(/** @type {string | null} */ (null));
+    // Which wallet:account pair the balances on screen belong to; saved rows count.
+    const balancesScopeRef = useRef(/** @type {string | null} */ (
+        initialBalanceCache ? `${activeWalletId}:${activeAccountId || ''}` : null
+    ));
     // Active (operating) address per chain. The headline balance per coin
     // reflects this address only (not the sum across all addresses).
     const [activeByChain, setActiveByChain] = useState(
-        /** @type {Record<string, { id: string, address: string }>} */ ({}),
+        /** @type {Record<string, { id: string, address: string }>} */ (initialBalanceCache?.activeByChain || {}),
     );
     // Cluster G FOLLOWUP 5: Unix-ms timestamp of the most recent
     // successful balance fetch; null until the first one completes.
     // Threaded into HomeTabs → StalenessLabel so the user can tell
     // when the balance view was last live.
     const [balancesFetchedAt, setBalancesFetchedAt] = useState(
-        /** @type {number | null} */ (null),
+        /** @type {number | null} */ (initialBalanceCache?.fetchedAt ?? null),
     );
+    // Cached rows stay visible while their live replacement is in flight.
+    // This flag distinguishes that refresh from a first load with no data.
+    const [cachedBalancesUpdating, setCachedBalancesUpdating] = useState(
+        Boolean(initialBalanceCache) && isNavigatorOnline(),
+    );
+    const balanceScopeRef = useRef({ walletId: activeWalletId, accountId: activeAccountId || null });
+    const balanceScopeChanged = balanceScopeRef.current.walletId !== activeWalletId
+        || balanceScopeRef.current.accountId !== (activeAccountId || null);
+    if (balanceScopeChanged) {
+        // React discards this render and retries with the next scope's state,
+        // so a wallet switch never commits one frame of the prior wallet.
+        balanceScopeRef.current = { walletId: activeWalletId, accountId: activeAccountId || null };
+        const scopedCache = readBalanceCache(activeWalletId, activeAccountId);
+        setBalances(scopedCache?.balances || null);
+        setActiveByChain(scopedCache?.activeByChain || {});
+        setBalancesFetchedAt(scopedCache?.fetchedAt ?? null);
+        setCachedBalancesUpdating(Boolean(scopedCache) && isNavigatorOnline());
+        balancesScopeRef.current = scopedCache ? `${activeWalletId}:${activeAccountId || ''}` : null;
+    }
     // What every row consumer reads: the balances plus each shown address's
     // open-offer escrow, so a token escrowed in full keeps its row.
     const balancesView = useEscrowedBalances({ balances, activeByChain, balancesFetchedAt, messaging });
@@ -278,20 +316,16 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // rather than counting down a number the wallet made up.
     const [rateLimitNamedSeconds, setRateLimitNamedSeconds] = useState(false);
     const [alertsOpen, setAlertsOpen] = useState(false);
-    // Network filter can be controlled by the parent shell (web AppHeader
-    // owns the toolbar filter button) or self-managed when the parent
-    // doesn't pass props (popup renders its own filter button inline).
-    const [networkFilterLocal, setNetworkFilterLocal] = useState('all');
-    const networkFilter = networkFilterProp ?? networkFilterLocal;
-    const setNetworkFilter = onNetworkFilterChangeProp ?? setNetworkFilterLocal;
+    // The full shell controls these values so its header and Home share one
+    // model. Compact shells use the same per-wallet model here directly.
+    const walletFilters = useWalletFilters(activeWalletId);
+    const networkFilter = networkFilterProp ?? walletFilters.networkFilter;
+    const setNetworkFilter = onNetworkFilterChangeProp ?? walletFilters.setNetworkFilter;
     // BTC-only gate: multisig is Bitcoin-only at launch (spec 10.3), so the
     // multisig badge data only flows when Bitcoin is in view.
     const isBtc = networkFilter === 'bitcoin' || networkFilter === 'all';
-    // Free-text token filter follows the same parent-vs-local pattern as
-    // the network filter; popped into the header's filter popover.
-    const [tokenQueryLocal, setTokenQueryLocal] = useState('');
-    const tokenQuery = tokenQueryProp ?? tokenQueryLocal;
-    const setTokenQuery = onTokenQueryChangeProp ?? setTokenQueryLocal;
+    const tokenQuery = tokenQueryProp ?? walletFilters.tokenQuery;
+    const setTokenQuery = onTokenQueryChangeProp ?? walletFilters.setTokenQuery;
     const [settingsOpen, setSettingsOpen] = useState(false);
 
     const [homeMoreOpen, setHomeMoreOpen] = useState(false);
@@ -384,9 +418,11 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     useEffect(() => {
         let cancelled = false;
         if (typeof messaging?.getSettings !== 'function') return undefined;
+        setPinnedTokens([]);
         messaging.getSettings().then((s) => {
             if (cancelled) return;
-            const pins = Array.isArray(s?.pinnedTokens) ? s.pinnedTokens.filter((k) => typeof k === 'string') : [];
+            const pins = pinnedTokensForWallet(s, activeWalletId)
+                .filter((k) => typeof k === 'string');
             const hides = Array.isArray(s?.hiddenTokens) ? s.hiddenTokens.filter((k) => typeof k === 'string') : [];
             setPinnedTokens(pins);
             setHiddenTokens(hides);
@@ -394,7 +430,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             setShowHideAffordance(s?.showHideAffordance === true);
         }).catch(() => { /* tolerate missing settings; empty pin list is a fine default */ });
         return () => { cancelled = true; };
-    }, [messaging]);
+    }, [messaging, activeWalletId]);
 
     const handleTogglePin = useCallback((key, nextPinned) => {
         if (typeof key !== 'string' || !key) return;
@@ -404,11 +440,13 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             else set.delete(key);
             const next = Array.from(set);
             if (typeof messaging?.updateSettings === 'function') {
-                messaging.updateSettings({ pinnedTokens: next }).catch(() => { /* best-effort */ });
+                messaging.updateSettings(
+                    pinnedTokensPatchForWallet(activeWalletId, next),
+                ).catch(() => { /* best-effort */ });
             }
             return next;
         });
-    }, [messaging]);
+    }, [messaging, activeWalletId]);
 
     // §34.2 Balances context shortcuts: p / h / o act on the balance row that
     // currently has keyboard focus (rows are buttons, so Tab reaches them and
@@ -582,11 +620,18 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         isCancelled,
         reportError = false,
     }) => {
+        // The saved copy of this pair's balances; only a clean fresh read
+        // replaces it. activeForCache starts from the saved active addresses.
+        let activeForCache = readBalanceCache(walletId, accountId)?.activeByChain || {};
+        let freshBalances = null;
+        let freshFetchedAt = null;
+        let freshBalancesCacheable = false;
         // A browser offline event is definitive enough to avoid starting work
         // that cannot finish. In particular, keep the last successful balance
         // state on screen instead of replacing it with a loading skeleton.
         if (!isNavigatorOnline()) {
             pollThrottleRef.current.fail();
+            if (!isCancelled()) setCachedBalancesUpdating(false);
             return;
         }
         if (reset) {
@@ -605,9 +650,12 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 setBalances(null);
                 setBalancesFetchedAt(null);
                 setActiveByChain({});
+                setCachedBalancesUpdating(false);
                 setMultisig(null);
                 setPendingAirdrops([]);
                 setConfirmSessions([]);
+            } else {
+                setCachedBalancesUpdating(isNavigatorOnline());
             }
             setLoadError(null);
         }
@@ -641,13 +689,17 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         variant: 'error',
                     });
                 } else {
+                    freshBalancesCacheable = !wait;
                     // Fresh balances restart the re-poll window, whichever
                     // path asks for them.
                     pollThrottleRef.current.succeed();
                     balancesScopeRef.current = `${walletId}:${accountId || ''}`;
                     setBalances(b);
                     setBalancesFetchedAt(Date.now());
+                    freshBalances = b;
+                    freshFetchedAt = Date.now();
                 }
+                setCachedBalancesUpdating(false);
                 if (wait && !refreshHasFailure) {
                     beginRateLimitWait(wait.seconds);
                 } else if (!refreshHasFailure) {
@@ -668,6 +720,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             // should not stomp a screen the user is already looking at
             // with an error banner; only surface it on the reset path.
             if (!isCancelled()) {
+                setCachedBalancesUpdating(false);
                 // The raw SDK message used to go straight on screen here, URL
                 // and all ("Explorer returned HTTP 429 for /RLTC/api/balances/
                 // bcrt1q..."). humanizeError owns the wording for every shape
@@ -692,8 +745,19 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         if (typeof messaging.getActiveAddresses === 'function') {
             try {
                 const active = await messaging.getActiveAddresses(walletId, accountId);
-                if (!isCancelled()) setActiveByChain(active || {});
+                if (!isCancelled()) {
+                    activeForCache = active || {};
+                    setActiveByChain(activeForCache);
+                }
             } catch { /* fall back to aggregate when unavailable */ }
+        }
+
+        if (!isCancelled() && freshBalances && freshBalancesCacheable) {
+            writeBalanceCache(walletId, accountId, {
+                balances: freshBalances,
+                activeByChain: activeForCache,
+                fetchedAt: freshFetchedAt,
+            });
         }
 
         if (typeof messaging.getMultisigReceiveAddress === 'function') {
@@ -780,7 +844,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             isCancelled: () => cancelled,
         });
         return () => { cancelled = true; };
-    }, [activeWalletId, activeAccountId, homeReloadKey, loadHomeData]);
+    }, [activeWalletId, activeAccountId, homeReloadKey, resumeKey, loadHomeData]);
 
     // Nothing pushes balance changes to the wallet - an incoming send, a
     // mint landing, a token someone else sent you - so Home has to ask.
@@ -825,7 +889,9 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             load();
         };
 
-        const intervalId = setInterval(poll, BALANCE_POLL_INTERVAL_MS);
+        const stopPollInterval = startVisibleInterval(poll, BALANCE_POLL_INTERVAL_MS, {
+            runOnVisible: false,
+        });
         // An alt-tab fires `focus` and `visibilitychange` together, so coming
         // back to the wallet used to cost two loads. The first event after the
         // balances have aged past one interval still fires at once; the rest
@@ -841,7 +907,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
 
         return () => {
             cancelled = true;
-            clearInterval(intervalId);
+            stopPollInterval();
             window.removeEventListener('focus', onVisibilityOrFocus);
             document.removeEventListener('visibilitychange', onVisibilityOrFocus);
         };
@@ -935,6 +1001,12 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         ? wallets.find((w) => w.id === activeWalletId)
         : null;
 
+    useEffect(() => {
+        if (activeWallet?.id && activeWallet?.name) {
+            writeActiveWallet(activeWallet.id, activeWallet.name);
+        }
+    }, [activeWallet?.id, activeWallet?.name]);
+
     // Build the wallet-level alerts from the one shared list (walletAlerts.js);
     // a new alert is added there, never here.
     const alerts = buildWalletAlerts({ activeWallet, messagingUnread }, { onMessaging, onMigrateToBip39 });
@@ -942,7 +1014,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // Coin families surfaced in the dataset, in canonical order.
     // Drives both the network filter and the per-tab "no balances on
     // this network" empty messages.
-    const coinFamilies = (() => {
+    const coinFamilies = useMemo(() => {
         const seen = new Set();
         if (balances) {
             for (const cid of Object.keys(balances)) {
@@ -953,7 +1025,104 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         const ordered = ['bitcoin', 'litecoin', 'dogecoin'].filter((c) => seen.has(c));
         for (const c of seen) if (!ordered.includes(c)) ordered.push(c);
         return ordered;
-    })();
+    }, [balances]);
+
+    const pinnedKeys = useMemo(() => new Set(pinnedTokens), [pinnedTokens]);
+    const hiddenKeys = useMemo(() => new Set(hiddenTokens), [hiddenTokens]);
+    const handleAddAddress = useCallback(() => setAddAddressOpen(true), []);
+    const quickActions = useMemo(() => (
+        <div>
+            {quickActionsReason ? (
+                <p className={styles.quickActionsReason} id="home-quick-actions-reason">
+                    {quickActionsReason}
+                </p>
+            ) : null}
+            <div
+                className={styles.quickActions}
+                role="group"
+                aria-label={t('home.quickActions')}
+                aria-describedby={quickActionsReason ? 'home-quick-actions-reason' : undefined}
+            >
+                {!isDemoActive ? (
+                    <SendQuickAction
+                        onSend={onSend}
+                        browserOnline={browserOnline}
+                        onOffline={() => runNetworkAction('Sending', onSend)}
+                    />
+                ) : null}
+                {!isDemoActive ? (
+                    <button
+                        type="button"
+                        className={styles.quickAction}
+                        onClick={onReceive}
+                        disabled={!onReceive}
+                    >
+                        <span className={styles.quickActionIcon} aria-hidden="true"><Icon.ReceiveIcon /></span>
+                        <span>{t('home.receive')}</span>
+                    </button>
+                ) : null}
+                {onExchange ? (
+                    <button
+                        type="button"
+                        className={styles.quickAction}
+                        onClick={() => runNetworkAction('Exchange', onExchange)}
+                        aria-disabled={!browserOnline ? 'true' : undefined}
+                        title={!browserOnline ? t('home.exchangeOffline') : undefined}
+                    >
+                        <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MarketIcon /></span>
+                        <span>{t('home.exchange')}</span>
+                    </button>
+                ) : null}
+                {homeMoreActions.length === 1 ? (
+                    <button
+                        type="button"
+                        className={styles.quickAction}
+                        onClick={homeMoreActions[0].onSelect}
+                    >
+                        <span className={styles.quickActionIcon} aria-hidden="true">{homeMoreActions[0].icon}</span>
+                        <span>{homeMoreActions[0].label}</span>
+                    </button>
+                ) : null}
+                {homeMoreActions.length > 1 ? (
+                    <div className={styles.quickActionMoreWrap} ref={homeMoreWrapRef}>
+                        <button
+                            type="button"
+                            className={styles.quickAction}
+                            aria-haspopup="menu"
+                            aria-expanded={homeMoreOpen}
+                            onClick={() => setHomeMoreOpen((o) => !o)}
+                        >
+                            <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MoreIcon /></span>
+                            <span>{t('home.more')}</span>
+                        </button>
+                        {homeMoreOpen ? (
+                            <div className={styles.quickActionMoreMenu} role="menu">
+                                {homeMoreActions.map((action) => (
+                                    <button
+                                        key={action.id}
+                                        type="button"
+                                        role="menuitem"
+                                        className={styles.quickActionMoreItem}
+                                        onClick={() => { setHomeMoreOpen(false); action.onSelect(); }}
+                                    >
+                                        {action.icon ? (
+                                            <span className={styles.quickActionMoreItemIcon} aria-hidden="true">
+                                                {action.icon}
+                                            </span>
+                                        ) : null}
+                                        <span>{action.label}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        ) : null}
+                    </div>
+                ) : null}
+            </div>
+        </div>
+    ), [
+        browserOnline, homeMoreActions, homeMoreOpen, isDemoActive, onExchange, onReceive, onSend,
+        quickActionsReason, runNetworkAction,
+    ]);
 
     const accountList = Array.isArray(accounts) ? [...accounts].sort((a, b) => a.index - b.index) : [];
     const activeAccount = accountList.find((a) => a.id === activeAccountId) || null;
@@ -1063,6 +1232,10 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 ) : null}
                 {loadErrorText ? (
                     <StatusMessage variant="error" className={styles.error}>{loadErrorText}</StatusMessage>
+                ) : null}
+
+                {cachedBalancesUpdating ? (
+                    <StatusMessage variant="status">{t('home.updatingBalances')}</StatusMessage>
                 ) : null}
 
                 {balances === null && browserOnline && !loadErrorText ? (
@@ -1183,13 +1356,13 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         onReceive={onReceive}
                         onBuy={onExchange}
                         hasAddresses={Object.keys(balances).length > 0}
-                        onAddAddress={() => setAddAddressOpen(true)}
+                        onAddAddress={handleAddAddress}
                         onHistory={onHistory}
                         onSelectToken={onSelectToken}
                         onSelectEntry={onSelectEntry}
-                        pinnedKeys={new Set(pinnedTokens)}
+                        pinnedKeys={pinnedKeys}
                         onTogglePin={showPinAffordance ? handleTogglePin : undefined}
-                        hiddenKeys={new Set(hiddenTokens)}
+                        hiddenKeys={hiddenKeys}
                         onToggleHide={showHideAffordance ? handleToggleHide : undefined}
                         verifyMap={verifyMap}
                         hideSmallBalances={hideSmallBalances}
@@ -1201,96 +1374,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         onOpenSettings={onOpenSettings}
                         // Same rule as the gear: a lock button for shells with no header.
                         onLockWallet={onLockWallet}
-                        actions={(
-                            <div>
-                                {quickActionsReason ? (
-                                    <p className={styles.quickActionsReason} id="home-quick-actions-reason">
-                                        {quickActionsReason}
-                                    </p>
-                                ) : null}
-                                <div
-                                    className={styles.quickActions}
-                                    role="group"
-                                    aria-label={t('home.quickActions')}
-                                    aria-describedby={quickActionsReason ? 'home-quick-actions-reason' : undefined}
-                                >
-                                    {!isDemoActive ? (
-                                        <SendQuickAction
-                                            onSend={onSend}
-                                            browserOnline={browserOnline}
-                                            onOffline={() => runNetworkAction('Sending', onSend)}
-                                        />
-                                    ) : null}
-                                    {!isDemoActive ? (
-                                        <button
-                                            type="button"
-                                            className={styles.quickAction}
-                                            onClick={onReceive}
-                                            disabled={!onReceive}
-                                        >
-                                            <span className={styles.quickActionIcon} aria-hidden="true"><Icon.ReceiveIcon /></span>
-                                            <span>{t('home.receive')}</span>
-                                        </button>
-                                    ) : null}
-                                    {onExchange ? (
-                                        <button
-                                            type="button"
-                                            className={styles.quickAction}
-                                            onClick={() => runNetworkAction('Exchange', onExchange)}
-                                            aria-disabled={!browserOnline ? 'true' : undefined}
-                                            title={!browserOnline ? t('home.exchangeOffline') : undefined}
-                                        >
-                                            <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MarketIcon /></span>
-                                            <span>{t('home.exchange')}</span>
-                                        </button>
-                                    ) : null}
-                                    {homeMoreActions.length === 1 ? (
-                                        <button
-                                            type="button"
-                                            className={styles.quickAction}
-                                            onClick={homeMoreActions[0].onSelect}
-                                        >
-                                            <span className={styles.quickActionIcon} aria-hidden="true">{homeMoreActions[0].icon}</span>
-                                            <span>{homeMoreActions[0].label}</span>
-                                        </button>
-                                    ) : null}
-                                    {homeMoreActions.length > 1 ? (
-                                        <div className={styles.quickActionMoreWrap} ref={homeMoreWrapRef}>
-                                            <button
-                                                type="button"
-                                                className={styles.quickAction}
-                                                aria-haspopup="menu"
-                                                aria-expanded={homeMoreOpen}
-                                                onClick={() => setHomeMoreOpen((o) => !o)}
-                                            >
-                                                <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MoreIcon /></span>
-                                                <span>{t('home.more')}</span>
-                                            </button>
-                                            {homeMoreOpen ? (
-                                                <div className={styles.quickActionMoreMenu} role="menu">
-                                                    {homeMoreActions.map((action) => (
-                                                        <button
-                                                            key={action.id}
-                                                            type="button"
-                                                            role="menuitem"
-                                                            className={styles.quickActionMoreItem}
-                                                            onClick={() => { setHomeMoreOpen(false); action.onSelect(); }}
-                                                        >
-                                                            {action.icon ? (
-                                                                <span className={styles.quickActionMoreItemIcon} aria-hidden="true">
-                                                                    {action.icon}
-                                                                </span>
-                                                            ) : null}
-                                                            <span>{action.label}</span>
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            ) : null}
-                                        </div>
-                                    ) : null}
-                                </div>
-                            </div>
-                        )}
+                        actions={quickActions}
                     />
                 ) : null}
 

@@ -27,13 +27,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Icon } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useSettings } from '../../hooks/useSettings.js';
+import { useSupportedChains } from '../../hooks/useSupportedChains.js';
+import { useMessaging } from '../../useMessaging.js';
+import { tickerReferenceError } from '../../utils/tickerGrammar.js';
 import { useConfirmModal } from '../../hooks/useConfirmModal.js';
 import { ConfirmModal } from '../ConfirmModal.jsx';
 import {
     NUMBER_FORMAT_DEFAULT,
     SMALL_BALANCE_THRESHOLD_DEFAULT,
+    pinnedTokensForWallet,
+    pinnedTokensPatchForWallet,
 } from '../../../schemas/settings.js';
 import { clearAllChainFilters } from '../../utils/chainFilterMemory.js';
+import { readActiveWallet } from '../../utils/activeWalletMemory.js';
 import { INPUT, ROW, ROW_COPY, ROW_HINT, ROW_LABEL, SELECT, STACK, SettingsLoadError, Status, ToggleRow } from './_settingsPrimitives.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -70,18 +76,27 @@ const ACTIONS = {
 const EMPTY_HINT = { ...ROW_LABEL, fontStyle: 'italic' };
 
 export function DisplaySection() {
+    const { messaging } = useMessaging();
     const { settings, loading, error, update } = useSettings();
+    const chains = useSupportedChains();
     const confirmDialog = useConfirmModal();
     // Cluster O FOLLOWUP 3: show a brief confirmation after a
     // filter-reset run so the click doesn't feel inert.
     const [resetMessage, setResetMessage] = useState(/** @type {string | null} */ (null));
     const [displayMessage, setDisplayMessage] = useState(/** @type {string | null} */ (null));
+    const [watchChainId, setWatchChainId] = useState(() => chains[0]?.id || '');
+    const [watchTicker, setWatchTicker] = useState('');
+    const [watchMessage, setWatchMessage] = useState(/** @type {string | null} */ (null));
+    const [watching, setWatching] = useState(false);
     const [tokenQuery, setTokenQuery] = useState('');
     const [debouncedTokenQuery, setDebouncedTokenQuery] = useState('');
     const tokenSearchRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const tokenListsRef = useRef(/** @type {HTMLDivElement | null} */ (null));
 
-    const pinned = Array.isArray(settings?.pinnedTokens) ? settings.pinnedTokens : [];
+    const walletId = readActiveWallet();
+    const legacyPinned = Array.isArray(settings?.pinnedTokens) ? settings.pinnedTokens : [];
+    const pinned = walletId ? pinnedTokensForWallet(settings, walletId) : legacyPinned;
+    const watched = Array.isArray(settings?.watchedTokens) ? settings.watchedTokens : [];
     const hidden = Array.isArray(settings?.hiddenTokens) ? settings.hiddenTokens : [];
 
     useEffect(() => {
@@ -118,12 +133,13 @@ export function DisplaySection() {
 
     const writePinned = useCallback(async (next) => {
         try {
-            await update({ pinnedTokens: next });
+            if (walletId) await update(pinnedTokensPatchForWallet(walletId, next));
+            else await update({ pinnedTokens: next });
         } catch (err) {
             // eslint-disable-next-line no-console
             console.error('display.pinnedTokens update failed:', err);
         }
-    }, [update]);
+    }, [update, walletId]);
 
     const writeHidden = useCallback(async (next) => {
         try {
@@ -155,6 +171,64 @@ export function DisplaySection() {
         if (hidden.length === 0) return;
         writeHidden([]);
     }, [hidden, writeHidden]);
+
+    const addWatchedToken = useCallback(async (event) => {
+        event.preventDefault();
+        setWatchMessage(null);
+        const tick = watchTicker.trim();
+        const grammarError = tickerReferenceError(tick, { allowRef: true });
+        if (grammarError) {
+            setWatchMessage(grammarError);
+            return;
+        }
+        if (!watchChainId) {
+            setWatchMessage('Choose a chain.');
+            return;
+        }
+        const chain = chains.find((candidate) => candidate.id === watchChainId);
+        const chainLabel = chain ? `${chain.displayName} (${chain.networkKind})` : watchChainId;
+        const enteredKey = `${watchChainId}:${tick}`;
+        if (watched.includes(enteredKey)) {
+            setWatchMessage(`${tick} is already watched on ${chainLabel}.`);
+            return;
+        }
+        if (typeof messaging?.getTokenInfo !== 'function') {
+            setWatchMessage('Token lookup is unavailable in this app.');
+            return;
+        }
+        setWatching(true);
+        try {
+            const info = await messaging.getTokenInfo({ chainId: watchChainId, tick, demo: false });
+            const canonicalTick = typeof info?.canonicalTick === 'string'
+                ? info.canonicalTick.trim()
+                : '';
+            if (!canonicalTick) {
+                setWatchMessage(`Token "${tick}" was not found on ${chainLabel}.`);
+                return;
+            }
+            const key = `${watchChainId}:${canonicalTick}`;
+            if (watched.includes(key)) {
+                setWatchMessage(`${canonicalTick} is already watched on ${chainLabel}.`);
+                return;
+            }
+            await update({
+                watchedTokens: [...watched, key],
+                hiddenTokens: hidden.filter((candidate) => candidate !== key),
+            });
+            setWatchTicker('');
+            setWatchMessage(`${canonicalTick} is now shown in balances.`);
+        } catch {
+            setWatchMessage(`Could not look up ${tick} on ${chainLabel}. Try again.`);
+        } finally {
+            setWatching(false);
+        }
+    }, [chains, hidden, messaging, update, watchChainId, watchTicker, watched]);
+
+    const removeWatchedToken = useCallback((key) => {
+        setWatchMessage(null);
+        update({ watchedTokens: watched.filter((candidate) => candidate !== key) })
+            .catch(() => setWatchMessage('Could not remove the watched token. Try again.'));
+    }, [update, watched]);
 
     // Cluster O FOLLOWUP 3: reset all per-list chain-filter memory
     // entries. Affects History's enabledChains + the Home tab's coin-
@@ -208,6 +282,8 @@ export function DisplaySection() {
         setDisplayMessage(null);
         update({
             pinnedTokens: [],
+            pinnedTokensByWallet: {},
+            watchedTokens: [],
             hiddenTokens: [],
             showPinAffordance: false,
             showHideAffordance: false,
@@ -285,6 +361,51 @@ export function DisplaySection() {
                 checked={showHideAffordance}
                 onChange={setHideAffordance}
             />
+
+            <h3 style={SECTION_HEADER}>Watched tokens ({watched.length})</h3>
+            <p style={SECTION_HINT}>
+                Add a token by chain and ticker to keep it in Balances even when its balance is zero.
+            </p>
+            <form style={ROW} onSubmit={addWatchedToken}>
+                <select
+                    aria-label="Token chain"
+                    value={watchChainId}
+                    onChange={(event) => setWatchChainId(event.target.value)}
+                    style={SELECT}
+                >
+                    {chains.map((chain) => (
+                        <option key={chain.id} value={chain.id}>
+                            {chain.displayName} ({chain.networkKind})
+                        </option>
+                    ))}
+                </select>
+                <input
+                    aria-label="Token ticker"
+                    value={watchTicker}
+                    onChange={(event) => setWatchTicker(event.target.value)}
+                    placeholder="Ticker"
+                    autoComplete="off"
+                    style={{ ...INPUT, flex: 1, minWidth: 120 }}
+                />
+                <Button type="submit" size="sm" variant="secondary" icon={null} disabled={watching}>
+                    {watching ? 'Checking…' : 'Watch token'}
+                </Button>
+            </form>
+            {watchMessage ? <span role="status" aria-live="polite" style={ROW_HINT}>{watchMessage}</span> : null}
+            {watched.map((key) => (
+                <div key={key} style={ROW}>
+                    <span style={KEY_TEXT} title={key}>{key}</span>
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        icon={null}
+                        onClick={() => removeWatchedToken(key)}
+                        aria-label={`Remove watched token ${key}`}
+                    >
+                        Remove
+                    </Button>
+                </div>
+            ))}
 
             {(pinned.length > 0 || hidden.length > 0) ? (
                 <div style={{ display: 'flex', gap: 'var(--xc-space-1)' }}>
@@ -424,7 +545,7 @@ export function DisplaySection() {
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={ROW_LABEL}>Reset display settings</span>
-                    <span style={ROW_HINT}>Restores balance display options and clears pinned, hidden, and saved list preferences.</span>
+                    <span style={ROW_HINT}>Restores balance display options and clears watched, pinned, hidden, and saved list preferences.</span>
                     {displayMessage ? <span role="status" aria-live="polite" style={ROW_HINT}>{displayMessage}</span> : null}
                 </div>
                 <Button size="sm" variant="secondary" icon={null} onClick={resetDisplay}>

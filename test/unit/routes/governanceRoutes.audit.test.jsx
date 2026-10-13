@@ -168,7 +168,7 @@ describe('governance route audit', () => {
         expect(await screen.findByText('Ship it?')).toBeTruthy();
         expect(screen.getByText('Decided')).toBeTruthy();
         expect(screen.getAllByText('0: Yes')).toHaveLength(2);
-        expect(screen.getByText('42')).toBeTruthy();
+        expect(screen.getByText('42 weight')).toBeTruthy();
         expect(screen.queryByRole('button', { name: 'Vote' })).toBeNull();
     });
 
@@ -228,7 +228,7 @@ describe('governance route audit', () => {
 
         expect(await screen.findByText('Awaiting finalization')).toBeTruthy();
         expect(screen.getByText('Voting closed')).toBeTruthy();
-        expect(await screen.findByText('25')).toBeTruthy();
+        expect(await screen.findByText('25 weight')).toBeTruthy();
         expect(screen.queryByRole('button', { name: 'Vote' })).toBeNull();
         expect(messaging.governancePollResults).toHaveBeenCalledWith({ chainId: CHAIN, pollIndex: 9 });
     });
@@ -269,6 +269,103 @@ describe('governance route audit', () => {
         });
         expect(await screen.findByText('No polls yet')).toBeTruthy();
         expect(screen.getByText('Polls created on this chain appear here.')).toBeTruthy();
+    });
+
+    it('renders a long poll-list card and its actions at 320px', async () => {
+        const widthDescriptor = Object.getOwnPropertyDescriptor(window, 'innerWidth');
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 320 });
+        const longQuestion = 'Should-the-community-fund-this-unbroken-public-infrastructure-reference?';
+        try {
+            mount(GovernancePolls, {
+                walletId: 'wallet-1', onOpenPoll() {}, onCreate() {}, onDelegate() {}, onBack() {},
+            }, messagingWith({
+                governancePolls: vi.fn().mockResolvedValue({
+                    data: [{
+                        action_index: 22,
+                        tick: 'COMMUNITY-GOVERNANCE-TOKEN',
+                        question: longQuestion,
+                        poll_status: 'open',
+                        end_block: 150,
+                    }],
+                }),
+            }));
+
+            expect(await screen.findByText(longQuestion)).toBeTruthy();
+            expect(screen.getByText('Open')).toBeTruthy();
+            expect(screen.getByRole('button', { name: 'Create poll' })).toBeTruthy();
+            expect(screen.getByRole('button', { name: 'Delegate votes' })).toBeTruthy();
+            expect(screen.getByRole('button', { name: /#22/ })).toBeTruthy();
+        } finally {
+            if (widthDescriptor) Object.defineProperty(window, 'innerWidth', widthDescriptor);
+        }
+    });
+
+    it('keeps long voting options, the countdown, and the vote action in the 320px render', async () => {
+        const widthDescriptor = Object.getOwnPropertyDescriptor(window, 'innerWidth');
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 320 });
+        const longOption = 'Fund-the-community-owned-infrastructure-program-with-an-unbroken-reference';
+        try {
+            mount(PollDetail, {
+                walletId: 'wallet-1', chainId: CHAIN, pollIndex: 12, onBack() {},
+            }, messagingWith({
+                getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 100 }),
+                governancePoll: vi.fn().mockResolvedValue({
+                    action_index: 12,
+                    tick: 'VOTE',
+                    poll_status: 'open',
+                    question: 'Choose the next community project',
+                    options: [longOption, 'Keep the treasury unchanged'],
+                    tally_mode: 'approval',
+                    max_selections: 1,
+                    end_block: 125,
+                }),
+            }));
+
+            expect(await screen.findByText('25 blocks remaining')).toBeTruthy();
+            expect(screen.getByLabelText(`0: ${longOption}`)).toBeTruthy();
+            expect(screen.getByRole('button', { name: 'Vote' })).toBeTruthy();
+            expect(screen.getByRole('form', { name: 'Cast ballot' }).contains(
+                screen.getByRole('button', { name: 'Vote' }),
+            )).toBe(true);
+        } finally {
+            if (widthDescriptor) Object.defineProperty(window, 'innerWidth', widthDescriptor);
+        }
+    });
+
+    it('renders wrapped result labels, text values, and bars at 360px', async () => {
+        const widthDescriptor = Object.getOwnPropertyDescriptor(window, 'innerWidth');
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 360 });
+        const longOption = 'Community-maintained-public-goods-and-validator-infrastructure';
+        try {
+            mount(PollDetail, {
+                walletId: 'wallet-1', chainId: CHAIN, pollIndex: 13, onBack() {},
+            }, messagingWith({
+                governancePoll: vi.fn().mockResolvedValue({
+                    action_index: 13,
+                    tick: 'VOTE',
+                    poll_status: 'finalized',
+                    options: [longOption, 'No'],
+                    tally_mode: 'approval',
+                    end_block: 120,
+                    winning_option: 0,
+                }),
+                governancePollResults: vi.fn().mockResolvedValue({
+                    data: [
+                        { option_index: 0, total_weight: '987654321012345', voter_count: 17 },
+                        { option_index: 1, total_weight: '123', voter_count: 2 },
+                    ],
+                }),
+            }));
+
+            expect(await screen.findByText('987654321012345 weight')).toBeTruthy();
+            expect(screen.getByText('17 voters')).toBeTruthy();
+            const bars = screen.getAllByRole('progressbar');
+            expect(bars).toHaveLength(2);
+            expect(bars[0]).toHaveAccessibleName(`0: ${longOption} weight`);
+            expect(bars[0]).toHaveAttribute('aria-valuenow', '100');
+        } finally {
+            if (widthDescriptor) Object.defineProperty(window, 'innerWidth', widthDescriptor);
+        }
     });
 
     it('retries a failed poll-list load', async () => {

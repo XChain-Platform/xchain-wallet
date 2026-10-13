@@ -182,7 +182,7 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
             ) : null}
 
             {rows && rows.length > 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <div className={local.pollList}>
                     {rows.map((p) => {
                         const id = p.action_index;
                         const label = p.question || (Array.isArray(p.options) ? p.options.join(' / ') : String(p.options || ''));
@@ -193,12 +193,12 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
                                 onClick={() => onOpenPoll(chainId, id)}
                                 className={local.pollCard}
                             >
-                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                                    <strong>#{String(id)} · {p.tick || t('common.notAvailable')}</strong>
+                                <div className={local.pollHeader}>
+                                    <strong className={local.pollTitle}>#{String(id)} · {p.tick || t('common.notAvailable')}</strong>
                                     <StatusPill status={p.poll_status} />
                                 </div>
-                                {label ? <div className={styles.hint}>{String(label).slice(0, 100)}</div> : null}
-                                <div className={styles.hint}>
+                                {label ? <div className={`${styles.hint} ${local.pollText}`}>{String(label).slice(0, 100)}</div> : null}
+                                <div className={`${styles.hint} ${local.pollText}`}>
                                     {t('governance.closesAtBlock', { block: String(p.end_block ?? t('common.notAvailable')) })}
                                 </div>
                             </button>

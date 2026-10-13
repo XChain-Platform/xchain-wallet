@@ -51,13 +51,14 @@ export function AlertsOverlay({ alerts, onClose }) {
             className={styles.overlay}
             role="dialog"
             aria-modal="true"
-            aria-label={t('alerts.dialogLabel')}
+            aria-labelledby="xc-alerts-title"
+            aria-describedby="xc-alerts-body"
             onClick={onClose}
             tabIndex={-1}
         >
             <div className={styles.panel} onClick={(e) => e.stopPropagation()} role="presentation" tabIndex={-1}>
                 <header className={styles.header}>
-                    <span className={styles.title}>
+                    <span id="xc-alerts-title" className={styles.title}>
                         {t('alerts.title')}
                         {alerts.length > 0 ? (
                             <span className={styles.count}>{alerts.length}</span>
@@ -72,7 +73,7 @@ export function AlertsOverlay({ alerts, onClose }) {
                         <Icon.XIcon />
                     </button>
                 </header>
-                <div className={styles.body}>
+                <div id="xc-alerts-body" className={styles.body}>
                     {alerts.length === 0 ? (
                         <p className={styles.empty}>{t('alerts.empty')}</p>
                     ) : (

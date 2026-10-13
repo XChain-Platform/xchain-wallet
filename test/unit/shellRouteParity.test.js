@@ -67,4 +67,16 @@ describe('shell route parity', () => {
             'if (route.executePrefill) setExecutePrefill(route.executePrefill);',
         );
     });
+
+    it('keeps web launch routes ahead of last-view restoration', () => {
+        expect(webAppSource).toContain('launchRouteState.current.remember(route.view, status.state);');
+        expect(webAppSource).toContain('skip: launchRouteState.current.shouldSkipLastViewResume(),');
+        expect(webAppSource).toContain('launchRouteState.current.walletActivated();');
+    });
+
+    it('resets desktop route context when a sibling window switches wallets', () => {
+        expect(desktopAppSource).toMatch(
+            /change\?\.kind !== 'active-wallet'[\s\S]*?setActiveAccountId\(null\);[\s\S]*?setActiveWalletId\(walletId\);[\s\S]*?setUnlockedView\('home'\);/,
+        );
+    });
 });

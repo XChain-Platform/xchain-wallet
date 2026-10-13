@@ -239,7 +239,7 @@ export function MyBets({ walletId, accountId, onOpenMarket, onBack }) {
                         {statusLabel(b.bet_status)}
                     </span>
                 </div>
-                <div className={styles.hint}>
+                <div className={`${styles.hint} ${styles.betLongText}`}>
                     {b.bet_status === 'invalid'
                         // "staked 100 XCHAIN" is false on a rejected bet: the amount is
                         // what the transaction ASKED for, and no stake was ever taken.
@@ -249,7 +249,7 @@ export function MyBets({ walletId, accountId, onOpenMarket, onBack }) {
                 </div>
                 {/* Payouts credit the address that PLACED the bet, so name it:
                     a sweep does not move a bet escrow or its winnings. */}
-                <div className={styles.hint}>from {b.owner}</div>
+                <div className={`${styles.hint} ${styles.betLongText}`}>from {b.owner}</div>
                 {b.bet_status !== 'open' && b.settled_block !== undefined && b.settled_block !== null ? (
                     <div className={styles.hint}>Settled in block {String(b.settled_block)}</div>
                 ) : null}

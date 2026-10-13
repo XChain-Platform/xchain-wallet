@@ -14,6 +14,7 @@ import styles from './NoticeModal.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap, useInertBackground } from '../utils/focusTrap.js';
 import { t } from '../../i18n/index.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 
 /**
  * Small centered confirm/cancel dialog: the in-app replacement for the native
@@ -75,7 +76,11 @@ export function ConfirmModal({
             <div ref={panelRef} className={styles.panel} onClick={(e) => e.stopPropagation()} role="presentation" tabIndex={-1}>
                 <p id={titleId} className={styles.title}>{title}</p>
                 {message ? <p id={messageId} className={styles.message}>{message}</p> : null}
-                {error ? <p role="alert" className={styles.error}>{error}</p> : null}
+                {error ? (
+                    <p role="alert" className={styles.error}>
+                        {userFacingMessage(error, 'Could not complete this request. Try again.')}
+                    </p>
+                ) : null}
                 <div style={{ display: 'flex', gap: 'var(--xc-space-2)' }}>
                     <Button variant="secondary" block onClick={cancel} disabled={busy} autoFocus>
                         {cancelLabel}

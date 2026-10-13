@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import {
@@ -23,6 +23,10 @@ import { NetworkFilter } from '../components/NetworkFilter.jsx';
 import { bridgeDisplayTick } from './BridgeTick.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
+import {
+    pinnedTokensForWallet,
+    pinnedTokensPatchForWallet,
+} from '../../schemas/settings.js';
 import styles from './TokenPicker.module.css';
 
 const PLATFORM_QUERY_MIN_CHARS = 3;
@@ -136,6 +140,7 @@ export function TokenPicker({
     const [kindFilterLocal, setKindFilterLocal] = useState(/** @type {'all' | 'coins' | 'tokens'} */ ('all'));
     const kindFilter = kindFilterProp ?? kindFilterLocal;
     const setKindFilter = onKindFilterChangeProp ?? setKindFilterLocal;
+    const [rovingOption, setRovingOption] = useState(null);
 
     // Open with the caret in the search box (xchain-wallet#57): a user who
     // starts typing a ticker straight away otherwise types into the page, and
@@ -158,21 +163,21 @@ export function TokenPicker({
     useEffect(() => {
         let cancelled = false;
         if (typeof messaging?.getSettings !== 'function') return undefined;
+        setPinnedTokens([]);
         messaging.getSettings()
             .then((s) => {
                 if (cancelled) return;
                 const hides = Array.isArray(s?.hiddenTokens)
                     ? s.hiddenTokens.filter((k) => typeof k === 'string')
                     : [];
-                const pins = Array.isArray(s?.pinnedTokens)
-                    ? s.pinnedTokens.filter((k) => typeof k === 'string')
-                    : [];
+                const pins = pinnedTokensForWallet(s, walletId)
+                    .filter((k) => typeof k === 'string');
                 setHiddenTokens(hides);
                 setPinnedTokens(pins);
             })
             .catch(() => { /* empty hide/pin lists are fine defaults */ });
         return () => { cancelled = true; };
-    }, [messaging]);
+    }, [messaging, walletId]);
 
     useEffect(() => {
         if (!walletId) return undefined;
@@ -279,6 +284,21 @@ export function TokenPicker({
 
     const hiddenSet = useMemo(() => new Set(hiddenTokens), [hiddenTokens]);
     const pinnedSet = useMemo(() => new Set(pinnedTokens), [pinnedTokens]);
+    const handleTogglePin = useCallback((key, nextPinned) => {
+        if (typeof key !== 'string' || !key) return;
+        setPinnedTokens((previous) => {
+            const nextSet = new Set(previous);
+            if (nextPinned) nextSet.add(key);
+            else nextSet.delete(key);
+            const next = Array.from(nextSet);
+            if (typeof messaging?.updateSettings === 'function') {
+                messaging.updateSettings(
+                    pinnedTokensPatchForWallet(walletId, next),
+                ).catch(() => {});
+            }
+            return next;
+        });
+    }, [messaging, walletId]);
 
     // Platform discovery (receive only): when the user types a partial
     // ticker, substring-search every chain the wallet has addresses on and
@@ -366,6 +386,49 @@ export function TokenPicker({
     const filtersActive = Boolean(tokenQuery.trim())
         || networkFilter !== 'all'
         || (!kindLocked && kindFilter !== 'all');
+
+    const visibleOptionRows = rows.filter((row) => !hiddenSet.has(`${row.chainId}:${row.tick}`));
+    const sortedOptionRows = pinnedSet.size > 0
+        ? [
+            ...visibleOptionRows.filter((row) => pinnedSet.has(`${row.chainId}:${row.tick}`)),
+            ...visibleOptionRows.filter((row) => !pinnedSet.has(`${row.chainId}:${row.tick}`)),
+        ]
+        : visibleOptionRows;
+    const optionRows = [
+        ...sortedOptionRows,
+        ...platformResults,
+    ];
+    const optionKeys = optionRows.map((row) => `${row.chainId}:${row.tick}`);
+    const optionTabStop = rovingOption && optionKeys.includes(rovingOption)
+        ? rovingOption
+        : optionKeys[0];
+
+    const handlePickerKeyDown = (e) => {
+        if (e.key === 'Escape' && typeof onBack === 'function') {
+            e.preventDefault();
+            onBack();
+            return;
+        }
+        if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+        const current = e.target.closest?.('[data-balance-option]');
+        if (!current) return;
+        const options = Array.from(e.currentTarget.querySelectorAll('[data-balance-option]'));
+        const index = options.indexOf(current);
+        let next = null;
+        if (e.key === 'ArrowDown') next = (index + 1) % options.length;
+        if (e.key === 'ArrowUp') next = (index - 1 + options.length) % options.length;
+        if (e.key === 'Home') next = 0;
+        if (e.key === 'End') next = options.length - 1;
+        if (next === null || next === index) return;
+        e.preventDefault();
+        setRovingOption(options[next].dataset.balanceOption);
+        options[next].focus();
+    };
+
+    const handlePickerFocus = (e) => {
+        const option = e.target.closest?.('[data-balance-option]');
+        if (option) setRovingOption(option.dataset.balanceOption);
+    };
 
     const handleSelect = (tok) => onSelect?.({
         chainId: tok.chainId,
@@ -497,6 +560,7 @@ export function TokenPicker({
                             role="tab"
                             tabIndex={active ? 0 : -1}
                             aria-selected={active}
+                            tabIndex={active ? 0 : -1}
                             className={`${styles.kindSegment} ${active ? styles.kindSegmentActive : ''}`}
                             onClick={() => setKindFilter(opt.id)}
                         >
@@ -509,7 +573,7 @@ export function TokenPicker({
     );
 
     const body = (
-        <ListPage toolbar={toolbar}>
+        <ListPage toolbar={toolbar} onKeyDown={handlePickerKeyDown} onFocus={handlePickerFocus}>
             {loadError ? (
                 <StatusMessage
                     variant="error"
@@ -525,7 +589,7 @@ export function TokenPicker({
                 </div>
             ) : null}
             {balances ? (
-                <div ref={resultsRef}>
+                <div ref={resultsRef} role="group" aria-label="Coins and tokens">
                     {rows.length > 0 ? (
                         <BalanceList
                             rows={rows}
@@ -533,7 +597,11 @@ export function TokenPicker({
                             getRowActionLabel={tokenSelectionLabel}
                             hiddenKeys={hiddenSet}
                             pinnedKeys={pinnedSet}
+                            onTogglePin={handleTogglePin}
                             allowRemoteImages={allowRemoteImages}
+                            getRowTabIndex={(row) => (
+                                `${row.chainId}:${row.tick}` === optionTabStop ? 0 : -1
+                            )}
                             // The held-balance list is cross-chain too
                             // whenever the caller has not pinned a network, so
                             // a user holding the same tick on two chains would
@@ -581,6 +649,9 @@ export function TokenPicker({
                                     // re-targets the calling form's network.
                                     showChain
                                     allowRemoteImages={allowRemoteImages}
+                                    getRowTabIndex={(row) => (
+                                        `${row.chainId}:${row.tick}` === optionTabStop ? 0 : -1
+                                    )}
                                 />
                             ) : null}
                         </div>

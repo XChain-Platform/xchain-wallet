@@ -31,7 +31,9 @@ import { useHaptic } from '../hooks/useHaptic.js';
 import { clearLastView } from '../utils/lastViewMemory.js';
 import { sweepMsgMemoryForWallet } from '../utils/msgReadMemory.js';
 import { wipeWalletStorage } from '../utils/wipeWalletStorage.js';
+import { setForgotPasswordRestoreIntent } from '../utils/forgotPasswordRecovery.js';
 import { nextPaint } from '../utils/nextPaint.js';
+import { readActiveWalletName } from '../utils/activeWalletMemory.js';
 import { DemoExitConfirm } from '../components/DemoExitConfirm.jsx';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { useBackHandler } from '../../ui/backStack.js';
@@ -95,6 +97,9 @@ export function Locked({ onUnlocked }) {
     const [demoWipeError, setDemoWipeError] = useState(/** @type {string | null} */ (null));
     const [demoConfirmOpen, setDemoConfirmOpen] = useState(false);
     const [forgotOpen, setForgotOpen] = useState(false);
+    const [restoreLane, setRestoreLane] = useState(
+        /** @type {'mnemonic' | 'backup' | null} */ (null),
+    );
     const [wipeConfirmText, setWipeConfirmText] = useState('');
     const [wipeBusy, setWipeBusy] = useState(false);
     const [wipeError, setWipeError] = useState(/** @type {string | null} */ (null));
@@ -138,11 +143,13 @@ export function Locked({ onUnlocked }) {
     // misclick can't destroy a real wallet.
     async function handleForgotPasswordWipe() {
         if (wipeBusy) return;
+        if (!restoreLane) return;
         if (wipeConfirmText.trim().toUpperCase() !== 'WIPE') return;
         setWipeBusy(true);
         setWipeError(null);
         try {
             await wipeWalletStorage();
+            setForgotPasswordRestoreIntent(restoreLane);
             if (typeof window !== 'undefined') window.location.reload();
         } catch (err) {
             setWipeError(err?.message || 'Could not wipe wallet data.');
@@ -153,6 +160,7 @@ export function Locked({ onUnlocked }) {
     function handleForgotPasswordCancel() {
         if (wipeBusy) return;
         setForgotOpen(false);
+        setRestoreLane(null);
         setWipeConfirmText('');
         setWipeError(null);
     }
@@ -230,6 +238,7 @@ export function Locked({ onUnlocked }) {
 
     const captureWallet = captureQueue[captureIndex] || null;
     const inCaptureStep = captureWallet !== null;
+    const activeWalletName = readActiveWalletName();
 
     // The one place `onUnlocked` is called from the password paths. It
     // unmounts this screen in every shell, so the password is dropped here
@@ -328,6 +337,12 @@ export function Locked({ onUnlocked }) {
             // A closed prompt is a choice: back to the password field, quietly.
             if (err?.name === 'BiometricCancelledError') {
                 setBusy(false);
+                // The input stays disabled until React applies the busy-state
+                // update, so focus it on the next task when it accepts input.
+                window.setTimeout(() => {
+                    inputRef.current?.focus();
+                    inputRef.current?.select();
+                }, 0);
                 return;
             }
             if (err?.name === 'BiometricNotRegisteredError') {
@@ -406,6 +421,19 @@ export function Locked({ onUnlocked }) {
                 alt={branding.PRODUCT_NAME}
                 className={styles.logo}
             />
+            <h1
+                title={!inCaptureStep && activeWalletName ? activeWalletName : undefined}
+                style={{
+                    maxWidth: '100%',
+                    margin: 0,
+                    color: 'var(--xc-text)',
+                    fontSize: 'var(--xc-text-xl)',
+                    fontWeight: 700,
+                    overflowWrap: 'anywhere',
+                }}
+            >
+                {inCaptureStep ? 'Save wallet passphrase' : (activeWalletName || 'Unlock wallet')}
+            </h1>
         </div>
     );
 
@@ -531,38 +559,65 @@ export function Locked({ onUnlocked }) {
                             ref={forgotDialogRef}
                             id="locked-forgot-password-panel"
                             className={styles.wipeConfirm}
-                            role="dialog"
-                            aria-label="Wipe wallet data"
+                            role="alertdialog"
+                            aria-modal="false"
+                            aria-label="Restore wallet access"
                         >
-                            <p className={styles.wipeWarning}>
-                                <strong>This permanently deletes every wallet saved in this app on this device, including its recovery information, accounts, addresses, and queued transactions.</strong>
-                            </p>
-                            <p className={styles.wipeNote}>
-                                Funds on the blockchain are unaffected, but you need each wallet's recovery phrase or encrypted backup file to restore access. Use this only if you have those backups, or if every wallet is empty.
-                            </p>
-                            <Input
-                                type="text"
-                                label="Type WIPE to confirm"
-                                value={wipeConfirmText}
-                                onChange={(e) => setWipeConfirmText(e.target.value)}
-                                autoComplete="off"
-                                autoCapitalize="characters"
-                                disabled={wipeBusy}
-                            />
-                            <Button
-                                type="button"
-                                variant="danger"
-                                onClick={handleForgotPasswordWipe}
-                                loading={wipeBusy}
-                                disabled={wipeBusy || wipeConfirmText.trim().toUpperCase() !== 'WIPE'}
-                            >
-                                Wipe wallet data
-                            </Button>
+                            {!restoreLane ? (
+                                <>
+                                    <p className={styles.wipeNote}>
+                                        <strong>Your password cannot be recovered or reset.</strong>{' '}
+                                        You can restore the wallet and choose a new password using its recovery phrase or an encrypted backup file.
+                                    </p>
+                                    <Button
+                                        type="button"
+                                        variant="secondary"
+                                        onClick={() => setRestoreLane('mnemonic')}
+                                    >
+                                        Use recovery phrase
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="secondary"
+                                        onClick={() => setRestoreLane('backup')}
+                                    >
+                                        Use backup file
+                                    </Button>
+                                </>
+                            ) : (
+                                <>
+                                    <p className={styles.wipeWarning}>
+                                        <strong>This permanently deletes every wallet saved in this app on this device, including its recovery information, accounts, addresses, and queued transactions.</strong>
+                                    </p>
+                                    <p className={styles.wipeNote}>
+                                        Funds on the blockchain are unaffected. Continue only if you have the {restoreLane === 'backup' ? 'encrypted backup file' : 'recovery phrase'} for every wallet you need. After erasing this vault, the app opens the {restoreLane === 'backup' ? 'backup-file restore' : 'recovery-phrase restore'} form.
+                                    </p>
+                                    <Input
+                                        type="text"
+                                        label="Type WIPE to confirm"
+                                        value={wipeConfirmText}
+                                        onChange={(e) => setWipeConfirmText(e.target.value)}
+                                        autoComplete="off"
+                                        autoCapitalize="characters"
+                                        disabled={wipeBusy}
+                                    />
+                                    <Button
+                                        type="button"
+                                        variant="danger"
+                                        onClick={handleForgotPasswordWipe}
+                                        loading={wipeBusy}
+                                        disabled={wipeBusy || wipeConfirmText.trim().toUpperCase() !== 'WIPE'}
+                                    >
+                                        Erase vault and restore
+                                    </Button>
+                                </>
+                            )}
                             <Button
                                 type="button"
                                 variant="secondary"
                                 onClick={handleForgotPasswordCancel}
                                 disabled={wipeBusy}
+                                autoFocus
                             >
                                 Cancel
                             </Button>
@@ -629,7 +684,6 @@ export function Locked({ onUnlocked }) {
 
     return (
         <Screen variant={variant}>
-            <h1 className="sr-only">{inCaptureStep ? 'Save wallet passphrase' : 'Unlock wallet'}</h1>
             {body}
         </Screen>
     );

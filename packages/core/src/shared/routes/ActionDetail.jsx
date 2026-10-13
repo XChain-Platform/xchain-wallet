@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { EmptyState, ListPage, Screen, PageHeader, VerifiedBadge } from '@xchain-wallet/core/ui';
+import { EmptyState, ListPage, Screen, PageHeader, StatusMessage, VerifiedBadge } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { t } from '../../i18n/index.js';
@@ -19,9 +19,11 @@ import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { normalizeHistoryRow } from '../utils/historyRow.js';
 import { useActionProofVerification } from '../hooks/useProofVerification.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { useOnlineStatus } from '../hooks/useOnlineStatus.js';
 import styles from './History.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const OFFLINE_ACTION_REASON = 'This action needs a network connection.';
 
 /**
  * @param {object} props
@@ -34,6 +36,7 @@ const chainRegistry = registryLib.defaultRegistry();
 export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWatermark, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
+    const browserOnline = useOnlineStatus();
 
     // M2.3: the shells hand this page a SNAPSHOT of the row the user clicked
     // and never revisit it, which is harmless for a confirmed action and wrong
@@ -53,6 +56,7 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
     }, [entryProp?.key]);
     useEffect(() => {
         if (!pendingTxHash || confirmed) return undefined;
+        if (!browserOnline) return undefined;
         if (!entryProp?.chainId || !entryProp?.address) return undefined;
         if (typeof messaging.getAddressHistory !== 'function') return undefined;
         const { chainId, address } = entryProp;
@@ -84,7 +88,7 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
             look();
         }, flowsLib.BALANCE_POLL_INTERVAL_MS);
         return () => { cancelled = true; clearInterval(id); };
-    }, [pendingTxHash, confirmed, entryProp, messaging]);
+    }, [pendingTxHash, confirmed, entryProp, messaging, browserOnline]);
 
     // Local peer cache: fetched once on mount when the entry is one
     // side of a cross-chain LINK pair. DetailCard handles loading +
@@ -106,6 +110,12 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
         const peerChainId = entry.link.peerChainId;
         const peerActionIndex = String(entry.link.peerActionIndex);
         const pKey = `${peerChainId}:${peerActionIndex}`;
+        if (!browserOnline) {
+            setPeerCache({
+                [pKey]: { loading: false, action: null, error: OFFLINE_ACTION_REASON },
+            });
+            return undefined;
+        }
         let cancelled = false;
         setPeerCache({ [pKey]: { loading: true, action: null, error: null } });
         messaging.getActionByIndex({ chainId: peerChainId, actionIndex: peerActionIndex })
@@ -124,7 +134,7 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
                 });
             });
         return () => { cancelled = true; };
-    }, [entry, messaging, isPending]);
+    }, [entry, messaging, isPending, browserOnline]);
 
     // PC-50: the same SPV verdict the History list badges, on the detail view
     // the item names. Only a confirmed action with a numeric index is
@@ -139,7 +149,7 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
         return [{ key: 'detail', chainId: entry.chainId, actionIndex: entry.actionIndex }];
     }, [entry, isPending]);
     const verifyMap = useActionProofVerification({
-        messaging, items: verifyItems, enabled: verifyEnabled,
+        messaging, items: verifyItems, enabled: verifyEnabled && browserOnline,
     });
     const verdict = verifyMap.detail || null;
 
@@ -191,6 +201,11 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
     return (
         <Screen variant={variant} header={header}>
             <ListPage className={styles.body}>
+                {!browserOnline ? (
+                    <StatusMessage variant="warning" id="history-offline-action-reason">
+                        {t('actionDetail.offline')}
+                    </StatusMessage>
+                ) : null}
                 {verdict ? (
                     <div className={styles.detailVerify}>
                         <VerifiedBadge status={verdict.status} reason={verdict.reason} size="sm" />
@@ -202,6 +217,7 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
                     chainTip={chainTip}
                     indexerWatermark={indexerWatermark}
                     walletId={walletId}
+                    networkAvailable={browserOnline}
                     onDismissFailed={typeof messaging?.dismissFailedPendingTx === 'function'
                         ? async (pendingTxId) => {
                             // The record is gone once this resolves, so the

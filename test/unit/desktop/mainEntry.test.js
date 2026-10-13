@@ -22,8 +22,11 @@ const electron = vi.hoisted(() => {
         displays: [{ workArea: { x: 0, y: 0, width: 1920, height: 1080 } }],
         normalBounds: { x: 0, y: 0, width: 1024, height: 768 },
     };
+    const ownerWindow = {};
+    const popup = vi.fn();
     class BrowserWindow {
         static instances = [];
+        static fromWebContents = vi.fn(() => ownerWindow);
 
         constructor(options) {
             browserWindowOptions.push(options);
@@ -49,6 +52,8 @@ const electron = vi.hoisted(() => {
         appListeners,
         browserWindowOptions,
         isolatedSession,
+        ownerWindow,
+        popup,
         state,
         app: {
             isPackaged: true,
@@ -61,7 +66,10 @@ const electron = vi.hoisted(() => {
             whenReady: vi.fn(() => new Promise(() => {})),
         },
         BrowserWindow,
-        Menu: { buildFromTemplate: vi.fn(() => ({})), setApplicationMenu: vi.fn() },
+        Menu: {
+            buildFromTemplate: vi.fn(() => ({ popup })),
+            setApplicationMenu: vi.fn(),
+        },
         ipcMain: { handle: vi.fn() },
         safeStorage: {},
         screen: {
@@ -79,10 +87,14 @@ const electron = vi.hoisted(() => {
 
 const protocol = vi.hoisted(() => ({
     attachDeepLinkHandlers: vi.fn(() => ({ gotLock: true })),
-    createDeepLinkSlot: vi.fn(() => ({ offer: vi.fn(), take: vi.fn() })),
+    deepLinkSlot: { offer: vi.fn(), take: vi.fn() },
+    createDeepLinkSlot: vi.fn(),
+    focusDeepLinkTarget: vi.fn(),
     pickDeepLinkTarget: vi.fn(),
     registerProtocolClients: vi.fn(),
 }));
+
+protocol.createDeepLinkSlot.mockReturnValue(protocol.deepLinkSlot);
 
 const permissions = vi.hoisted(() => ({
     attachHidPermissions: vi.fn(),
@@ -221,6 +233,40 @@ describe('desktop main entry point', () => {
         expect(electron.app.quit).toHaveBeenCalledOnce();
     });
 
+    it('parks an Electron deep link until a renderer can claim it', async () => {
+        await import('../../../packages/desktop/main/index.js');
+        const event = {
+            scheme: 'dogecoin',
+            raw: 'dogecoin:DRecipient?amount=3',
+            parsed: { address: 'DRecipient', amount: '3' },
+        };
+
+        protocol.attachDeepLinkHandlers.mock.calls[0][1].onDeepLink(event);
+
+        expect(protocol.deepLinkSlot.offer).toHaveBeenCalledExactlyOnceWith(event);
+    });
+
+    it('restores, shows, and focuses the Electron window receiving a link', async () => {
+        const { focusDeepLinkTarget } = await vi.importActual(
+            '../../../packages/desktop/main/protocol.js',
+        );
+        const win = {
+            isMinimized: vi.fn(() => true),
+            restore: vi.fn(),
+            isVisible: vi.fn(() => false),
+            show: vi.fn(),
+            focus: vi.fn(),
+        };
+
+        focusDeepLinkTarget(win);
+
+        expect(win.restore).toHaveBeenCalledOnce();
+        expect(win.show).toHaveBeenCalledOnce();
+        expect(win.focus).toHaveBeenCalledOnce();
+        expect(win.restore.mock.invocationCallOrder[0]).toBeLessThan(win.focus.mock.invocationCallOrder[0]);
+        expect(win.show.mock.invocationCallOrder[0]).toBeLessThan(win.focus.mock.invocationCallOrder[0]);
+    });
+
     it.each([
         {
             label: 'at the desktop default on a large display',
@@ -354,6 +400,55 @@ describe('desktop main entry point', () => {
         const webview = { preventDefault: vi.fn() };
         handlers.get('will-attach-webview')(webview);
         expect(webview.preventDefault).toHaveBeenCalledOnce();
+    });
+
+    it('provides context editing actions without exposing an inspect action', async () => {
+        await import('../../../packages/desktop/main/index.js');
+        const handlers = new Map();
+        const contents = {
+            session: electron.session.defaultSession,
+            getURL: () => appIndex,
+            setWindowOpenHandler: vi.fn(),
+            on: vi.fn((name, handler) => { handlers.set(name, handler); }),
+        };
+        electron.appListeners.get('web-contents-created')({}, contents);
+
+        handlers.get('context-menu')({}, {
+            isEditable: true,
+            selectionText: 'wallet',
+            editFlags: {
+                canCut: false,
+                canCopy: true,
+                canPaste: false,
+                canSelectAll: true,
+            },
+        });
+
+        expect(electron.Menu.buildFromTemplate).toHaveBeenLastCalledWith([
+            { role: 'cut', enabled: false },
+            { role: 'copy', enabled: true },
+            { role: 'paste', enabled: false },
+            { type: 'separator' },
+            { role: 'selectAll', enabled: true },
+        ]);
+        expect(electron.popup).toHaveBeenLastCalledWith({ window: electron.ownerWindow });
+        expect(electron.BrowserWindow.fromWebContents).toHaveBeenLastCalledWith(contents);
+
+        handlers.get('context-menu')({}, {
+            isEditable: false,
+            selectionText: 'read-only text',
+            editFlags: { canCopy: true },
+        });
+        expect(electron.Menu.buildFromTemplate).toHaveBeenLastCalledWith([
+            { role: 'copy', enabled: true },
+        ]);
+
+        handlers.get('context-menu')({}, {
+            isEditable: false,
+            selectionText: '',
+            editFlags: { canCopy: false },
+        });
+        expect(electron.Menu.buildFromTemplate).toHaveBeenCalledTimes(2);
     });
 
     it('creates the main BrowserWindow with every renderer security control enabled', async () => {

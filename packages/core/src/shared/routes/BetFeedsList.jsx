@@ -203,7 +203,7 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
             toolbar={(
                 <>
                     <NetworkField value={chainId} onChange={setChainId} chainIds={betChains.length ? betChains : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
-                    <div className={styles.actions} style={{ gap: '0.5rem' }}>
+                    <div className={styles.betActions}>
                         {/* A two-way filter: the colour shows the active side, and
                             aria-pressed says the same to a screen reader. */}
                         <Button variant={openOnly ? 'primary' : 'ghost'} aria-pressed={openOnly} onClick={() => setOpenOnly(true)}>Taking bets</Button>
@@ -217,7 +217,7 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
                 pattern), so the two personal views hang off it rather than each
                 needing its own slot in the actions menu. */}
             {onMyBets || onMyMarkets ? (
-                <div className={styles.actions} style={{ gap: '0.5rem' }}>
+                <div className={styles.betActions}>
                     {onMyBets ? <Button variant="ghost" onClick={onMyBets}>My bets</Button> : null}
                     {onMyMarkets ? <Button variant="ghost" onClick={onMyMarkets}>My markets</Button> : null}
                 </div>
@@ -264,9 +264,9 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
                                             <strong>#{String(id)} · {m.tick || 'n/a'}</strong>
                                             <StatusPill status={m.feed_status} />
                                         </span>
-                                        <span className={local.marketDetail}>{String(label).slice(0, 100)}</span>
+                                        <span className={`${local.marketDetail} ${styles.betLongText}`}>{String(label).slice(0, 100)}</span>
                                         {outcomes.length ? (
-                                            <span className={local.marketDetail}>{outcomes.slice(0, 4).join(' / ')}{outcomes.length > 4 ? ' …' : ''}</span>
+                                            <span className={`${local.marketDetail} ${styles.betLongText}`}>{outcomes.slice(0, 4).join(' / ')}{outcomes.length > 4 ? ' …' : ''}</span>
                                         ) : null}
                                     </span>
                                 </Button>

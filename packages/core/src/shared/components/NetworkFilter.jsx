@@ -31,8 +31,9 @@ import styles from './NetworkFilter.module.css';
  * @param {string[]} props.coinFamilies   coin families discovered in the active dataset, ordered for display
  * @param {string} props.value
  * @param {(coin: string) => void} props.onChange
+ * @param {string} [props.ariaLabel]
  */
-export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange }) {
+export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange, ariaLabel }) {
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
     const listboxId = useId();
@@ -162,6 +163,7 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange }) 
                 aria-haspopup="listbox"
                 aria-expanded={open ? 'true' : 'false'}
                 aria-controls={open ? listboxId : undefined}
+                aria-label={ariaLabel}
                 title={triggerLabel}
             >
                 <span className={styles.triggerIcon} aria-hidden="true">
@@ -211,6 +213,7 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange }) 
                                 type="button"
                                 role="option"
                                 tabIndex={-1}
+                                aria-label="All networks"
                                 aria-selected={value === 'all' ? 'true' : 'false'}
                                 className={`${styles.item} ${value === 'all' ? styles.itemActive : ''}`}
                                 onClick={() => { onChange('all'); closeFilter(true); }}
@@ -231,6 +234,7 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange }) 
                                         type="button"
                                         role="option"
                                         tabIndex={-1}
+                                        aria-label={e.label}
                                         aria-selected={value === e.coin ? 'true' : 'false'}
                                         className={`${styles.item} ${value === e.coin ? styles.itemActive : ''}`}
                                         onClick={() => { onChange(e.coin); closeFilter(true); }}

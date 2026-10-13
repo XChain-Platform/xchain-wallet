@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react';
 import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { t } from '../../i18n/index.js';
+import { WalletIdentity } from '../components/WalletIdentity.jsx';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
@@ -137,8 +138,8 @@ export function WalletPicker({
                                                 <Icon.CheckIcon />
                                             </span>
                                         ) : null}
-                                        <span className={pickerStyles.rowName} title={walletName}>
-                                            {walletName}
+                                        <span className={pickerStyles.rowName}>
+                                            <WalletIdentity wallet={w} active={active} />
                                         </span>
                                     </span>
                                     {w.format ? (
