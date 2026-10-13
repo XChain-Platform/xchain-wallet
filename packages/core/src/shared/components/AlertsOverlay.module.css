@@ -121,6 +121,39 @@
     gap: var(--xc-space-2);
 }
 
+.read {
+    opacity: 0.78;
+}
+
+.unread {
+    opacity: 1;
+}
+
+.alertOpen,
+.alertContent {
+    appearance: none;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    text-align: start;
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+.alertOpen {
+    cursor: pointer;
+}
+
+.alertOpen:focus-visible,
+.controlButton:focus-visible,
+.markRead:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
 .info     { border-inline-start-color: var(--xc-accent-primary); }
 .warning  { border-inline-start-color: #F59E0B; }
 .critical { border-inline-start-color: var(--xc-danger); }
@@ -136,6 +169,12 @@
     font-weight: 700;
     color: var(--xc-text);
     font-size: var(--xc-text-sm);
+}
+
+.readStatus {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
 }
 
 .alertMessage {
@@ -160,4 +199,47 @@
 .alertAction:hover {
     background: var(--xc-accent-primary-hover);
     border-color: var(--xc-accent-primary-hover);
+}
+
+.controls {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--xc-space-2);
+}
+
+.unreadCount {
+    flex: 1 1 auto;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+}
+
+.controlButton,
+.markRead {
+    appearance: none;
+    border: 1px solid var(--xc-border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--xc-accent-text);
+    padding: 6px 10px;
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.controlButton:hover:not(:disabled),
+.markRead:hover {
+    background: var(--xc-bg-muted);
+}
+
+.controlButton:disabled {
+    color: var(--xc-text-muted);
+    cursor: default;
+    opacity: 0.65;
+}
+
+.markRead {
+    align-self: flex-start;
 }

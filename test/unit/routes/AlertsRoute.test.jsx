@@ -25,6 +25,8 @@ vi.mock('../../../packages/core/src/shared/components/AlertsOverlay.module.css',
         critical: 'critical-style',
         warning: 'warning-style',
         info: 'info-style',
+        unread: 'unread-style',
+        read: 'read-style',
     },
 }));
 
@@ -37,6 +39,7 @@ function mount(overrides = {}) {
 
 afterEach(() => {
     cleanup();
+    globalThis.localStorage?.clear();
     messaging = {};
     vi.clearAllMocks();
     vi.restoreAllMocks();
@@ -81,7 +84,7 @@ describe('AlertsRoute alert list', () => {
         });
     });
 
-    it('runs an alert action once and leaves actionless alerts without a button', () => {
+    it('runs an alert action once and leaves actionless alerts without an open button', () => {
         const onSelect = vi.fn();
         mount({ alerts: [
             {
@@ -98,7 +101,76 @@ describe('AlertsRoute alert list', () => {
         fireEvent.click(within(actionItem).getByRole('button', { name: 'Review' }));
 
         expect(onSelect).toHaveBeenCalledTimes(1);
-        expect(within(plainItem).queryByRole('button')).toBeNull();
+        expect(within(plainItem).queryByRole('button', { name: 'Review' })).toBeNull();
+    });
+
+    it('counts only unread list rows and can mark one or every alert read', () => {
+        mount({ alerts: [
+            { id: 'one', severity: 'info', title: 'One', message: 'First' },
+            { id: 'two', severity: 'info', title: 'Two', message: 'Second', read: true },
+            { id: 'three', severity: 'info', title: 'Three', message: 'Third' },
+        ] });
+
+        expect(screen.getByText('2 unread')).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Mark One read' }));
+        expect(screen.getByText('1 unread')).toBeTruthy();
+        expect(within(screen.getAllByRole('listitem')[0]).getByText('Read')).toBeTruthy();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Mark all read' }));
+        expect(screen.getByText('0 unread')).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Mark all read' })).toBeDisabled();
+        expect(screen.queryByRole('button', { name: /^Mark (One|Two|Three) read$/ })).toBeNull();
+    });
+
+    it('clears the list into the shared empty state', () => {
+        const alerts = [
+            { id: 'one', severity: 'info', title: 'One', message: 'First' },
+            { id: 'two', severity: 'warning', title: 'Two', message: 'Second' },
+        ];
+        const first = mount({ walletId: 'wallet-1', alerts });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Clear alerts' }));
+
+        expect(screen.queryByRole('list')).toBeNull();
+        expect(screen.getByRole('heading', { name: 'No alerts' })).toBeTruthy();
+        expect(screen.getByText("You're all caught up.")).toBeTruthy();
+        expect(screen.queryByText(/unread$/)).toBeNull();
+
+        first.unmount();
+        mount({ walletId: 'wallet-1', alerts });
+        expect(screen.queryByRole('list')).toBeNull();
+        expect(screen.getByRole('heading', { name: 'No alerts' })).toBeTruthy();
+    });
+
+    it('marks an alert read and opens its related screen when the row is tapped', () => {
+        const onSelect = vi.fn();
+        mount({ alerts: [{
+            id: 'message',
+            severity: 'info',
+            title: 'Unread messages',
+            message: 'You have a message.',
+            action: { label: 'Open Messaging', onSelect },
+        }] });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Open Messaging' }));
+
+        expect(onSelect).toHaveBeenCalledTimes(1);
+        expect(screen.getByText('0 unread')).toBeTruthy();
+        expect(screen.getByText('Read')).toBeTruthy();
+    });
+
+    it('keeps read state per wallet across navigation and treats changed content as new', () => {
+        const alert = { id: 'one', severity: 'info', title: 'One', message: 'First' };
+        const first = mount({ walletId: 'wallet-1', alerts: [alert] });
+        fireEvent.click(screen.getByRole('button', { name: 'Mark One read' }));
+        first.unmount();
+
+        mount({ walletId: 'wallet-1', alerts: [alert] });
+        expect(screen.getByText('0 unread')).toBeTruthy();
+
+        cleanup();
+        mount({ walletId: 'wallet-1', alerts: [{ ...alert, message: 'Updated' }] });
+        expect(screen.getByText('1 unread')).toBeTruthy();
     });
 
     it('renders an unknown severity with the info style', () => {
