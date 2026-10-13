@@ -103,10 +103,25 @@ describe('main route heading order', () => {
         expectOrderedHeadings(view.container);
     });
 
-    it('shows the active wallet as the locked screen\'s only page heading', () => {
-        writeActiveWallet('wallet-2', 'Treasury');
-        const locked = renderRoute(<Locked onUnlocked={vi.fn()} />, { unlockWallet: vi.fn() });
-        expect(screen.getByRole('heading', { level: 1, name: 'Treasury' })).toBeVisible();
+    it('restores the active wallet name from safe metadata on a cold launch', async () => {
+        writeActiveWallet('wallet-2');
+        const locked = renderRoute(<Locked onUnlocked={vi.fn()} />, {
+            unlockWallet: vi.fn(),
+            listWallets: vi.fn().mockResolvedValue([
+                { id: 'wallet-1', name: 'Personal' },
+                { id: 'wallet-2', name: 'Treasury' },
+            ]),
+        });
+        expect(await screen.findByRole('heading', { level: 1, name: 'Treasury' })).toBeVisible();
+        expectOrderedHeadings(locked.container);
+    });
+
+    it('falls back to the unlock heading when there is no active wallet', () => {
+        const locked = renderRoute(<Locked onUnlocked={vi.fn()} />, {
+            unlockWallet: vi.fn(),
+            listWallets: vi.fn().mockResolvedValue([{ id: 'wallet-1', name: 'Personal' }]),
+        });
+        expect(screen.getByRole('heading', { level: 1, name: 'Unlock wallet' })).toBeVisible();
         expectOrderedHeadings(locked.container);
         locked.unmount();
 

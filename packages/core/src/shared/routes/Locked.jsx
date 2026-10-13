@@ -33,7 +33,11 @@ import { sweepMsgMemoryForWallet } from '../utils/msgReadMemory.js';
 import { wipeWalletStorage } from '../utils/wipeWalletStorage.js';
 import { setForgotPasswordRestoreIntent } from '../utils/forgotPasswordRecovery.js';
 import { nextPaint } from '../utils/nextPaint.js';
-import { readActiveWalletName } from '../utils/activeWalletMemory.js';
+import {
+    readActiveWallet,
+    readActiveWalletName,
+    writeActiveWallet,
+} from '../utils/activeWalletMemory.js';
 import { DemoExitConfirm } from '../components/DemoExitConfirm.jsx';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { useBackHandler } from '../../ui/backStack.js';
@@ -103,6 +107,7 @@ export function Locked({ onUnlocked }) {
     const [wipeConfirmText, setWipeConfirmText] = useState('');
     const [wipeBusy, setWipeBusy] = useState(false);
     const [wipeError, setWipeError] = useState(/** @type {string | null} */ (null));
+    const [activeWalletName, setActiveWalletName] = useState(readActiveWalletName);
     const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const forgotTriggerRef = useRef(/** @type {HTMLButtonElement | null} */ (null));
     const forgotDialogRef = useRef(/** @type {HTMLDivElement | null} */ (null));
@@ -175,6 +180,30 @@ export function Locked({ onUnlocked }) {
         inputRef.current?.focus();
     }, []);
 
+    // The wallet list is safe metadata, so it can restore the heading before
+    // unlock when an older active-wallet entry contains only the wallet id.
+    useEffect(() => {
+        const activeWalletId = readActiveWallet();
+        if (!activeWalletId || typeof messaging?.listWallets !== 'function') return undefined;
+        let cancelled = false;
+        Promise.resolve()
+            .then(() => messaging.listWallets())
+            .then((value) => {
+                if (cancelled) return;
+                const wallets = Array.isArray(value) ? value : value?.wallets;
+                const activeWallet = Array.isArray(wallets)
+                    ? wallets.find((wallet) => wallet?.id === activeWalletId)
+                    : null;
+                const name = typeof activeWallet?.name === 'string'
+                    ? activeWallet.name.trim()
+                    : '';
+                setActiveWalletName(name || null);
+                if (name) writeActiveWallet(activeWalletId, name);
+            })
+            .catch(() => { /* Keep the last known name when metadata is unavailable. */ });
+        return () => { cancelled = true; };
+    }, [messaging]);
+
     // Probe for biometric availability + a registered credential. The
     // button only renders when both are true; otherwise the user sees
     // the password form unchanged.
@@ -238,7 +267,6 @@ export function Locked({ onUnlocked }) {
 
     const captureWallet = captureQueue[captureIndex] || null;
     const inCaptureStep = captureWallet !== null;
-    const activeWalletName = readActiveWalletName();
 
     // The one place `onUnlocked` is called from the password paths. It
     // unmounts this screen in every shell, so the password is dropped here
