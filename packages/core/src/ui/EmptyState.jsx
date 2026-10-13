@@ -27,6 +27,9 @@ import styles from './EmptyState.module.css';
  * @param {string} [props.actionLabel]                    omit, with onAction, for no button
  * @param {() => void} [props.onAction]
  * @param {import('react').ReactNode | null} [props.actionIcon]   icon for the button; defaults to the label's icon
+ * @param {string} [props.secondaryActionLabel]           optional outline action shown after the primary action
+ * @param {() => void} [props.onSecondaryAction]
+ * @param {import('react').ReactNode | null} [props.secondaryActionIcon]
  * @param {'h2' | 'h3' | 'p'} [props.titleAs]             default h2; h3 under a SectionHeader
  * @param {string} [props.role]                           default 'status'
  * @param {string} [props.className]
@@ -38,20 +41,39 @@ export function EmptyState({
     actionLabel,
     onAction,
     actionIcon,
+    secondaryActionLabel,
+    onSecondaryAction,
+    secondaryActionIcon,
     titleAs: Title = 'h2',
     role = 'status',
     className,
+    ...rest
 }) {
+    const hasPrimaryAction = Boolean(actionLabel && onAction);
+    const hasSecondaryAction = Boolean(secondaryActionLabel && onSecondaryAction);
+
     return (
-        <div className={[styles.wrap, className].filter(Boolean).join(' ')} role={role}>
+        <div className={[styles.wrap, className].filter(Boolean).join(' ')} role={role} {...rest}>
             {icon ? <div className={styles.icon} aria-hidden="true">{icon}</div> : null}
             <Title className={styles.title}>{title}</Title>
             {body ? <p className={styles.body}>{body}</p> : null}
-            {actionLabel && onAction ? (
-                <div className={styles.action}>
-                    <Button variant="primary" size="sm" onClick={onAction} icon={actionIcon}>
-                        {actionLabel}
-                    </Button>
+            {hasPrimaryAction || hasSecondaryAction ? (
+                <div className={styles.actions}>
+                    {hasPrimaryAction ? (
+                        <Button variant="primary" size="sm" onClick={onAction} icon={actionIcon}>
+                            {actionLabel}
+                        </Button>
+                    ) : null}
+                    {hasSecondaryAction ? (
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={onSecondaryAction}
+                            icon={secondaryActionIcon}
+                        >
+                            {secondaryActionLabel}
+                        </Button>
+                    ) : null}
                 </div>
             ) : null}
         </div>

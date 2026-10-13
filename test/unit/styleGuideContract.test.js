@@ -112,7 +112,9 @@ describe('STYLE_GUIDE component contracts', () => {
         expect(guide).toContain('### The list rule: full width to the scrollbar');
         expect(guide).toContain('Do not wrap it in a card or add a centered maximum width');
         for (const prop of [
-            'title', 'body', 'icon', 'actionLabel', 'onAction', 'actionIcon', 'titleAs', 'role', 'className',
+            'title', 'body', 'icon', 'actionLabel', 'onAction', 'actionIcon',
+            'secondaryActionLabel', 'onSecondaryAction', 'secondaryActionIcon',
+            'titleAs', 'role', 'className',
         ]) {
             expect(emptyState).toMatch(new RegExp(`\\b${prop}\\b`));
             expect(guide).toMatch(new RegExp(`\`${prop}\``));
