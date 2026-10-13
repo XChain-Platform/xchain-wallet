@@ -244,7 +244,8 @@ describe('BetFeedDetail reports the outcome of a bet the market has outlived', (
 
         const alert = utils.container.querySelector('[role="alert"]');
         expect(alert).toBeTruthy();
-        expect(alert.textContent).toContain('Broadcast refused by the node.');
+        // An unclassified node error reaches the user as the generic house line.
+        expect(alert.textContent).toContain('Something went wrong. Try again.');
         expect(utils.queryByTestId('bet-result')).toBeNull();
     });
 });
