@@ -424,22 +424,21 @@ assert.match(
 
 // ---- Safe area: the app must not draw under the Dynamic Island ----------
 //
-// Measured on an iPhone 17 Pro Max simulator: the island sat on top of the
-// XChain logo. Two halves fix it, and BOTH are one-liners a template
-// regeneration or a stray `cap sync` could silently drop:
+// ONE mechanism owns the safe area, and it is the web one:
+// `viewport-fit=cover` plus the body insets in core/ui/tokens.css, sized
+// against --xc-viewport-h so the shell is exactly one screen tall.
 //
-//   1. `ios.contentInset: "always"` makes the WKWebView's scroll view adjust
-//      for the safe area. This is the half that actually moved the content -
-//      `env(safe-area-inset-top)` evaluates to ZERO inside this WebView even
-//      with viewport-fit=cover, proven by a literal-padding probe that DID
-//      move the app.
-//   2. `viewport-fit=cover` plus the body insets in core/ui/tokens.css, which
-//      is what serves the MOBILE WEB shell (Safari on a notched phone), where
-//      env() does return real values.
+// The native scroll view must NOT adjust for the safe area as well.
+// `ios.contentInset: "always"` did, on top of the CSS insets: measured on an
+// iPhone 17 Pro simulator (2026-10-12) the header sat 124pt down (62pt twice)
+// and the scroll view's added insets made the whole shell draggable, sliding
+// the header under the status bar and leaving a blank band under the tab
+// bar. "never" leaves the WebView full screen and env(safe-area-inset-*)
+// reports the real insets there (62pt top, 34pt bottom).
 assert.equal(
     capConfig.ios?.contentInset,
-    'always',
-    'capacitor.config.json sets ios.contentInset=always (else the WebView draws under the Dynamic Island)',
+    'never',
+    'capacitor.config.json sets ios.contentInset=never (the CSS insets own the safe area; "always" doubles them and makes the shell scroll)',
 );
 const webIndex = readFileSync(join(wsRoot, 'packages', 'web', 'index.html'), 'utf8');
 assert.match(
