@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MarketsList } from '../../../packages/core/src/shared/routes/MarketsList.jsx';
@@ -155,9 +155,9 @@ describe('MarketsList narrow layout', () => {
             </MessagingProvider>,
         );
 
-        const search = await screen.findByLabelText('Search markets');
-        expect(search.parentElement.style.flexWrap).toBe('wrap');
-        expect(search.style.flex).toBe('1 1 140px');
+        const search = await screen.findByRole('searchbox', { name: 'Search markets' });
+        expect(search.closest('[class*="searchField"]')).toBeInTheDocument();
+        expect(search.closest('[class*="searchField"]').parentElement.style.flexWrap).toBe('wrap');
     });
 
     it('shows a load error instead of presenting a failed request as an empty market', async () => {
@@ -369,18 +369,19 @@ describe('MarketsList narrow layout', () => {
         );
 
         fireEvent.click(await screen.findByRole('tab', { name: 'All' }));
-        const list = (await screen.findByText('TOKEN0000')).closest('ul');
-        await waitFor(() => expect(list.querySelectorAll('li')).toHaveLength(25));
+        await screen.findByText('TOKEN0000');
+        const list = screen.getByRole('list', { name: 'Markets' });
+        await waitFor(() => expect(within(list).getAllByRole('listitem')).toHaveLength(25));
         expect(screen.getByText('25 of 5,000 markets shown')).toBeInTheDocument();
 
-        const scroller = document.querySelector('main');
+        const scroller = screen.getByRole('main');
         scroller.scrollTop = 241;
         const showMore = screen.getByRole('button', { name: 'Load more markets' });
         showMore.focus();
         expect(document.activeElement).toBe(showMore);
         fireEvent.click(showMore);
 
-        await waitFor(() => expect(list.querySelectorAll('li')).toHaveLength(50));
+        await waitFor(() => expect(within(list).getAllByRole('listitem')).toHaveLength(50));
         expect(scroller.scrollTop).toBe(241);
     });
 });

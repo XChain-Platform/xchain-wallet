@@ -28,31 +28,16 @@
 .search {
     flex: 1 1 0;
     min-width: 0;
-    box-sizing: border-box;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
 }
 
-.search::placeholder {
-    color: var(--xc-text-muted);
+.search > *,
+.sort > * {
+    margin-bottom: 0;
 }
 
 /* Sort sits beside the two half-width controls at its natural width. */
 .sort {
     flex: 0 0 auto;
-    box-sizing: border-box;
-    padding: var(--xc-space-2) var(--xc-space-2);
-    font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
 }
 
 @media (max-width: 420px) {
@@ -469,44 +454,6 @@
     margin-top: var(--xc-space-3);
 }
 
-/* Textarea used in the new contact form notes field, styled to match Input. */
-.notesField {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-1);
-    margin-bottom: var(--xc-space-2);
-}
-
-/* Save row on the create/edit contact forms. Tighter top margin than the
-   shared .actions so the button sits close under the notes textarea. */
-
-.notesLabel {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-    font-weight: 500;
-}
-
-.notesTextarea {
-    padding: var(--xc-space-2) var(--xc-space-3);
-    font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-md);
-    color: var(--xc-text);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
-    width: 100%;
-    box-sizing: border-box;
-    resize: vertical;
-    min-height: 80px;
-    transition: border-color var(--xc-transition), box-shadow var(--xc-transition);
-}
-
-.notesTextarea:focus {
-    outline: none;
-    border-color: var(--xc-accent-primary);
-    box-shadow: 0 0 0 3px var(--xc-focus-ring);
-}
-
 /* Empty state shown when no contacts exist or none match the filter.
    Rendered as a card so the emptiness is clearly intentional, not a
    loading glitch. */
@@ -526,12 +473,3 @@
 }
 
 .linkButton:hover { text-decoration: underline; }
-
-/* Box-shadow focus rings are not painted in forced-colors mode, so give
- * this control a real outline there (WCAG 2.4.7). */
-@media (forced-colors: active) {
-    .notesTextarea:focus {
-        outline: 2px solid Highlight;
-        outline-offset: 2px;
-    }
-}

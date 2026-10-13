@@ -10,6 +10,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
+    Button,
     Screen,
     PageHeader,
     Input,
@@ -174,15 +175,18 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
             title="My tokens"
             titleIcon={<Icon.TokenIcon />}
             trailing={
-                <button
+                <Button
                     type="button"
+                    variant="ghost"
+                    size="sm"
+                    icon={null}
                     className={styles.issueButton}
                     onClick={onIssue}
                     aria-label="Issue new token"
                     title="Issue new token"
                 >
                     <Icon.PlusIcon />
-                </button>
+                </Button>
             }
         />
     );
@@ -201,6 +205,7 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                         />
                     </div>
                     <div className={styles.chipGroup} role="radiogroup" aria-label="Filter by balance held">
+                        {/* Raw buttons preserve the segmented radio control semantics. */}
                         <button
                             type="button"
                             role="radio"
@@ -210,6 +215,7 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                         >
                             All
                         </button>
+                        {/* Raw buttons preserve the segmented radio control semantics. */}
                         <button
                             type="button"
                             role="radio"
@@ -279,8 +285,10 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                     <ul className={styles.list} role="list">
                         {filteredTokens.map((row) => (
                             <li key={`${row.chainId}:${row.tick}`}>
-                                <button
+                                <Button
                                     type="button"
+                                    variant="ghost"
+                                    icon={null}
                                     className={styles.row}
                                     onClick={() => onSelectTick(row.tick, row.chainId, row)}
                                     aria-label={`Open ${row.tick} token details`}
@@ -312,7 +320,7 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                                     <span className={styles.rowChevron} aria-hidden="true">
                                         <Icon.ForwardIcon />
                                     </span>
-                                </button>
+                                </Button>
                             </li>
                         ))}
                     </ul>

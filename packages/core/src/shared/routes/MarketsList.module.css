@@ -16,6 +16,54 @@
     background: var(--xc-bg-muted);
 }
 
+.assetButton > span,
+.marketButton > span {
+    display: contents;
+}
+
+.searchField {
+    flex: 1 1 140px;
+    min-width: 0;
+}
+
+.searchField > * {
+    margin-bottom: 0;
+}
+
+.starButton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: var(--xc-tap-min);
+    min-height: var(--xc-tap-min);
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.marketButton {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    flex: 1;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+}
+
+.marketButton:disabled {
+    cursor: not-allowed;
+}
+
 .pagination {
     display: flex;
     align-items: center;
