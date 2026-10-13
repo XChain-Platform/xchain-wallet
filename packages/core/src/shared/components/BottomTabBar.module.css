@@ -63,11 +63,12 @@
 }
 
 .tabIcon {
+    --xc-icon-size: var(--xc-icon-lg);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
-    height: 22px;
+    width: var(--xc-icon-xl);
+    height: var(--xc-icon-xl);
     position: relative;
 }
 
@@ -160,11 +161,12 @@
 }
 
 .sheetIcon {
+    --xc-icon-size: var(--xc-icon-lg);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 20px;
-    height: 20px;
+    width: var(--xc-icon-lg);
+    height: var(--xc-icon-lg);
     flex: 0 0 auto;
 }
 

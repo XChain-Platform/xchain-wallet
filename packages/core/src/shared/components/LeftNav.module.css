@@ -206,11 +206,12 @@
 }
 
 .icon {
+    --xc-icon-size: var(--xc-icon-md);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 18px;
-    height: 18px;
+    width: var(--xc-icon-md);
+    height: var(--xc-icon-md);
     flex: 0 0 auto;
 }
 

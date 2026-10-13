@@ -30,6 +30,13 @@
     --xc-text-xl: 20px;
     --xc-text-2xl: 24px;
 
+    /* Icon sizes use one named scale across controls and navigation rows. */
+    --xc-icon-xs: 14px;
+    --xc-icon-sm: 16px;
+    --xc-icon-md: 18px;
+    --xc-icon-lg: 20px;
+    --xc-icon-xl: 24px;
+
     /* Minimum interactive target (responsive-first, slice 2).
      *
      * WCAG 2.2 AA 2.5.8 "Target Size (Minimum)": every pointer target is

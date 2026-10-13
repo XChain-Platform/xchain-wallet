@@ -40,12 +40,14 @@
 }
 
 .md {
+    --xc-icon-size: var(--xc-icon-md);
     padding: var(--xc-space-2) var(--xc-space-4);
     font-size: var(--xc-text-md);
     min-height: 36px;
 }
 
 .sm {
+    --xc-icon-size: var(--xc-icon-sm);
     padding: var(--xc-space-1) var(--xc-space-3);
     font-size: var(--xc-text-sm);
     min-height: 28px;

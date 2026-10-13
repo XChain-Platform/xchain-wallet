@@ -79,6 +79,7 @@
 }
 
 .amountUnitSwap {
+    --xc-icon-size: var(--xc-icon-xs);
     display: inline-flex;
     align-items: center;
     gap: var(--xc-space-1);
@@ -101,7 +102,5 @@
 }
 
 .amountUnitSwap svg {
-    width: 14px;
-    height: 14px;
     flex-shrink: 0;
 }
