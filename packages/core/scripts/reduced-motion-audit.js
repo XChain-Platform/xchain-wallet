@@ -60,28 +60,49 @@ function hasLocalOverride(source, kind) {
     const cancellation = kind === 'animation'
         ? /\banimation(?:-duration)?\s*:\s*(?:none|0(?:\.0+1)?ms)\b/i
         : /\btransition(?:-duration)?\s*:\s*(?:none|0(?:\.0+1)?ms)\b/i;
-    return mediaBodies(source, /prefers-reduced-motion\s*:\s*reduce/i)
+    const hasOsOverride = mediaBodies(source, /prefers-reduced-motion\s*:\s*reduce/i)
         .some((body) => cancellation.test(body));
+    const hasAppOverride = Array.from(stripComments(source).matchAll(/([^{}]+)\{([^{}]*)\}/g))
+        .some(([, selectorText, body]) => (
+            selectorText.includes(':root[data-xc-reduced-motion="reduce"]')
+            && cancellation.test(body)
+        ));
+    return hasOsOverride && hasAppOverride;
+}
+
+function hasGlobalSelectorGuard(source, root) {
+    const rules = stripComments(source).matchAll(/([^{}]+)\{([^{}]*)\}/g);
+    for (const [, selectorText, body] of rules) {
+        const selectors = selectorText.split(',').map((selector) => selector.trim());
+        if (!selectors.includes(root)
+            || !selectors.includes(`${root} *`)
+            || !selectors.includes(`${root} *::before`)
+            || !selectors.includes(`${root} *::after`)) continue;
+        if (/animation-duration\s*:\s*0(?:\.0+1)?ms\s*!important/i.test(body)
+            && /animation-iteration-count\s*:\s*1\s*!important/i.test(body)
+            && /transition-duration\s*:\s*0(?:\.0+1)?ms\s*!important/i.test(body)
+            && /scroll-behavior\s*:\s*auto\s*!important/i.test(body)) return true;
+    }
+    return false;
 }
 
 export function hasGlobalReducedMotionGuard(source) {
-    return mediaBodies(source, /prefers-reduced-motion\s*:\s*reduce/i).some((body) => {
-        const compact = body.replace(/\s+/g, ' ');
-        const root = ':root:not([data-xc-reduced-motion="no-preference"])';
-        return compact.includes(`${root},`)
-            && compact.includes(`${root} *`)
-            && compact.includes(`${root} *::before`)
-            && compact.includes(`${root} *::after`)
-            && /animation-duration\s*:\s*0(?:\.0+1)?ms\s*!important/i.test(body)
-            && /animation-iteration-count\s*:\s*1\s*!important/i.test(body)
-            && /transition-duration\s*:\s*0(?:\.0+1)?ms\s*!important/i.test(body)
-            && /scroll-behavior\s*:\s*auto\s*!important/i.test(body);
-    });
+    const osRoot = ':root:not([data-xc-reduced-motion="no-preference"])';
+    const appRoot = ':root[data-xc-reduced-motion="reduce"]';
+    const hasOsGuard = mediaBodies(source, /prefers-reduced-motion\s*:\s*reduce/i)
+        .some((body) => hasGlobalSelectorGuard(body, osRoot));
+    return hasOsGuard && hasGlobalSelectorGuard(source, appRoot);
 }
 
 function reducesTransitionToken(source) {
-    return mediaBodies(source, /prefers-reduced-motion\s*:\s*reduce/i)
+    const hasOsToken = mediaBodies(source, /prefers-reduced-motion\s*:\s*reduce/i)
         .some((body) => /--xc-transition\s*:\s*0ms\b/i.test(body));
+    const hasAppToken = Array.from(stripComments(source).matchAll(/([^{}]+)\{([^{}]*)\}/g))
+        .some(([, selectorText, body]) => (
+            selectorText.includes(':root[data-xc-reduced-motion="reduce"]')
+            && /--xc-transition\s*:\s*0ms\b/i.test(body)
+        ));
+    return hasOsToken && hasAppToken;
 }
 
 /**

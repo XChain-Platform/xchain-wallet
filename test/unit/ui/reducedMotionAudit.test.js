@@ -26,12 +26,25 @@ const guardedTokens = `
             scroll-behavior: auto !important;
         }
     }
+    :root[data-xc-reduced-motion="reduce"],
+    :root[data-xc-reduced-motion="reduce"] *,
+    :root[data-xc-reduced-motion="reduce"] *::before,
+    :root[data-xc-reduced-motion="reduce"] *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
 `;
 
 describe('reduced-motion CSS audit', () => {
-    it('recognizes the global OS guard and the explicit opt-out', () => {
+    it('requires both the global OS guard and the app setting guard', () => {
         expect(hasGlobalReducedMotionGuard(guardedTokens)).toBe(true);
         expect(hasGlobalReducedMotionGuard(guardedTokens.replace(' *::after', ' .missing'))).toBe(false);
+        expect(hasGlobalReducedMotionGuard(guardedTokens.replace(
+            /:root\[data-xc-reduced-motion="reduce"\],[\s\S]*$/,
+            '',
+        ))).toBe(false);
     });
 
     it('lists hard-coded motion when the global guard is absent', () => {
@@ -50,14 +63,27 @@ describe('reduced-motion CSS audit', () => {
             {
                 file: 'Local.module.css',
                 source: '.a { animation: pulse 1s infinite; }\n'
-                    + '@media (prefers-reduced-motion: reduce) { .a { animation: none; } }',
+                    + '@media (prefers-reduced-motion: reduce) { .a { animation: none; } }\n'
+                    + ':root[data-xc-reduced-motion="reduce"] .a { animation: none; }',
             },
             { file: 'Token.module.css', source: '.b { transition: color var(--xc-transition); }' },
             { file: 'Essential.module.css', source: '.c { animation: status 1s infinite; }' },
         ];
-        const tokenOnly = '@media (prefers-reduced-motion: reduce) { :root { --xc-transition: 0ms; } }';
+        const tokenOnly = '@media (prefers-reduced-motion: reduce) { :root { --xc-transition: 0ms; } }\n'
+            + ':root[data-xc-reduced-motion="reduce"] { --xc-transition: 0ms; }';
         const allowlist = new Map([['Essential.module.css', 'Communicates an essential status.']]);
         expect(findUncoveredMotionCss(stylesheets, tokenOnly, allowlist)).toEqual([]);
+    });
+
+    it('rejects local guards that only honor the OS setting', () => {
+        const stylesheets = [{
+            file: 'OsOnly.module.css',
+            source: '.a { animation: pulse 1s infinite; }\n'
+                + '@media (prefers-reduced-motion: reduce) { .a { animation: none; } }',
+        }];
+        expect(findUncoveredMotionCss(stylesheets, '')).toEqual([
+            { file: 'OsOnly.module.css', kinds: ['animation'] },
+        ]);
     });
 
     it('finds no uncovered motion in core source', () => {

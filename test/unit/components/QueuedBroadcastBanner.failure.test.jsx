@@ -48,6 +48,7 @@ const { QueuedBroadcastBanner, queuedBroadcastFailure } = await import(
 
 afterEach(() => {
     cleanup();
+    document.documentElement.removeAttribute('data-xc-reduced-motion');
     queue = [];
     toasts.length = 0;
     broadcastImpl = async () => {};
@@ -171,7 +172,8 @@ describe('QueuedBroadcastBanner actions and announcements', () => {
         expect(toasts.at(-1)).toMatchObject({ message: 'Transaction sent.', variant: 'success' });
     });
 
-    it('moves focus to the first send action from the reconnect reminder', async () => {
+    it('moves focus without smooth scrolling when app reduced motion is active', async () => {
+        document.documentElement.setAttribute('data-xc-reduced-motion', 'reduce');
         reachabilityOverall = 'offline';
         queue = [entry('a', 'Send 1 XCP')];
         const view = render(<QueuedBroadcastBanner walletId="w1" intervalMs={0} />);
@@ -185,7 +187,7 @@ describe('QueuedBroadcastBanner actions and announcements', () => {
         toasts.at(-1).onAction();
 
         expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Send now: Send 1 XCP' }));
-        expect(scrollIntoView).toHaveBeenCalledOnce();
+        expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center', behavior: 'auto' });
     });
 });
 

@@ -25,7 +25,7 @@
 // "Review" action so the user knows the transactions are ready to send.
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { ChainBadge } from '@xchain-wallet/core/ui';
+import { ChainBadge, useReducedMotion } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging } from '../useMessaging.js';
 import { useReachability } from '../hooks/useReachability.js';
@@ -53,6 +53,7 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
     // to broadcast.
     const { overall: reachabilityOverall } = useReachability({});
     const { showToast } = useToast();
+    const reducedMotion = useReducedMotion();
     const prevOverallRef = useRef(/** @type {string | null} */ (null));
     const lastPromptedAtRef = useRef(/** @type {number} */ (0));
     const bannerRef = useRef(/** @type {HTMLElement | null} */ (null));
@@ -103,12 +104,15 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
                 const sendButton = bannerRef.current?.querySelector('[data-queued-send]');
                 if (sendButton && typeof sendButton.focus === 'function') {
                     sendButton.focus();
-                    bannerRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                    bannerRef.current.scrollIntoView({
+                        block: 'center',
+                        behavior: reducedMotion ? 'auto' : 'smooth',
+                    });
                 }
             },
             durationMs: 12_000,
         });
-    }, [reachabilityOverall, queue.length, showToast]);
+    }, [reachabilityOverall, queue.length, reducedMotion, showToast]);
 
     if (queue.length === 0) return null;
 
