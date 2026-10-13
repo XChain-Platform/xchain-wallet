@@ -90,4 +90,46 @@ describe('LayoutModeToggle', () => {
         expect(chrome.storage.onChanged.removeListener).toHaveBeenCalledWith(listener);
         expect(listeners.size).toBe(0);
     });
+
+    it('does not let a delayed initial read overwrite a newer storage change', () => {
+        const { chrome } = extensionChrome();
+        let finishRead;
+        chrome.storage.local.get.mockImplementation((_key, callback) => {
+            finishRead = callback;
+        });
+        render(<LayoutModeToggle />);
+        const listener = chrome.storage.onChanged.addListener.mock.calls[0][0];
+
+        act(() => listener({ [STORAGE_KEY]: { newValue: 'sidepanel' } }, 'local'));
+        act(() => finishRead({ [STORAGE_KEY]: 'popup' }));
+
+        expect(screen.getByRole('radio', { name: 'Sidebar' })).toHaveAttribute('aria-checked', 'true');
+    });
+
+    it('ignores a delayed initial read after unmount', () => {
+        const { chrome } = extensionChrome();
+        let finishRead;
+        chrome.storage.local.get.mockImplementation((_key, callback) => {
+            finishRead = callback;
+        });
+        const view = render(<LayoutModeToggle />);
+
+        view.unmount();
+        const staleItems = {};
+        Object.defineProperty(staleItems, STORAGE_KEY, {
+            get: () => { throw new Error('unmounted callback read stale items'); },
+        });
+        expect(() => finishRead(staleItems)).not.toThrow();
+    });
+
+    it('handles rejected storage writes', async () => {
+        const { chrome } = extensionChrome('popup');
+        chrome.storage.local.set.mockReturnValueOnce(Promise.reject(new Error('storage unavailable')));
+        render(<LayoutModeToggle />);
+
+        fireEvent.click(screen.getByRole('radio', { name: 'Sidebar' }));
+        await act(async () => Promise.resolve());
+
+        expect(screen.getByRole('radio', { name: 'Sidebar' })).toHaveAttribute('aria-checked', 'true');
+    });
 });
