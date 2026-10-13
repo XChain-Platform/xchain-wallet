@@ -22,7 +22,9 @@ const rules = parseRules(css).filter((rule) => rule.selector === selector);
 assert.equal(rules.length, 1, 'tokens.css defines one shared text-control font floor');
 assert.match(rules[0].body, /font-size:\s*1rem\s*!important\s*;/,
     'the shared text-control font floor is 1rem and overrides local declarations');
-assert.deepEqual(rules[0].at, ['@media (max-width: 599px)'],
-    'the font floor applies below 600px without changing desktop control sizes');
+assert.deepEqual(rules[0].at, ['@media (pointer: coarse), (hover: none)'],
+    'the font floor applies to touch devices without changing pointer-based desktop sizes');
+assert.doesNotMatch(rules[0].at[0], /(?:max|min)-width/,
+    'the touch font floor applies at phone and tablet widths');
 
 console.log('mobile-form-control-font-size smoke OK');

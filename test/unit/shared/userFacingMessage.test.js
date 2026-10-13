@@ -84,6 +84,24 @@ describe('userFacingMessage', () => {
         expect(userFacingMessage(new Error('   importWif: boom'), FALLBACK)).toBe(FALLBACK);
     });
 
+    it.each([
+        'ERR_NETWORK',
+        'E_CONN_RESET',
+        'INSUFFICIENT_FUNDS',
+        'Request failed: ERR_NETWORK',
+        'SDKEncoderError: INSUFFICIENT_FUNDS',
+    ])('keeps raw error codes and internal names out of display copy: %s', (raw) => {
+        expect(userFacingMessage(raw, FALLBACK)).toBe(FALLBACK);
+    });
+
+    it.each([
+        'at submitAction (submitAction.js:42:7)',
+        'Could not submit\n    at submitAction (submitAction.js:42:7)',
+        'submitAction.js:42:7',
+    ])('keeps stack fragments out of display copy: %s', (raw) => {
+        expect(userFacingMessage(raw, FALLBACK)).toBe(FALLBACK);
+    });
+
     it('isDeveloperMessage reports the same verdict for logging callers', () => {
         expect(isDeveloperMessage(new Error('importWif: boom'))).toBe(true);
         expect(isDeveloperMessage(new Error('That is not a valid private key.'))).toBe(false);

@@ -117,7 +117,7 @@ async function readPath(page, rowName) {
     await expect(field, 'the address detail view showed no derivation path').toBeVisible({ timeout: 30_000 });
     const value = (await field.innerText()).trim();
 
-    await page.getByRole('button', { name: 'Back' }).first().click();
+    await page.getByRole('button', { name: 'Back to previous screen' }).first().click();
     await expect(page.getByRole('button', { name: /^View address / }).first())
         .toBeVisible({ timeout: 30_000 });
     return pathTail(value);
