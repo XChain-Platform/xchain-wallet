@@ -2053,7 +2053,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         title="View on the XChain explorer"
                     >
                         <img src={branding.logoUrl()} alt="" aria-hidden="true" className={local.quickActionLogo} />
-                        <span>XChain</span>
+                        <span>XChain <span aria-hidden="true">↗</span></span>
                     </a>
                 ) : null}
                 <div className={local.quickActionMoreWrap} ref={moreWrapRef}>

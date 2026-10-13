@@ -471,7 +471,7 @@ function FirmwareBanner({ verdict, vendor }) {
                     target="_blank"
                     rel="noopener noreferrer"
                 >
-                    Open vendor update tool →
+                    Open vendor update tool <span aria-hidden="true">↗</span>
                 </a>
             ) : null}
         </StatusMessage>

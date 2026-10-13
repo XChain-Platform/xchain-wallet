@@ -341,7 +341,7 @@ function DocLink({ path, label }) {
                 rel="noreferrer noopener"
                 style={{ ...style, color: 'var(--xc-accent, var(--xc-text))' }}
             >
-                {label}
+                {label} <span aria-hidden="true">↗</span>
             </a>
         );
     }
