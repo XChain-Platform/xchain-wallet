@@ -17,7 +17,7 @@
 //
 //   usr/share/icons/hicolor/1024x1024/apps/xchain-wallet.png
 //     CI (GitHub runner, umask 022):  -rw-r--r--  (0644)
-//     test02 (Ubuntu login, umask 002): -rw-rw-r--  (0664)
+//     dev host (Ubuntu login, umask 002): -rw-rw-r--  (0664)
 //
 // That icon is build/icon.png copied byte-for-byte (same sha256), and both
 // fpm and the AppImage stage copy it WITH its mode. A git checkout writes
