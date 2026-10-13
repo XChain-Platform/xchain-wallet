@@ -9,7 +9,7 @@
 // a literal, so this test cannot drift either.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -45,8 +45,8 @@ function messagingWith(listActions, chainId) {
 
 // Read the option values of the first "Action" picker, blank option dropped.
 async function actionOptions() {
-    const label = await screen.findByText('Action', { selector: 'span' });
-    const select = within(label.closest('label')).getByRole('combobox');
+    // The kit Select labels its native select, so the label names the combobox.
+    const select = await screen.findByRole('combobox', { name: 'Action' });
     await waitFor(() => expect(select.querySelectorAll('option').length).toBeGreaterThan(1));
     return [...select.querySelectorAll('option')].map((o) => o.value).filter(Boolean);
 }
@@ -121,7 +121,7 @@ describe('BatchComposerForm fallback action list', () => {
             </MessagingProvider>,
         );
         await actionOptions();
-        const pick = (name) => within(screen.getByText(name, { selector: 'span' }).closest('label')).getByRole('combobox');
+        const pick = (name) => screen.getByRole('combobox', { name });
         fireEvent.change(pick('Action'), { target: { value: 'COLLECT' } });
         fireEvent.change(pick('Chain'), { target: { value: LTC } });
         expect(await screen.findByText(/is not available on/)).toBeTruthy();
