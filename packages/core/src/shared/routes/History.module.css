@@ -418,20 +418,8 @@
 
 .row {
     position: relative;
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-1);
-    padding: var(--xc-space-3);
     border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     background: var(--xc-surface-raised);
-    cursor: pointer;
-    color: var(--xc-text);
-    font-family: inherit;
-    width: 100%;
-    min-width: 0;
-    box-sizing: border-box;
-    text-align: start;
     margin: var(--xc-space-1) 0;
 }
 
@@ -454,6 +442,13 @@
     display: flex;
     align-items: center;
     gap: var(--xc-space-2);
+}
+
+.rowDetails {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    min-width: 0;
 }
 
 .actionBadge {
@@ -1293,18 +1288,6 @@
 
 .groupCardWrap > .groupMembers > li + li > .row {
     border-top: 1px solid var(--xc-border);
-}
-
-/* Chevron toggle on the group header. Uses the shared DoubleChevron
-   component (matching the Additional-details disclosure). Points down
-   when collapsed, up when expanded. Pushed to the far right edge of
-   the meta line. */
-.groupChevron {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    margin-inline-start: auto;
-    color: var(--xc-text-muted);
 }
 
 /* PC-50: SPV verdict badge above the action detail card. */
