@@ -363,9 +363,12 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await main.getByRole('button', { name: 'Pay now' }).first().click();
             await main.getByRole('button', { name: 'Review' }).click();
+            await page.getByRole('button', { name: 'Continue to confirmation' }).click();
+            await expectConfirmModal(page, 'the matched order payment', 60_000);
             const password = page.getByLabel('Password', { exact: true });
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-            await page.getByRole('button', { name: 'Sign payment' }).click();
+            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
+            await approveAndGetTxid(page);
             await expect(page.getByText('Payment broadcast'),
                 'the payment never reported being broadcast')
                 .toBeVisible({ timeout: 180_000 });

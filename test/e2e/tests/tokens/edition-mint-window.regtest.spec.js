@@ -390,7 +390,8 @@ async function onboardAndCreateEdition(page, {
     if (stopBlock !== null) {
         await main.getByLabel('Minting closes at block (optional)').fill(String(stopBlock));
     }
-    await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+    await main.getByRole('button', { name: 'Review token', exact: true }).click();
+    await main.getByRole('button', { name: 'Continue to confirmation', exact: true }).click();
 
     await expectConfirmScreen(page);
     const issued = await waitForIndexedAction(await approveAndGetTxid(page));

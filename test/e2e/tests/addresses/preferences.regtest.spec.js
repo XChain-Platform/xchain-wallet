@@ -1,6 +1,7 @@
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 import {
     explorerJson,
+    expectConfirmModal,
     fundAddress,
     mintXchain,
     readReceiveAddress,
@@ -60,7 +61,9 @@ test.describe('ADDRESS v0 preferences on regtest', () => {
             await main.getByRole('button', { name: 'Edit on-chain preferences' }).click();
 
             // The screen title sits in the page banner, outside main.
-            await expect(page.getByRole('banner').getByText('On-chain preferences', { exact: true }))
+            await expect(page.getByRole('banner').getByRole('heading', {
+                name: 'On-chain preferences',
+            }))
                 .toBeVisible({ timeout: 30_000 });
             await main.getByRole('radio', { name: 'Destroy the fee (reduces supply)' }).check();
             await main.getByRole('checkbox', {
@@ -75,7 +78,15 @@ test.describe('ADDRESS v0 preferences on regtest', () => {
             await expect(main).toContainText('Destroy the fee (reduces supply) - CHANGED');
             await expect(main).toContainText('Memo required on incoming sends - CHANGED');
             await expect(main).toContainText('Anyone may open a dispenser here - CHANGED');
-            await main.getByRole('button', { name: 'Sign & broadcast', exact: true }).click();
+            await main.getByRole('button', { name: 'Continue to confirmation', exact: true }).click();
+            await expectConfirmModal(page, 'address preferences');
+            const password = page.getByLabel('Password', { exact: true });
+            if (await password.count() > 0 && await password.isVisible().catch(() => false)) {
+                await password.fill(PASSWORD);
+            }
+            const approve = page.getByTestId('confirm-approve');
+            await expect(approve).toBeEnabled({ timeout: 120_000 });
+            await approve.click();
         });
 
         await test.step('read the exact ADDRESS row back from the explorer', async () => {

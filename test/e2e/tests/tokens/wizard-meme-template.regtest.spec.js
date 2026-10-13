@@ -76,7 +76,8 @@ test.describe(`Meme token wizard template on ${REGTEST_CHAIN_LABEL}`, () => {
         await expect(main).toContainText('Template: meme');
         await main.getByLabel('Token name (ticker)').fill(TICK);
         await main.getByLabel('Supply', { exact: true }).fill(String(SUPPLY));
-        await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+        await main.getByRole('button', { name: 'Review token', exact: true }).click();
+        await main.getByRole('button', { name: 'Continue to confirmation', exact: true }).click();
 
         const txid = await approveAndReadTxid(page);
         const genesis = await waitForValidAction(txid);
