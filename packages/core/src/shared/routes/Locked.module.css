@@ -66,6 +66,56 @@
     font-weight: 600;
 }
 
+.passwordField {
+    position: relative;
+}
+
+.passwordField > div {
+    margin-bottom: 0;
+}
+
+.passwordInput {
+    padding-inline-end: calc(var(--xc-space-8) + var(--xc-space-3));
+}
+
+.passwordToggle {
+    --xc-icon-size: var(--xc-icon-md);
+    position: absolute;
+    inset-inline-end: 2px;
+    top: calc(var(--xc-text-sm) + var(--xc-space-2));
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    min-height: 32px;
+    padding: 0;
+    color: var(--xc-text-muted);
+    background: transparent;
+    border: 0;
+    border-radius: var(--xc-radius-sm);
+    cursor: pointer;
+}
+
+.passwordToggle:hover {
+    color: var(--xc-text);
+}
+
+.passwordToggle:focus-visible {
+    outline: 2px solid var(--xc-focus-ring, var(--xc-accent-primary));
+    outline-offset: 0;
+}
+
+.unlockActions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    width: 100%;
+}
+
+.unlockActions > button {
+    width: 100%;
+}
+
 .demoExitBlock {
     margin-top: var(--xc-space-4);
     padding-top: var(--xc-space-3);
@@ -89,9 +139,6 @@
 }
 
 .forgotBlock {
-    margin-top: var(--xc-space-4);
-    padding-top: var(--xc-space-3);
-    border-top: 1px dashed var(--xc-border);
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);

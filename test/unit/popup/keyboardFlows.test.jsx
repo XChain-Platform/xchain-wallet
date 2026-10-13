@@ -164,7 +164,7 @@ describe('extension popup keyboard flows', () => {
         expect(document.activeElement).toBe(password);
         fireEvent.change(password, { target: { value: 'keyboard secret' } });
         await user.tab();
-        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Forgot password?' }));
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Show password' }));
         await user.tab();
         expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Unlock Wallet' }));
         await user.keyboard('{Enter}');
