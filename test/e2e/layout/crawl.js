@@ -111,6 +111,14 @@ function armMutations() {
     window.__xcCrawlObs.observe(document.body, {
         subtree: true, childList: true, attributes: true, characterData: true,
     });
+    // A share button's result is the OS share sheet, which a test browser
+    // never draws (WebKit has navigator.share but no sheet). Count the call
+    // as the visible result and complete it, as a user picking a target would.
+    if (typeof navigator.share === 'function' && !navigator.share.__xcCrawl) {
+        const shareStub = () => { window.__xcCrawlMut += 1; return Promise.resolve(); };
+        shareStub.__xcCrawl = true;
+        try { Object.defineProperty(navigator, 'share', { value: shareStub, configurable: true }); } catch { /* leave it */ }
+    }
 }
 
 /** Runs in the page: what identifies the screen being looked at. */
