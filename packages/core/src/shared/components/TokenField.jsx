@@ -61,14 +61,18 @@ export function TokenField({
     const tick = value?.tick;
     const hasValue = Boolean(chainId && tick);
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
-    const chainName = descriptor?.displayName || chainId;
+    const networkSuffix = descriptor?.networkKind && descriptor.networkKind !== 'mainnet'
+        ? ` · ${descriptor.networkKind}`
+        : '';
+    const chainName = descriptor ? `${descriptor.displayName}${networkSuffix}` : chainId;
     const iconSize = size === 'lg' ? 24 : 20;
 
     // Accessible name carries the field label + current selection (or the
     // empty-state text), since the visual chip isn't a native form control.
-    const accessibleName = `${label}: ${hasValue
+    const selectionText = hasValue
         ? `${tick}${chainName ? ` on ${chainName}` : ''}`
-        : placeholder}`;
+        : placeholder;
+    const accessibleName = label ? `${label}: ${selectionText}` : selectionText;
 
     return (
         <div className={`${styles.field} ${styles[size] || ''}`.trim()}>
@@ -87,9 +91,9 @@ export function TokenField({
                     <>
                         <TickerIcon chainId={chainId} tick={tick} size={iconSize} />
                         <span className={styles.text}>
-                            <span className={styles.tick}>{tick}</span>
+                            <span className={styles.tick} title={tick}>{tick}</span>
                             {chainName ? (
-                                <span className={styles.chain}>on {chainName}</span>
+                                <span className={styles.chain} title={chainName}>on {chainName}</span>
                             ) : null}
                         </span>
                     </>

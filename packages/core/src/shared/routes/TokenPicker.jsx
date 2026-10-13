@@ -28,6 +28,16 @@ const PLATFORM_QUERY_DEBOUNCE_MS = 350;
 
 const chainRegistry = registryLib.defaultRegistry();
 
+function tokenSelectionLabel(row) {
+    const networkSuffix = row.networkKind && row.networkKind !== 'mainnet'
+        ? ` · ${row.networkKind}`
+        : '';
+    const chain = row.chainDisplayName
+        ? ` on ${row.chainDisplayName}${networkSuffix}`
+        : '';
+    return `Select ${row.displayName || row.tick}${chain}`;
+}
+
 /**
  * TokenPicker: the single "pick a coin or token" screen shared by the
  * Send and Receive quick-actions (and the markets coin/token picker).
@@ -440,6 +450,7 @@ export function TokenPicker({
                         <BalanceList
                             rows={rows}
                             onSelectToken={handleSelect}
+                            getRowActionLabel={tokenSelectionLabel}
                             hiddenKeys={hiddenSet}
                             pinnedKeys={pinnedSet}
                             // The held-balance list is cross-chain too
@@ -469,6 +480,7 @@ export function TokenPicker({
                                 <BalanceList
                                     rows={platformResults}
                                     onSelectToken={handleSelect}
+                                    getRowActionLabel={tokenSelectionLabel}
                                     // This section searches EVERY chain
                                     // the wallet holds an address on, so the
                                     // same tick legitimately appears once per

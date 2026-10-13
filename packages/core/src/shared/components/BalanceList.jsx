@@ -38,6 +38,7 @@ import {
  * @param {() => void} [props.onEmptyAction]         runs that action (e.g. clearing the filter that emptied the list)
  * @param {(token: { chainId: string, tick: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string }) => void} [props.onSelectToken]
  *        Click handler for a balance row. Surfaces the §27.6 Token detail page (G071) when supplied.
+ * @param {(row: BalanceRow) => string} [props.getRowActionLabel]  overrides the default "Open ... details" accessible label for selector uses
  * @param {Set<string> | null} [props.pinnedKeys]    `chainId:tick` keys pinned by the user. Pinned rows sort to the top (§27.3 / G072).
  * @param {(key: string, nextPinned: boolean) => void} [props.onTogglePin]   per-row pin/unpin callback; when supplied each row renders a star button
  * @param {Set<string> | null} [props.hiddenKeys]    `chainId:tick` keys hidden by the user. Hidden rows collapse into the Hidden footer section (§27.4 / G073).
@@ -56,6 +57,7 @@ export function BalanceList({
     emptyActionLabel,
     onEmptyAction,
     onSelectToken,
+    getRowActionLabel,
     pinnedKeys,
     onTogglePin,
     hiddenKeys,
@@ -117,6 +119,7 @@ export function BalanceList({
                         fiatCurrency={fiatCurrency}
                         multisig={r.chainId === multisigChainId ? multisig : null}
                         onSelect={onSelectToken}
+                        getActionLabel={getRowActionLabel}
                         pinned={pinned}
                         onTogglePin={onTogglePin}
                         hidden={false}
@@ -148,6 +151,7 @@ export function BalanceList({
                                 fiatCurrency={fiatCurrency}
                                 multisig={r.chainId === multisigChainId ? multisig : null}
                                 onSelect={onSelectToken}
+                                getActionLabel={getRowActionLabel}
                                 pinned={pinned}
                                 onTogglePin={onTogglePin}
                                 hidden
@@ -181,6 +185,7 @@ export function BalanceList({
                                 fiatCurrency={fiatCurrency}
                                 multisig={r.chainId === multisigChainId ? multisig : null}
                                 onSelect={onSelectToken}
+                                getActionLabel={getRowActionLabel}
                                 pinned={false}
                                 onTogglePin={onTogglePin}
                                 hidden={false}
@@ -196,7 +201,7 @@ export function BalanceList({
     );
 }
 
-function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, onToggleHide, verify, showChain, fiatCurrency = 'USD' }) {
+function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onTogglePin, hidden, onToggleHide, verify, showChain, fiatCurrency = 'USD' }) {
     const isNative = row.kind === 'native';
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
     // App-wide privacy toggle: when on, replace the per-row qty and
@@ -236,6 +241,9 @@ function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, on
         [row.quantity, row.divisibility, row.fiatRate],
     );
     const clickable = typeof onSelect === 'function';
+    const actionLabel = clickable && typeof getActionLabel === 'function'
+        ? getActionLabel(row)
+        : `Open ${row.displayName || row.tick} details`;
     const handleClick = clickable
         ? () => onSelect({
             chainId: row.chainId,
@@ -261,9 +269,7 @@ function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, on
                 className={`${styles.rowContent} ${clickable ? styles.rowClickable : ''}`}
                 type={clickable ? 'button' : undefined}
                 onClick={handleClick}
-                aria-label={clickable
-                    ? `Open ${row.displayName || row.tick} details`
-                    : undefined}
+                aria-label={clickable ? actionLabel : undefined}
             >
                 <div className={styles.iconWrap}>
                     {isNative && chainIconUrl ? (
