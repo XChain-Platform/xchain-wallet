@@ -22,6 +22,7 @@ import {
     signers as signersLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { safeHttpUrl } from '../utils/externalUrl.js';
 import { isWebHidSupported, detectBrowserFamilyForWebHidHint } from '../utils/webhidSupport.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './PairSignerForm.module.css';
@@ -457,6 +458,7 @@ function FirmwareBanner({ verdict, vendor }) {
     const variantClass = verdict.status === 'vulnerable' || verdict.status === 'unsupported'
         ? styles.errorBanner
         : styles.warningBanner;
+    const updateUrl = safeHttpUrl(verdict.updateUrl);
     return (
         <StatusMessage variant="error" className={variantClass}>
             <p className={styles.bannerDetail}>
@@ -464,10 +466,10 @@ function FirmwareBanner({ verdict, vendor }) {
                     ? firmwareUpdateAdvice(vendor, verdict.recommended)
                     : verdict.detail}
             </p>
-            {verdict.updateUrl ? (
+            {updateUrl ? (
                 <a
                     className={styles.updateLink}
-                    href={verdict.updateUrl}
+                    href={updateUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                 >

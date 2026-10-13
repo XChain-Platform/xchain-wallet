@@ -5,6 +5,22 @@
 
 import { describe, expect, it } from 'vitest';
 import { explorerPageUrl } from '../../../packages/core/src/shared/utils/explorerLinks.js';
+import { safeHttpUrl } from '../../../packages/core/src/shared/utils/externalUrl.js';
+
+describe('safeHttpUrl', () => {
+    it.each([
+        ['https://example.com/help', 'https://example.com/help'],
+        [' http://localhost:8080/path ', 'http://localhost:8080/path'],
+        ['javascript:alert(1)', null],
+        ['data:text/html,<script>alert(1)</script>', null],
+        ['//example.com/path', null],
+        ['/relative', null],
+        ['not a url', null],
+        [null, null],
+    ])('normalizes link candidate %j', (value, expected) => {
+        expect(safeHttpUrl(value)).toBe(expected);
+    });
+});
 
 describe('explorerPageUrl', () => {
     it.each([
@@ -34,6 +50,22 @@ describe('explorerPageUrl', () => {
             settings,
         })).toBe('https://operator.example/explorer/TBTC/tx/deadbeef');
     });
+
+    it.each(['javascript:alert(1)', 'data:text/html,explorer'])(
+        'refuses a non-HTTP custom explorer endpoint: %s',
+        (explorerUrl) => {
+            expect(explorerPageUrl({
+                chainId: 'bitcoin-testnet',
+                kind: 'transaction',
+                value: 'deadbeef',
+                settings: {
+                    sdkEndpoints: {
+                        'bitcoin-testnet': { custom: true, explorerUrl },
+                    },
+                },
+            })).toBeNull();
+        },
+    );
 
     it.each([
         [{ chainId: 'bitcoin-mainnet', kind: 'transaction', value: '' }],

@@ -38,7 +38,7 @@ beforeAll(() => {
 afterAll(() => { globalThis.ResizeObserver = savedResizeObserver; });
 afterEach(() => { cleanup(); __clearTokenInfoCache(); });
 
-function renderDetail() {
+function renderDetail(tokenInfo = {}) {
     const messaging = {
         getTokenInfo: vi.fn().mockResolvedValue({
             creator: 'bcrt1qcreator',
@@ -47,6 +47,7 @@ function renderDetail() {
                 { type: 'large', url: MEDIA_URL, name: MEDIA_NAME },
                 { type: 'large', url: UNNAMED_MEDIA_URL },
             ],
+            ...tokenInfo,
         }),
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [] }),
         getHoldersForToken: vi.fn().mockResolvedValue({ data: [] }),
@@ -98,5 +99,50 @@ describe('TokenDetail collectible media', () => {
             .toHaveAttribute('href', UNNAMED_MEDIA_URL);
         expect(screen.getByRole('link', { name: `Open image ${MEDIA_NAME}` }))
             .toHaveAttribute('href', MEDIA_URL);
+    });
+
+    it('links only HTTP(S) destinations from token metadata', async () => {
+        renderDetail({
+            website: 'javascript:alert(1)',
+            websites: [
+                'https://issuer.example/',
+                'javascript:alert(1)',
+                'data:text/html,<script>alert(1)</script>',
+            ],
+            socials: [
+                { platform: 'url', host: 'safe.example', url: 'http://safe.example/profile' },
+                { platform: 'url', host: 'unsafe.example', url: 'data:text/html,unsafe' },
+            ],
+            contacts: [
+                { type: 'url', value: 'https://contact.example/' },
+                { type: 'url', value: 'javascript:alert(1)' },
+            ],
+            files: [
+                { url: 'https://files.example/readme.txt', name: 'Safe file', type: 'text/plain' },
+                { url: 'data:text/html,unsafe', name: 'Unsafe file', type: 'text/html' },
+            ],
+        });
+
+        fireEvent.click(screen.getByRole('tab', { name: 'About' }));
+        expect(await screen.findByRole('link', { name: 'Website' }))
+            .toHaveAttribute('href', 'https://issuer.example/');
+        expect(screen.getByRole('link', { name: /safe\.example/ }))
+            .toHaveAttribute('href', 'http://safe.example/profile');
+        expect(screen.getByRole('link', { name: /https:\/\/contact\.example/ }))
+            .toHaveAttribute('href', 'https://contact.example/');
+        expect(screen.getByText('javascript:alert(1)')).toBeInTheDocument();
+        expect(document.querySelector('a[href^="javascript:"]')).toBeNull();
+        expect(document.querySelector('a[href^="data:"]')).toBeNull();
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
+        fireEvent.click(await screen.findByRole('tab', { name: 'File' }));
+        expect(await screen.findByRole('link', { name: /Safe file/ }))
+            .toHaveAttribute('href', 'https://files.example/readme.txt');
+        expect(screen.queryByText('Unsafe file')).toBeNull();
+
+        for (const link of document.querySelectorAll('a[target="_blank"]')) {
+            expect(link.getAttribute('rel')).toContain('noopener');
+            expect(link.getAttribute('rel')).toContain('noreferrer');
+        }
     });
 });

@@ -30,6 +30,7 @@
 // readers announce; `role="note"` for outdated / unknown.
 
 import { signers as signersLib } from '@xchain-wallet/core';
+import { safeHttpUrl } from '../utils/externalUrl.js';
 import styles from './HwFirmwareBanner.module.css';
 
 const { checkFirmware } = signersLib;
@@ -72,6 +73,7 @@ export function HwFirmwareBanner({ signerInfo }) {
         : verdict.status === 'outdated'
         ? `Install ${verdict.recommended ? `version ${verdict.recommended} or newer` : 'the latest firmware'} with the vendor update tool, then reconnect and unlock the device.`
         : `Do not sign yet. Install ${verdict.recommended ? `version ${verdict.recommended} or newer` : 'the latest firmware'} with the vendor update tool, then reconnect and unlock the device.`;
+    const updateUrl = safeHttpUrl(verdict.updateUrl);
 
     return (
         <div role={role} className={className}>
@@ -80,10 +82,10 @@ export function HwFirmwareBanner({ signerInfo }) {
                 <p className={styles.detail}>{verdict.detail}</p>
             ) : null}
             <p className={styles.detail}>{action}</p>
-            {verdict.updateUrl ? (
+            {updateUrl ? (
                 <a
                     className={styles.updateLink}
-                    href={verdict.updateUrl}
+                    href={updateUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                 >
