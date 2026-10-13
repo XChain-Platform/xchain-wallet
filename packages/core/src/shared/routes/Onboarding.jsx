@@ -35,20 +35,20 @@ const EXPLAINER_FRAMES = [
     {
         id: 'self-custody',
         icon: <Icon.LockIcon />,
-        title: 'You hold the keys',
-        body: 'This wallet is self-custodial. Your coins and tokens live on the blockchain, and only your keys can move them. No company, including us, can freeze or access your funds.',
+        title: 'Your keys, your wallet',
+        body: 'XChain Platform gives you a self-custodial wallet. Your assets stay on their blockchains, and your keys authorize each transaction. XChain Platform cannot access or freeze your funds.',
     },
     {
         id: 'recovery-phrase',
         icon: <Icon.KeyIcon />,
-        title: 'Your recovery phrase is everything',
-        body: 'When you create a wallet you get a secret list of words. Anyone with those words controls your funds, and if you lose them, nobody can restore access. Write them down and keep them offline.',
+        title: 'Protect your recovery phrase',
+        body: 'Creating a wallet gives you a recovery phrase. Store it offline and never share it. You can use it to restore your wallet on a new device.',
     },
     {
         id: 'transactions',
         icon: <Icon.SendIcon />,
-        title: 'Sending is final',
-        body: 'A blockchain transaction cannot be reversed once it is confirmed. Always double-check the address and the amount before you sign. There is no undo and no support line to call.',
+        title: 'Review before you send',
+        body: 'A confirmed blockchain transaction cannot be reversed. Check the chain, address, and amount before you approve a send.',
     },
     {
         id: 'multi-chain',
@@ -75,18 +75,18 @@ function markExplainerSeen() {
 const LICENSE_SUMMARY = [
     { text: `By using ${branding.PRODUCT_NAME} you agree to the ${LICENSE_NAME}.` },
     {
-        text: 'The wallet is provided as-is, with no warranties of any kind and no remedy if you lose your recovery phrase, passphrase, or hardware wallet. Cryptocurrency is irreversible. Anything you send is gone the moment a miner includes it in a block.',
+        text: `${branding.PRODUCT_NAME} is provided as-is, without warranties. Keep access to your recovery phrase, any BIP39 passphrase, and hardware wallet. Confirm transaction details because confirmed blockchain transactions cannot be reversed.`,
         critical: true,
     },
     {
-        text: 'Your recovery phrase never leaves this device. It is not uploaded, not transmitted, and not stored on any server. The team behind this software has no copy of it and no way to retrieve it. Backing it up is entirely your responsibility: write it down, store it somewhere safe, and never share it. If you lose this device AND your written copy, the keys are gone forever. Customer support cannot recover them. Nobody can.',
+        text: 'XChain Platform keeps your recovery phrase on this device and does not upload it to a server. Store an offline copy in a safe place. XChain Platform and support cannot retrieve it for you.',
         critical: true,
     },
-    { text: 'You are solely responsible for your private keys, your transactions, and any tax or legal consequences thereof. The wallet does not withhold or report taxes. You are the bank.' },
-    { text: 'You are also responsible for verifying the authenticity of every download. Releases are signed; check the signatures. Phishing copies of this app exist. We do not link to or endorse them.' },
-    { text: 'Software and tokens visible in this wallet may be subject to local laws on financial instruments, securities, money transmission, anti-money-laundering, or sanctions. You agree not to use the wallet in a jurisdiction where doing so is unlawful, or to facilitate any unlawful activity through it.' },
-    { text: 'Some features (hardware wallet integration, the dApp bridge, etc.) interact with third-party software you control. Vulnerabilities or bugs in those tools are not the wallet\'s responsibility. The wallet does its best to fail closed when it detects a problem.' },
-    { text: `Full license text: ${LICENSE_FILE} in the source repository. Read it. Disagreement means you should not continue.` },
+    { text: `${branding.PRODUCT_NAME} does not withhold or report taxes. You are responsible for your keys, transactions, and any tax or legal obligations.` },
+    { text: 'Verify downloads from official XChain Platform sources and check the release signatures.' },
+    { text: 'Software and tokens shown in XChain Platform may be subject to local laws on financial instruments, securities, money transmission, anti-money-laundering, or sanctions. Do not use the software where doing so is unlawful or to facilitate unlawful activity.' },
+    { text: 'Some XChain Platform features connect to third-party software, including hardware wallets and the dApp bridge. Those tools have their own security and reliability risks.' },
+    { text: `The full license is in ${LICENSE_FILE} in the source repository. Continue only if you agree.` },
 ];
 
 function readAcceptedAt() {
@@ -397,7 +397,7 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                         <span>
                             {scrolledToEnd
                                 ? 'I have read and agree to these terms.'
-                                : 'Scroll to the end of the terms to enable.'}
+                                : 'Scroll to the end to review all terms.'}
                         </span>
                     </label>
                     <div className={isFull ? styles.actionsFull : styles.actionsPopup}>
@@ -431,19 +431,15 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                 </div>
                 <div className={styles.demoGraduateNotice}>
                     <p>
-                        The demo set this device up with a temporary password you never
-                        chose, and that password is what unlocks everything stored here.
+                        The demo uses a temporary password for this device.
                     </p>
                     <p>
-                        A real wallet made inside the demo would still be locked behind
-                        that temporary password, and the demo throws it away when it
-                        ends. So the demo has to go first: your new wallet then starts
-                        clean, and the password you pick is the one that opens it.
+                        Clear the demo before you create or import a wallet. Your wallet
+                        can then use the password you choose.
                     </p>
                     <p>
-                        Nothing in the demo is real. The balances and history are made
-                        up and no coins are at stake, so there is nothing to lose by
-                        clearing it.
+                        Demo balances and activity are examples, so clearing the demo
+                        does not affect real funds.
                     </p>
                 </div>
                 <div className={isFull ? styles.actionsFull : styles.actionsPopup}>

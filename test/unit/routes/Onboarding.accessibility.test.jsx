@@ -85,10 +85,10 @@ describe('Onboarding accessibility', () => {
         );
 
         for (const title of [
-            'You hold the keys',
-            'Your recovery phrase is everything',
-            'Sending is final',
-            'One wallet, several chains',
+            'Your keys, your wallet',
+            'Protect your recovery phrase',
+            'Review before you send',
+            'Built for the XChain Platform',
         ]) {
             await screen.findByText(title);
             await scan(explainer.container);
@@ -123,7 +123,7 @@ describe('Onboarding accessibility', () => {
         await screen.findByRole('list', { name: 'Recovery phrase' });
         await scan(view.container);
 
-        fireEvent.click(screen.getByRole('checkbox', { name: /written down my recovery phrase/i }));
+        fireEvent.click(screen.getByRole('checkbox', { name: /saved my recovery phrase/i }));
         fireEvent.click(screen.getByRole('button', { name: 'Verify recovery phrase' }));
 
         const answers = await screen.findAllByLabelText(/^Word \d+$/);

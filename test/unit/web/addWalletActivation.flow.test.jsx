@@ -96,7 +96,7 @@ async function createSecondWallet() {
     fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: PASSWORD } });
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
-    fireEvent.click(await screen.findByRole('checkbox', { name: /written down my recovery phrase/ }));
+    fireEvent.click(await screen.findByRole('checkbox', { name: /saved my recovery phrase/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Verify recovery phrase' }));
     answerRecoveryQuiz();
     fireEvent.click(screen.getByRole('button', { name: 'Create wallet' }));

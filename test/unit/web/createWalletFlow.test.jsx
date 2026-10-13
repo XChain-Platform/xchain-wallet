@@ -99,7 +99,7 @@ describe('web create-wallet flow', () => {
         const verifyButton = screen.getByRole('button', { name: 'Verify recovery phrase' });
         expect(verifyButton).toBeDisabled();
 
-        fireEvent.click(screen.getByRole('checkbox', { name: /written down my recovery phrase/ }));
+        fireEvent.click(screen.getByRole('checkbox', { name: /saved my recovery phrase/ }));
         fireEvent.click(verifyButton);
 
         expect(await screen.findByRole('heading', { name: 'Verify your recovery phrase' })).toBeInTheDocument();
@@ -111,7 +111,7 @@ describe('web create-wallet flow', () => {
 
         answerQuiz(() => 'wrong');
         fireEvent.click(screen.getByRole('button', { name: 'Create wallet' }));
-        expect(await screen.findByText(/doesn't match/)).toBeInTheDocument();
+        expect(await screen.findByText(/does not match/)).toBeInTheDocument();
         expect(background.importMnemonic).not.toHaveBeenCalled();
 
         const words = PHRASE.split(' ');

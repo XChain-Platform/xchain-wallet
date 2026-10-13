@@ -261,6 +261,25 @@ describe('Onboarding: explainer gating', () => {
         globalThis.localStorage.setItem('xc:licenseAcceptedVersion', LICENSE_VERSION);
     }
 
+    it('uses calm, platform-first copy for the license and first explainer step', () => {
+        stubMatchMedia(false);
+        const license = mountOnboarding();
+
+        expect(screen.getByText(/XChain Platform keeps your recovery phrase on this device/))
+            .toBeInTheDocument();
+        expect(screen.queryByText(/Nobody can/)).not.toBeInTheDocument();
+
+        license.unmount();
+        acceptLicense();
+        mountOnboarding();
+
+        expect(screen.getByRole('heading', { name: 'Your keys, your wallet' }))
+            .toBeInTheDocument();
+        expect(screen.getByText(/XChain Platform gives you a self-custodial wallet/))
+            .toBeInTheDocument();
+        expect(screen.queryByText(/no support line/i)).not.toBeInTheDocument();
+    });
+
     it('shows the carousel on the fresh path, then the welcome screen after it is finished', () => {
         stubMatchMedia(false);
         acceptLicense();

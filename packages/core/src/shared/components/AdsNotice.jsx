@@ -35,8 +35,8 @@ export function AdsNotice({ onContinue, isFull, headClass, titleClass, subtitleC
             <header className={headClass}>
                 <h1 className={titleClass}>Automatic Donation System</h1>
                 <p className={subtitleClass}>
-                    XChain Wallet includes an Automatic Donation System (ADS) that
-                    supports continued development of the XChain Platform.
+                    XChain Platform includes an Automatic Donation System (ADS)
+                    that supports continued development.
                 </p>
             </header>
             <ul style={{
@@ -55,11 +55,10 @@ export function AdsNotice({ onContinue, isFull, headClass, titleClass, subtitleC
                     ADS is on by default. It sets aside a small amount when you send a
                     transaction and sends it as one donation once it adds up.
                 </li>
-                <li>You do not need to donate to use this wallet.</li>
+                <li>You do not need to donate to use XChain Platform.</li>
                 <li>
-                    How much, how often, and whether to donate at all are yours to set
-                    under Settings &rarr; Automatic Donation System, where ADS can also
-                    be turned off entirely.
+                    Choose the amount and frequency under Settings &rarr; Automatic Donation System.
+                    ADS can also be turned off entirely there.
                 </li>
             </ul>
             <div className={actionsClass}>

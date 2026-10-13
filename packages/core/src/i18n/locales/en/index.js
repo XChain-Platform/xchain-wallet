@@ -219,17 +219,17 @@ export const en = {
     'scan.error.paymentRequest':
         "This payment request doesn't match a supported chain or valid address.",
     'scan.error.wif':
-        'A private key (WIF) was scanned. Use Import Wallet → Import WIF to add it deliberately.',
+        'This is a private key (WIF). In XChain Platform, open Import wallet and choose Import WIF.',
     'scan.error.mnemonic':
-        'A recovery phrase was scanned. Use Import Wallet → Recovery phrase to add it deliberately.',
+        'This is a recovery phrase. In XChain Platform, open Import wallet and choose Recovery phrase.',
     'scan.error.xcwChunk':
         'Part {n} of {total} of a multi-frame QR code was scanned. Open the screen that asked for this code and capture every frame there.',
     'scan.error.transactionHex':
         "A signed transaction was scanned. This screen can't broadcast raw transaction hex. Use a compatible broadcasting tool.",
     'scan.error.backupPointer':
-        'A backup pointer was scanned. Start Import Wallet, choose Restore from backup, and scan it there.',
+        'This is a backup pointer. In XChain Platform, open Import wallet, choose Encrypted backup, and scan it there.',
     'scan.error.pairingCode':
-        'A wallet pairing code was scanned. Start Pair a watcher or signer, and scan it there.',
+        'This is a wallet pairing code. In XChain Platform, open Pair a watcher or signer and scan it there.',
     'scan.error.unknown':
         "This QR code contains text the wallet doesn't know how to use.",
 

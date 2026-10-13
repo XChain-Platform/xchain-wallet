@@ -140,7 +140,7 @@ const EXPLANATION_CASES = [
     {
         name: 'backup pointer',
         input: 'xchain-backup:1?loc=https%3A%2F%2Fexample.com%2Fwallet&name=Cold',
-        message: /backup pointer.*Import Wallet.*Restore from backup/i,
+        message: /backup pointer.*Import wallet.*Encrypted backup/i,
     },
     {
         name: 'pairing code',
