@@ -86,11 +86,35 @@ describe('OrderbookPanel market display', () => {
         expect(onPickPrice).toHaveBeenCalledWith('0.010000');
     });
 
-    it('shows a failed request as an error rather than an empty book', async () => {
-        renderBook(vi.fn().mockRejectedValue(new Error('network unavailable')));
+    it('shows a plain failed-load message without an empty table and retries', async () => {
+        const getOrderbook = vi.fn()
+            .mockRejectedValueOnce(new Error('getOrderbook: POST https://explorer.invalid/api/orderbook failed'))
+            .mockResolvedValue({ bids: [['0.01', '5']], asks: [] });
+        renderBook(getOrderbook);
 
         expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load the order book.");
+        expect(screen.getByRole('alert')).not.toHaveTextContent('explorer.invalid');
         expect(screen.queryByText('No open orders on this market.')).toBeNull();
         expect(screen.queryByText('Loading order book…')).toBeNull();
+        expect(screen.queryByText('Price (BTC)')).toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+
+        expect(await screen.findByTitle('0.01')).toHaveTextContent('0.01');
+        expect(getOrderbook).toHaveBeenCalledTimes(2);
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    it('renders only valid levels from a partial response without broken values', async () => {
+        const { container } = renderBook(vi.fn().mockResolvedValue({
+            bids: [['0.01', '5'], ['not-a-price', '2'], null],
+            asks: null,
+        }));
+
+        expect(await screen.findByTitle('0.01')).toHaveTextContent('0.01');
+        expect(screen.getByRole('region', { name: 'Sell asks order book levels' })).toBeInTheDocument();
+        expect(screen.getAllByText('Price (BTC)')).toHaveLength(2);
+        expect(container).not.toHaveTextContent('NaN');
+        expect(container).not.toHaveTextContent('undefined');
     });
 });

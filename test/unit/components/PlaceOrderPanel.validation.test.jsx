@@ -144,4 +144,34 @@ describe('PlaceOrderPanel validation', () => {
         }));
         expect(onOrderPlaced).not.toHaveBeenCalled();
     });
+
+    it('keeps a rejected order retryable without exposing the raw error', async () => {
+        const watchAddress = { ...ADDRESS, source: 'watch' };
+        const buildActionPsbtRequest = vi.fn()
+            .mockRejectedValueOnce(new Error('orderAction: POST https://node.invalid/api/order returned 500'))
+            .mockResolvedValue({
+                psbtHex: 'aa00', encoding: 'psbt', fromAddress: watchAddress.address, chainId: CHAIN,
+            });
+        mount({}, {
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [watchAddress] }),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+            buildActionPsbtRequest,
+        });
+
+        fireEvent.change(await screen.findByLabelText('Price (BTC)'), { target: { value: '2' } });
+        fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '3' } });
+        fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Create unsigned transaction' }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            "Couldn't place this order. Something went wrong. Try again.",
+        );
+        expect(document.body).not.toHaveTextContent('node.invalid');
+        expect(screen.getByText('Give 6 BTC, get 3 XCHAIN')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction' }));
+
+        expect(await screen.findByLabelText('Unsigned transaction hex')).toHaveValue('aa00');
+        expect(buildActionPsbtRequest).toHaveBeenCalledTimes(2);
+    });
 });

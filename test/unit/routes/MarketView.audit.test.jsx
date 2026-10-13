@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 let messaging;
 
@@ -124,5 +124,44 @@ describe('MarketView market state', () => {
 
         expect(onSwap).toHaveBeenCalledTimes(1);
         expect(screen.getByText('Prefill: none')).toBeInTheDocument();
+    });
+
+    it('labels stale price data and refreshes it on request', async () => {
+        const now = Math.floor(Date.now() / 1000);
+        messaging.getMarketHistory = vi.fn()
+            .mockResolvedValueOnce([
+                { price: '0.01', amount: '2', type: 'buy', timestamp: now - 90000 },
+            ])
+            .mockResolvedValueOnce([
+                { price: '0.02', amount: '3', type: 'sell', timestamp: now },
+            ]);
+        renderMarket();
+
+        expect(await screen.findByText(/latest trade is over 24 hours old/i)).toBeInTheDocument();
+        expect(screen.getByRole('region', { name: 'Market summary' })).toHaveTextContent('0.010000 BTC');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Refresh prices' }));
+
+        await waitFor(() => {
+            expect(screen.queryByText(/latest trade is over 24 hours old/i)).toBeNull();
+        });
+        expect(screen.getByRole('region', { name: 'Market summary' })).toHaveTextContent('0.020000 BTC');
+        expect(messaging.getMarketHistory).toHaveBeenCalledTimes(2);
+    });
+
+    it('ignores malformed history rows while rendering usable partial data', async () => {
+        const now = Math.floor(Date.now() / 1000);
+        messaging.getMarketHistory = vi.fn().mockResolvedValue([
+            { price: 'not-a-price', amount: null, type: 'buy', timestamp: 'invalid' },
+            { price: '0.02', amount: '3', type: 'sell', timestamp: now },
+        ]);
+        const { container } = renderMarket();
+
+        await waitFor(() => {
+            expect(screen.getByRole('region', { name: 'Market summary' })).toHaveTextContent('0.020000 BTC');
+        });
+        expect(container).not.toHaveTextContent('NaN');
+        expect(container).not.toHaveTextContent('undefined');
+        expect(screen.queryByRole('alert')).toBeNull();
     });
 });

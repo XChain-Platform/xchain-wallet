@@ -50,6 +50,7 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
     const [book, setBook] = useState(/** @type {any} */ ({ bids: [], asks: [], maxCumulative: '0' }));
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const [retryKey, setRetryKey] = useState(0);
 
     useEffect(() => {
         let cancelled = false;
@@ -89,7 +90,9 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
             cancelled = true;
             clearInterval(handle);
         };
-    }, [messaging, chainId, tick1, tick2, demo]);
+    }, [messaging, chainId, tick1, tick2, demo, retryKey]);
+
+    const hasLevels = book.bids.length > 0 || book.asks.length > 0;
 
     return (
         <section
@@ -102,31 +105,41 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
             }}
         >
             <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>Order book</p>
-            <div className={styles.orderBookGrid}>
-                <LevelsColumn
-                    title="Buy bids"
-                    side="bid"
-                    levels={book.bids}
-                    maxCumulative={book.maxCumulative}
-                    onPickPrice={onPickPrice}
-                    tick2={tick2}
-                    tick1={tick1}
-                />
-                <LevelsColumn
-                    title="Sell asks"
-                    side="ask"
-                    levels={book.asks}
-                    maxCumulative={book.maxCumulative}
-                    onPickPrice={onPickPrice}
-                    tick2={tick2}
-                    tick1={tick1}
-                />
-            </div>
+            {hasLevels ? (
+                <div className={styles.orderBookGrid}>
+                    <LevelsColumn
+                        title="Buy bids"
+                        side="bid"
+                        levels={book.bids}
+                        maxCumulative={book.maxCumulative}
+                        onPickPrice={onPickPrice}
+                        tick2={tick2}
+                        tick1={tick1}
+                    />
+                    <LevelsColumn
+                        title="Sell asks"
+                        side="ask"
+                        levels={book.asks}
+                        maxCumulative={book.maxCumulative}
+                        onPickPrice={onPickPrice}
+                        tick2={tick2}
+                        tick1={tick1}
+                    />
+                </div>
+            ) : null}
             {loading ? (
                 <StatusMessage variant="status">Loading order book…</StatusMessage>
             ) : null}
             {loadError ? (
-                <StatusMessage variant="error">{loadError}</StatusMessage>
+                <StatusMessage
+                    variant="error"
+                    recovery={{
+                        label: 'Try again',
+                        onAction: () => setRetryKey((key) => key + 1),
+                    }}
+                >
+                    {loadError}
+                </StatusMessage>
             ) : null}
             {!loading && !loadError && book.bids.length === 0 && book.asks.length === 0 ? (
                 <p style={{ margin: '0.25rem 0 0', color: 'var(--xc-text-muted)', fontSize: '0.75rem' }}>
