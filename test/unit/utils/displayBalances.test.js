@@ -47,6 +47,17 @@ describe('loadDisplayBalances', () => {
         expect(out).toEqual(synthesizeDemoBalances(byChain));
     });
 
+    it('does not substitute demo holdings for a real wallet while the demo flag exists', async () => {
+        markDemoWallet('w-demo');
+        const messaging = fakeMessaging();
+
+        const out = await loadDisplayBalances(messaging, 'w-real', 'real-account');
+
+        expect(messaging.getWalletBalances).toHaveBeenCalledWith('w-real', 'real-account');
+        expect(messaging.getAddressesByChain).not.toHaveBeenCalled();
+        expect(out['bitcoin-mainnet'][0].balances).toBeNull();
+    });
+
     it('falls back to the chain when the shell cannot list addresses', async () => {
         markDemoWallet('w-demo');
         const messaging = fakeMessaging();

@@ -18,7 +18,12 @@
 // demo first and carries the chosen lane across the reload the wipe
 // needs. These are the pure pieces of that decision.
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import React from 'react';
+import { LICENSE_VERSION } from '../../../packages/core/src/buildInfo.js';
+import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { Onboarding } from '../../../packages/core/src/shared/routes/Onboarding.jsx';
 import {
     POST_DEMO_INTENT_KEY,
     setPostDemoIntent,
@@ -39,11 +44,61 @@ import {
     readActiveWallet,
     writeActiveWallet,
 } from '../../../packages/core/src/shared/utils/activeWalletMemory.js';
+import {
+    readBalanceCache,
+    writeBalanceCache,
+} from '../../../packages/core/src/shared/utils/balanceCache.js';
+import {
+    readHistoryCache,
+    writeHistoryCache,
+} from '../../../packages/core/src/shared/utils/historyCache.js';
 
 const DEMO_ID_KEY = 'xc:demoWalletId';
 
 beforeEach(() => {
     globalThis.localStorage?.clear();
+});
+
+afterEach(() => cleanup());
+
+describe('entering demo mode', () => {
+    it('creates a demo-origin wallet and seeds sample contacts without mutating a real wallet', async () => {
+        globalThis.localStorage.setItem('xc:licenseAcceptedAt', new Date().toISOString());
+        globalThis.localStorage.setItem('xc:licenseAcceptedVersion', LICENSE_VERSION);
+        globalThis.localStorage.setItem('xc:onboardingExplainerSeenAt', new Date().toISOString());
+        const importMnemonic = vi.fn(async () => ({ wallet: { id: 'demo-entered' } }));
+        const saveContact = vi.fn(async () => {});
+        const removeWallet = vi.fn();
+        const renameWallet = vi.fn();
+        const onDemoEntered = vi.fn();
+        render(
+            React.createElement(
+                MessagingProvider,
+                {
+                    shell: 'web',
+                    messaging: { importMnemonic, saveContact, removeWallet, renameWallet },
+                },
+                React.createElement(Onboarding, {
+                    onCreate: vi.fn(),
+                    onImport: vi.fn(),
+                    onDemoEntered,
+                }),
+            ),
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Try in demo mode' }));
+
+        await waitFor(() => expect(onDemoEntered).toHaveBeenCalledTimes(1));
+        expect(importMnemonic).toHaveBeenCalledWith(expect.objectContaining({
+            name: 'Demo Wallet',
+            origin: 'demo',
+            activeNetwork: 'regtest',
+        }));
+        expect(saveContact).toHaveBeenCalled();
+        expect(getDemoWalletId()).toBe('demo-entered');
+        expect(removeWallet).not.toHaveBeenCalled();
+        expect(renameWallet).not.toHaveBeenCalled();
+    });
 });
 
 describe('demoOwnsVaultPassword', () => {
@@ -172,6 +227,42 @@ describe('exitDemoWallet', () => {
         expect(h.calls.reloaded).toBe(0);
         expect(readActiveWallet()).toBe(null);
         expect(takePostDemoIntent()).toBe(null);
+    });
+
+    it('clears only the demo display caches when a real wallet remains', async () => {
+        const demoWalletId = 'demo-with-caches';
+        const realWalletId = 'real-with-caches';
+        const demoBalances = { 'bitcoin-regtest': [{ balances: [{ tick: 'DEMO', quantity: '100' }] }] };
+        const realBalances = { 'bitcoin-regtest': [{ balances: [{ tick: 'REAL', quantity: '2' }] }] };
+        const demoHistory = {
+            entries: [{ key: 'demo-history' }],
+            addressesByChain: { 'bitcoin-regtest': [{ address: 'demo-address' }] },
+            fetchedAt: 100,
+        };
+        const realHistory = {
+            entries: [{ key: 'real-history' }],
+            addressesByChain: { 'bitcoin-regtest': [{ address: 'real-address' }] },
+            fetchedAt: 200,
+        };
+        writeBalanceCache(demoWalletId, 'demo-account', { balances: demoBalances, fetchedAt: 100 });
+        writeBalanceCache(realWalletId, 'real-account', { balances: realBalances, fetchedAt: 200 });
+        writeHistoryCache(demoWalletId, 'demo-account', demoHistory);
+        writeHistoryCache(realWalletId, 'real-account', realHistory);
+        markDemoWallet(demoWalletId);
+        const h = harness({ wallets: [{ id: realWalletId }] });
+
+        await exitDemoWallet({
+            messaging: h.messaging,
+            walletId: demoWalletId,
+            wipe: h.wipe,
+            reload: h.reload,
+        });
+
+        expect(readBalanceCache(demoWalletId, 'demo-account')).toBe(null);
+        expect(readHistoryCache(demoWalletId, 'demo-account')).toBe(null);
+        expect(readBalanceCache(realWalletId, 'real-account')).toMatchObject({ balances: realBalances });
+        expect(readHistoryCache(realWalletId, 'real-account')).toEqual(realHistory);
+        expect(h.calls.wiped).toBe(0);
     });
 
     it('reports an unreadable wallet list as a retryable failure instead of claiming success', async () => {

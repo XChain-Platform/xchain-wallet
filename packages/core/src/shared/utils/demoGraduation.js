@@ -39,6 +39,7 @@
 
 import { clearDemoWalletId } from '../../flows/demoMode.js';
 import { clearActiveWallet } from './activeWalletMemory.js';
+import { clearBalanceCache } from './balanceCache.js';
 import { clearLastView } from './lastViewMemory.js';
 import { sweepMsgMemoryForWallet } from './msgReadMemory.js';
 import { wipeWalletStorage } from './wipeWalletStorage.js';
@@ -196,6 +197,7 @@ export async function exitDemoWallet({
     if (remaining === 'occupied') {
         clearDemoWalletId();
         clearLastView(walletId);
+        clearBalanceCache(walletId);
         clearActiveWallet();
         sweepMsgMemoryForWallet(walletId);
         return { wiped: false, reloaded: false, remaining };
@@ -204,6 +206,7 @@ export async function exitDemoWallet({
     await wipe();
     clearDemoWalletId();
     clearLastView(walletId);
+    clearBalanceCache(walletId);
     clearActiveWallet();
     sweepMsgMemoryForWallet(walletId);
     if (intent) setPostDemoIntent(intent);
