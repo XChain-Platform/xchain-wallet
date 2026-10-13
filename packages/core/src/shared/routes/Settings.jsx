@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Screen, PageHeader, Icon } from '@xchain-wallet/core/ui';
+import { EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { shellCapabilities } from '../shellCapabilities.js';
@@ -334,9 +334,9 @@ export function Settings({
             );
             return (
                 <Screen variant={variant} header={subpageHeader}>
-                    <div className={styles.listPopup}>
+                    <ListPage>
                         <SectionComponent {...(section.props || {})} />
-                    </div>
+                    </ListPage>
                 </Screen>
             );
         }
@@ -350,33 +350,28 @@ export function Settings({
 
     return (
         <Screen variant={variant} header={header}>
-            <div className={styles.listPopup}>
-                <input
-                    type="search"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search settings…"
-                    aria-label="Search settings"
-                    style={{
-                        width: '100%',
-                        padding: 'var(--xc-space-2) var(--xc-space-3)',
-                        background: 'var(--xc-surface-raised)',
-                        border: '1px solid var(--xc-border)',
-                        borderRadius: 'var(--xc-radius-md)',
-                        color: 'var(--xc-text)',
-                        fontSize: 'var(--xc-text-md)',
-                        marginBottom: 'var(--xc-space-3)',
-                    }}
-                />
+            <ListPage
+                toolbar={(
+                    <input
+                        type="search"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        placeholder="Search settings…"
+                        aria-label="Search settings"
+                        style={{
+                            width: '100%',
+                            padding: 'var(--xc-space-2) var(--xc-space-3)',
+                            background: 'var(--xc-surface-raised)',
+                            border: '1px solid var(--xc-border)',
+                            borderRadius: 'var(--xc-radius-md)',
+                            color: 'var(--xc-text)',
+                            fontSize: 'var(--xc-text-md)',
+                        }}
+                    />
+                )}
+            >
                 {filtered.length === 0 ? (
-                    <div style={{
-                        padding: 'var(--xc-space-4)',
-                        textAlign: 'center',
-                        color: 'var(--xc-text-muted)',
-                        fontSize: 'var(--xc-text-sm)',
-                    }}>
-                        No settings match "{query}".
-                    </div>
+                    <EmptyState title={`No settings match "${query}".`} />
                 ) : null}
                 {filtered.map((section) => {
                     if (section.kind === 'external-drill') {
@@ -423,7 +418,7 @@ export function Settings({
                         </PanelBlock>
                     );
                 })}
-            </div>
+            </ListPage>
         </Screen>
     );
 }
@@ -494,23 +489,8 @@ function DrillRow({ title, summary, onClick }) {
 
 function PanelBlock({ title, description, children }) {
     return (
-        <div style={{ marginBottom: 'var(--xc-space-3)' }}>
-            <div style={{
-                fontSize: 'var(--xc-text-xs)',
-                fontWeight: 700,
-                textTransform: 'uppercase',
-                letterSpacing: '0.06em',
-                color: 'var(--xc-text-muted)',
-                marginBottom: 'var(--xc-space-1)',
-            }}>{title}</div>
-            {description ? (
-                <div style={{
-                    fontSize: 'var(--xc-text-xs)',
-                    color: 'var(--xc-text-muted)',
-                    marginBottom: 'var(--xc-space-2)',
-                    lineHeight: 1.4,
-                }}>{description}</div>
-            ) : null}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-2)', marginBottom: 'var(--xc-space-3)' }}>
+            <SectionHeader title={title} description={description} />
             {children}
         </div>
     );

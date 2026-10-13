@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { EmptyState, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -53,7 +53,6 @@ const chainRegistry = registryLib.defaultRegistry();
 export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onCreateDispenser, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -298,42 +297,47 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            <div className={isFull ? local.wrapFull : local.wrapPopup}>
-                {children}
-            </div>
+            {children}
         </Screen>
     );
 
     if (addressesError) {
-        return wrap(<StatusMessage variant="error" className={styles.entryDescription}>{addressesError}</StatusMessage>);
+        return wrap(
+            <ListPage>
+                <StatusMessage variant="error" className={styles.entryDescription}>{addressesError}</StatusMessage>
+            </ListPage>,
+        );
     }
     if (!addressesByChain) {
-        return wrap(<p className={styles.entryDescription}>Loading addresses…</p>);
+        return wrap(<ListPage><p className={styles.entryDescription}>Loading addresses…</p></ListPage>);
     }
     if (Object.keys(addressesByChain).length === 0) {
         return wrap(
-            <p className={styles.entryDescription}>
-                No addresses on any chain yet. Use Receive to generate one first, or Create dispenser to open your first.
-            </p>,
+            <ListPage>
+                <EmptyState title="No addresses on any chain yet. Use Receive to generate one first, or Create dispenser to open your first." />
+            </ListPage>,
         );
     }
 
     return wrap(
-        <>
-            <div className={local.toolbar}>
-                <input
-                    type="text"
-                    className={local.search}
-                    placeholder="Search"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    aria-label="Search dispensers"
-                />
-                <NetworkFilterDropdown value={network} onChange={setNetwork} />
-            </div>
+        <ListPage
+            toolbar={(
+                <>
+                    <input
+                        type="search"
+                        className={local.search}
+                        placeholder="Search"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        autoComplete="off"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        aria-label="Search dispensers"
+                    />
+                    <NetworkFilterDropdown value={network} onChange={setNetwork} />
+                </>
+            )}
+        >
             {loadErrors.length > 0 ? (
                 <StatusMessage variant="error" className={styles.entryDescription}>
                     Couldn't load some dispensers. {loadErrors.join('; ')}
@@ -342,11 +346,11 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
             {anyLoading && visibleRows.length === 0 ? (
                 <p className={styles.entryDescription}>Loading…</p>
             ) : visibleRows.length === 0 ? (
-                <p className={styles.entryDescription}>
-                    {allRows.length === 0
+                <EmptyState
+                    title={allRows.length === 0
                         ? 'No dispensers opened yet. Use Create dispenser to open your first.'
                         : 'No dispensers match the current filter.'}
-                </p>
+                />
             ) : (
                 <div className={local.list} role="list">
                     {visibleRows.map((row) => (
@@ -363,7 +367,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                     ))}
                 </div>
             )}
-        </>,
+        </ListPage>,
     );
 }
 

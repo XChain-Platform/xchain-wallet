@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, EmptyState, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -56,7 +56,6 @@ const chainRegistry = registryLib.defaultRegistry();
 export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, initialCounterparty }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
     // Whether the session can sign without a per-action password. The shared
     // confirmation screen uses this to either show the unlocked note or ask
     // for the wallet password before sharing a key.
@@ -431,24 +430,27 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
 
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.listCard}>{children}</div> : children}
+            {children}
         </Screen>
     );
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+        return wrap(
+            <ListPage>
+                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+            </ListPage>,
+        );
     }
 
     if (!addressesByChain) {
-        return wrap(<p className={styles.hint}>Loading wallet…</p>);
+        return wrap(<ListPage><p className={styles.hint}>Loading wallet…</p></ListPage>);
     }
 
     if (sweepAddrs.length === 0) {
         return wrap(
-            <p className={styles.hint}>
-                This account has no addresses that can receive messages yet. Use
-                Receive to generate one first.
-            </p>,
+            <ListPage>
+                <EmptyState title="This account has no addresses that can receive messages yet. Use Receive to generate one first." />
+            </ListPage>,
         );
     }
 
@@ -456,15 +458,31 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     // effect above advances it to the inbox (or the password prompt) the
     // moment addresses load, so this is just the brief transitional state.
     if (stage === 'pick') {
-        return wrap(<p className={styles.hint}>Opening inbox…</p>);
+        return wrap(<ListPage><p className={styles.hint}>Opening inbox…</p></ListPage>);
     }
 
     if (stage === 'password' || stage === 'submitting') {
         return wrap(
-            <form onSubmit={handleUnlock} noValidate>
-                <p style={{ margin: '0 0 0.5rem' }}>
-                    Enter your wallet password to decrypt this account's messages.
-                </p>
+            <FormPage
+                label="Unlock messaging inbox"
+                onSubmit={handleUnlock}
+                intro="Enter your wallet password to decrypt this account's messages."
+                status={unlockError ? (
+                    <p role="alert" className={styles.error}>
+                        {unlockError}
+                    </p>
+                ) : null}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={stage === 'submitting'}
+                        disabled={password.length === 0}
+                    >
+                        Unlock inbox
+                    </Button>
+                )}
+            >
                 <Input
                     ref={passwordRef}
                     type="password"
@@ -477,22 +495,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                     autoComplete="current-password"
                     aria-invalid={unlockError ? true : undefined}
                 />
-                {unlockError ? (
-                    <p role="alert" className={styles.error} style={{ marginTop: '0.25rem' }}>
-                        {unlockError}
-                    </p>
-                ) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={password.length === 0}
-                    >
-                        Unlock inbox
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -508,7 +511,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
         const replyRecord = replyContext ? recordByAddress[replyContext.fromAddress] : null;
         const threadBody = (
             thread.length === 0 ? (
-                <p className={styles.hint}>No messages in this conversation.</p>
+                <EmptyState title="No messages in this conversation." />
             ) : (
                 <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                     {threadItems.map((item) => {
@@ -603,28 +606,30 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                 )}
                 footer={composer}
             >
-                {isFull ? <div className={styles.listCard}>{threadBody}</div> : threadBody}
+                <ListPage>{threadBody}</ListPage>
             </Screen>
         );
     }
 
     return wrap(
-        <>
-            <div className={local.toolbar}>
-                <input
-                    type="text"
-                    className={local.search}
-                    placeholder="Search"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    aria-label="Search conversations"
-                />
-                <NetworkFilterDropdown value={network} onChange={setNetwork} />
-            </div>
-
+        <ListPage
+            toolbar={(
+                <>
+                    <input
+                        type="search"
+                        className={local.search}
+                        placeholder="Search"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        autoComplete="off"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        aria-label="Search conversations"
+                    />
+                    <NetworkFilterDropdown value={network} onChange={setNetwork} />
+                </>
+            )}
+        >
             {handshakeRequesters.length > 0 ? (
                 <div className={local.requestCard} role="region" aria-label="Encrypted-session requests">
                     <p className={local.requestIntro}>
@@ -659,9 +664,9 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
             ) : null}
 
             {conversations.length === 0 ? (
-                <p className={styles.hint}>No messages for this account yet.</p>
+                <EmptyState title="No messages for this account yet." />
             ) : visibleConversations.length === 0 ? (
-                <p className={styles.hint}>No conversations match the current filter.</p>
+                <EmptyState title="No conversations match the current filter." />
             ) : (
                 <div className={local.convCard}>
                     <ul className={local.convList} aria-label="Conversations">
@@ -717,7 +722,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                     </ul>
                 </div>
             )}
-        </>,
+        </ListPage>,
     );
 }
 

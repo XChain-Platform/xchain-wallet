@@ -12,7 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -128,7 +128,6 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -549,7 +548,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            {children}
         </Screen>
     );
 
@@ -602,7 +601,33 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
 
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
+            <FormPage
+                label="Review advanced action"
+                onSubmit={handleSubmit}
+                status={(isWatcherMode || isHwSource) && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={stage === 'submitting'}
+                        disabled={
+                            isWatcherMode
+                                ? false
+                                : isHwSource
+                                    ? hwStatus !== 'available'
+                                    : (!signerReady && password.length === 0)
+                        }
+                    >
+                        {isWatcherMode
+                            ? 'Create unsigned transaction'
+                            : isHwSource
+                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                : (descriptor ? `Sign on ${descriptor.displayName}` : 'Sign')}
+                    </Button>
+                )}
+            >
                 <p className={styles.summary}>{decoded?.summary}</p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Chain</dt>
@@ -658,30 +683,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 )}
-                {(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
-                ) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={
-                            isWatcherMode
-                                ? false
-                                : isHwSource
-                                    ? hwStatus !== 'available'
-                                    : (!signerReady && password.length === 0)
-                        }
-                    >
-                        {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : (descriptor ? `Sign on ${descriptor.displayName}` : 'Sign')}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -729,7 +731,25 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
 
     // stage === 'compose'
     return wrap(
-        <form onSubmit={handleReview} noValidate>
+        <FormPage
+            label="Compose advanced action"
+            onSubmit={handleReview}
+            status={formError ? (
+                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={actionConfirm.composing}
+                    disabled={actionConfirm.composing}
+                >
+                    {actionConfirm.composing
+                        ? 'Preparing review…'
+                        : singleEncode ? 'Sign action' : 'Preview'}
+                </Button>
+            )}
+        >
             <NetworkField value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
 
             {fromAddress ? (
@@ -873,24 +893,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                 mandatory={nativeFeeMandatory}
             />
 
-            {formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
-            ) : null}
-
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    block
-                    loading={actionConfirm.composing}
-                    disabled={actionConfirm.composing}
-                >
-                    {actionConfirm.composing
-                        ? 'Preparing review…'
-                        : singleEncode ? 'Sign action' : 'Preview'}
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }
 
