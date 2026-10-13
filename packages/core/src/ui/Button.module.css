@@ -55,9 +55,8 @@
     width: 100%;
 }
 
-/* Default rule: every button variant has a coloured fill and #FFFFFF
- * text. Hardcoded white (rather than `--xc-text-inverted`) so dark-mode
- * inversion can't flip button text to black. */
+/* Filled variants pair each semantic background with its contrast-tested
+ * label token. Fixed slate and purple fills keep their white labels. */
 
 .primary {
     background: var(--xc-accent-primary);
@@ -100,7 +99,7 @@
 
 .success {
     background: var(--xc-success);
-    color: #FFFFFF;
+    color: var(--xc-on-success);
 }
 .success:hover:not(:disabled) {
     filter: brightness(0.92);
