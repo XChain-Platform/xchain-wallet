@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { useReducedMotion } from './reducedMotion.js';
 
@@ -19,9 +19,9 @@ import { useReducedMotion } from './reducedMotion.js';
  * round-trip envelopes wrapped in the same chunk format.
  *
  * Hidden complexity: `qrcode.toDataURL` is async, so we render each
- * frame to a data URL on demand and cache them in `urls`. While a
- * frame is being rendered the previous frame stays visible (avoids
- * flicker).
+ * frame to a data URL on demand and cache it by size and content. The
+ * placeholder remains visible until its matching QR is ready, keeping
+ * the image and frame counter in sync.
  *
  * Honors reduced motion (`prefers-reduced-motion: reduce`, or the in-app
  * Settings → Appearance override): when set, the auto-advance
@@ -37,61 +37,105 @@ import { useReducedMotion } from './reducedMotion.js';
  */
 export function AnimatedQrFrames({ frames, fps = 3, size = 240, alt = 'Animated QR' }) {
     const [index, setIndex] = useState(0);
-    const [urls, setUrls] = useState(/** @type {Record<number, string>} */ ({}));
+    const [urls, setUrls] = useState(/** @type {Record<string, string>} */ ({}));
+    const urlsRef = useRef(/** @type {Record<string, string>} */ ({}));
+    const [paused, setPaused] = useState(false);
     // The OS media query AND the in-app Settings → Appearance
     // override, resolved in one place. The auto-advance below is a JS timer,
     // so no CSS rule can stop it on the user's behalf.
     const reducedMotion = useReducedMotion();
+    const frameList = Array.isArray(frames) ? frames : [];
+    const frameCount = frameList.length;
+    const normalizedSize = Number.isFinite(size) && size > 0 ? Math.round(size) : 240;
+    const normalizedFps = Number.isFinite(fps) && fps > 0 ? Math.min(fps, 20) : 3;
+    const safeIndex = index < frameCount ? index : 0;
+    const frameSetKey = JSON.stringify(frameList);
+    const currentKey = frameCount > 0
+        ? `${normalizedSize}\u0000${frameList[safeIndex]}`
+        : null;
+    const nextIndex = frameCount > 0 ? (safeIndex + 1) % frameCount : 0;
+    const nextKey = frameCount > 0
+        ? `${normalizedSize}\u0000${frameList[nextIndex]}`
+        : null;
+    const currentReady = Boolean(currentKey && urls[currentKey]);
+    const nextReady = Boolean(nextKey && urls[nextKey]);
+
+    useEffect(() => {
+        setIndex(0);
+    }, [frameSetKey]);
 
     useEffect(() => {
         let cancelled = false;
         async function renderFrame(i) {
-            if (urls[i]) return;
+            if (i < 0 || i >= frameCount) return;
+            const key = `${normalizedSize}\u0000${frameList[i]}`;
+            if (urlsRef.current[key]) return;
             try {
-                const dataUrl = await QRCode.toDataURL(frames[i], {
+                const dataUrl = await QRCode.toDataURL(frameList[i], {
                     errorCorrectionLevel: 'M',
-                    margin: 2,
-                    width: size,
-                    color: { dark: '#0F172A', light: '#FFFFFF' },
+                    margin: 4,
+                    width: normalizedSize,
+                    color: { dark: '#000000', light: '#FFFFFF' },
                 });
                 if (!cancelled) {
-                    setUrls((prev) => ({ ...prev, [i]: dataUrl }));
+                    urlsRef.current[key] = dataUrl;
+                    setUrls((prev) => (prev[key] ? prev : { ...prev, [key]: dataUrl }));
                 }
             } catch {
-                // Leave the slot empty; the prior frame stays visible.
+                // Leave the slot empty so the counter never labels a different QR as this frame.
             }
         }
-        renderFrame(index);
-        renderFrame((index + 1) % frames.length);
+        if (frameCount > 0) {
+            const nearby = frameCount > 1
+                ? [safeIndex, nextIndex, (safeIndex - 1 + frameCount) % frameCount]
+                : [safeIndex];
+            for (const i of new Set(nearby)) {
+                renderFrame(i);
+            }
+        }
         return () => { cancelled = true; };
-    }, [frames, index, size, urls]);
+    }, [frameSetKey, frameCount, nextIndex, normalizedSize, safeIndex]);
 
     useEffect(() => {
-        if (frames.length <= 1) return undefined;
         if (reducedMotion) return undefined;
-        const intervalMs = Math.max(50, Math.floor(1000 / fps));
+        if (frameCount <= 1 || paused || !currentReady || !nextReady) {
+            return undefined;
+        }
+        const intervalMs = Math.max(50, Math.round(1000 / normalizedFps));
         const id = setInterval(() => {
-            setIndex((i) => (i + 1) % frames.length);
+            setIndex((i) => (i + 1) % frameCount);
         }, intervalMs);
         return () => clearInterval(id);
-    }, [frames, fps, reducedMotion]);
+    }, [currentReady, frameCount, nextReady, normalizedFps, paused, reducedMotion]);
 
-    if (!Array.isArray(frames) || frames.length === 0) return null;
+    if (frameCount === 0) return null;
 
-    const dataUrl = urls[index] || urls[0] || null;
-    const multiFrame = frames.length > 1;
+    const dataUrl = currentKey ? urls[currentKey] || null : null;
+    const multiFrame = frameCount > 1;
+    const manual = reducedMotion || paused;
     const cadenceLabel = !multiFrame
         ? null
-        : reducedMotion
+        : manual
             ? 'manual'
-            : `${fps} fps`;
+            : `${normalizedFps} fps`;
+    const step = (offset) => {
+        setIndex((i) => (i + offset + frameCount) % frameCount);
+    };
+    const qrAlt = `${alt}, frame ${safeIndex + 1} of ${frameCount}`;
+    const controlStyle = {
+        minWidth: 44,
+        minHeight: 44,
+        padding: '0.5rem 0.75rem',
+        fontSize: '0.875rem',
+        color: 'var(--xc-text)',
+        border: '1px solid var(--xc-border-strong)',
+        borderRadius: 4,
+        background: 'var(--xc-surface)',
+        cursor: 'pointer',
+    };
 
     return (
         <div
-            role="img"
-            aria-label={`${alt} (frame ${index + 1} of ${frames.length}${
-                reducedMotion && multiFrame ? '; advance manually' : ''
-            })`}
             data-testid="animated-qr-frames"
             data-reduced-motion={reducedMotion ? 'true' : 'false'}
             style={{
@@ -99,62 +143,76 @@ export function AnimatedQrFrames({ frames, fps = 3, size = 240, alt = 'Animated 
                 flexDirection: 'column',
                 alignItems: 'center',
                 gap: '0.5rem',
+                width: '100%',
+                maxWidth: normalizedSize,
             }}
         >
             {dataUrl ? (
                 <img
                     src={dataUrl}
-                    alt=""
-                    width={size}
-                    height={size}
-                    style={{ background: '#FFFFFF', borderRadius: 4 }}
+                    alt={qrAlt}
+                    width={normalizedSize}
+                    height={normalizedSize}
+                    style={{
+                        display: 'block',
+                        width: '100%',
+                        maxWidth: normalizedSize,
+                        height: 'auto',
+                        aspectRatio: '1 / 1',
+                        background: '#FFFFFF',
+                        borderRadius: 4,
+                    }}
                 />
             ) : (
                 <div
+                    role="status"
+                    aria-label={`Preparing ${qrAlt}`}
                     style={{
-                        width: size,
-                        height: size,
+                        width: '100%',
+                        maxWidth: normalizedSize,
+                        aspectRatio: '1 / 1',
                         background: '#F1F5F9',
                         borderRadius: 4,
                     }}
                 />
             )}
-            <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
-                Frame {index + 1} / {frames.length}
+            <span style={{ fontSize: '0.875rem', color: 'var(--xc-text)' }}>
+                Frame {safeIndex + 1} / {frameCount}
                 {cadenceLabel ? ` · ${cadenceLabel}` : ''}
             </span>
-            {reducedMotion && multiFrame ? (
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button
-                        type="button"
-                        aria-label="Previous frame"
-                        onClick={() => setIndex((i) => (i - 1 + frames.length) % frames.length)}
-                        style={{
-                            padding: '0.25rem 0.75rem',
-                            fontSize: '0.75rem',
-                            border: '1px solid #CBD5E1',
-                            borderRadius: 4,
-                            background: '#FFFFFF',
-                            cursor: 'pointer',
-                        }}
-                    >
-                        Prev
-                    </button>
-                    <button
-                        type="button"
-                        aria-label="Next frame"
-                        onClick={() => setIndex((i) => (i + 1) % frames.length)}
-                        style={{
-                            padding: '0.25rem 0.75rem',
-                            fontSize: '0.75rem',
-                            border: '1px solid #CBD5E1',
-                            borderRadius: 4,
-                            background: '#FFFFFF',
-                            cursor: 'pointer',
-                        }}
-                    >
-                        Next
-                    </button>
+            {multiFrame ? (
+                <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '0.5rem' }}>
+                    {!reducedMotion ? (
+                        <button
+                            type="button"
+                            aria-label={paused ? 'Resume animation' : 'Pause animation'}
+                            aria-pressed={paused}
+                            onClick={() => setPaused((value) => !value)}
+                            style={controlStyle}
+                        >
+                            {paused ? 'Resume' : 'Pause'}
+                        </button>
+                    ) : null}
+                    {manual ? (
+                        <>
+                            <button
+                                type="button"
+                                aria-label="Previous frame"
+                                onClick={() => step(-1)}
+                                style={controlStyle}
+                            >
+                                Prev
+                            </button>
+                            <button
+                                type="button"
+                                aria-label="Next frame"
+                                onClick={() => step(1)}
+                                style={controlStyle}
+                            >
+                                Next
+                            </button>
+                        </>
+                    ) : null}
                 </div>
             ) : null}
         </div>
