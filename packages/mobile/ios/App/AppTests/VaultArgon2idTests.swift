@@ -12,6 +12,7 @@
 // test/fixtures/crypto/argon2id-vectors.json, which the JS implementation
 // produced. A mismatch would leave existing wallets unopenable on iOS.
 
+import Capacitor
 import XCTest
 @testable import App
 
@@ -95,6 +96,53 @@ final class VaultArgon2idTests: XCTestCase {
         XCTAssertThrowsError(try VaultArgon2id.derive(password: [1], salt: [UInt8](repeating: 0, count: 7), params: params)) {
             XCTAssertEqual($0 as? Argon2idFailure, .invalid("salt must be at least 8 bytes"))
         }
+    }
+
+    /// Drives the plugin method itself, with options coerced the way the bridge
+    /// coerces them, and waits for its background resolve or reject.
+    private func callPlugin(_ options: [String: Any]) -> (key: String?, error: String?) {
+        let done = expectation(description: "argon2id settles")
+        var key: String?
+        var error: String?
+        let call = CAPPluginCall(
+            callbackId: "test", methodName: "argon2id",
+            options: JSTypes.coerceDictionaryToJSObject(options) ?? [:],
+            success: { result, _ in key = result?.data?["key"] as? String; done.fulfill() },
+            error: { err in error = err?.message; done.fulfill() }
+        )
+        XChainVaultPlugin().argon2id(call!)
+        wait(for: [done], timeout: 30)
+        return (key, error)
+    }
+
+    func testPluginMethodResolvesTheFirstVector() throws {
+        let fixture = try JSONSerialization.jsonObject(
+            with: Data(contentsOf: try XCTUnwrap(Bundle(for: VaultArgon2idTests.self)
+                .url(forResource: "argon2id-vectors", withExtension: "json")))
+        ) as? [String: Any]
+        let first = try XCTUnwrap((fixture?["vectors"] as? [[String: Any]])?.first)
+        let options = first.filter { ["password", "salt", "iterations", "memoryKib", "parallelism", "length"].contains($0.key) }
+        let outcome = callPlugin(options)
+        XCTAssertNil(outcome.error)
+        XCTAssertEqual(outcome.key, first["keyBase64"] as? String)
+    }
+
+    func testPluginMethodRejectsBadOptions() {
+        let good: [String: Any] = [
+            "password": "x", "salt": "AQIDBAUGBwg=", "iterations": 1, "memoryKib": 64, "parallelism": 1, "length": 32,
+        ]
+        let bad: [(String, Any?)] = [
+            ("password", nil), ("salt", "not base64!"), ("salt", "AQIDBAUGBw=="),
+            ("iterations", true), ("iterations", 1.5), ("iterations", "1"), ("memoryKib", 7), ("length", 65),
+        ]
+        for (name, value) in bad {
+            var options = good
+            options[name] = value
+            let outcome = callPlugin(options)
+            XCTAssertNil(outcome.key, "\(name)=\(String(describing: value))")
+            XCTAssertNotNil(outcome.error, "\(name)=\(String(describing: value))")
+        }
+        XCTAssertNotNil(callPlugin(good).key, "the unaltered options derive a key")
     }
 
     func testWipeZeroesTheBuffer() {
