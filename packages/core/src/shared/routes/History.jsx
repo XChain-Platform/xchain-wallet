@@ -1544,6 +1544,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     setFormat={setExportFormat}
                     columns={exportColumns}
                     setColumns={setExportColumns}
+                    fiatCurrency={fiatCurrency}
                     visibleCount={visibleEntries.length}
                     onConfirm={() => {
                         runExport({
@@ -4036,6 +4037,7 @@ function ExportModal({
     onClose,
     format, setFormat,
     columns, setColumns,
+    fiatCurrency,
     visibleCount,
     onConfirm,
 }) {
@@ -4099,16 +4101,27 @@ function ExportModal({
 
                 <fieldset style={MODAL_FIELDSET}>
                     <legend style={MODAL_LEGEND}>{t('history.export.columns')}</legend>
-                    {flowsLib.EXPORT_COLUMNS.map((col) => (
-                        <label key={col} style={MODAL_LABEL}>
-                            <input
-                                type="checkbox"
-                                checked={columns.has(col)}
-                                onChange={() => toggleColumn(col)}
-                            />
-                            <span style={{ fontFamily: 'var(--xc-font-mono, monospace)', fontSize: 'var(--xc-text-xs)' }}>{col}</span>
-                        </label>
-                    ))}
+                    {flowsLib.EXPORT_COLUMNS.map((col) => {
+                        const detail = flowsLib.EXPORT_COLUMN_DETAILS[col];
+                        const label = col === 'fiatCurrency'
+                            ? `${detail.label} (${String(fiatCurrency || 'USD').trim().toUpperCase()})`
+                            : detail.label;
+                        return (
+                            <label key={col} style={MODAL_LABEL} title={detail.description}>
+                                <input
+                                    type="checkbox"
+                                    checked={columns.has(col)}
+                                    onChange={() => toggleColumn(col)}
+                                />
+                                <span>
+                                    <span style={{ fontSize: 'var(--xc-text-sm)' }}>{label}</span>
+                                    <span style={{ display: 'block', color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-xs)' }}>
+                                        {detail.description}
+                                    </span>
+                                </span>
+                            </label>
+                        );
+                    })}
                 </fieldset>
 
                 <p style={{ margin: 0, fontSize: 'var(--xc-text-sm)' }}>
