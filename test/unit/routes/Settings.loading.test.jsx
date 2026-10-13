@@ -14,8 +14,8 @@
 // before getSettings resolved; the palette's Settings deep-link
 // was the first flow to drive it.
 
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Settings } from '../../../packages/core/src/shared/routes/Settings.jsx';
 
@@ -34,5 +34,27 @@ describe('Settings while settings are loading', () => {
         expect(screen.getByText('Keyboard')).toBeTruthy();
         expect(screen.getByText('Network')).toBeTruthy();
         expect(document.body.textContent).not.toContain('raw PSBT inspector');
+    });
+
+    it('shows the active account and opens its account picker', () => {
+        const onOpenAccountPicker = vi.fn();
+        const messaging = {
+            getSettings: () => new Promise(() => {}),
+            listConnectedSites: () => Promise.resolve([]),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <Settings
+                    onBack={() => {}}
+                    activeWallet={{ id: 'wallet-1', name: 'Main wallet' }}
+                    activeAccount={{ id: 'account-2', index: 1, name: 'Savings' }}
+                    onOpenAccountPicker={onOpenAccountPicker}
+                />
+            </MessagingProvider>,
+        );
+
+        expect(screen.getByText('Savings')).toBeTruthy();
+        fireEvent.click(screen.getByText('Accounts & Addresses').closest('button'));
+        expect(onOpenAccountPicker).toHaveBeenCalledOnce();
     });
 });

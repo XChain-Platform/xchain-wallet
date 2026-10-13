@@ -60,7 +60,7 @@
 }
 
 .instruction strong {
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
 }
 
 .deviceHint {

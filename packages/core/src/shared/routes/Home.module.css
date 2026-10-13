@@ -72,7 +72,7 @@
 
 .error {
     font-size: var(--xc-text-sm);
-    color: var(--xc-danger);
+    color: var(--xc-danger-fg);
     background: color-mix(in srgb, var(--xc-danger) 8%, transparent);
     padding: var(--xc-space-2) var(--xc-space-3);
     border-radius: var(--xc-radius-sm);
@@ -176,7 +176,7 @@
     height: 32px;
     border-radius: 50%;
     background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -239,7 +239,7 @@
     justify-content: center;
     width: 16px;
     height: 16px;
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
 }
 
 /* Supplementary actions wrap because the width-capped container cannot fit

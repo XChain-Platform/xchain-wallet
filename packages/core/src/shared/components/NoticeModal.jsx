@@ -8,10 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { Button } from '@xchain-wallet/core/ui';
 import styles from './NoticeModal.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
+import { useFocusTrap, useInertBackground } from '../utils/focusTrap.js';
 
 /**
  * Small centered status modal for quick "it happened" confirmations
@@ -26,7 +27,12 @@ import { useBackHandler } from '../../ui/backStack.js';
  * @param {() => void} props.onClose
  */
 export function NoticeModal({ title, message, confirmLabel = 'OK', onClose }) {
-    // The system Back gesture closes this before it leaves the screen.
+    const rootRef = useRef(null);
+    const panelRef = useRef(null);
+    const titleId = useId();
+    const messageId = useId();
+    useFocusTrap(panelRef, { active: true });
+    useInertBackground(rootRef, { active: true });
     useBackHandler(onClose);
     useEffect(() => {
         const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -36,17 +42,19 @@ export function NoticeModal({ title, message, confirmLabel = 'OK', onClose }) {
 
     return (
         <div
+            ref={rootRef}
             className={styles.overlay}
             role="dialog"
             aria-modal="true"
-            aria-label={title}
+            aria-labelledby={titleId}
+            aria-describedby={message ? messageId : undefined}
             onClick={onClose}
             tabIndex={-1}
         >
-            <div className={styles.panel} onClick={(e) => e.stopPropagation()} role="presentation" tabIndex={-1}>
-                <p className={styles.title}>{title}</p>
-                {message ? <p className={styles.message}>{message}</p> : null}
-                <Button variant="primary" block onClick={onClose} autoFocus>
+            <div ref={panelRef} className={styles.panel} onClick={(e) => e.stopPropagation()} role="presentation" tabIndex={-1}>
+                <p id={titleId} className={styles.title}>{title}</p>
+                {message ? <p id={messageId} className={styles.message}>{message}</p> : null}
+                <Button variant="primary" block onClick={onClose}>
                     {confirmLabel}
                 </Button>
             </div>

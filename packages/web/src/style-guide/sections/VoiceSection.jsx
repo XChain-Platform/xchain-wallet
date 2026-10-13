@@ -24,7 +24,7 @@ function Compare({ good, bad, note }) {
                 <div style={{ fontSize: 14 }}>{good}</div>
             </div>
             <div>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--xc-danger)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>✗ Avoid</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--xc-danger-fg)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>✗ Avoid</div>
                 <div style={{ fontSize: 14, color: 'var(--xc-text-muted)' }}>{bad}</div>
             </div>
             {note ? <div style={{ gridColumn: '1 / -1', fontSize: 12, color: 'var(--xc-text-muted)', fontStyle: 'italic' }}>{note}</div> : null}

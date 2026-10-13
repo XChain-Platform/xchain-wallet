@@ -14,11 +14,12 @@
 // dispatcher actually binds. Rebinding itself lives in Settings → Keyboard;
 // the footer points there.
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Icon } from '../../ui/index.js';
 import { SHORTCUT_GROUPS, formatBinding, resolveBindings } from './shortcuts.js';
 import styles from './ShortcutHelp.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
+import { useFocusTrap } from '../utils/focusTrap.js';
 
 function isMac() {
     if (typeof navigator === 'undefined') return false;
@@ -36,6 +37,10 @@ export function ShortcutHelp({ open, onClose, overrides }) {
     const shortcuts = useMemo(() => resolveBindings(overrides), [overrides]);
     // The system Back gesture closes this before it leaves the screen.
     useBackHandler(open ? onClose : undefined);
+    // Opened by a bare key, so focus starts on the page: move it into the
+    // dialog, keep Tab inside it, and hand it back to the opener on close.
+    const dialogRef = useRef(null);
+    useFocusTrap(dialogRef, { active: open });
     useEffect(() => {
         if (!open) return undefined;
         const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); onClose(); } };
@@ -48,6 +53,7 @@ export function ShortcutHelp({ open, onClose, overrides }) {
 
     return (
         <div
+            ref={dialogRef}
             className={styles.overlay}
             role="dialog"
             aria-modal="true"
@@ -61,10 +67,10 @@ export function ShortcutHelp({ open, onClose, overrides }) {
                         <Icon.XIcon />
                     </button>
                 </header>
-                <div className={styles.body}>
+                <div className={styles.body} role="region" aria-label="Shortcut list" tabIndex={0}>
                     {SHORTCUT_GROUPS.map((group) => (
                         <section key={group} className={styles.group}>
-                            <h3 className={styles.groupTitle}>{group}</h3>
+                            <h2 className={styles.groupTitle}>{group}</h2>
                             <dl className={styles.list}>
                                 {shortcuts.filter((s) => s.group === group).map((s) => (
                                     <div key={s.id} className={styles.row}>

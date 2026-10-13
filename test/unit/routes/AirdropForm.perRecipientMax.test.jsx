@@ -223,6 +223,18 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
+    it('keeps a fractional indivisible-token payout out of both review steps', async () => {
+        const messaging = mountAirdrop({ balance: '10', divisibility: 0 });
+        await pasteRecipients();
+        fireEvent.change(await amountField(), { target: { value: '1.5' } });
+        fireEvent.click(submitButton());
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Per-recipient amount must be a whole number because XCHAIN is indivisible.',
+        );
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+        expect(messaging.createList).not.toHaveBeenCalled();
+    });
+
     it('lets a payable amount through to the recipient review', async () => {
         mountAirdrop();
         await pasteRecipients();

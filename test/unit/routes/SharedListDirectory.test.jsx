@@ -50,7 +50,7 @@ const ENTRIES = [
     },
 ];
 
-function mount({ mode = 'browse', filterType, onSelect = vi.fn(), response } = {}) {
+function mount({ mode = 'browse', filterType, onSelect = vi.fn(), onOpenList, response } = {}) {
     const messaging = {
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
         getSharedLists: vi.fn().mockResolvedValue(response ?? {
@@ -66,6 +66,7 @@ function mount({ mode = 'browse', filterType, onSelect = vi.fn(), response } = {
                 mode={mode}
                 filterType={filterType}
                 onSelect={onSelect}
+                onOpenList={onOpenList}
                 onBack={() => {}}
             />
         </MessagingProvider>,
@@ -132,5 +133,71 @@ describe('SharedListDirectory', () => {
 
         expect(await screen.findByText('Shared lists unavailable from Litecoin.')).toBeTruthy();
         expect(screen.getByText('Shared lists unavailable from Dogecoin.')).toBeTruthy();
+    });
+
+    it('searches every entry and distinguishes no matches from an empty directory', async () => {
+        mount({
+            response: {
+                lists: [
+                    ...ENTRIES,
+                    { ...ENTRIES[0], home_list_index: 99, bindTarget: 1099, name: 'Treasury assets' },
+                ],
+                unavailable: [],
+            },
+        });
+
+        await screen.findByRole('listitem', { name: /Token list 99 on BTC/ });
+        fireEvent.change(screen.getByLabelText('Search shared lists'), { target: { value: 'treasury' } });
+
+        expect(screen.getAllByRole('listitem')).toHaveLength(1);
+        expect(screen.getByText('Treasury assets')).toBeTruthy();
+
+        fireEvent.change(screen.getByLabelText('Search shared lists'), { target: { value: 'missing' } });
+        expect(screen.getByText('No shared lists match your search.')).toBeTruthy();
+        expect(screen.queryByText('No shared lists are available.')).toBeNull();
+    });
+
+    it('pages long directories and opens a list on its home chain', async () => {
+        const onOpenList = vi.fn();
+        const lists = Array.from({ length: 23 }, (_, index) => ({
+            ...ENTRIES[0],
+            home_list_index: index + 1,
+            bindTarget: 1000 + index,
+        }));
+        mount({ response: { lists, unavailable: [] }, onOpenList });
+
+        expect(await screen.findAllByRole('listitem')).toHaveLength(20);
+        fireEvent.change(screen.getByLabelText('Search shared lists'), { target: { value: '1022' } });
+        expect(screen.getAllByRole('listitem')).toHaveLength(1);
+        expect(screen.getByRole('listitem', { name: 'Token list 23 on BTC' })).toBeTruthy();
+
+        fireEvent.change(screen.getByLabelText('Search shared lists'), { target: { value: '' } });
+        expect(screen.getAllByRole('listitem')).toHaveLength(20);
+        fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
+        expect(screen.getAllByRole('listitem')).toHaveLength(23);
+
+        const row = screen.getByRole('listitem', { name: 'Token list 23 on BTC' });
+        fireEvent.click(within(row).getByRole('button', { name: 'Open list' }));
+        expect(onOpenList).toHaveBeenCalledWith('bitcoin-mainnet', '23');
+    });
+
+    it('shows the request failure instead of an empty directory', async () => {
+        const messaging = {
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            getSharedLists: vi.fn().mockRejectedValue(new Error('Directory unavailable')),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <SharedListDirectory
+                    walletId="wallet-1"
+                    chainId={CHAIN}
+                    mode="browse"
+                    onBack={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        expect(await screen.findByText('Directory unavailable')).toBeTruthy();
+        expect(screen.queryByText('No shared lists are available.')).toBeNull();
     });
 });
