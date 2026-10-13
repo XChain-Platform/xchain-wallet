@@ -39,6 +39,9 @@ const ICONS = {
  *                             with `{ target: { value } }` so callers
  *                             can swap from `<Input>` without changes.
  *   - suggestions           `Suggestion[]` from buildRecentDestinations.
+ *   - onSuggestionSelect    optional selection handler for callers that need
+ *                             the full suggestion metadata. When present, it
+ *                             replaces the default address-only `onChange`.
  *   - onPaste               called first for BIP21 / WIF handling; when the
  *                             host does not consume the event, surrounding
  *                             whitespace is trimmed before insertion.
@@ -54,6 +57,7 @@ const ICONS = {
  * @property {string} value
  * @property {(e: { target: { value: string } }) => void} onChange
  * @property {import('../flows/recentDestinations.js').Suggestion[]} [suggestions]
+ * @property {(suggestion: import('../flows/recentDestinations.js').Suggestion) => void} [onSuggestionSelect]
  * @property {(e: React.ClipboardEvent<HTMLInputElement>) => void} [onPaste]
  * @property {'contacts' | 'addresses'} [icon]
  * @property {() => void} [onIconClick]
@@ -64,6 +68,7 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
         value,
         onChange,
         suggestions = [],
+        onSuggestionSelect,
         onPaste,
         icon,
         onIconClick,
@@ -97,10 +102,11 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
     const select = useCallback(
         (s) => {
             if (!s) return;
-            onChange({ target: { value: s.address } });
+            if (onSuggestionSelect) onSuggestionSelect(s);
+            else onChange({ target: { value: s.address } });
             close();
         },
-        [onChange, close],
+        [onChange, onSuggestionSelect, close],
     );
 
     const onKeyDown = (e) => {

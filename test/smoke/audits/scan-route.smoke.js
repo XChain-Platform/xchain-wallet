@@ -87,6 +87,7 @@ const SCAN_KEYS = [
     'scan.classifyPaste',
     'scan.error.pasteEmpty',
     'scan.error.unknownXchainIntent',
+    'scan.error.paymentRequest',
     'scan.error.wif',
     'scan.error.mnemonic',
     'scan.error.xcwChunk',
