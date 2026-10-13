@@ -146,13 +146,15 @@ describe('TotalBalanceHero fiat formatting', () => {
 });
 
 describe('TotalBalanceHero refresh status', () => {
-    it('shows stale price time and exposes manual refresh progress', () => {
+    it('shows one shared status using the oldest balance or price update', () => {
         const onRefresh = vi.fn();
+        const lastSyncedAt = Date.now() - 2 * 60_000;
         const pricesFetchedAt = Date.now() - 10 * 60_000;
-        const { rerender } = mount({ pricesFetchedAt, onRefresh });
+        const { rerender } = mount({ lastSyncedAt, pricesFetchedAt, onRefresh });
 
-        const priceStatus = screen.getByText(/Prices updated 10 min ago/);
-        expect(priceStatus.className).toMatch(/stale/);
+        const status = screen.getByText('Updated 10 min ago');
+        expect(status.className).toMatch(/stale/);
+        expect(screen.getAllByRole('status')).toHaveLength(1);
         screen.getByRole('button', { name: 'Refresh portfolio' }).click();
         expect(onRefresh).toHaveBeenCalledOnce();
 

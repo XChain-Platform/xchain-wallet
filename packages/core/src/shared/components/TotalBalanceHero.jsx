@@ -141,15 +141,19 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
 
     const filterLabel = networkFilter === 'all' ? null : networkFilter.toUpperCase();
     const hasUnpriced = unpriced > 0;
-    const hasSync = typeof lastSyncedAt === 'number' && lastSyncedAt > 0;
     const stalePriceAsOf = oldestStalePriceTimestamp(rows);
-    const hasPriceSync = typeof pricesFetchedAt === 'number' && pricesFetchedAt > 0;
+    const portfolioUpdatedAt = oldestFreshnessTimestamp(
+        lastSyncedAt,
+        pricesFetchedAt,
+        stalePriceAsOf,
+    );
+    const hasUpdate = portfolioUpdatedAt !== null;
     const hasChange = !hidden
         && change24h
         && Number.isFinite(change24h.delta)
         && Number.isFinite(change24h.pct);
     const changeDisplay = hasChange ? percentChangeDisplay(change24h.pct) : null;
-    const showMeta = !hidden && (hasChange || hasUnpriced || hasSync || hasPriceSync || stalePriceAsOf !== null);
+    const showMeta = !hidden && (hasChange || hasUnpriced || hasUpdate);
 
     return (
         // Home's rows hold only the ACTIVE address on each chain (Home.jsx), so
@@ -294,24 +298,9 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                             </span>
                         ) : null}
                     </span>
-                    {hasSync ? (
+                    {hasUpdate ? (
                         <StalenessLabel
-                            lastSyncedAt={lastSyncedAt}
-                            warnAfterMs={5 * 60_000}
-                            className={styles.metaRight}
-                        />
-                    ) : null}
-                    {stalePriceAsOf !== null ? (
-                        <StalenessLabel
-                            lastSyncedAt={stalePriceAsOf}
-                            prefix="Prices as of"
-                            warnAfterMs={0}
-                            className={styles.metaRight}
-                        />
-                    ) : hasPriceSync ? (
-                        <StalenessLabel
-                            lastSyncedAt={pricesFetchedAt}
-                            prefix="Prices updated"
+                            lastSyncedAt={portfolioUpdatedAt}
                             warnAfterMs={5 * 60_000}
                             className={styles.metaRight}
                         />
@@ -320,6 +309,13 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
             ) : null}
         </section>
     );
+}
+
+function oldestFreshnessTimestamp(...timestamps) {
+    const valid = timestamps.filter((timestamp) => (
+        typeof timestamp === 'number' && Number.isFinite(timestamp) && timestamp > 0
+    ));
+    return valid.length > 0 ? Math.min(...valid) : null;
 }
 
 function oldestStalePriceTimestamp(rows) {
