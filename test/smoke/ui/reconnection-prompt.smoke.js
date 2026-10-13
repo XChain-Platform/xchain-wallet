@@ -72,7 +72,7 @@ assert.ok(
 
 // --- 3. Transition-detect useEffect ------------------------------------
 
-const effectMatch = /useEffect\(\(\) => \{\s*\n\s*const prev = prevOverallRef\.current;[\s\S]+?\}, \[reachabilityOverall, queue\.length, showToast\]\);/.exec(src);
+const effectMatch = /useEffect\(\(\) => \{\s*\n\s*const prev = prevOverallRef\.current;[\s\S]+?\}, \[reachabilityOverall, queue\.length, reducedMotion, showToast\]\);/.exec(src);
 assert.ok(effectMatch, 'banner has a transition-detection useEffect');
 const effectBody = effectMatch[0];
 assert.ok(
@@ -94,6 +94,10 @@ assert.ok(
 assert.ok(
     /now - lastPromptedAtRef\.current < 60_000/.test(effectBody),
     'effect dedupes within a 60-second window',
+);
+assert.ok(
+    /behavior: reducedMotion \? 'auto' : 'smooth'/.test(effectBody),
+    'the Review action avoids smooth scrolling when reduced motion is active',
 );
 
 // --- 4. Toast payload --------------------------------------------------
