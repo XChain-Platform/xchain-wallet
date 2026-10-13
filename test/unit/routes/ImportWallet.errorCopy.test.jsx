@@ -50,17 +50,21 @@ describe('the import screen shows house copy, not flow-layer internals', () => {
         const importMnemonic = vi.fn().mockRejectedValue(new Error('importMnemonic: mnemonic is required'));
         await submitWith(importMnemonic);
 
-        await screen.findByText('Could not import the wallet.');
+        await screen.findByText(
+            'Could not import the wallet. Check the recovery phrase and try again.',
+        );
         expect(screen.queryByText(/importMnemonic:/)).toBeNull();
     });
 
     it('still shows a message the flow wrote for the user', async () => {
-        const written = 'That recovery phrase belongs to a wallet you already imported.';
+        const written = 'That recovery phrase belongs to a wallet you already imported. Use the existing wallet instead.';
         const importMnemonic = vi.fn().mockRejectedValue(new Error(written));
         await submitWith(importMnemonic);
 
         await screen.findByText(written);
-        expect(screen.queryByText('Could not import the wallet.')).toBeNull();
+        expect(screen.queryByText(
+            'Could not import the wallet. Check the recovery phrase and try again.',
+        )).toBeNull();
     });
 
     it('keeps the wallet name when a backend error is retried', async () => {
@@ -72,7 +76,9 @@ describe('the import screen shows house copy, not flow-layer internals', () => {
             .mockResolvedValueOnce({ walletId: 'wallet-1' });
         await submitWith(importMnemonic, { name: 'Travel Wallet' });
 
-        expect(await screen.findByRole('alert')).toHaveTextContent('Could not import the wallet.');
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Could not import the wallet. Check the recovery phrase and try again.',
+        );
         expect(screen.queryByText('backend unavailable')).toBeNull();
         expect(screen.getByLabelText('Wallet name')).toHaveValue('Travel Wallet');
         expect(importMnemonic.mock.calls[0][0].name).toBe('Travel Wallet');

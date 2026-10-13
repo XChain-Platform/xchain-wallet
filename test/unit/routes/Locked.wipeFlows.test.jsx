@@ -69,6 +69,22 @@ afterEach(() => {
 });
 
 describe('Locked forgot-password wipe', () => {
+    it('hides SDK and stack text when unlocking fails', async () => {
+        const internal = Object.assign(
+            new Error('ERR_UNLOCK_BRIDGE\n    at unlock.js:7:4'),
+            { name: 'SDKWalletError', code: 'ERR_UNLOCK_BRIDGE' },
+        );
+        mount({ messaging: { unlockWallet: vi.fn().mockRejectedValue(internal) } });
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Unlock Wallet' }));
+
+        expect(await screen.findByText(
+            'Could not unlock the wallet. Close and reopen the app, then try again.',
+        )).toBeInTheDocument();
+        expect(document.body).not.toHaveTextContent('ERR_UNLOCK_BRIDGE');
+        expect(document.body).not.toHaveTextContent('unlock.js');
+    });
+
     it('keeps keyboard focus in the restore dialog, closes on Escape, and continues to unlock', async () => {
         const user = userEvent.setup();
         const messaging = { unlockWallet: vi.fn().mockResolvedValue({}) };
@@ -174,7 +190,11 @@ describe('Locked forgot-password wipe', () => {
         fireEvent.change(screen.getByLabelText('Type WIPE to confirm'), { target: { value: 'WIPE' } });
         fireEvent.click(screen.getByRole('button', { name: 'Erase vault and restore' }));
 
-        expect(await screen.findByRole('alert')).toHaveTextContent('host storage is busy');
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent(
+            'Could not erase wallet data. Close and reopen the app, then try again.',
+        );
+        expect(alert).not.toHaveTextContent('host storage is busy');
         expect(screen.getByRole('button', { name: 'Erase vault and restore' })).toBeEnabled();
         expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled();
         expect(globalThis.localStorage.getItem(FORGOT_PASSWORD_RESTORE_LANE_KEY)).toBeNull();
@@ -215,7 +235,11 @@ describe('Locked demo exit', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Exit demo & wipe' }));
         fireEvent.click(screen.getAllByRole('button', { name: 'Exit demo & wipe' })[1]);
 
-        expect(await screen.findByRole('alert')).toHaveTextContent('desktop files are busy');
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent(
+            'Could not exit demo mode. Close and reopen the app, then try again.',
+        );
+        expect(alert).not.toHaveTextContent('desktop files are busy');
         expect(screen.getByRole('dialog')).toHaveAttribute('aria-busy', 'false');
         expect(screen.getAllByRole('button', { name: 'Exit demo & wipe' })[1]).toBeEnabled();
         expect(getDemoWalletId()).toBe('demo-1');

@@ -50,9 +50,8 @@ import styles from './Locked.module.css';
  * inside its fixed-size window.
  *
  * `InvalidPasswordError` surfaces as a field-level error and increments
- * the §26 / G066 lockout counter; any other failure shows the raw
- * message and does NOT count against the user (those are bugs, not
- * bad guesses.
+ * the §26 / G066 lockout counter; any other failure shows a recovery step
+ * and does not count against the user (those are not bad guesses).
  *
  * §15.6 step 2: the unlock reply names the legacy passphrase wallets the
  * password just opened that hold no stored passphrase yet. While that
@@ -136,8 +135,8 @@ export function Locked({ onUnlocked }) {
                 return;
             }
             onUnlocked?.();
-        } catch (err) {
-            setDemoWipeError(err?.message || 'Could not exit demo mode.');
+        } catch {
+            setDemoWipeError('Could not exit demo mode. Close and reopen the app, then try again.');
             setDemoWipeBusy(false);
         }
     }
@@ -158,8 +157,8 @@ export function Locked({ onUnlocked }) {
             await wipeWalletStorage();
             setForgotPasswordRestoreIntent(restoreLane);
             if (typeof window !== 'undefined') window.location.reload();
-        } catch (err) {
-            setWipeError(err?.message || 'Could not wipe wallet data.');
+        } catch {
+            setWipeError('Could not erase wallet data. Close and reopen the app, then try again.');
             setWipeBusy(false);
         }
     }
@@ -353,7 +352,9 @@ export function Locked({ onUnlocked }) {
                 );
                 haptic.error();
             } else {
-                setError(err?.message || 'Unlock failed.');
+                setError(err?.message === 'Could not prepare unlock'
+                    ? err.message
+                    : 'Could not unlock the wallet. Close and reopen the app, then try again.');
                 haptic.error();
             }
             setBusy(false);
@@ -399,10 +400,13 @@ export function Locked({ onUnlocked }) {
                 inputRef.current?.focus();
                 return;
             }
-            // Other biometric failures (such as a PRF failure) are
-            // surfaced raw: they are not bad-password guesses and must NOT
-            // increment the lockout counter.
-            setError(err?.message || 'Biometric unlock failed.');
+            // The native retry message is authored for this screen. Every
+            // other biometric failure gets fixed copy instead of provider text.
+            setError(err?.message === 'Biometrics did not recognize you after several attempts. '
+                + 'Try again or unlock with your wallet password.'
+                ? err.message
+                : 'Biometric unlock failed. Unlock with your wallet password, '
+                    + 'then set up biometrics again in Settings.');
             haptic.error();
             setBusy(false);
         } finally {
@@ -438,7 +442,11 @@ export function Locked({ onUnlocked }) {
             // The password was right: the vault opened at step 1. Only the
             // passphrase missed, so this marks the field and touches
             // nothing on the lockout counter.
-            setCaptureError(err?.message || 'That passphrase does not match this wallet.');
+            setCaptureError(
+                err?.name === 'PassphraseMismatchError'
+                    ? 'That passphrase does not match this wallet. Check it and try again.'
+                    : 'Could not save the wallet passphrase. Check it and try again.',
+            );
             haptic.error();
             setBusy(false);
             captureRef.current?.focus();

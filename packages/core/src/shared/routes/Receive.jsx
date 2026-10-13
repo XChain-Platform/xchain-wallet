@@ -219,9 +219,9 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 } else {
                     setNoAddresses(true);
                 }
-            } catch (err) {
+            } catch {
                 if (!cancelled) {
-                    setLoadError(err?.message || "Couldn't load addresses. Try again.");
+                    setLoadError("Couldn't load wallet addresses. Check your connection and try again.");
                 }
             }
         })();
@@ -246,9 +246,9 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     const nextDescriptor = chainRegistry.get(activeChainId);
                     setAddressType(newest?.addressType || nextDescriptor?.defaultAddressType || '');
                 }
-            } catch (err) {
+            } catch {
                 if (!cancelled) {
-                    setLoadError(err?.message || 'Could not load the receive address. Try again.');
+                    setLoadError('Could not load the receive address. Check your connection and try again.');
                 }
             }
         })();
@@ -324,7 +324,10 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             if (err?.name === 'HardwareAddressMismatchError') {
                 setHwVerify({ status: 'mismatch', message: '' });
             } else {
-                setHwVerify({ status: 'error', message: err?.message || 'Could not verify the address. Try again.' });
+                setHwVerify({
+                    status: 'error',
+                    message: 'Could not verify the address on your hardware wallet. Reconnect it and try again.',
+                });
             }
         }
     }, [address, activeChainId, walletId, messaging]);
@@ -579,8 +582,8 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     [activeChainId]: [...withoutDuplicate, generated],
                 };
             });
-        } catch (err) {
-            setGenerateError(err?.message || 'Could not create a new receive address. Try again.');
+        } catch {
+            setGenerateError('Could not create a new receive address. Check your connection and try again.');
         } finally {
             setGenerating(false);
         }
