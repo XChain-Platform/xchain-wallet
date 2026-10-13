@@ -68,7 +68,7 @@ describe('CreateWallet security options', () => {
     it('warns that the enabled BIP39 passphrase is required and exact', async () => {
         draw();
         fillPasswords();
-        fireEvent.click(screen.getByLabelText('Use a BIP39 passphrase (advanced)'));
+        fireEvent.click(screen.getByLabelText(/^Use a BIP39 passphrase \(advanced\)/));
 
         expect(screen.getByText(/Save this passphrase separately/)).toHaveTextContent(
             /missing or mistyped passphrase opens a different wallet without warning/,
