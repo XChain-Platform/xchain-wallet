@@ -1989,29 +1989,29 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     {historyFetchedAt && loadingChains.size === 0 ? (
                         <StalenessLabel lastSyncedAt={historyFetchedAt} />
                     ) : <span />}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)' }}>
-                        {visibleEntries.length === 0 ? (
-                            <span
-                                id="history-export-disabled-reason"
-                                style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}
+                    {entries.length > 0 ? (
+                        <div className={styles.exportControls}>
+                            {visibleEntries.length === 0 ? (
+                                <span
+                                    id="history-export-disabled-reason"
+                                    className={styles.exportDisabledReason}
+                                >
+                                    {t('history.export.noMatchingRows')}
+                                </span>
+                            ) : null}
+                            <button
+                                type="button"
+                                className={styles.exportTrigger}
+                                aria-haspopup="dialog"
+                                aria-expanded={exportModalOpen}
+                                aria-describedby={visibleEntries.length === 0 ? 'history-export-disabled-reason' : undefined}
+                                onClick={() => setExportModalOpen(true)}
+                                disabled={visibleEntries.length === 0}
                             >
-                                {entries.length > 0
-                                    ? t('history.export.noMatchingRows')
-                                    : t('history.export.noRows')}
-                            </span>
-                        ) : null}
-                        <button
-                            type="button"
-                            className={styles.exportTrigger}
-                            aria-haspopup="dialog"
-                            aria-expanded={exportModalOpen}
-                            aria-describedby={visibleEntries.length === 0 ? 'history-export-disabled-reason' : undefined}
-                            onClick={() => setExportModalOpen(true)}
-                            disabled={visibleEntries.length === 0}
-                        >
-                            {t('history.export.open')}
-                        </button>
-                    </div>
+                                {t('history.export.open')}
+                            </button>
+                        </div>
+                    ) : null}
                 </div>
             ) : null}
 
