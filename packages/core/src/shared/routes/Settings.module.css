@@ -11,6 +11,7 @@
 @media (max-width: 360px) {
     .page div:has(> select),
     .page div:has(> input:not([type='checkbox']):not([type='radio']):not([type='range'])),
+    .page div:has(> textarea),
     .page div:has(> button),
     .page div:has(> :is(span, div) > :is(select, button)),
     .page div:has(> div > input:not([type='checkbox']):not([type='radio']):not([type='range'])) {
@@ -21,6 +22,7 @@
        label's readable width. Toggle and radio controls remain alongside it. */
     .page :is(
         select,
+        textarea,
         input:not([type='checkbox']):not([type='radio']):not([type='range'])
     ) {
         flex: 1 1 100% !important;
@@ -29,10 +31,18 @@
         max-width: 100%;
     }
 
+    /* Raw action buttons share the same viewport clamp as the Button
+       component, including destructive actions with longer labels. */
+    .page button {
+        min-width: 0;
+        max-width: 100%;
+    }
+
     /* A label and its description keep the full first line when the control
        is a direct child of the shared Settings row. */
     .page div:has(> select) > :is(span, div):first-child,
     .page div:has(> input:not([type='checkbox']):not([type='radio']):not([type='range'])) > :is(span, div):first-child,
+    .page div:has(> textarea) > :is(span, div):first-child,
     .page div:has(> button) > :is(span, div):first-child {
         flex: 1 1 100% !important;
         min-width: 0;
@@ -47,8 +57,24 @@
     }
 
     .page div:has(> select),
-    .page div:has(> input:not([type='checkbox']):not([type='radio']):not([type='range'])) {
+    .page div:has(> input:not([type='checkbox']):not([type='radio']):not([type='range'])),
+    .page div:has(> textarea) {
         min-width: 0;
         max-width: 100%;
+    }
+
+    /* Long section names take the first line so summaries and the forward
+       affordance remain visible inside a 320px viewport. */
+    .drillRow {
+        flex-wrap: wrap;
+    }
+
+    .drillLabel {
+        flex: 1 1 100%;
+        min-width: 0;
+    }
+
+    .drillSummary {
+        justify-content: flex-start !important;
     }
 }
