@@ -36,6 +36,7 @@ import {
 // ("importMnemonic: mnemonic is required"), and `|| fallback` only fires on an
 // EMPTY message, so those reached the recovery screen verbatim.
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { takeForgotPasswordRestoreLane } from '../utils/forgotPasswordRecovery.js';
 import { ClipboardPasteButton } from '../../ui/ClipboardPasteButton.jsx';
 // The three password fields, their hints, and the copy for every way
 // a restore can fail, all from one place so a message can never name a field
@@ -160,9 +161,11 @@ export function ImportWallet({
     const acceptedWordCounts = isFreeWallet ? [12] : ACCEPTED_WORD_COUNTS;
     // §19.4 / G036: two import lanes: recovery phrase (default) and
     // encrypted-backup restore. FreeWallet variant pins to 'mnemonic'.
-    const [lane, setLane] = useState(
+    const [lane, setLane] = useState(() =>
         /** @type {'mnemonic' | 'backup'} */ (
-            !isFreeWallet && initialLane === 'backup' ? 'backup' : 'mnemonic'
+            !isFreeWallet && takeForgotPasswordRestoreLane(initialLane) === 'backup'
+                ? 'backup'
+                : 'mnemonic'
         ),
     );
     const [name, setName] = useState(isFreeWallet ? 'FreeWallet' : 'Imported Wallet');
