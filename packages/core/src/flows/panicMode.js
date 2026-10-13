@@ -202,8 +202,10 @@ function writeState(state) {
         // mirror to the async store (best-effort; the cache already holds it).
         memoryFallback = state.expiresAt === 0 ? null : { ...state };
         try {
-            if (state.expiresAt === 0) void persistentStore.clear();
-            else void persistentStore.save({ ...state });
+            const write = state.expiresAt === 0
+                ? persistentStore.clear()
+                : persistentStore.save({ ...state });
+            void write.catch(() => { /* best-effort; cache is source of truth this session */ });
         } catch (_err) { /* best-effort; cache is source of truth this session */ }
         return;
     }
@@ -328,7 +330,9 @@ export function clearPanicModeState() {
     memoryFallback = null;
     awaitingHydration = false;
     if (persistentStore) {
-        try { void persistentStore.clear(); } catch (_err) { /* best-effort */ }
+        try {
+            void persistentStore.clear().catch(() => { /* best-effort */ });
+        } catch (_err) { /* best-effort */ }
         return;
     }
     const store = getStorage();

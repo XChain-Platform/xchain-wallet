@@ -14,8 +14,15 @@ vi.mock('../../../packages/core/src/shared/utils/nextPaint.js', () => ({ nextPai
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Locked } from '../../../packages/core/src/shared/routes/Locked.jsx';
 import {
+    activatePanicMode,
     clearDemoWalletId,
     clearLockoutState,
+    clearPanicModeState,
+    configureLockoutPersistence,
+    configurePanicModePersistence,
+    getLockoutState,
+    getPanicModeState,
+    recordLockoutFailure,
     setBiometricProvider,
 } from '../../../packages/core/src/flows/index.js';
 
@@ -30,11 +37,13 @@ function deferred() {
 }
 
 function mount(unlockWallet) {
+    const onUnlocked = vi.fn();
     render(
         <MessagingProvider shell="popup" messaging={{ unlockWallet }}>
-            <Locked onUnlocked={vi.fn()} />
+            <Locked onUnlocked={onUnlocked} />
         </MessagingProvider>,
     );
+    return { onUnlocked };
 }
 
 beforeEach(() => {
@@ -45,10 +54,13 @@ beforeEach(() => {
     nextPaint.mockClear();
 });
 
-afterEach(() => {
+afterEach(async () => {
     cleanup();
     vi.useRealTimers();
+    await configureLockoutPersistence(null);
+    await configurePanicModePersistence(null);
     clearLockoutState();
+    clearPanicModeState();
     setBiometricProvider(null);
 });
 
@@ -99,5 +111,96 @@ describe('Locked unlock progress', () => {
         act(() => vi.advanceTimersByTime(2000));
         expect(screen.queryByText(/unlocking your wallet securely/i)).toBeNull();
         expect(screen.getByText('Unlock failed quickly')).toBeTruthy();
+    });
+
+    it('restores focus and selection after a failed attempt re-enables the field', async () => {
+        const pending = deferred();
+        mount(vi.fn(() => pending.promise));
+        const password = screen.getByLabelText('Password');
+        const button = screen.getByRole('button', { name: 'Unlock Wallet' });
+
+        fireEvent.change(password, { target: { value: 'wallet password' } });
+        button.focus();
+        fireEvent.click(button);
+        await act(async () => pending.reject(new Error('Unlock failed')));
+
+        expect(password).toHaveFocus();
+        expect(password.selectionStart).toBe(0);
+        expect(password.selectionEnd).toBe('wallet password'.length);
+    });
+
+    it('clears a prior error when a retry succeeds', async () => {
+        const unlockWallet = vi.fn()
+            .mockRejectedValueOnce(new Error('Temporary unlock failure'))
+            .mockResolvedValueOnce({});
+        const { onUnlocked } = mount(unlockWallet);
+        const password = screen.getByLabelText('Password');
+
+        fireEvent.change(password, { target: { value: 'wallet password' } });
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'Unlock Wallet' }));
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        expect(screen.getByText('Temporary unlock failure')).toBeTruthy();
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'Unlock Wallet' }));
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+
+        expect(onUnlocked).toHaveBeenCalledOnce();
+        expect(screen.queryByText('Temporary unlock failure')).toBeNull();
+    });
+
+    it('disarms the delayed explanation as soon as unlock succeeds', async () => {
+        const pending = deferred();
+        const { onUnlocked } = mount(vi.fn(() => pending.promise));
+
+        fireEvent.change(screen.getByLabelText('Password'), {
+            target: { value: 'wallet password' },
+        });
+        const timersBeforeUnlock = vi.getTimerCount();
+        fireEvent.click(screen.getByRole('button', { name: 'Unlock Wallet' }));
+        await act(async () => Promise.resolve());
+        expect(vi.getTimerCount()).toBe(timersBeforeUnlock + 1);
+
+        await act(async () => pending.resolve({}));
+
+        expect(onUnlocked).toHaveBeenCalledOnce();
+        expect(vi.getTimerCount()).toBe(timersBeforeUnlock);
+        act(() => vi.advanceTimersByTime(2000));
+        expect(screen.queryByText(/unlocking your wallet securely/i)).toBeNull();
+    });
+
+    it('contains rejected best-effort writes from unlock guard state', async () => {
+        const persistenceError = new Error('Guard storage unavailable');
+        const lockoutStore = {
+            load: vi.fn(async () => null),
+            save: vi.fn(() => Promise.reject(persistenceError)),
+            clear: vi.fn(() => Promise.reject(persistenceError)),
+        };
+        const panicStore = {
+            load: vi.fn(async () => null),
+            save: vi.fn(() => Promise.reject(persistenceError)),
+            clear: vi.fn(() => Promise.reject(persistenceError)),
+        };
+        await configureLockoutPersistence(lockoutStore);
+        await configurePanicModePersistence(panicStore);
+
+        recordLockoutFailure(1_000);
+        activatePanicMode({ nowMs: 1_000 });
+        await Promise.resolve();
+
+        expect(getLockoutState().failedAttempts).toBe(1);
+        expect(getPanicModeState().expiresAt).toBeGreaterThan(1_000);
+        expect(lockoutStore.save).toHaveBeenCalledOnce();
+        expect(panicStore.save).toHaveBeenCalledOnce();
+
+        await configureLockoutPersistence(null);
+        await configurePanicModePersistence(null);
+        clearLockoutState();
+        clearPanicModeState();
     });
 });

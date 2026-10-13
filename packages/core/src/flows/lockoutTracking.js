@@ -178,8 +178,10 @@ function writeState(state) {
         // immediately, then mirror to the async store.
         memoryFallback = empty ? null : { ...state };
         try {
-            if (empty) void persistentStore.clear();
-            else void persistentStore.save({ ...state });
+            const write = empty
+                ? persistentStore.clear()
+                : persistentStore.save({ ...state });
+            void write.catch(() => { /* best-effort; the cache holds it this session */ });
         } catch (_err) { /* best-effort; the cache holds it this session */ }
         return;
     }
@@ -250,7 +252,9 @@ export function recordSuccess() {
 export function clearLockoutState() {
     memoryFallback = null;
     if (persistentStore) {
-        try { void persistentStore.clear(); } catch (_err) { /* best-effort */ }
+        try {
+            void persistentStore.clear().catch(() => { /* best-effort */ });
+        } catch (_err) { /* best-effort */ }
         return;
     }
     const store = getStorage();
