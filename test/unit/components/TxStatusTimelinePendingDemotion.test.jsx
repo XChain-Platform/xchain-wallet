@@ -21,7 +21,7 @@
 // A test that only checks the healthy case would have passed against the bug.
 
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { act, render, screen, cleanup } from '@testing-library/react';
 import React from 'react';
 
 import { TxStatusTimeline } from '../../../packages/core/src/shared/components/TxStatusTimeline.jsx';
@@ -109,6 +109,20 @@ describe('TxStatusTimeline: the mempool stage only claims what it knows', () => 
         expect(row.className).toContain('rowWarn');
         expect(row.querySelector('span[aria-hidden="true"]').textContent).toBe('!');
         expect(row.className).not.toContain('rowDone');
+    });
+
+    it('updates to "Not seen by the network" when the window expires while mounted', () => {
+        const staleInOneTick = pendingEntry({
+            broadcastAtMs: NOW - (NETWORK_SEEN_WINDOW_MS - 1000),
+        });
+        const { unmount } = render(<TxStatusTimeline entry={staleInOneTick} />);
+        expect(mempoolRow().textContent).toContain('Broadcast, awaiting network');
+
+        act(() => vi.advanceTimersByTime(30_000));
+        expect(mempoolRow().textContent).toContain('Not seen by the network');
+
+        unmount();
+        expect(vi.getTimerCount()).toBe(0);
     });
 
     it('holds "Broadcast, awaiting network" right up to the window edge', () => {
