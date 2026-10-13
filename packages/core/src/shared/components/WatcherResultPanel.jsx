@@ -30,7 +30,7 @@
 // (Send.jsx still passes `onSendAnother` for back-compat; the prop is
 // accepted under either name.)
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatedQrFrames, Button, StatusMessage } from '../../ui/index.js';
 import { copyText } from '../clipboard.js';
 import { encodeXcwChunks } from '../../uri/psbtQr.js';
@@ -57,11 +57,28 @@ export function WatcherResultPanel({
     const psbtHex = result?.psbtHex || '';
     const [qrFormat, setQrFormat] = useState('xcw');
     const [copyState, setCopyState] = useState(/** @type {'idle' | 'copied' | 'failed'} */ ('idle'));
+    const copyGenerationRef = useRef(0);
+    const copyResetTimerRef = useRef(null);
     const haptic = useHapticFeedback();
     const { announce } = useToast();
     useEffect(() => {
         announce(title);
     }, [announce, title]);
+    useEffect(() => {
+        copyGenerationRef.current += 1;
+        setCopyState('idle');
+        if (copyResetTimerRef.current !== null) {
+            clearTimeout(copyResetTimerRef.current);
+            copyResetTimerRef.current = null;
+        }
+        return () => {
+            copyGenerationRef.current += 1;
+            if (copyResetTimerRef.current !== null) {
+                clearTimeout(copyResetTimerRef.current);
+                copyResetTimerRef.current = null;
+            }
+        };
+    }, [psbtHex]);
     const exportFrames = useMemo(() => {
         if (!psbtHex) return null;
         try {
@@ -74,12 +91,26 @@ export function WatcherResultPanel({
     }, [psbtHex, qrFormat]);
     const copyHex = useCallback(async () => {
         if (!psbtHex) return;
-        const { ok } = await copyText(psbtHex);
+        const generation = ++copyGenerationRef.current;
+        if (copyResetTimerRef.current !== null) {
+            clearTimeout(copyResetTimerRef.current);
+            copyResetTimerRef.current = null;
+        }
+        let ok = false;
+        try {
+            ({ ok } = await copyText(psbtHex));
+        } catch {
+            // Clipboard integrations are an external boundary, so a rejection is a copy failure.
+        }
+        if (generation !== copyGenerationRef.current) return;
         setCopyState(ok ? 'copied' : 'failed');
         announce(ok ? 'Copied' : 'Copy failed: clipboard unavailable');
         if (ok) haptic.tap();
         else haptic.error();
-        setTimeout(() => setCopyState('idle'), 1500);
+        copyResetTimerRef.current = setTimeout(() => {
+            if (generation === copyGenerationRef.current) setCopyState('idle');
+            copyResetTimerRef.current = null;
+        }, 1500);
     }, [announce, haptic, psbtHex]);
     const formatLabel = qrFormat === 'bbqr' ? 'BBQr (hex)' : 'XCW chunks';
     const buildAnother = onBuildAnother || onSendAnother;
