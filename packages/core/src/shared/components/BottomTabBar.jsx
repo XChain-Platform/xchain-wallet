@@ -198,6 +198,7 @@ export function BottomTabBar({
                         className={styles.sheet}
                     >
                         <div className={styles.handle} aria-hidden="true" />
+                        {/* Safari needs an explicit list role because this class removes list styling. */}
                         <ul className={styles.sheetList} role="list">
                             {sheetRows.map((row) => {
                                 const active = isNavItemActive(row.id, currentView);
@@ -227,6 +228,7 @@ export function BottomTabBar({
                             })}
                         </ul>
                         <div className={styles.sheetDivider} />
+                        {/* Safari needs an explicit list role because this class removes list styling. */}
                         <ul className={styles.sheetList} role="list">
                             {onOpenWalletPicker ? (
                                 <li>

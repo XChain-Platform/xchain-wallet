@@ -272,6 +272,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                         {offers.length === 0 ? (
                             <EmptyState title="No open dispensers" body={<>Open dispensers selling {tick} appear here.</>} titleAs="p" />
                         ) : (
+                            /* Safari needs an explicit list role because this class removes list styling. */
                             <ul className={styles.list} role="list">
                                 {offers.slice(0, visibleCounts.offers).map(({ chainId, row }, index) => {
                                     // Explorer fields: GIVE_AMOUNT per fill, GET_AMOUNT
@@ -333,6 +334,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                         {dexOrders.length === 0 ? (
                             <EmptyState title="No open DEX orders" body={<>Open orders involving {tick} appear here.</>} titleAs="p" />
                         ) : (
+                            /* Safari needs an explicit list role because this class removes list styling. */
                             <ul className={styles.list} role="list">
                                 {dexOrders.slice(0, visibleCounts.orders).map(({ chainId, row }, i) => {
                                     const giveTick = row.give_tick || row.give_coin || row.giveTick || row.giveCoin || '';
@@ -381,6 +383,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                         {sales.length === 0 ? (
                             <EmptyState title="No recent dispenses" body={<>Recent dispenses of {tick} appear here.</>} titleAs="p" />
                         ) : (
+                            /* Safari needs an explicit list role because this class removes list styling. */
                             <ul className={styles.list} role="list">
                                 {sales.slice(0, visibleCounts.sales).map(({ chainId, row }, i) => {
                                     // A dispense row's GET_AMOUNT is what the buyer actually
@@ -434,6 +437,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                         {dexSwaps.length === 0 ? (
                             <EmptyState title="No recent DEX swaps" body={<>Recent swaps involving {tick} appear here.</>} titleAs="p" />
                         ) : (
+                            /* Safari needs an explicit list role because this class removes list styling. */
                             <ul className={styles.list} role="list">
                                 {dexSwaps.slice(0, visibleCounts.swaps).map(({ chainId, row }, i) => {
                                     const giveTick = row.give_tick || row.give_coin || row.giveTick || row.giveCoin || '';

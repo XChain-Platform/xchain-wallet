@@ -341,12 +341,14 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
             {openItems.length > 0 ? (
                 <section>
                     <SectionHeader title="Open" />
+                    {/* Safari needs an explicit list role because this class removes list styling. */}
                     <ul className={L.list} role="list" aria-label="Open swaps">{openItems.map(renderRow)}</ul>
                 </section>
             ) : <EmptyState title="No open swaps" body="Open atomic swaps appear here." titleAs="p" />}
             {closedItems.length > 0 ? (
                 <section>
                     <SectionHeader title="Closed" />
+                    {/* Safari needs an explicit list role because this class removes list styling. */}
                     <ul className={L.list} role="list" aria-label="Closed swaps">{closedItems.map(renderRow)}</ul>
                 </section>
             ) : null}
