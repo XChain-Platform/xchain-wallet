@@ -115,7 +115,107 @@ export function measureInPage() {
             push('unreachable', { el: desc(el), top: Math.round(T), bottom: Math.round(B) });
         }
     }
+    res.narrow = measureNarrowLists();
     return res;
+
+    // Lists, cards and tables fill the content area's usable width, up to
+    // the scrollbar (operator ruling 2026-10-12); forms keep their own
+    // narrower column. The usable width is the main scroller's clientWidth,
+    // which excludes a classic scrollbar, less its own horizontal padding.
+    // A list is judged by the outermost box around it that draws an edge,
+    // since a list inset by its own card's padding is how a card looks; a
+    // block sharing its row with siblings (a grid of cards) is judged by
+    // the row; and anything holding a form control is a form.
+    function measureNarrowLists() {
+        const main = document.getElementById('xc-main');
+        let scroller = main;
+        for (let a = main; a; a = a.parentElement) {
+            const ox = getComputedStyle(a).overflowY;
+            if (scrollable(ox)) { scroller = a; break; }
+        }
+        if (!scroller) return [];
+        const scs = getComputedStyle(scroller);
+        const sr = scroller.getBoundingClientRect();
+        const padL = parseFloat(scs.paddingLeft) || 0;
+        const padR = parseFloat(scs.paddingRight) || 0;
+        const usable = scroller.clientWidth - padL - padR;
+        const left = sr.left + (parseFloat(scs.borderLeftWidth) || 0) + padL;
+        const LISTY = /(^|_|-)(list|lists|card|cards|table|items|grid|panel|feed|results)(_|-|$)/i;
+        const BLOCK = /^(block|flex|grid|table|list-item|flow-root)$/;
+        const isCandidate = (el) => {
+            if (!BLOCK.test(getComputedStyle(el).display)) return false;
+            const role = el.getAttribute('role');
+            if (role === 'list' || role === 'table' || role === 'grid') return true;
+            if (['UL', 'OL', 'TABLE'].includes(el.tagName)) return true;
+            return [...el.classList].some((c) => LISTY.test(c));
+        };
+        // A box that draws an edge: a border, or a background that differs
+        // from the page's own (a wrapper painted in the page colour draws
+        // nothing a user can see).
+        const clear = (bg) => !bg || bg === 'transparent' || /rgba\(.*,\s*0\)$/.test(bg);
+        let pageBg = null;
+        for (let a = scroller; a && !pageBg; a = a.parentElement) {
+            const bg = getComputedStyle(a).backgroundColor;
+            if (!clear(bg)) pageBg = bg;
+        }
+        const isBox = (el) => {
+            const cs = getComputedStyle(el);
+            const bg = cs.backgroundColor;
+            return parseFloat(cs.borderLeftWidth) > 0 || parseFloat(cs.borderRightWidth) > 0
+                || (!clear(bg) && bg !== pageBg);
+        };
+        // A search or filter box above a list does not make the list a form.
+        const isFilter = (c) => c.type === 'search' || c.getAttribute('role') === 'searchbox'
+            || c.tagName === 'SELECT'
+            || /search|filter/i.test(`${c.getAttribute('aria-label') || ''} ${c.getAttribute('placeholder') || ''}`);
+        const isFormish = (el) => el.closest('form, dialog, [role="dialog"], [role="alertdialog"]')
+            || el.querySelector('form, textarea, button[type="submit"]')
+            || [...el.querySelectorAll('input, select')].some((c) => !isFilter(c));
+        const out = [];
+        const judged = new Set();
+        for (const el of scroller.querySelectorAll('*')) {
+            if (!isCandidate(el)) continue;
+            const cs = getComputedStyle(el);
+            if (cs.visibility === 'hidden' || cs.position === 'absolute' || cs.position === 'fixed') continue;
+            const r0 = el.getBoundingClientRect();
+            if (r0.width < 1 || r0.height < 1) continue;
+            // Judge the outermost edge-drawing box around the list, or the
+            // list itself when nothing around it draws an edge: a list inset
+            // by its own card's padding is how a card looks.
+            let target = el;
+            let nested = false;
+            for (let a = el.parentElement; a && a !== scroller; a = a.parentElement) {
+                if (isCandidate(a)) nested = true;
+                if (isBox(a)) target = a;
+            }
+            if (nested || judged.has(target) || isFormish(target)) continue;
+            judged.add(target);
+            // A cell of a grid is judged by its grid, whose last row may
+            // hold a single cell by design.
+            const parent = target.parentElement;
+            if (parent && parent !== scroller && /grid/.test(getComputedStyle(parent).display)) {
+                if (judged.has(parent)) continue;
+                judged.add(parent);
+                target = parent;
+            }
+            const r = target.getBoundingClientRect();
+            // The row this block sits in: siblings overlapping it vertically.
+            let rowL = r.left; let rowR = r.right;
+            for (const sib of target.parentElement ? target.parentElement.children : []) {
+                if (sib === target) continue;
+                const sr2 = sib.getBoundingClientRect();
+                if (sr2.width < 1 || sr2.bottom <= r.top || sr2.top >= r.bottom) continue;
+                rowL = Math.min(rowL, sr2.left); rowR = Math.max(rowR, sr2.right);
+                judged.add(sib);
+            }
+            const short = Math.round(usable - (rowR - rowL));
+            if (short > 2) {
+                out.push({ el: desc(target), w: Math.round(rowR - rowL), usable: Math.round(usable), short, offset: Math.round(rowL - left) });
+                if (out.length >= 15) break;
+            }
+        }
+        return out;
+    }
 }
 
 /** A sweep bound to one page, one venue and one output directory. */
