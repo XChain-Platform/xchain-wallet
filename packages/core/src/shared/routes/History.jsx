@@ -529,6 +529,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const [dateFrom, setDateFrom] = useState(() => isoDateDaysAgo(29));
     const [dateTo, setDateTo] = useState(() => isoDateDaysAgo(0));
     const [dateError, setDateError] = useState('');
+    const [phoneFiltersOpen, setPhoneFiltersOpen] = useState(false);
     const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
     // The export modal controls only the file representation. Row selection
     // remains owned by the History filters so the file matches the list.
@@ -1256,16 +1257,16 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     });
 
     const chainFilterActive = activeChainIds.some((cid) => !enabledChains.has(cid));
-    const filtersActive = Boolean(
-        searchQuery
-        || actionTypeFilter.size > 0
-        || statusFilter.size > 0
-        || dateFrom
-        || dateTo
-        || chainFilterActive
-        || crossChainOnly
-        || multisigOnly
-    );
+    const activeFilterCount = [
+        Boolean(searchQuery),
+        actionTypeFilter.size > 0,
+        statusFilter.size > 0,
+        Boolean(dateFrom || dateTo),
+        chainFilterActive,
+        crossChainOnly,
+        multisigOnly,
+    ].filter(Boolean).length;
+    const filtersActive = activeFilterCount > 0;
 
     const toggleSetMember = (setter) => (id) => {
         setter((prev) => {
@@ -1712,8 +1713,24 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     }
 
     return wrap(
-        <ListPage toolbar={(
-            <div className={styles.filterCard} role="group" aria-label={t('history.filters.label')}>
+        <ListPage toolbar={entries.length > 0 ? (
+            <>
+                <button
+                    type="button"
+                    className={styles.phoneFilterToggle}
+                    aria-expanded={phoneFiltersOpen}
+                    aria-controls="history-filter-panel"
+                    onClick={() => setPhoneFiltersOpen((open) => !open)}
+                >
+                    <Icon.FilterIcon />
+                    <span>{t('history.filters.toggle', { count: activeFilterCount })}</span>
+                </button>
+                <div
+                    id="history-filter-panel"
+                    className={`${styles.filterCard} ${phoneFiltersOpen ? styles.filterCardOpen : ''}`}
+                    role="group"
+                    aria-label={t('history.filters.label')}
+                >
                 <div className={styles.searchRow}>
                     <input
                         ref={searchInputRef}
@@ -1905,8 +1922,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
 
                     </div>
                 ) : null}
-            </div>
-        )}>
+                </div>
+            </>
+        ) : null}>
 
             {!browserOnline || showingCachedHistory ? (
                 <StatusMessage
@@ -1966,7 +1984,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 )
             ) : null}
 
-            {historyFetchedAt ? (
+            {historyFetchedAt && entries.length > 0 ? (
                 <div className={styles.resultsHeader}>
                     {historyFetchedAt && loadingChains.size === 0 ? (
                         <StalenessLabel lastSyncedAt={historyFetchedAt} />

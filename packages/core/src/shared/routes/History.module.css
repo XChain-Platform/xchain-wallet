@@ -24,10 +24,16 @@
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-3);
+    width: 100%;
+    box-sizing: border-box;
     padding: var(--xc-space-3);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-md);
     background: var(--xc-surface);
+}
+
+.phoneFilterToggle {
+    display: none;
 }
 
 .searchRow {
@@ -1358,6 +1364,45 @@
     white-space: nowrap;
     -webkit-user-select: text;
     user-select: text;
+}
+
+/* Phone layouts keep the full filter form behind one compact disclosure. */
+@media not all and (min-width: 480px) {
+    .phoneFilterToggle {
+        appearance: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--xc-space-2);
+        width: 100%;
+        min-height: var(--xc-tap-min);
+        padding: var(--xc-space-2) var(--xc-space-3);
+        border: 1px solid var(--xc-border);
+        border-radius: var(--xc-radius-md);
+        background: var(--xc-surface);
+        color: var(--xc-text);
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .phoneFilterToggle svg {
+        width: 18px;
+        height: 18px;
+    }
+
+    .phoneFilterToggle:focus-visible {
+        outline: 2px solid var(--xc-focus-ring);
+        outline-offset: 2px;
+    }
+
+    .filterCard {
+        display: none;
+    }
+
+    .filterCard.filterCardOpen {
+        display: flex;
+    }
 }
 
 /* Compact history layouts wrap controls and row metadata, while detail keys

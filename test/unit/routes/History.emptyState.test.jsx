@@ -3,12 +3,12 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// A wallet with no activity at all says so, even with a search typed;
-// "No results for these filters" is reserved for a filter that hides
-// rows that exist.
+// Keep an activity-free wallet focused on its empty state, even when the
+// route opens with a search scope. "No results for these filters" remains
+// reserved for a filter that hides rows that exist.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { clearDemoWalletId, markDemoWallet } from '../../../packages/core/src/flows/demoMode.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -106,13 +106,16 @@ describe('History empty state', () => {
         await waitFor(() => expect(screen.getByText('No activity yet')).toBeInTheDocument());
         expect(screen.queryByText(/No results for these filters/)).toBeNull();
         expect(screen.queryByRole('button', { name: 'Receive' })).toBeNull();
+        expect(screen.queryByRole('group', { name: 'History filters' })).toBeNull();
+        expect(screen.queryByRole('button', { name: /Filters/ })).toBeNull();
+        expect(screen.queryByText(/Last synced/)).toBeNull();
     });
 
-    it('keeps saying so when a search is typed on a wallet with no history', async () => {
-        mount();
+    it('keeps the empty state clear of filters when an initial search has no history to search', async () => {
+        mount({ initialSearchQuery: 'abc' });
         await screen.findByText('No activity yet');
-        fireEvent.change(screen.getByLabelText('Search history'), { target: { value: 'abc' } });
-        expect(await screen.findByText('No activity yet')).toBeInTheDocument();
+        expect(screen.queryByLabelText('Search history')).toBeNull();
+        expect(screen.queryByRole('button', { name: /Filters/ })).toBeNull();
         expect(screen.queryByText(/No results for these filters/)).toBeNull();
         expect(screen.queryByText(/Reset the filters/)).toBeNull();
     });

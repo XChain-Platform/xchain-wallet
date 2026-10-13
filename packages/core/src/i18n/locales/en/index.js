@@ -758,6 +758,7 @@ export const en = {
     'history.empty.noActivityBody':
         'Activity appears here after you send or receive on a selected chain.',
     'history.filters.label': 'History filters',
+    'history.filters.toggle': 'Filters ({count})',
     'history.filters.searchPlaceholder': 'Search action, address, token, txid, memo…',
     'history.filters.searchLabel': 'Search history',
     'history.filters.clearSearch': 'Clear history search',

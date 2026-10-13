@@ -358,9 +358,9 @@ describe('History filters', () => {
         expect(await screen.findByText('No results for these filters')).toBeInTheDocument();
     });
 
-    it('renders rows, filters, and detail fields with a 320px layout contract', async () => {
+    it('collapses filters behind an active-count button in the 360px layout', async () => {
         const widthDescriptor = Object.getOwnPropertyDescriptor(window, 'innerWidth');
-        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 320 });
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 360 });
 
         try {
             const { view } = mountHistory({
@@ -374,14 +374,27 @@ describe('History filters', () => {
             });
             await waitFor(() => expect(rowKeys(view)).toHaveLength(1));
 
+            const filterToggle = screen.getByRole('button', { name: 'Filters (1)' });
+            expect(filterToggle).toHaveAttribute('aria-expanded', 'false');
             expect(screen.getByRole('group', { name: 'History filters' })).toBeInTheDocument();
+            fireEvent.click(filterToggle);
+            expect(filterToggle).toHaveAttribute('aria-expanded', 'true');
             expect(screen.getByLabelText('From date')).toBeInTheDocument();
             expect(screen.getByLabelText('To date')).toBeInTheDocument();
+
+            fireEvent.click(screen.getByRole('button', { name: 'All' }));
+            expect(screen.getByRole('button', { name: 'Filters (0)' })).toBeInTheDocument();
 
             fireEvent.click(view.container.querySelector('[data-history-key] > button'));
             expect(screen.getByRole('rowheader', { name: 'Time' })).toBeInTheDocument();
             fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
             expect(screen.getByRole('rowheader', { name: 'Amount' })).toBeInTheDocument();
+
+            const phone = mediaBlock(historyCss, 'not all and (min-width: 480px)');
+            expect(ruleBody(historyCss, '.phoneFilterToggle')).toMatch(/display:\s*none/);
+            expect(ruleBody(phone, '.phoneFilterToggle')).toMatch(/display:\s*flex/);
+            expect(ruleBody(phone, '.filterCard')).toMatch(/display:\s*none/);
+            expect(ruleBody(phone, '.filterCard.filterCardOpen')).toMatch(/display:\s*flex/);
 
             const narrow = mediaBlock(historyCss, 'not all and (min-width: 400px)');
             // The two date fields stack into one full-width column on phones.
