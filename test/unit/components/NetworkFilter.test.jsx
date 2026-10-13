@@ -260,12 +260,16 @@ describe('shared network filter surfaces', () => {
         ), 'utf8');
         const triggerClass = css.match(/\.trigger\s*\{[^}]*\}/)?.[0] || '';
         const inputClass = inputCss.match(/\.input\s*\{[^}]*\}/)?.[0] || '';
+        // Text controls take their height from the size class's control token.
+        const inputHeight = inputCss.match(/\.input:not\(textarea\)\s*\{[^}]*\}/)?.[0] || '';
+        const mdSize = inputCss.match(/\.md\s*\{[^}]*\}/)?.[0] || '';
 
         expect(search).toHaveClass(inputStyles.input);
         expect(dropdown).toHaveClass(dropdownStyles.md);
         expect(filter).toHaveClass(filterStyles.md);
         expect(trigger).toHaveClass(filterStyles.trigger);
-        expect(inputClass).toMatch(/(?:min-)?height:\s*(?:36px|var\(--xc-control-h-md)/);
+        expect(inputHeight).toMatch(/height:\s*var\(--xc-control-height\)/);
+        expect(mdSize).toMatch(/--xc-control-height:\s*var\(--xc-control-h-md\)/);
         expect(inputClass).toMatch(/border-radius:\s*var\(--xc-(?:control-radius|radius-md)/);
         expect(triggerClass).toMatch(/height:\s*var\(--network-filter-control-height,\s*var\(--xc-control-h-md/);
         expect(triggerClass).toMatch(/border-radius:\s*var\(--xc-control-radius,\s*var\(--xc-radius-md\)\)/);
