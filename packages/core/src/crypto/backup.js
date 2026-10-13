@@ -45,7 +45,7 @@
 // "the secrets are in the clear" is wrong about every one of them.
 
 import { decrypt as aeadDecrypt, encrypt as aeadEncrypt } from './aead.js';
-import { base64ToBytes, bytesToBase64, deriveMasterKey, makeFreshKdfParams } from './kdf.js';
+import { base64ToBytes, bytesToBase64, deriveMasterKeyAsync, makeFreshKdfParams } from './kdf.js';
 
 export const BACKUP_MAGIC = 'XCHAIN-WALLET-BACKUP';
 export const BACKUP_FORMAT_VERSION = 1;
@@ -112,7 +112,7 @@ export async function encodeBackupEnvelope({ password, payload, walletName, kdfP
         throw new Error('encodeBackupEnvelope: walletName must be a string');
     }
     const params = kdfParams ?? makeFreshKdfParams();
-    const masterKey = deriveMasterKey(password, params);
+    const masterKey = await deriveMasterKeyAsync(password, params);
     try {
         const plaintext = new TextEncoder().encode(JSON.stringify(payload));
         let packed;
@@ -168,7 +168,7 @@ export async function decodeBackupEnvelope({ password, envelope }) {
     blob.set(ct, iv.length);
     blob.set(tag, iv.length + ct.length);
 
-    const masterKey = deriveMasterKey(password, kdf);
+    const masterKey = await deriveMasterKeyAsync(password, kdf);
     let plaintext;
     try {
         try {

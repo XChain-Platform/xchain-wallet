@@ -29,8 +29,8 @@
 
 import {
     bytesToBase64,
-    calibrateKdfParams,
-    deriveMasterKey,
+    calibrateKdfParamsAsync,
+    deriveMasterKeyAsync,
     encrypt,
     makeFreshKdfParams,
 } from '../crypto/index.js';
@@ -124,12 +124,12 @@ export async function importSingleWif({
     const derivedAddress = sdk.wallet.deriveAddress(keyInfo.publicKeyHex, { type });
 
     const params = kdfParams ?? (typeof performance !== 'undefined'
-        ? calibrateKdfParams({ targetMs: 1000 })
+        ? await calibrateKdfParamsAsync({ targetMs: 1000 })
         : makeFreshKdfParams());
 
     // Encrypt the WIF under the freshly-derived master key. No seed blob
     // to produce; encryptedSeed stays empty.
-    const masterKey = deriveMasterKey(password, params);
+    const masterKey = await deriveMasterKeyAsync(password, params);
     let encryptedWif;
     try {
         const wifBytes = new TextEncoder().encode(wif);

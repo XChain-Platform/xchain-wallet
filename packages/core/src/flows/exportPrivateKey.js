@@ -31,7 +31,7 @@
 import {
     base64ToBytes,
     decrypt,
-    deriveMasterKey,
+    deriveMasterKeyAsync,
 } from '../crypto/index.js';
 import { unlockWalletRecord, WalletNotFoundError } from './unlockWallet.js';
 
@@ -179,7 +179,7 @@ export async function exportPrivateKey({
         const entry = wallet.importedKeys.find((k) => k.addressId === addressId);
         if (!entry) throw new ImportedKeyMissingError(addressId);
 
-        const masterKey = deriveMasterKey(password, wallet.kdfParams);
+        const masterKey = await deriveMasterKeyAsync(password, wallet.kdfParams);
         try {
             // Password probe. For seed-backed wallets we decrypt the
             // seed blob; for wif-only wallets (no seed) we probe the

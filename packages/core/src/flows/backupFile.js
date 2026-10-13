@@ -52,7 +52,7 @@ import {
     encodeBackupEnvelope,
     parseBackupEnvelope,
     stringifyBackupEnvelope,
-    deriveMasterKey,
+    deriveMasterKeyAsync,
     makeFreshKdfParams,
     encrypt,
     decrypt,
@@ -628,7 +628,7 @@ export async function rekeyWalletRecord(wallet, { walletPassword, devicePassword
         );
     }
 
-    const oldKey = deriveMasterKey(walletPassword, wallet.kdfParams);
+    const oldKey = await deriveMasterKeyAsync(walletPassword, wallet.kdfParams);
     let seed = null;
     /** @type {Uint8Array[]} */
     let wifs = [];
@@ -673,7 +673,7 @@ export async function rekeyWalletRecord(wallet, { walletPassword, devicePassword
         memory: wallet.kdfParams.memory,
         parallelism: wallet.kdfParams.parallelism,
     });
-    const newKey = deriveMasterKey(devicePassword, nextParams);
+    const newKey = await deriveMasterKeyAsync(devicePassword, nextParams);
     try {
         if (seed) wallet.encryptedSeed = bytesToBase64(await encrypt(newKey, seed));
         for (let i = 0; i < sealedKeys.length; i += 1) {

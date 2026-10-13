@@ -16,7 +16,7 @@
 
 import { decryptWalletPassphrase, decryptWalletSeed } from '../crypto/walletBlob.js';
 import { decrypt } from '../crypto/aead.js';
-import { base64ToBytes, copyMasterKey, deriveMasterKey } from '../crypto/kdf.js';
+import { base64ToBytes, copyMasterKey, deriveMasterKeyAsync } from '../crypto/kdf.js';
 import {
     bip39MnemonicToSeed,
     isValidBip39Mnemonic,
@@ -157,7 +157,7 @@ export class SoftwareSigner extends Signer {
                 );
             }
             const masterKey = suppliedMasterKey === undefined
-                ? deriveMasterKey(password, enc.kdfParams)
+                ? await deriveMasterKeyAsync(password, enc.kdfParams)
                 : copyMasterKey(suppliedMasterKey);
             let importedWifs;
             try {
