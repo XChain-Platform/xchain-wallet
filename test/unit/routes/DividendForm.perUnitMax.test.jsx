@@ -292,6 +292,8 @@ describe('DividendForm Max fills a rate, not the balance', () => {
             divisibility: 0,
         });
         await pickDividendToken();
+        // Let the dividend token's divisibility lookup settle before submitting.
+        await flushTimers();
         fireEvent.change(amountField(), { target: { value: '1.5' } });
         fireEvent.click(submitButton());
         expect(screen.getByRole('alert')).toHaveTextContent(
