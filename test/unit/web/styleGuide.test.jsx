@@ -4,6 +4,7 @@
 import React from 'react';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
+import { expectNoSeriousAxeViolations } from '../../a11y/helpers/axe.js';
 import {
     Guidance,
     Markup,
@@ -24,6 +25,7 @@ const sectionModules = import.meta.glob(
 
 afterEach(() => {
     cleanup();
+    document.documentElement.removeAttribute('data-xc-theme');
     window.history.replaceState({}, '', '/');
 });
 
@@ -71,5 +73,17 @@ describe('style guide catalog', () => {
         expect(screen.getByText('Use a direct label')).not.toBeNull();
         expect(screen.getByText(/hand-written buttons/)).not.toBeNull();
         expect(screen.getByText('<Button>Continue</Button>')).not.toBeNull();
+    });
+
+    it.each(
+        Object.values(VIEWS).flatMap((view) => (
+            ['light', 'dark'].map((theme) => [view.id, theme])
+        )),
+    )('has no serious or critical axe violations in the %s view with the %s theme', async (view, theme) => {
+        window.history.replaceState({}, '', `/style-guide?view=${view}`);
+        document.documentElement.setAttribute('data-xc-theme', theme);
+        const { container } = render(<StyleGuidePage />);
+
+        await expectNoSeriousAxeViolations(container, { iframes: false });
     });
 });
