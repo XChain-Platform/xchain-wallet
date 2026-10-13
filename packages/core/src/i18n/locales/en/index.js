@@ -255,6 +255,8 @@ export const en = {
     'scan.error.pasteEmpty': 'Paste something first.',
     'scan.error.unknownXchainIntent':
         'xchain: URI was scanned but the intent was not recognized. Try a clearer code.',
+    'scan.error.paymentRequest':
+        'This payment request does not match a supported chain or valid address.',
     'scan.error.wif':
         'A private key (WIF) was scanned. Use Import Wallet → Import WIF to add it deliberately.',
     'scan.error.mnemonic':
