@@ -136,7 +136,7 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
         expect(await screen.findByText(/10 DOGE available/)).toBeInTheDocument();
         // The other-wallet path stays for buyers who prefer it.
         expect(screen.getByText(OWNER, { selector: 'code' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /^Copy$/ })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^Copy dispenser payment address$/ })).toBeInTheDocument();
         expect(document.body.textContent).not.toMatch(/on the roadmap/);
     });
 

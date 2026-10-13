@@ -8,11 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Unit tests for the §46 PriceAlertWatcher. getNativePrices is a spy that
-// returns a fixed price; listArmedAlerts is a mutable array; notify +
-// markTriggered are spies. pollOnce() is driven directly so no real timers.
+// Unit tests for the §46 PriceAlertWatcher. getNativePrices is a spy backed
+// by mutable prices; listArmedAlerts is a mutable array; notify +
+// markTriggered are spies. Fake timers drive the polling tests.
 
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { PriceAlertWatcher } from '../../../packages/core/src/notifications/PriceAlertWatcher.js';
 
 function armedAlert(over = {}) {
@@ -35,12 +35,12 @@ function makeWatcher(over = {}) {
         privacy: { priceDataEnabled: true },
         notifications: { priceAlerts: true },
     };
-    const price = over.price ?? 71000;
+    const state = { price: over.price ?? 71000 };
     const getNativePrices = over.getNativePrices
         || vi.fn(async ({ chainIds }) => ({
-            prices: Object.fromEntries(chainIds.map((c) => [c, { priceFiat: price }])),
+            prices: Object.fromEntries(chainIds.map((c) => [c, { priceFiat: state.price }])),
         }));
-    const notify = vi.fn(async () => {});
+    const notify = over.notify || vi.fn(async () => {});
     const markTriggered = over.markTriggered
         || vi.fn(async (id) => {
             const a = alerts.find((x) => x.id === id);
@@ -54,11 +54,16 @@ function makeWatcher(over = {}) {
         getSettings,
         notify,
         markTriggered,
+        intervalMs: over.intervalMs,
     });
-    return { watcher, getNativePrices, notify, markTriggered, listArmedAlerts, getSettings, alerts, settings };
+    return { watcher, getNativePrices, notify, markTriggered, listArmedAlerts, getSettings, alerts, settings, state };
 }
 
 describe('PriceAlertWatcher', () => {
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
     it('fires an "above" alert when price >= target, then marks it triggered', async () => {
         const { watcher, notify, markTriggered } = makeWatcher({ price: 71000 });
         await watcher.pollOnce();
@@ -94,6 +99,74 @@ describe('PriceAlertWatcher', () => {
         expect(notify).toHaveBeenCalledTimes(1);
     });
 
+    it('detects an upward crossing on the interval timer and fires only once', async () => {
+        vi.useFakeTimers();
+        const { watcher, notify, state } = makeWatcher({ price: 69000, intervalMs: 1000 });
+        watcher.start();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(notify).not.toHaveBeenCalled();
+
+        state.price = 70000;
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(notify).toHaveBeenCalledTimes(1);
+        expect(notify.mock.calls[0][0].body).toContain('rose above');
+
+        state.price = 72000;
+        await vi.advanceTimersByTimeAsync(2000);
+        expect(notify).toHaveBeenCalledTimes(1);
+        watcher.stop();
+    });
+
+    it('detects a downward crossing on the interval timer and fires only once', async () => {
+        vi.useFakeTimers();
+        const { watcher, notify, state } = makeWatcher({
+            alerts: [armedAlert({ direction: 'below', targetFiat: 60000 })],
+            price: 61000,
+            intervalMs: 1000,
+        });
+        watcher.start();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(notify).not.toHaveBeenCalled();
+
+        state.price = 60000;
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(notify).toHaveBeenCalledTimes(1);
+        expect(notify.mock.calls[0][0].body).toContain('fell below');
+
+        state.price = 58000;
+        await vi.advanceTimersByTimeAsync(2000);
+        expect(notify).toHaveBeenCalledTimes(1);
+        watcher.stop();
+    });
+
+    it('keeps an alert armed when notification permission blocks delivery, then retries', async () => {
+        let permitted = false;
+        const notify = vi.fn(async () => permitted);
+        const { watcher, markTriggered } = makeWatcher({ price: 71000, notify });
+
+        await watcher.pollOnce();
+        expect(notify).toHaveBeenCalledTimes(1);
+        expect(markTriggered).not.toHaveBeenCalled();
+
+        permitted = true;
+        await watcher.pollOnce();
+        expect(notify).toHaveBeenCalledTimes(2);
+        expect(markTriggered).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps an alert armed when delivery throws, then retries', async () => {
+        const notify = vi.fn()
+            .mockRejectedValueOnce(new Error('permission revoked'))
+            .mockResolvedValueOnce(true);
+        const { watcher, markTriggered } = makeWatcher({ price: 71000, notify });
+
+        await watcher.pollOnce();
+        expect(markTriggered).not.toHaveBeenCalled();
+        await watcher.pollOnce();
+        expect(notify).toHaveBeenCalledTimes(2);
+        expect(markTriggered).toHaveBeenCalledTimes(1);
+    });
+
     it('makes NO price fetch when priceDataEnabled is off', async () => {
         const { watcher, getNativePrices, notify } = makeWatcher({
             settings: { privacy: { priceDataEnabled: false }, notifications: { priceAlerts: true } },
@@ -117,13 +190,33 @@ describe('PriceAlertWatcher', () => {
         expect(getNativePrices).not.toHaveBeenCalled();
     });
 
-    it('skips alerts whose chain has no price data (null priceFiat)', async () => {
-        const getNativePrices = vi.fn(async ({ chainIds }) => ({
-            prices: Object.fromEntries(chainIds.map((c) => [c, { priceFiat: null }])),
-        }));
-        const { watcher, notify } = makeWatcher({ getNativePrices });
+    it('leaves alerts armed when their chain has no price data', async () => {
+        const getNativePrices = vi.fn(async () => ({ prices: {} }));
+        const { watcher, notify, markTriggered } = makeWatcher({ getNativePrices });
         await watcher.pollOnce();
         expect(notify).not.toHaveBeenCalled();
+        expect(markTriggered).not.toHaveBeenCalled();
+    });
+
+    it('evaluates priced chains without firing an alert for a null-priced chain', async () => {
+        const getNativePrices = vi.fn(async () => ({
+            prices: {
+                'bitcoin-mainnet': { priceFiat: 71000 },
+                'litecoin-mainnet': { priceFiat: null },
+            },
+        }));
+        const { watcher, notify, markTriggered } = makeWatcher({
+            alerts: [
+                armedAlert({ id: 'btc', chainId: 'bitcoin-mainnet' }),
+                armedAlert({ id: 'ltc', chainId: 'litecoin-mainnet', targetFiat: 80 }),
+            ],
+            getNativePrices,
+        });
+        await watcher.pollOnce();
+        expect(notify).toHaveBeenCalledTimes(1);
+        expect(notify.mock.calls[0][0].data.alertId).toBe('btc');
+        expect(markTriggered).toHaveBeenCalledTimes(1);
+        expect(markTriggered).toHaveBeenCalledWith('btc');
     });
 
     it('bails on a {disabled:true} oracle result', async () => {

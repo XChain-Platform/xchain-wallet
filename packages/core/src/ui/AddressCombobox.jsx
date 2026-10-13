@@ -154,6 +154,7 @@ export const AddressCombobox = forwardRef(function AddressCombobox(
                 label={label}
                 size={size}
                 disabled={disabled}
+                autoComplete="off"
                 style={IconComponent ? { paddingInlineEnd: '48px', ...style } : style}
                 value={value}
                 onChange={(e) => {

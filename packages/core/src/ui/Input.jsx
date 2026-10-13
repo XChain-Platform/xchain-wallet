@@ -35,16 +35,33 @@ import { localTimeZoneNote } from './localTimeZoneNote.js';
  * @property {'md' | 'lg'} [size]   field size: 'md' (36px, default) or 'lg' (48px hero field). Mirrors Button's size API.
  */
 export const Input = forwardRef(function Input(
-    { label, hint, error, id, size = 'md', type = 'text', onKeyDown, onKeyUp, onFocus, onBlur, ...rest },
+    {
+        label,
+        hint,
+        error,
+        id,
+        size = 'md',
+        type = 'text',
+        autoCapitalize = 'off',
+        autoCorrect = 'off',
+        spellCheck = false,
+        enterKeyHint,
+        onKeyDown,
+        onKeyUp,
+        onFocus,
+        onBlur,
+        ...rest
+    },
     ref,
 ) {
     const autoId = useId();
     const inputId = id || autoId;
-    const hintId = hint ? `${inputId}-hint` : undefined;
+    const hintId = hint && !error ? `${inputId}-hint` : undefined;
     const errorId = error ? `${inputId}-error` : undefined;
     const capsLockId = `${inputId}-capslock`;
     const isDateTime = type === 'datetime-local';
     const zoneId = isDateTime ? `${inputId}-zone` : undefined;
+    const resolvedEnterKeyHint = enterKeyHint || (type === 'search' ? 'search' : 'done');
 
     const isPassword = type === 'password';
     const [capsLockOn, setCapsLockOn] = useState(false);
@@ -96,6 +113,10 @@ export const Input = forwardRef(function Input(
                 ref={ref}
                 id={inputId}
                 type={type}
+                autoCapitalize={autoCapitalize}
+                autoCorrect={autoCorrect}
+                spellCheck={spellCheck}
+                enterKeyHint={resolvedEnterKeyHint}
                 className={inputClass}
                 aria-invalid={error ? 'true' : undefined}
                 aria-describedby={describedBy}
