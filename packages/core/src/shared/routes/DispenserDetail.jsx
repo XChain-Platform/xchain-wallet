@@ -2179,7 +2179,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             )}
 
             {canBuyWithSend ? (
-                <section style={{ marginTop: '1rem', padding: '0.75rem', border: '1px solid var(--xc-border)', borderRadius: '4px' }}>
+                <section className={local.buyPanel} data-testid="dispenser-buy-form">
                     <SectionHeader title="Buy from this dispenser" />
                     <p className={styles.hint}>
                         {isTokenPaid
@@ -2189,12 +2189,12 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     </p>
                     {listWarnings}
                     {buyerAddresses.length > 1 ? (
-                        <label style={{ display: 'block', marginBottom: '0.5rem' }}>
+                        <label className={local.buyerAddressField}>
                             <span className={styles.detailsLabel}>Pay from</span>
                             <select
                                 value={buyerAddressId || ''}
                                 onChange={(e) => setBuyerAddressId(e.target.value)}
-                                style={{ marginLeft: '0.5rem', maxWidth: '100%' }}
+                                className={local.buyerAddressSelect}
                             >
                                 {buyerAddresses.map((a) => (
                                     <option key={a.id} value={a.id}>{a.address}</option>
@@ -2288,7 +2288,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             ) : null}
 
             {showPayHere ? (
-                <section style={{ marginTop: '1rem', padding: '0.75rem', border: '1px solid var(--xc-border)', borderRadius: '4px' }}>
+                <section className={local.buyPanel}>
                     <SectionHeader title="Pay to buy" />
                     {canBuyWithSend ? null : listWarnings}
                     <p className={styles.hint}>

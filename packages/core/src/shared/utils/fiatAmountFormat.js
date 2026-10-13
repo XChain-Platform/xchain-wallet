@@ -84,3 +84,31 @@ export function formatFiatAmount(value, currency = 'USD', locale, options = {}) 
     }
     return `${isTinyPositive ? '< ' : ''}${formatted}`;
 }
+
+/** Format a fiat value with a currency name for assistive technology. */
+export function formatFiatAmountForSpeech(value, currency = 'USD', locale) {
+    if (value === null || value === undefined) return '';
+    const code = String(currency || 'USD').toUpperCase();
+    let formatter;
+    try {
+        formatter = new Intl.NumberFormat(getFormatLocale(locale), {
+            style: 'currency',
+            currency: code,
+            currencyDisplay: 'name',
+        });
+    } catch {
+        return `${formatDecimalAmount(value, locale, {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 2,
+        })} ${code}`;
+    }
+    const fractionDigits = formatter.resolvedOptions().maximumFractionDigits;
+    const minorUnit = fractionDigits === 0
+        ? '1'
+        : `0.${'0'.repeat(fractionDigits - 1)}1`;
+    if (compareDecimalStrings(value, '0') === 1
+        && compareDecimalStrings(value, minorUnit) === -1) {
+        return `less than ${formatter.format(minorUnit)}`;
+    }
+    return formatter.format(String(value));
+}

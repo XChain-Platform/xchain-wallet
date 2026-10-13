@@ -57,7 +57,7 @@ test.describe('adding a second wallet', () => {
         await expect(unlockedShell(page)).toBeVisible();
 
         await gotoPalette(page, 'Switch wallet');
-        await page.getByRole('button', { name: 'Add Wallet' }).click();
+        await page.getByRole('button', { name: 'Add wallet' }).click();
         await createWallet(page, {
             password: PASSWORD, name: 'Second Wallet', navigate: false,
         });
@@ -97,7 +97,7 @@ test.describe('adding a second wallet', () => {
         await createWallet(page, { password: PASSWORD, name: 'First Wallet' });
 
         await gotoPalette(page, 'Switch wallet');
-        await page.getByRole('button', { name: 'Add Wallet' }).click();
+        await page.getByRole('button', { name: 'Add wallet' }).click();
         await createWallet(page, {
             password: PASSWORD, name: 'Second Wallet', navigate: false,
         });

@@ -12,6 +12,7 @@ import React from 'react';
 import { cleanup, render } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { MessagingProvider } from '../../packages/core/src/shared/MessagingProvider.jsx';
+import { RouteErrorBoundary } from '../../packages/core/src/shared/components/RouteErrorBoundary.jsx';
 import {
     HIDDEN_ROUTE_IDS,
     ROUTE_NAV_GROUPS,
@@ -94,18 +95,23 @@ describe('route registry consistency', () => {
     });
 
     for (const route of Object.values(ROUTE_REGISTRY)) {
-        it(`${route.id} renders with minimal props`, async () => {
+        it(`${route.id} renders a heading in the web shell`, async () => {
             const importer = moduleImporter(route.component);
             expect(importer, `${route.component}.jsx is registered`).toBeTypeOf('function');
             const routeModule = await importer();
             const Component = routeModule[route.component];
             expect(Component, `${route.component} is exported`).toBeTypeOf('function');
 
-            expect(() => render(
+            const result = render(
                 <MessagingProvider shell="web" messaging={pendingMessaging}>
-                    <Component {...MINIMAL_PROPS} {...route.minimalProps} />
+                    <RouteErrorBoundary>
+                        <Component {...MINIMAL_PROPS} {...route.minimalProps} />
+                    </RouteErrorBoundary>
                 </MessagingProvider>,
-            )).not.toThrow();
+            );
+
+            expect(result.queryByText('This screen could not be shown')).not.toBeInTheDocument();
+            expect(result.container.querySelector('h1, h2, h3, h4, h5, h6')).not.toBeNull();
         });
     }
 });

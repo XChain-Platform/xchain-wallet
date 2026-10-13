@@ -88,6 +88,30 @@ describe('TokenDetail holders', () => {
         expect(screen.queryByText('No holders yet')).toBeNull();
     });
 
+    it('bounds a holder response with thousands of rows and expands without moving the page', async () => {
+        const data = Array.from({ length: 5_000 }, (_, index) => ({
+            address: `bcrt1qholder${String(index).padStart(5, '0')}xxxxxxxxxxxxxxxxxxxx`,
+            amount: String(index + 1),
+        }));
+        mount({ holders: { data, total: data.length } });
+        fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
+
+        await screen.findByText('Holders (5000)');
+        const list = screen.getByRole('table', { name: 'Holder balances' });
+        expect(list.querySelectorAll('tbody tr')).toHaveLength(100);
+        expect(screen.getByRole('button', { name: 'Show more holders (100 of 5,000 shown)' })).toBeInTheDocument();
+
+        const scroller = document.querySelector('main');
+        scroller.scrollTop = 197;
+        const showMore = screen.getByRole('button', { name: 'Show more holders (100 of 5,000 shown)' });
+        showMore.focus();
+        expect(document.activeElement).toBe(showMore);
+        fireEvent.click(showMore);
+
+        await waitFor(() => expect(list.querySelectorAll('tbody tr')).toHaveLength(200));
+        expect(scroller.scrollTop).toBe(197);
+    });
+
     it('copies the complete creator address from Details', async () => {
         mount();
         fireEvent.click(screen.getByRole('tab', { name: 'Details' }));

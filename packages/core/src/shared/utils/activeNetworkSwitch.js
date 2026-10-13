@@ -57,6 +57,7 @@ export function activeNetworkOptions({ developerMode = false, current } = {}) {
  * @param {(message: string) => boolean} [confirm]
  */
 export function confirmActiveNetworkSwitch(current, next, confirm = globalThis.confirm) {
+    if (!NETWORKS.includes(next)) return false;
     const from = activeNetworkLabel(current);
     const to = activeNetworkLabel(next);
     if (from === to) return false;
