@@ -152,6 +152,11 @@ export function TokenDetail({
 
     const supplyHistory = useSupplyHistory({ messaging, chainId, tick, skip: isNative });
 
+    const handleBack = useCallback(() => {
+        onBack();
+        restoreBalanceRowFocus(chainId, tick);
+    }, [chainId, onBack, tick]);
+
     const [holdersOpen, setHoldersOpen] = useState(false);
     const [holders, setHolders] = useState(/** @type {any[] | null} */ (null));
     const [holdersError, setHoldersError] = useState(/** @type {string | null} */ (null));
@@ -299,7 +304,7 @@ export function TokenDetail({
     const pageTitle = displayName || bridgeDisplayTick(tick, coinFromChainId(chainId)).label;
     const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={handleBack}
             // A bridged copy is titled by its bare name; the rooted wire form
             // and the origin chain are both on the Details panel below, so the
             // page never hides which asset this really is.
@@ -574,6 +579,12 @@ export function TokenDetail({
                             {tradeDisabledReason ? <span className={styles.quickActionReason}>{tradeDisabledReason}</span> : null}
                         </button>
                     ) : null}
+                    {typeof onViewActivity === 'function' ? (
+                        <button type="button" className={styles.quickAction} onClick={onViewActivity}>
+                            <span className={styles.quickActionIcon} aria-hidden="true"><Icon.HistoryIcon /></span>
+                            <span>History</span>
+                        </button>
+                    ) : null}
                     {!isNative && typeof onManageToken === 'function' && isTokenOwner ? (
                         <button type="button" className={styles.quickAction} onClick={onManageToken}>
                             <span className={styles.quickActionIcon} aria-hidden="true"><Icon.GearIcon /></span>
@@ -593,6 +604,7 @@ export function TokenDetail({
                                     type="button"
                                     role="tab"
                                     aria-selected={activeTab === t.id ? 'true' : 'false'}
+                                    tabIndex={activeTab === t.id ? 0 : -1}
                                     className={`${styles.tab} ${activeTab === t.id ? styles.tabActive : ''}`}
                                     onClick={() => setActiveTab(t.id)}
                                 >
@@ -878,6 +890,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
                                     type="button"
                                     role="tab"
                                     aria-selected={r.id === rangeId ? 'true' : 'false'}
+                                    tabIndex={r.id === rangeId ? 0 : -1}
                                     className={`${portfolioChartStyles.range} ${r.id === rangeId ? portfolioChartStyles.rangeActive : ''}`}
                                     onClick={() => setRangeId(r.id)}
                                 >
@@ -959,6 +972,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
                             type="button"
                             role="tab"
                             aria-selected={r.id === rangeId ? 'true' : 'false'}
+                            tabIndex={r.id === rangeId ? 0 : -1}
                             className={`${portfolioChartStyles.range} ${r.id === rangeId ? portfolioChartStyles.rangeActive : ''}`}
                             onClick={() => setRangeId(r.id)}
                         >
@@ -1281,6 +1295,7 @@ function MediaPanel({ isNative, assetInfo, loading }) {
                         type="button"
                         role="tab"
                         aria-selected={activeSubtab === t.id ? 'true' : 'false'}
+                        tabIndex={activeSubtab === t.id ? 0 : -1}
                         className={`${styles.subtab} ${activeSubtab === t.id ? styles.subtabActive : ''}`}
                         onClick={() => setActiveSubtab(t.id)}
                     >
@@ -2286,6 +2301,19 @@ function HoldersPanel({
 
 function holderIdentity(holder) {
     return holder?.address ?? holder?.ADDRESS ?? null;
+}
+
+function restoreBalanceRowFocus(chainId, tick) {
+    if (typeof document === 'undefined') return;
+    const key = `${chainId}:${tick}`;
+    setTimeout(() => {
+        const row = Array.from(document.querySelectorAll('[data-balance-key]'))
+            .find((candidate) => candidate.getAttribute('data-balance-key') === key);
+        const target = row?.matches('button:not(:disabled), [href], [tabindex]:not([tabindex="-1"])')
+            ? row
+            : row?.querySelector('button:not(:disabled), [href], [tabindex]:not([tabindex="-1"])');
+        target?.focus();
+    }, 0);
 }
 
 function StatCell({ label, value, tone }) {
