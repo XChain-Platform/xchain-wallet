@@ -72,11 +72,17 @@ describe('device clock skew', () => {
     it('keeps future relative and resumable timestamps safe under a slow clock', () => {
         const now = 1_700_000_000_000;
         expect(formatRelativeTime(now + 24 * 60 * 60 * 1000, now)).toBe('just now');
-        expect(isResumable({
+        const base = { walletId: 'w1', chainId: 'bitcoin-mainnet', from: { address: 'bc1qsource' } };
+        const session = (createdAt) => ({
             id: 'clock-skew',
-            createdAt: now + 24 * 60 * 60 * 1000,
-            composed: { psbt: 'psbt' },
-            dispatch: { software: 'sendToken', base: {} },
-        }, now)).toBe(true);
+            createdAt,
+            composed: { psbt: 'psbt', chainId: 'bitcoin-mainnet' },
+            dispatch: { software: 'sendToken', base },
+        });
+        expect(isResumable(session(now - 60 * 1000), now)).toBe(true);
+        // A confirm stamped ahead of the clock fails closed: its age would read
+        // negative, so the resume TTL could never expire it. The user composes
+        // again instead of approving a stored one of unknown age.
+        expect(isResumable(session(now + 24 * 60 * 60 * 1000), now)).toBe(false);
     });
 });
