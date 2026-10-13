@@ -1614,6 +1614,9 @@ export async function importBackupLocal(req) {
     const meta = createMetaBackend();
     const lease = await acquireWebVaultLease();
     let masterKey = null;
+    // This call's own copy of the key the restored wallet is now sealed under.
+    let deviceKey = null;
+    let deviceKdfParams = null;
     let sessionStarted = false;
     // What THIS call put into module state, so a failure tears down only that.
     let openedVault = null;
@@ -1634,6 +1637,13 @@ export async function importBackupLocal(req) {
             walletPassword,
             devicePassword: password,
             mode: 'fresh',
+            // Core zeroes the lent buffer when this returns, so keep a copy;
+            // the finally below zeroes it whether or not the restore succeeds.
+            onDeviceKey: (key, params) => {
+                if (deviceKey) deviceKey.fill(0);
+                deviceKey = key.slice();
+                deviceKdfParams = params;
+            },
         };
         // Nothing is persisted or unlocked until the merge has actually
         // succeeded: a wrong wallet password leaves the install fresh and
@@ -1658,10 +1668,11 @@ export async function importBackupLocal(req) {
             password,
             chainRegistry,
             sdkRegistry,
-            // Matches only a wallet sealed under the vault's own params. The
-            // re-key gives a restored wallet a fresh salt, so today it derives.
-            masterKey,
-            masterKeyKdfParams: kdfParams,
+            // The re-key's own key: same password, same params as the restored
+            // seal, so the wallet skips a second Argon2id round. The vault key
+            // serves only when nothing was re-sealed (no key material to pool).
+            masterKey: deviceKey ?? masterKey,
+            masterKeyKdfParams: deviceKey ? deviceKdfParams : kdfParams,
         });
         host = createBackgroundHost({
             vault,
@@ -1687,6 +1698,7 @@ export async function importBackupLocal(req) {
         throw err;
     } finally {
         if (masterKey) masterKey.fill(0);
+        if (deviceKey) deviceKey.fill(0);
         if (lease && !sessionStarted) await releaseWebVaultLease(lease);
     }
 }
