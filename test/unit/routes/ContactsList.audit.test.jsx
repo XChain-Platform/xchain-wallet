@@ -212,8 +212,9 @@ describe('ContactsList audited behavior', () => {
 
         fireEvent.click((await screen.findByText('Alice')).closest('button'));
         fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
-        const dialog = await screen.findByRole('dialog', { name: 'Delete this contact?' });
-        fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+        const dialog = await screen.findByRole('dialog', { name: 'Delete Alice from contacts?' });
+        expect(within(dialog).getByText('Alice and all saved addresses will be removed. You can restore the contact with Undo.')).toBeTruthy();
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Delete contact' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Undo' }));
 
         await waitFor(() => expect(messaging.store.get('alice')).toEqual(alice));
