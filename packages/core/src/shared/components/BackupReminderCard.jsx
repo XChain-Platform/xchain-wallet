@@ -16,8 +16,8 @@ import styles from './BackupReminderCard.module.css';
 /**
  * §19.7 / G034 + G062: progressive backup reminder card on Home.
  *
- * Evaluates `flowsLib.computeBackupReminderState({ walletId,
- * walletCreatedAt })`. Renders nothing for the 'hidden' state. 'gentle' renders a
+ * Evaluates `flowsLib.computeBackupReminderState({ walletId, hasFunds })`.
+ * Renders nothing for the 'hidden' state. 'gentle' renders a
  * quiet card with a snooze button; 'firm' renders a more prominent card
  * without a dismiss.
  *
@@ -26,22 +26,34 @@ import styles from './BackupReminderCard.module.css';
  *
  * @param {object} props
  * @param {string} props.walletId
- * @param {string | null | undefined} [props.walletCreatedAt]
+ * @param {boolean} props.hasFunds
  * @param {() => void} [props.onAction]      "Back up now" CTA
  */
-export function BackupReminderCard({ walletId, walletCreatedAt, onAction }) {
+export function BackupReminderCard({ walletId, hasFunds, onAction }) {
     const [state, setState] = useState({ kind: 'hidden' });
 
     useEffect(() => {
         if (!walletId) {
             setState({ kind: 'hidden' });
-            return;
+            return undefined;
         }
-        setState(flowsLib.computeBackupReminderState({
-            walletId,
-            walletCreatedAt: walletCreatedAt || null,
-        }));
-    }, [walletId, walletCreatedAt]);
+        const refresh = (event) => {
+            if (event?.type === 'storage' && event.key !== 'xc:backupVerifiedAt') return;
+            setState(flowsLib.computeBackupReminderState({ walletId, hasFunds }));
+        };
+        refresh();
+        globalThis.addEventListener?.('storage', refresh);
+        return () => globalThis.removeEventListener?.('storage', refresh);
+    }, [walletId, hasFunds]);
+
+    useEffect(() => {
+        if (typeof state.recheckAt !== 'number') return undefined;
+        const delay = Math.max(0, state.recheckAt - Date.now());
+        const timer = setTimeout(() => {
+            setState(flowsLib.computeBackupReminderState({ walletId, hasFunds }));
+        }, delay);
+        return () => clearTimeout(timer);
+    }, [state.recheckAt, walletId, hasFunds]);
 
     if (state.kind === 'hidden') return null;
 
@@ -69,7 +81,7 @@ export function BackupReminderCard({ walletId, walletCreatedAt, onAction }) {
                         className={styles.dismissBtn}
                         onClick={() => {
                             flowsLib.dismissBackupReminder(walletId);
-                            setState({ kind: 'hidden' });
+                            setState(flowsLib.computeBackupReminderState({ walletId, hasFunds }));
                         }}
                     >
                         Remind me tomorrow
