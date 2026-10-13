@@ -536,11 +536,11 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, name1, name2, lastPric
                 onClick={onOpen}
                 disabled={openDisabled}
                 aria-label={`Open ${otherName || otherTick} market`}
+                tooltip={openDisabled ? 'Opening a market needs a network connection' : undefined}
                 data-market-result="true"
                 leading={<TickerIcon chainId={chainId} tick={otherTick} />}
                 title={(
                     <span
-                        title={openDisabled ? 'Opening a market needs a network connection' : undefined}
                         style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--xc-space-2)', flexWrap: 'wrap' }}
                     >
                         <strong style={{ fontSize: 'var(--xc-text-md)' }}>{otherTick}</strong>
