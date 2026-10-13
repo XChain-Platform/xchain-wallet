@@ -100,7 +100,7 @@ function PermissionRow() {
     if (permission === 'granted') {
         hint = 'Allowed. Use the categories below to choose which notifications you receive.';
     } else if (permission === 'denied') {
-        hint = 'Blocked by your browser or system settings. Allow notifications for this app there to enable them.';
+        hint = 'Notifications are blocked. Open your browser or system settings, find XChain Wallet, and allow notifications.';
     } else {
         action = (
             <button type="button" onClick={request} disabled={requesting} aria-busy={requesting} style={PERMISSION_BUTTON}>

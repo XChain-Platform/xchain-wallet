@@ -18,7 +18,7 @@
 // live frame any more, which is exactly why the confirmed-side branch had
 // never fired before this work.
 
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { NotificationService } from '../../../packages/core/src/notifications/NotificationService.js';
 import { getActiveAddresses } from '../../../packages/core/src/notifications/getActiveAddresses.js';
 
@@ -28,6 +28,15 @@ const OURS = 'addrBTC';
 const STRANGER = 'addrStranger';
 const TX = 'AbCdEf0123456789';
 const HOUR = 60 * 60_000;
+
+beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-01-15T18:30:00.000Z'));
+});
+
+afterEach(() => {
+    vi.useRealTimers();
+});
 
 function makeSdk() {
     const handlers = {};

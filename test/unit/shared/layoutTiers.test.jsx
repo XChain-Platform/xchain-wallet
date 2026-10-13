@@ -17,7 +17,7 @@
 // positively: at EVERY width, exactly one nav surface is mounted.
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, waitFor } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
@@ -37,6 +37,9 @@ describe('layout tiers', () => {
             expect(tierForWidth(320)).toBe('compact');
             expect(tierForWidth(360)).toBe('compact');
             expect(tierForWidth(390)).toBe('compact');   // iPhone portrait
+            expect(tierForWidth(507)).toBe('compact');   // iPad split view
+            expect(tierForWidth(600)).toBe('compact');   // carded form, bottom navigation
+            expect(tierForWidth(694)).toBe('rail');      // iPad split view
             expect(tierForWidth(768)).toBe('rail');      // tablet portrait
             expect(tierForWidth(1024)).toBe('full');     // tablet landscape
             expect(tierForWidth(1440)).toBe('full');     // desktop
@@ -106,6 +109,21 @@ describe('layout tiers', () => {
             expect(screen.queryByTestId('bottom-bar')).toBeNull();
         });
 
+        it('switches split-view navigation on the shared 640px boundary', () => {
+            for (const [width, expectedTier, bottomBarVisible] of [
+                [507, 'compact', true],
+                [600, 'compact', true],
+                [640, 'rail', false],
+                [694, 'rail', false],
+            ]) {
+                const view = renderAt(width);
+                expect(view.container.firstChild.getAttribute('data-xc-tier')).toBe(expectedTier);
+                expect(screen.queryByTestId('bottom-bar') !== null).toBe(bottomBarVisible);
+                expect(screen.queryByTestId('sidebar-nav') !== null).toBe(!bottomBarVisible);
+                cleanup();
+            }
+        });
+
         it('gives a desktop window the sidebar and no bottom bar', () => {
             const { container } = renderAt(1440);
             expect(container.firstChild.getAttribute('data-xc-tier')).toBe('full');
@@ -129,6 +147,43 @@ describe('layout tiers', () => {
             }
         });
 
+        it('focuses a new route heading without stealing focus on initial or inline renders', async () => {
+            const view = render(
+                <FullLayoutWithNav routeKey="home">
+                    <h1>Home</h1>
+                    <button type="button">Open settings</button>
+                </FullLayoutWithNav>,
+            );
+
+            expect(document.activeElement).not.toBe(screen.getByRole('heading', { name: 'Home' }));
+
+            view.rerender(
+                <FullLayoutWithNav routeKey="settings">
+                    <p>Loading settings</p>
+                </FullLayoutWithNav>,
+            );
+            view.rerender(
+                <FullLayoutWithNav routeKey="settings">
+                    <h1>Settings</h1>
+                    <button type="button">Save</button>
+                </FullLayoutWithNav>,
+            );
+            const settingsHeading = screen.getByRole('heading', { name: 'Settings' });
+            await waitFor(() => expect(settingsHeading).toHaveFocus());
+            expect(settingsHeading).toHaveAttribute('tabindex', '-1');
+
+            const save = screen.getByRole('button', { name: 'Save' });
+            save.focus();
+            view.rerender(
+                <FullLayoutWithNav routeKey="settings">
+                    <h1>Settings</h1>
+                    <button type="button">Save</button>
+                    <p role="status">Saved</p>
+                </FullLayoutWithNav>,
+            );
+            expect(save).toHaveFocus();
+        });
+
         it('caps a compact header stack so route content remains visible', () => {
             const css = readFileSync(join(
                 process.cwd(),
@@ -136,6 +191,7 @@ describe('layout tiers', () => {
             ), 'utf8');
             expect(css).toMatch(/\.layout\[data-xc-tier='compact'\] \.header\s*\{[^}]*max-height:\s*45%/s);
             expect(css).toMatch(/\.layout\[data-xc-tier='compact'\] \.header\s*\{[^}]*overflow-y:\s*auto/s);
+            expect(css).toMatch(/\.routeFocusTarget:focus\s*\{[^}]*outline:\s*none/s);
         });
     });
 });

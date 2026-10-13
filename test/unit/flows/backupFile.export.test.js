@@ -27,12 +27,14 @@ vi.mock('../../../packages/core/src/crypto/index.js', async (importOriginal) => 
                 payload: 'Y2lwaGVydGV4dA==',
             };
         }),
+        decodeBackupEnvelope: vi.fn(async () => structuredClone(capture.encoded.payload)),
     };
 });
 
 import {
     BACKUP_PAYLOAD_VERSION,
     exportBackupFile,
+    importBackupFile,
 } from '../../../packages/core/src/flows/backupFile.js';
 
 const KDF_PARAMS = {
@@ -47,6 +49,11 @@ function collection(records) {
     return {
         get: vi.fn(async (id) => records.find((record) => record.id === id) ?? null),
         list: vi.fn(async () => records),
+        put: vi.fn(async (record) => {
+            const index = records.findIndex((item) => item.id === record.id);
+            if (index >= 0) records[index] = record;
+            else records.push(record);
+        }),
     };
 }
 
@@ -82,7 +89,7 @@ function vaultFixture() {
             contacts: collection([contact]),
             connectedSites: collection([connectedSite]),
             pendingTxs: collection([ownPending, otherPending]),
-            settings: { get: vi.fn(async () => settings) },
+            settings: { get: vi.fn(async () => settings), put: vi.fn(async () => {}) },
         },
     };
 }
@@ -132,5 +139,43 @@ describe('exportBackupFile', () => {
         expect(typeof result.fileContent).toBe('string');
         expect(JSON.parse(result.fileContent)).toEqual(result.envelope);
         expect(result.fileContent).toContain('\n  "magic": "XCHAIN-WALLET-BACKUP"');
+    });
+
+    it('restores an address label already carried by the backup payload', async () => {
+        const source = vaultFixture();
+        source.wallet.schemaVersion = 3;
+        source.wallet.encryptedSeed = '';
+        source.ownAccount.schemaVersion = 2;
+        source.ownAddress.schemaVersion = 4;
+        source.ownAddress.label = 'Client invoices';
+        source.importedAddress.schemaVersion = 4;
+        source.importedAddress.label = 'Imported savings';
+        source.vault.contacts = collection([]);
+        source.vault.connectedSites = collection([]);
+        source.vault.pendingTxs = collection([]);
+        source.vault.settings = { get: vi.fn(async () => null), put: vi.fn(async () => {}) };
+        const exported = await exportBackupFile({
+            vault: source.vault,
+            walletId: source.wallet.id,
+            password: 'backup-secret',
+            kdfParams: KDF_PARAMS,
+        });
+        const target = vaultFixture().vault;
+        target.wallets = collection([]);
+        target.accounts = collection([]);
+        target.addresses = collection([]);
+        target.contacts = collection([]);
+        target.connectedSites = collection([]);
+        target.pendingTxs = collection([]);
+        target.settings = { get: vi.fn(async () => null), put: vi.fn(async () => {}) };
+
+        await importBackupFile({
+            vault: target,
+            fileContent: exported.fileContent,
+            password: 'backup-secret',
+        });
+
+        expect((await target.addresses.get(source.ownAddress.id)).label).toBe('Client invoices');
+        expect((await target.addresses.get(source.importedAddress.id)).label).toBe('Imported savings');
     });
 });
