@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Button, EmptyState, Icon, Input, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, Input, ListPage, ListRow, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, branding as brandingLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useReachability } from '../hooks/useReachability.js';
@@ -548,81 +548,71 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, name1, name2, lastPric
             >
                 {starred ? '★' : '☆'}
             </Button>
-            <Button
+            <ListRow
                 type="button"
-                variant="ghost"
-                icon={null}
                 className={marketsStyles.marketButton}
                 onClick={onOpen}
                 disabled={openDisabled}
-                title={openDisabled ? 'Opening a market needs a network connection' : undefined}
                 aria-label={`Open ${otherName || otherTick} market`}
                 data-market-result="true"
-            >
-            <TickerIcon chainId={chainId} tick={otherTick} />
-            <div
-                style={{
-                    flex: 1,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '2px',
-                    minWidth: 0,
-                }}
-            >
-                <span style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--xc-space-2)', flexWrap: 'wrap' }}>
-                    <strong style={{ fontSize: 'var(--xc-text-md)' }}>{otherTick}</strong>
-                    {otherName && otherName.toUpperCase() !== otherTick.toUpperCase() ? (
-                        <span>{otherName}</span>
-                    ) : null}
-                    <DispenserBadge chainId={chainId} tick={otherTick} />
-                </span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)', fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)' }}>
-                    {lastPrice ? <span>last {lastPrice}</span> : null}
-                </span>
-            </div>
-            <div style={{
-                flex: '0 0 auto',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'flex-end',
-                gap: '2px',
-            }}>
-                {change24h ? (
+                leading={<TickerIcon chainId={chainId} tick={otherTick} />}
+                title={(
                     <span
-                        aria-label={changeDisplay ? `24-hour change. ${changeDisplay.label}` : undefined}
-                        style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 2,
-                            fontSize: 'var(--xc-text-sm)',
-                            fontWeight: 600,
-                            color: changeColor,
-                        }}
+                        title={openDisabled ? 'Opening a market needs a network connection' : undefined}
+                        style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--xc-space-2)', flexWrap: 'wrap' }}
                     >
-                        {changeDisplay?.text ?? change24h}
-                        {changeDisplay && changeDisplay.direction !== 'neutral' ? (
-                            <span aria-hidden="true" style={{ fontSize: '0.8em', lineHeight: 1 }}>
-                                {changeDisplay.direction === 'positive' ? '▲' : '▼'}
+                        <strong style={{ fontSize: 'var(--xc-text-md)' }}>{otherTick}</strong>
+                        {otherName && otherName.toUpperCase() !== otherTick.toUpperCase() ? (
+                            <span>{otherName}</span>
+                        ) : null}
+                        <DispenserBadge chainId={chainId} tick={otherTick} />
+                    </span>
+                )}
+                subtitle={lastPrice ? <span>last {lastPrice}</span> : null}
+                trailing={(
+                    <span style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'flex-end',
+                        gap: '2px',
+                    }}>
+                        {change24h ? (
+                            <span
+                                aria-label={changeDisplay ? `24-hour change. ${changeDisplay.label}` : undefined}
+                                style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 2,
+                                    fontSize: 'var(--xc-text-sm)',
+                                    fontWeight: 600,
+                                    color: changeColor,
+                                }}
+                            >
+                                {changeDisplay?.text ?? change24h}
+                                {changeDisplay && changeDisplay.direction !== 'neutral' ? (
+                                    <span aria-hidden="true" style={{ fontSize: '0.8em', lineHeight: 1 }}>
+                                        {changeDisplay.direction === 'positive' ? '▲' : '▼'}
+                                    </span>
+                                ) : null}
+                            </span>
+                        ) : null}
+                        {typeof depth === 'number' && Number.isFinite(depth) ? (
+                            <span style={{
+                                display: 'inline-block',
+                                background: `color-mix(in srgb, var(--xc-accent-primary) ${depthPct}%, transparent)`,
+                                color: 'var(--xc-accent-text)',
+                                fontWeight: 600,
+                                padding: '1px 8px',
+                                borderRadius: 999,
+                                fontSize: 11,
+                                lineHeight: 1.5,
+                            }}>
+                                depth {depth}
                             </span>
                         ) : null}
                     </span>
-                ) : null}
-                {typeof depth === 'number' && Number.isFinite(depth) ? (
-                    <span style={{
-                        display: 'inline-block',
-                        background: `color-mix(in srgb, var(--xc-accent-primary) ${depthPct}%, transparent)`,
-                        color: 'var(--xc-accent-text)',
-                        fontWeight: 600,
-                        padding: '1px 8px',
-                        borderRadius: 999,
-                        fontSize: 11,
-                        lineHeight: 1.5,
-                    }}>
-                        depth {depth}
-                    </span>
-                ) : null}
-            </div>
-            </Button>
+                )}
+            />
         </li>
     );
 }

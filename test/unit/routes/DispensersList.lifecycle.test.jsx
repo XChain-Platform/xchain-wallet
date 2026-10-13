@@ -16,7 +16,7 @@
 // terminal row must not claim tokens are "in escrow".
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DispensersList } from '../../../packages/core/src/shared/routes/DispensersList.jsx';
@@ -67,8 +67,10 @@ afterEach(() => cleanup());
 describe('DispensersList lifecycle badges', () => {
     it('badges each row with its lifecycle state, never the action validity', async () => {
         mount();
-        expect(await screen.findByText('open')).toBeInTheDocument();
-        expect(screen.getByText('cancelled')).toBeInTheDocument();
+        const openRow = await screen.findByRole('button', { name: 'Open JAVIERTEST dispenser #40' });
+        const cancelledRow = screen.getByRole('button', { name: 'Open JAVIERTEST dispenser #31' });
+        expect(within(openRow).getByText('open')).toBeInTheDocument();
+        expect(within(cancelledRow).getByText('cancelled')).toBeInTheDocument();
         expect(screen.queryByText('valid')).not.toBeInTheDocument();
     });
 

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, ListRow, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -310,32 +310,21 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                     const onClick = typeof onOpenDispenser === 'function' && actionIndex
                                         ? () => onOpenDispenser(chainId, actionIndex)
                                         : undefined;
-                                    const content = (
-                                        <>
-                                            <TickerIcon chainId={chainId} tick={tick} size={32} />
-                                            <span className={styles.rowText}>
-                                                <span className={styles.rowTitle}>
-                                                    {isDispenserPriceStale(row)
-                                                        ? dispenserRateLabel(row)
-                                                        : row.give_amount
-                                                            ? dispenserRateLabel(row, oracleFeedsFor(chainId, row))
-                                                            : 'Open dispenser'}
-                                                </span>
-                                                <span className={styles.rowSub}>
-                                                    {remaining != null ? `${formatDecimal(remaining)} ${tick} remaining` : ''}
-                                                </span>
-                                            </span>
-                                            {onClick ? <Icon.ForwardIcon /> : null}
-                                        </>
-                                    );
+                                    const title = isDispenserPriceStale(row)
+                                        ? dispenserRateLabel(row)
+                                        : row.give_amount
+                                            ? dispenserRateLabel(row, oracleFeedsFor(chainId, row))
+                                            : 'Open dispenser';
                                     return (
                                         <li key={marketRowIdentity({ chainId, row }) || `offer:${index}`}>
-                                            {onClick ? (
-                                                /* Clickable list rows stay native buttons so the whole row keeps its established layout and hit target. */
-                                                <button type="button" className={styles.row} onClick={onClick}>
-                                                    {content}
-                                                </button>
-                                            ) : <div className={styles.row}>{content}</div>}
+                                            <ListRow
+                                                className={styles.row}
+                                                leading={<TickerIcon chainId={chainId} tick={tick} size={32} />}
+                                                title={title}
+                                                subtitle={remaining != null ? `${formatDecimal(remaining)} ${tick} remaining` : undefined}
+                                                chevron={onClick ? <Icon.ForwardIcon /> : false}
+                                                onClick={onClick}
+                                            />
                                         </li>
                                     );
                                 })}
@@ -379,12 +368,11 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                             : `Buy ${tick}`);
                                     return (
                                         <li key={marketRowIdentity({ chainId, row }) || `order:${i}`}>
-                                            <div className={styles.row}>
-                                                <TickerIcon chainId={chainId} tick={tick} size={32} />
-                                                <span className={styles.rowText}>
-                                                    <span className={styles.rowTitle}>{title}</span>
-                                                </span>
-                                            </div>
+                                            <ListRow
+                                                className={styles.row}
+                                                leading={<TickerIcon chainId={chainId} tick={tick} size={32} />}
+                                                title={title}
+                                            />
                                         </li>
                                     );
                                 })}
@@ -427,18 +415,17 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                         : '';
                                     return (
                                         <li key={marketRowIdentity({ chainId, row }) || `sale:${i}`}>
-                                            <div className={styles.row}>
-                                                <TickerIcon chainId={chainId} tick={tick} size={32} />
-                                                <span className={styles.rowText}>
-                                                    <span className={styles.rowTitle}>
+                                            <ListRow
+                                                className={styles.row}
+                                                leading={<TickerIcon chainId={chainId} tick={tick} size={32} />}
+                                                title={(
+                                                    <>
                                                         {give ? `Sold ${formatDecimal(give)} ${soldTick}` : `Sold ${soldTick}`}
                                                         {give && Number(get) > 0 && payAsset ? ` for ${formatDecimal(get)} ${payAsset}` : ''}
-                                                    </span>
-                                                    <span className={styles.rowSub}>
-                                                        {dateLabel}
-                                                    </span>
-                                                </span>
-                                            </div>
+                                                    </>
+                                                )}
+                                                subtitle={dateLabel || undefined}
+                                            />
                                         </li>
                                     );
                                 })}
@@ -487,13 +474,12 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                             : `Bought ${tick}`);
                                     return (
                                         <li key={marketRowIdentity({ chainId, row }) || `swap:${i}`}>
-                                            <div className={styles.row}>
-                                                <TickerIcon chainId={chainId} tick={tick} size={32} />
-                                                <span className={styles.rowText}>
-                                                    <span className={styles.rowTitle}>{title}</span>
-                                                    <span className={styles.rowSub}>{dateLabel}</span>
-                                                </span>
-                                            </div>
+                                            <ListRow
+                                                className={styles.row}
+                                                leading={<TickerIcon chainId={chainId} tick={tick} size={32} />}
+                                                title={title}
+                                                subtitle={dateLabel || undefined}
+                                            />
                                         </li>
                                     );
                                 })}
