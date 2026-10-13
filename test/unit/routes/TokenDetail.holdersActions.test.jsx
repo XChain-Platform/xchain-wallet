@@ -96,8 +96,8 @@ describe('TokenDetail holders', () => {
         fireEvent.click(screen.getByRole('tab', { name: 'Unlock' }));
 
         await screen.findByText('Holders (5000)');
-        const list = document.querySelector('ol');
-        expect(list.querySelectorAll('li')).toHaveLength(100);
+        const list = screen.getByRole('table', { name: 'Holder balances' });
+        expect(list.querySelectorAll('tbody tr')).toHaveLength(100);
         expect(screen.getByRole('button', { name: 'Show more holders (100 of 5,000 shown)' })).toBeInTheDocument();
 
         const scroller = document.querySelector('main');
@@ -107,7 +107,7 @@ describe('TokenDetail holders', () => {
         expect(document.activeElement).toBe(showMore);
         fireEvent.click(showMore);
 
-        await waitFor(() => expect(list.querySelectorAll('li')).toHaveLength(200));
+        await waitFor(() => expect(list.querySelectorAll('tbody tr')).toHaveLength(200));
         expect(scroller.scrollTop).toBe(197);
     });
 
