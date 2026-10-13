@@ -82,15 +82,26 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         /** @type {string | null} */ (null),
     );
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const firstQuizInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const stageFormRef = useRef(/** @type {HTMLFormElement | null} */ (null));
 
     // The clipboard auto-clear that used to live here is gone with the copy
     // button it existed for (, decided 2026-08-01): the phrase cannot
     // be copied, so there is nothing to clear.
 
     useEffect(() => {
-        if (stage === 'password') {
-            setTimeout(() => passwordRef.current?.focus(), 0);
-        }
+        const id = setTimeout(() => {
+            if (stage === 'password') passwordRef.current?.focus();
+            else if (stage === 'verify') firstQuizInputRef.current?.focus();
+            else {
+                const heading = stageFormRef.current?.querySelector('h1');
+                if (heading instanceof HTMLElement) {
+                    heading.tabIndex = -1;
+                    heading.focus();
+                }
+            }
+        }, 0);
+        return () => clearTimeout(id);
     }, [stage]);
 
     function handlePasswordSubmit(event) {
@@ -223,7 +234,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         );
         return (
             <Screen variant={variant} header={screenHeader}>
-                <FormPage label="Automatic Donation System">
+                <FormPage ref={stageFormRef} label="Automatic Donation System">
                     {noticeBody}
                 </FormPage>
             </Screen>
@@ -243,7 +254,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
         );
         return (
             <Screen variant={variant} header={screenHeader}>
-                <FormPage label="Wallet creation status">
+                <FormPage ref={stageFormRef} label="Wallet creation status">
                     {persistingBody}
                 </FormPage>
             </Screen>
@@ -253,6 +264,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     if (stage === 'verify') {
         const verifyBody = (
             <FormPage
+                ref={stageFormRef}
                 label="Verify recovery phrase"
                 onSubmit={handleSubmitVerify}
                 status={(
@@ -300,6 +312,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     {quizPositions.map((p) => (
                         <li key={p} className={styles.quizRow}>
                             <Input
+                                ref={p === quizPositions[0] ? firstQuizInputRef : undefined}
                                 label={`Word ${p}`}
                                 value={quizAnswers[p] || ''}
                                 onChange={(e) => {
@@ -327,6 +340,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     if (stage === 'mnemonic') {
         const mnemonicBody = (
             <FormPage
+                ref={stageFormRef}
                 label="Recovery phrase"
                 status={persistError ? (
                     <StatusMessage variant="error" className={styles.error}>{persistError}</StatusMessage>
@@ -397,6 +411,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
             : null;
     const formBody = (
         <FormPage
+            ref={stageFormRef}
             label="Create wallet"
             onSubmit={handlePasswordSubmit}
             status={passwordStepDisabledReason ? (
