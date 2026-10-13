@@ -96,10 +96,8 @@ export function SafetySection() {
                 </div>
                 <input
                     key={String(settings.grace.testSendThresholdSats)}
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    step={1}
+                    type="text"
+                    inputMode="decimal"
                     defaultValue={settings.grace.testSendThresholdSats}
                     onBlur={(e) => {
                         const raw = e.target.value.trim();

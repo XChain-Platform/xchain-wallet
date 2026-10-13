@@ -141,8 +141,6 @@ export function FeesSection() {
                                 <input
                                     type="text"
                                     inputMode="decimal"
-                                    min={0}
-                                    step="any"
                                     defaultValue={formatWithThousands(settingsCustomToDisplayRate(unit, fees.customSatsPerKb ?? seedRate))}
                                     onBlur={(e) => {
                                         // Store the typed display rate as the integer smallest-unit per KB the schema requires.
