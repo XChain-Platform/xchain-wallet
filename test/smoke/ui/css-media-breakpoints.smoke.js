@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
 const sourceRoot = join(root, 'packages', 'core', 'src');
-const allowed = new Set(['360px', '400px', '420px', '480px', '48rem', '520px', '600px', '640px', '1024px']);
+const allowed = new Set(['360px', '400px', '420px', '480px', '48rem', '600px', '640px', '1024px']);
 
 function filesBelow(dir) {
     return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {

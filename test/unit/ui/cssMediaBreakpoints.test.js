@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 
 const root = join(process.cwd(), 'packages', 'core', 'src');
 const guide = readFileSync(join(process.cwd(), 'STYLE_GUIDE.md'), 'utf8');
-const documented = ['360px', '400px', '420px', '480px', '48rem', '520px', '600px', '640px', '1024px'];
+const documented = ['360px', '400px', '420px', '480px', '48rem', '600px', '640px', '1024px'];
 
 function filesBelow(dir) {
     return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -41,7 +41,6 @@ describe('core CSS module media breakpoints', () => {
             '420px',
             '480px',
             '48rem',
-            '520px',
             '600px',
             '640px',
         ]);

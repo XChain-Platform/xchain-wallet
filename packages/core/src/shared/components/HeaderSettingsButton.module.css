@@ -40,12 +40,13 @@
 }
 
 /* Phones narrower than about 430px cannot fit the logo, the full badge
-   and the header buttons in one row, so the badge drops to a dot and
+   and the header buttons in one row, so below the 480px compact-controls
+   point on the documented scale the badge drops to a dot and
    keeps the name for assistive tech (the badge's aria-label and title
    carry it too). A viewport query rather than a container query because
    Android WebView 102 predates container queries, and this header only
    renders in the full-window web and mobile shells. */
-@media (max-width: 429px) {
+@media not all and (min-width: 480px) {
     .networkBadge {
         min-width: 24px;
         padding: 2px 0;
