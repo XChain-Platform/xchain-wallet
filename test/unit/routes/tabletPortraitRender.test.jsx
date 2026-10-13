@@ -192,7 +192,8 @@ describe('primary routes at 768x1024', () => {
             hostMessaging,
         );
 
-        await screen.findByRole('searchbox', { name: 'Search history' });
+        // An empty history hides its filters, so wait for the timeline list itself.
+        await screen.findByRole('list', { name: 'History' });
         expectRailNavigation(view.container);
         expectListPage(view.container);
     });
