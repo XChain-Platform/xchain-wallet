@@ -171,8 +171,10 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
                 <>
                     <NetworkField value={chainId} onChange={setChainId} chainIds={betChains.length ? betChains : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
                     <div className={styles.actions} style={{ gap: '0.5rem' }}>
-                        <Button variant={openOnly ? 'primary' : 'ghost'} onClick={() => setOpenOnly(true)}>Taking bets</Button>
-                        <Button variant={openOnly ? 'ghost' : 'primary'} onClick={() => setOpenOnly(false)}>All markets</Button>
+                        {/* A two-way filter: the colour shows the active side, and
+                            aria-pressed says the same to a screen reader. */}
+                        <Button variant={openOnly ? 'primary' : 'ghost'} aria-pressed={openOnly} onClick={() => setOpenOnly(true)}>Taking bets</Button>
+                        <Button variant={openOnly ? 'ghost' : 'primary'} aria-pressed={!openOnly} onClick={() => setOpenOnly(false)}>All markets</Button>
                         {onCreate ? <Button variant="ghost" onClick={() => onCreate(chainId)}>Create market</Button> : null}
                     </div>
                 </>

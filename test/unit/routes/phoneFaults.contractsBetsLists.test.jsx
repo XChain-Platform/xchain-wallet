@@ -62,6 +62,27 @@ describe('BetFeedsList market cards', () => {
         expect(onOpenMarket).toHaveBeenCalledTimes(1);
         expect(onOpenMarket.mock.calls[0][1]).toBe(7);
     }, 20_000);
+
+    it('says which status filter is on, not only by colour', async () => {
+        const messaging = {
+            getAddressesByChain: vi.fn().mockResolvedValue({
+                'bitcoin-testnet': [{ address: 'tb1qexampleaddress0000000000000000000000' }],
+            }),
+            betFeeds: vi.fn().mockResolvedValue({ data: [] }),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <BetFeedsList walletId="w1" onOpenMarket={() => {}} onBack={() => {}} />
+            </MessagingProvider>,
+        );
+        const taking = await screen.findByRole('button', { name: 'Taking bets' }, { timeout: 10_000 });
+        const every = screen.getByRole('button', { name: 'All markets' });
+        expect(taking.getAttribute('aria-pressed')).toBe('true');
+        expect(every.getAttribute('aria-pressed')).toBe('false');
+        fireEvent.click(every);
+        expect(taking.getAttribute('aria-pressed')).toBe('false');
+        expect(every.getAttribute('aria-pressed')).toBe('true');
+    }, 20_000);
 });
 
 describe('ContractsList filter field sizing', () => {
