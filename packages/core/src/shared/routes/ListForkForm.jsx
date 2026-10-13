@@ -199,7 +199,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                     setLoadError('No address on this chain yet. Use Receive to generate one first.');
                 }
             })
-            .catch((err) => { if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.'); });
+            .catch(() => { if (!cancelled) setLoadError('Failed to load addresses.'); });
         return () => { cancelled = true; };
     }, [walletId, chainId, messaging]);
 
@@ -523,15 +523,15 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
     async function handleReview(event) {
         event.preventDefault();
         if (!fromAddress) { setFormError('No signing address available on this chain.'); return; }
-        if (!needsAdd && !needsRemove && !memoOnly) {
-            setFormError('Nothing changed: add or remove an item, or write a memo.');
-            return;
-        }
         if (additions.invalid.length > 0) {
             const noun = isTick
                 ? (additions.invalid.length === 1 ? 'token name' : 'token names')
                 : (additions.invalid.length === 1 ? 'address' : 'addresses');
             setFormError(`Remove ${additions.invalid.length} invalid ${noun} before reviewing.`);
+            return;
+        }
+        if (!needsAdd && !needsRemove && !memoOnly) {
+            setFormError('Nothing changed: add or remove an item, or write a memo.');
             return;
         }
         // Verify no pipe or semicolon in MEMO (both are protocol delimiters)
@@ -668,7 +668,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
     const header = (
         <PageHeader
             onBack={onBack}
-            title={stage === 'review-1' ? 'Review add/remove'
+            title={stage === 'review-1' ? 'Review list edit'
                 : stage === 'wait-index' ? 'Waiting for fork to be indexed'
                     : stage === 'review-2' ? 'Review remove'
                         : stage === 'repoint' ? 'Edit published'
@@ -946,14 +946,25 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
                             <dt className={styles.detailsLabel}>Members</dt>
                             <dd className={styles.detailsValue}>Unchanged ({currentItems.length})</dd>
                         </>
-                    ) : (
+                    ) : null}
+                    {needsAdd ? (
                         <>
-                            <dt className={styles.detailsLabel}>{needsAdd ? 'Adding' : 'Removing'}</dt>
-                            <dd className={styles.detailsValue}>{(needsAdd ? toAdd : toRemove).length} item{(needsAdd ? toAdd : toRemove).length === 1 ? '' : 's'}</dd>
+                            <dt className={styles.detailsLabel}>Adding</dt>
+                            <dd className={styles.detailsValue}>{toAdd.length} item{toAdd.length === 1 ? '' : 's'}</dd>
+                        </>
+                    ) : null}
+                    {needsRemove ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Removing</dt>
+                            <dd className={styles.detailsValue}>{toRemove.length} item{toRemove.length === 1 ? '' : 's'}</dd>
+                        </>
+                    ) : null}
+                    {!memoOnly ? (
+                        <>
                             <dt className={styles.detailsLabel}>Members after edit</dt>
                             <dd className={styles.detailsValue}>{resultingCount}</dd>
                         </>
-                    )}
+                    ) : null}
                     <dt className={styles.detailsLabel}>Action size</dt>
                     <dd className={styles.detailsValue}>
                         {firstActionSize.compiledBytes.toLocaleString('en-US')} / {firstActionSize.maxBytes.toLocaleString('en-US')} bytes
@@ -1016,6 +1027,7 @@ export function ListForkForm({ walletId, listRef, onBack, onDone, repointHandler
         <FormPage
             label="Edit list"
             onSubmit={handleReview}
+            onChangeCapture={() => { if (formError) setFormError(null); }}
             noValidate
             status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
             actions={(

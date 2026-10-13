@@ -38,6 +38,7 @@
 .list {
     display: flex;
     flex-direction: column;
+    width: 100%;
     background: var(--xc-surface);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-md);
