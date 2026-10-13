@@ -93,4 +93,36 @@ describe('BIP21-style Receive payment requests', () => {
             { chainRegistry: registry },
         ).type).toBe('unknown');
     });
+
+    it('recognizes uppercase standard and required keys from QR payloads', () => {
+        const address = 'BC1QAR0SRRR7XFKVY5L643LYDNW9RE59GTZZWF5MDQ';
+        const parsed = parseBip21Uri(
+            `BITCOIN:${address}?AMOUNT=0.25&LABEL=Coffee%20shop&MESSAGE=Order%2042&EXTRA=kept`,
+        );
+
+        expect(parsed).toMatchObject({
+            scheme: 'bitcoin',
+            address,
+            amount: '0.25',
+            label: 'Coffee shop',
+            message: 'Order 42',
+            params: {
+                amount: '0.25',
+                label: 'Coffee shop',
+                message: 'Order 42',
+                EXTRA: 'kept',
+            },
+        });
+        expect(parseBip21Uri(`bitcoin:${address}?REQ-SOMETHING=1`)).toMatchObject({
+            required: ['something'],
+            params: { 'req-something': '1' },
+        });
+    });
+
+    it('rejects scientific notation when the amount key is uppercase', () => {
+        expect(detectQrContent(
+            'BITCOIN:BC1QAR0SRRR7XFKVY5L643LYDNW9RE59GTZZWF5MDQ?AMOUNT=1E-8',
+            { chainRegistry: registry },
+        )).toEqual({ type: 'unknown' });
+    });
 });

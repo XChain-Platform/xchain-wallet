@@ -37,6 +37,7 @@ export class InvalidBip21Error extends Error {
 
 const BIP21_AMOUNT_RE = /^\d+(?:\.\d*)?$/;
 const BIP21_MAX_DECIMALS = 8;
+const STANDARD_PARAM_KEYS = new Set(['amount', 'label', 'message']);
 
 /**
  * Return the canonical BIP21 decimal representation of an amount.
@@ -132,12 +133,14 @@ export function parseBip21Uri(uri) {
                         uri,
                     );
                 }
-                if (decodedKey.startsWith('req-')) {
-                    const bare = decodedKey.slice(4);
+                const lowerKey = decodedKey.toLowerCase();
+                if (lowerKey.startsWith('req-')) {
+                    const bare = lowerKey.slice(4);
                     required.push(bare);
-                    params[decodedKey] = decodedVal;
+                    params[`req-${bare}`] = decodedVal;
                 } else {
-                    params[decodedKey] = decodedVal;
+                    const key = STANDARD_PARAM_KEYS.has(lowerKey) ? lowerKey : decodedKey;
+                    params[key] = decodedVal;
                 }
             }
         }
