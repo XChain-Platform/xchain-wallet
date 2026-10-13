@@ -224,12 +224,12 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
 
     function guardBeforeSign() {
         if (!giveChainId || !fromAddress) { setFormError('Pick a source address first.'); return false; }
-        if (!getChainId) { setFormError('Pick the chain you want to receive on.'); return false; }
+        if (!getChainId) { setFormError('Pick the chain where you want to get assets.'); return false; }
         if (validationError) { setFormError(validationError); return false; }
-        if (!giveTick.trim()) { setFormError('Enter the ticker you are offering.'); return false; }
+        if (!giveTick.trim()) { setFormError('Enter the ticker to give.'); return false; }
         if (!giveOwnership && !isPlainPositive(giveAmount)) { setFormError('Enter a positive amount to give.'); return false; }
-        if (!getTick.trim()) { setFormError('Enter the ticker you want in return.'); return false; }
-        if (!getOwnership && !isPlainPositive(getAmount)) { setFormError('Enter a positive amount to receive.'); return false; }
+        if (!getTick.trim()) { setFormError('Enter the ticker to get.'); return false; }
+        if (!getOwnership && !isPlainPositive(getAmount)) { setFormError('Enter a positive amount to get.'); return false; }
         const ga = getAddress.trim();
         if (!ga) { setFormError(`Receive address on ${getDescriptor?.displayName || 'the get chain'} is required.`); return false; }
         if (ga.includes('|') || ga.includes(';')) { setFormError('Receive address is invalid.'); return false; }
@@ -601,7 +601,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                         hint="Your address on the get chain. Each fill is released to it."
                         value={getAddress}
                         onChange={(e) => setGetAddress(e.target.value)}
-                        placeholder="auto-filled from your get-chain wallet"
+                        placeholder="Automatically filled from your wallet on the get chain"
                         autoComplete="off"
                         autoCorrect="off"
                         spellCheck={false}

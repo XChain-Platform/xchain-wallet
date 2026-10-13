@@ -251,17 +251,17 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         }
         // GIVE side.
         if (giveType === 'token') {
-            if (!giveTick.trim()) { setFormError('Enter the ticker you are offering.'); return false; }
+            if (!giveTick.trim()) { setFormError('Enter the ticker to give.'); return false; }
             if (!giveOwnership && !isPlainPositive(giveAmount)) { setFormError('Enter a positive amount to give.'); return false; }
         } else if (!isPlainPositive(giveAmount)) {
             setFormError(`Enter a positive amount of ${coinTicker} to give.`); return false;
         }
         // GET side.
         if (getType === 'token') {
-            if (!getTick.trim()) { setFormError('Enter the ticker you want in return.'); return false; }
-            if (!getOwnership && !isPlainPositive(getAmount)) { setFormError('Enter a positive amount to receive.'); return false; }
+            if (!getTick.trim()) { setFormError('Enter the ticker to get.'); return false; }
+            if (!getOwnership && !isPlainPositive(getAmount)) { setFormError('Enter a positive amount to get.'); return false; }
         } else if (!isPlainPositive(getAmount)) {
-            setFormError(`Enter a positive amount of ${coinTicker} to receive.`); return false;
+            setFormError(`Enter a positive amount of ${coinTicker} to get.`); return false;
         }
         const ga = getAddress.trim();
         if (ga && (ga.includes('|') || ga.includes(';'))) { setFormError('Receive address is invalid.'); return false; }
@@ -669,7 +669,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
             <FormSection title="Expiration">
                 <Input
                     label="Receive at (optional)"
-                    hint="Address to receive the GET side on. Defaults to your source address."
+                    hint="Address where you receive the get side. Defaults to your source address."
                     value={getAddress}
                     onChange={(e) => setGetAddress(e.target.value)}
                     autoComplete="off"
