@@ -18,7 +18,7 @@ import { setNativeQrScanner } from '../../../packages/core/src/ui/nativeQrScanne
 import { clearDemoWalletId, clearLockoutState, setBiometricProvider } from '../../../packages/core/src/flows/index.js';
 import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 import screenStyles from '../../../packages/core/src/ui/Screen.module.css';
-import noticeStyles from '../../../packages/core/src/shared/components/NoticeModal.module.css';
+import overlayStyles from '../../../packages/core/src/shared/components/OverlaySurface.module.css';
 
 const { qrToDataURL, showToast } = vi.hoisted(() => ({
     qrToDataURL: vi.fn(async () => 'data:image/png;base64,iVBORw0KGgo='),
@@ -89,7 +89,7 @@ describe('mobile-only surfaces use the shared kit', () => {
         render(<NoticeModal title="Cannot open link" message="That link is not supported." onClose={() => {}} />);
 
         const dialog = screen.getByRole('dialog', { name: 'Cannot open link' });
-        expect(dialog).toHaveClass(noticeStyles.overlay);
+        expect(dialog).toHaveClass(overlayStyles.overlay, overlayStyles.dialogOverlay);
         expect(screen.getByRole('button', { name: 'OK' })).toHaveClass(
             buttonStyles.btn,
             buttonStyles.md,
@@ -98,10 +98,10 @@ describe('mobile-only surfaces use the shared kit', () => {
 
         const css = readFileSync(resolve(
             process.cwd(),
-            'packages/core/src/shared/components/NoticeModal.module.css',
+            'packages/core/src/shared/components/OverlaySurface.module.css',
         ), 'utf8');
-        const overlayRule = css.match(/\.overlay\s*\{[^}]*\}/)?.[0] || '';
-        expect(overlayRule).toContain('var(--xc-page-gutter)');
+        const overlayRule = css.match(/\.dialogOverlay\s*\{[^}]*\}/)?.[0] || '';
+        expect(overlayRule).toContain('var(--xc-space-4)');
         for (const edge of ['top', 'right', 'bottom', 'left']) {
             expect(overlayRule).toContain(`env(safe-area-inset-${edge}, 0px)`);
         }

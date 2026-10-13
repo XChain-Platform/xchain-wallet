@@ -69,7 +69,7 @@ describe('shared M to Z components at a 320px viewport', () => {
         expect(screen.getByRole('searchbox', { name: 'Search networks' })).toBeVisible();
 
         const source = css('NetworkFilter');
-        expect(source).toMatch(/\.wrap\s*\{[^}]*min-width:\s*0/s);
+        expect(source).toMatch(/\.wrap\s*\{[^}]*min-width:\s*(?:0|min\(10rem, 100%\))/s);
         expect(source).toMatch(/\.trigger\s*\{[^}]*box-sizing:\s*border-box/s);
         expect(source).toMatch(/\.search\s*\{[^}]*min-width:\s*0/s);
         expect(source).toMatch(/\.item\s*\{[^}]*box-sizing:\s*border-box[^}]*min-width:\s*0/s);
