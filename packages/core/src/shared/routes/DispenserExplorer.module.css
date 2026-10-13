@@ -1,0 +1,89 @@
+.searchForm,
+.resultGroup {
+    width: 100%;
+    min-width: 0;
+}
+
+.searchModes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-2);
+    margin-bottom: var(--xc-space-2);
+}
+
+.chainField {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    align-items: center;
+    gap: var(--xc-space-2);
+    margin-bottom: var(--xc-space-2);
+}
+
+.chainSelect {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.searchActions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--xc-space-2);
+}
+
+.resultGroup {
+    margin-bottom: var(--xc-space-4);
+}
+
+.resultRow {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--xc-space-2);
+}
+
+.resultFacts {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    min-width: 0;
+}
+
+.factRow {
+    display: grid;
+    grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+    gap: var(--xc-space-1) var(--xc-space-3);
+    min-width: 0;
+}
+
+.factLabel {
+    margin: 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.factValue {
+    min-width: 0;
+    margin: 0;
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    overflow-wrap: anywhere;
+}
+
+.resultMeta {
+    display: block;
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 399px) {
+    .chainField,
+    .factRow {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
