@@ -34,6 +34,8 @@ import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { useCollectibleKeys } from '../hooks/useCollectibleKeys.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { useMessaging } from '../useMessaging.js';
+import { useSettings } from '../hooks/useSettings.js';
+import { useNativeFiatRates, priceNativeRows } from '../hooks/useFiatRate.js';
 import styles from './HomeTabs.module.css';
 
 /**
@@ -79,10 +81,27 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
     const [filterOpen, setFilterOpen] = useState(() => tokenQuery.trim().length > 0);
     const canFilter = typeof onNetworkFilterChange === 'function' && typeof onTokenQueryChange === 'function';
 
-    const allRows = useMemo(
+    const builtRows = useMemo(
         () => buildBalanceRows(balances, chainRegistry, activeByChain),
         [balances, chainRegistry, activeByChain],
     );
+    // Real balance reads carry no price, so native rows get the coin's live
+    // §45 rate here; without it the hero and the chart count every coin as
+    // unpriced. A demo wallet asks for nothing (its fixtures price
+    // themselves), and nothing is fetched until settings resolve, so an
+    // opted-out user never reaches the CoinGecko fallback in the meantime.
+    const { settings, loading: settingsLoading } = useSettings();
+    const nativeCoins = useMemo(() => {
+        if (settingsLoading || isDemoWallet(walletId)) return [];
+        return builtRows.filter((r) => r.kind === 'native').map((r) => coinFromChainId(r.chainId));
+    }, [builtRows, settingsLoading, walletId]);
+    const nativeRates = useNativeFiatRates({
+        chainCoins: nativeCoins,
+        fiatCurrency: settings?.fiatCurrency || 'USD',
+        allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
+        refreshKey: balancesFetchedAt,
+    });
+    const allRows = useMemo(() => priceNativeRows(builtRows, nativeRates), [builtRows, nativeRates]);
     const filteredRows = useMemo(() => {
         if (networkFilter === 'all') return allRows;
         return allRows.filter((r) => coinFromChainId(r.chainId) === networkFilter);

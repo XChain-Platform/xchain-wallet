@@ -19,7 +19,7 @@
 // whenever the coin or currency changes. The refresh is internally
 // TTL-throttled, so mounting many consumers stays cheap.
 
-import { useEffect, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import {
     getFiatRate,
     getTokenFiatRate,
@@ -160,4 +160,105 @@ export function useTickFiatRate({
 
     if (isToken) return tokenRate;
     return fiatRateForTick({ rate: coinRate, tick, nativeTicker });
+}
+
+/**
+ * Live §45 rates for several coin families at once, keyed by family.
+ *
+ * Home prices one native row per chain the wallet holds, and the set of
+ * chains is only known at render time, so it cannot call `useFiatRate`
+ * once per coin. This reads every requested coin from the same cache in
+ * one store subscription and refreshes them in one batched call.
+ *
+ * `refreshKey` re-runs the refresh when it changes. Home passes its
+ * balance fetch time, so a refresh that failed at launch (offline, a
+ * timeout) is retried on the next balance poll instead of leaving the
+ * rows unpriced until a remount. The refresh is TTL-throttled, so a key
+ * that changes every poll costs nothing while the cached rates are fresh.
+ *
+ * @param {object} opts
+ * @param {string[]} opts.chainCoins                     coin families, e.g. ['bitcoin', 'litecoin']
+ * @param {string} [opts.fiatCurrency]                   default 'USD'
+ * @param {boolean} [opts.allowCoingeckoFallback]        pass privacy.priceDataEnabled !== false
+ * @param {unknown} [opts.refreshKey]                    any value; a change triggers a refresh
+ * @returns {Record<string, import('../../flows/priceLookup.js').FiatRate>}
+ */
+export function useNativeFiatRates({
+    chainCoins,
+    fiatCurrency = 'USD',
+    allowCoingeckoFallback = true,
+    refreshKey,
+} = {}) {
+    const coins = Array.isArray(chainCoins)
+        ? Array.from(new Set(chainCoins.filter((c) => typeof c === 'string' && c.length > 0))).sort()
+        : [];
+    const coinKey = coins.join(',');
+
+    // The snapshot is a string so useSyncExternalStore compares it by value;
+    // it changes exactly when a requested coin's cached rate object changes.
+    const snapshot = useSyncExternalStore(
+        subscribeFiatRates,
+        () => coins
+            .map((coin) => {
+                const r = getFiatRate({ chainCoin: coin, fiatCurrency });
+                return r ? `${coin}=${r.rate}@${r.fetchedAt}` : `${coin}=`;
+            })
+            .join('|'),
+    );
+
+    useEffect(() => {
+        if (coinKey.length === 0) return;
+        refreshFiatRates({
+            chainCoins: coinKey.split(','),
+            fiatCurrency,
+            allowCoingeckoFallback,
+        }).catch(() => { /* cache keeps its last value; rows stay unpriced */ });
+    }, [coinKey, fiatCurrency, allowCoingeckoFallback, refreshKey]);
+
+    return useMemo(() => {
+        /** @type {Record<string, import('../../flows/priceLookup.js').FiatRate>} */
+        const out = {};
+        for (const coin of coinKey.length > 0 ? coinKey.split(',') : []) {
+            const r = getFiatRate({ chainCoin: coin, fiatCurrency });
+            if (r) out[coin] = r;
+        }
+        return out;
+    }, [snapshot, coinKey, fiatCurrency]); // eslint-disable-line react-hooks/exhaustive-deps
+}
+
+/**
+ * Attach live coin rates to native balance rows that have none.
+ *
+ * Real balance reads (flows/balances.js) carry no price, so every native
+ * row built from them arrives with `fiatRate: null` and the Home hero
+ * counted it as unpriced. This fills the rate in from the coin's live
+ * §45 rate, keyed by the chain's coin family.
+ *
+ * A numeric `fiatRate` already on a row is kept: demo fixtures price
+ * themselves. A row whose balance could not be read at all
+ * (`unavailable === 'all'`) stays unpriced, because its quantity is a
+ * placeholder zero and pricing it would state a $0.00 the wallet does
+ * not know. Tokens are left alone; a coin rate never prices a token.
+ *
+ * @template {{ kind: string, chainId: string, fiatRate: number | null, unavailable?: string }} R
+ * @param {R[]} rows
+ * @param {Record<string, { rate: number }>} ratesByCoin   coin family -> FiatRate
+ * @returns {R[]}  the same array when nothing changes, else a new one
+ */
+export function priceNativeRows(rows, ratesByCoin) {
+    if (!Array.isArray(rows) || !ratesByCoin) return rows;
+    let changed = false;
+    const out = rows.map((row) => {
+        if (!row || row.kind !== 'native') return row;
+        if (typeof row.fiatRate === 'number') return row;
+        if (row.unavailable === 'all') return row;
+        const id = String(row.chainId || '');
+        const dash = id.indexOf('-');
+        const coin = dash > 0 ? id.slice(0, dash) : id;
+        const rate = ratesByCoin[coin]?.rate;
+        if (typeof rate !== 'number' || !Number.isFinite(rate) || rate <= 0) return row;
+        changed = true;
+        return { ...row, fiatRate: rate };
+    });
+    return changed ? out : rows;
 }
