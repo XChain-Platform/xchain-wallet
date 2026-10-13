@@ -38,7 +38,6 @@ import {
     setUpdateNoticeEnabled,
 } from '../../../flows/directUpdate.js';
 import { ToggleRow } from './_settingsPrimitives.jsx';
-import { copyText } from '../../clipboard.js';
 import { useHapticFeedback } from '../../hooks/useHaptic.js';
 
 const ROW = {

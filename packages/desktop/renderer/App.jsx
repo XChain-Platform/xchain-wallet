@@ -317,9 +317,6 @@ function AppInner() {
     const [receivePrefill, setReceivePrefill] = useState(
         /** @type {{ chainId?: string, tick?: string, kind?: string, displayName?: string, imageUrl?: string | null } | null} */ (null),
     );
-    const [executePrefill, setExecutePrefill] = useState(
-        /** @type {{ method?: string, paramsText?: string } | null} */ (null),
-    );
     const [activeWalletId, setActiveWalletId] = useState(
         /** @type {string | null} */ (null),
     );

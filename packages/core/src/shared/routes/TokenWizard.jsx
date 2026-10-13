@@ -274,7 +274,6 @@ export function TokenWizard({ walletId, onBack }) {
     // Host composition and signing use the shared confirmation page after the
     // wizard's review step, keeping the reviewed and signed transaction equal.
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
-    const { isWatcherMode } = useWalletMode();
     // An already-unlocked wallet does not re-prompt on the confirm page.
     const signerReady = useSignerReady(walletId);
     // The confirm page's password field writes `password` state; the approve
