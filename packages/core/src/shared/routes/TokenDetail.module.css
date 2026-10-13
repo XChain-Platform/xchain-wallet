@@ -212,7 +212,7 @@
     font-size: 0.85em;
     font-weight: 500;
     color: rgba(255, 255, 255, 0.65);
-    margin-inline-start: 4px;
+    margin-inline-start: var(--xc-space-1);
     white-space: nowrap;
     vertical-align: baseline;
 }

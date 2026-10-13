@@ -218,7 +218,7 @@
     gap: var(--xc-space-3);
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
-    margin-top: 4px;
+    margin-top: var(--xc-space-1);
 }
 
 .amountFooterRight {
