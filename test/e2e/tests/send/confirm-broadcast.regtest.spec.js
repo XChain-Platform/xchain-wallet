@@ -124,7 +124,9 @@ test.describe('confirm -> broadcast on regtest', () => {
 
         // §1.7 / wallet spec §21.7: the last place the user sees which network
         // is about to move their money.
-        await expect(page.getByTestId('confirm-approve')).toHaveText(/^Approve$/);
+        // With the real decoder on regtest the button names the decoded action
+        // and amount; the bare Approve label is only the no-decoder fallback.
+        await expect(page.getByTestId('confirm-approve')).toHaveText(/^(Send [0-9.]+ BTC|Approve)$/);
 
         // Approvable outright: no "Sign anyway" override, because there is no
         // failure to override. This is what regressed users' most common
