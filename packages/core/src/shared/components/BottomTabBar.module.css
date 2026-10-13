@@ -15,7 +15,7 @@
     inset-inline-start: 0;
     inset-inline-end: 0;
     bottom: 0;
-    height: 56px;
+    min-height: 3.5rem;
     display: flex;
     flex-direction: row;
     background: var(--xc-surface-raised);
@@ -35,6 +35,7 @@
 
 .tab {
     flex: 1 1 0;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -47,6 +48,7 @@
     font-size: var(--xc-text-xs);
     cursor: pointer;
     padding: var(--xc-space-1) var(--xc-space-2);
+    overflow: hidden;
     /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
        inheriting it from whichever line box the platform font produces. */
     min-height: var(--xc-tap-min);
@@ -66,8 +68,9 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
-    height: 22px;
+    width: 1.375rem;
+    height: 1.375rem;
+    flex: 0 0 auto;
     position: relative;
 }
 
@@ -84,7 +87,12 @@
 }
 
 .tabLabel {
+    display: block;
+    max-width: 100%;
     line-height: 1.1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* Scrim + bottom sheet. The sheet sits above the bar so its safe-area
@@ -168,8 +176,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 20px;
-    height: 20px;
+    width: 1.25rem;
+    height: 1.25rem;
     flex: 0 0 auto;
 }
 
@@ -177,6 +185,7 @@
 .sheetLabel {
     flex: 1 1 auto;
     min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 /* Unread count pill on a sheet row (e.g. Messaging). */

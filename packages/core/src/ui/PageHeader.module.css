@@ -117,6 +117,7 @@
     appearance: none;
     width: var(--xc-page-header-side);
     height: var(--xc-page-header-side);
+    min-width: var(--xc-tap-min);
     min-height: var(--xc-tap-min);
     border-radius: 50%;
     border: 1px solid var(--xc-border-strong);
