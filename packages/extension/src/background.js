@@ -72,6 +72,7 @@ import {
     attachLayoutModeListener,
     readLayoutMode,
 } from './background/layoutMode.js';
+import { attachExtensionCommandListener } from './background/extensionCommands.js';
 import { restoreLabelSyncBestEffort } from './background/walletCreate.js';
 import { startLabelSyncRestoreTask } from './background/labelSyncRestoreTasks.js';
 import { createSurfaceStateBroadcaster } from './shared/surfaceStateSync.js';
@@ -655,6 +656,22 @@ const lockBackstop = createLockBackstop({
 });
 
 const { lockWalletNow, maybeAutoLock } = lockBackstop;
+
+attachExtensionCommandListener({
+    commandsApi: typeof chrome === 'undefined' ? null : chrome.commands,
+    openWallet: async (tab) => {
+        if (await readLayoutMode() === 'sidepanel' && chrome.sidePanel?.open) {
+            let windowId = tab?.windowId;
+            if (!Number.isInteger(windowId)) {
+                const lastFocused = await chrome.windows.getLastFocused();
+                windowId = lastFocused?.id;
+            }
+            if (Number.isInteger(windowId)) return chrome.sidePanel.open({ windowId });
+        }
+        return chrome.action.openPopup();
+    },
+    lockWallet: lockWalletNow,
+});
 
 // The idle-lock check runs before the notification refresh, never behind its network I/O.
 const keepaliveTick = createKeepaliveTick({
