@@ -13,6 +13,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     formatWithThousands,
+    normalizeLocalizedDecimal,
     countNonCommaBefore,
     formatDisplayAmount,
     formatHistoryAmount,
@@ -102,6 +103,39 @@ describe('shared/amountFormat formatWithThousands', () => {
 
     it('accepts a numeric argument by stringifying it', () => {
         expect(formatWithThousands(12345)).toBe('12,345');
+    });
+
+    it.each([
+        ['de-DE', '1234.56', '1.234,56'],
+        ['fr-FR', '1234.56', '1\u202f234,56'],
+        ['de-DE', '1234.', '1.234,'],
+        ['fr-FR', '.5', ',5'],
+    ])('formats canonical %s input without changing precision', (locale, input, expected) => {
+        expect(formatWithThousands(input, locale)).toBe(expected);
+    });
+});
+
+describe('shared/amountFormat normalizeLocalizedDecimal', () => {
+    it.each([
+        ['de-DE', '1.234,56', '1234.56'],
+        ['de-DE', '1,234.56', '1234.56'],
+        ['fr-FR', '1\u202f234,56', '1234.56'],
+        ['fr-FR', '1,234.56', '1234.56'],
+        ['de-DE', '1.234', '1234'],
+        ['de-DE', '1,25', '1.25'],
+        ['en-US', '1,234', '1234'],
+        ['en-US', '1,25', '1.25'],
+    ])('normalizes %s input %s to the wire decimal', (locale, input, expected) => {
+        expect(normalizeLocalizedDecimal(input, locale)).toBe(expected);
+    });
+
+    it.each([
+        ['de-DE', '12.34,56'],
+        ['fr-FR', '1,234,56'],
+        ['en-US', '1.2.3'],
+        ['de-DE', '12 EUR'],
+    ])('rejects malformed %s input %s instead of guessing', (locale, input) => {
+        expect(normalizeLocalizedDecimal(input, locale)).toBeNull();
     });
 });
 

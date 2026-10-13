@@ -66,7 +66,9 @@ describe('notification categories and permission', () => {
         globalThis.Notification = { permission: 'denied', requestPermission: vi.fn() };
         try {
             render(<NotificationsSection />);
-            expect(screen.getByText(/Blocked by your browser or system settings/)).toBeTruthy();
+            expect(screen.getByText(/Notifications are blocked/)).toHaveTextContent(
+                'Open your browser or system settings, find XChain Wallet, and allow notifications.',
+            );
             expect(screen.queryByRole('button', { name: 'Request permission' })).toBeNull();
         } finally {
             globalThis.Notification = prior;

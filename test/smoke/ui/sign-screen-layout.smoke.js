@@ -196,7 +196,7 @@ for (const cls of ['source', 'sourceLabel', 'sourceOrigin', 'sourceApp', 'detail
 // affordance).
 assert.match(
     sendSrc,
-    /descriptor\?\.displayName\s*\?\s*`Sign on \$\{descriptor\.displayName\}`\s*:\s*'Sign'/,
+    /descriptor\?\.displayName\s*\?\s*t\('send\.review\.signOn', \{ device: descriptor\.displayName \}\)\s*:\s*t\('send\.review\.sign'\)/,
     'Send.jsx review/sign button reads "Sign on <chain>" (software path)',
 );
 // Send is a deliberate two-stage flow: the compose-stage submit button

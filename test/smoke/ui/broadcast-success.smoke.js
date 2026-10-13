@@ -30,7 +30,7 @@ const css = readFileSync(sendCss, 'utf8');
 assert.ok(/stage === 'done'/.test(send), 'Send still gates on stage === "done"');
 assert.ok(/className=\{styles\.successCard\}/.test(send),
     'Done stage renders the styles.successCard wrapper');
-assert.ok(/Broadcast pending/.test(send),
+assert.ok(/t\('send\.success\.broadcastPending'\)/.test(send),
     'Done stage uses "Broadcast pending" copy (§28.4 status timeline language)');
 assert.ok(/role="status"\s+aria-live="polite"/.test(send),
     'Done stage announces success via role=status + aria-live=polite');
@@ -48,7 +48,7 @@ assert.ok(/setAmount\(''\)/.test(send) && /setToAddress\(''\)/.test(send),
 
 assert.ok(/explorer\?\.defaultUrl/.test(send),
     'Done stage reads explorer.defaultUrl from the chain descriptor');
-assert.ok(/View on explorer/.test(send),
+assert.ok(/t\('send\.success\.viewOnExplorer'\)/.test(send),
     'Done stage offers a "View on explorer" link');
 assert.ok(/target="_blank"/.test(send) && /rel="noopener noreferrer"/.test(send),
     'Explorer link opens in a new tab with noopener noreferrer');

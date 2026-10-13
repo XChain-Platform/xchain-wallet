@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { useEffect, useRef } from 'react';
 import { Icon } from '@xchain-wallet/core/ui';
 import { showsBottomBar, showsSidebar } from '../styles/breakpoints.js';
 import { useLayoutTier } from '../styles/useLayoutTier.js';
@@ -201,6 +202,7 @@ export function LeftNav({
                     <span className={styles.label}>Search</span>
                 </button>
             ) : null}
+            {/* Safari needs an explicit list role because this class removes list styling. */}
             <ul className={styles.list} role="list">
                 {primary.map((item) => {
                     const active = activeItem === item.id;
@@ -228,6 +230,7 @@ export function LeftNav({
                 })}
             </ul>
             <hr className={styles.divider} />
+            {/* Safari needs an explicit list role because this class removes list styling. */}
             <ul className={styles.list} role="list">
                 {secondary.map((item) => {
                     const active = activeItem === item.id;
@@ -340,12 +343,37 @@ function skipToMain(e) {
  * @param {import('react').ReactNode} props.nav
  * @param {import('react').ReactNode} [props.bottomBar]
  * @param {import('react').ReactNode} [props.header]
+ * @param {string} [props.routeKey]
  * @param {import('react').ReactNode} props.children
  */
 export function FullLayoutWithNav({ nav, bottomBar, header, children }) {
+    const { routeKey } = arguments[0];
     const [layoutRef, tier] = useLayoutTier();
+    const previousRouteKeyRef = useRef(routeKey);
     const sidebar = showsSidebar(tier) ? nav : null;
     const bar = showsBottomBar(tier) ? bottomBar : null;
+
+    useEffect(() => {
+        if (previousRouteKeyRef.current === routeKey) return;
+        previousRouteKeyRef.current = routeKey;
+        const routeBody = document.querySelector(`.${styles.mainBody}`);
+        if (!routeBody) return undefined;
+        const focusHeading = () => {
+            const heading = routeBody.querySelector('h1');
+            if (!heading) return false;
+            heading.tabIndex = -1;
+            heading.classList.add(styles.routeFocusTarget);
+            heading.focus({ preventScroll: true });
+            return true;
+        };
+        if (focusHeading()) return undefined;
+        const observer = new MutationObserver(() => {
+            if (focusHeading()) observer.disconnect();
+        });
+        observer.observe(routeBody, { childList: true, subtree: true });
+        return () => observer.disconnect();
+    }, [routeKey]);
+
     return (
         <div
             ref={layoutRef}

@@ -5,10 +5,16 @@
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
 import { ConfirmActionModal } from '../../../packages/core/src/shared/components/ConfirmActionModal.jsx';
 import { ActionConfirmScreen } from '../../../packages/core/src/shared/components/ActionConfirmScreen.jsx';
 
-afterEach(() => cleanup());
+const originalInnerWidth = Object.getOwnPropertyDescriptor(window, 'innerWidth');
+
+afterEach(() => {
+    cleanup();
+    if (originalInnerWidth) Object.defineProperty(window, 'innerWidth', originalInnerWidth);
+});
 
 const DECODED = {
     summary: 'Send 5 JDOG to bc1qxyz',
@@ -149,6 +155,73 @@ describe('ConfirmActionModal', () => {
             />,
         );
         expect(screen.queryByTestId('confirm-total')).toBeNull();
+    });
+
+    it.each([320, 360])('keeps the Send review readable and reachable at %ipx', (width) => {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
+        const address = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
+        const longToken = 'A-VERY-LONG-TOKEN-NAME-THAT-MUST-NOT-HIDE-THE-AMOUNT';
+        const confirmAction = {
+            phase: 'ready',
+            composed: {
+                chainId: 'bitcoin-mainnet',
+                bareNativePayment: true,
+                networkFeeSats: 2500,
+                decoded: {
+                    summary: `Send 1 BTC to ${address}`,
+                    details: [
+                        { label: 'Token', value: 'BTC' },
+                        { label: 'Amount', value: '1' },
+                        { label: 'Destination', value: address },
+                    ],
+                    warnings: [],
+                },
+                simulation: {
+                    deltas: [{ tick: longToken, before: '123456789.12345678', after: '1.00000000' }],
+                    notes: [],
+                },
+            },
+            report: null,
+            acknowledged: new Set(),
+            acknowledge: vi.fn(),
+            canApprove: true,
+            approve: vi.fn(),
+            reject: vi.fn(),
+            error: null,
+            source: null,
+        };
+
+        render(
+            <ActionConfirmScreen
+                confirmAction={confirmAction}
+                chainLabel="Bitcoin"
+                signerReady
+                password=""
+                onPasswordChange={vi.fn()}
+            />,
+        );
+
+        const intent = screen.getByTestId('action-intent');
+        expect(intent).toHaveTextContent(address);
+        expect(intent).toHaveTextContent(longToken);
+        expect(intent).toHaveTextContent('123456789.12345678 → 1.00000000');
+        expect(screen.getByTestId('confirm-fee')).toHaveTextContent('Network fee: 0.000025 BTC');
+        expect(screen.getByTestId('confirm-total')).toHaveTextContent('Total: 1.000025 BTC');
+        expect(screen.getByTestId('confirm-approve')).toBeVisible();
+
+        const intentCss = readFileSync(
+            'packages/core/src/shared/components/ActionIntentSummary.module.css',
+            'utf8',
+        );
+        const modalCss = readFileSync(
+            'packages/core/src/shared/components/ConfirmActionModal.module.css',
+            'utf8',
+        );
+        expect(intentCss).toMatch(/@media \(max-width: 399px\)[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\)/);
+        expect(intentCss).toMatch(/\.deltaTick\s*\{[^}]*overflow-wrap:\s*anywhere/s);
+        expect(modalCss).toMatch(/\.fee\s*\{[^}]*text-align:\s*end/s);
+        expect(modalCss).toMatch(/\.page\s*\{[^}]*padding-bottom:\s*var\(--xc-bottom-bar-h, 0px\)/s);
+        expect(modalCss).toMatch(/@media \(max-width: 399px\)[\s\S]*\.footer\s*\{[^}]*flex-direction:\s*column/s);
     });
 
     it('uses a plain headline when an action has no decoded summary', () => {

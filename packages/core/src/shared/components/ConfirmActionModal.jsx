@@ -37,6 +37,7 @@ import { envelopeTransactionLines } from '../../flows/envelopeFeeDisclosure.js';
 import { satsToCoinDecimal } from '../../flows/feeEstimate.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { formatDisplayAmount } from '../utils/amountFormat.js';
+import { OriginIdentity } from './OriginIdentity.jsx';
 import styles from './ConfirmActionModal.module.css';
 
 const OPEN_PHASES = new Set(['preflighting', 'ready', 'signing', 'rechecking', 'done', 'error', 'signed-not-broadcast']);
@@ -203,7 +204,6 @@ export function ConfirmActionModal({
     const signaturePhase = phase === 'signing' || phase === 'rechecking';
     const terminal = phase === 'done' || phase === 'error' || phase === 'signed-not-broadcast';
     const open = OPEN_PHASES.has(phase);
-    const displayedRequestOrigin = neutralizeControlText(requestOrigin);
 
     // A signature exists once we leave the pre-sign phases into signing and
     // the signer has produced it. We approximate "signature exists" as any
@@ -244,16 +244,11 @@ export function ConfirmActionModal({
                 </div>
 
                 <div className={styles.body}>
-                    {displayedRequestOrigin ? (
-                        <section
-                            className={styles.requestOrigin}
-                            aria-label="Requesting site"
-                            data-testid="confirm-request-origin"
-                        >
-                            <span className={styles.requestOriginLabel}>Requesting site</span>
-                            <code className={styles.requestOriginValue}>{displayedRequestOrigin}</code>
-                        </section>
-                    ) : null}
+                    <OriginIdentity
+                        origin={requestOrigin}
+                        label="Requesting site"
+                        testId="confirm-request-origin"
+                    />
 
                     {/* Settings > Developer Mode > Learn Mode. Renders
                         nothing unless the user asked for it; first in the body
