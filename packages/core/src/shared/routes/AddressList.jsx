@@ -19,7 +19,7 @@ import { useConfirmModal } from '../hooks/useConfirmModal.js';
 import { useToast } from '../components/ToastHost.jsx';
 import { copyText } from '../clipboard.js';
 import { AddAddressModal, addressTypeHint } from './AddAddressModal.jsx';
-import { coinFromChainId, formatAmount, fiatValue } from '../components/BalanceList.jsx';
+import { coinFromChainId, formatAmount, fiatValue, formatFiat } from '../components/BalanceList.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { addressTypeLabel } from '../utils/addressTypeLabel.js';
@@ -108,21 +108,6 @@ export function deleteAddressMessage({ record, chainName, holdings = [], hidden 
         parts.push('An imported key is gone unless you have a separate backup.');
     }
     return parts.join(' ');
-}
-
-// Format a fiat value in the user's selected currency (symbol + amount),
-// e.g. "$32.10" / "¥3,200". The 3-letter code is appended by the caller.
-function formatFiatAmount(value, currency) {
-    if (value === null || value === undefined) return '';
-    const code = String(currency || 'USD').toUpperCase();
-    try {
-        const fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: code, currencyDisplay: 'symbol' });
-        const minorUnit = fmt.resolvedOptions().maximumFractionDigits === 0 ? 1 : 0.01;
-        if (value > 0 && value < minorUnit) return `<${fmt.format(minorUnit)}`;
-        return fmt.format(value);
-    } catch {
-        return value.toLocaleString('en-US', { maximumFractionDigits: 2 });
-    }
 }
 
 /**
@@ -321,13 +306,13 @@ export function AddressList({
         }
         return out;
     };
-    // Formatted fiat value for a row, with the currency code (e.g. "$32.10 USD"),
+    // Formatted fiat value for a row, with the currency code (e.g. "€32.10 EUR"),
     // or '' when there's no price/balance.
     const fiatTextFor = (row) => {
         const nb = nativeByKey.get(`${row.chainId}:${String(row.address || '').toLowerCase()}`);
         if (!nb) return '';
         const v = fiatValue(nb.quantity, nb.divisibility, nb.fiatRate);
-        return v === null ? '' : `${formatFiatAmount(v, fiatCurrency)} ${fiatCurrency}`;
+        return v === null ? '' : `${formatFiat(v, fiatCurrency)} ${fiatCurrency}`;
     };
 
     // Human label for the address type, mirroring the toggle categories.

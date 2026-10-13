@@ -28,11 +28,10 @@ import { PriceAlertForm } from '../components/PriceAlertForm.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { usePortfolioChartVisible } from '../hooks/usePortfolioChartVisible.js';
-import { coinFromChainId } from '../components/BalanceList.jsx';
+import { coinFromChainId, formatFiat } from '../components/BalanceList.jsx';
 import { BridgeOriginTick } from './BridgeOriginBadge.jsx';
 import { parseBridgedTick, bridgeDisplayTick, coinDisplay } from './BridgeTick.js';
 import {
-    compareDecimalStrings,
     decimalFromBaseUnits,
     multiplyDecimalStrings,
 } from '../utils/amountFormat.js';
@@ -65,7 +64,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {'native' | 'token' | 'subtoken' | string} [props.kind]
  * @param {string} [props.displayName]               human-readable name (defaults to ticker)
  * @param {number} [props.divisibility]
- * @param {number | null} [props.fiatRate]           USD per token if known
+ * @param {number | null} [props.fiatRate]           selected fiat currency per token if known
  * @param {string} [props.quantity]                  atomic-unit balance string
  * @param {() => void} props.onBack
  * @param {() => void} [props.onSend]                navigate to Send route
@@ -120,7 +119,10 @@ export function TokenDetail({
     // flag the UI uses to hide the stats strip + chart with no calls
     // having fired. Skipped for non-native (XCP tokens don't have a
     // CoinGecko entry).
-    const nativePrice = useNativePrice(isNative ? chainId : null, { includeSparkline: true });
+    const nativePrice = useNativePrice(isNative ? chainId : null, {
+        includeSparkline: true,
+        fiatCurrency,
+    });
 
     const supplyHistory = useSupplyHistory({ messaging, chainId, tick, skip: isNative });
 
@@ -771,8 +773,8 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
             hint = 'Loading market data…';
         } else if (nativePrice.entry) {
             const e = nativePrice.entry;
-            if (e.priceFiat != null) priceCell = formatFiat(e.priceFiat);
-            if (e.marketCapFiat != null) marketCapCell = formatCompactFiat(e.marketCapFiat);
+            if (e.priceFiat != null) priceCell = formatFiat(e.priceFiat, fiatCurrency);
+            if (e.marketCapFiat != null) marketCapCell = formatCompactFiat(e.marketCapFiat, fiatCurrency);
             if (e.change24hPct != null) {
                 pct24h = formatPct(e.change24hPct);
                 pctTone24h = pctTone(e.change24hPct);
@@ -867,8 +869,7 @@ function MarketPanel({ isNative, nativePrice, showSparkline, isDemo, assetInfo, 
             sparkline = synth.sparkline;
         }
     } else if (typeof fiatRate === 'number' && isFinite(fiatRate) && fiatRate > 0) {
-        priceCell = formatFiat(fiatRate);
-        void fiatCurrency;
+        priceCell = formatFiat(fiatRate, fiatCurrency);
         if (isDemo) {
             const synth = synthesizeTokenChart(`${chainId}|${tick}|fiat|${range.id}`, fiatRate, range.points);
             if (synth.change24hPct != null) {
@@ -2096,14 +2097,14 @@ function StatCell({ label, value, tone }) {
     );
 }
 
-function formatCompactFiat(usd) {
-    if (usd === null || usd === undefined || !isFinite(usd)) return 'N/A';
-    const abs = Math.abs(usd);
-    if (abs >= 1e12) return `$${(usd / 1e12).toFixed(2)}T`;
-    if (abs >= 1e9) return `$${(usd / 1e9).toFixed(2)}B`;
-    if (abs >= 1e6) return `$${(usd / 1e6).toFixed(2)}M`;
-    if (abs >= 1e3) return `$${(usd / 1e3).toFixed(2)}K`;
-    return formatFiat(usd);
+function formatCompactFiat(value, currency) {
+    if (value === null || value === undefined || !isFinite(value)) return 'N/A';
+    const abs = Math.abs(value);
+    if (abs >= 1e12) return `${formatFiat(value / 1e12, currency)}T`;
+    if (abs >= 1e9) return `${formatFiat(value / 1e9, currency)}B`;
+    if (abs >= 1e6) return `${formatFiat(value / 1e6, currency)}M`;
+    if (abs >= 1e3) return `${formatFiat(value / 1e3, currency)}K`;
+    return formatFiat(value, currency);
 }
 
 function formatPct(pct) {
@@ -2172,22 +2173,8 @@ function fiatValue(quantityStr, divisibility, fiatRate) {
     return multiplyDecimalStrings(amount, String(fiatRate));
 }
 
-function formatFiat(usd) {
-    if (usd === null || usd === undefined) return 'N/A';
-    if (compareDecimalStrings(usd, '0') === 0) return '$0.00';
-    if (compareDecimalStrings(usd, '0') === 1 && compareDecimalStrings(usd, '0.01') === -1) {
-        return '<$0.01';
-    }
-    return new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: 'USD',
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    }).format(String(usd));
-}
-
 // Returns just the symbol-prefixed numeric portion of a fiat value in
-// the wallet's preferred currency ("$8,642.00", "¥1,200"). The ISO
+// the wallet's preferred currency ("€8,642.00", "¥1,200"). The ISO
 // currency code is rendered separately as a styled suffix span by the
 // caller so it can be sized down relative to the amount. Uses
 // Intl.NumberFormat so currencies with non-USD symbols / decimal

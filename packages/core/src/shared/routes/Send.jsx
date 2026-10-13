@@ -32,7 +32,7 @@ import {
 } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { explorerCoinCode } from '../../registry/coinTicker.js';
-import { tickerColor } from '../components/BalanceList.jsx';
+import { formatFiat, tickerColor } from '../components/BalanceList.jsx';
 import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -670,7 +670,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
     }, [settings, toAddress, tick, amount, chainId, contacts, historyRows, testedThisSession]);
 
     // §29.2 Max + §29.3 fiat toggle.
-    // Fiat rate for "≈ $X.XX" preview + the optional fiat-entry mode.
+    // Fiat rate for the approximate-value preview + the optional fiat-entry mode.
     // Oracle-primary with CoinGecko fallback (§45); the
     // fallback is gated on the privacy.priceDataEnabled setting.
     const fiatCurrency = settings?.fiatCurrency || 'USD';
@@ -2758,7 +2758,8 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                         if (!fiatRate || !coinAmount) return null;
                         const v = coinToFiat(String(coinAmount), fiatRate);
                         if (v == null || !Number.isFinite(v)) return null;
-                        return `≈ ${v.toFixed(2)} ${fiatRate.fiatCurrency || ''}`.trim();
+                        const code = String(fiatRate.fiatCurrency || fiatCurrency).toUpperCase();
+                        return `≈ ${formatFiat(v, code)} ${code}`;
                     }}
                 />
             ) : null}
