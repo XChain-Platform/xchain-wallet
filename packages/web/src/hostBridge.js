@@ -1427,28 +1427,34 @@ export async function createWalletLocal(req) {
 }
 
 /**
- * Import a pre-existing mnemonic (BIP39 12/24-word or Counterwallet
- * legacy 12-word). Same persistence path as `createWalletLocal`: fresh
- * kdfParams, open vault, run the core `importMnemonic` flow, save meta.
+ * Import a pre-existing mnemonic or a single WIF private key. Same persistence
+ * path as `createWalletLocal`: fresh kdfParams, open vault, run the matching
+ * core import flow, save meta.
  *
- * @param {{ password: string, mnemonic: string, name?: string, bip39Passphrase?: string, activeChainIds?: string[] }} req
- * @returns {Promise<{ format: 'bip39' | 'counterwallet-legacy', walletName: string, walletId: string, labelSyncToken: string | null }>}
+ * @param {{ password: string, mnemonic?: string, wif?: string, chainId?: string, name?: string, bip39Passphrase?: string, activeChainIds?: string[] }} req
+ * @returns {Promise<{ format: 'bip39' | 'counterwallet-legacy' | 'wif-only', walletName: string, walletId: string, labelSyncToken: string | null }>}
  */
 export async function importMnemonicLocal(req) {
     const password = req?.password;
     const mnemonic = req?.mnemonic;
+    const wif = req?.wif;
+    const importingWif = typeof wif === 'string' && wif.trim().length > 0;
     if (typeof password !== 'string' || password.length === 0) {
         throw new Error('wallet.import: password is required');
     }
-    if (typeof mnemonic !== 'string' || mnemonic.trim().length === 0) {
-        throw new Error('wallet.import: mnemonic is required');
+    if (!importingWif && (typeof mnemonic !== 'string' || mnemonic.trim().length === 0)) {
+        throw new Error('wallet.import: recovery phrase or WIF private key is required');
     }
     const {
         name = 'Imported Wallet',
         bip39Passphrase = '',
         activeChainIds = DEFAULT_ACTIVE_CHAIN_IDS,
         origin,
+        chainId,
     } = req;
+    if (importingWif && (typeof chainId !== 'string' || chainId.length === 0)) {
+        throw new Error('wallet.import: chainId is required for a WIF private key');
+    }
 
     const meta = createMetaBackend();
 
@@ -1459,7 +1465,7 @@ export async function importMnemonicLocal(req) {
     // not valid". The format check is microseconds and importMnemonic
     // re-validates anyway, so this is a fast path, not a second gate.
     const flowsNs = await getFlows();
-    if (!flowsNs.detectMnemonicFormat(flowsNs.normalizeMnemonic(mnemonic))) {
+    if (!importingWif && !flowsNs.detectMnemonicFormat(flowsNs.normalizeMnemonic(mnemonic))) {
         throw new Error(
             'That recovery phrase is not valid. Check for typos, missing words, or a phrase from a different wallet.',
         );
@@ -1480,21 +1486,33 @@ export async function importMnemonicLocal(req) {
         const v = new storageLib.Vault({ backend: storage, masterKey });
         openedVault = v;
         await v.open();
-        const result = await flowsNs.importMnemonic({
-            password,
-            mnemonic,
-            vault: v,
-            chainRegistry,
-            sdkRegistry,
-            activeChainIds,
-            name,
-            bip39Passphrase,
-            origin,
-            kdfParams,
-            // Same password, same params: the wallet seal reuses the vault
-            // key instead of paying a second Argon2id round.
-            masterKey,
-        });
+        await sdkBound();
+        const result = importingWif
+            ? await flowsNs.importSingleWif({
+                password,
+                wif: wif.trim(),
+                chainId,
+                vault: v,
+                chainRegistry,
+                sdkRegistry,
+                name,
+                kdfParams,
+            })
+            : await flowsNs.importMnemonic({
+                password,
+                mnemonic,
+                vault: v,
+                chainRegistry,
+                sdkRegistry,
+                activeChainIds,
+                name,
+                bip39Passphrase,
+                origin,
+                kdfParams,
+                // Same password, same params: the wallet seal reuses the vault
+                // key instead of paying a second Argon2id round.
+                masterKey,
+            });
         await v.save();
         vault = v;
         await sdkBound();
@@ -1525,7 +1543,7 @@ export async function importMnemonicLocal(req) {
         // published earlier. Runs after sdkBound() so the explorer endpoints
         // are resolved, and after the wallet is fully persisted so a dead
         // explorer can only cost the restore, never the import.
-        const labelSyncToken = origin === 'created'
+        const labelSyncToken = importingWif || origin === 'created'
             ? null
             : startLabelSyncRestoreTask({
                 walletId: result.wallet.id,
@@ -1547,7 +1565,7 @@ export async function importMnemonicLocal(req) {
         // lane imported the phrase and then dead-ended on "the shell returned
         // no wallet id" - a hard stop after the wallet already existed.
         return {
-            format: result.format,
+            format: result.format ?? result.wallet.format,
             walletName: result.wallet.name,
             walletId: result.wallet.id,
             labelSyncToken,

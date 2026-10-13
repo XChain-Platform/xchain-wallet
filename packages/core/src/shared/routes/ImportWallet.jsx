@@ -15,6 +15,7 @@ import {
     Button,
     FormPage,
     Input,
+    Select,
     Icon,
     ListPage,
     QrScanner,
@@ -25,6 +26,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useToast } from '../components/ToastHost.jsx';
 import { AdsNotice } from '../components/AdsNotice.jsx';
 import { useDropZone } from '../hooks/useDropZone.js';
+import { useSupportedChains } from '../hooks/useSupportedChains.js';
 import { detectQrContent } from '../../uri/detectQrContent.js';
 import { englishWordlist, isValidBip39Mnemonic } from '../../crypto/mnemonic.js';
 import {
@@ -157,16 +159,19 @@ export function ImportWallet({
 
     const isFreeWallet = importVariant === 'freewallet';
     const acceptedWordCounts = isFreeWallet ? [12] : ACCEPTED_WORD_COUNTS;
-    // §19.4 / G036: two import lanes: recovery phrase (default) and
-    // encrypted-backup restore. FreeWallet variant pins to 'mnemonic'.
+    // Recovery phrase, private-key, and encrypted-backup imports share this
+    // route. The FreeWallet variant stays pinned to its recovery phrase.
     const [lane, setLane] = useState(
-        /** @type {'mnemonic' | 'backup'} */ (
+        /** @type {'mnemonic' | 'wif' | 'backup'} */ (
             !isFreeWallet && initialLane === 'backup' ? 'backup' : 'mnemonic'
         ),
     );
     const [name, setName] = useState(isFreeWallet ? 'FreeWallet' : 'Imported Wallet');
     const [mnemonic, setMnemonic] = useState('');
     const [mnemonicCursor, setMnemonicCursor] = useState(0);
+    const [wif, setWif] = useState('');
+    const [wifChainId, setWifChainId] = useState('bitcoin-mainnet');
+    const [wifWarningAck, setWifWarningAck] = useState(false);
     const [password, setPassword] = useState('');
     const [confirm, setConfirm] = useState('');
     const [backupContent, setBackupContent] = useState('');
@@ -203,6 +208,9 @@ export function ImportWallet({
     const [dragOver, setDragOver] = useState(false);
     const textareaRef = useRef(/** @type {HTMLTextAreaElement | null} */ (null));
     const adsContinuedRef = useRef(false);
+    const wifChains = useSupportedChains().filter(
+        (descriptor) => Number.isInteger(descriptor.wifVersionByte),
+    );
 
     useEffect(() => {
         setTimeout(() => textareaRef.current?.focus(), 0);
@@ -484,7 +492,7 @@ export function ImportWallet({
             } else {
                 result = await messaging.importMnemonic({ password, mnemonic: trimmed, name, bip39Passphrase: passphraseArg });
             }
-            setAdsNotice(true);
+            finishWalletImport();
             const showRestoredLabels = (labelSync) => {
                 const restoredMessage = labelSyncRestoredMessage(labelSync);
                 if (restoredMessage) showToast({ message: restoredMessage });
@@ -501,6 +509,57 @@ export function ImportWallet({
             }
         } catch (err) {
             setError(userFacingMessage(err, 'Failed to import wallet.'));
+            setBusy(false);
+        }
+    }
+
+    function finishWalletImport() {
+        setAdsNotice(true);
+    }
+
+    async function handleWifSubmit(event) {
+        event.preventDefault();
+        if (busy) return;
+        const trimmedWif = wif.trim();
+        if (trimmedWif.length === 0) {
+            setError('WIF private key is required.');
+            return;
+        }
+        if (!wifChainId) {
+            setError('Pick the chain this private key belongs to.');
+            return;
+        }
+        if (password.length < MIN_PASSWORD_LENGTH) {
+            setError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+            return;
+        }
+        if (password !== confirm) {
+            setError('Passwords do not match.');
+            return;
+        }
+        if (!wifWarningAck) {
+            setError('Acknowledge the backup warning before importing this private key.');
+            return;
+        }
+        if (typeof messaging.importMnemonic !== 'function') {
+            setError('Private-key import is not available in this shell.');
+            return;
+        }
+        setError(null);
+        setBusy(true);
+        try {
+            await messaging.importMnemonic({
+                password,
+                wif: trimmedWif,
+                chainId: wifChainId,
+                name,
+            });
+            finishWalletImport();
+        } catch (err) {
+            setError(userFacingMessage(
+                err,
+                'Could not import that private key. Check the key and the chain, then try again.',
+            ));
             setBusy(false);
         }
     }
@@ -556,6 +615,18 @@ export function ImportWallet({
             >
                 Recovery phrase
             </button>
+            {mode === 'fresh' ? (
+                <button
+                    type="button"
+                    role="tab"
+                    aria-selected={lane === 'wif'}
+                    className={`${styles.laneTab} ${lane === 'wif' ? styles.laneTabActive : ''}`}
+                    onClick={() => { setLane('wif'); setError(null); }}
+                    disabled={busy}
+                >
+                    Private key
+                </button>
+            ) : null}
             <button
                 type="button"
                 role="tab"
@@ -579,6 +650,14 @@ export function ImportWallet({
                     : backupDevicePassword.length === 0
                         ? `Enter the ${restoreDeviceLabel(mode).toLowerCase()} to continue.`
                         : null
+        : lane === 'wif'
+        ? wif.trim().length === 0
+            ? 'Enter a private key to continue.'
+            : password.length === 0
+                ? 'Enter a password to continue.'
+                : confirm.length === 0
+                    ? 'Confirm your password to continue.'
+                    : null
         : mnemonic.trim().length === 0
             ? 'Enter a recovery phrase to continue.'
             : password.length === 0
@@ -619,6 +698,17 @@ export function ImportWallet({
         >
             {busy ? 'Restoring…' : 'Restore'}
         </Button>
+    ) : lane === 'wif' ? (
+        <Button
+            type="submit"
+            variant="primary"
+            loading={busy}
+            icon={<Icon.KeyIcon />}
+            disabled={Boolean(formDisabledReason)}
+            aria-describedby={formDisabledReason ? 'import-wallet-disabled-reason' : undefined}
+        >
+            {busy ? 'Importing…' : 'Import'}
+        </Button>
     ) : (
         <Button
             type="submit"
@@ -635,7 +725,11 @@ export function ImportWallet({
     const form = (
         <FormPage
             label="Import wallet"
-            onSubmit={lane === 'backup' ? handleBackupSubmit : handleSubmit}
+            onSubmit={lane === 'backup'
+                ? handleBackupSubmit
+                : lane === 'wif'
+                    ? handleWifSubmit
+                    : handleSubmit}
             status={formStatus}
             actions={formActions}
         >
@@ -645,6 +739,8 @@ export function ImportWallet({
                         ? (isFull ? 'Import from FreeWallet' : 'FreeWallet import')
                         : lane === 'backup'
                             ? (isFull ? 'Restore from encrypted backup' : 'Restore backup')
+                            : lane === 'wif'
+                                ? (isFull ? 'Import a private key' : 'Import private key')
                             : (isFull ? 'Import an existing wallet' : 'Import wallet')}
                 </h1>
                 <p className={subtitleClass}>
@@ -663,6 +759,8 @@ export function ImportWallet({
                                 : (mode === 'add'
                                     ? 'Restore as a new wallet (won\'t replace your existing one).'
                                     : 'Pick a backup file, then fill in the three passwords below.'))
+                            : lane === 'wif'
+                                ? 'Import one WIF private key as a wallet. Pick the matching chain so the correct address is derived.'
                             : (isFull
                                 ? 'Enter a BIP39 recovery phrase (12, 15, 18, 21, or 24 words) or a Counterwallet 12-word mnemonic. The format is detected automatically.'
                                 : 'Paste a 12-, 15-, 18-, 21-, or 24-word recovery phrase.')}
@@ -980,6 +1078,80 @@ export function ImportWallet({
                 </div>
             ) : null}
             </>
+            ) : null}
+            {lane === 'wif' ? (
+                <>
+                    <Input
+                        type="password"
+                        label="WIF private key"
+                        value={wif}
+                        onChange={(e) => {
+                            setWif(e.target.value);
+                            if (error) setError(null);
+                        }}
+                        autoComplete="off"
+                        disabled={busy}
+                    />
+                    <Select
+                        label="Private key chain"
+                        value={wifChainId}
+                        onChange={(e) => {
+                            setWifChainId(e.target.value);
+                            if (error) setError(null);
+                        }}
+                        disabled={busy}
+                    >
+                        {wifChains.map((descriptor) => (
+                            <option key={descriptor.id} value={descriptor.id}>
+                                {descriptor.displayName} ({descriptor.networkKind})
+                            </option>
+                        ))}
+                    </Select>
+                    <Input
+                        label="Wallet name"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        autoComplete="off"
+                        disabled={busy}
+                    />
+                    <Input
+                        type="password"
+                        label="Password"
+                        hint={isFull
+                            ? `At least ${MIN_PASSWORD_LENGTH} characters. Encrypts the wallet on this device.`
+                            : `At least ${MIN_PASSWORD_LENGTH} characters.`}
+                        value={password}
+                        onChange={(e) => {
+                            setPassword(e.target.value);
+                            if (error) setError(null);
+                        }}
+                        autoComplete="new-password"
+                        disabled={busy}
+                    />
+                    <Input
+                        type="password"
+                        label={isFull ? 'Confirm password' : 'Confirm'}
+                        value={confirm}
+                        onChange={(e) => {
+                            setConfirm(e.target.value);
+                            if (error) setError(null);
+                        }}
+                        autoComplete="new-password"
+                        disabled={busy}
+                    />
+                    <label className={styles.advancedToggle}>
+                        <input
+                            type="checkbox"
+                            checked={wifWarningAck}
+                            onChange={(e) => {
+                                setWifWarningAck(e.target.checked);
+                                if (error) setError(null);
+                            }}
+                            disabled={busy}
+                        />
+                        <span>I understand this key is not recoverable from a recovery phrase.</span>
+                    </label>
+                </>
             ) : null}
         </FormPage>
     );
