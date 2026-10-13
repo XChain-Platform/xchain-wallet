@@ -267,4 +267,13 @@ describe('flows/priceLookup', () => {
             expect(grammar.test(out)).toBe(true);
         }
     });
+
+    it('converts finite exponential numbers without losing the decimal grammar', () => {
+        expect(coinToFiatExact(1e-8, { rate: 1e-8 })).toBe('0.0000000000000001');
+        expect(coinToFiatExact('0.00000001', { rate: 1e21 })).toBe('10000000000000');
+        expect(fiatToCoin(1e-8, { rate: 1 }, 8)).toBe('0.00000001');
+        expect(fiatToCoin('1', { rate: 1e-8 })).toBe('100000000');
+        expect(fiatToCoin('1', { rate: -1 })).toBeNull();
+        expect(coinToFiat('2', { rate: 1e308 })).toBeNull();
+    });
 });
