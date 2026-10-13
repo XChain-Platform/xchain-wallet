@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
@@ -502,6 +502,21 @@ describe('Send flow with mocked messaging', () => {
         expect(warning).toHaveTextContent(SAVED_LOOKALIKE);
         expect(screen.getByRole('form', { name: 'Send' })).toBeInTheDocument();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('rejects an iOS-swiped review without retaining its partial password', async () => {
+        const onBack = vi.fn();
+        const messaging = mount({ onBack });
+        await openPasswordConfirm(messaging);
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'partial secret' } });
+
+        act(() => window.dispatchEvent(new Event('xchain:native-edge-back')));
+
+        await waitFor(() => expect(screen.getByRole('form', { name: 'Send' })).toBeInTheDocument());
+        expect(onBack).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(2));
+        expect(await screen.findByLabelText('Password')).toHaveValue('');
     });
 
     it('reviews every payment field, signs with the password, and shows the txid', async () => {

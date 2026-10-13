@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { resetBackStackForTests } from '../../../packages/core/src/ui/backStack.js';
 import { CreateWallet } from '../../../packages/core/src/shared/routes/CreateWallet.jsx';
@@ -36,22 +36,34 @@ afterEach(() => {
     generateBip39Mnemonic.mockClear();
 });
 
-function renderCreate({ onBack = vi.fn(), importMnemonic = vi.fn().mockResolvedValue({}) } = {}) {
+function renderCreate({
+    onBack = vi.fn(),
+    onCreated = vi.fn(),
+    importMnemonic = vi.fn().mockResolvedValue({}),
+} = {}) {
     render(
         <MessagingProvider shell="web" messaging={{ importMnemonic }}>
-            <CreateWallet onBack={onBack} onCreated={() => {}} />
+            <CreateWallet onBack={onBack} onCreated={onCreated} />
         </MessagingProvider>,
     );
-    return { onBack, importMnemonic };
+    return { onBack, onCreated, importMnemonic };
 }
 
-function renderImport({ onBack = vi.fn(), importMnemonic = vi.fn().mockResolvedValue({}) } = {}) {
+function renderImport({
+    onBack = vi.fn(),
+    onImported = vi.fn(),
+    importMnemonic = vi.fn().mockResolvedValue({}),
+} = {}) {
     render(
         <MessagingProvider shell="web" messaging={{ importMnemonic }}>
-            <ImportWallet onBack={onBack} onImported={() => {}} />
+            <ImportWallet onBack={onBack} onImported={onImported} />
         </MessagingProvider>,
     );
-    return { onBack, importMnemonic };
+    return { onBack, onImported, importMnemonic };
+}
+
+function swipeBackFromIOS() {
+    act(() => window.dispatchEvent(new Event('xchain:native-edge-back')));
 }
 
 function tabStops() {
@@ -190,6 +202,42 @@ describe('create onboarding keyboard flow', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Back to wallet setup' }));
         expect(onBack).toHaveBeenCalledOnce();
     });
+
+    it('keeps the keyboard dismissed when an iOS swipe returns from the phrase', async () => {
+        const { onBack } = renderCreate();
+        fillCreatePasswords();
+        pressEnter(screen.getByLabelText('Confirm password'));
+        await screen.findByRole('heading', { name: 'Write down your recovery phrase' });
+
+        swipeBackFromIOS();
+
+        await screen.findByRole('heading', { name: 'Create a new wallet' });
+        expect(screen.getByLabelText('Password')).toHaveValue('');
+        expect(screen.getByLabelText('Confirm password')).toHaveValue('');
+        expect(screen.getByLabelText('Password')).not.toHaveFocus();
+        expect(onBack).not.toHaveBeenCalled();
+    });
+
+    it('does not let an iOS swipe bypass the completion notice', async () => {
+        const { onBack, onCreated } = renderCreate();
+        fillCreatePasswords();
+        pressEnter(screen.getByLabelText('Confirm password'));
+        fireEvent.click(await screen.findByRole('checkbox', { name: /saved my recovery phrase/i }));
+        fireEvent.click(screen.getByRole('button', { name: 'Verify recovery phrase' }));
+        for (const input of await screen.findAllByLabelText(/^Word \d+$/)) {
+            fireEvent.change(input, { target: { value: 'abandon' } });
+        }
+        pressEnter(screen.getAllByLabelText(/^Word \d+$/)[2]);
+        await screen.findByRole('heading', { name: 'Automatic Donation System' });
+
+        swipeBackFromIOS();
+
+        expect(screen.getByRole('heading', { name: 'Automatic Donation System' })).toBeInTheDocument();
+        expect(onBack).not.toHaveBeenCalled();
+        expect(onCreated).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+        expect(onCreated).toHaveBeenCalledOnce();
+    });
 });
 
 describe('import onboarding keyboard flow', () => {
@@ -274,5 +322,43 @@ describe('import onboarding keyboard flow', () => {
         expect(onBack).toHaveBeenCalledTimes(2);
         expect(screen.getByLabelText('Wallet name')).toHaveValue('Recovered wallet');
         expect(screen.getByLabelText('Recovery phrase')).toHaveValue('');
+    });
+
+    it('closes an import scanner before leaving and clears focused secrets on the next swipe', async () => {
+        const { onBack } = renderImport();
+        const phrase = screen.getByLabelText('Recovery phrase');
+        fireEvent.change(phrase, { target: { value: 'abandon ability' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Scan QR' }));
+        expect(screen.getByRole('button', { name: 'Cancel scan' })).toBeInTheDocument();
+
+        swipeBackFromIOS();
+
+        expect(screen.getByRole('button', { name: 'Scan QR' })).toBeInTheDocument();
+        expect(phrase).toHaveValue('abandon ability');
+        expect(onBack).not.toHaveBeenCalled();
+
+        phrase.focus();
+        swipeBackFromIOS();
+
+        expect(onBack).toHaveBeenCalledOnce();
+        expect(phrase).toHaveValue('');
+        expect(phrase).not.toHaveFocus();
+    });
+
+    it('does not let an iOS swipe bypass the import completion notice', async () => {
+        const { onBack, onImported } = renderImport();
+        fireEvent.change(screen.getByLabelText('Recovery phrase'), { target: { value: PHRASE } });
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: PASSWORD } });
+        fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: PASSWORD } });
+        fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+        await screen.findByRole('heading', { name: 'Automatic Donation System' });
+
+        swipeBackFromIOS();
+
+        expect(screen.getByRole('heading', { name: 'Automatic Donation System' })).toBeInTheDocument();
+        expect(onBack).not.toHaveBeenCalled();
+        expect(onImported).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+        expect(onImported).toHaveBeenCalledOnce();
     });
 });
