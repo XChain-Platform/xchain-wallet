@@ -41,6 +41,7 @@
     color: var(--xc-text);
     font-family: inherit;
     width: 100%;
+    transition: background var(--xc-transition), border-color var(--xc-transition), box-shadow var(--xc-transition);
 }
 
 .entryIcon {
@@ -67,9 +68,21 @@
     min-width: 0;
 }
 
-.entry:hover:not([aria-disabled="true"]) {
-    background: var(--xc-bg-muted);
-    border-color: var(--xc-accent-primary);
+@media (hover: hover) and (pointer: fine) {
+    .entry:hover:not([aria-disabled="true"]) {
+        background: var(--xc-control-bg-hover);
+        border-color: var(--xc-control-border-hover);
+    }
+}
+
+.entry:active:not([aria-disabled="true"]) {
+    background: var(--xc-control-bg-hover);
+    border-color: var(--xc-control-selected);
+}
+
+.entry:is([aria-current='page'], [aria-pressed='true']) {
+    background: var(--xc-control-bg-hover);
+    border-color: var(--xc-control-selected);
 }
 
 .entry[aria-disabled="true"] {

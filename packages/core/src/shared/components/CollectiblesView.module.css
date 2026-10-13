@@ -44,9 +44,17 @@
     cursor: pointer;
 }
 
-.cardClickable:hover {
-    background: var(--xc-bg-muted);
-    border-color: var(--xc-border-strong);
+@media (hover: hover) and (pointer: fine) {
+    .cardClickable:hover {
+        background: var(--xc-control-bg-hover);
+        border-color: var(--xc-control-border-hover);
+    }
+}
+
+.cardClickable:active {
+    background: var(--xc-control-bg-hover);
+    border-color: var(--xc-control-border-hover);
+    box-shadow: inset 0 0 0 1px var(--xc-control-selected);
 }
 
 .cardClickable .cardContent:focus-visible {
@@ -56,7 +64,7 @@
 }
 
 .cardPinned {
-    border-color: var(--xc-accent-primary, var(--xc-border-strong));
+    border-color: var(--xc-control-selected);
     box-shadow: var(--xc-shadow-accent-ring);
 }
 

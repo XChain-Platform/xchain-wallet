@@ -18,7 +18,7 @@
     line-height: var(--xc-control-line, 1.25);
     font-weight: 600;
     cursor: pointer;
-    transition: background var(--xc-transition), border-color var(--xc-transition);
+    transition: background var(--xc-transition), border-color var(--xc-transition), transform var(--xc-transition);
     user-select: none;
     text-decoration: none;
     max-width: 100%;
@@ -51,6 +51,18 @@
 .btn:disabled {
     opacity: var(--xc-disabled-opacity);
     cursor: not-allowed;
+}
+
+.btn:active:not(:disabled) {
+    background: var(--xc-button-hover-bg);
+    border-color: var(--xc-button-hover-border);
+    filter: brightness(0.86);
+    transform: translateY(1px);
+}
+
+.btn[aria-pressed='true']:not(:disabled) {
+    box-shadow: 0 0 0 2px var(--xc-control-selected),
+        inset 0 0 0 2px var(--xc-control-selected-text);
 }
 
 .md {
@@ -117,21 +129,18 @@
  * label token. */
 
 .primary {
+    --xc-button-hover-bg: var(--xc-accent-primary-hover);
+    --xc-button-hover-border: var(--xc-accent-primary-hover);
     background: var(--xc-accent-primary);
     color: var(--xc-on-accent);
 }
-.primary:hover:not(:disabled) {
-    background: var(--xc-accent-primary-hover);
-}
 
 .secondary {
+    --xc-button-hover-bg: var(--xc-control-bg-hover);
+    --xc-button-hover-border: var(--xc-control-border-hover);
     background: transparent;
     color: var(--xc-accent-text);
     border-color: var(--xc-border-strong);
-}
-.secondary:hover:not(:disabled) {
-    background: var(--xc-bg-muted);
-    border-color: var(--xc-accent-text);
 }
 
 /* Ghost gets a neutral slate fill so white text reads clearly in both
@@ -139,29 +148,37 @@
  * "Coming from FreeWallet") that should still look obviously
  * clickable. */
 .ghost {
+    --xc-button-hover-bg: #334155;  /* slate-700 */
+    --xc-button-hover-border: #334155;
     background: #475569;  /* slate-600; ~7:1 against #FFFFFF */
     color: #FFFFFF;
     border-color: #475569;
 }
-.ghost:hover:not(:disabled) {
-    background: #334155;  /* slate-700 */
-    border-color: #334155;
-}
 
 .danger {
+    --xc-button-hover-bg: var(--xc-danger);
+    --xc-button-hover-border: var(--xc-danger);
     background: var(--xc-danger);
     color: var(--xc-on-danger);
 }
-.danger:hover:not(:disabled) {
-    filter: brightness(0.92);
-}
 
 .success {
+    --xc-button-hover-bg: var(--xc-success-fill);
+    --xc-button-hover-border: var(--xc-success-fill);
     background: var(--xc-success-fill);
     color: var(--xc-on-success);
 }
-.success:hover:not(:disabled) {
-    filter: brightness(0.92);
+
+@media (hover: hover) and (pointer: fine) {
+    .btn:hover:not(:disabled) {
+        background: var(--xc-button-hover-bg);
+        border-color: var(--xc-button-hover-border);
+    }
+
+    .danger:hover:not(:disabled),
+    .success:hover:not(:disabled) {
+        filter: brightness(0.92);
+    }
 }
 
 .spinnerStatus {
