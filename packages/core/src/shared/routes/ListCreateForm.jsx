@@ -781,7 +781,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                             Upload CSV
                         </Button>
                         <Button type="button" variant="ghost" onClick={() => setContactPickerOpen(true)}>
-                            Add from Contacts
+                            Add from contacts
                         </Button>
                     </div>
                     {pasteText.trim() ? (
@@ -961,7 +961,7 @@ function ContactAddressPickerScreen({ variant, messaging, chainCoin, onAdd, onBa
         });
     }
 
-    const header = <PageHeader onBack={onBack} title="Add from Contacts" />;
+    const header = <PageHeader onBack={onBack} title="Add from contacts" />;
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
             <ListPage>{children}</ListPage>

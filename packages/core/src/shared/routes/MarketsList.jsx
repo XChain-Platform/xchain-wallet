@@ -210,7 +210,7 @@ export function MarketsList({
     }, [watchlist, walletId, messaging, loadWatchlist]);
 
     const header = (
-        <PageHeader onBack={onBack} title="Decentralized Exchange" titleIcon={<Icon.MarketIcon />} />
+        <PageHeader onBack={onBack} title="Decentralized exchange" titleIcon={<Icon.MarketIcon />} />
     );
 
     const selectorDescriptor = selectedAsset ? chainRegistry.get(selectedAsset.chainId) : null;

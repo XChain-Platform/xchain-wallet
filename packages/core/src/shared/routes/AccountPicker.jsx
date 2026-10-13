@@ -61,8 +61,8 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                 <button
                     type="button"
                     onClick={onAddAccount}
-                    aria-label="Add Account"
-                    title="Add Account"
+                    aria-label="Add account"
+                    title="Add account"
                 >
                     <Icon.PlusIcon />
                 </button>

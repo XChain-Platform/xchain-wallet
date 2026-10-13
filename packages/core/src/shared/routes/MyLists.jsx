@@ -170,7 +170,7 @@ export function MyLists({ walletId, activeAccountId, onOpenList, onCreateList, o
             onBack={onBack}
             backLabel="Back to home"
             titleIcon={<Icon.TokenListIcon />}
-            title="My Lists"
+            title="My lists"
             // Only the round + belongs in the header: PageHeader styles every
             // trailing button as a 38px circle, and the two text actions
             // squeezed into circles spilled across the title at phone width.

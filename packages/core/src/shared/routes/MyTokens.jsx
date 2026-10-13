@@ -171,7 +171,7 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
         <PageHeader
             onBack={onBack}
             backLabel="Back to home"
-            title="My Tokens"
+            title="My tokens"
             titleIcon={<Icon.TokenIcon />}
             trailing={
                 <button

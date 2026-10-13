@@ -70,16 +70,16 @@ export function MenuRoute({
     const variant = screenVariantFor(shell);
 
     const primary = [
-        { id: 'markets',          label: 'Decentralized Exchange', Icon: Icon.MarketIcon,   handler: onMarkets },
+        { id: 'markets',          label: 'Decentralized exchange', Icon: Icon.MarketIcon,   handler: onMarkets },
         { id: 'market-activity',  label: 'Marketplace', Icon: Icon.DollarIcon,   handler: onMarketActivity },
         { id: 'dispensers',       label: 'Dispensers',  Icon: Icon.HandshakeIcon, handler: onDispensers },
-        { id: 'tokens',           label: 'My Tokens',   Icon: Icon.TokenIcon,    handler: onTokens },
+        { id: 'tokens',           label: 'My tokens',   Icon: Icon.TokenIcon,    handler: onTokens },
         { id: 'alerts',           label: 'Alerts',      Icon: Icon.InfoIcon,     handler: onAlerts },
         { id: 'more-actions',     label: 'More actions', Icon: Icon.MoreIcon,    handler: onMoreActions },
         { id: 'messaging',    label: 'Messaging',   Icon: Icon.MessageIcon,  handler: onMessaging },
         { id: 'cross-chain', label: 'Cross-chain', Icon: Icon.LinkIcon,     handler: onCrossChain },
         { id: 'contacts',    label: 'Contacts',    Icon: Icon.UsersIcon,    handler: onContacts },
-        { id: 'lists',       label: 'My Lists',    Icon: Icon.TokenListIcon, handler: onLists },
+        { id: 'lists',       label: 'My lists',    Icon: Icon.TokenListIcon, handler: onLists },
         { id: 'addresses',   label: 'Addresses',   Icon: Icon.ScanIcon,     handler: onAddresses },
         { id: 'contracts',   label: 'Contracts',   Icon: Icon.ContractIcon, handler: onContracts },
         { id: 'staking',     label: 'Staking',     Icon: Icon.StakeIcon,    handler: onStaking },

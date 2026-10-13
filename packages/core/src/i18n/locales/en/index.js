@@ -95,7 +95,7 @@ export const en = {
 
     // --- send -----------------------------------------------------
     'send.title': 'Send',
-    'send.review': 'Review & Send',
+    'send.review': 'Review & send',
     'send.backToEdit': 'Back to edit',
     'send.pickSourceFirst': 'Pick a source address first.',
     'send.destinationRequired': 'Destination address is required.',
@@ -166,7 +166,7 @@ export const en = {
     'send.watcherHardware':
         'Source address is paired to {device} on this wallet, but watcher mode does not sign here. Pair the same {device} on your Signer-mode wallet to sign the transaction this step produces.',
     'send.walletUnlocked': 'Wallet unlocked. No password needed.',
-    'send.useMax': 'Use Max',
+    'send.useMax': 'Use max',
     'send.fromAddress': 'From address',
     'send.draft.restore': 'Restore',
     'send.draft.unfinished': 'Your unfinished Send draft was saved. Restore it to continue. Nothing was submitted.',
