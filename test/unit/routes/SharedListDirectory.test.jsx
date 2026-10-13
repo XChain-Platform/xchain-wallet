@@ -184,7 +184,9 @@ describe('SharedListDirectory', () => {
     it('shows the request failure instead of an empty directory', async () => {
         const messaging = {
             getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
-            getSharedLists: vi.fn().mockRejectedValue(new Error('Directory unavailable')),
+            getSharedLists: vi.fn()
+                .mockRejectedValueOnce(new Error('Directory unavailable'))
+                .mockResolvedValueOnce({ lists: [], unavailable: [] }),
         };
         render(
             <MessagingProvider shell="web" messaging={messaging}>
@@ -199,5 +201,9 @@ describe('SharedListDirectory', () => {
 
         expect(await screen.findByText('Directory unavailable')).toBeTruthy();
         expect(screen.queryByText('No shared lists are available.')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+
+        expect(await screen.findByText('No shared lists yet')).toBeTruthy();
+        expect(messaging.getSharedLists).toHaveBeenCalledTimes(2);
     });
 });
