@@ -105,8 +105,8 @@ describe('Home native rows on a real wallet', () => {
         const { calls, release } = venue();
         mount({ balances: balancesOf(ZERO_COINS) });
 
-        // Before the oracle answers the coins are unpriced, and named as coins.
-        expect(within(hero()).getByText('3 coins not priced')).toBeInTheDocument();
+        // A zero holding has no fiat value to leave unpriced while rates load.
+        expect(within(hero()).queryByText(/not priced/)).toBeNull();
         await waitFor(() => expect(calls.length).toBeGreaterThan(0));
 
         release();
@@ -196,14 +196,15 @@ describe('TotalBalanceHero unpriced note', () => {
     );
     const native = (over) => ({ kind: 'native', chainId: 'bitcoin-mainnet', tick: 'BTC', quantity: '0', divisibility: 8, fiatRate: null, ...over });
 
-    it('shows no note when every row has a rate, even at zero balance', () => {
-        renderHero([native({ fiatRate: 80000 }), native({ chainId: 'litecoin-mainnet', tick: 'LTC', fiatRate: 90 })]);
+    it('shows no price or change warning for unpriced zero balances', () => {
+        renderHero([native(), native({ chainId: 'litecoin-mainnet', tick: 'LTC' })]);
         expect(screen.queryByText(/not priced/)).toBeNull();
+        expect(hero()).not.toHaveTextContent(/▲|▼|%/);
     });
 
     it('names coins and tokens apart', () => {
         renderHero([
-            native(),
+            native({ quantity: '100' }),
             native({ kind: 'token', tick: 'XCP', quantity: '100' }),
             native({ kind: 'token', tick: 'PEPECASH', quantity: '100' }),
         ]);

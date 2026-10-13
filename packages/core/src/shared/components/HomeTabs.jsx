@@ -74,10 +74,13 @@ import styles from './HomeTabs.module.css';
  * @param {string} [props.multisigChainId]
  * @param {import('react').ReactNode} [props.actions]   slot rendered between the total-balance hero and the tab strip; used by Home for the Send / Receive / Swap / Buy quick-action row
  * @param {() => void} [props.onReceive]   forwarded to empty-state nudges so the "No balances yet" cards can render a one-tap Receive CTA (G077)
+ * @param {() => void} [props.onBuy]       opens the coin exchange from the first-funding state
+ * @param {boolean} [props.hasAddresses]   whether the active account has any receiving address
+ * @param {() => void} [props.onAddAddress] opens address generation for an account with no addresses
  * @param {() => void} [props.onHistory]   opens the complete chronological feed from the non-demo Activity placeholder
  * @param {boolean} [props.hideSmallBalances]: `settings.privacy.hideSmallBalances`, forwarded to the Coins and Tokens lists so dust rows collapse into their own section
  */
-export function HomeTabs({ chainRegistry, balances, activeByChain = null, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', coinFamilies, onNetworkFilterChange, onTokenQueryChange, multisig, multisigChainId, actions, onReceive, onHistory, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide, verifyMap, hideSmallBalances = false, onCommandPalette, onOpenSettings, onLockWallet }) {
+export function HomeTabs({ chainRegistry, balances, activeByChain = null, balancesFetchedAt, walletId, networkFilter, tokenQuery = '', coinFamilies, onNetworkFilterChange, onTokenQueryChange, multisig, multisigChainId, actions, onReceive, onBuy, hasAddresses = true, onAddAddress, onHistory, onSelectToken, onSelectEntry, pinnedKeys, onTogglePin, hiddenKeys, onToggleHide, verifyMap, hideSmallBalances = false, onCommandPalette, onOpenSettings, onLockWallet }) {
     const [active, setActive] = useState('coins');
     const isDemo = isDemoWallet(walletId);
     // Inline filter row (search + network dropdown) is collapsed by
@@ -174,6 +177,8 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
             return tick.includes(tokenQueryTrim) || name.includes(tokenQueryTrim);
         });
     }, [tokens, tokenQueryTrim]);
+    const hasHoldings = allRows.some((row) => hasNonZeroQuantity(row));
+    const showFirstFunding = networkFilter === 'all' && !tokenQueryTrim && !hasHoldings;
     // NFTs = tokens matching the canonical NFT pattern (NFT_Standard.md:
     // DECIMALS=0 AND LOCK_MAX_SUPPLY=1 (indivisible, supply can never
     // inflate). Classification, not decoration: a divisible token with a
@@ -250,25 +255,57 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
 
             <div className={styles.panel} role="tabpanel">
                 {active === 'coins' ? (
-                    <BalanceList
-                        rows={coins}
-                        fiatCurrency={settings?.fiatCurrency || 'USD'}
-                        multisig={multisig}
-                        multisigChainId={multisigChainId}
-                        emptyTitle={networkFilter === 'all' ? 'No coins yet' : 'No coins on this network'}
-                        emptyBody={networkFilter === 'all'
-                            ? 'Receive Bitcoin, Litecoin, or Dogecoin to populate this list.'
-                            : 'Coins on this network appear here after this wallet receives them.'}
-                        onReceive={networkFilter === 'all' ? onReceive : undefined}
-                        onSelectToken={onSelectToken}
-                        pinnedKeys={pinnedKeys}
-                        onTogglePin={onTogglePin}
-                        hiddenKeys={hiddenKeys}
-                        onToggleHide={onToggleHide}
-                        hideSmallBalances={hideSmallBalances}
-                        smallBalanceThreshold={settings?.smallBalanceThreshold}
-                        numberFormat={settings?.numberFormat}
-                    />
+                    showFirstFunding ? (
+                        <Placeholder
+                            title="Fund your wallet"
+                            body={hasAddresses
+                                ? 'Receive coins from another wallet or buy coins through Exchange to get started.'
+                                : 'Generate a receiving address, then transfer coins to it or buy coins through Exchange.'}
+                            action={(
+                                <div className={styles.firstFundingActions}>
+                                    <Button
+                                        variant="primary"
+                                        size="sm"
+                                        onClick={hasAddresses ? onReceive : onAddAddress}
+                                        disabled={hasAddresses ? !onReceive : !onAddAddress}
+                                        icon={hasAddresses ? <Icon.ReceiveIcon /> : <Icon.PlusIcon />}
+                                    >
+                                        {hasAddresses ? 'Receive' : 'Generate an address'}
+                                    </Button>
+                                    {onBuy ? (
+                                        <Button
+                                            variant="secondary"
+                                            size="sm"
+                                            onClick={onBuy}
+                                            icon={<Icon.MarketIcon />}
+                                        >
+                                            Buy coins
+                                        </Button>
+                                    ) : null}
+                                </div>
+                            )}
+                        />
+                    ) : (
+                        <BalanceList
+                            rows={coins}
+                            fiatCurrency={settings?.fiatCurrency || 'USD'}
+                            multisig={multisig}
+                            multisigChainId={multisigChainId}
+                            emptyTitle={networkFilter === 'all' ? 'No coins yet' : 'No coins on this network'}
+                            emptyBody={networkFilter === 'all'
+                                ? 'Receive Bitcoin, Litecoin, or Dogecoin to populate this list.'
+                                : 'Coins on this network appear here after this wallet receives them.'}
+                            onReceive={networkFilter === 'all' ? onReceive : undefined}
+                            onSelectToken={onSelectToken}
+                            pinnedKeys={pinnedKeys}
+                            onTogglePin={onTogglePin}
+                            hiddenKeys={hiddenKeys}
+                            onToggleHide={onToggleHide}
+                            hideSmallBalances={hideSmallBalances}
+                            smallBalanceThreshold={settings?.smallBalanceThreshold}
+                            numberFormat={settings?.numberFormat}
+                        />
+                    )
                 ) : null}
 
                 {active === 'tokens' ? (
@@ -434,6 +471,15 @@ function Placeholder({ title, body, action = null }) {
             {action ? <div className={styles.placeholderAction}>{action}</div> : null}
         </div>
     );
+}
+
+function hasNonZeroQuantity(row) {
+    try {
+        return BigInt(row?.quantity ?? 0) !== 0n;
+    } catch {
+        const quantity = Number(row?.quantity);
+        return Number.isFinite(quantity) && quantity !== 0;
+    }
 }
 
 // Builds an tick lookup keyed by `${chainId}|${tick}` so ActivityRow

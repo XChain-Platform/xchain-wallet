@@ -117,6 +117,7 @@ export function PortfolioChart({ rows, walletId }) {
     );
 
     const hasData = Array.isArray(series) && series.length > 0;
+    const hasBalance = (rows || []).some((row) => hasNonZeroQuantity(row));
 
     const { delta, pct } = useMemo(() => {
         if (!hasData) return { delta: null, pct: null };
@@ -138,7 +139,7 @@ export function PortfolioChart({ rows, walletId }) {
     // suppresses the numeric delta line but leaves the chart shape and
     // range pills visible. The early return lives below every hook call
     // so the hook count stays stable as the toggle flips.
-    if (!chartVisible) return null;
+    if (!chartVisible || !hasBalance) return null;
 
     return (
         <section className={styles.wrap} aria-label="Portfolio performance">
@@ -267,6 +268,15 @@ function fiatValueOf(row) {
     if (!row) return null;
     const exact = fiatValue(row.quantity, row.divisibility, row.fiatRate);
     return exact === null ? null : Number(exact);
+}
+
+function hasNonZeroQuantity(row) {
+    try {
+        return BigInt(row?.quantity ?? 0) !== 0n;
+    } catch {
+        const quantity = Number(row?.quantity);
+        return Number.isFinite(quantity) && quantity !== 0;
+    }
 }
 
 function formatFiat(value, currency) {

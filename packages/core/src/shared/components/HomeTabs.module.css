@@ -127,6 +127,13 @@
     margin-top: var(--xc-space-3);
 }
 
+.firstFundingActions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--xc-space-2);
+}
+
 /* Demo activity / defi list: single rounded card with row dividers,
    matching the Tokens / Coins list layout so all five tabs share the
    same visual rhythm. */
