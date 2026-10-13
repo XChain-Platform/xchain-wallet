@@ -208,6 +208,14 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     const [balances, setBalances] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
+    const balancesRef = useRef(/** @type {Record<string, any[]> | null} */ (null));
+    balancesRef.current = balances;
+    const [balancesRefreshing, setBalancesRefreshing] = useState(false);
+    const manualRefreshGenerationRef = useRef(0);
+    useEffect(() => () => { manualRefreshGenerationRef.current += 1; }, [
+        activeWalletId,
+        activeAccountId,
+    ]);
     // Active (operating) address per chain. The headline balance per coin
     // reflects this address only (not the sum across all addresses).
     const [activeByChain, setActiveByChain] = useState(
@@ -563,7 +571,11 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         setLoadError(`Couldn't ${BALANCES_VERB}. ${rateLimitedMessage(named ? seconds : null)}`);
     }, []);
 
-    const loadHomeData = useCallback(async (walletId, accountId, { reset, isCancelled }) => {
+    const loadHomeData = useCallback(async (walletId, accountId, {
+        reset,
+        isCancelled,
+        reportError = false,
+    }) => {
         // A browser offline event is definitive enough to avoid starting work
         // that cannot finish. In particular, keep the last successful balance
         // state on screen instead of replacing it with a loading skeleton.
@@ -589,6 +601,9 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             setPendingAirdrops([]);
             setConfirmSessions([]);
             setLoadError(null);
+            setBalancesRefreshing(false);
+        } else {
+            setBalancesRefreshing(true);
         }
 
         try {
@@ -600,20 +615,35 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             // loadDisplayBalances holds that branch so the palette shows the same.
             const b = await loadDisplayBalances(messaging, walletId, accountId);
             if (!isCancelled()) {
-                // Fresh balances: this is what restarts the re-poll window,
-                // whichever path asked for them.
-                pollThrottleRef.current.succeed();
-                setBalances(b);
-                setBalancesFetchedAt(Date.now());
                 // A read can LAND and still be rate limited: the aggregator
                 // reports a refused address as that entry's `error` string
                 // rather than throwing, so the banner is decided from what
                 // came back, on the poll path as well as the reset one. The
                 // balances that did land stay on screen either way.
                 const wait = rateLimitWaitFromBalances(b);
-                if (wait) {
-                    beginRateLimitWait(wait.seconds);
+                const refreshHasFailure = reportError
+                    && balancesRef.current !== null
+                    && Object.values(b || {}).some((rows) => (
+                        Array.isArray(rows) && rows.some((entry) => entry?.error)
+                    ));
+                if (refreshHasFailure) {
+                    pollThrottleRef.current.fail();
+                    showToast({
+                        message: wait
+                            ? "Couldn't refresh balances. The service asked the wallet to slow down. Try again in a moment."
+                            : "Couldn't refresh balances. Try again.",
+                        variant: 'error',
+                    });
                 } else {
+                    // Fresh balances restart the re-poll window, whichever
+                    // path asks for them.
+                    pollThrottleRef.current.succeed();
+                    setBalances(b);
+                    setBalancesFetchedAt(Date.now());
+                }
+                if (wait && !refreshHasFailure) {
+                    beginRateLimitWait(wait.seconds);
+                } else if (!refreshHasFailure) {
                     // Balances landed clean, so whatever the last failure said
                     // is no longer true. Cleared on the poll path too: a wallet
                     // that recovered on its own used to keep the error banner
@@ -630,7 +660,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             // A silent poll that fails (e.g. a transient network blip)
             // should not stomp a screen the user is already looking at
             // with an error banner; only surface it on the reset path.
-            if (!isCancelled() && reset) {
+            if (!isCancelled()) {
                 // The raw SDK message used to go straight on screen here, URL
                 // and all ("Explorer returned HTTP 429 for /RLTC/api/balances/
                 // bcrt1q..."). humanizeError owns the wording for every shape
@@ -639,8 +669,16 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 // channel, a chain-wide fault), and it is the path that used to
                 // print the wire text.
                 const humanized = humanizeError(err, BALANCES_VERB);
-                if (humanized.cause === 'rate_limited') beginRateLimitWait(humanized.retryAfterSeconds ?? null);
-                else setLoadError(humanized.message);
+                if (reportError && balancesRef.current !== null) {
+                    showToast({
+                        message: humanizeError(err, 'refresh balances').message,
+                        variant: 'error',
+                    });
+                } else if (reset && humanized.cause === 'rate_limited') {
+                    beginRateLimitWait(humanized.retryAfterSeconds ?? null);
+                } else if (reset) {
+                    setLoadError(humanized.message);
+                }
             }
         }
 
@@ -697,8 +735,21 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 if (!isCancelled()) setConfirmSessions(resp?.sessions || []);
             } catch { /* non-fatal */ }
         }
+        if (!reset && !isCancelled()) setBalancesRefreshing(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [messaging]);
+
+    const refreshBalances = useCallback(() => {
+        if (!activeWalletId || !browserOnline || pollThrottleRef.current.isInFlight()) return;
+        const generation = manualRefreshGenerationRef.current;
+        pollThrottleRef.current.reset();
+        pollThrottleRef.current.start();
+        loadHomeData(activeWalletId, activeAccountId || undefined, {
+            reset: false,
+            reportError: true,
+            isCancelled: () => manualRefreshGenerationRef.current !== generation,
+        });
+    }, [activeWalletId, activeAccountId, browserOnline, loadHomeData]);
 
     const refreshPortfolio = useCallback(async () => {
         if (!activeWalletId || portfolioRefreshing || !isNavigatorOnline()) return;
@@ -803,6 +854,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         const reconnected = !wasBrowserOnlineRef.current && browserOnline;
         wasBrowserOnlineRef.current = browserOnline;
         if (!reconnected || !activeWalletId) return;
+        if (pollThrottleRef.current.isInFlight()) return;
         pollThrottleRef.current.reset();
         pollThrottleRef.current.start();
         let cancelled = false;
@@ -843,8 +895,10 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 setRateLimitTickNow(now);
                 return;
             }
+            if (pollThrottleRef.current.isInFlight()) return;
             setRateLimitRetryAt(null);
             setLoadError(`Couldn't ${BALANCES_VERB}. ${rateLimitedMessage(null)}`);
+            pollThrottleRef.current.reset();
             pollThrottleRef.current.start();
             loadHomeData(walletId, accountId, {
                 reset: false,
@@ -1002,6 +1056,17 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             <ListPage className={isFull ? styles.bodyFull : undefined}>
                 {/* Home has no PageHeader, so its one h1 is visually hidden. */}
                 <h1 className="sr-only">Home</h1>
+                <div className={styles.refreshRow}>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        loading={balancesRefreshing}
+                        disabled={!browserOnline || balances === null}
+                        onClick={refreshBalances}
+                    >
+                        {balancesRefreshing ? 'Refreshing balances…' : 'Refresh balances'}
+                    </Button>
+                </div>
                 {!browserOnline ? (
                     <StatusMessage variant="warning">
                         {balances
