@@ -141,8 +141,8 @@ export function statusCopy(status, signerKind, chainId, detail) {
             return 'Signing was cancelled on your device. Nothing was signed. Review the details and try again when you are ready.';
         case 'error':
             return detail
-                ? `Couldn't reach the device. ${userFacingMessage(detail, 'Check its connection and try again.')}`
-                : "Couldn't reach the device. Check its connection and try again.";
+                ? `Couldn't reach device. ${userFacingMessage(detail, 'Check the connection and try again.')}`
+                : "Couldn't reach device.";
         default:
             return '';
     }
