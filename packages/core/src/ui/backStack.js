@@ -97,6 +97,22 @@ function onPopState() {
     }
 }
 
+/** Escape dismisses only the top overlay and never acts as route navigation. */
+function onKeyDown(event) {
+    if (event.key !== 'Escape') return;
+    let top = null;
+    for (let i = handlers.length - 1; i >= 0; i -= 1) {
+        if (handlers[i].kind !== 'route') {
+            top = handlers[i];
+            break;
+        }
+    }
+    if (!top) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    top.run();
+}
+
 /**
  * Register a back action. The most recently registered one is "on top" and
  * is the one a Back press runs.
@@ -109,6 +125,7 @@ export function registerBackHandler(run, kind = 'overlay') {
     ensureNativeListener();
     if (!listening && typeof window !== 'undefined') {
         window.addEventListener('popstate', onPopState);
+        window.addEventListener('keydown', onKeyDown, true);
         listening = true;
     }
     const entry = { run, kind };
@@ -165,7 +182,10 @@ export function resetBackStackForTests() {
     armed = false;
     ignoreNextPop = false;
     syncScheduled = false;
-    if (listening && typeof window !== 'undefined') window.removeEventListener('popstate', onPopState);
+    if (listening && typeof window !== 'undefined') {
+        window.removeEventListener('popstate', onPopState);
+        window.removeEventListener('keydown', onKeyDown, true);
+    }
     listening = false;
     routeHistoryManaged = false;
     const listener = nativeListener;

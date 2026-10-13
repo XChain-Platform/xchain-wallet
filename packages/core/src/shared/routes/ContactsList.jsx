@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, ChainBadge, EmptyState, FormPage, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useFocusTrap } from '../utils/focusTrap.js';
+import { useBackHandler } from '../../ui/backStack.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useToast } from '../components/ToastHost.jsx';
 import { NETWORK_OPTIONS, NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
@@ -167,6 +168,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     // The add-address dialog traps Tab and returns focus to its opener on close.
     const addAddrRef = useRef(null);
     useFocusTrap(addAddrRef, { active: addAddrOpen });
+    useBackHandler(addAddrOpen ? () => setAddAddrOpen(false) : undefined);
     const [addAddrValue, setAddAddrValue] = useState('');
     const [addAddrError, setAddAddrError] = useState(/** @type {string | null} */ (null));
     const [addAddrSaving, setAddAddrSaving] = useState(false);
