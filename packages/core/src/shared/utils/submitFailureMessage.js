@@ -91,6 +91,14 @@ function knownSdkErrorMessage(err) {
 }
 
 const NEXT_STEP_RE = /\b(?:add|check|choose|enter|give|reconnect|report|retry(?:ing)?|review|try|update|wait)\b/i;
+const SIGNER_CANCELLED_RE = /\b(?:user (?:cancelled|canceled)|(?:cancelled|canceled) (?:by the user|on (?:the )?device)|user rejected on (?:the )?device)\b/i;
+
+function isSignerCancellation(err) {
+    if (!err || typeof err !== 'object') return false;
+    const e = /** @type {any} */ (err);
+    if (/^(?:Signer|User)Cancel(?:led|ed)Error$/.test(String(e.name || ''))) return true;
+    return SIGNER_CANCELLED_RE.test(String(e.message || ''));
+}
 
 function compactActionableMessage(message) {
     const plain = message
@@ -217,7 +225,7 @@ function isCommitFeeTooLowBroadcast(err) {
         ? String(/** @type {any} */ (err).message || '')
         : (typeof err === 'string' ? err : '');
     return /^broadcast failed \(commit\):/i.test(message.trim())
-        && /\b(?:min(?:imum)?[-\s]+relay[-\s]+fee|fee[-\s]+too[-\s]+low)\b/i.test(message);
+        && /\b(?:min(?:imum)?[-\s]+relay[-\s]+fee|fee[-\s]+too[-\s]+low|insufficient[-\s]+fee)\b/i.test(message);
 }
 
 // Read the per-chain action gates' refusals (registry/actions.js and the nested
@@ -285,6 +293,9 @@ export function submitFailureMessage(
     const generic = `Couldn't ${verb}. Something went wrong. Try again.`;
     const protocolRefusal = protocolRefusalReason(err);
     if (protocolRefusal) return protocolRefusal;
+    if (isSignerCancellation(err)) {
+        return 'Signing was cancelled. Nothing was signed. Review the details and try again when you are ready.';
+    }
     if (isNativeFeeForfeit(err)) {
         return userFacingMessage(
             nativeFeeErrorMessage(err, { coinTicker, mandatory, chainId, networkKind }), generic,

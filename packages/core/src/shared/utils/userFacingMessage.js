@@ -62,7 +62,9 @@ function errorText(err) {
 
 /**
  * The node's explanation for an encoder RPC refusal, when it is safe to show.
- * The SDK preserves this shape across every shell as name, code and message.
+ * The SDK identifies this in-process with name, code and message. Messaging
+ * shells may preserve only name and message, so the prefix remains the final
+ * discriminator when code is absent.
  *
  * @param {unknown} err
  * @returns {string|null}
@@ -70,7 +72,8 @@ function errorText(err) {
 export function protocolRefusalReason(err) {
     if (!err || typeof err !== 'object') return null;
     const e = /** @type {any} */ (err);
-    if (e.name !== 'SDKEncoderError' || e.code !== 'ENCODER_RPC_ERROR') return null;
+    if (e.name !== 'SDKEncoderError'
+        || (e.code !== undefined && e.code !== 'ENCODER_RPC_ERROR')) return null;
     const message = errorText(err);
     if (!ENCODER_REFUSAL_PREFIX.test(message)) return null;
     const reason = message.replace(ENCODER_REFUSAL_PREFIX, '').trim();
