@@ -75,6 +75,12 @@ describe('TotalBalanceHero privacy', () => {
 });
 
 describe('TotalBalanceHero fiat formatting', () => {
+    it('uses the shared tiny-positive floor for the headline total', async () => {
+        mount({ rows: [row({ quantity: '5', divisibility: 3 })] });
+
+        expect(await screen.findByText('< $0.01')).toBeInTheDocument();
+    });
+
     it('sums every priced row exactly and excludes an unpriced holding', () => {
         mount({
             rows: [
