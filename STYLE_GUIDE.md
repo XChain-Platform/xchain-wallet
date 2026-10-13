@@ -73,7 +73,7 @@ The current CSS-module audit uses `360px`, `400px`, `420px`, `480px`, `600px`, `
 | `FormPage` | `onSubmit`, `actions`, `status`, `intro`, `sectioned`, `label` (accessible name), `noValidate` (default `true`), `className`, `ref` (the form), `children`, and other form attributes |
 | `FormSection` | `title`, `description`, `headingLevel` (`h2` default), `className`, `children` |
 | `ListPage` | `toolbar`, `intro`, `className`, `children`, and other root attributes such as `aria-label` |
-| `EmptyState` | `title`, `body` (one line), `icon`, `actionLabel` + `onAction`, `actionIcon`, `titleAs` (`h2` default), `role` (`status` default), `className` |
+| `EmptyState` | `title`, `body` (one line), `icon`, `actionLabel` + `onAction`, `actionIcon`, `secondaryActionLabel` + `onSecondaryAction`, `secondaryActionIcon`, `titleAs` (`h2` default), `role` (`status` default), `className`, and other root attributes |
 | `SectionHeader` | `title`, `as` (`h2` default), `id`, `description`, `trailing`, `className` |
 
 ```jsx

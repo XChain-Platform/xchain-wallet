@@ -2703,13 +2703,12 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     <div role="status" aria-live="polite">
                         <EmptyState
                             role="presentation"
-                            icon="⏳"
+                            icon={<Icon.ClockIcon />}
                             title={SIGNED_NOT_BROADCAST_TITLE}
                             body={t('send.queued.body')}
+                            actionLabel={t('common.done')}
+                            onAction={onDone || leaveGuard.guardedOnBack}
                         />
-                    </div>
-                    <div className={styles.actions}>
-                        <Button variant="primary" onClick={onDone || leaveGuard.guardedOnBack}>{t('common.done')}</Button>
                     </div>
                 </>,
             );

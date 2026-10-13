@@ -1726,7 +1726,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     body={t('history.empty.noAddressesBody')}
                     actionLabel={onReceive ? t('home.receive') : undefined}
                     onAction={onReceive}
-                    icon={onReceive ? <Icon.ReceiveIcon /> : undefined}
+                    actionIcon={onReceive ? <Icon.ReceiveIcon /> : undefined}
                 />
             </ListPage>,
         );
