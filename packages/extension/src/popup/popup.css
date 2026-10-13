@@ -4,11 +4,16 @@ html {
     min-width: 0;
 }
 
+html[data-xc-extension-surface='sidepanel'] {
+    width: 100%;
+}
+
 body,
 #xchain-popup-root {
     width: 100%;
     max-width: 100%;
     min-width: 0;
+    overflow-x: hidden;
 }
 
 .popup-background-connection {

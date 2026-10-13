@@ -448,6 +448,10 @@
 .modalCard {
     width: 100%;
     max-width: 420px;
+    max-height: calc(var(--xc-viewport-h, 100vh) - var(--xc-space-4) - var(--xc-space-4));
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     background: var(--xc-surface-raised);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-lg);

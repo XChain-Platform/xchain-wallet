@@ -4484,11 +4484,21 @@ const MODAL_CARD = {
     padding: 'var(--xc-space-3)',
     width: 'min(420px, 90vw)',
     maxHeight: '80vh',
-    overflowY: 'auto',
+    minHeight: 0,
+    overflow: 'hidden',
     display: 'flex',
     flexDirection: 'column',
     gap: 'var(--xc-space-3)',
     boxShadow: '0 12px 32px rgba(0, 0, 0, 0.25)',
+};
+const MODAL_BODY = {
+    flex: '1 1 auto',
+    minHeight: 0,
+    overflowY: 'auto',
+    overscrollBehavior: 'contain',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 'var(--xc-space-3)',
 };
 const MODAL_FIELDSET = {
     border: '1px solid var(--xc-border)',
@@ -4513,6 +4523,8 @@ const MODAL_LABEL = {
 };
 const MODAL_ACTIONS = {
     display: 'flex',
+    flex: '0 0 auto',
+    flexWrap: 'wrap',
     justifyContent: 'flex-end',
     gap: 'var(--xc-space-2)',
 };
@@ -4563,79 +4575,81 @@ function ExportModal({
             >
                 <h2 id="xc-history-export-title" style={{ margin: 0, fontSize: 'var(--xc-text-base)' }}>{t('history.export.title')}</h2>
 
-                <fieldset style={MODAL_FIELDSET}>
-                    <legend style={MODAL_LEGEND}>{t('history.export.format')}</legend>
-                    <label style={MODAL_LABEL}>
-                        <input
-                            type="radio"
-                            name="export-format"
-                            value="csv"
-                            checked={format === 'csv'}
-                            onChange={() => setFormat('csv')}
-                            disabled={exporting}
-                        />
-                        {t('history.export.csv')}
-                    </label>
-                    <label style={MODAL_LABEL}>
-                        <input
-                            type="radio"
-                            name="export-format"
-                            value="json"
-                            checked={format === 'json'}
-                            onChange={() => setFormat('json')}
-                            disabled={exporting}
-                        />
-                        {t('history.export.json')}
-                    </label>
-                </fieldset>
+                <div style={MODAL_BODY}>
+                    <fieldset style={MODAL_FIELDSET}>
+                        <legend style={MODAL_LEGEND}>{t('history.export.format')}</legend>
+                        <label style={MODAL_LABEL}>
+                            <input
+                                type="radio"
+                                name="export-format"
+                                value="csv"
+                                checked={format === 'csv'}
+                                onChange={() => setFormat('csv')}
+                                disabled={exporting}
+                            />
+                            {t('history.export.csv')}
+                        </label>
+                        <label style={MODAL_LABEL}>
+                            <input
+                                type="radio"
+                                name="export-format"
+                                value="json"
+                                checked={format === 'json'}
+                                onChange={() => setFormat('json')}
+                                disabled={exporting}
+                            />
+                            {t('history.export.json')}
+                        </label>
+                    </fieldset>
 
-                <fieldset style={MODAL_FIELDSET}>
-                    <legend style={MODAL_LEGEND}>{t('history.export.columns')}</legend>
-                    {flowsLib.EXPORT_COLUMNS.map((col) => {
-                        const detail = flowsLib.EXPORT_COLUMN_DETAILS[col];
-                        const label = col === 'fiatCurrency'
-                            ? `${detail.label} (${String(fiatCurrency || 'USD').trim().toUpperCase()})`
-                            : detail.label;
-                        return (
-                            <label key={col} style={MODAL_LABEL} title={detail.description}>
-                                <input
-                                    type="checkbox"
-                                    checked={columns.has(col)}
-                                    onChange={() => toggleColumn(col)}
-                                    disabled={exporting}
-                                />
-                                <span>
-                                    <span style={{ fontSize: 'var(--xc-text-sm)' }}>{label}</span>
-                                    <span style={{ display: 'block', color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-xs)' }}>
-                                        {detail.description}
+                    <fieldset style={MODAL_FIELDSET}>
+                        <legend style={MODAL_LEGEND}>{t('history.export.columns')}</legend>
+                        {flowsLib.EXPORT_COLUMNS.map((col) => {
+                            const detail = flowsLib.EXPORT_COLUMN_DETAILS[col];
+                            const label = col === 'fiatCurrency'
+                                ? `${detail.label} (${String(fiatCurrency || 'USD').trim().toUpperCase()})`
+                                : detail.label;
+                            return (
+                                <label key={col} style={MODAL_LABEL} title={detail.description}>
+                                    <input
+                                        type="checkbox"
+                                        checked={columns.has(col)}
+                                        onChange={() => toggleColumn(col)}
+                                        disabled={exporting}
+                                    />
+                                    <span>
+                                        <span style={{ fontSize: 'var(--xc-text-sm)' }}>{label}</span>
+                                        <span style={{ display: 'block', color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-xs)' }}>
+                                            {detail.description}
+                                        </span>
                                     </span>
-                                </span>
-                            </label>
-                        );
-                    })}
-                </fieldset>
-
-                <p style={{ margin: 0, fontSize: 'var(--xc-text-sm)' }}>
-                    {t('history.export.rowCount', { count: visibleCount })}
-                </p>
-
-                {exporting ? (
-                    <p role="status" aria-live="polite" style={{ margin: 0, fontSize: 'var(--xc-text-sm)' }}>
-                        {t('history.export.progress', {
-                            completed: progress.completed,
-                            total: progress.total,
+                                </label>
+                            );
                         })}
-                        {operationTime.showElapsed
-                            ? ` ${t('history.export.elapsed', { seconds: operationTime.elapsedSeconds })}`
-                            : ''}
+                    </fieldset>
+
+                    <p style={{ margin: 0, fontSize: 'var(--xc-text-sm)' }}>
+                        {t('history.export.rowCount', { count: visibleCount })}
                     </p>
-                ) : null}
-                {operationTime.timedOut ? (
-                    <p role="alert" style={{ margin: 0, color: 'var(--xc-danger)' }}>
-                        {t('history.export.slow')}
-                    </p>
-                ) : null}
-                {error ? <p role="alert" style={{ margin: 0, color: 'var(--xc-danger)' }}>{error}</p> : null}
+
+                    {exporting ? (
+                        <p role="status" aria-live="polite" style={{ margin: 0, fontSize: 'var(--xc-text-sm)' }}>
+                            {t('history.export.progress', {
+                                completed: progress.completed,
+                                total: progress.total,
+                            })}
+                            {operationTime.showElapsed
+                                ? ` ${t('history.export.elapsed', { seconds: operationTime.elapsedSeconds })}`
+                                : ''}
+                        </p>
+                    ) : null}
+                    {operationTime.timedOut ? (
+                        <p role="alert" style={{ margin: 0, color: 'var(--xc-danger)' }}>
+                            {t('history.export.slow')}
+                        </p>
+                    ) : null}
+                    {error ? <p role="alert" style={{ margin: 0, color: 'var(--xc-danger)' }}>{error}</p> : null}
+                </div>
 
                 <div style={MODAL_ACTIONS}>
                     <button type="button" className={styles.chip} onClick={onClose}>{t('common.cancel')}</button>

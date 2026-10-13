@@ -201,4 +201,29 @@ describe('320x568 modal layout contracts', () => {
         expect(rule(bottomBar, '.sheetBody')).toMatch(/flex:\s*1 1 auto/);
         expect(rule(bottomBar, '.sheetBody')).toMatch(/overflow-y:\s*auto/);
     });
+
+    it('bounds route dialogs while keeping export actions outside the scroller', () => {
+        const contacts = readFileSync('packages/core/src/shared/routes/ContactsList.module.css', 'utf8');
+        const contactCard = rule(contacts, '.modalCard');
+        expect(contactCard).toMatch(/max-height:\s*calc\(/);
+        expect(contactCard).toMatch(/min-height:\s*0/);
+        expect(contactCard).toMatch(/overflow-y:\s*auto/);
+
+        const history = readFileSync('packages/core/src/shared/routes/History.jsx', 'utf8');
+        expect(history).toMatch(/const MODAL_CARD = \{[^}]*minHeight:\s*0[^}]*overflow:\s*'hidden'/s);
+        expect(history).toMatch(/const MODAL_BODY = \{[^}]*flex:\s*'1 1 auto'[^}]*minHeight:\s*0[^}]*overflowY:\s*'auto'/s);
+        expect(history).toMatch(/const MODAL_ACTIONS = \{[^}]*flex:\s*'0 0 auto'[^}]*flexWrap:\s*'wrap'/s);
+        expect(history).toMatch(/<div style=\{MODAL_BODY\}>[\s\S]*<\/div>\s*<div style=\{MODAL_ACTIONS\}>/);
+    });
+
+    it('loads the horizontal containment rules in both extension surfaces', () => {
+        const sidePanel = readFileSync('packages/extension/sidepanel.html', 'utf8');
+        const extensionCss = readFileSync('packages/extension/src/popup/popup.css', 'utf8');
+
+        expect(sidePanel).toContain('data-xc-extension-surface="sidepanel"');
+        expect(sidePanel).toContain('href="./src/popup/popup.css"');
+        expect(extensionCss).toMatch(/html\s*\{[^}]*width:\s*min\(360px,\s*100vw\)/s);
+        expect(extensionCss).toMatch(/html\[data-xc-extension-surface='sidepanel'\]\s*\{[^}]*width:\s*100%/s);
+        expect(extensionCss).toMatch(/body,\s*#xchain-popup-root\s*\{[^}]*max-width:\s*100%[^}]*min-width:\s*0[^}]*overflow-x:\s*hidden/s);
+    });
 });
