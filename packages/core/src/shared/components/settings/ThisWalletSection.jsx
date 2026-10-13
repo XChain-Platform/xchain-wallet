@@ -551,7 +551,8 @@ function RemoveConfirm({ walletName, busy, error, onCancel, onConfirm }) {
             </div>
             <div style={ROW_HINT}>
                 Type the wallet name <strong style={{ color: 'var(--xc-text)' }}>{walletName}</strong> to confirm.
-                The encrypted seed is destroyed and cannot be undone.
+                Make sure you have a backup before continuing. The encrypted seed is destroyed and
+                cannot be recovered.
             </div>
             <input
                 type="text"
