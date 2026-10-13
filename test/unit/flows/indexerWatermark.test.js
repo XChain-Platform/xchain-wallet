@@ -70,6 +70,17 @@ describe('indexerWatermark', () => {
         expect(r).toEqual({ chainId: 'bitcoin-regtest', watermark: null });
     });
 
+    it('returns null watermark when SDK resolution or the status request fails', async () => {
+        const registries = [
+            { get: () => { throw new Error('no sdk for chain'); } },
+            makeRegistry({ status: () => { throw new Error('explorer down'); } }),
+        ];
+        for (const sdkRegistry of registries) {
+            await expect(indexerWatermark({ sdkRegistry, chainId: 'bitcoin-regtest' }))
+                .resolves.toEqual({ chainId: 'bitcoin-regtest', watermark: null });
+        }
+    });
+
     it('returns null watermark when last_block is absent', async () => {
         const registry = makeRegistry({ status: { supported: {} } });
         const r = await indexerWatermark({ sdkRegistry: registry, chainId: 'bitcoin-regtest' });
