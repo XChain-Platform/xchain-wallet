@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -764,30 +764,15 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
             {!rosterChecked ? (
                 <p className={styles.hint}>Loading the current official-token list…</p>
             ) : null}
-            <label className={styles.pickerLabel} htmlFor="roster-members">
-                Tokens (one per line)
-            </label>
-            <textarea
+            <Textarea
                 id="roster-members"
+                label="Tokens (one per line)"
                 value={membersText}
                 onChange={(e) => setMembersText(e.target.value)}
                 rows={6}
                 spellCheck={false}
                 autoCapitalize="none"
                 aria-label="Tokens (one per line)"
-                style={{
-                    width: '100%',
-                    fontFamily: 'var(--xc-font-mono, monospace)',
-                    fontSize: 'var(--xc-text-sm)',
-                    padding: 'var(--xc-space-2)',
-                    borderRadius: 'var(--xc-radius-md)',
-                    border: '1px solid var(--xc-border)',
-                    background: 'var(--xc-surface)',
-                    color: 'var(--xc-text)',
-                    resize: 'vertical',
-                    boxSizing: 'border-box',
-                    marginBottom: 'var(--xc-space-3)',
-                }}
             />
             {membersText.trim() ? (
                 <p className={styles.hint}>

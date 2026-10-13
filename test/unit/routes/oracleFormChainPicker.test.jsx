@@ -147,9 +147,8 @@ async function publish(utils, { tick, value }) {
         await drainMicrotasks();
     });
     await domAct(async () => {
-        const btn = Array.from(utils.container.querySelectorAll('button'))
-            .find((b) => b.getAttribute('data-testid') === 'confirm-approve' && !b.disabled);
-        if (btn) fireEvent.click(btn);
+        const btn = utils.queryByRole('button', { name: 'Approve' });
+        if (btn && !btn.disabled) fireEvent.click(btn);
         await drainMicrotasks();
     });
 }

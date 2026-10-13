@@ -206,6 +206,7 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack }) {
                             </>
                         );
                         return onOpenMarket ? (
+                            // A raw button keeps the entire list card as one clickable row.
                             <button
                                 key={String(m.action_index)}
                                 type="button"

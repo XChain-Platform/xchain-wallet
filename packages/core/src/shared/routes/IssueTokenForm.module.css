@@ -153,6 +153,27 @@
     margin: var(--xc-space-2) 0;
 }
 
+.listMemberToggle {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+}
+
+.listMemberToggle > div {
+    flex: 0 0 auto;
+    margin-bottom: 0;
+}
+
+.listMemberToggle .listMemberCheckbox {
+    width: 1rem;
+    min-height: 1rem;
+    padding: 0;
+}
+
+.listMemberToggle label {
+    cursor: pointer;
+}
+
 /* PC-02 lock matrix: one row per ISSUE v3 lock flag (checkbox + label
    via .checkRow, then a per-flag permanence hint underneath it). */
 .lockFlagRow {

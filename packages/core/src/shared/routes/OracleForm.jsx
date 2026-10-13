@@ -651,9 +651,9 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                         const count = consumerCountFor(f);
                         return (
                             <li key={f.key} className={styles.hint}>
-                                <button type="button" onClick={() => prefillFromFeed(f)}>
+                                <Button variant="secondary" size="sm" onClick={() => prefillFromFeed(f)}>
                                     {f.coin && f.coin !== coinTicker ? `${f.coin}:` : ''}{f.tick} in {f.fiat}
-                                </button>
+                                </Button>
                                 {': '}
                                 {f.live
                                     ? `${f.live.value} ${f.fiat} live`
