@@ -6,17 +6,19 @@ import { join } from 'node:path';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
+import { CommandPalette } from '../../../packages/core/src/shared/commandPalette/CommandPalette.jsx';
 import { AlertsOverlay } from '../../../packages/core/src/shared/components/AlertsOverlay.jsx';
 import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
 import { ConfirmModal } from '../../../packages/core/src/shared/components/ConfirmModal.jsx';
 import { GatedFileViewer } from '../../../packages/core/src/shared/components/GatedFileViewer.jsx';
 import { NoticeModal } from '../../../packages/core/src/shared/components/NoticeModal.jsx';
 import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
+import overlayStyles from '../../../packages/core/src/shared/components/OverlaySurface.module.css';
 
 const COMPONENT_DIR = join(process.cwd(), 'packages/core/src/shared/components');
 const ROUTE_DIR = join(process.cwd(), 'packages/core/src/shared/routes');
 const UI_DIR = join(process.cwd(), 'packages/core/src/ui');
-const VIEWPORT = { width: 320, height: 568 };
+const VIEWPORT = { width: 360, height: 640 };
 
 const css = (name) => readFileSync(join(COMPONENT_DIR, name), 'utf8');
 
@@ -59,7 +61,7 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
-describe('320x568 modal inventory', () => {
+describe('360x640 modal inventory', () => {
     it('keeps modal semantics in the shared overlay kit and specialized viewers', () => {
         expect([
             ...modalFiles(COMPONENT_DIR),
@@ -83,17 +85,17 @@ describe('320x568 modal inventory', () => {
         }
 
         const confirmAction = readFileSync(join(COMPONENT_DIR, 'ConfirmActionModal.jsx'), 'utf8');
-        expect(confirmAction).toContain('<Screen ');
+        expect(confirmAction).toContain('<Screen');
         expect(confirmAction).toContain('<PageHeader');
 
         const addAddress = readFileSync(join(ROUTE_DIR, 'AddAddressModal.jsx'), 'utf8');
-        expect(addAddress).toContain('<Screen ');
+        expect(addAddress).toContain('<Screen');
         expect(addAddress).toContain('<PageHeader');
         expect(addAddress).toContain('<FormPage');
     });
 });
 
-describe('320x568 modal renders', () => {
+describe('360x640 modal renders', () => {
     it('keeps Notice content in a scroller and its close action in a footer', () => {
         render(
             <NoticeModal
@@ -176,15 +178,35 @@ describe('320x568 modal renders', () => {
         const sheet = screen.getByRole('dialog', { name: 'More' });
         const close = screen.getByRole('button', { name: 'Close more navigation' });
         expect(sheet.firstElementChild).toHaveAttribute('data-overlay-surface', 'sheet');
+        expect(sheet.firstElementChild.querySelector(`.${overlayStyles.handle}`))
+            .toHaveAttribute('aria-hidden', 'true');
         expect(sheet.firstElementChild).toContainElement(close);
         expect(close).toHaveClass(buttonStyles.md, buttonStyles.iconOnly);
         expect(sheet.lastElementChild).toContainElement(screen.getByRole('button', { name: 'Lock wallet' }));
         fireEvent.click(close);
         expect(screen.queryByRole('dialog', { name: 'More' })).toBeNull();
     });
+
+    it('gives the phone command sheet a handle, header row, and close action', () => {
+        const onClose = vi.fn();
+        render(
+            <CommandPalette
+                open
+                onClose={onClose}
+                commands={[{ id: 'home', category: 'Navigate', title: 'Home', run: () => {} }]}
+            />,
+        );
+
+        const dialog = screen.getByRole('dialog', { name: 'Command palette' });
+        const header = screen.getByRole('heading', { name: 'Command palette' }).closest('header');
+        expect(dialog.firstElementChild.firstElementChild).toBe(header);
+        expect(header.querySelector('[aria-hidden="true"]')).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Close command palette' }));
+        expect(onClose).toHaveBeenCalledOnce();
+    });
 });
 
-describe('320x568 modal layout contracts', () => {
+describe('360x640 modal layout contracts', () => {
     it('bounds centered dialogs and isolates their scrolling content', () => {
         const overlay = css('OverlaySurface.module.css');
         const surface = rule(overlay, '.surface');
@@ -220,6 +242,8 @@ describe('320x568 modal layout contracts', () => {
         expect(sheet).toMatch(/width:\s*100%/);
         expect(sheet).toMatch(/max-width:\s*35rem/);
         expect(sheet).toMatch(/max-height:\s*min\(70vh/);
+        expect(rule(overlay, '.handle')).toMatch(/width:\s*2\.25rem/);
+        expect(rule(overlay, '.handle')).toMatch(/height:\s*4px/);
         expect(rule(overlay, '.header')).toMatch(/flex:\s*0 0 auto/);
         const sheetClose = rule(overlay, '.close');
         expect(sheetClose).toMatch(/width:\s*var\(--xc-control-h-md\)/);
@@ -233,5 +257,26 @@ describe('320x568 modal layout contracts', () => {
         expect(rule(overlay, '.body')).toMatch(/min-height:\s*0/);
         expect(rule(overlay, '.body')).toMatch(/flex:\s*1 1 auto/);
         expect(rule(overlay, '.body')).toMatch(/overflow-y:\s*auto/);
+    });
+
+    it('bounds the phone command sheet and keeps its results as the scroll region', () => {
+        const palette = readFileSync(
+            join(COMPONENT_DIR, '..', 'commandPalette', 'CommandPalette.module.css'),
+            'utf8',
+        );
+        expect(rule(palette, '.panel')).toMatch(/box-sizing:\s*border-box/);
+        expect(rule(palette, '.panel')).toMatch(/overflow:\s*hidden/);
+        expect(rule(palette, '.header')).toMatch(/flex:\s*0 0 auto/);
+        expect(rule(palette, '.list')).toMatch(/min-height:\s*0/);
+        expect(rule(palette, '.list')).toMatch(/overflow-y:\s*auto/);
+        expect(palette).toMatch(
+            /@media not all and \(min-width: 640px\)[\s\S]*?\.panel\s*\{[^}]*max-height:\s*min\(85%/,
+        );
+        expect(palette).toMatch(
+            /@media not all and \(min-width: 640px\)[\s\S]*?\.panel\s*\{[^}]*padding-bottom:\s*calc\([^}]*safe-area-inset-bottom/,
+        );
+        expect(palette).toMatch(
+            /@media not all and \(min-width: 640px\)[\s\S]*?\.handle\s*\{[^}]*display:\s*block/,
+        );
     });
 });

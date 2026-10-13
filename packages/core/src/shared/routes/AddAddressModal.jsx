@@ -206,8 +206,23 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
             titleIcon={<Icon.PlusIcon />}
         />
     );
+    const footer = coinOptions.length > 0 ? (
+        <form aria-label="Generate addresses" onSubmit={handleGenerate}>
+            <Button
+                type="submit"
+                variant="primary"
+                size="md"
+                block
+                loading={busy}
+                disabled={busy || !effectiveChainId}
+                data-testid="add-address-generate"
+            >
+                {generateLabel}
+            </Button>
+        </form>
+    ) : null;
     return (
-        <Screen variant={variant} header={header}>
+        <Screen variant={variant} header={header} footer={footer}>
             {coinOptions.length === 0 ? (
                 <EmptyState
                     title="No coins available"
@@ -223,20 +238,6 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
                             {busy ? <p className={styles.progress}>Generating {done}/{countNum}…</p> : null}
                         </>
                     ) : null}
-                    actions={(
-                        // The label carries a count ("Generate 3"), so matching it by
-                        // text needs a regex that also matches any future Generate button.
-                        <Button
-                            type="submit"
-                            variant="primary"
-                            size="md"
-                            loading={busy}
-                            disabled={busy || !effectiveChainId}
-                            data-testid="add-address-generate"
-                        >
-                            {generateLabel}
-                        </Button>
-                    )}
                 >
                         <ChainPicker
                             label="Coin"

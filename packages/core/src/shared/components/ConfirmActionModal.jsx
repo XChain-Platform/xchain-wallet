@@ -8,16 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// ConfirmActionModal (§5.1-5.2). The wallet's single standardized
-// confirmation surface. Originally an overlay modal; per operator
-// direction 2026-07-22 it renders as a full PAGE in the same frame as the
-// action forms (the overlay didn't fit small/mobile viewports), shown in
-// place of the form the way picker screens are. The exported name stays
-// `ConfirmActionModal` so the slice wiring and its tests keep
-// their vocabulary. Built on the single-encode pipeline (the previewed
-// PSBT is the signed PSBT). Anatomy top-to-bottom (§5.2): "Confirm"
-// header, intent, balance deltas, fee and total section, pre-flight panel,
-// credentials + HW note, back/reject and approve footer.
+// ConfirmActionModal (§5.1-5.2) is the wallet's standardized full-screen
+// confirmation surface. It replaces the action form within the same Screen
+// frame and uses the single-encode pipeline, so the previewed PSBT is the
+// signed PSBT. Anatomy top-to-bottom (§5.2): "Confirm" header, intent,
+// balance deltas, fee and total section, pre-flight panel, credentials and
+// hardware note, then the pinned reject and approve footer.
 //
 // Interaction contract (§5.1, page form): exactly two exits, approve or
 // back/reject; the header back arrow rejects the request. Both exits stay
@@ -384,9 +380,38 @@ export function ConfirmActionModal({
             titleRef={titleRef}
         />
     );
+    const footer = (
+        <div className={styles.footer}>
+            <Button
+                variant="danger"
+                icon={<Icon.ThumbsDownIcon />}
+                onClick={handleReject}
+                disabled={exitsLocked}
+                data-testid="confirm-reject"
+            >
+                Reject
+            </Button>
+            <Button
+                variant="success"
+                icon={<Icon.ThumbsUpIcon />}
+                onClick={handleApprove}
+                disabled={approveDisabled || !previewReady || signaturePhase || terminal || !canApprove || !credentialsReady || !!refusal}
+                data-testid="confirm-approve"
+                aria-label={resolvedApproveLabel}
+            >
+                {resolvedApproveLabel}
+            </Button>
+        </div>
+    );
 
     return (
-        <Screen rootRef={pageRef} variant={screenVariant} header={header} restoreScroll={false}>
+        <Screen
+            rootRef={pageRef}
+            variant={screenVariant}
+            header={header}
+            footer={footer}
+            restoreScroll={false}
+        >
             <div
                 className={styles.page}
                 data-testid="confirm-modal"
@@ -566,40 +591,14 @@ export function ConfirmActionModal({
                             Signing is taking longer than expected. Keep this screen open and check the device or wallet service. Before trying again, check History and the queued-transactions banner so you do not submit the same transaction twice.
                         </div>
                     ) : null}
-                    {/* this line used to promise a retry, and nothing retries
-                        on its own. The queue holds the signed transaction until the
-                        user broadcasts it from the queued-transactions banner. */}
+                    {/* The queue holds the signed transaction until the user
+                        broadcasts it from the queued-transactions banner. */}
                     {phase === 'signed-not-broadcast' ? (
                         <p className={styles.queued} data-testid="confirm-queued">
                             Signed - not broadcast yet.
                         </p>
                     ) : null}
                 </div>
-
-                {/* Both exits remain grouped at the end of the review (§5.2.7). */}
-                <footer className={styles.footer}>
-                    <Button
-                        variant="danger"
-                        icon={<Icon.ThumbsDownIcon />}
-                        onClick={handleReject}
-                        disabled={exitsLocked}
-                        data-testid="confirm-reject"
-                    >
-                        Reject
-                    </Button>
-                    <Button
-                        variant="success"
-                        icon={<Icon.ThumbsUpIcon />}
-                        onClick={handleApprove}
-                        disabled={approveDisabled || !previewReady || signaturePhase || terminal || !canApprove || !credentialsReady || !!refusal}
-                        data-testid="confirm-approve"
-                        // The explicit accessible name stays identical to the
-                        // visible action and amount.
-                        aria-label={resolvedApproveLabel}
-                    >
-                        {resolvedApproveLabel}
-                    </Button>
-                </footer>
             </div>
         </Screen>
     );

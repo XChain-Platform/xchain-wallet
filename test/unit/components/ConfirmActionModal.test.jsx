@@ -230,7 +230,7 @@ describe('ConfirmActionModal', () => {
         expect(screen.queryByTestId('confirm-total')).toBeNull();
     });
 
-    it.each([320, 412])('keeps long Send review values readable and reachable at %ipx', (width) => {
+    it.each([360, 412])('keeps long Send review values readable and its actions pinned at %ipx', (width) => {
         Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
         const address = 'bc1pqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq';
         const longToken = 'A-VERY-LONG-TOKEN-NAME-THAT-MUST-NOT-HIDE-VALUES';
@@ -299,6 +299,11 @@ describe('ConfirmActionModal', () => {
         const approve = screen.getByTestId('confirm-approve');
         expect(approve).toBeVisible();
         expect(approve).toHaveTextContent(`Send 12,345,678.12345678 ${longToken}`);
+        const reviewMain = screen.getByTestId('confirm-modal').closest('main');
+        const actionFooter = approve.closest('footer');
+        expect(actionFooter).toBe(reviewMain.nextElementSibling);
+        expect(actionFooter).toContainElement(screen.getByTestId('confirm-reject'));
+        expect(reviewMain).not.toContainElement(approve);
 
         const intentCss = readFileSync(
             'packages/core/src/shared/components/ActionIntentSummary.module.css',
@@ -316,12 +321,10 @@ describe('ConfirmActionModal', () => {
         expect(modalCss).toMatch(/\.fee\s*\{[^}]*text-align:\s*end/s);
         expect(modalCss).toMatch(/\.page\s*\{[^}]*container-type:\s*inline-size/s);
         expect(modalCss).toMatch(/\.credentials dd\s*\{[^}]*white-space:\s*pre-wrap/s);
-        expect(modalCss).toMatch(/\.page\s*\{[^}]*padding-bottom:\s*var\(--xc-bottom-bar-h, 0px\)/s);
         expect(modalCss).toMatch(/\.footer > button\s*\{[^}]*white-space:\s*normal/s);
         expect(modalCss).toMatch(/\.footer > button > span:last-child\s*\{[^}]*overflow-wrap:\s*anywhere/s);
         expect(modalCss).toMatch(/\.footer > button > span:last-child\s*\{[^}]*text-overflow:\s*clip/s);
         expect(modalCss).toMatch(/@media not all and \(min-width: 400px\)[\s\S]*\.footer\s*\{[^}]*flex-direction:\s*column/s);
-        expect(modalCss).toMatch(/@container not \(min-width: 400px\)[\s\S]*\.footer\s*\{[^}]*flex-direction:\s*column/s);
     });
 
     it('uses a plain headline when an action has no decoded summary', () => {
