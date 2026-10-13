@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, FormSection, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, CopyButton, FeeSelector, FormPage, FormSection, Icon, Input, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -577,11 +577,12 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         }
         return wrap(
             <>
-                <p className={styles.successTitle}>Cross-chain swap broadcast</p>
+                <SectionHeader title="Cross-chain swap broadcast" />
                 {txid ? (
                     <>
                         <p className={styles.successLabel}>Give-chain transaction</p>
                         <code className={styles.txid}>{txid}</code>
+                        <CopyButton value={txid} label="Copy transaction ID" />
                     </>
                 ) : null}
                 <p className={styles.hint}>
@@ -652,6 +653,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                     Offer to give {giveSide} on {giveDescriptor?.displayName || giveChainId} in exchange
                     for {getSide} on {getDescriptor?.displayName || getChainId}.
                 </p>
+                {/* Native definition list remains because the UI kit has no read-only detail-list primitive. */}
                 <dl className={styles.detailsList}>
                     <DetailRow
                         label="Give chain"
@@ -864,7 +866,8 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                         value={giveTick && giveChainId ? { chainId: giveChainId, tick: giveTick } : null}
                         onOpenPicker={() => setGivePickerOpen(true)}
                     />
-                    <label style={{ display: 'block', margin: '0.25rem 0' }}>
+                    <label className={styles.checkRow}>
+                        {/* Native checkbox remains because the UI kit has no checkbox control. */}
                         <input type="checkbox" checked={giveOwnership} onChange={(e) => setGiveOwnership(e.target.checked)} />
                         {' '}Give this token&apos;s ownership (not a balance)
                     </label>
@@ -906,7 +909,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                         chainIds={chainIds}
                         chainRegistry={chainRegistry}
                     />
-                    <Input
+                    <AddressField
                         label="Receive at"
                         value={getAddress}
                         onChange={(e) => {
@@ -921,7 +924,8 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                         value={getTick && getChainId ? { chainId: getChainId, tick: getTick } : null}
                         onOpenPicker={() => setGetPickerOpen(true)}
                     />
-                    <label style={{ display: 'block', margin: '0.25rem 0' }}>
+                    <label className={styles.checkRow}>
+                        {/* Native checkbox remains because the UI kit has no checkbox control. */}
                         <input type="checkbox" checked={getOwnership} onChange={(e) => setGetOwnership(e.target.checked)} />
                         {' '}Require the matcher to give that token&apos;s ownership
                     </label>
@@ -944,10 +948,12 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                 description="The give side stays escrowed until a match, cancellation, or expiration."
             >
                 <label style={{ display: 'block' }}>
+                    {/* Native radio remains because the UI kit has no segmented radio control. */}
                     <input type="radio" name="xswap-exp" checked={expMode === 'default'} onChange={() => setExpMode('default')} />
                     {' '}Default window
                 </label>
                 <label style={{ display: 'block' }}>
+                    {/* Native radio remains because the UI kit has no segmented radio control. */}
                     <input type="radio" name="xswap-exp" checked={expMode === 'custom'} onChange={() => setExpMode('custom')} />
                     {' '}Expire at a specific time
                 </label>
@@ -960,6 +966,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                 />
                 ) : null}
 
+                {/* Native definition list remains because the UI kit has no read-only detail-list primitive. */}
                 <dl className={styles.detailsList}>
                     <DetailRow label="Rate" value={rateText} />
                 </dl>

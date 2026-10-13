@@ -13,6 +13,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const root = process.cwd();
+const readSource = (path) => readFileSync(join(root, path), 'utf8');
 const readCss = (path) => readFileSync(join(root, path), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '');
 
@@ -40,7 +41,43 @@ const routeStyles = [
     'packages/core/src/shared/routes/IssueTokenForm.module.css',
 ];
 
+const migratedRoutes = [
+    'packages/core/src/shared/routes/TokenWizard.jsx',
+    'packages/core/src/shared/routes/CrossChainSwapForm.jsx',
+    'packages/core/src/shared/routes/CrossChainOrderForm.jsx',
+];
+
 describe('token issuance mobile layout', () => {
+    it.each(migratedRoutes)('%s uses kit controls except documented native checkbox and radio inputs', (path) => {
+        const source = readSource(path);
+        expect(source).not.toMatch(/<(?:button|select|textarea)\b/);
+
+        const nativeInputs = source.match(/<input\b[\s\S]*?\/>/g) || [];
+        for (const input of nativeInputs) {
+            expect(input).toMatch(/type="(?:checkbox|radio)"/);
+        }
+        expect(source.match(/Native (?:checkbox|radio) remains because the UI kit has no/g) || [])
+            .toHaveLength(nativeInputs.length);
+    });
+
+    it('uses shared fields, sections, and result actions for cross-chain authoring', () => {
+        const wizard = readSource(migratedRoutes[0]);
+        const swap = readSource(migratedRoutes[1]);
+        const order = readSource(migratedRoutes[2]);
+
+        expect(wizard).toMatch(/<Button[\s\S]*?variant="secondary"[\s\S]*?className={styles\.templateContent}/);
+        expect(wizard).toMatch(/<AddressField\s+label="Transfer ownership to \(optional\)"/);
+        expect(wizard).toMatch(/<FormSection\s+title="Locks \(permanent\)"/);
+        expect(wizard).toMatch(/<SectionHeader title="Token issued"/);
+        expect(wizard).toMatch(/<CopyButton value={txid} label="Copy transaction ID"/);
+
+        for (const source of [swap, order]) {
+            expect(source).toMatch(/<AddressField\s+label="Receive at"/);
+            expect(source).toMatch(/<SectionHeader title="Cross-chain (?:swap|order) broadcast"/);
+            expect(source).toMatch(/<CopyButton value={txid} label="Copy transaction ID"/);
+        }
+    });
+
     it.each(routeStyles)('%s keeps review text inside its grid track', (path) => {
         const css = readCss(path);
         expect(ruleBody(css, '.detailsList')).toMatch(

@@ -315,12 +315,10 @@ assert.ok(
 for (const cls of [
     '.progress',
     '.templateGrid',
-    '.templateCard',
-    '.templateCardDisabled',
+    '.templateContent',
     '.detailsList',
     '.warnings',
     '.actions',
-    '.successTitle',
 ]) {
     assert.ok(
         css.includes(cls),
@@ -328,6 +326,11 @@ for (const cls of [
     );
 }
 assert.ok(src.includes('<FormPage'), 'TokenWizard delegates its page card to FormPage');
+assert.ok(
+    /<Button[\s\S]*?variant="secondary"[\s\S]*?styles\.templateContent/.test(src),
+    'TokenWizard delegates template actions to Button',
+);
+assert.ok(!/<button\b/.test(src), 'TokenWizard has no route-level raw button');
 assert.ok(!/(^|\n)\.card\s*\{/.test(css), 'TokenWizard has no route-level page card');
 
 // --- 8. Uses the shared messaging + shell context ---------------------
