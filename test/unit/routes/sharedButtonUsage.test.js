@@ -275,8 +275,8 @@ describe('trade form style guide primitives', () => {
 
         expect(markets).toMatch(/<Input\b/);
         expect(markets).toMatch(/<Button\b/);
-        expect(markets.match(/<button\b/g)).toHaveLength(1);
-        expect(markets).toMatch(/<button[\s\S]*?role="tab"/);
+        expect(markets).not.toMatch(/<button\b/);
+        expect(markets).toMatch(/<Chip[\s\S]*?onPressedChange/);
 
         for (const component of ['AddressField', 'Input', 'Select', 'Textarea', 'Button', 'EmptyState', 'SectionHeader']) {
             expect(contacts).toContain(`<${component}`);
