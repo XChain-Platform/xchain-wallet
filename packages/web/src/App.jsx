@@ -2946,6 +2946,7 @@ function AppInner() {
                             }}
                         >
                             <ScanRoute
+                                embedded
                                 onBack={() => setGlobalScannerOpen(false)}
                                 onClassified={(outcome) => {
                                     setGlobalScannerOpen(false);
