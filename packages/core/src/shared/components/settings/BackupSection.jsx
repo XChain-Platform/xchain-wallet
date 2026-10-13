@@ -946,9 +946,9 @@ function DryRunChainReport({ chain }) {
                     <span style={{ color: 'var(--xc-text-muted)' }} title={chain.addressType}>{typeLabel}</span>
                 </span>
                 <span style={{ fontFamily: 'var(--xc-font-mono)' }}>
-                    <span style={{ color: 'var(--xc-accent-primary)' }}>{chain.matchedCount} ✓</span>
+                    <span style={{ color: 'var(--xc-accent-text)' }}>{chain.matchedCount} ✓</span>
                     {chain.divergentCount > 0
-                        ? <span style={{ color: 'var(--xc-danger)' }}> · {chain.divergentCount} ✗</span>
+                        ? <span style={{ color: 'var(--xc-danger-fg)' }}> · {chain.divergentCount} ✗</span>
                         : null}
                     {chain.missingCount > 0
                         ? <span style={{ color: 'var(--xc-text-muted)' }}> · {chain.missingCount} new</span>

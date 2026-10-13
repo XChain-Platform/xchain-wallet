@@ -470,7 +470,7 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, lastPrice, change24h, 
                     <span style={{
                         display: 'inline-block',
                         background: `color-mix(in srgb, var(--xc-accent-primary) ${depthPct}%, transparent)`,
-                        color: 'var(--xc-accent-primary)',
+                        color: 'var(--xc-accent-text)',
                         fontWeight: 600,
                         padding: '1px 8px',
                         borderRadius: 999,

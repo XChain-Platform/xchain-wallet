@@ -213,7 +213,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
                                 style={{
                                     marginTop: 'var(--xc-space-2)',
                                     fontSize: 'var(--xc-text-xs)',
-                                    color: 'var(--xc-danger)',
+                                    color: 'var(--xc-danger-fg)',
                                 }}
                             >
                                 {exitError}

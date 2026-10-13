@@ -244,7 +244,7 @@ export function SignMessageForm({ walletId, onBack }) {
         return (
             <Screen variant={variant} header={header}>
                 <ListPage>
-                    <div role="alert" style={{ color: 'var(--xc-danger)', padding: 'var(--xc-space-3)' }}>
+                    <div role="alert" style={{ color: 'var(--xc-danger-fg)', padding: 'var(--xc-space-3)' }}>
                         {loadError}
                     </div>
                 </ListPage>

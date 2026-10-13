@@ -23,7 +23,7 @@
 
 .error {
     font-size: var(--xc-text-sm);
-    color: var(--xc-danger);
+    color: var(--xc-danger-fg);
     background: color-mix(in srgb, var(--xc-danger) 8%, transparent);
     padding: var(--xc-space-2) var(--xc-space-3);
     border-radius: var(--xc-radius-sm);
@@ -131,7 +131,7 @@
 
 .templateSoon {
     font-size: var(--xc-text-xs);
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     font-style: italic;
 }
 

@@ -345,7 +345,7 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
                 onChange={(v) => { setDraft((d) => ({ ...d, hubUrl: v })); setEditing(true); }}
             />
             {saveError ? (
-                <div role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger, #c33)' }}>
+                <div role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger-fg, #c33)' }}>
                     {saveError}
                 </div>
             ) : null}

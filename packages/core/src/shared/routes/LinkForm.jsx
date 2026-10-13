@@ -563,7 +563,7 @@ export function LinkForm({ walletId, onBack }) {
                 label="Review link"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || hw) && submitError ? (
-                    <p role="alert" style={{ margin: '0.25rem 0 0', color: 'var(--xc-danger)', fontSize: '0.75rem' }}>
+                    <p role="alert" style={{ margin: '0.25rem 0 0', color: 'var(--xc-danger-fg)', fontSize: '0.75rem' }}>
                         {submitError}
                     </p>
                 ) : null}

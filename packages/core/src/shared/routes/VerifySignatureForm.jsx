@@ -97,7 +97,7 @@ export function VerifySignatureForm({ onBack }) {
         <>
             {error ? (
                 <div role="alert" style={{
-                    color: 'var(--xc-danger)',
+                    color: 'var(--xc-danger-fg)',
                     fontSize: 'var(--xc-text-xs)',
                 }}>
                     {error}

@@ -102,7 +102,7 @@
 
 .rowActive {
     background: var(--xc-accent-primary);
-    color: var(--xc-text-inverted);
+    color: var(--xc-on-accent);
 }
 
 .rowIcon {
@@ -111,7 +111,7 @@
     color: var(--xc-text-muted);
 }
 
-.rowActive .rowIcon { color: var(--xc-text-inverted); }
+.rowActive .rowIcon { color: var(--xc-on-accent); }
 
 .rowIcon svg { width: 18px; height: 18px; }
 
@@ -137,7 +137,7 @@
     text-overflow: ellipsis;
 }
 
-.rowActive .rowSubtitle { color: var(--xc-text-inverted); opacity: 0.85; }
+.rowActive .rowSubtitle { color: var(--xc-on-accent); opacity: 0.85; }
 
 .empty {
     padding: var(--xc-space-5) var(--xc-space-4);

@@ -170,7 +170,7 @@ export function FeesSection() {
                             </div>
                         ) : null}
                         {rateErrors[chainId] ? (
-                            <div role="alert" style={{ ...ROW_HINT, color: 'var(--xc-error)' }}>
+                            <div role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger-fg)' }}>
                                 {rateErrors[chainId]}
                             </div>
                         ) : null}

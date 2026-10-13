@@ -38,6 +38,6 @@
 .error {
     flex-basis: 100%;
     margin: 0;
-    color: var(--xc-danger, #B91C1C);
+    color: var(--xc-danger-fg, #B91C1C);
     font-size: var(--xc-text-xs);
 }

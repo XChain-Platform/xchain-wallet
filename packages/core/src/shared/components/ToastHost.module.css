@@ -70,7 +70,7 @@
     border-color: var(--xc-success, #2c7a3d);
 }
 .variant_error {
-    border-color: var(--xc-error, #b00);
+    border-color: var(--xc-danger-fg);
 }
 
 .message {
@@ -90,7 +90,7 @@
 .actionBtn {
     background: transparent;
     border: none;
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;

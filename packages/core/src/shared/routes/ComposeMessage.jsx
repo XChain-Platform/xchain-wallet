@@ -741,7 +741,7 @@ export function ComposeMessage({
                 label="Review message"
                 onSubmit={handleSubmit}
                 status={hw && submitError ? (
-                    <p role="alert" style={{ margin: '0.25rem 0 0', color: 'var(--xc-danger)', fontSize: '0.75rem' }}>
+                    <p role="alert" style={{ margin: '0.25rem 0 0', color: 'var(--xc-danger-fg)', fontSize: '0.75rem' }}>
                         {submitError}
                     </p>
                 ) : null}
@@ -975,7 +975,7 @@ export function ComposeMessage({
                             {handshakeError ? (
                                 <p
                                     role="alert"
-                                    style={{ margin: '0.5rem 0 0', color: 'var(--xc-danger)', fontSize: '0.8rem' }}
+                                    style={{ margin: '0.5rem 0 0', color: 'var(--xc-danger-fg)', fontSize: '0.8rem' }}
                                 >
                                     {handshakeError}
                                 </p>
