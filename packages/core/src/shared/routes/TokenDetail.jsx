@@ -8,8 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Button, ChainBadge, CopyButton, EmptyState, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Button, ChainBadge, CopyButton, EmptyState, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -125,6 +125,7 @@ export function TokenDetail({
             .catch(() => { /* A read failure is not proof that the token is gone. */ });
         return () => { cancelled = true; };
     }, [messaging, chainId, tick, isNative, isDemo]);
+    const metadataLoading = !isNative && !assetInfo && !tokenMissing;
 
     // A holder who is also the issuer gets a way back to the admin
     // surface: without this, ManageToken was reachable only via Menu ->
@@ -692,6 +693,7 @@ export function TokenDetail({
                                         kind={kind}
                                         isNative={isNative}
                                         assetInfo={assetInfo}
+                                        loading={metadataLoading}
                                         quantity={quantity}
                                         divisibility={divisibility}
                                         fiat={fiat}
@@ -705,6 +707,7 @@ export function TokenDetail({
                                     isNative={isNative}
                                     assetInfo={assetInfo}
                                     hasDescription={hasDescription}
+                                    loading={metadataLoading}
                                 />
                             ) : null}
 
@@ -712,6 +715,7 @@ export function TokenDetail({
                                 <MediaPanel
                                     isNative={isNative}
                                     assetInfo={assetInfo}
+                                    loading={metadataLoading}
                                 />
                             ) : null}
 
@@ -1057,6 +1061,7 @@ function DetailsPanel({
     kind,
     isNative,
     assetInfo,
+    loading,
     quantity,
     divisibility,
     fiat,
@@ -1064,7 +1069,12 @@ function DetailsPanel({
 }) {
     const [balanceHidden] = useBalancesHidden();
     return (
-        <div className={styles.infoStack}>
+        <div
+            className={styles.infoStack}
+            role="region"
+            aria-label="Token details"
+            aria-busy={loading || undefined}
+        >
             <table className={styles.metaTable}>
                 <tbody>
                     <tr className={styles.metaRow}>
@@ -1102,7 +1112,7 @@ function DetailsPanel({
                     {!isNative ? (
                         <tr className={styles.metaRow}>
                             <th scope="row">Divisibility</th>
-                            <td>{divisibility}</td>
+                            <td>{detailText(divisibility)}</td>
                         </tr>
                     ) : null}
                     <tr className={styles.metaRow}>
@@ -1119,28 +1129,36 @@ function DetailsPanel({
                             {balanceHidden
                                 ? '•••••'
                                 : fiat == null
-                                    ? 'N/A'
+                                    ? '-'
                                     : `${formatFiatNumber(fiat, fiatCurrency)} ${(fiatCurrency || 'USD').toUpperCase()}`}
                         </td>
                     </tr>
-                    {!isNative && assetInfo?.creator ? (
+                    {!isNative ? (
                         <tr className={styles.metaRow}>
                             <th scope="row">Creator</th>
                             <td>
-                                <span className={styles.copyableValue}>
-                                    <span className={styles.creatorCell} title={assetInfo.creator}>
-                                        {shorten(assetInfo.creator)}
+                                {loading ? (
+                                    <Skeleton shape="text" width="70%" height={20} />
+                                ) : assetInfo?.creator ? (
+                                    <span className={styles.copyableValue}>
+                                        <span className={styles.creatorCell} title={assetInfo.creator}>
+                                            {shorten(assetInfo.creator)}
+                                        </span>
+                                        <CopyButton value={assetInfo.creator} ariaLabel="Copy creator address" />
                                     </span>
-                                    <CopyButton value={assetInfo.creator} ariaLabel="Copy creator address" />
-                                </span>
+                                ) : 'N/A'}
                             </td>
                         </tr>
                     ) : null}
-                    {!isNative && assetInfo ? (
+                    {!isNative ? (
                         <tr className={styles.metaRow}>
                             <th scope="row">Status</th>
                             <td>
-                                {assetInfo.locked ? (
+                                {loading ? (
+                                    <Skeleton shape="text" width="40%" height={20} />
+                                ) : assetInfo?.locked == null ? (
+                                    '-'
+                                ) : assetInfo.locked ? (
                                     <span className={styles.lockedFlag}>Locked</span>
                                 ) : (
                                     <span className={styles.unlockedFlag}>Mutable</span>
@@ -1160,7 +1178,7 @@ function DetailsPanel({
 // PGP signature) so a token's published metadata renders in one place.
 // When the token has no TIS document the panel renders an empty-state
 // hint so the tab still has something to land on.
-function InfoPanel({ isNative, assetInfo, hasDescription }) {
+function InfoPanel({ isNative, assetInfo, hasDescription, loading }) {
     if (isNative) {
         return (
             <div className={styles.infoCard}>
@@ -1170,11 +1188,20 @@ function InfoPanel({ isNative, assetInfo, hasDescription }) {
             </div>
         );
     }
+    if (loading) {
+        return (
+            <div className={styles.infoCard} role="status" aria-label="Loading token information" aria-busy="true">
+                <Skeleton.List rows={3} rowHeight={48} avatar={false} />
+            </div>
+        );
+    }
     if (!assetInfo) {
         return (
-            <div className={styles.infoCard}>
-                <p className={styles.metadataHint}>Loading token information…</p>
-            </div>
+            <EmptyState
+                title="No additional information"
+                body="Information published by the token issuer appears here."
+                titleAs="p"
+            />
         );
     }
     const hasLinks = Boolean(assetInfo.website)
@@ -1253,7 +1280,7 @@ function DnsBlock({ dns }) {
 // document. Pure visual surface; everything textual lives in the
 // About tab so a user can browse the artwork without being asked to
 // also read prose.
-function MediaPanel({ isNative, assetInfo }) {
+function MediaPanel({ isNative, assetInfo, loading }) {
     // Only large + hires images count toward the Image surface (icon
     // and standard buckets render in the page header instead). We
     // derive the buckets unconditionally so the React hook below can
@@ -1297,11 +1324,20 @@ function MediaPanel({ isNative, assetInfo }) {
             </div>
         );
     }
+    if (loading) {
+        return (
+            <div className={styles.infoCard} role="status" aria-label="Loading token media" aria-busy="true">
+                <Skeleton height={144} />
+            </div>
+        );
+    }
     if (!assetInfo) {
         return (
-            <div className={styles.infoCard}>
-                <p className={styles.metadataHint}>Loading media…</p>
-            </div>
+            <EmptyState
+                title="No published media"
+                body="Images, audio, video, and files published for this token appear here."
+                titleAs="p"
+            />
         );
     }
     if (subtabs.length === 0) {
@@ -1417,6 +1453,7 @@ function MediaSubpanel({ kind, images, audio, video, files }) {
                             {f.type ? (
                                 <span className={styles.fileLinkType}>{f.type}</span>
                             ) : null}
+                            <span aria-hidden="true">↗</span>
                         </a>
                     </li>
                 ))}
@@ -1482,7 +1519,9 @@ function ContactsBlock({ contacts }) {
                             display = <a href={`tel:${c.value.replace(/[^+\d]/g, '')}`}>{c.value}</a>;
                         } else if (isUrl) {
                             display = (
-                                <a href={c.value} target="_blank" rel="noreferrer noopener">{c.value}</a>
+                                <a href={c.value} target="_blank" rel="noreferrer noopener">
+                                    {c.value} <span aria-hidden="true">↗</span>
+                                </a>
                             );
                         }
                         return (
@@ -1550,8 +1589,12 @@ function ImageHero({ img }) {
                 src={img.url}
                 alt={img.name || ''}
                 className={styles.heroImage}
+                loading="lazy"
+                decoding="async"
+                style={{ aspectRatio: '1 / 1' }}
                 onError={() => setFailedImageUrl(img.url)}
             />
+            <span aria-hidden="true">↗</span>
         </a>
     );
     if (img.name) {
@@ -1696,6 +1739,7 @@ function LinksAndFiles({ assetInfo }) {
                         >
                             <SocialIcon platform={s.platform} />
                             {socialLabel(s.platform)} · {s.host}
+                            <span aria-hidden="true">↗</span>
                         </a>
                     ))}
                 </div>
@@ -1717,10 +1761,16 @@ function formatTotalSupply(isNative, chainId, assetInfo) {
         const coin = chainId.split('-')[0];
         return NATIVE_SUPPLY_BY_COIN[coin] || 'N/A';
     }
-    if (assetInfo?.totalSupply == null) return 'N/A';
-    return assetInfo.maxSupply
-        ? `${assetInfo.totalSupply} / ${assetInfo.maxSupply}`
-        : String(assetInfo.totalSupply);
+    const totalSupply = detailText(assetInfo?.totalSupply);
+    if (totalSupply === '-') return totalSupply;
+    const maxSupply = detailText(assetInfo?.maxSupply);
+    return maxSupply === '-' ? totalSupply : `${totalSupply} / ${maxSupply}`;
+}
+
+function detailText(value) {
+    if (value == null || value === '' || (typeof value === 'number' && !Number.isFinite(value))) return '-';
+    const text = String(value).trim();
+    return !text || /^(?:undefined|null|nan)$/i.test(text) ? '-' : text;
 }
 
 // Token-gated content panel: renders the list of gated FILEs published
@@ -1828,6 +1878,7 @@ function GatedGroupCard({
     ownsToken,
     tokenLabel,
 }) {
+    const unlockErrorId = `${useId()}-unlock-error`;
     const [password, setPassword] = useState('');
     const [unlockError, setUnlockError] = useState(/** @type {string | null} */ (null));
     const [accessError, setAccessError] = useState(/** @type {string | null} */ (null));
@@ -2172,9 +2223,15 @@ function GatedGroupCard({
                         }}
                         autoComplete="current-password"
                         aria-invalid={unlockError ? true : undefined}
+                        aria-describedby={unlockError ? unlockErrorId : undefined}
                     />
                     {unlockError ? (
-                        <p role="alert" className={styles.error} style={{ marginTop: 'var(--xc-space-1)' }}>
+                        <p
+                            id={unlockErrorId}
+                            role="alert"
+                            className={styles.error}
+                            style={{ marginTop: 'var(--xc-space-1)' }}
+                        >
                             {unlockError}
                         </p>
                     ) : null}

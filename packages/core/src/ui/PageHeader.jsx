@@ -27,7 +27,7 @@ import styles from './PageHeader.module.css';
  *   Android Back key, the browser's Back button) run it. Omit to render an
  *   empty spacer.
  * @param {string} [props.backLabel]                  aria-label for the back
- *   button. Defaults to "Back".
+ *   button. Defaults to "Back to previous screen".
  * @param {boolean} [props.backDisabled]              disables the back button
  *   (e.g. while a submit is in flight). The chevron stays visible but inert.
  * @param {import('react').ReactNode} props.title     centered title text.
@@ -41,7 +41,7 @@ import styles from './PageHeader.module.css';
  */
 export function PageHeader({
     onBack,
-    backLabel = 'Back',
+    backLabel = 'Back to previous screen',
     backDisabled = false,
     title,
     titleId,
@@ -49,6 +49,9 @@ export function PageHeader({
     trailing = null,
 }) {
     useBackHandler(onBack, backDisabled, 'route');
+    const accessibleBackLabel = backLabel.trim().toLowerCase() === 'back'
+        ? 'Back to previous screen'
+        : backLabel;
     return (
         <div className={styles.header}>
             {onBack ? (
@@ -56,7 +59,7 @@ export function PageHeader({
                     type="button"
                     onClick={onBack}
                     className={styles.back}
-                    aria-label={backLabel}
+                    aria-label={accessibleBackLabel}
                     disabled={backDisabled}
                 >
                     <BackIcon />

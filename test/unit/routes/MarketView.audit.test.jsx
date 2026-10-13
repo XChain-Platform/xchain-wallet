@@ -118,12 +118,16 @@ describe('MarketView market state', () => {
         messaging.getMarket = vi.fn(() => request.promise);
         renderMarket();
 
-        expect(screen.getByRole('status')).toHaveTextContent('Loading market…');
+        expect(screen.getByRole('region', { name: 'Market summary' }))
+            .toHaveAttribute('aria-busy', 'true');
+        const loadingStatus = screen.getByRole('status', { name: 'Loading market' });
+        expect(loadingStatus.querySelector('[aria-hidden="true"]'))
+            .toHaveStyle({ height: '159px' });
 
         await act(async () => request.reject(new Error('network unavailable')));
 
         expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load this market.");
-        expect(screen.queryByText('Loading market…')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading market' })).toBeNull();
     });
 
     it('clears a picked price before reversing the market', async () => {
@@ -133,7 +137,7 @@ describe('MarketView market state', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Pick exact price' }));
         expect(screen.getByText('Prefill: 0.010000')).toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Reverse pair to BTC/XCHAIN' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Reverse pair to BTC/XCHAIN' }));
 
         expect(onSwap).toHaveBeenCalledTimes(1);
         expect(screen.getByText('Prefill: none')).toBeInTheDocument();

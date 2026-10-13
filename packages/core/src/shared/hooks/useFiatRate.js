@@ -372,6 +372,7 @@ export function priceTokenRows(rows, ratesByToken) {
             fiatRate: rate.rate,
             fiatRateSource: rate.source,
             fiatRateFetchedAt: rate.fetchedAt,
+            change24hPct: Number.isFinite(rate.change24hPct) ? rate.change24hPct : null,
         };
     });
     return changed ? out : rows;

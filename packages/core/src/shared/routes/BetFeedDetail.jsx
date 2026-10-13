@@ -475,7 +475,15 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                     <div>
                         <strong>Run by</strong>:{' '}
                         {onOpenOracle
-                            ? <a href="#" onClick={(e) => { e.preventDefault(); onOpenOracle(chainId, feed.source); }}>{feed.source}</a>
+                            ? (
+                                <button
+                                    type="button"
+                                    className={styles.inlineAction}
+                                    onClick={() => onOpenOracle(chainId, feed.source)}
+                                >
+                                    {feed.source}
+                                </button>
+                            )
                             : feed.source}
                     </div>
                 ) : null}
