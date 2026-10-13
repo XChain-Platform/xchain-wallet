@@ -1061,67 +1061,67 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                     />
                 ) : null}
                 {!isDemoActive ? (
-                    <button
+                    <Button
                         type="button"
                         className={styles.quickAction}
                         onClick={onReceive}
                         disabled={!onReceive}
+                        icon={<span className={styles.quickActionIcon}><Icon.ReceiveIcon /></span>}
                     >
-                        <span className={styles.quickActionIcon} aria-hidden="true"><Icon.ReceiveIcon /></span>
-                        <span>{t('home.receive')}</span>
-                    </button>
+                        {t('home.receive')}
+                    </Button>
                 ) : null}
                 {onExchange ? (
-                    <button
+                    <Button
                         type="button"
                         className={styles.quickAction}
                         onClick={() => runNetworkAction('Exchange', onExchange)}
                         aria-disabled={!networkActionsAvailable ? 'true' : undefined}
                         title={!networkActionsAvailable ? t('home.exchangeOffline') : undefined}
+                        icon={<span className={styles.quickActionIcon}><Icon.MarketIcon /></span>}
                     >
-                        <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MarketIcon /></span>
-                        <span>{t('home.exchange')}</span>
-                    </button>
+                        {t('home.exchange')}
+                    </Button>
                 ) : null}
                 {homeMoreActions.length === 1 ? (
-                    <button
+                    <Button
                         type="button"
                         className={styles.quickAction}
                         onClick={homeMoreActions[0].onSelect}
+                        icon={<span className={styles.quickActionIcon}>{homeMoreActions[0].icon}</span>}
                     >
-                        <span className={styles.quickActionIcon} aria-hidden="true">{homeMoreActions[0].icon}</span>
-                        <span>{homeMoreActions[0].label}</span>
-                    </button>
+                        {homeMoreActions[0].label}
+                    </Button>
                 ) : null}
                 {homeMoreActions.length > 1 ? (
                     <div className={styles.quickActionMoreWrap} ref={homeMoreWrapRef}>
-                        <button
+                        <Button
                             type="button"
                             className={styles.quickAction}
                             aria-haspopup="menu"
                             aria-expanded={homeMoreOpen}
                             onClick={() => setHomeMoreOpen((o) => !o)}
+                            icon={<span className={styles.quickActionIcon}><Icon.MoreIcon /></span>}
                         >
-                            <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MoreIcon /></span>
-                            <span>{t('history.detail.more')}</span>
-                        </button>
+                            {t('history.detail.more')}
+                        </Button>
                         {homeMoreOpen ? (
                             <div className={styles.quickActionMoreMenu} role="menu">
                                 {homeMoreActions.map((action) => (
-                                    <button
+                                    <Button
                                         key={action.id}
                                         type="button"
                                         role="menuitem"
                                         className={styles.quickActionMoreItem}
                                         onClick={() => { setHomeMoreOpen(false); action.onSelect(); }}
-                                    >
-                                        {action.icon ? (
-                                            <span className={styles.quickActionMoreItemIcon} aria-hidden="true">
+                                        icon={action.icon ? (
+                                            <span className={styles.quickActionMoreItemIcon}>
                                                 {action.icon}
                                             </span>
                                         ) : null}
-                                        <span>{action.label}</span>
-                                    </button>
+                                    >
+                                        {action.label}
+                                    </Button>
                                 ))}
                             </div>
                         ) : null}
@@ -1273,25 +1273,28 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 {pendingAirdrops.length > 0 && onResumeAirdrop ? (
                     <div role="group" aria-label={t('home.pendingAirdrops')}>
                         {pendingAirdrops.map((rec) => (
-                            <button
+                            <Button
                                 key={rec.id}
                                 type="button"
                                 className={styles.pendingAirdropCard}
                                 onClick={() => onResumeAirdrop(rec.id)}
+                                icon={null}
                             >
-                                <span className={styles.pendingAirdropTitle}>
-                                    {t('home.resumeAirdrop', {
-                                        amount: rec.amountPer,
-                                        token: rec.token,
-                                        count: rec.recipients.length,
-                                    })}
+                                <span className={styles.pendingAirdropContent}>
+                                    <span className={styles.pendingAirdropTitle}>
+                                        {t('home.resumeAirdrop', {
+                                            amount: rec.amountPer,
+                                            token: rec.token,
+                                            count: rec.recipients.length,
+                                        })}
+                                    </span>
+                                    <span className={styles.pendingAirdropHint}>
+                                        {rec.stage === 'waiting-index'
+                                            ? t('home.airdrop.waitingIndex')
+                                            : t('home.airdrop.readyToSign')}
+                                    </span>
                                 </span>
-                                <span className={styles.pendingAirdropHint}>
-                                    {rec.stage === 'waiting-index'
-                                        ? t('home.airdrop.waitingIndex')
-                                        : t('home.airdrop.readyToSign')}
-                                </span>
-                            </button>
+                            </Button>
                         ))}
                     </div>
                 ) : null}
@@ -1306,7 +1309,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                             const chainDescriptor = chainRegistry.get(rec.chainId);
                             const ticker = chainDescriptor ? tickerForCoin(chainDescriptor.coin) : '';
                             return (
-                                <button
+                                <Button
                                     key={`${rec.chainId}-${rec.orderMatchActionIndex}`}
                                     type="button"
                                     className={styles.pendingAirdropCard}
@@ -1315,17 +1318,20 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                                         address: rec.address,
                                         orderMatchActionIndex: rec.orderMatchActionIndex,
                                     })}
+                                    icon={null}
                                 >
-                                    <span className={styles.pendingAirdropTitle}>
-                                        {t('home.paymentDue', {
-                                            amount: rec.coinAmount,
-                                            order: rec.orderMatchActionIndex,
-                                        })}{ticker ? ` (${ticker})` : ''}
+                                    <span className={styles.pendingAirdropContent}>
+                                        <span className={styles.pendingAirdropTitle}>
+                                            {t('home.paymentDue', {
+                                                amount: rec.coinAmount,
+                                                order: rec.orderMatchActionIndex,
+                                            })}{ticker ? ` (${ticker})` : ''}
+                                        </span>
+                                        <span className={styles.pendingAirdropHint}>
+                                            {t('home.paymentDue.hint')}
+                                        </span>
                                     </span>
-                                    <span className={styles.pendingAirdropHint}>
-                                        {t('home.paymentDue.hint')}
-                                    </span>
-                                </button>
+                                </Button>
                             );
                         })}
                     </div>
@@ -1508,34 +1514,31 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
 }
 
 function SendQuickAction({ onSend, networkActionsAvailable, onOffline }) {
-    const content = (
-        <>
-            <span className={styles.quickActionIcon} aria-hidden="true"><Icon.SendIcon /></span>
-            <span>{t('send.title')}</span>
-        </>
-    );
+    const icon = <span className={styles.quickActionIcon}><Icon.SendIcon /></span>;
     if (!networkActionsAvailable && onSend) {
         return (
-            <button
+            <Button
                 type="button"
                 className={styles.quickAction}
                 onClick={onOffline}
                 aria-disabled="true"
                 title={t('home.sendOffline')}
+                icon={icon}
             >
-                {content}
-            </button>
+                {t('send.title')}
+            </Button>
         );
     }
     return (
-        <button
+        <Button
             type="button"
             className={styles.quickAction}
             onClick={onSend}
             disabled={!onSend}
+            icon={icon}
         >
-            {content}
-        </button>
+            {t('send.title')}
+        </Button>
     );
 }
 

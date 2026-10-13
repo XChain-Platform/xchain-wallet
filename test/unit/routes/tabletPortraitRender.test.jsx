@@ -6,7 +6,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
 import { FullLayoutWithNav } from '../../../packages/core/src/shared/components/LeftNav.jsx';
 import { Home } from '../../../packages/core/src/shared/routes/Home.jsx';
@@ -136,7 +136,7 @@ describe('primary routes at 768x1024', () => {
         expectRailNavigation(view.container);
         expectListPage(view.container);
         expect(actions.className).toMatch(/quickActionsSingle/);
-        expect(actions.querySelectorAll('button')).toHaveLength(1);
+        expect(within(actions).getAllByRole('button')).toHaveLength(1);
         expect(screen.getByRole('button', { name: 'Exchange' })).toBeInTheDocument();
     });
 

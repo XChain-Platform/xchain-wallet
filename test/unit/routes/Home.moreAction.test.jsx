@@ -20,6 +20,14 @@ const homeStyles = readFileSync(join(
     process.cwd(),
     'packages/core/src/shared/routes/Home.module.css',
 ), 'utf8');
+const homeSource = readFileSync(join(
+    process.cwd(),
+    'packages/core/src/shared/routes/Home.jsx',
+), 'utf8');
+const heroSource = readFileSync(join(
+    process.cwd(),
+    'packages/core/src/shared/components/TotalBalanceHero.jsx',
+), 'utf8');
 
 const WALLET = { id: 'wallet-a', name: 'Main Wallet' };
 const BALANCES = {
@@ -59,6 +67,13 @@ afterEach(() => {
 });
 
 describe('Home overflow quick action', () => {
+    it('builds Home actions from the shared Button component', () => {
+        expect(homeSource).toContain("import { Button, EmptyState, Icon");
+        expect(heroSource).toContain("import { Button, Icon }");
+        expect(homeSource).not.toMatch(/<button\b/);
+        expect(heroSource).not.toMatch(/<button\b/);
+    });
+
     it('opens Swap directly instead of a one-item More menu', async () => {
         const onSwap = vi.fn();
         mount({ onSwap });

@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import { computeAccessibleName } from 'dom-accessibility-api';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -20,19 +20,25 @@ const RAW_I18N_KEY = /\b(?:(?:common|home|send|receive|history|pending|scan|sett
 const BROKEN_COPY = /\b(?:undefined|null|NaN)\b|\[object Object\]|\{[a-zA-Z][^{}]*\}/;
 
 function expectEveryButtonNamed(container) {
-    const unnamed = Array.from(container.querySelectorAll('button'))
+    const unnamed = within(container).queryAllByRole('button', { hidden: true })
         .filter((button) => computeAccessibleName(button).trim() === '')
         .map((button) => button.outerHTML);
     expect(unnamed).toEqual([]);
 }
 
 function expectVisibleCopyResolved(container) {
+    const scope = within(container);
+    const placeholderFields = [
+        ...scope.queryAllByRole('textbox', { hidden: true }),
+        ...scope.queryAllByRole('searchbox', { hidden: true }),
+        ...scope.queryAllByRole('spinbutton', { hidden: true }),
+    ].filter((field) => field.hasAttribute('placeholder'));
+    const inputButtons = scope.queryAllByRole('button', { hidden: true })
+        .filter((button) => button instanceof HTMLInputElement);
     const visibleCopy = [
         container.textContent,
-        ...Array.from(container.querySelectorAll('input[placeholder], textarea[placeholder]'))
-            .map((field) => field.getAttribute('placeholder')),
-        ...Array.from(container.querySelectorAll('input[type="button"], input[type="submit"]'))
-            .map((button) => button.value),
+        ...placeholderFields.map((field) => field.getAttribute('placeholder')),
+        ...inputButtons.map((button) => button.value),
     ].join('\n');
 
     expect(visibleCopy).not.toMatch(RAW_I18N_KEY);

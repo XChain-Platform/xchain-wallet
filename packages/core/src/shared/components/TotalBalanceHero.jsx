@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Icon } from '@xchain-wallet/core/ui';
+import { Button, Icon } from '@xchain-wallet/core/ui';
 import { sumFiatValue } from './BalanceList.jsx';
 import { StalenessLabel } from './StalenessLabel.jsx';
 import { useMessaging } from '../useMessaging.js';
@@ -191,16 +191,17 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                 </div>
                 <div className={styles.actions}>
                     {typeof onRefresh === 'function' ? (
-                        <button
+                        <Button
                             type="button"
                             className={`${styles.eye} ${refreshing ? styles.refreshing : ''}`}
                             onClick={onRefresh}
                             disabled={refreshing}
                             aria-label={refreshing ? 'Refreshing portfolio' : 'Refresh portfolio'}
                             title={refreshing ? 'Refreshing portfolio' : 'Refresh portfolio'}
+                            icon={<Icon.RefreshIcon />}
                         >
-                            <Icon.RefreshIcon />
-                        </button>
+                            {null}
+                        </Button>
                     ) : null}
                     {/* Shells with no navigation surface need a
                         VISIBLE way into Settings. Only the MV3 popup passes
@@ -209,69 +210,75 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                         than variant-sniffed: the shell that lacks the route
                         is the one that knows it. */}
                     {typeof onOpenSettings === 'function' ? (
-                        <button
+                        <Button
                             type="button"
                             className={styles.eye}
                             onClick={onOpenSettings}
                             aria-label="Open settings"
                             title="Settings"
+                            icon={<Icon.GearIcon />}
                         >
-                            <Icon.GearIcon />
-                        </button>
+                            {null}
+                        </Button>
                     ) : null}
                     {typeof onCommandPalette === 'function' ? (
-                        <button
+                        <Button
                             type="button"
                             className={styles.eye}
                             onClick={onCommandPalette}
                             aria-label="Open command palette"
                             aria-keyshortcuts="Meta+K Control+K"
                             title="Search (Cmd/Ctrl+K)"
+                            icon={<Icon.SearchIcon />}
                         >
-                            <Icon.SearchIcon />
-                        </button>
+                            {null}
+                        </Button>
                     ) : null}
                     {typeof onToggleFilter === 'function' ? (
-                        <button
+                        <Button
                             type="button"
                             className={`${styles.eye} ${filterOpen ? styles.eyeActive : ''}`}
                             onClick={onToggleFilter}
                             aria-pressed={filterOpen ? 'true' : 'false'}
                             aria-label={filterOpen ? 'Hide filters' : 'Show filters'}
                             title={filterOpen ? 'Hide filters' : 'Show filters'}
+                            icon={<Icon.FilterIcon />}
                         >
-                            <Icon.FilterIcon />
-                        </button>
+                            {null}
+                        </Button>
                     ) : null}
-                    <button
+                    <Button
                         type="button"
                         className={`${styles.eye} ${chartVisible ? styles.eyeActive : ''}`}
                         onClick={toggleChartVisible}
                         aria-pressed={chartVisible ? 'true' : 'false'}
                         aria-label={chartVisible ? 'Hide chart' : 'Show chart'}
                         title={chartVisible ? 'Hide chart' : 'Show chart'}
+                        icon={<Icon.LineChartIcon />}
                     >
-                        <Icon.LineChartIcon />
-                    </button>
-                    <button
+                        {null}
+                    </Button>
+                    <Button
                         type="button"
                         className={styles.eye}
                         onClick={toggleHidden}
                         aria-label={hidden ? 'Show balance' : 'Hide balance'}
                         title={hidden ? 'Show balance' : 'Hide balance'}
+                        icon={hidden ? <Icon.EyeOffIcon /> : <Icon.EyeIcon />}
                     >
-                        {hidden ? <Icon.EyeOffIcon /> : <Icon.EyeIcon />}
-                    </button>
+                        {null}
+                    </Button>
                     {typeof onLockWallet === 'function' ? (
-                        <button
+                        <Button
                             type="button"
                             className={styles.eye}
                             onClick={onLockWallet}
                             aria-label="Lock wallet"
                             title="Lock wallet"
+                            icon={<Icon.LockIcon />}
                         >
-                            <Icon.LockIcon />
-                        </button>
+                            {null}
+                        </Button>
                     ) : null}
                 </div>
             </div>
