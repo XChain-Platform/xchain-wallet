@@ -274,6 +274,7 @@ function AppInner() {
     // Quick "Message sent" confirmation modal, shown over the view the user
     // is returned to after a compose-form send succeeds.
     const [messageSentNotice, setMessageSentNotice] = useState(false);
+    const [deepLinkNotice, setDeepLinkNotice] = useState(/** @type {string | null} */ (null));
     // §24.3 / Cluster Y FOLLOWUP 1: `<ScanRoute>` outcomes route into
     // the existing 'send' view via this prefill slot. Cleared after
     // submit / back to avoid leaking a stale prefill into a future Send.
@@ -294,6 +295,9 @@ function AppInner() {
     // backs out of Receive. Mirrors `sendPrefill` for the Send side.
     const [receivePrefill, setReceivePrefill] = useState(
         /** @type {{ chainId?: string, tick?: string, kind?: string, displayName?: string, imageUrl?: string | null } | null} */ (null),
+    );
+    const [executePrefill, setExecutePrefill] = useState(
+        /** @type {{ method?: string, paramsText?: string } | null} */ (null),
     );
     const [activeWalletId, setActiveWalletId] = useState(
         /** @type {string | null} */ (null),
@@ -641,8 +645,13 @@ function AppInner() {
         unlocked: status.state === 'unlocked',
         walletId: activeWalletId,
         apply: (route) => {
+            if (route.view === 'deep-link-error') {
+                setDeepLinkNotice(route.message);
+                return;
+            }
             if (route.sendPrefill) setSendPrefill(route.sendPrefill);
             if (route.contractRef) setContractRef(route.contractRef);
+            if (route.executePrefill) setExecutePrefill(route.executePrefill);
             setUnlockedView(route.view);
         },
     });
@@ -1822,7 +1831,9 @@ function AppInner() {
                         walletId={activeWalletId}
                         chainId={contractRef.chainId}
                         contractActionIndex={contractRef.contractActionIndex}
-                        onBack={() => setUnlockedView('contract-detail')}
+                        initialMethod={executePrefill?.method}
+                        initialParamsText={executePrefill?.paramsText}
+                        onBack={() => { setExecutePrefill(null); setUnlockedView('contract-detail'); }}
                     />
                 );
             }
@@ -2572,6 +2583,13 @@ function AppInner() {
                         <NoticeModal
                             title="Message sent"
                             onClose={() => setMessageSentNotice(false)}
+                        />
+                    ) : null}
+                    {deepLinkNotice ? (
+                        <NoticeModal
+                            title="Cannot open link"
+                            message={deepLinkNotice}
+                            onClose={() => setDeepLinkNotice(null)}
                         />
                     ) : null}
                     <CommandPalette

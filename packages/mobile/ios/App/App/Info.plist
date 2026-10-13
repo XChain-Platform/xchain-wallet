@@ -36,6 +36,9 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>xchain</string>
+				<string>bitcoin</string>
+				<string>litecoin</string>
+				<string>dogecoin</string>
 			</array>
 		</dict>
 	</array>

@@ -434,6 +434,7 @@ function AppInner() {
     // Quick "Message sent" confirmation modal, shown over the view the user
     // is returned to after a compose-form send succeeds.
     const [messageSentNotice, setMessageSentNotice] = useState(false);
+    const [deepLinkNotice, setDeepLinkNotice] = useState(/** @type {string | null} */ (null));
     const [contactScanPrefill, setContactScanPrefill] = useState(
         /** @type {{ address: string, chainId?: string } | null} */ (null),
     );
@@ -654,6 +655,11 @@ function AppInner() {
             // carry what their form needs.
             const route = deepLinkRoute(raw, APP_CHAIN_REGISTRY);
             if (!route) return;
+            if (route.view === 'deep-link-error') {
+                setDeepLinkNotice(route.message);
+                pendingUriView.current = null;
+                return;
+            }
             if (route.view === 'send') setSendPrefill(route.sendPrefill);
             if (route.view === 'contract-execute') {
                 setContractRef(route.contractRef);
@@ -662,9 +668,8 @@ function AppInner() {
             setUnlockedView(route.view);
             pendingUriView.current = route.view;
         } catch {
-            // Parser surfaces unknown via kind === 'unknown'; nothing else
-            // throws here. Defensive try/catch in case future parser
-            // changes regress.
+            // The shared router returns an error route for malformed input;
+            // this remains defensive against an unexpected parser failure.
         }
     }, []);
 
@@ -2805,6 +2810,13 @@ function AppInner() {
                         <NoticeModal
                             title="Message sent"
                             onClose={() => setMessageSentNotice(false)}
+                        />
+                    ) : null}
+                    {deepLinkNotice ? (
+                        <NoticeModal
+                            title="Cannot open link"
+                            message={deepLinkNotice}
+                            onClose={() => setDeepLinkNotice(null)}
                         />
                     ) : null}
                     {globalScannerOpen ? (
