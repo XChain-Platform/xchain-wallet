@@ -44,6 +44,7 @@
 //
 import { useEffect, useState } from 'react';
 import { registry as registryLib, schemas, flows as flowsLib } from '@xchain-wallet/core';
+import { DEFAULT_MINER_URL } from '../../../branding/branding.js';
 import { useMessaging } from '../../useMessaging.js';
 import { useSettings } from '../../hooks/useSettings.js';
 import { LogConsole } from '../LogConsole.jsx';
@@ -462,7 +463,7 @@ function RegtestFaucetRow({ developerMode, fees, onNavigateToMint }) {
     const descriptor = activeRegtests.find((d) => d.coin === 'bitcoin') || activeRegtests[0];
     const coinTicker = PROTOCOL_COIN_TICKER[descriptor.coin] || descriptor.coin;
 
-    const [minerUrl, setMinerUrl] = useState('http://localhost:3005');
+    const [minerUrl, setMinerUrl] = useState(DEFAULT_MINER_URL);
     const [amount, setAmount] = useState('10');
     const [busy, setBusy] = useState(false);
     const [statusText, setStatusText] = useState(/** @type {string | null} */ (null));

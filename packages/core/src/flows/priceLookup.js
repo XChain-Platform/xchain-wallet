@@ -31,6 +31,7 @@
 
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { defaultRegistry } from '../registry/index.js';
+import { COINGECKO_API_BASE } from '../branding/branding.js';
 import {
     divideDecimalStrings,
     multiplyDecimalStrings,
@@ -46,8 +47,6 @@ const ORACLE_STALE_MS = 30 * 60 * 1000;
 const REFRESH_TTL_MS = 5 * 60 * 1000;
 
 const FETCH_TIMEOUT_MS = 8000;
-
-const COINGECKO_BASE = 'https://api.coingecko.com/api/v3';
 
 // CoinGecko id per coin family. For the launch coins the id happens to
 // equal the family name; the map keeps that an implementation detail.
@@ -203,7 +202,7 @@ async function fetchCoingeckoRates(fetchImpl, chainCoins, fiatCurrency) {
         .map((c) => COINGECKO_ID_BY_COIN[c])
         .filter(Boolean);
     if (ids.length === 0) return {};
-    const url = `${COINGECKO_BASE}/simple/price?ids=${encodeURIComponent(ids.join(','))}&vs_currencies=${encodeURIComponent(vs)}`;
+    const url = `${COINGECKO_API_BASE}/simple/price?ids=${encodeURIComponent(ids.join(','))}&vs_currencies=${encodeURIComponent(vs)}`;
     const json = await fetchJson(fetchImpl, url);
     /** @type {Record<string, number>} */
     const out = {};
@@ -234,7 +233,7 @@ export function isFiatRateSourceUrl(url) {
         return false;
     }
     if (u.protocol !== 'https:' || u.username || u.password || u.port) return false;
-    if (u.origin + u.pathname === `${COINGECKO_BASE}/simple/price`) return true;
+    if (u.origin + u.pathname === `${COINGECKO_API_BASE}/simple/price`) return true;
     for (const coin of Object.keys(COINGECKO_ID_BY_COIN)) {
         const base = explorerUrlForCoin(coin);
         if (!base) continue;
