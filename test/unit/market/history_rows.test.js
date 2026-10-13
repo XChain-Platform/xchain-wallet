@@ -85,6 +85,17 @@ describe('market/history_rows', () => {
             .toBe(1_800_000_000);
     });
 
+    it('does not turn missing timestamps into epoch trades', () => {
+        expect(historyTimestamp({ timestamp: null, block_time: '1800000002' }))
+            .toBe(1_800_000_002);
+        expect(historyTimestamp({ timestamp: ' ', block_time: null })).toBeNull();
+        expect(historyTimestamp({ timestamp: 0 })).toBeNull();
+        expect(historyTimestamp({ timestamp: Date.now() })).toBeNull();
+        expect(historyTimestamp({ timestamp: true })).toBeNull();
+        expect(historyTimestamp({ timestamp: '0x10' })).toBeNull();
+        expect(historyTimestamp({ created_at: Symbol('invalid') })).toBeNull();
+    });
+
     it('rejects incomplete, non-positive, foreign, and undated rows', () => {
         const opts = ['TOKEN', 'BTC'];
         const invalidRows = [
