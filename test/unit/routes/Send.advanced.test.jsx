@@ -107,7 +107,7 @@ describe('Send advanced choices', () => {
     it('counts memo characters and refuses the network-invalid length before compose', async () => {
         const messaging = mount();
         await fillSend();
-        const memo = screen.getByLabelText('Memo');
+        const memo = screen.getByLabelText('Memo (optional)');
         fireEvent.change(memo, { target: { value: 'm'.repeat(MAX_MEMO_LENGTH + 1) } });
 
         expect(screen.getByText(`${MAX_MEMO_LENGTH + 1} / ${MAX_MEMO_LENGTH} characters.`, { exact: false }))
@@ -120,7 +120,7 @@ describe('Send advanced choices', () => {
     it('composes selected inputs and change, then repeats every advanced choice on review', async () => {
         const messaging = mount();
         await fillSend();
-        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'invoice 7' } });
+        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'invoice 7' } });
         await waitFor(() => expect(screen.getByLabelText('Coin control enabled')).not.toBeDisabled());
         fireEvent.click(screen.getByLabelText('Coin control enabled'));
         fireEvent.click(screen.getByLabelText(/0\.001 BTC/));

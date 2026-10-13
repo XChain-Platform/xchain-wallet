@@ -3207,6 +3207,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsse
                     <>
                         <Input
                             label={t('send.memo')}
+                            optional
                             value={memo}
                             onChange={(e) => setMemo(e.target.value)}
                             autoComplete="off"

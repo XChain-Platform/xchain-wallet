@@ -122,6 +122,18 @@ Use `<Input>` from `@xchain-wallet/core/ui` for everything single-line. Pass-thr
 
 Use `md` for normal inputs. Do not duplicate the `lg` font, padding, or height with inline styles.
 
+### Required and optional fields
+
+Mark optional fields, not required fields. Required fields use their plain label, while every optional field ends with the exact suffix `(optional)`. Do not mix this with `(required)` markers, and keep units outside the marker: `Feed fee (%) (optional)`, not `Feed fee (optional, %)`.
+
+`Input`, `Select`, and `Textarea` expose the matching requirement through `aria-required`. A plain string label is required by default. Use the `optional` prop when a field is optional, especially when its base label is translated or dynamic; the component appends the suffix and sets `aria-required="false"`. Existing literal labels ending in `(optional)` receive the same accessibility state. The native `required` prop remains available when browser constraint validation is appropriate.
+
+```jsx
+<Input label="Account name" />
+<Input label={t('send.memo')} optional />
+<Select label="Network" value={chainId}>…</Select>
+```
+
 ## Amount field (with USD / coin swap)
 
 Use `<AmountField>` from `@xchain-wallet/core/shared/components/AmountField.jsx` for a transferable coin or token amount. It composes the shared `Input`, live thousand-separator formatting, an optional inline Max button, the coin / fiat swap footer, and optional balance text. It defaults to `size="md"`; Send and other hero screens pass `size="lg"`.
