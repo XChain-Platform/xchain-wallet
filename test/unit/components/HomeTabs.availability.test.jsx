@@ -21,9 +21,13 @@ vi.mock('../../../packages/core/src/shared/components/TotalBalanceHero.jsx', () 
 vi.mock('../../../packages/core/src/shared/components/PortfolioChart.jsx', () => ({
     PortfolioChart: () => null,
 }));
-vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
-    useMessaging: () => ({ messaging: {}, shell: 'web' }),
-}));
+// One object for every render, as the real context provides: HomeTabs reads
+// settings through useSettings, whose effects key on the messaging identity,
+// so a fresh object per render re-runs them forever.
+vi.mock('../../../packages/core/src/shared/useMessaging.js', () => {
+    const value = { messaging: {}, shell: 'web' };
+    return { useMessaging: () => value };
+});
 vi.mock('../../../packages/core/src/shared/hooks/useCollectibleKeys.js', () => ({
     useCollectibleKeys: () => new Set(),
 }));
