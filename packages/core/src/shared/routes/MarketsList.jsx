@@ -278,7 +278,6 @@ export function MarketsList({
                                         color: 'var(--xc-text)',
                                         font: 'inherit',
                                         fontSize: 'var(--xc-text-sm)',
-                                        outline: 'none',
                                     }}
                                 />
                                 <div

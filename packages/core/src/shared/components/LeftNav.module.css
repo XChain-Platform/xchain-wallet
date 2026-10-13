@@ -21,6 +21,30 @@
     color: var(--xc-text);
 }
 
+/* Skip-to-content link (WCAG 2.4.1): the sidebar sits ahead of the page in tab
+   order, so a keyboard user would otherwise Tab past every destination on
+   every screen. Parked above the window until it takes focus. */
+.skipLink {
+    position: absolute;
+    inset-inline-start: var(--xc-space-3);
+    top: -40px;
+    background: var(--xc-text);
+    color: var(--xc-bg);
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border-radius: var(--xc-radius-sm);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    text-decoration: none;
+    z-index: 1000;
+}
+
+.skipLink:focus,
+.skipLink:focus-visible {
+    top: var(--xc-space-3);
+    outline: 2px solid var(--xc-accent-primary, var(--xc-text));
+    outline-offset: 2px;
+}
+
 .sidebar {
     flex: 0 0 220px;
     min-width: 0;
