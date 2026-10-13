@@ -427,7 +427,7 @@ export function TokenDetail({
     if (tokenMissing) {
         return (
             <Screen variant={variant} header={header}>
-                <ListPage><EmptyState title="Token not found" /></ListPage>
+                <ListPage><EmptyState title="Token not found" body="It may not be indexed yet, or the name may be mistyped." /></ListPage>
             </Screen>
         );
     }

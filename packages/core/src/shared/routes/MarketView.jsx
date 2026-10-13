@@ -215,7 +215,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
         </div>
     );
 
-    if (marketMissing) return wrap(<EmptyState title="Market not found" />);
+    if (marketMissing) return wrap(<EmptyState title="Market not found" body="It may have been closed or not indexed yet." />);
 
     return wrap(
         <>
