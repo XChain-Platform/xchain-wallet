@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import {
     BalanceList,
@@ -22,10 +22,12 @@ import {
 import { NetworkFilter } from '../components/NetworkFilter.jsx';
 import { bridgeDisplayTick } from './BridgeTick.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useSettings } from '../hooks/useSettings.js';
 import styles from './TokenPicker.module.css';
 
 const PLATFORM_QUERY_MIN_CHARS = 3;
 const PLATFORM_QUERY_DEBOUNCE_MS = 350;
+const LOCAL_QUERY_DEBOUNCE_MS = 200;
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -107,6 +109,9 @@ export function TokenPicker({
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isReceive = purpose === 'receive';
+    const { settings } = useSettings();
+    const allowRemoteImages = Boolean(settings)
+        && settings.privacy?.metadataFetchEnabled !== false;
 
     const [balances, setBalances] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -117,6 +122,7 @@ export function TokenPicker({
     const [hiddenTokens, setHiddenTokens] = useState(/** @type {string[]} */ ([]));
     const [pinnedTokens, setPinnedTokens] = useState(/** @type {string[]} */ ([]));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const [balanceReload, setBalanceReload] = useState(0);
 
     const [networkFilterLocal, setNetworkFilterLocal] = useState('all');
     const networkFilter = networkFilterProp ?? networkFilterLocal;
@@ -125,6 +131,7 @@ export function TokenPicker({
     const [tokenQueryLocal, setTokenQueryLocal] = useState('');
     const tokenQuery = tokenQueryProp ?? tokenQueryLocal;
     const setTokenQuery = onTokenQueryChangeProp ?? setTokenQueryLocal;
+    const [debouncedTokenQuery, setDebouncedTokenQuery] = useState(tokenQuery);
 
     const [kindFilterLocal, setKindFilterLocal] = useState(/** @type {'all' | 'coins' | 'tokens'} */ ('all'));
     const kindFilter = kindFilterProp ?? kindFilterLocal;
@@ -142,6 +149,11 @@ export function TokenPicker({
             && window.matchMedia('(pointer: coarse)').matches;
         if (!coarse) searchRef.current?.focus();
     }, []);
+
+    useEffect(() => {
+        const handle = setTimeout(() => setDebouncedTokenQuery(tokenQuery), LOCAL_QUERY_DEBOUNCE_MS);
+        return () => clearTimeout(handle);
+    }, [tokenQuery]);
 
     useEffect(() => {
         let cancelled = false;
@@ -199,7 +211,7 @@ export function TokenPicker({
             }
         })();
         return () => { cancelled = true; };
-    }, [walletId, accountId, messaging, isReceive]);
+    }, [walletId, accountId, messaging, isReceive, balanceReload]);
 
     const allRows = useMemo(() => {
         const rowsFromBalances = buildBalanceRows(balances, chainRegistry);
@@ -230,7 +242,7 @@ export function TokenPicker({
         return ordered;
     }, [allRows]);
 
-    const tokenQueryTrim = tokenQuery.trim().toLowerCase();
+    const tokenQueryTrim = debouncedTokenQuery.trim().toLowerCase();
     const rows = useMemo(() => {
         let next = isReceive
             ? allRows
@@ -276,6 +288,8 @@ export function TokenPicker({
     // with a per-component cache keyed by `${chainId}::${query}`.
     const [platformResults, setPlatformResults] = useState(/** @type {any[]} */ ([]));
     const [platformBusy, setPlatformBusy] = useState(false);
+    const [platformError, setPlatformError] = useState(/** @type {string | null} */ (null));
+    const [platformReload, setPlatformReload] = useState(0);
     const platformCacheRef = useRef(/** @type {Map<string, any>} */ (new Map()));
 
     const localKeySet = useMemo(() => {
@@ -285,7 +299,7 @@ export function TokenPicker({
     }, [allRows]);
 
     useEffect(() => {
-        const query = tokenQuery.trim().toUpperCase();
+        const query = debouncedTokenQuery.trim().toUpperCase();
         if (!isReceive
             || !query
             || query.length < PLATFORM_QUERY_MIN_CHARS
@@ -295,11 +309,13 @@ export function TokenPicker({
         ) {
             setPlatformResults([]);
             setPlatformBusy(false);
+            setPlatformError(null);
             return undefined;
         }
         let cancelled = false;
         setPlatformResults([]);
         setPlatformBusy(true);
+        setPlatformError(null);
         const handle = setTimeout(async () => {
             const chainIds = Object.keys(addressesByChain).filter((chainId) => (
                 networkFilter === 'all' || coinFromChainId(chainId) === networkFilter
@@ -310,13 +326,12 @@ export function TokenPicker({
                     const cacheKey = `${chainId}::${query}`;
                     if (cache.has(cacheKey)) return { chainId, hits: cache.get(cacheKey) };
                     try {
-                        const hits = await messaging.searchTokens({ chainId, query });
+                        const hits = await messaging.searchTokens({ chainId, query, limit: 50 });
                         const normalized = Array.isArray(hits) ? hits : [];
                         cache.set(cacheKey, normalized);
-                        return { chainId, hits: normalized };
+                        return { chainId, hits: normalized, failed: false };
                     } catch {
-                        cache.set(cacheKey, []);
-                        return { chainId, hits: [] };
+                        return { chainId, hits: [], failed: true };
                     }
                 }));
                 if (cancelled) return;
@@ -330,6 +345,9 @@ export function TokenPicker({
                     }
                 }
                 setPlatformResults(sortByChainThenAsset(found));
+                if (lookups.some(({ failed }) => failed)) {
+                    setPlatformError('Could not search all platform tokens. Try again.');
+                }
             } finally {
                 if (!cancelled) setPlatformBusy(false);
             }
@@ -338,7 +356,16 @@ export function TokenPicker({
             cancelled = true;
             clearTimeout(handle);
         };
-    }, [isReceive, tokenQuery, kindFilter, networkFilter, addressesByChain, messaging, localKeySet]);
+    }, [isReceive, debouncedTokenQuery, kindFilter, networkFilter, addressesByChain, messaging, localKeySet, platformReload]);
+
+    const resetFilters = () => {
+        setTokenQuery('');
+        setNetworkFilter('all');
+        if (!kindLocked) setKindFilter('all');
+    };
+    const filtersActive = Boolean(tokenQuery.trim())
+        || networkFilter !== 'all'
+        || (!kindLocked && kindFilter !== 'all');
 
     const handleSelect = (tok) => onSelect?.({
         chainId: tok.chainId,
@@ -347,6 +374,21 @@ export function TokenPicker({
         displayName: tok.displayName,
         imageUrl: tok.imageUrl,
     });
+    const resultsRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+    const firstResult = () => resultsRef.current?.querySelector('button[aria-label^="Select "]');
+    const handleSearchKeyDown = (event) => {
+        if (event.key !== 'ArrowDown' && event.key !== 'Enter') return;
+        const result = firstResult();
+        if (!result) return;
+        event.preventDefault();
+        if (event.key === 'Enter') result.click();
+        else result.focus();
+    };
+    const clearSearch = () => {
+        setDebouncedTokenQuery('');
+        setTokenQuery('');
+        searchRef.current?.focus();
+    };
 
     const headerTitle = title ?? (isReceive ? 'Receive' : 'Send');
     const headerIcon = titleIcon ?? (isReceive ? <Icon.ReceiveIcon /> : <Icon.SendIcon />);
@@ -404,20 +446,28 @@ export function TokenPicker({
 
     const toolbar = (
         <>
-            <input
-                ref={searchRef}
-                type="search"
-                enterKeyHint="search"
-                className={styles.search}
-                placeholder="Search"
-                value={tokenQuery}
-                onChange={(e) => setTokenQuery(e.target.value)}
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="characters"
-                spellCheck={false}
-                aria-label="Search coins or tokens"
-            />
+            <div style={{ display: 'flex', flex: '1 1 160px', minWidth: 0, gap: 'var(--xc-space-1)' }}>
+                <input
+                    ref={searchRef}
+                    type="search"
+                    enterKeyHint="search"
+                    className={styles.search}
+                    placeholder="Search"
+                    value={tokenQuery}
+                    onChange={(e) => setTokenQuery(e.target.value)}
+                    onKeyDown={handleSearchKeyDown}
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="characters"
+                    spellCheck={false}
+                    aria-label="Search coins or tokens"
+                />
+                {tokenQuery ? (
+                    <Button type="button" size="sm" variant="ghost" icon={null} onClick={clearSearch} aria-label="Clear token search">
+                        <Icon.XIcon />
+                    </Button>
+                ) : null}
+            </div>
             <div className={styles.networkFilter}>
                 <NetworkFilter
                     chainRegistry={chainRegistry}
@@ -460,7 +510,13 @@ export function TokenPicker({
     const body = (
         <ListPage toolbar={toolbar}>
             {loadError ? (
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage
+                    variant="error"
+                    className={styles.error}
+                    recovery={{ label: 'Try again', onAction: () => setBalanceReload((value) => value + 1) }}
+                >
+                    {loadError}
+                </StatusMessage>
             ) : null}
             {balances === null && !loadError ? (
                 <div role="status" aria-label="Loading balances">
@@ -468,7 +524,7 @@ export function TokenPicker({
                 </div>
             ) : null}
             {balances ? (
-                <>
+                <div ref={resultsRef}>
                     {rows.length > 0 ? (
                         <BalanceList
                             rows={rows}
@@ -476,6 +532,7 @@ export function TokenPicker({
                             getRowActionLabel={tokenSelectionLabel}
                             hiddenKeys={hiddenSet}
                             pinnedKeys={pinnedSet}
+                            allowRemoteImages={allowRemoteImages}
                             // The held-balance list is cross-chain too
                             // whenever the caller has not pinned a network, so
                             // a user holding the same tick on two chains would
@@ -485,19 +542,30 @@ export function TokenPicker({
                             // avoids.
                             showChain={networkFilter === 'all'}
                         />
-                    ) : (platformResults.length === 0 && !platformBusy) ? (
+                    ) : (platformResults.length === 0 && !platformBusy && !platformError) ? (
                         <EmptyState
                             title={emptyTitle}
                             body={emptyBody}
+                            actionLabel={filtersActive ? 'Reset filters' : undefined}
+                            onAction={filtersActive ? resetFilters : undefined}
                         />
                     ) : null}
-                    {(platformResults.length > 0 || platformBusy) ? (
+                    {(platformResults.length > 0 || platformBusy || platformError) ? (
                         <div className={styles.platformSection}>
                             <SectionHeader title="On the platform" />
                             {platformBusy && platformResults.length === 0 ? (
                                 <div role="status" aria-label="Searching platform">
                                     <Skeleton.List rows={1} />
                                 </div>
+                            ) : null}
+                            {platformError ? (
+                                <StatusMessage
+                                    variant="error"
+                                    className={styles.error}
+                                    recovery={{ label: 'Try again', onAction: () => setPlatformReload((value) => value + 1) }}
+                                >
+                                    {platformError}
+                                </StatusMessage>
                             ) : null}
                             {platformResults.length > 0 ? (
                                 <BalanceList
@@ -511,11 +579,12 @@ export function TokenPicker({
                                     // rows are identical, and picking one
                                     // re-targets the calling form's network.
                                     showChain
+                                    allowRemoteImages={allowRemoteImages}
                                 />
                             ) : null}
                         </div>
                     ) : null}
-                </>
+                </div>
             ) : null}
         </ListPage>
     );

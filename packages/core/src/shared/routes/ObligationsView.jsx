@@ -168,6 +168,7 @@ export function ObligationsView({ walletId, activeAccountId, onPay, onBack }) {
                 ) : null}
 
                 {payable.length > 0 ? (
+                    /* Safari needs an explicit list role because this class removes list styling. */
                     <ul className={styles.list} role="list" aria-label="Pending payments">
                         {payable.map((o) => (
                             <ObligationRow key={rowKey(o)} row={o} onPay={onPay} />
@@ -188,6 +189,7 @@ export function ObligationsView({ walletId, activeAccountId, onPay, onBack }) {
                                 </>
                             )}
                         />
+                        {/* Safari needs an explicit list role because this class removes list styling. */}
                         <ul className={styles.list} role="list" aria-label="Expired payments">
                             {expired.map((o) => (
                                 <ObligationRow key={rowKey(o)} row={o} onPay={onPay} />

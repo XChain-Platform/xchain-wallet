@@ -102,6 +102,26 @@ describe('QrScanner picks its camera path', () => {
         expect(scanner.start).not.toHaveBeenCalled();
     });
 
+    it('explains camera use in the Android shell before requesting permission', async () => {
+        window.Capacitor = { isNativePlatform: () => true };
+        window.BarcodeDetector = function BarcodeDetector() { this.detect = async () => []; };
+        const getUserMedia = vi.fn(() => new Promise(() => {}));
+        Object.defineProperty(navigator, 'mediaDevices', {
+            configurable: true,
+            value: { getUserMedia },
+        });
+
+        render(<QrScanner onFrame={() => {}} alt="Test scanner" />);
+
+        const rationale = screen.getByTestId('qr-scanner-camera-rationale');
+        expect(rationale.textContent).toMatch(/only to scan QR codes while this scanner is open/);
+        expect(rationale.textContent).toMatch(/paste the code instead/i);
+        expect(getUserMedia).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Continue to camera' }));
+        await waitFor(() => expect(getUserMedia).toHaveBeenCalledTimes(1));
+    });
+
     it('shows the paste advice when neither is available', () => {
         window.Capacitor = { isNativePlatform: () => true };
         render(<QrScanner onFrame={() => {}} />);

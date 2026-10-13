@@ -7,7 +7,7 @@
 // General Public License v3.0 or later; see LICENSE.md.
 
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { VerifiedBadge } from '../../../packages/core/src/ui/VerifiedBadge.jsx';
 
 describe('<VerifiedBadge>', () => {
@@ -41,28 +41,32 @@ describe('<VerifiedBadge>', () => {
         expect(screen.queryByTestId('verified-badge')).toBeNull();
     });
 
-    it('humanizes a known reason code in the tooltip (plain language, no consensus jargon)', () => {
+    it('opens the plain-language reason from a touch-accessible info tip', () => {
         render(<VerifiedBadge status="unavailable" reason="NOT_YET_CHECKPOINTED" />);
-        const el = screen.getByTestId('verified-badge');
-        expect(el.getAttribute('title')).toContain('too new to verify');
-        expect(el.getAttribute('title')).not.toMatch(/checkpoint|quorum/i);
+        const trigger = screen.getByRole('button', { name: 'Unverified details' });
+
+        expect(screen.getByTestId('verified-badge').hasAttribute('title')).toBe(false);
+        fireEvent.pointerDown(trigger, { pointerType: 'touch' });
+        fireEvent.click(trigger);
+        expect(screen.getByRole('tooltip').textContent).toContain('too new to verify');
+        expect(screen.getByRole('tooltip').textContent).not.toMatch(/checkpoint|quorum/i);
     });
 
-    it('keeps consensus jargon out of every badge tooltip', () => {
+    it('keeps consensus jargon out of every badge info tip', () => {
         for (const status of ['verified', 'pending', 'failed', 'unavailable']) {
             const { unmount } = render(<VerifiedBadge status={status} />);
-            const el = screen.getByTestId('verified-badge');
-            expect(el.getAttribute('title')).not.toMatch(/quorum|checkpoint|state commitment/i);
+            const tip = screen.getByRole('tooltip', { hidden: true });
+            expect(tip.textContent).not.toMatch(/quorum|checkpoint|state commitment/i);
             unmount();
         }
     });
 
-    it('shows NO parenthetical for an unmapped reason (raw code stays out of the tooltip)', () => {
+    it('shows NO parenthetical for an unmapped reason (raw code stays out of the info tip)', () => {
         render(<VerifiedBadge status="failed" reason="LEAF_AMOUNT_MISMATCH" />);
-        const title = screen.getByTestId('verified-badge').getAttribute('title');
+        const tip = screen.getByRole('tooltip', { hidden: true }).textContent;
         // The badge label carries the verdict; an unrecognized SCREAMING_SNAKE
-        // code (or a raw transport message) must not leak into the tooltip.
-        expect(title).not.toContain('LEAF_AMOUNT_MISMATCH');
-        expect(title).not.toContain('(');
+        // code (or a raw transport message) must not leak into the info tip.
+        expect(tip).not.toContain('LEAF_AMOUNT_MISMATCH');
+        expect(tip).not.toContain('(');
     });
 });

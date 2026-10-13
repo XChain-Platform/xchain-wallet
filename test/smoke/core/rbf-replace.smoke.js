@@ -44,13 +44,22 @@ assert.match(
     /not RBF-replaceable/,
 );
 
-const ok = isEntryReplaceable({ blockIndex: 0, action: 'SEND', txHash: 'abc' }, btc);
+const ok = isEntryReplaceable({ blockIndex: 0, action: 'SEND', txHash: 'abc', pending: { rbf: true } }, btc);
 assert.equal(ok.ok, true);
+
+assert.deepEqual(
+    isEntryReplaceable({ blockIndex: 0, action: 'SEND', txHash: 'abc', pending: { rbf: false } }, btc),
+    { ok: false, reason: 'This transaction did not allow fee replacement.' },
+);
+assert.equal(
+    isEntryReplaceable({ blockIndex: 0, action: 'SEND', txHash: 'abc', pending: { rbf: null } }, btc).ok,
+    false,
+);
 
 // All replaceable kinds
 for (const action of ['SEND', 'SWEEP', 'DISPENSE', 'DIVIDEND', 'AIRDROP', 'EXECUTE', 'DEPOSIT', 'WITHDRAW']) {
     assert.equal(
-        isEntryReplaceable({ blockIndex: 0, action, txHash: 'abc' }, btc).ok,
+        isEntryReplaceable({ blockIndex: 0, action, txHash: 'abc', pending: { rbf: true } }, btc).ok,
         true,
         `${action} is replaceable`,
     );
@@ -58,7 +67,7 @@ for (const action of ['SEND', 'SWEEP', 'DISPENSE', 'DIVIDEND', 'AIRDROP', 'EXECU
 
 // Case-insensitive action
 assert.equal(
-    isEntryReplaceable({ blockIndex: 0, action: 'send', txHash: 'abc' }, btc).ok,
+    isEntryReplaceable({ blockIndex: 0, action: 'send', txHash: 'abc', pending: { rbf: true } }, btc).ok,
     true,
 );
 
@@ -66,14 +75,17 @@ assert.equal(
 // descriptor refuses rather than assuming the chain can replace.
 assert.deepEqual(
     isEntryReplaceable(
-        { blockIndex: 0, action: 'SEND', txHash: 'abc', chainId: 'dogecoin-mainnet' },
+        { blockIndex: 0, action: 'SEND', txHash: 'abc', chainId: 'dogecoin-mainnet', pending: { rbf: true } },
         { descriptor: registry.get('dogecoin-mainnet') },
     ),
     { ok: false, reason: 'Fee bumping is not supported on Dogecoin.' },
 );
 assert.equal(isEntryReplaceable({ blockIndex: 0, action: 'SEND', txHash: 'abc' }).ok, false);
 assert.equal(
-    isEntryReplaceable({ blockIndex: 0, action: 'SEND', txHash: 'abc' }, { descriptor: registry.get('litecoin-mainnet') }).ok,
+    isEntryReplaceable(
+        { blockIndex: 0, action: 'SEND', txHash: 'abc', pending: { rbf: true } },
+        { descriptor: registry.get('litecoin-mainnet') },
+    ).ok,
     true,
 );
 
@@ -151,6 +163,7 @@ const goodResult = await replaceFromHistoryEntry({
         action: 'SEND',
         txHash: 'orig123',
         chainId: 'bitcoin-mainnet',
+        pending: { rbf: true },
     },
     strategy: 'cancel',
     walletId: 'w1',

@@ -320,7 +320,7 @@ describe('SweepForm preview and navigation states', () => {
         await waitFor(() => {
             expect(q.container.textContent).toContain('Review sweep');
         });
-        fireEvent.click(q.button('Back'));
+        fireEvent.click(q.button('Back to previous screen'));
 
         await waitFor(() => {
             expect(q.destination()?.value).toBe(OTHER);

@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ThisWalletSection } from '../../../packages/core/src/shared/components/settings/ThisWalletSection.jsx';
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
+import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 
 const { qrToDataURL } = vi.hoisted(() => ({
     qrToDataURL: vi.fn(async () => 'data:image/png;base64,cHVia2V5'),
@@ -28,7 +29,9 @@ const ACTIVE_ACCOUNT = { id: 'account-2', name: 'Savings', index: 2 };
 function mount(messaging, wallet = ACTIVE_WALLET) {
     return render(
         <MessagingContext.Provider value={{ messaging, shell: 'web' }}>
-            <ThisWalletSection activeWallet={wallet} activeAccount={ACTIVE_ACCOUNT} />
+            <ToastHost>
+                <ThisWalletSection activeWallet={wallet} activeAccount={ACTIVE_ACCOUNT} />
+            </ToastHost>
         </MessagingContext.Provider>,
     );
 }
@@ -52,6 +55,64 @@ beforeEach(() => {
 afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+});
+
+describe('ThisWalletSection password change', () => {
+    function fill({ current = 'old-password', next = 'new-password', confirm = next } = {}) {
+        fireEvent.change(screen.getByLabelText('Current wallet password'), { target: { value: current } });
+        fireEvent.change(screen.getByLabelText('New wallet password'), { target: { value: next } });
+        fireEvent.change(screen.getByLabelText('Confirm new wallet password'), { target: { value: confirm } });
+    }
+
+    it('shows strength guidance and blocks a mismatched confirmation', () => {
+        const messaging = { changePassword: vi.fn() };
+        mount(messaging);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Change…' }));
+        expect(screen.getByText(/unique, longer password is stronger/i)).toBeInTheDocument();
+        fill({ confirm: 'different-password' });
+
+        expect(screen.getByText('Passwords do not match.')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Change password' }));
+        expect(messaging.changePassword).not.toHaveBeenCalled();
+    });
+
+    it('stays busy during re-encryption and shows a success toast', async () => {
+        let finish;
+        const messaging = {
+            changePassword: vi.fn(() => new Promise((resolve) => { finish = resolve; })),
+        };
+        mount(messaging);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Change…' }));
+        fill();
+        fireEvent.click(screen.getByRole('button', { name: 'Change password' }));
+
+        expect(await screen.findByRole('button', { name: 'Changing password…' })).toBeDisabled();
+        expect(screen.getByLabelText('Current wallet password')).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+        expect(messaging.changePassword).toHaveBeenCalledWith({
+            walletId: ACTIVE_WALLET.id,
+            currentPassword: 'old-password',
+            newPassword: 'new-password',
+        });
+
+        finish({ changed: true });
+        expect(await screen.findByText('Wallet password changed.')).toBeInTheDocument();
+    });
+
+    it('reports a wrong current password and keeps the form retryable', async () => {
+        const authError = Object.assign(new Error('cipher detail'), { name: 'InvalidPasswordError' });
+        const messaging = { changePassword: vi.fn(async () => { throw authError; }) };
+        mount(messaging);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Change…' }));
+        fill({ current: 'wrong-password' });
+        fireEvent.click(screen.getByRole('button', { name: 'Change password' }));
+
+        expect(await screen.findByText('Current wallet password is incorrect.')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Change password' })).toBeEnabled();
+    });
 });
 
 describe('ThisWalletSection extended public key export', () => {

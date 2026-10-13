@@ -15,6 +15,7 @@
 // Underscore prefix marks this as internal to `components/settings/`;
 // other directories shouldn't import from here.
 
+import { useId } from 'react';
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
 
 export const ROW = {
@@ -74,16 +75,19 @@ export const INPUT = {
  * @param {boolean} [props.disabled]
  */
 export function ToggleRow({ label, hint, checked, onChange, disabled }) {
+    const autoId = useId();
+    const hintId = hint ? `${autoId}-hint` : undefined;
     return (
         <div style={ROW}>
             <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                 <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>{label}</span>
-                {hint ? <span style={ROW_HINT}>{hint}</span> : null}
+                {hint ? <span id={hintId} style={ROW_HINT}>{hint}</span> : null}
             </div>
             <input
                 type="checkbox"
                 role="switch"
                 aria-label={label}
+                aria-describedby={hintId}
                 checked={checked}
                 disabled={disabled}
                 onChange={(e) => onChange(e.target.checked)}
@@ -105,10 +109,11 @@ export function ToggleRow({ label, hint, checked, onChange, disabled }) {
  * @param {object} props
  * @param {string} props.text
  * @param {'error'|'muted'} [props.tone]
+ * @param {string} [props.id]
  */
-export function Status({ text, tone }) {
+export function Status({ text, tone, id }) {
     return (
-        <div style={{
+        <div id={id} role={tone === 'error' ? 'alert' : undefined} style={{
             padding: 'var(--xc-space-3) var(--xc-space-4)',
             background: 'var(--xc-surface-raised)',
             border: tone === 'error'

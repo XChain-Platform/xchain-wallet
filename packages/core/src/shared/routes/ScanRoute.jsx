@@ -22,15 +22,52 @@
 // vault from a casual scan. Address / BIP21 / xchain-uri / PSBT-hex
 // drive the four supported routes.
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useId, useMemo, useRef, useState } from 'react';
 import { Button, FormPage, Icon, PageHeader, QrScanner, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { detectQrContent } from '../../uri/detectQrContent.js';
 import { parseXchainUri, hardenUriIntentText, safeChainIdParam } from '../../uri/xchainUri.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
+import { isValidAddressAnyNetwork, isValidAddressForChain } from '../utils/addressValidation.js';
 import { t } from '../../i18n/index.js';
 import { defaultRegistry } from '../../registry/index.js';
 
 const DEFAULT_CHAIN_REGISTRY = defaultRegistry();
+const LOCALLY_VALIDATED_COINS = new Set(['bitcoin', 'litecoin', 'dogecoin']);
+
+function descriptorAcceptsAddress(descriptor, address) {
+    if (!LOCALLY_VALIDATED_COINS.has(descriptor.coin)) return true;
+    return isValidAddressForChain(address, descriptor.coin, descriptor.networkKind);
+}
+
+function resolvePaymentChain({ address, chainId, scheme, chainRegistry }) {
+    if (chainId !== undefined) {
+        const descriptor = chainRegistry.get(chainId);
+        if (!descriptor || (scheme && descriptor.uriScheme.toLowerCase() !== scheme)) {
+            return { valid: false };
+        }
+        return descriptorAcceptsAddress(descriptor, address)
+            ? { valid: true, chainId }
+            : { valid: false };
+    }
+
+    const eligible = chainRegistry.supportedChains().filter((descriptor) => (
+        !scheme || descriptor.uriScheme.toLowerCase() === scheme
+    ));
+    const locallyValidated = eligible.filter((descriptor) => (
+        LOCALLY_VALIDATED_COINS.has(descriptor.coin)
+    ));
+    if (locallyValidated.length === 0) {
+        return { valid: eligible.length > 0 };
+    }
+    const descriptors = locallyValidated.filter((descriptor) => (
+        descriptorAcceptsAddress(descriptor, address)
+    ));
+    if (descriptors.length === 0) return { valid: false };
+    return {
+        valid: true,
+        chainId: descriptors.length === 1 ? descriptors[0].id : undefined,
+    };
+}
 
 const PASTE_LABEL = {
     display: 'flex',
@@ -65,8 +102,10 @@ const PASTE_BOX = {
  * @param {(outcome: ScanRouteOutcome) => void} props.onClassified
  * @param {() => void} [props.onBack]
  * @param {import('../../registry/index.js').ChainRegistry} [props.chainRegistry]
+ * @param {boolean} [props.embedded]
  */
-export function ScanRoute({ onClassified, onBack, chainRegistry }) {
+export function ScanRoute({ onClassified, onBack, chainRegistry, embedded = false }) {
+    const headingId = useId();
     const [paste, setPaste] = useState('');
     const [status, setStatus] = useState(/** @type {string | null} */ (null));
     const [stopped, setStopped] = useState(false);
@@ -76,9 +115,8 @@ export function ScanRoute({ onClassified, onBack, chainRegistry }) {
         if (claimedRef.current) return;
         const text = typeof raw === 'string' ? raw.trim() : '';
         if (!text) return;
-        const detected = detectQrContent(text, {
-            chainRegistry: chainRegistry || DEFAULT_CHAIN_REGISTRY,
-        });
+        const registry = chainRegistry || DEFAULT_CHAIN_REGISTRY;
+        const detected = detectQrContent(text, { chainRegistry: registry });
 
         // xchain: URIs use the richer parser so we get the send/receive
         // intent split + chainId/tick breakdown that detectQrContent
@@ -90,8 +128,25 @@ export function ScanRoute({ onClassified, onBack, chainRegistry }) {
             // the same hardening the deep-link boot paths apply before they
             // ever become an editable form value. `address` stays raw; see
             // `hardenUriIntentText`'s own comment for why.
-            const intent = hardenUriIntentText(parseXchainUri(text, { chainRegistry }));
+            const intent = hardenUriIntentText(parseXchainUri(text, { chainRegistry: registry }));
+            if (intent.chainId && !registry.get(intent.chainId)) {
+                setStatus(t('scan.error.paymentRequest'));
+                return;
+            }
             if (intent.kind === 'send') {
+                let resolvedChainId = intent.chainId;
+                if (intent.address) {
+                    const resolved = resolvePaymentChain({
+                        address: intent.address,
+                        chainId: intent.chainId,
+                        chainRegistry: registry,
+                    });
+                    if (!resolved.valid) {
+                        setStatus(t('scan.error.paymentRequest'));
+                        return;
+                    }
+                    resolvedChainId = resolved.chainId;
+                }
                 claimedRef.current = true;
                 setStopped(true);
                 onClassified({
@@ -99,7 +154,7 @@ export function ScanRoute({ onClassified, onBack, chainRegistry }) {
                     address: intent.address,
                     amount: intent.amount,
                     tick: intent.tick,
-                    chainId: intent.chainId,
+                    chainId: resolvedChainId,
                     memo: intent.memo,
                     feePriority: intent.feePriority,
                 });
@@ -116,10 +171,26 @@ export function ScanRoute({ onClassified, onBack, chainRegistry }) {
         }
 
         if (detected.type === 'bip21') {
+            const chainParam = detected.parts.params?.chain;
+            const chainId = safeChainIdParam(chainParam);
+            if (detected.parts.required.length > 0
+                || (chainParam !== undefined && chainId === undefined)) {
+                setStatus(t('scan.error.paymentRequest'));
+                return;
+            }
+            const resolved = resolvePaymentChain({
+                address: detected.address,
+                chainId,
+                scheme: detected.scheme,
+                chainRegistry: registry,
+            });
+            if (!resolved.valid) {
+                setStatus(t('scan.error.paymentRequest'));
+                return;
+            }
             claimedRef.current = true;
             setStopped(true);
             const tickParam = detected.parts.params?.tick;
-            const chainParam = detected.parts.params?.chain;
             const memoParam = detected.parts.message ?? detected.parts.label;
             // BIP21 parses separately from parseXchainUri (bip21.js, not
             // xchainUri.js), but a scanned `bitcoin:`/`xchain:<addr>` link is
@@ -137,15 +208,27 @@ export function ScanRoute({ onClassified, onBack, chainRegistry }) {
                 tick: typeof tickParam === 'string' && tickParam.length > 0
                     ? neutralizeControlText(tickParam).toUpperCase()
                     : undefined,
-                chainId: safeChainIdParam(chainParam),
+                chainId: resolved.chainId,
             });
             return;
         }
 
         if (detected.type === 'address') {
+            if (!isValidAddressAnyNetwork(detected.address)) {
+                setStatus(t('scan.error.unknown'));
+                return;
+            }
+            const resolved = resolvePaymentChain({
+                address: detected.address,
+                chainRegistry: registry,
+            });
             claimedRef.current = true;
             setStopped(true);
-            onClassified({ kind: 'send', address: detected.address });
+            onClassified({
+                kind: 'send',
+                address: detected.address,
+                chainId: resolved.chainId,
+            });
             return;
         }
 
@@ -211,12 +294,18 @@ export function ScanRoute({ onClassified, onBack, chainRegistry }) {
             onBack={onBack}
             backLabel={t('common.back')}
             title={t('scan.title')}
+            titleId={headingId}
             titleIcon={<Icon.CameraIcon />}
         />
-    ), [onBack]);
+    ), [headingId, onBack]);
 
     return (
-        <Screen variant="small" header={header}>
+        <Screen
+            variant="small"
+            header={header}
+            bodyAs={embedded ? 'section' : 'main'}
+            bodyLabelledBy={headingId}
+        >
             <FormPage
                 label={t('scan.title')}
                 data-testid="scan-route"

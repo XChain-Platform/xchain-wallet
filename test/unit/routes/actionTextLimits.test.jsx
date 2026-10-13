@@ -124,12 +124,12 @@ describe('ComposeMessage text limit', () => {
         const submit = screen.getByRole('button', { name: 'Send message' });
 
         fireEvent.change(message, { target: { value: 'hello' } });
-        expect(screen.getByText('5 / 1,048,576 characters.')).toBeTruthy();
+        expect(screen.getByText(`5 / ${MAX_MESSAGE_LENGTH.toLocaleString()} characters.`)).toBeTruthy();
         expect(submit.disabled).toBe(false);
 
         fireEvent.change(message, { target: { value: 'm'.repeat(MAX_MESSAGE_LENGTH + 1) } });
         expect(screen.getByText(
-            'Message is 1,048,577 characters; the network accepts at most 1,048,576.',
+            `Message is ${(MAX_MESSAGE_LENGTH + 1).toLocaleString()} characters; the network accepts at most ${MAX_MESSAGE_LENGTH.toLocaleString()}.`,
         )).toBeTruthy();
         expect(submit.disabled).toBe(true);
         expect(messaging.composeMessageForConfirm).not.toHaveBeenCalled();

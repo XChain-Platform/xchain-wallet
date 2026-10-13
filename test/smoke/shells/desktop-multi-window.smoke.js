@@ -23,9 +23,8 @@
 //   4. Deep-link forwarder targets the focused window (or last-created
 //      fallback) instead of a singleton; updater events broadcast to
 //      every live window.
-//   5. `app.activate` (macOS dock click) opens a window when none exist,
-//      matching the §24.6 single/multi-window contract, and both windowless
-//      reopen paths run the idle auto-lock check before the renderer exists.
+//   5. macOS close hides the window, dock activation reveals it, and a fully
+//      closed app opens a window through the idle auto-lock gate.
 //   6. Successful session and wallet-selection changes notify sibling
 //      renderers, and normal window bounds survive close and reopen.
 
@@ -96,21 +95,30 @@ assert.ok(/onEvent:\s*\(event\)\s*=>\s*\{[^}]*?broadcastToWindows\('xchain:updat
 
 // --- 5. activate hook + first-window bootstrap --------------------------
 
-assert.ok(/buildApplicationMenu\(\);\s*\n\s*createWindow\(\);/.test(src),
+assert.ok(/buildApplicationMenu\(\);[\s\S]*?canCreateWindows = true;\s*\n\s*createWindow\(\);/.test(src),
     'whenReady installs the menu, then opens the primary window');
-assert.ok(/app\.on\('activate',\s*\(\)\s*=>\s*\{\s*if \(BrowserWindow\.getAllWindows\(\)\.length === 0\) void openWindowAfterIdleCheck\(\)/.test(src),
-    'app.activate (dock click on macOS) opens a window when none exist, through the idle-check helper');
+assert.ok(/app\.on\('activate',[\s\S]*?restoreWindowAfterIdleCheck\(\)/.test(src),
+    'app.activate reveals a hidden window or opens one through the idle-check helper');
 
 // A windowless macOS app keeps the vault open, and a new renderer re-stamps
 // the idle clock on its first message, so the check must finish first.
 const helper = src.slice(src.indexOf('function openWindowAfterIdleCheck('));
 assert.ok(helper.length > 0 && src.includes('function openWindowAfterIdleCheck('),
     'openWindowAfterIdleCheck() exists');
-assert.ok(helper.indexOf('await enforceIdleAutoLock(runtime)') !== -1
-    && helper.indexOf('await enforceIdleAutoLock(runtime)') < helper.indexOf('createWindow();\n    })()'),
-    'the windowless reopen awaits the idle check before it creates the window');
-assert.ok(/app\.on\('window-all-closed',[\s\S]*?startWindowlessIdleLock\(\);/.test(src),
-    'closing the last window on macOS starts the windowless idle check');
+const idleGate = src.slice(src.indexOf('function runWindowlessIdleGate('));
+assert.ok(idleGate.indexOf('await enforceIdleAutoLock(runtime)') !== -1
+    && idleGate.indexOf('await enforceIdleAutoLock(runtime)') < idleGate.indexOf('action();'),
+    'the shared windowless gate awaits the idle check before its window action');
+assert.ok(/function openWindowAfterIdleCheck\([\s\S]*?runWindowlessIdleGate\([\s\S]*?createWindow\(\)/.test(src),
+    'the windowless reopen creates its window through the idle gate');
+const restoreHelper = src.slice(src.indexOf('function restoreWindowAfterIdleCheck('));
+assert.ok(restoreHelper.indexOf('runWindowlessIdleGate(') !== -1
+    && restoreHelper.indexOf('runWindowlessIdleGate(') < restoreHelper.indexOf('revealWindow(target)'),
+    'restoring a hidden macOS window reveals it through the idle gate');
+assert.ok(/applyWindowCloseConvention\(win,\s*event\)[\s\S]*?startWindowlessIdleLock\(\)/.test(src),
+    'hiding the last visible macOS window starts the windowless idle check');
+assert.ok(/platform !== 'darwin' \|\| quitting[\s\S]*?event\.preventDefault\(\);[\s\S]*?win\.hide\(\)/.test(src),
+    'macOS close hides unless the application is explicitly quitting');
 assert.ok(/function createWindow\([^)]*\)\s*\{\s*\/\/[^\n]*\n\s*stopWindowlessIdleLock\(\);/.test(src),
     'a live window stops the windowless idle check');
 

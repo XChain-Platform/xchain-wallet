@@ -37,72 +37,143 @@
 export const en = {
     // --- common ---------------------------------------------------
     'common.back': 'Back',
+    'common.backToHome': 'Back to home',
     'common.cancel': 'Cancel',
-    'common.next': 'Next',
+    'common.tryAgain': 'Try again',
     'common.done': 'Done',
     'common.loading': 'Loading…',
     'common.password': 'Password',
-    'common.confirmPassword': 'Confirm password',
-
-    // --- branding -------------------------------------------------
-    'brand.productName': 'XChain Wallet',
-    'brand.tagline': 'The self-custodial wallet for the XChain Platform.',
-
-    // --- session / lock -------------------------------------------
-    'session.locked': 'Wallet locked.',
-    'session.unlock': 'Unlock',
-    'session.lock': 'Lock',
-    'session.incorrectPassword': 'Incorrect password.',
 
     // --- home -----------------------------------------------------
-    'home.noWallets': 'No wallets found.',
-    'home.loadingBalances': 'Loading balances…',
-    'home.noAddresses': 'No addresses yet. Use Receive to generate one.',
-    'home.send': 'Send',
     'home.receive': 'Receive',
-    'home.balanceUnavailable': 'Balance unavailable: {reason}',
-    'home.addressCount': '{count, plural, one {# address} other {# addresses}}',
-
-    // --- onboarding ----------------------------------------------
-    'onboarding.create': 'Create a new wallet',
-    'onboarding.import': 'I already have a wallet',
-    'create.title': 'Create a new wallet',
-    'create.passwordHelp':
-        "Your password encrypts the wallet on this device. If you forget it, use the recovery phrase on the next screen to restore access. It cannot be recovered any other way.",
-    'create.walletName': 'Wallet name',
-    'create.passwordMinHint': 'At least {min} characters.',
-    'create.passwordMismatch': 'Passwords do not match.',
-    'create.mnemonicTitle': 'Write down your recovery phrase',
-    'create.mnemonicHelp':
-        'These twelve words are the ONLY way to recover your wallet if you lose access to this device. Write them down on paper and store them somewhere safe. Never type them into a website, email, or photo.',
-    'create.mnemonicAck':
-        'I have written down my recovery phrase and stored it safely.',
-    'create.createWallet': 'Create wallet',
-    'create.failed': 'Failed to create wallet.',
-
-    'import.title': 'Import an existing wallet',
-    'import.help':
-        'Enter a BIP39 recovery phrase (12, 15, 18, 21, or 24 words) or a Counterwallet 12-word mnemonic. The format is detected automatically.',
-    'import.phrase': 'Recovery phrase',
-    'import.phraseRequired': 'Recovery phrase is required.',
-    'import.wordCount':
-        'Expected 12, 15, 18, 21, or 24 words (got {count}).',
-    'import.failed': 'Failed to import wallet.',
-    'import.submit': 'Import',
 
     // --- send -----------------------------------------------------
     'send.title': 'Send',
     'send.review': 'Review & Send',
-    'send.pickSourceFirst': 'Pick a source address first.',
-    'send.destinationRequired': 'Destination address is required.',
-    'send.tickRequired': 'Token ticker is required.',
-    'send.amountPositive': 'Amount must be a positive number.',
+    'send.backToEdit': 'Back to edit',
     'send.memoForbiddenChars': 'Memo cannot contain | or ; characters.',
     'send.passwordHint': 'Required to sign.',
-    'send.sent': 'Sent',
     'send.txid': 'Transaction ID',
-    'send.noAddresses':
-        'No addresses on any chain yet. Use Receive to generate one.',
+    'send.testGate.title': 'First send to this address. Test it first?',
+    'send.testGate.body':
+        "You're sending {amount} {ticker} to a new recipient. A small test send confirms the address works before the full amount goes out.",
+    'send.testGate.sendSmall': 'Send a small test first',
+    'send.testGate.continue': "I've verified, continue",
+    'send.signerMode':
+        'This wallet is in signer mode, so it does not send or broadcast. It signs transactions passed in from a watcher wallet. Switch the mode under Settings, Wallet Mode to send from this device.',
+    'send.networkFeeValue': 'Network fee: {amount} {ticker}',
+    'send.queued.body':
+        "Your transaction is signed but couldn't reach the network just now. It's waiting in the queued-transactions banner and won't go out until you broadcast it from there; the wallet reminds you when the network is back. Don't send this payment again.",
+    'send.success.broadcastPending': 'Broadcast pending',
+    'send.success.broadcastPendingBody':
+        'Your transaction was broadcast but is not confirmed yet. Confirmation time depends on the selected network and fee.',
+    'send.success.copyTransactionId': 'Copy transaction id',
+    'send.success.copy': 'Copy',
+    'send.success.viewOnExplorer': 'View on explorer',
+    'send.success.sendAnother': 'Send another',
+    'send.fields.amount': 'Amount',
+    'send.fields.to': 'To',
+    'send.fields.chain': 'Chain',
+    'send.fields.from': 'From',
+    'send.fields.token': 'Token',
+    'send.reviewLabel': 'Review send',
+    'send.review.createUnsigned': 'Create unsigned transaction',
+    'send.review.signOn': 'Sign on {device}',
+    'send.review.sign': 'Sign',
+    'send.review.submitAction': '{label}: send',
+    'send.memoCount': '{used} / {max} characters.',
+    'send.advanced.label': 'Advanced send choices',
+    'send.advanced.none': 'None',
+    'send.advanced.feeBumping': 'Fee bumping',
+    'send.advanced.allowed': 'Allowed',
+    'send.advanced.notAllowed': 'Not allowed',
+    'send.advanced.coinControl': 'Coin control',
+    'send.advanced.coinControlEnabled': 'Coin control enabled',
+    'send.advanced.coinControlReady': 'Choose exactly which unspent outputs fund this transaction.',
+    'send.advanced.coinControlUnavailable': 'Coin control is unavailable while spendable inputs cannot be loaded.',
+    'send.advanced.loadingInputs': 'Loading spendable inputs…',
+    'send.advanced.inputs': 'Inputs',
+    'send.advanced.noInputs': 'No spendable inputs found.',
+    'send.advanced.changeAddress': 'Change address',
+    'send.advanced.automaticChange': 'Automatic: {address}',
+    'send.advanced.changeHint': 'Any leftover native coin returns here.',
+    'send.advanced.availableCount': '{count} available',
+    'send.advanced.selectAll': 'Select all',
+    'send.advanced.clearSelection': 'Clear',
+    'send.advanced.dust': 'Dust',
+    'send.advanced.dustTitle': 'Below the {sats} sat dust threshold',
+    'send.advanced.summaryLabel': 'Coin control summary',
+    'send.advanced.selectedTotal': 'Selected total',
+    'send.advanced.approxChange': 'Approx. change',
+    'send.review.multiTokenPreview':
+        'This send moves more than one token, and the balance preview covers a single token at a time. Every recipient and amount is listed under Details below.',
+    'send.review.details': 'Details ({count})',
+    'send.device.trezor': 'Trezor',
+    'send.device.ledger': 'Ledger',
+    'send.watcherMode':
+        'Watcher mode: this wallet will build an unsigned transaction instead of signing and broadcasting. Bring the result to your Signer-mode wallet to sign.',
+    'send.watcherHardware':
+        'Source address is paired to {device} on this wallet, but watcher mode does not sign here. Pair the same {device} on your Signer-mode wallet to sign the transaction this step produces.',
+    'send.walletUnlocked': 'Wallet unlocked. No password needed.',
+    'send.useMax': 'Use Max',
+    'send.fromAddress': 'From address',
+    'send.draft.restore': 'Restore',
+    'send.draft.unfinished': 'Your unfinished Send draft was saved. Restore it to continue. Nothing was submitted.',
+    'send.draft.discardLabel': 'Discard saved draft',
+    'send.draft.discard': 'Discard',
+    'send.source.choose': 'Choose source address',
+    'send.source.hint': 'Only what this address holds can be sent.',
+    'send.source.noAddress': 'No address on this chain. Use Receive to generate one first.',
+    'send.destination.placeholder': 'Enter or paste an address or name...',
+    'send.paste.checkLabel': 'Check pasted recipient',
+    'send.paste.checkHint': 'Compare the first and last 6 characters.',
+    'send.saveRecipient.open': 'Save recipient',
+    'send.saveRecipient.nameLabel': 'Contact name',
+    'send.saveRecipient.save': 'Save contact',
+    'send.saveRecipient.saving': 'Saving…',
+    'send.saveRecipient.saved': 'Recipient saved to contacts.',
+    'send.token.hint': 'Tick. Native coin by default.',
+    'send.balance.unavailable': 'Balance unavailable ({error})',
+    'send.balance.available': '{amount} {ticker} available',
+    'send.recipient.heading': 'Recipient {number}',
+    'send.recipient.removeLabel': 'Remove recipient {number}',
+    'send.recipient.remove': 'Remove',
+    'send.recipient.addressLabel': 'Recipient {number} address',
+    'send.recipient.tokenLabel': 'Recipient {number} token',
+    'send.recipient.amountLabel': 'Recipient {number} amount',
+    'send.recipient.selectToken': 'Select token for recipient {number}',
+    'send.recipient.differentToken': 'Different token per recipient',
+    'send.recipient.differentTokenOff': 'Off: every recipient gets {token}.',
+    'send.recipient.tokenAbove': 'the token above',
+    'send.recipient.total':
+        'Total: {total} across {count} recipients, in one transaction and one network fee.',
+    'send.recipient.add': '+ Add recipient',
+    'send.recipient.maximum':
+        '{count} recipients is the most one send carries. Use an airdrop to distribute to a longer list.',
+    'send.gated.ready':
+        'This token has gated content. The unlock key will be securely attached to this send so the recipient can open it. Gated tokens can only be sent to addresses that have made at least one transaction.',
+    'send.gated.partial':
+        'This token has {total} gated content packs and this wallet holds keys for only {available} of them. The recipient will NOT be able to open the missing pack(s): {missing}… You can still send, or recover the missing keys first (unlock the content once from the address that received it).',
+    'send.gated.blocked':
+        'This token has gated content, and this wallet holds none of its unlock keys. Sending without the key attached would be rejected by the network, and the recipient could never open the content.',
+    'send.gated.softwareSigner':
+        "Key recovery needs a software signer (the scan decrypts messages with the address's private key, which this signer cannot do). If this wallet published the content, the key is already stored and this notice will not appear; otherwise recover the key from a software wallet holding this address.",
+    'send.gated.passwordLabel': 'Wallet password (scan for keys)',
+    'send.gated.passwordHint':
+        'Scans messages sent to your addresses for the unlock key and stores it in this wallet.',
+    'send.gated.recover': 'Recover keys',
+    'send.networkFee': 'Network fee',
+    'send.advanced': 'Advanced',
+    'send.memo': 'Memo',
+    'send.rbf.label': 'Allow fee bumping (replace-by-fee)',
+    'send.rbf.helpLabel': 'Replace-by-fee help',
+    'send.rbf.help':
+        'Allows this unconfirmed transaction to be replaced with one that pays a higher fee, so it can confirm sooner or be cancelled.',
+    'send.rbf.enabledHint':
+        'Allows this transaction to be sped up or cancelled with a higher fee before confirmation.',
+    'send.rbf.unsupported': 'Fee bumping is not supported on {chain}.',
+    'send.rbf.thisChain': 'this chain',
+    'send.rbf.enabledLabel': 'Replace-by-fee enabled',
     // M2.4: the success card's in-wallet link to the merged History entry.
     // The entry exists the moment this card does (built from the wallet's
     // own pending record), but the network has not necessarily reported it
@@ -112,13 +183,8 @@ export const en = {
     'send.success.viewInHistoryHint':
         'It is already in your history. It may still read "Broadcast, '
         + 'awaiting network" for up to a minute before the network reports it.',
-    'send.failed': 'Send failed.',
 
     // --- extension banner ----------------------------------------
-    'extBanner.detected': 'XChain Wallet extension detected.',
-    'extBanner.hint':
-        'Your extension wallet is ready. Click its icon in the browser toolbar to open it.',
-    'extBanner.dismiss': 'Dismiss',
 
     // --- xchain: URI intent labels (Cluster L FOLLOWUP 5) ---------
     'uri.intent.send': 'Send',
@@ -147,6 +213,8 @@ export const en = {
     'scan.error.pasteEmpty': 'Paste something first.',
     'scan.error.unknownXchainIntent':
         'xchain: URI was scanned but the intent was not recognized. Try a clearer code.',
+    'scan.error.paymentRequest':
+        'This payment request does not match a supported chain or valid address.',
     'scan.error.wif':
         'A private key (WIF) was scanned. Use Import Wallet → Import WIF to add it deliberately.',
     'scan.error.mnemonic':
@@ -161,6 +229,108 @@ export const en = {
         'A wallet pairing code was scanned. Start Pair a watcher or signer, and scan it there.',
     'scan.error.unknown':
         'This QR code contains text the wallet does not know how to use.',
+
+    // --- history --------------------------------------------------
+    'history.title': 'History',
+    'history.refresh': 'Refresh history',
+    'history.refreshing': 'Refreshing history',
+    'history.showMore': 'Show more history',
+    'history.itemsShown': '{shown} of {total} history items shown',
+    'history.showMoreGroupEntries': 'Show more group entries ({shown} of {total} shown)',
+    'history.recipients.noHoldersFound': 'No holders found',
+    'history.recipients.noRecipientsFound': 'No recipients found',
+    'history.recipients.noHoldersBody': 'Token holders appear here after balances are indexed.',
+    'history.recipients.noRecipientsBody': 'Matching recipients appear here after history is indexed.',
+    'history.loading': 'Loading history',
+    'history.empty.noAddressesTitle': 'No addresses yet',
+    'history.empty.noAddressesBody': 'Generate a receive address to populate history.',
+    'history.empty.noMatchesTitle': 'No matches for the current filters',
+    'history.empty.noMatchesBody': 'Adjust or clear the filters to see more history.',
+    'history.empty.clearFilters': 'Clear filters',
+    'history.empty.noCrossChainTitle': 'No cross-chain actions yet',
+    'history.empty.noCrossChainBody':
+        'Cross-chain transfers sent or received by this wallet appear here.',
+    'history.empty.noActivityTitle': 'No activity yet',
+    'history.empty.noActivityBody':
+        'Once you send or receive on the selected chains, the activity feed populates.',
+    'history.filters.label': 'History filters',
+    'history.filters.searchPlaceholder': 'Search action, address, token, txid, memo…',
+    'history.filters.searchLabel': 'Search history',
+    'history.filters.fromDate': 'From date',
+    'history.filters.toDate': 'To date',
+    'history.filters.additionalDetails': 'Additional details',
+    'history.filters.fiatHelp': 'Show the fiat equivalent for native-coin amounts',
+    'history.filters.fiatCurrency': 'Fiat: {currency}',
+    'history.filters.showFiat': 'Show fiat',
+    'history.filters.groupingMode': 'Grouping mode',
+    'history.filters.grouped': 'Grouped',
+    'history.filters.flat': 'Flat',
+    'history.filters.advanced': 'Advanced filters',
+    'history.filters.allActionTypes': 'All action types',
+    'history.filters.actionType': 'action type',
+    'history.filters.actionTypes': 'Action types',
+    'history.filters.allStatuses': 'All statuses',
+    'history.filters.status': 'status',
+    'history.filters.statusHeader': 'Status',
+    'history.filters.noSpecialFilters': 'No special filters',
+    'history.filters.filter': 'filter',
+    'history.filters.special': 'Special',
+    'history.filters.multisigOnly': 'Multisig only',
+    'history.filters.allChains': 'All chains',
+    'history.detail.label': 'Action detail',
+    'history.detail.options': 'Action options',
+    'history.detail.more': 'More',
+    'history.detail.noAdditionalActions': 'No additional actions',
+    'history.detail.view': 'Action detail view',
+    'history.detail.copyRawJson': 'Copy raw JSON',
+    'history.detail.peerHeading': 'Peer · {ticker} #{index}',
+    'history.detail.loadingPeer': 'Loading the linked transaction…',
+    'history.detail.peerError': "Couldn't load peer: {error}",
+    'history.detail.copyPeerRawJson': 'Copy peer raw JSON',
+    'history.detail.peerUnavailable':
+        'Peer chain not bundled in this wallet; open the block explorer for {ticker} to view {ticker} #{index}.',
+    'history.detail.openNewWindow': 'Open in new window',
+    'history.contact.saveAs': 'Save {address} as',
+    'history.contact.name': 'Contact name',
+    'history.contact.save': 'Save',
+    'history.copy.clipboard': 'Copy to clipboard',
+    'history.copy.copied': 'Copied',
+    'history.copy.copiedTitle': 'Copied!',
+    'history.copy.actionNumber': 'Copy action number',
+    'history.copy.transactionId': 'Copy transaction ID',
+    'history.copy.fromAddress': 'Copy from address',
+    'history.copy.walletAddress': 'Copy wallet address',
+    'history.recipients.showHolders': 'Show holders',
+    'history.recipients.showRecipients': 'Show recipients',
+    'history.recipients.loadingHolders': 'Loading holders…',
+    'history.recipients.loadingRecipients': 'Loading recipients…',
+    'history.recipients.saved':
+        'Saved {count, plural, one {# address} other {# addresses}} as a single contact "{name}".',
+    'history.recipients.holderCount':
+        '{count, plural, one {# holder} other {# holders}}',
+    'history.recipients.recipientCount':
+        '{count, plural, one {# recipient} other {# recipients}}',
+    'history.recipients.moreNotShown': '… and {count} more not shown',
+    'history.recipients.saveAsContact': 'Save {count} as one contact',
+    'history.row.linkedTo': 'Linked to {ticker} #{index}',
+    'history.row.block': 'Block {block}',
+    'history.row.confirmations': '{count} Confirms',
+    'history.row.receivedAt': 'Received at {label}',
+    'history.group.latest': 'Latest {when}',
+    'history.status.confirmed': 'Confirmed',
+    'history.status.failed': 'Failed',
+    'history.status.pending': 'Pending',
+    'history.export.noMatchingRows': 'No rows match the current filters.',
+    'history.export.noRows': 'There are no history rows to export.',
+    'history.export.open': 'Export…',
+    'history.export.title': 'Export history',
+    'history.export.format': 'Format',
+    'history.export.csv': 'CSV (RFC-4180; compact, opens in spreadsheets)',
+    'history.export.json': 'JSON (preserves the full row including link / raw)',
+    'history.export.columns': 'Columns',
+    'history.export.rowCount':
+        '{count, plural, one {# filtered row will be exported.} other {# filtered rows will be exported.}}',
+    'history.export.confirm': 'Export',
 
     // --- pending (unconfirmed) transactions -----------------------
     // Terminology is fixed: "pending" in every string a user reads,
@@ -246,8 +416,6 @@ export const en = {
     'pending.amount.caveat': 'Pending, not yet validated by the service: {summary}',
 
     // --- errors ---------------------------------------------------
-    'error.vaultClosed': 'Wallet is locked. Unlock to continue.',
-    'error.genericLoad': 'Failed to load.',
 };
 
 // Default export so the lazy locale loader (`import.meta.glob(..., {

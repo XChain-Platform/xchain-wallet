@@ -242,7 +242,7 @@ function RawTransactionBroadcast({ walletId, chainId, setChainId, messaging, onK
                         <CopyButton value={txid} label="Copy transaction ID" />
                         {explorerUrl ? (
                             <a href={explorerUrl} target="_blank" rel="noopener noreferrer">
-                                View on explorer
+                                View on explorer <span aria-hidden="true">↗</span>
                             </a>
                         ) : null}
                     </>
