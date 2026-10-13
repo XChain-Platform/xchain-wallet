@@ -122,7 +122,7 @@ describe('§5.5 PsbtSignForm routes through the PSBT confirm variant', () => {
         expect(calls.some((c) => c.method === 'signPsbtUserInitiated')).toBe(false);
     });
 
-    async function drive(parseResult) {
+    async function drive(parseResult, { openConfirm = true } = {}) {
         const { messaging, calls } = recordingMessaging({
             parsePsbtRequest: (args) => {
                 calls.push({ method: 'parsePsbtRequest', args });
@@ -142,12 +142,64 @@ describe('§5.5 PsbtSignForm routes through the PSBT confirm variant', () => {
             typeIn(utils, /Unsigned transaction/i, PSBT_HEX);
             await drainMicrotasks();
         });
+        if (openConfirm) {
+            await domAct(async () => {
+                fireEvent.click(findButton(utils, /Sign transaction/i));
+                await drainMicrotasks();
+            });
+        }
+        return { utils, calls };
+    }
+
+    it('shows the decoded transaction exactly before and during approval', async () => {
+        const recipientA = 'bc1qrecipientaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+        const recipientB = 'bc1qrecipientbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+        const parsed = {
+            decomposed: {
+                inputs: [
+                    { address: OWN, value: 150000 },
+                    { address: null, value: 50000 },
+                ],
+                outputs: [
+                    { address: recipientA, value: 120000 },
+                    { address: recipientB, value: 20000 },
+                    { address: OWN, value: 55000 },
+                ],
+            },
+            action: null,
+            actionDecodeReason: 'NO_OP_RETURN',
+        };
+        const { utils, calls } = await drive(parsed, { openConfirm: false });
+
+        expect(utils.getAllByTestId('psbt-sign-input').map((row) => row.textContent)).toEqual([
+            `Input${OWN}150,000 sats`,
+            'Unknown input(unknown source script)50,000 sats',
+        ]);
+        expect(utils.getAllByTestId('psbt-sign-output').map((row) => row.textContent)).toEqual([
+            `Recipient${recipientA}120,000 sats`,
+            `Recipient${recipientB}20,000 sats`,
+            `Change (back to you)${OWN}55,000 sats`,
+        ]);
+        expect(utils.container.textContent).toContain('Total in: 200,000 sats');
+        expect(utils.container.textContent).toContain('Total out: 195,000 sats');
+        expect(utils.container.textContent).toContain('Network fee: 5,000 sats');
+
         await domAct(async () => {
             fireEvent.click(findButton(utils, /Sign transaction/i));
             await drainMicrotasks();
         });
-        return { utils, calls };
-    }
+
+        expect(utils.getAllByTestId('psbt-input').map((row) => row.textContent)).toEqual([
+            `Signs with your key${OWN}150,000 sats`,
+            'Unknown input(unknown source script)50,000 sats',
+        ]);
+        expect(utils.getAllByTestId('psbt-output').map((row) => row.textContent)).toEqual([
+            `Recipient${recipientA}120,000 sats`,
+            `Recipient${recipientB}20,000 sats`,
+            `Change (back to you)${OWN}55,000 sats`,
+        ]);
+        expect(calls.some((call) => call.method === 'signPsbtUserInitiated')).toBe(false);
+    });
 
     it('opens the confirm page with the input/output enumeration instead of signing inline', async () => {
         const { utils, calls } = await drive({

@@ -131,17 +131,23 @@ export function PsbtIntentPanel({
                 {inputs.map((inp, i) => {
                     const isOwn = !!inp.address && own.has(inp.address);
                     const signs = !!inp.address && !!signingAddress && inp.address === signingAddress;
+                    const amount = formatExactSats(inp.value);
+                    const isUnknown = !inp.address || amount === null;
                     return (
-                        <div className={styles.row} key={`in-${i}`}>
+                        <div className={styles.row} key={`in-${i}`} data-testid="psbt-input">
                             <span className={signs ? styles.tag : styles.tagMuted}>
-                                {signs ? 'Signs with your key' : isOwn ? 'Your address' : 'Other signer'}
+                                {isUnknown
+                                    ? 'Unknown input'
+                                    : signs
+                                        ? 'Signs with your key'
+                                        : isOwn ? 'Your address' : 'Other signer'}
                             </span>
                             {inp.address
                                 ? <span className={styles.addr}><AddressText address={inp.address} truncate={false} /></span>
                                 : <span className={styles.dataOutput}>(unknown source script)</span>}
                             <span className={styles.value}>
-                                {formatExactSats(inp.value) !== null
-                                    ? `${formatExactSats(inp.value)} sats`
+                                {amount !== null
+                                    ? `${amount} sats`
                                     : 'amount unknown'}
                             </span>
                         </div>
@@ -155,8 +161,9 @@ export function PsbtIntentPanel({
                 </p>
                 {outputs.map((o, i) => {
                     const isChange = !!o.address && own.has(o.address);
+                    const amount = formatExactSats(o.value);
                     return (
-                        <div className={styles.row} key={`out-${i}`}>
+                        <div className={styles.row} key={`out-${i}`} data-testid="psbt-output">
                             <span className={isChange ? styles.tagMuted : styles.tag}>
                                 {isChange ? 'Change (back to you)' : 'Recipient'}
                             </span>
@@ -164,7 +171,7 @@ export function PsbtIntentPanel({
                                 ? <span className={styles.addr}><AddressText address={o.address} truncate={false} /></span>
                                 : <span className={styles.dataOutput}>(data / non-address output)</span>}
                             <span className={styles.value}>
-                                {formatExactSats(o.value ?? 0)} sats
+                                {amount !== null ? `${amount} sats` : 'amount unknown'}
                             </span>
                         </div>
                     );
@@ -173,7 +180,9 @@ export function PsbtIntentPanel({
 
             <dl className={styles.totals}>
                 <dt className={styles.totalsLabel}>Leaving this wallet</dt>
-                <dd className={styles.totalsValue}>{formatExactSats(leaving ?? 0n)} sats</dd>
+                <dd className={styles.totalsValue}>
+                    {leaving != null ? `${formatExactSats(leaving)} sats` : 'unavailable'}
+                </dd>
                 <dt className={styles.totalsLabel}>Total in</dt>
                 <dd className={styles.totalsValue}>
                     {totalIn != null ? `${formatExactSats(totalIn)} sats` : 'unavailable'}

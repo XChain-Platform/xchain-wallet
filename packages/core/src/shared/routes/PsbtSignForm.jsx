@@ -674,14 +674,14 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
     }, [decomposed, selectedAddress]);
 
     const totalIn = useMemo(() => {
-        if (!decomposed) return 0n;
-        return sumExactSats(decomposed.inputs.map((input) => input.value)) ?? 0n;
+        if (!decomposed) return null;
+        return sumExactSats(decomposed.inputs.map((input) => input.value));
     }, [decomposed]);
     const totalOut = useMemo(() => {
-        if (!decomposed) return 0n;
-        return sumExactSats(decomposed.outputs.map((output) => output.value)) ?? 0n;
+        if (!decomposed) return null;
+        return sumExactSats(decomposed.outputs.map((output) => output.value));
     }, [decomposed]);
-    const fee = exactNetworkFeeSats(decomposed) ?? 0;
+    const fee = exactNetworkFeeSats(decomposed);
 
     // Own addresses on the selected chain, used to mark outputs that pay back
     // to this wallet (change) vs external recipients. Same signal the
@@ -1024,22 +1024,55 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                 <strong>Outputs:</strong> {decomposed.outputs.length}
             </div>
             <div>
-                <strong>Total in:</strong> {formatExactSats(totalIn)} sats
+                <strong>Total in:</strong>{' '}
+                {totalIn != null ? `${formatExactSats(totalIn)} sats` : 'unavailable'}
                 {' · '}
-                <strong>Total out:</strong> {formatExactSats(totalOut)} sats
+                <strong>Total out:</strong>{' '}
+                {totalOut != null ? `${formatExactSats(totalOut)} sats` : 'unavailable'}
                 {' · '}
-                <strong>Network fee:</strong> {formatExactSats(fee)} sats
+                <strong>Network fee:</strong>{' '}
+                {fee != null ? `${formatExactSats(fee)} sats` : 'unavailable'}
             </div>
             <div>
                 <strong>Inputs this address signs:</strong> {ownedInputCount} of {decomposed.inputs.length}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 4 }}>
+                <strong>What this transaction spends:</strong>
+                {decomposed.inputs.map((input, i) => {
+                    const amount = formatExactSats(input.value);
+                    const isUnknown = !input.address || amount === null;
+                    return (
+                        <div
+                            key={`${input.prevTxHash || 'unknown'}-${input.prevTxIndex ?? i}`}
+                            data-testid="psbt-sign-input"
+                            style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}
+                        >
+                            <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                {isUnknown ? 'Unknown input' : 'Input'}
+                            </span>
+                            {input.address ? (
+                                <AddressText address={input.address} truncate={false} />
+                            ) : (
+                                <span style={{ color: 'var(--xc-text-muted)' }}>
+                                    (unknown source script)
+                                </span>
+                            )}
+                            <span style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }}>
+                                {amount !== null ? `${amount} sats` : 'amount unknown'}
+                            </span>
+                        </div>
+                    );
+                })}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 4 }}>
                 <strong>Where the coins go:</strong>
                 {decomposed.outputs.map((o, i) => {
                     const own = !!o.address && ownAddressSet.has(o.address);
+                    const amount = formatExactSats(o.value);
                     return (
                         <div
                             key={`${o.address || 'data'}-${i}`}
+                            data-testid="psbt-sign-output"
                             style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}
                         >
                             <span
@@ -1052,14 +1085,14 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                                 {own ? 'Change (back to you)' : 'Recipient'}
                             </span>
                             {o.address ? (
-                                <AddressText address={o.address} />
+                                <AddressText address={o.address} truncate={false} />
                             ) : (
                                 <span style={{ color: 'var(--xc-text-muted)' }}>
                                     (data / non-address output)
                                 </span>
                             )}
                             <span style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }}>
-                                {formatExactSats(o.value ?? 0)} sats
+                                {amount !== null ? `${amount} sats` : 'amount unknown'}
                             </span>
                         </div>
                     );
