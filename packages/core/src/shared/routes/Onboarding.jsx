@@ -346,8 +346,8 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                 type="button"
                 onClick={onBack}
                 className={pickerStyles.iconBtn}
-                aria-label="Back"
-                title="Back"
+                aria-label="Back to wallets"
+                title="Back to wallets"
             >
                 <Icon.BackIcon />
             </button>

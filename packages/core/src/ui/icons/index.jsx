@@ -16,8 +16,8 @@
 // pick up the swap transparently.
 //
 // Lucide defaults: 24×24 viewBox, 2px stroke, currentColor, round
-// caps/joins (matches STROKE_PROPS exactly). Each migrated icon below
-// passes `size={18}` to land on the wallet's 18×18 render size.
+// caps/joins (matches STROKE_PROPS exactly). The shared size variable
+// lets each control select a named icon size without overriding SVGs.
 import {
     QrCode as LucideQrCode,
     Menu as LucideMenu,
@@ -36,9 +36,11 @@ import {
     ThumbsDown as LucideThumbsDown,
 } from 'lucide-react';
 
+const ICON_SIZE = 'var(--xc-icon-size, var(--xc-icon-md))';
+
 const STROKE_PROPS = {
-    width: 18,
-    height: 18,
+    width: ICON_SIZE,
+    height: ICON_SIZE,
     viewBox: '0 0 24 24',
     fill: 'none',
     stroke: 'currentColor',
@@ -46,14 +48,17 @@ const STROKE_PROPS = {
     strokeLinecap: 'round',
     strokeLinejoin: 'round',
     'aria-hidden': 'true',
+    focusable: 'false',
+    style: { display: 'block' },
 };
 
-// Lucide wrapper. Matches the hand-rolled icons' 18×18 render + 2px
-// stroke so swapping a single icon doesn't disturb surrounding layout.
+// Lucide wrapper follows the same shared dimensions and stroke contract.
 const LUCIDE_PROPS = {
-    size: 18,
+    size: ICON_SIZE,
     strokeWidth: 2,
     'aria-hidden': 'true',
+    focusable: 'false',
+    style: { display: 'block' },
 };
 
 export function PlusIcon() {
@@ -111,6 +116,14 @@ export function BackIcon() {
     return (
         <svg {...STROKE_PROPS}>
             <path d="m15 6-6 6 6 6" />
+        </svg>
+    );
+}
+
+export function ChevronDownIcon({ style } = {}) {
+    return (
+        <svg {...STROKE_PROPS} style={{ ...STROKE_PROPS.style, ...style }}>
+            <path d="m6 9 6 6 6-6" />
         </svg>
     );
 }
@@ -505,10 +518,12 @@ export function FileTypeIcon({ type }) {
     const fontSize = label.length >= 4 ? 4 : 5;
     return (
         <svg
-            width="20"
-            height="20"
+            width={ICON_SIZE}
+            height={ICON_SIZE}
             viewBox="0 0 24 24"
             aria-hidden="true"
+            focusable="false"
+            style={{ display: 'block' }}
         >
             <path
                 d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"

@@ -92,6 +92,30 @@ describe('Android: the WebView resizes for the keyboard', () => {
         expect(style.has('--xc-viewport-h')).toBe(false);
     });
 
+    it('reveals the focused field inside the resized route scroller', () => {
+        const { win, vv, fire } = fakeWindow({ layoutH: 760, vvH: 760, platform: 'android' });
+        const scroller = {
+            overflowY: 'auto',
+            scrollTop: 0,
+            scrollHeight: 1000,
+            clientHeight: 320,
+            parentElement: win.document.body,
+            getBoundingClientRect: () => ({ top: 80, bottom: 400 }),
+        };
+        win.document.activeElement = {
+            ...textInput(),
+            parentElement: scroller,
+            getBoundingClientRect: () => ({ top: 390, bottom: 438 }),
+        };
+        win.getComputedStyle = (el) => ({ overflowY: el.overflowY || 'visible' });
+        installKeyboardViewport(win);
+        win.innerHeight = 420;
+        vv.height = 420;
+        win.document.documentElement.clientHeight = 420;
+        fire('resize');
+        expect(scroller.scrollTop).toBe(50);
+    });
+
     it('shows the tab bar again when focus leaves the field with the window still short', () => {
         const { win, vv, attrs, fire, fireDoc } = fakeWindow({ layoutH: 760, vvH: 760, platform: 'android' });
         installKeyboardViewport(win);

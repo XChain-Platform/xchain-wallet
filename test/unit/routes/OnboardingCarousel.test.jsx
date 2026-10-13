@@ -75,11 +75,17 @@ describe('OnboardingCarousel: paginated (default motion)', () => {
     it('shows the first frame and steps forward through Next to Get started', () => {
         stubMatchMedia(false);
         const onDone = vi.fn();
-        render(React.createElement(OnboardingCarousel, { frames: FRAMES, onDone }));
+        const { container } = render(React.createElement(OnboardingCarousel, { frames: FRAMES, onDone }));
+
+        function expectSinglePageHeading(name) {
+            expect(container.querySelectorAll('h1')).toHaveLength(1);
+            expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(name);
+        }
 
         // Only the first frame is exposed; inactive tab panels stay hidden.
         expect(screen.getByText('Frame A title')).toBeVisible();
         expect(screen.getByText('Frame B title')).not.toBeVisible();
+        expectSinglePageHeading('Frame A title');
 
         // Back is disabled on the first frame.
         expect(screen.getByRole('button', { name: 'Back' })).toBeDisabled();
@@ -87,8 +93,10 @@ describe('OnboardingCarousel: paginated (default motion)', () => {
         // Next -> frame B, then C.
         fireEvent.click(screen.getByRole('button', { name: 'Next' }));
         expect(screen.getByText('Frame B title')).toBeInTheDocument();
+        expectSinglePageHeading('Frame B title');
         fireEvent.click(screen.getByRole('button', { name: 'Next' }));
         expect(screen.getByText('Frame C title')).toBeInTheDocument();
+        expectSinglePageHeading('Frame C title');
 
         // Last frame: Next is replaced by Get started; there is no Next.
         expect(screen.queryByRole('button', { name: 'Next' })).not.toBeInTheDocument();
@@ -183,12 +191,15 @@ describe('OnboardingCarousel: reduced motion', () => {
     it('stacks every frame with a single Get started and no stepping controls', () => {
         stubMatchMedia(true);
         const onDone = vi.fn();
-        render(React.createElement(OnboardingCarousel, { frames: FRAMES, onDone }));
+        const { container } = render(React.createElement(OnboardingCarousel, { frames: FRAMES, onDone }));
 
         // All frames rendered at once.
         expect(screen.getByText('Frame A title')).toBeInTheDocument();
         expect(screen.getByText('Frame B title')).toBeInTheDocument();
         expect(screen.getByText('Frame C title')).toBeInTheDocument();
+        expect(container.querySelectorAll('h1')).toHaveLength(1);
+        expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Frame A title');
+        expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(2);
 
         // No stepping affordances.
         expect(screen.queryByRole('button', { name: 'Next' })).not.toBeInTheDocument();

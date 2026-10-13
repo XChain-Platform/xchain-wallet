@@ -108,6 +108,11 @@ export function listWallets() {
     return /** @type {any} */ (sendMessage('wallet.list'));
 }
 
+/** @param {{ walletId: string, currentPassword: string, newPassword: string }} opts */
+export function changePassword(opts) {
+    return /** @type {any} */ (sendMessage('wallet.changePassword', opts));
+}
+
 /**
  * Add a wallet to the already-open vault (unlocked-state add). Distinct
  * from the pre-host `wallet.import` (which only runs on a fresh install

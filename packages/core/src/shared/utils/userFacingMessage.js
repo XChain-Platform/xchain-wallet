@@ -36,6 +36,8 @@ export const DEV_PREFIX = /^[a-z][A-Za-z0-9_$]*(?:\.[A-Za-z0-9_$]+)*:\s/;
 const INTERNALS = /non-base58|cannot read propert|is not a function|is not defined|is not iterable|typeerror|referenceerror|\[object|assertion failed|unexpected token/i;
 const WIRE_TEXT = /https?:\/\/|(?:\/[A-Za-z0-9_-]+)?\/api(?:\/|\b)|\n\s*at\s+\S+|request failed with status code\s+\d{3}|^(?:rpc|http)\s+(?:error|code)\b/i;
 const SERIALIZED_DATA = /(?:^|:\s*)[{[]\s*["'][^\n]*[}\]]/;
+const ENCODER_REFUSAL_PREFIX = /^Encoder RPC error:\s*/i;
+const MAX_REFUSAL_REASON_LENGTH = 500;
 
 function errorText(err) {
     const raw = (err && typeof err === 'object')
@@ -45,12 +47,34 @@ function errorText(err) {
 }
 
 /**
+ * The node's explanation for an encoder RPC refusal, when it is safe to show.
+ * The SDK preserves this shape across every shell as name, code and message.
+ *
+ * @param {unknown} err
+ * @returns {string|null}
+ */
+export function protocolRefusalReason(err) {
+    if (!err || typeof err !== 'object') return null;
+    const e = /** @type {any} */ (err);
+    if (e.name !== 'SDKEncoderError' || e.code !== 'ENCODER_RPC_ERROR') return null;
+    const message = errorText(err);
+    if (!ENCODER_REFUSAL_PREFIX.test(message)) return null;
+    const reason = message.replace(ENCODER_REFUSAL_PREFIX, '').trim();
+    if (!reason || INTERNALS.test(reason) || WIRE_TEXT.test(reason) || SERIALIZED_DATA.test(reason)) {
+        return null;
+    }
+    return reason.slice(0, MAX_REFUSAL_REASON_LENGTH).trimEnd();
+}
+
+/**
  * @param {unknown} err       the caught error (Error, string, or anything)
  * @param {string} fallback   house-voice copy to show when the message is
  *                            developer output (or missing entirely)
  * @returns {string}
  */
 export function userFacingMessage(err, fallback = 'Something went wrong. Try again.') {
+    const refusal = protocolRefusalReason(err);
+    if (refusal) return refusal;
     const text = errorText(err);
     if (isDeveloperMessage(err)) return fallback;
     return text;
@@ -64,6 +88,7 @@ export function userFacingMessage(err, fallback = 'Something went wrong. Try aga
  * @returns {boolean}
  */
 export function isDeveloperMessage(err) {
+    if (protocolRefusalReason(err)) return false;
     const text = errorText(err);
     if (!text) return true;
     if (err && typeof err === 'object') {

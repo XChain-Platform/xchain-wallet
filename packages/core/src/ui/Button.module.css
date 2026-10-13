@@ -11,9 +11,10 @@
     transition: background var(--xc-transition), border-color var(--xc-transition);
     user-select: none;
     text-decoration: none;
-    /* Button labels never wrap. If a label is too long for its container,
-     * shorten the label - wrapping splits a single CTA into a paragraph
-     * and breaks alignment with the icon. */
+    max-width: 100%;
+    min-width: 0;
+    /* Button labels stay on one line and ellipsize inside narrow containers.
+     * Wrapping splits a single CTA into a paragraph and breaks icon alignment. */
     white-space: nowrap;
 }
 
@@ -27,6 +28,9 @@
 .label {
     display: inline-flex;
     align-items: center;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .btn:focus-visible {
@@ -40,12 +44,14 @@
 }
 
 .md {
+    --xc-icon-size: var(--xc-icon-md);
     padding: var(--xc-space-2) var(--xc-space-4);
     font-size: var(--xc-text-md);
     min-height: 36px;
 }
 
 .sm {
+    --xc-icon-size: var(--xc-icon-sm);
     padding: var(--xc-space-1) var(--xc-space-3);
     font-size: var(--xc-text-sm);
     min-height: 28px;
@@ -55,9 +61,8 @@
     width: 100%;
 }
 
-/* Default rule: every button variant has a coloured fill and #FFFFFF
- * text. Hardcoded white (rather than `--xc-text-inverted`) so dark-mode
- * inversion can't flip button text to black. */
+/* Filled variants pair each semantic background with its contrast-tested
+ * label token. Fixed slate and purple fills keep their white labels. */
 
 .primary {
     background: var(--xc-accent-primary);
@@ -99,18 +104,18 @@
 }
 
 .success {
-    background: var(--xc-success);
-    color: #FFFFFF;
+    background: var(--xc-success-fill);
+    color: var(--xc-on-success);
 }
 .success:hover:not(:disabled) {
     filter: brightness(0.92);
 }
 
 .spinner {
-    width: 12px;
-    height: 12px;
+    width: 0.75rem;
+    height: 0.75rem;
     border-radius: 50%;
-    border: 2px solid currentColor;
+    border: 0.125rem solid currentColor;
     border-top-color: transparent;
     animation: spin 0.7s linear infinite;
 }

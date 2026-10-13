@@ -31,6 +31,7 @@ import { localTimeZoneNote } from './localTimeZoneNote.js';
  * @property {string} [label]
  * @property {string} [hint]
  * @property {string} [error]
+ * @property {string | number} [errorKey]
  * @property {string} [id]
  * @property {'md' | 'lg'} [size]   field size: 'md' (36px, default) or 'lg' (48px hero field). Mirrors Button's size API.
  */
@@ -39,6 +40,7 @@ export const Input = forwardRef(function Input(
         label,
         hint,
         error,
+        errorKey,
         id,
         size = 'md',
         type = 'text',
@@ -50,6 +52,7 @@ export const Input = forwardRef(function Input(
         autoCapitalize = 'off',
         autoCorrect = 'off',
         spellCheck = false,
+        inputMode,
         enterKeyHint,
         onKeyDown,
         onKeyUp,
@@ -64,7 +67,9 @@ export const Input = forwardRef(function Input(
     const autoId = useId();
     const inputId = id || autoId;
     const [dismissedError, setDismissedError] = useState(null);
-    const visibleError = error && error !== dismissedError ? error : null;
+    const errorIsDismissed = dismissedError !== null && dismissedError.message === error
+        && Object.is(dismissedError.key, errorKey);
+    const visibleError = error && !errorIsDismissed ? error : null;
     const hintId = hint && !visibleError ? `${inputId}-hint` : undefined;
     const errorId = visibleError ? `${inputId}-error` : undefined;
     const capsLockId = `${inputId}-capslock`;
@@ -74,6 +79,13 @@ export const Input = forwardRef(function Input(
     const initialValue = value ?? defaultValue ?? '';
     const [uncontrolledLength, setUncontrolledLength] = useState(() => String(initialValue).length);
     const characterCount = value === undefined ? uncontrolledLength : String(value ?? '').length;
+    const resolvedInputMode = inputMode ?? ({
+        email: 'email',
+        number: 'decimal',
+        search: 'search',
+        tel: 'tel',
+        url: 'url',
+    }[type]);
     const resolvedEnterKeyHint = enterKeyHint || (type === 'search' ? 'search' : 'done');
 
     const isPassword = type === 'password';
@@ -123,7 +135,7 @@ export const Input = forwardRef(function Input(
     };
     const handleChange = (event) => {
         setUncontrolledLength(event.currentTarget.value.length);
-        if (error) setDismissedError(error);
+        if (error) setDismissedError({ message: error, key: errorKey });
         onChange?.(event);
     };
 
@@ -141,6 +153,7 @@ export const Input = forwardRef(function Input(
                 autoCapitalize={autoCapitalize}
                 autoCorrect={autoCorrect}
                 spellCheck={spellCheck}
+                inputMode={resolvedInputMode}
                 enterKeyHint={resolvedEnterKeyHint}
                 className={inputClass}
                 aria-invalid={visibleError ? 'true' : externalInvalid}

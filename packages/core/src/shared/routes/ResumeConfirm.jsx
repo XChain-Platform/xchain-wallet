@@ -30,7 +30,7 @@
 //      would have done it is not on screen.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Button, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useConfirmAction, isConfirmOpenPhase } from '../hooks/useConfirmAction.js';
@@ -178,7 +178,16 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
 
     if (isWatcherMode) {
         return (
-            <Screen variant={variant} title="Unsigned transaction">
+            <Screen
+                variant={variant}
+                header={(
+                    <PageHeader
+                        onBack={onCancel}
+                        backLabel="Back to home"
+                        title="Unsigned transaction"
+                    />
+                )}
+            >
                 {composed?.psbt ? (
                     <WatcherResultPanel
                         result={{
@@ -240,9 +249,17 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
     });
 
     return (
-        <Screen variant={variant}>
+        <Screen
+            variant={variant}
+            header={(
+                <PageHeader
+                    onBack={() => (result ? onDone?.(result) : onCancel?.())}
+                    backLabel="Back to home"
+                    title={title}
+                />
+            )}
+        >
             <div className={styles.page}>
-                <h1 className={styles.title}>{title}</h1>
                 {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
                 {copyError ? <StatusMessage variant="error">{copyError}</StatusMessage> : null}
                 {result ? (
@@ -326,7 +343,6 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
                         ) : null}
                     </section>
                 ) : null}
-                <Button onClick={() => (result ? onDone?.(result) : onCancel?.())}>Back</Button>
             </div>
         </Screen>
     );

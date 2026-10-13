@@ -13,11 +13,39 @@
 import { describe, it, expect } from 'vitest';
 import {
     formatWithThousands,
+    normalizeLocalizedDecimal,
     countNonCommaBefore,
+    formatDisplayAmount,
+    formatHistoryAmount,
     indexAfterNonCommaCount,
     trimAmountTail,
     tokenAmountPrecisionError,
 } from '../../../packages/core/src/shared/utils/amountFormat.js';
+
+describe('shared/amountFormat display policy', () => {
+    it.each([
+        ['whole number', '1234', '1,234'],
+        ['insignificant decimal zeros', '1234.50000000', '1,234.5'],
+        ['zero decimal tail', '0.00000000', '0'],
+        ['smallest displayed unit', '0.00000001', '0.00000001'],
+        ['positive dust', '0.000000001', '< 0.00000001'],
+        ['negative dust', '-0.000000001', '> -0.00000001'],
+        ['precision beyond a float', '0.000000010000000001', '0.000000010000000001'],
+        ['large exact decimal', '9007199254740993.0100', '9,007,199,254,740,993.01'],
+    ])('formats %s consistently', (_label, value, expected) => {
+        expect(formatDisplayAmount(value, 'en-US')).toBe(expected);
+    });
+
+    it.each([
+        ['incoming', '1.25000000', 'in', '+1.25'],
+        ['outgoing', '1.25000000', 'out', '-1.25'],
+        ['unknown direction', '1.25000000', null, '1.25'],
+        ['already negative', '-1.25000000', 'in', '-1.25'],
+        ['zero', '0.00000000', 'out', '0'],
+    ])('applies the %s History sign once', (_label, value, direction, expected) => {
+        expect(formatHistoryAmount(value, direction, 'en-US')).toBe(expected);
+    });
+});
 
 // (a): the indexer sums in DECIMAL(65,18), so an aggregate reaches the
 // wallet with an 18-place tail whatever the token's own decimals are.
@@ -75,6 +103,39 @@ describe('shared/amountFormat formatWithThousands', () => {
 
     it('accepts a numeric argument by stringifying it', () => {
         expect(formatWithThousands(12345)).toBe('12,345');
+    });
+
+    it.each([
+        ['de-DE', '1234.56', '1.234,56'],
+        ['fr-FR', '1234.56', '1\u202f234,56'],
+        ['de-DE', '1234.', '1.234,'],
+        ['fr-FR', '.5', ',5'],
+    ])('formats canonical %s input without changing precision', (locale, input, expected) => {
+        expect(formatWithThousands(input, locale)).toBe(expected);
+    });
+});
+
+describe('shared/amountFormat normalizeLocalizedDecimal', () => {
+    it.each([
+        ['de-DE', '1.234,56', '1234.56'],
+        ['de-DE', '1,234.56', '1234.56'],
+        ['fr-FR', '1\u202f234,56', '1234.56'],
+        ['fr-FR', '1,234.56', '1234.56'],
+        ['de-DE', '1.234', '1234'],
+        ['de-DE', '1,25', '1.25'],
+        ['en-US', '1,234', '1234'],
+        ['en-US', '1,25', '1.25'],
+    ])('normalizes %s input %s to the wire decimal', (locale, input, expected) => {
+        expect(normalizeLocalizedDecimal(input, locale)).toBe(expected);
+    });
+
+    it.each([
+        ['de-DE', '12.34,56'],
+        ['fr-FR', '1,234,56'],
+        ['en-US', '1.2.3'],
+        ['de-DE', '12 EUR'],
+    ])('rejects malformed %s input %s instead of guessing', (locale, input) => {
+        expect(normalizeLocalizedDecimal(input, locale)).toBeNull();
     });
 });
 

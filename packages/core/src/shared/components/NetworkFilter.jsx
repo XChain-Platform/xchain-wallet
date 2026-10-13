@@ -127,6 +127,7 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange }) 
                                 spellCheck={false}
                                 className={styles.search}
                                 placeholder="Search networks…"
+                                aria-label="Search networks"
                                 value={query}
                                 onChange={(e) => setQuery(e.target.value)}
                                 autoFocus

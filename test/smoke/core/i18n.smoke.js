@@ -11,8 +11,7 @@
 // Smoke test for Batch 5 piece 17 (i18n scaffold).
 //
 // Covers:
-//   1. Dictionary surface: a hand-picked set of keys the extension and
-//      web shells will need exists in en.js.
+//   1. Dictionary surface: representative package keys exist in en.js.
 //   2. t() lookup, interpolation, missing-key fallback.
 //   3. format() pure substitution.
 //   4. setLocale + onLocaleChange + registerLocale round-trip.
@@ -44,34 +43,13 @@ const wsRoot = join(here, '..', '..', '..');
 
 // --- 1. Dictionary surface -------------------------------------------
 
-assert.ok(
-    typeof en['brand.productName'] === 'string',
-    'brand.productName defined',
-);
-assert.ok(typeof en['create.mnemonicTitle'] === 'string');
-assert.ok(typeof en['send.memoForbiddenChars'] === 'string');
-
-// Keys the extension + web shells will need. The shells do not call
-// t() yet, but the dictionary must cover the copy those screens render
-// so adoption is a drop-in. Keys already reached through t() are pinned
-// from source by section 6, not by this list.
+// Pin each active namespace independently of the source-derived sweep below.
 const requiredKeys = [
     'common.back',
-    'common.password',
-    'session.lock',
-    'session.unlock',
-    'session.incorrectPassword',
-    'home.send',
-    'home.receive',
-    'onboarding.create',
-    'onboarding.import',
-    'create.mnemonicTitle',
-    'create.mnemonicAck',
-    'import.wordCount',
     'send.memoForbiddenChars',
-    'send.amountPositive',
-    'send.failed',
-    'extBanner.detected',
+    'uri.intent.send',
+    'scan.title',
+    'pending.row.seen',
 ];
 for (const key of requiredKeys) {
     assert.ok(key in en, `en dictionary has "${key}"`);
@@ -100,20 +78,16 @@ for (const [val, keys] of Object.entries(counts)) {
 
 // --- 2. t() lookup + interpolation -----------------------------------
 
-assert.equal(t('brand.productName'), 'XChain Wallet');
+assert.equal(t('scan.title'), 'Scan');
 assert.equal(
-    t('create.passwordMinHint', { min: 8 }),
-    'At least 8 characters.',
-);
-assert.equal(
-    t('home.balanceUnavailable', { reason: 'SDK not wired' }),
-    'Balance unavailable: SDK not wired',
+    t('pending.detail.firstSeen', { when: 'just now' }),
+    'First seen by the network just now',
 );
 
 // Missing vars render literally so translators can spot them.
 assert.equal(
-    t('home.balanceUnavailable'),
-    'Balance unavailable: {reason}',
+    t('pending.detail.firstSeen'),
+    'First seen by the network {when}',
 );
 
 // Unknown keys return the key (so devs see missing-string tokens).
@@ -138,18 +112,18 @@ let changes = 0;
 const unsub = onLocaleChange(() => { changes += 1; });
 
 // Register a pretend locale with a single override.
-registerLocale('xx', { 'brand.productName': 'XChain Cüzdan' });
+registerLocale('xx', { 'common.back': 'Retour' });
 assert.deepEqual(availableLocales(), ['en', 'xx']);
 
 setLocale('xx');
-assert.equal(t('brand.productName'), 'XChain Cüzdan');
+assert.equal(t('common.back'), 'Retour');
 assert.equal(changes, 1, 'onLocaleChange fired once');
 
 // Missing key in xx falls back to en.
-assert.equal(t('session.unlock'), 'Unlock');
+assert.equal(t('scan.title'), 'Scan');
 
 setLocale('en');
-assert.equal(t('brand.productName'), 'XChain Wallet');
+assert.equal(t('common.back'), 'Back');
 assert.equal(changes, 2);
 
 unsub();
@@ -182,7 +156,6 @@ assert.ok(
 // from the source, so a new t() call is covered the day it lands.
 
 const KEY_SHAPE = /^[a-z][A-Za-z0-9]*(?:\.[A-Za-z0-9]+)+$/;
-const NAMESPACES = new Set(Object.keys(en).map((k) => k.split('.')[0]));
 const PAIRS = { '(': ')', '[': ']', '{': '}' };
 
 // Identifier vars cannot be read from source; these files pin theirs by
@@ -200,9 +173,9 @@ function sourceFiles(dir, out = []) {
     return out;
 }
 
-/** True when `s` is dotted like a key and opens with a dictionary namespace. */
+/** True when `s` has the dotted translation-key shape. */
 function isDictionaryKey(s) {
-    return KEY_SHAPE.test(s) && NAMESPACES.has(s.split('.')[0]);
+    return KEY_SHAPE.test(s);
 }
 
 /** Return every quoted dictionary-key literal in `text`. */
@@ -313,7 +286,7 @@ const translated = readdirSync(packagesDir)
     .filter((dir) => { try { return statSync(dir).isDirectory(); } catch { return false; } })
     .flatMap((dir) => sourceFiles(dir))
     .map((f) => ({ rel: relative(wsRoot, f).split('\\').join('/'), src: readFileSync(f, 'utf8') }))
-    .filter(({ src }) => [...src.matchAll(/(?<![\w$.])t\(\s*['"]([^'"]+)['"]/g)].some((m) => isDictionaryKey(m[1])));
+    .filter(({ src }) => /(?<![\w$.])t\(/.test(src) && keyLiterals(src).length > 0);
 
 const seenKeys = new Set();
 for (const { rel, src } of translated) {
@@ -323,6 +296,10 @@ for (const { rel, src } of translated) {
             `${rel} names "${key}", which en.js does not define`);
     }
 }
+
+const unusedKeys = Object.keys(en).filter((key) => !seenKeys.has(key));
+assert.deepEqual(unusedKeys, [],
+    `en.js defines keys no package source names: ${unusedKeys.join(', ')}`);
 
 const placeholderChecked = new Set();
 let unresolvedCalls = 0;

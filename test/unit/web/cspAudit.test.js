@@ -22,7 +22,29 @@ import {
 import { injectIntegrityImportMap } from '../../../packages/web/sri.js';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
-const WEB_CONNECT_SOURCES = [
+const DEFAULT_CONNECT_SOURCES = [
+    "'self'",
+    'https://explorer.xchain.io',
+    'https://encoder.xchain.io',
+    'https://hub.xchain.io',
+    'https://api.coingecko.com',
+    'https://ipfs.io',
+    'https://arweave.net',
+    'https://downloads.xchain.io',
+    'http://localhost:18080',
+    'http://localhost:3023',
+    'http://localhost:10000',
+    'http://localhost:3123',
+    'http://localhost:3223',
+    'http://localhost:3005',
+    'wss://explorer.xchain.io',
+    'ws://localhost:18080',
+];
+const CONNECT_SOURCES_BY_PROFILE = {
+    default: DEFAULT_CONNECT_SOURCES,
+    store: DEFAULT_CONNECT_SOURCES,
+};
+const EXTENSION_CONNECT_SOURCES = [
     "'self'",
     'https:',
     'wss:',
@@ -94,7 +116,11 @@ describe('built web CSPs', () => {
             expect(meta).toEqual(Object.fromEntries(
                 Object.entries(header).filter(([name]) => name !== 'frame-ancestors'),
             ));
-            expect(header['connect-src']).toEqual(WEB_CONNECT_SOURCES);
+            expect(header['connect-src']).toEqual(CONNECT_SOURCES_BY_PROFILE[profile]);
+            expect(header['connect-src']).not.toContain('https:');
+            expect(header['connect-src']).not.toContain('wss:');
+            expect(header['connect-src'].some((source) => source.includes('*'))).toBe(false);
+            expect(header['frame-ancestors']).toEqual(["'none'"]);
             expect(header['img-src']).toEqual(LOCAL_IMAGE_SOURCES);
             expectNoExecutableStringSources(header);
         });
@@ -108,7 +134,7 @@ describe('built web CSPs', () => {
 
             expect(result.admitted).toBe(true);
             expect(directives['script-src'].filter((source) => /^'sha384-/.test(source))).toHaveLength(1);
-            expect(directives['connect-src']).toEqual(WEB_CONNECT_SOURCES);
+            expect(directives['connect-src']).toEqual(CONNECT_SOURCES_BY_PROFILE[profile]);
             expectNoExecutableStringSources(directives);
         });
     }
@@ -128,7 +154,7 @@ describe('packaged shell CSPs', () => {
         const manifest = JSON.parse(readFileSync(resolve(REPO, 'packages/extension/manifest.json'), 'utf8'));
         const directives = parsePolicy(manifest.content_security_policy.extension_pages);
 
-        expect(directives['connect-src']).toEqual(WEB_CONNECT_SOURCES);
+        expect(directives['connect-src']).toEqual(EXTENSION_CONNECT_SOURCES);
         expect(directives['img-src']).toEqual(LOCAL_IMAGE_SOURCES);
         expect(directives['object-src']).toEqual(["'none'"]);
         expect(directives['frame-src']).toEqual(["'none'"]);
@@ -151,5 +177,15 @@ describe('packaged shell CSPs', () => {
             expect(directives['img-src']).toContain('data:');
             expect(directives['img-src'].some((source) => /^https?:/i.test(source))).toBe(false);
         }
+    });
+});
+
+describe('web entry document', () => {
+    it('contains no inline scripts', () => {
+        const html = readFileSync(resolve(REPO, 'packages/web/index.html'), 'utf8');
+        const scripts = [...html.matchAll(/<script\b[^>]*>/gi)].map((match) => match[0]);
+
+        expect(scripts.length).toBeGreaterThan(0);
+        for (const script of scripts) expect(script).toMatch(/\ssrc=["'][^"']+["']/i);
     });
 });
