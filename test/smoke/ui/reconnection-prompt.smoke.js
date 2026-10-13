@@ -14,8 +14,8 @@
 // one-shot toast when the `overall` value transitions from
 // offline|degraded back to normal AND the queue is non-empty.
 //
-// The user gets `"You have N queued transactions. Broadcast now?"` with
-// an "Open queue" action that focuses + scrolls the banner. Toast
+// The user gets plain wording that N transactions are ready to send with
+// a "Review" action that focuses the first send button and scrolls the banner. Toast
 // honors a 60s dedupe floor so flapping connections don't spam the
 // notification.
 
@@ -43,7 +43,7 @@ assert.ok(
     'banner imports useToast',
 );
 assert.ok(
-    /import \{ useCallback, useEffect, useRef, useState \} from 'react'/.test(src),
+    /import \{ useCallback, useEffect, useId, useRef, useState \} from 'react'/.test(src),
     'banner imports useRef (transition tracking + bannerRef)',
 );
 
@@ -99,35 +99,35 @@ assert.ok(
 // --- 4. Toast payload --------------------------------------------------
 
 assert.ok(
-    /You have 1 queued transaction\. Broadcast now\?/.test(effectBody),
+    /1 transaction is ready to send\./.test(effectBody),
     'singular form of the prompt copy',
 );
 assert.ok(
-    /You have \$\{queue\.length\} queued transactions\. Broadcast now\?/.test(effectBody),
+    /\$\{queue\.length\} transactions are ready to send\./.test(effectBody),
     'plural form of the prompt copy',
 );
 assert.ok(
-    /actionLabel: 'Open queue'/.test(effectBody),
-    'toast surfaces an "Open queue" action',
+    /actionLabel: 'Review'/.test(effectBody),
+    'toast surfaces a "Review" action',
 );
 assert.ok(
-    /bannerRef\.current\.focus\(\)/.test(effectBody),
-    '"Open queue" action focuses the banner',
+    /sendButton\.focus\(\)/.test(effectBody),
+    '"Review" action focuses the first send button',
 );
 assert.ok(
     /scrollIntoView/.test(effectBody),
-    '"Open queue" action scrolls the banner into view',
+    '"Review" action scrolls the banner into view',
 );
 assert.ok(
     /durationMs: 12_000/.test(effectBody),
     'toast lingers 12 seconds (long enough to read)',
 );
 
-// --- 5. Banner DOM gets ref + tabIndex so focus() works ----------------
+// --- 5. Banner DOM and send action expose the focus targets ------------
 
 assert.ok(
-    /<div\s+ref=\{bannerRef\}[\s\S]+?tabIndex=\{-1\}/.test(src),
-    'banner div carries the ref + tabIndex={-1} so it can be focused programmatically',
+    /<section\s+ref=\{bannerRef\}/.test(src) && /data-queued-send/.test(src),
+    'banner carries the ref and marks the send action for programmatic focus',
 );
 
 console.log('reconnection-prompt smoke OK');

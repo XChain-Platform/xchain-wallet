@@ -27,6 +27,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as branding from '../../branding/branding.js';
 import { Icon } from '../../ui/index.js';
 import { HeaderSettingsButton } from './HeaderSettingsButton.jsx';
+import { WatchOnlyBadge } from './WatchOnlyBadge.jsx';
 import { useViewportClamp } from '../hooks/useViewportClamp.js';
 import { PlatformSwitcher } from './PlatformSwitcher.jsx';
 import styles from './AppHeader.module.css';
@@ -41,6 +42,7 @@ import { useBackHandler } from '../../ui/backStack.js';
  * @param {() => void} [props.onCommandPalette]                      when provided, renders a search button that opens the §33 command palette (Cmd/Ctrl+K)
  * @param {() => void} [props.onLock]                                when provided, renders a one-tap lock button; same action as the "Lock wallet" row in the pancake menu
  * @param {boolean} [props.locking]                                  disables the lock button while a lock is in flight
+ * @param {boolean} [props.isWatcherMode]                            shows the persistent watch-only wallet badge
  * @param {{ id: string, name: string } | null} [props.activeWallet]              summary row in the gear popover
  * @param {{ id: string, name?: string, index?: number } | null} [props.activeAccount]
  * @param {() => void} [props.onOpenWalletPicker]                    gear popover: navigate to the wallet picker
@@ -52,6 +54,9 @@ import { useBackHandler } from '../../ui/backStack.js';
  * @param {string} [props.networkFilter]
  * @param {(coin: string) => void} [props.onNetworkFilterChange]
  * @param {boolean} [props.showNetworkFilter]                        set false on routes where a network filter is meaningless (Send / Receive)
+ * @param {'mainnet'|'testnet'|'regtest'} [props.activeNetwork]
+ * @param {boolean} [props.developerMode]
+ * @param {(network: 'mainnet'|'testnet'|'regtest') => Promise<void>} [props.onActiveNetworkChange]
  * @param {string} [props.platformCurrent]                           this surface's key in the *.xchain.io platform switcher (the web shell passes 'wallet'); omit to hide the switcher entirely, which is what the extension and desktop shells do
  */
 export function AppHeader({
@@ -62,6 +67,7 @@ export function AppHeader({
     onCommandPalette,
     onLock,
     locking,
+    isWatcherMode = false,
     activeWallet = null,
     activeAccount = null,
     onOpenWalletPicker,
@@ -73,6 +79,9 @@ export function AppHeader({
     networkFilter,
     onNetworkFilterChange,
     showNetworkFilter = true,
+    activeNetwork,
+    developerMode = false,
+    onActiveNetworkChange,
     platformCurrent,
 }) {
     const networkWired = showNetworkFilter
@@ -82,16 +91,20 @@ export function AppHeader({
         && typeof onNetworkFilterChange === 'function';
     const showSettings = typeof onOpenWalletPicker === 'function'
         || typeof onOpenAccountPicker === 'function'
-        || networkWired;
+        || networkWired
+        || typeof onActiveNetworkChange === 'function';
 
     return (
-        <header className={styles.bar} role="banner">
+        // A labelled region, not a second banner: each screen's Screen header already
+        // is the page banner, and a document may hold only one.
+        <div className={styles.bar} role="region" aria-label="App header">
             <div className={styles.left}>
                 <img
                     src={branding.logoUrl()}
                     alt={branding.PRODUCT_NAME}
                     className={styles.logo}
                 />
+                <WatchOnlyBadge visible={isWatcherMode} />
             </div>
             <div className={styles.right}>
                 {showSettings ? (
@@ -106,6 +119,9 @@ export function AppHeader({
                         coinFamilies={networkWired ? coinFamilies : undefined}
                         networkFilter={networkFilter}
                         onNetworkFilterChange={networkWired ? onNetworkFilterChange : undefined}
+                        activeNetwork={activeNetwork}
+                        developerMode={developerMode}
+                        onActiveNetworkChange={onActiveNetworkChange}
                     />
                 ) : null}
                 {onCommandPalette ? (
@@ -145,12 +161,13 @@ export function AppHeader({
                         onClick={onMenuOpen}
                         aria-label="Open menu"
                         aria-haspopup="dialog"
+                        title="Open menu"
                     >
                         <Icon.MenuIcon />
                     </button>
                 ) : null}
             </div>
-        </header>
+        </div>
     );
 }
 

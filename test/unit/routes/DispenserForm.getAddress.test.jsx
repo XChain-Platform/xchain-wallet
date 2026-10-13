@@ -223,7 +223,7 @@ describe('DispenserForm Mode B pricing', () => {
                 (utils) => fireEvent.click(utils.getByRole('button', { name: /Advanced options/ })),
                 (utils) => {
                     setValue(utils, 'Priced in fiat (optional)', 'USD');
-                    setValue(utils, /^Oracle address/, 'bc1qoracleoracleoracleoracleoracleoracle');
+                    setValue(utils, /^Oracle address/, '1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2');
                 },
                 (utils) => { triggerWasHidden = utils.queryByLabelText(/^Trigger price/) === null; },
             ],

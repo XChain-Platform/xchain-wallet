@@ -346,6 +346,13 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
 
 function summarizeOrder(o, tick1, tick2) {
     if (!o || typeof o !== 'object') return null;
+    const lifecycle = String(o.current_status ?? o.state?.status ?? '').toLowerCase();
+    if (lifecycle && lifecycle !== 'open') return null;
+    const expiration = Number(o.state?.expiration ?? o.expiration);
+    if (Number.isFinite(expiration) && expiration > 0
+        && expiration < 10_000_000_000 && expiration <= Math.floor(Date.now() / 1000)) return null;
+    const remaining = o.state?.give_remaining ?? o.give_remaining ?? o.giveRemaining;
+    if (remaining != null && compareAmounts(String(remaining), '0') !== 1) return null;
     const summarySide = String(o.type || '').toLowerCase();
     const summaryPrice = String(o.price ?? '').trim();
     const summarySize = String(o.amount ?? '').trim();

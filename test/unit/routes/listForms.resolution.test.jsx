@@ -146,6 +146,18 @@ describe('ListDetail membership under list-edit resolution', () => {
         expect(await screen.findByText('Left out by the network (1)')).toBeTruthy();
         expect(screen.getByText('NOSUCHTICKQA')).toBeTruthy();
     });
+
+    it('labels a numeric remove edit as removed items', async () => {
+        mountDetail({
+            ...LIST_2700,
+            action_index: 2703,
+            list_action_index: 2700,
+            edit: 2,
+            edits: [{ tick: 'MGRTEST', status: 'valid' }],
+        });
+
+        expect(await screen.findByText('#2700 (removed items)')).toBeTruthy();
+    });
 });
 
 const forkRef = (editResolutionActive) => ({

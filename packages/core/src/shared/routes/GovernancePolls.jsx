@@ -84,6 +84,11 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
     // retarget across the rest.
     useEffect(() => {
         let cancelled = false;
+        setChainId(null);
+        setNoChain(false);
+        setGovernChains([]);
+        setRows(null);
+        setError(null);
         messaging.getAddressesByChain(walletId)
             .then((byChain) => {
                 if (cancelled) return;
@@ -113,12 +118,15 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
     if (noChain) {
         return wrap(
             <EmptyState
-                title="No address on a governance-capable chain."
-                body="Use Receive to generate one first."
+                title="No governance address"
+                body="Governance requires an address on a supported chain."
             />,
         );
     }
     if (!chainId && !error) return wrap(<ListPage><p>Loading…</p></ListPage>);
+    if (!chainId) {
+        return wrap(<ListPage><StatusMessage variant="error" className={styles.error}>{error}</StatusMessage></ListPage>);
+    }
 
     return wrap(
         <ListPage toolbar={(
@@ -132,7 +140,7 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
             {error ? <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage> : null}
             {chainId && !rows && !error ? <p>Loading polls…</p> : null}
             {rows && rows.length === 0 ? (
-                <EmptyState title="No polls on this chain yet." body="Create the first one." />
+                <EmptyState title="No polls yet" body="Polls created on this chain appear here." />
             ) : null}
 
             {rows && rows.length > 0 ? (

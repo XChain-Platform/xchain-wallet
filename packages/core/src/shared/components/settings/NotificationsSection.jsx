@@ -98,9 +98,9 @@ function PermissionRow() {
     let hint = 'Not enabled';
     let action = null;
     if (permission === 'granted') {
-        hint = 'Enabled';
+        hint = 'Allowed. Use the categories below to choose which notifications you receive.';
     } else if (permission === 'denied') {
-        hint = 'Blocked. Turn notifications back on for this app in your browser or system settings.';
+        hint = 'Blocked by your browser or system settings. Allow notifications for this app there to enable them.';
     } else {
         action = (
             <button type="button" onClick={request} disabled={requesting} aria-busy={requesting} style={PERMISSION_BUTTON}>
@@ -190,17 +190,24 @@ const NOTIFICATION_FLAGS = /** @type {const} */ ([
  */
 export function NotificationsSection({ walletId } = {}) {
     const { settings, loading, error, update } = useSettings();
+    const [pendingKey, setPendingKey] = useState(/** @type {string | null} */ (null));
+    const [toggleError, setToggleError] = useState(/** @type {string | null} */ (null));
 
     if (loading) return <Status text="Loading…" />;
     if (error) return <SettingsLoadError error={error} />;
     if (!settings) return <Status text="Settings unavailable." tone="error" />;
 
-    const onToggle = async (key, next) => {
+    const onToggle = async (key, label, next) => {
+        setPendingKey(key);
+        setToggleError(null);
         try {
             await update({ notifications: { [key]: next } });
         } catch (err) {
+            setToggleError(`Could not update ${label.toLowerCase()}. Try again.`);
             // eslint-disable-next-line no-console
             console.error(`notifications.${key} update failed:`, err);
+        } finally {
+            setPendingKey(null);
         }
     };
 
@@ -213,7 +220,8 @@ export function NotificationsSection({ walletId } = {}) {
                         label={f.label}
                         hint={f.hint}
                         checked={f.defaultOn ? settings.notifications[f.key] !== false : Boolean(settings.notifications[f.key])}
-                        onChange={(v) => onToggle(f.key, v)}
+                        disabled={pendingKey !== null}
+                        onChange={(v) => onToggle(f.key, f.label, v)}
                     />
                     {f.key === 'priceAlerts' ? (
                         <PriceAlertsManager
@@ -224,6 +232,7 @@ export function NotificationsSection({ walletId } = {}) {
                     ) : null}
                 </div>
             ))}
+            {toggleError ? <span role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger)' }}>{toggleError}</span> : null}
             <QuietHoursRow settings={settings} update={update} />
             <SoundsBlock settings={settings} update={update} />
         </div>
@@ -434,14 +443,30 @@ const LINK_BTN = {
  * @param {boolean} props.enabled
  */
 function PriceAlertsManager({ walletId, settings, enabled }) {
-    const { alerts, supported, addAlert, removeAlert, rearm } = usePriceAlerts(walletId);
+    const {
+        alerts,
+        loading,
+        supported,
+        error,
+        addAlert,
+        updateAlert,
+        removeAlert,
+        rearm,
+        reload,
+    } = usePriceAlerts(walletId);
+    const [editingId, setEditingId] = useState(/** @type {string | null} */ (null));
+    const [actionError, setActionError] = useState(/** @type {string | null} */ (null));
+    const [busyId, setBusyId] = useState(/** @type {string | null} */ (null));
     const priceDataOff = settings?.privacy?.priceDataEnabled === false;
     const fiatCurrency = (typeof settings?.fiatCurrency === 'string' && settings.fiatCurrency) || 'usd';
+    const editingAlert = alerts.find((alert) => alert.id === editingId) || null;
 
     if (!walletId || !supported) {
         return (
             <div style={MANAGER}>
-                <span style={ROW_HINT}>Price alerts aren’t available in this view.</span>
+                <span style={ROW_HINT}>
+                    {!walletId ? 'Choose a wallet to manage price alerts.' : 'Price alerts are not supported in this app.'}
+                </span>
             </div>
         );
     }
@@ -457,8 +482,15 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
                 <span style={ROW_HINT}>Turn on Price alerts above to start receiving these.</span>
             ) : null}
 
-            {alerts.length === 0 ? (
-                <span style={ROW_HINT}>No price alerts yet. Add one below.</span>
+            {loading ? (
+                <span role="status" style={ROW_HINT}>Loading price alerts…</span>
+            ) : error ? (
+                <span role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger)' }}>
+                    Could not load price alerts.{' '}
+                    <button type="button" style={LINK_BTN} onClick={reload}>Try again</button>
+                </span>
+            ) : alerts.length === 0 ? (
+                <span role="status" style={ROW_HINT}>No price alerts yet. Add one below.</span>
             ) : (
                 alerts.map((a) => (
                     <div key={a.id} style={ALERT_ROW}>
@@ -470,17 +502,68 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
                         </span>
                         <span style={{ display: 'flex', gap: 'var(--xc-space-2)' }}>
                             {a.status === 'triggered' ? (
-                                <button type="button" style={LINK_BTN} onClick={() => rearm(a.id)}>Re-arm</button>
+                                <button
+                                    type="button"
+                                    style={LINK_BTN}
+                                    disabled={busyId !== null}
+                                    onClick={() => runAlertAction(a.id, () => rearm(a.id), setBusyId, setActionError)}
+                                >
+                                    Re-arm
+                                </button>
                             ) : null}
-                            <button type="button" style={LINK_BTN} onClick={() => removeAlert(a.id)}>Delete</button>
+                            <button
+                                type="button"
+                                style={LINK_BTN}
+                                disabled={busyId !== null}
+                                aria-label={`Edit ${coinLabelForChain(a.chainId)} price alert`}
+                                onClick={() => { setEditingId(a.id); setActionError(null); }}
+                            >
+                                Edit
+                            </button>
+                            <button
+                                type="button"
+                                style={LINK_BTN}
+                                disabled={busyId !== null}
+                                aria-label={`Delete ${coinLabelForChain(a.chainId)} price alert`}
+                                onClick={() => runAlertAction(a.id, async () => {
+                                    await removeAlert(a.id);
+                                    if (editingId === a.id) setEditingId(null);
+                                }, setBusyId, setActionError)}
+                            >
+                                Delete
+                            </button>
                         </span>
                     </div>
                 ))
             )}
 
-            <PriceAlertForm onCreate={addAlert} fiatCurrency={fiatCurrency} />
+            {actionError ? <span role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger)' }}>{actionError}</span> : null}
+            {!loading && !error ? (
+                <PriceAlertForm
+                    key={editingAlert?.id || 'new'}
+                    onCreate={editingAlert ? async (input) => {
+                        await updateAlert(editingAlert.id, input);
+                        setEditingId(null);
+                    } : addAlert}
+                    fiatCurrency={editingAlert?.fiatCurrency || fiatCurrency}
+                    initialAlert={editingAlert || undefined}
+                    onCancel={editingAlert ? () => setEditingId(null) : undefined}
+                />
+            ) : null}
         </div>
     );
+}
+
+async function runAlertAction(id, action, setBusyId, setActionError) {
+    setBusyId(id);
+    setActionError(null);
+    try {
+        await action();
+    } catch {
+        setActionError('Could not update the price alert. Try again.');
+    } finally {
+        setBusyId(null);
+    }
 }
 
 /** Compact, locale-free threshold label, e.g. 70000/usd → "$70,000". */

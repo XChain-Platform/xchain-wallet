@@ -24,10 +24,13 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { TickMemberName } from '../components/TickMemberName.jsx';
 import { neutralizeControlText } from '../utils/textHardening.js';
+import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { listMetaSupported } from '../../flows/listFormatSupport.js';
+import { uniqueRows } from '../utils/pagedRows.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const MEMBERS_PAGE_SIZE = 25;
 
 /**
  * PC-10 "My Lists" detail page: membership + lineage + a best-effort
@@ -70,17 +73,17 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
 
-    const [data, setData] = useState(/** @type {any | null} */ (null));
+    const [data, setData] = useState(/** @type {any | null | undefined} */ (undefined));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [metaSupported, setMetaSupported] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
-        setData(null);
+        setData(undefined);
         setLoadError(null);
         messaging.getListByActionIndex({ chainId, actionIndex })
             .then((row) => { if (!cancelled) setData(row || null); })
-            .catch((err) => { if (!cancelled) setLoadError(err?.message || 'Failed to load list.'); });
+            .catch((err) => { if (!cancelled) setLoadError(readFailureMessage(err, 'load this list')); });
         return () => { cancelled = true; };
     }, [chainId, actionIndex, messaging]);
 
@@ -102,7 +105,10 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const isTick = data ? String(data.type) === '1' : false;
     const isFork = data ? (data.list_action_index != null && data.list_action_index !== '') : false;
-    const items = useMemo(() => (Array.isArray(data?.list) ? data.list : []), [data]);
+    const items = useMemo(
+        () => uniqueRows(Array.isArray(data?.list) ? data.list : [], memberIdentity),
+        [data],
+    );
     const edits = useMemo(() => (Array.isArray(data?.edits) ? data.edits : []), [data]);
     // Items the network recorded invalid and left out (an unknown TICK, a
     // malformed or wrong-network ADDRESS); the LIST itself stays valid.
@@ -112,7 +118,9 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
     const resolution = state && typeof state.edit_resolution_active === 'boolean'
         ? state.edit_resolution_active : null;
     const currentItems = useMemo(
-        () => (resolution === true && Array.isArray(state?.current_list) ? state.current_list : null),
+        () => (resolution === true && Array.isArray(state?.current_list)
+            ? uniqueRows(state.current_list, memberIdentity)
+            : null),
         [resolution, state],
     );
     const membershipIndex = state?.membership_action_index != null ? String(state.membership_action_index) : null;
@@ -132,12 +140,16 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
     if (loadError) {
         return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
     }
-    if (!data) {
-        return wrap(<p className={styles.hint}>Loading…</p>);
+    if (data === undefined) {
+        return wrap(<StatusMessage variant="status">Loading list…</StatusMessage>);
+    }
+    if (data === null) {
+        return wrap(<EmptyState title="List not found." />);
     }
 
     return wrap(
         <>
+            <SectionHeader title="List details" />
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>Chain</dt>
                 <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
@@ -171,7 +183,7 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
                     <>
                         <dt className={styles.detailsLabel}>Forked from</dt>
                         <dd className={styles.detailsValue}>
-                            #{data.list_action_index} ({data.edit === '2' ? 'removed items' : 'added items'})
+                            #{data.list_action_index} ({String(data.edit) === '2' ? 'removed items' : 'added items'})
                         </dd>
                     </>
                 ) : null}
@@ -185,19 +197,37 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
                             ? `From edit #${membershipIndex}, the newest valid edit of this list. Everything that references #${actionIndex} uses these members.`
                             : `No edits yet. Everything that references #${actionIndex} uses these members.`}
                     />
-                    <MemberList items={currentItems} isTick={isTick} messaging={messaging} chainId={chainId} />
+                    <MemberList
+                        key={`current:${actionIndex}:${membershipIndex || ''}`}
+                        items={currentItems}
+                        isTick={isTick}
+                        messaging={messaging}
+                        chainId={chainId}
+                    />
                     <SectionHeader
                         title={`As created (${items.length})`}
                         description="The members this action was published with."
                     />
-                    <MemberList items={items} isTick={isTick} messaging={messaging} chainId={chainId} />
+                    <MemberList
+                        key={`created:${actionIndex}`}
+                        items={items}
+                        isTick={isTick}
+                        messaging={messaging}
+                        chainId={chainId}
+                    />
                 </>
             ) : (
                 <>
                     <SectionHeader
                         title={resolution === false ? `Current members (${items.length})` : `Members as published (${items.length})`}
                     />
-                    <MemberList items={items} isTick={isTick} messaging={messaging} chainId={chainId} />
+                    <MemberList
+                        key={`published:${actionIndex}`}
+                        items={items}
+                        isTick={isTick}
+                        messaging={messaging}
+                        chainId={chainId}
+                    />
                 </>
             )}
 
@@ -209,7 +239,7 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
                     />
                     <ul className={styles.detailsList} style={{ display: 'block' }}>
                         {rejected.map((e, i) => (
-                            <li key={i} style={{ padding: '2px 0' }}>
+                            <li key={i} style={{ padding: '2px 0', overflowWrap: 'anywhere' }}>
                                 <code>{e.tick ?? e.address}</code>{` (${e.status})`}
                             </li>
                         ))}
@@ -222,7 +252,7 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
                     <SectionHeader title="This fork's edit" />
                     <ul className={styles.detailsList} style={{ display: 'block' }}>
                         {edits.map((e, i) => (
-                            <li key={i} style={{ padding: '2px 0' }}>
+                            <li key={i} style={{ padding: '2px 0', overflowWrap: 'anywhere' }}>
                                 <code>{e.tick ?? e.address}</code>
                                 {e.status && e.status !== 'valid' ? ` (${e.status})` : ''}
                             </li>
@@ -236,6 +266,7 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
                 description="The explorer has no reverse lookup from a list index to the airdrops, dispensers, gates, or orders that reference it today, so the wallet can't show what uses this list. If you know a specific airdrop, dispenser, gate, or order references it, check that item directly."
             />
 
+            <SectionHeader title="Actions" />
             <div className={styles.actions}>
                 {onShare ? (
                     <Button variant="secondary" onClick={() => onShare({ chainId, actionIndex })}>
@@ -280,18 +311,37 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
  * @param {{ items: string[], isTick: boolean, messaging: object, chainId: string }} props
  */
 function MemberList({ items, isTick, messaging, chainId }) {
+    const [visibleLimit, setVisibleLimit] = useState(MEMBERS_PAGE_SIZE);
     if (items.length === 0) {
-        return <EmptyState title="This list has no members." titleAs="h3" />;
+        return <EmptyState title="No list members" body="Addresses added to this list appear here." titleAs="h3" />;
     }
+    const visibleItems = items.slice(0, visibleLimit);
     return (
-        <ul className={styles.detailsList} style={{ display: 'block' }}>
-            {items.map((item, i) => (
-                <li key={i} style={{ padding: '2px 0' }}>
-                    {isTick
-                        ? <TickMemberName item={item} messaging={messaging} chainId={chainId} />
-                        : <AddressText address={item} truncate={false} />}
-                </li>
-            ))}
-        </ul>
+        <>
+            <ul className={styles.detailsList} style={{ display: 'block' }}>
+                {visibleItems.map((item) => (
+                    <li key={String(item)} style={{ padding: '2px 0' }}>
+                        {isTick
+                            ? <TickMemberName item={item} messaging={messaging} chainId={chainId} />
+                            : <AddressText address={item} truncate={false} />}
+                    </li>
+                ))}
+            </ul>
+            {visibleItems.length < items.length ? (
+                <div className={styles.actions}>
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => setVisibleLimit((limit) => limit + MEMBERS_PAGE_SIZE)}
+                    >
+                        Load more members
+                    </Button>
+                </div>
+            ) : null}
+        </>
     );
+}
+
+function memberIdentity(item) {
+    return item == null ? null : String(item);
 }

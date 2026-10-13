@@ -95,7 +95,7 @@ async function submitParent(parent) {
     fireEvent.change(parentField, { target: { value: parent } });
     fireEvent.change(screen.getByLabelText('Subtoken name'), { target: { value: 'GRAND' } });
     fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '100' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Review token' }));
 }
 
 /**

@@ -13,6 +13,7 @@ import {
     Screen,
     PageHeader,
     Icon,
+    StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
@@ -55,15 +56,22 @@ export function StakeNew({ walletId, onPickValidator, onPickContract, onBack }) 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
+    const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     // 'options' shows the two cards; 'chain' is the inline network
     // step for the validator arm when >1 Bitcoin chain qualifies.
     const [step, setStep] = useState(/** @type {'options' | 'chain'} */ ('options'));
 
     useEffect(() => {
         let cancelled = false;
+        setAddressesByChain(null);
+        setLoadError(null);
         messaging.getAddressesByChain(walletId)
             .then((byChain) => { if (!cancelled) setAddressesByChain(byChain || {}); })
-            .catch(() => { if (!cancelled) setAddressesByChain({}); });
+            .catch((err) => {
+                if (cancelled) return;
+                setLoadError(err?.message || 'Failed to load staking networks.');
+                setAddressesByChain({});
+            });
         return () => { cancelled = true; };
     }, [walletId, messaging]);
 
@@ -89,6 +97,10 @@ export function StakeNew({ walletId, onPickValidator, onPickContract, onBack }) 
             </div>
         </Screen>
     );
+
+    if (loadError) {
+        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
+    }
 
     if (!addressesByChain) {
         return wrap(<p className={styles.entryDescription}>Loading…</p>);

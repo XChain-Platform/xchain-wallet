@@ -36,4 +36,15 @@ describe('QrScanner without BarcodeDetector', () => {
         expect(note.textContent).toMatch(/Chromium browsers can/);
         expect(note.textContent).not.toMatch(/BarcodeDetector|payload/);
     });
+
+    it('renders deterministic documentation states without using a camera', async () => {
+        window.BarcodeDetector = function BarcodeDetector() {};
+        const { rerender } = render(
+            <QrScanner previewState="unsupported" onFrame={() => {}} />,
+        );
+        expect(screen.getByTestId('qr-scanner-unsupported').textContent).toMatch(/Chromium browsers can/);
+
+        rerender(<QrScanner previewState="denied" onFrame={() => {}} />);
+        expect((await screen.findByRole('alert')).textContent).toMatch(/allow the camera/);
+    });
 });

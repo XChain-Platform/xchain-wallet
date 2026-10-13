@@ -113,6 +113,15 @@ describe('primary actions explain missing form input', () => {
         await submitAndExpect(container, 'Enter what you want in return and a price greater than 0.');
     });
 
+    it('SellOwnershipForm rejects native-coin prices below the coin scale', async () => {
+        const { container, getByLabelText } = mount(
+            <SellOwnershipForm walletId="w" chainId={BTC} tick="ALPHA" onBack={() => {}} />,
+        );
+        const field = await waitFor(() => getByLabelText(/^Price/));
+        fireEvent.change(field, { target: { value: '0.000000001' } });
+        await submitAndExpect(container, 'Price can have at most 8 decimal places for BTC.');
+    });
+
     it('AirdropForm explains that its token is required', async () => {
         const { container } = mount(<AirdropForm walletId="w" onBack={() => {}} />);
         await submitAndExpect(container, 'Token is required.');

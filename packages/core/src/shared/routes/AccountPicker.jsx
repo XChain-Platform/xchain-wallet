@@ -25,7 +25,7 @@ import pickerStyles from './WalletPicker.module.css';
  * @param {string | null} props.activeAccountId
  * @param {(accountId: string) => void} props.onSwitch
  * @param {() => void} props.onAddAccount
- * @param {(accountId: string) => void} [props.onRenameAccount]
+ * @param {(account: any) => void} [props.onRenameAccount]
  * @param {() => void} props.onBack
  */
 export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccount, onRenameAccount, onBack }) {
@@ -78,7 +78,7 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                 ) : accounts === null ? (
                     <div className={styles.entryDescription}>Loading…</div>
                 ) : accounts.length === 0 ? (
-                    <EmptyState title="No accounts yet." titleAs="p" />
+                    <EmptyState title="No accounts yet" body="Accounts added to this wallet appear here." titleAs="p" />
                 ) : accounts.map((a) => {
                     const active = a.id === activeAccountId;
                     const defaultName = `Account ${a.index + 1}`;
@@ -114,7 +114,7 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                                     title="Rename account"
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        onRenameAccount(a.id);
+                                        onRenameAccount(a);
                                     }}
                                 >
                                     <Icon.PencilIcon />

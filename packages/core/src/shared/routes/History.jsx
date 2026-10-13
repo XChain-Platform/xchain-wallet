@@ -36,7 +36,7 @@ import { useSettings } from '../hooks/useSettings.js';
 import { useFiatRate } from '../hooks/useFiatRate.js';
 import { useActionProofVerification } from '../hooks/useProofVerification.js';
 import { formatFiat } from '../components/BalanceList.jsx';
-import { coinToFiat } from '../../flows/priceLookup.js';
+import { coinToFiatExact } from '../../flows/priceLookup.js';
 import { useToast } from '../components/ToastHost.jsx';
 import { groupHistoryEntries } from '../utils/historyGrouping.js';
 import { normalizeHistoryRow } from '../utils/historyRow.js';
@@ -62,12 +62,17 @@ import {
 import { readChainSet, writeChainSet } from '../utils/chainFilterMemory.js';
 import { contractDisplayLabel } from './contractResponseShape.js';
 import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
+import { useFocusTrap } from '../utils/focusTrap.js';
 import { findContactByName, withEntriesAdded } from '../utils/contactMerge.js';
 import { copyText } from '../clipboard.js';
+import { formatDecimalAmount } from '../utils/amountFormat.js';
+import { formatLocalDateTime, formatRelativeTime } from '../utils/dateTime.js';
+import { useHapticFeedback } from '../hooks/useHaptic.js';
 import styles from './History.module.css';
 
 const HISTORY_CHAIN_FILTER_KEY = 'history';
 const GROUPING_MODE_STORAGE_KEY = 'xc:historyGroupingMode';
+const HISTORY_PAGE_SIZE = 100;
 
 function readPersistedGroupingMode() {
     try {
@@ -419,6 +424,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [entries, setEntries] = useState(/** @type {HistoryEntry[]} */ ([]));
+    const [historyLoaded, setHistoryLoaded] = useState(false);
+    const [addressesReload, setAddressesReload] = useState(0);
     // Cluster G FOLLOWUP 5: Unix ms of the last successful per-chain
     // history+links fan-out completion. Surfaces as a "Last synced …"
     // hint in the filter bar so the user can spot stale views.
@@ -453,18 +460,13 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const [dateFrom, setDateFrom] = useState(() => isoDateDaysAgo(30));
     const [dateTo, setDateTo] = useState(() => isoDateDaysAgo(0));
     const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
-    // Cluster I FOLLOWUP 5: single-modal export. Holds the modal's
-    // open state + the field choices (format / column set / date-range
-    // override). Initial column set = every field; date range defaults
-    // to the active filter when the modal opens.
+    // The export modal controls only the file representation. Row selection
+    // remains owned by the History filters so the file matches the list.
     const [exportModalOpen, setExportModalOpen] = useState(false);
     const [exportFormat, setExportFormat] = useState(/** @type {'csv' | 'json'} */ ('csv'));
     const [exportColumns, setExportColumns] = useState(
         /** @type {Set<string>} */ (new Set(flowsLib.EXPORT_COLUMNS)),
     );
-    const [exportFromDate, setExportFromDate] = useState('');
-    const [exportToDate, setExportToDate] = useState('');
-    const [exportScope, setExportScope] = useState(/** @type {'filtered' | 'all'} */ ('filtered'));
     const [selectedKey, setSelectedKey] = useState(/** @type {string | null} */ (null));
     // M2.3: the open row is remembered by TRANSACTION as well as by key.
     // A pending entry is keyed on its hash and a confirmed one on its
@@ -482,20 +484,12 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const initialFocusFiredRef = useRef(false);
     const searchInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
-    // §34.2 context shortcuts: '/' focuses the search input, 'e' opens the
-    // export modal. Single keys only, so they stay inert while any input has
-    // focus (useScreenShortcuts applies the same editable-target gate as the
-    // global dispatcher).
-    useScreenShortcuts({
-        keys: {
-            '/': () => { searchInputRef.current?.focus(); },
-            e: () => { setExportModalOpen(true); },
-        },
-    });
-
     // Step 1: resolve the wallet's addresses grouped by chainId.
     useEffect(() => {
         let cancelled = false;
+        setLoadError(null);
+        setAddressesByChain(null);
+        setHistoryLoaded(false);
         messaging.getAddressesByChain(walletId, accountId)
             .then((byChain) => {
                 if (cancelled) return;
@@ -530,7 +524,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
             });
         return () => { cancelled = true; };
-    }, [walletId, accountId, messaging, initialChainCoin]);
+    }, [walletId, accountId, messaging, initialChainCoin, addressesReload]);
 
     // §22 Multisig-only filter (Step 22). Resolve the wallet's
     // multisig receive address up-front so the chip can filter
@@ -637,6 +631,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             .map(([cid]) => cid);
         if (chainsToLoad.length === 0) {
             setEntries([]);
+            setHistoryLoaded(true);
             setHistoryFetchedAt(null);
             // Nothing to fetch, so nothing lands below to release the slot a
             // focus may have claimed on the way here. `fail()` rather than
@@ -681,8 +676,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 tasks.push(
                     Promise.all([
                         messaging.getAddressHistory({ chainId: cid, address: a.address })
-                            .then((r) => extractRows(r))
-                            .catch(() => []),
+                            .then((r) => extractRows(r)),
                         messaging.getLinksForAddress({ chainId: cid, address: a.address })
                             .then((r) => extractRows(r))
                             .catch(() => []),
@@ -833,6 +827,13 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             setEntries(merged.entries);
             setLoadingChains(new Set());
             setHistoryFetchedAt(Date.now());
+            setHistoryLoaded(true);
+        }).catch(() => {
+            if (cancelled) return;
+            throttle.fail();
+            setLoadingChains(new Set());
+            setHistoryLoaded(true);
+            setLoadError('Could not load history. Try again.');
         });
 
         return () => { cancelled = true; };
@@ -850,6 +851,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         }
         return s;
     }, [addressesByChain]);
+
+    const activeChainIds = Object.entries(addressesByChain || {})
+        .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
+        .map(([cid]) => cid);
 
     // Cluster I FOLLOWUP 6: Per-chain tip used to compute confirmation
     // counts on confirmed rows. Derived from the highest blockIndex
@@ -945,6 +950,16 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     // choice survives navigation and syncs across shells.
     const showFiatInHistory = Boolean(proofSettings.settings?.showFiatInHistory);
     const fiatCurrency = proofSettings.settings?.fiatCurrency || 'USD';
+    // Context shortcuts share the trigger's empty-view guard. A disabled
+    // button must not have a keyboard path that opens the same action.
+    useScreenShortcuts({
+        keys: {
+            '/': () => { searchInputRef.current?.focus(); },
+            e: () => {
+                if (visibleEntries.length > 0) setExportModalOpen(true);
+            },
+        },
+    });
     const toggleShowFiatInHistory = async () => {
         if (fiatToggleBusy) return;
         setFiatToggleBusy(true);
@@ -968,12 +983,16 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         enabled: verifyProofsEnabled,
     });
 
-    const filtersActive = (
+    const chainFilterActive = activeChainIds.some((cid) => !enabledChains.has(cid));
+    const filtersActive = Boolean(
         searchQuery
         || actionTypeFilter.size > 0
         || statusFilter.size > 0
         || dateFrom
         || dateTo
+        || chainFilterActive
+        || crossChainOnly
+        || multisigOnly
     );
 
     const toggleSetMember = (setter) => (id) => {
@@ -994,6 +1013,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             statusFilter: new Set(statusFilter),
             dateFrom,
             dateTo,
+            enabledChains: new Set(enabledChains),
+            chainFilterActive,
+            crossChainOnly,
+            multisigOnly,
         };
         const hadAny = Boolean(filtersActive);
         setSearchQuery('');
@@ -1001,6 +1024,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         setStatusFilter(new Set());
         setDateFrom('');
         setDateTo('');
+        setEnabledChains(new Set(activeChainIds));
+        setCrossChainOnly(false);
+        setMultisigOnly(false);
+        writeChainSet(HISTORY_CHAIN_FILTER_KEY, null);
         if (hadAny) {
             showToast({
                 message: 'Filter cleared',
@@ -1011,9 +1038,26 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     setStatusFilter(snapshot.statusFilter);
                     setDateFrom(snapshot.dateFrom);
                     setDateTo(snapshot.dateTo);
+                    setEnabledChains(snapshot.enabledChains);
+                    setCrossChainOnly(snapshot.crossChainOnly);
+                    setMultisigOnly(snapshot.multisigOnly);
+                    writeChainSet(
+                        HISTORY_CHAIN_FILTER_KEY,
+                        snapshot.chainFilterActive ? snapshot.enabledChains : null,
+                    );
                 },
             });
         }
+    };
+
+    const updateDateFrom = (value) => {
+        setDateFrom(value);
+        if (value && dateTo && value > dateTo) setDateTo(value);
+    };
+
+    const updateDateTo = (value) => {
+        setDateTo(value);
+        if (value && dateFrom && value < dateFrom) setDateFrom(value);
     };
 
     // For drawing the vertical connector: an entry is "threaded with
@@ -1045,6 +1089,60 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         [visibleEntries, groupingMode],
     );
 
+    // Filtering and grouping still run over the complete result set, while the
+    // DOM grows in bounded steps. This keeps exports and group membership exact
+    // without making the browser lay out thousands of row buttons at once.
+    const listScope = useMemo(() => [
+        groupingMode,
+        searchQuery,
+        dateFrom,
+        dateTo,
+        crossChainOnly ? 'cross-chain' : '',
+        multisigOnly ? 'multisig' : '',
+        [...enabledChains].sort().join(','),
+        [...actionTypeFilter].sort().join(','),
+        [...statusFilter].sort().join(','),
+    ].join('\u0000'), [
+        groupingMode, searchQuery, dateFrom, dateTo, crossChainOnly, multisigOnly,
+        enabledChains, actionTypeFilter, statusFilter,
+    ]);
+    const [listWindow, setListWindow] = useState(() => ({
+        scope: '',
+        count: HISTORY_PAGE_SIZE,
+    }));
+    const [groupMemberLimits, setGroupMemberLimits] = useState(
+        /** @type {Record<string, number>} */ ({}),
+    );
+    const visibleItemCount = listWindow.scope === listScope
+        ? listWindow.count
+        : HISTORY_PAGE_SIZE;
+    const renderedItems = groupedItems.slice(0, visibleItemCount);
+
+    useEffect(() => {
+        setListWindow({ scope: listScope, count: HISTORY_PAGE_SIZE });
+        setGroupMemberLimits({});
+    }, [listScope]);
+
+    const showMoreItems = () => {
+        setListWindow((prev) => {
+            const current = prev.scope === listScope ? prev.count : HISTORY_PAGE_SIZE;
+            return {
+                scope: listScope,
+                count: Math.min(groupedItems.length, current + HISTORY_PAGE_SIZE),
+            };
+        });
+    };
+
+    const showMoreGroupMembers = (groupKey, memberCount) => {
+        setGroupMemberLimits((prev) => ({
+            ...prev,
+            [groupKey]: Math.min(
+                memberCount,
+                (prev[groupKey] || HISTORY_PAGE_SIZE) + HISTORY_PAGE_SIZE,
+            ),
+        }));
+    };
+
     // §24.6 / Cluster Y FOLLOWUP 4: auto-select the entry matching
     // `initialFocus` once entries have loaded, then scroll it into
     // view. Fires at most once per History mount so a user who
@@ -1073,6 +1171,14 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         initialFocusFiredRef.current = true;
         selectedTxRef.current = rememberedSelection(match);
         setSelectedKey(match.key);
+        const itemIndex = groupedItems.findIndex((item) => (
+            item.kind === 'entry'
+                ? item.entry.key === match.key
+                : item.members.some((entry) => entry.key === match.key)
+        ));
+        if (itemIndex >= visibleItemCount) {
+            setListWindow({ scope: listScope, count: itemIndex + 1 });
+        }
         // Defer scrollIntoView until after the row's <li> has rendered;
         // looking up the DOM node by `data-history-key` keeps the
         // selector decoupled from React's internals.
@@ -1086,7 +1192,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 }
             }, 0);
         }
-    }, [entries, initialFocus]);
+    }, [entries, initialFocus, groupedItems, listScope, visibleItemCount]);
 
     // M2.3 handoff: the open row's key has just stopped existing, which
     // is what confirming looks like from here (the pending entry is
@@ -1207,7 +1313,21 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     if (loadError) {
         return wrap(
             <ListPage>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
+                <StatusMessage
+                    variant="error"
+                    className={styles.error}
+                    recovery={{
+                        label: 'Try again',
+                        onAction: () => {
+                            setLoadError(null);
+                            setAddressesByChain(null);
+                            setHistoryLoaded(false);
+                            setAddressesReload((value) => value + 1);
+                        },
+                    }}
+                >
+                    {loadError}
+                </StatusMessage>
             </ListPage>,
         );
     }
@@ -1220,9 +1340,6 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             </ListPage>,
         );
     }
-    const activeChainIds = Object.entries(addressesByChain)
-        .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
-        .map(([cid]) => cid);
     if (activeChainIds.length === 0) {
         return wrap(
             <ListPage>
@@ -1243,11 +1360,16 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 <input
                     ref={searchInputRef}
                     type="search"
+                    enterKeyHint="search"
+                    autoCapitalize="off"
+                    autoCorrect="off"
+                    spellCheck={false}
                     className={styles.searchInput}
                     placeholder="Search action, address, token, txid, memo…"
                     aria-label="Search history"
                     value={searchQuery}
                     onChange={(ev) => setSearchQuery(ev.target.value)}
+                    autoComplete="off"
                 />
 
                 <div className={styles.dateRow}>
@@ -1255,7 +1377,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         type="date"
                         aria-label="From date"
                         value={dateFrom}
-                        onChange={(ev) => setDateFrom(ev.target.value)}
+                        max={dateTo || undefined}
+                        onChange={(ev) => updateDateFrom(ev.target.value)}
                         className={styles.dateInput}
                     />
                     <span className={styles.dateSep}>→</span>
@@ -1263,7 +1386,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         type="date"
                         aria-label="To date"
                         value={dateTo}
-                        onChange={(ev) => setDateTo(ev.target.value)}
+                        min={dateFrom || undefined}
+                        onChange={(ev) => updateDateTo(ev.target.value)}
                         className={styles.dateInput}
                     />
                 </div>
@@ -1385,44 +1509,27 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     setFormat={setExportFormat}
                     columns={exportColumns}
                     setColumns={setExportColumns}
-                    fromDate={exportFromDate}
-                    setFromDate={setExportFromDate}
-                    toDate={exportToDate}
-                    setToDate={setExportToDate}
-                    scope={exportScope}
-                    setScope={setExportScope}
-                    activeFilterFromDate={dateFrom}
-                    activeFilterToDate={dateTo}
                     visibleCount={visibleEntries.length}
-                    totalCount={entries.length}
                     onConfirm={() => {
-                        const sourceEntries = exportScope === 'all' ? entries : visibleEntries;
-                        const ranged = (exportFromDate || exportToDate)
-                            ? flowsLib.filterEntriesByDateRange(sourceEntries, {
-                                // Same local-day reading as the filter bar, so an
-                                // export of "today" contains what the list showed.
-                                fromTs: exportFromDate ? Math.floor(localDayStartMs(exportFromDate) / 1000) : null,
-                                toTs: exportToDate ? Math.floor(localDayEndMs(exportToDate) / 1000) : null,
-                            })
-                            : sourceEntries;
                         runExport({
-                            entries: ranged,
+                            entries: visibleEntries,
                             scope: chainScopeLabel(enabledChains, activeChainIds),
                             format: exportFormat,
                             columns: Array.from(exportColumns),
+                            fiatCurrency,
                         });
                         setExportModalOpen(false);
                     }}
                 />
             ) : null}
 
-            {loadingChains.size > 0 ? (
+            {!historyLoaded || loadingChains.size > 0 ? (
                 <div role="status" aria-label="Loading history">
                     <Skeleton.List rows={Math.max(3, loadingChains.size)} />
                 </div>
             ) : null}
 
-            {visibleEntries.length === 0 && loadingChains.size === 0 ? (
+            {historyLoaded && visibleEntries.length === 0 && loadingChains.size === 0 ? (
                 filtersActive && entries.length > 0 ? (
                     <EmptyState
                         title="No matches for the current filters"
@@ -1436,37 +1543,49 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             ? 'No cross-chain actions yet'
                             : 'No activity yet'}
                         body={crossChainOnly
-                            ? 'Make a cross-chain transfer or receive one to see entries here.'
+                            ? 'Cross-chain transfers sent or received by this wallet appear here.'
                             : 'Once you send or receive on the selected chains, the activity feed populates.'}
-                        actionLabel={!crossChainOnly && onReceive ? 'Receive' : undefined}
-                        onAction={!crossChainOnly ? onReceive : undefined}
-                        icon={!crossChainOnly && onReceive ? <Icon.ReceiveIcon /> : undefined}
                     />
                 )
             ) : null}
 
-            {(visibleEntries.length > 0 || historyFetchedAt) ? (
+            {historyFetchedAt ? (
                 <div className={styles.resultsHeader}>
                     {historyFetchedAt && loadingChains.size === 0 ? (
                         <StalenessLabel lastSyncedAt={historyFetchedAt} />
                     ) : <span />}
-                    <button
-                        type="button"
-                        className={styles.exportTrigger}
-                        aria-haspopup="dialog"
-                        aria-expanded={exportModalOpen}
-                        onClick={() => setExportModalOpen(true)}
-                        disabled={entries.length === 0}
-                    >
-                        Export…
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)' }}>
+                        {visibleEntries.length === 0 ? (
+                            <span
+                                id="history-export-disabled-reason"
+                                style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}
+                            >
+                                {entries.length > 0
+                                    ? 'No rows match the current filters.'
+                                    : 'There are no history rows to export.'}
+                            </span>
+                        ) : null}
+                        <button
+                            type="button"
+                            className={styles.exportTrigger}
+                            aria-haspopup="dialog"
+                            aria-expanded={exportModalOpen}
+                            aria-describedby={visibleEntries.length === 0 ? 'history-export-disabled-reason' : undefined}
+                            onClick={() => setExportModalOpen(true)}
+                            disabled={visibleEntries.length === 0}
+                        >
+                            Export…
+                        </button>
+                    </div>
                 </div>
             ) : null}
 
             <ul className={styles.timeline}>
-                {groupedItems.map((item) => {
+                {renderedItems.map((item) => {
                     if (item.kind === 'group') {
                         const expanded = expandedGroups.has(item.key);
+                        const memberLimit = groupMemberLimits[item.key] || HISTORY_PAGE_SIZE;
+                        const renderedMembers = item.members.slice(0, memberLimit);
                         return (
                             <li key={item.key}>
                                 <div className={`${styles.groupCardWrap} ${expanded ? styles.groupCardWrapExpanded : ''}`}>
@@ -1477,7 +1596,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                                     />
                                     {expanded ? (
                                         <ul className={styles.groupMembers}>
-                                            {item.members.map((entry) => (
+                                            {renderedMembers.map((entry) => (
                                                 <EntryRow
                                                     key={entry.key}
                                                     entry={entry}
@@ -1499,6 +1618,22 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                                                     onDismissFailed={dismissFailedPending}
                                                 />
                                             ))}
+                                            {memberLimit < item.members.length ? (
+                                                <li className={styles.groupPagination}>
+                                                    <Button
+                                                        type="button"
+                                                        variant="secondary"
+                                                        size="sm"
+                                                        icon={null}
+                                                        onClick={() => showMoreGroupMembers(
+                                                            item.key,
+                                                            item.members.length,
+                                                        )}
+                                                    >
+                                                        Show more group entries ({Math.min(memberLimit, item.members.length).toLocaleString('en-US')} of {item.members.length.toLocaleString('en-US')} shown)
+                                                    </Button>
+                                                </li>
+                                            ) : null}
                                         </ul>
                                     ) : null}
                                 </div>
@@ -1526,6 +1661,21 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     );
                 })}
             </ul>
+            {visibleItemCount < groupedItems.length ? (
+                <div className={styles.pagination} aria-live="polite">
+                    <span className={styles.paginationCount}>
+                        {Math.min(visibleItemCount, groupedItems.length).toLocaleString('en-US')} of {groupedItems.length.toLocaleString('en-US')} history items shown
+                    </span>
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        icon={null}
+                        onClick={showMoreItems}
+                    >
+                        Show more history
+                    </Button>
+                </div>
+            ) : null}
         </ListPage>,
     );
 }
@@ -1552,7 +1702,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
         fiatCurrency: fiatCurrency || 'USD',
     });
     const nativeFiatValue = nativeAmount != null && fiatRate
-        ? coinToFiat(nativeAmount, fiatRate)
+        ? coinToFiatExact(nativeAmount, fiatRate)
         : null;
 
     // ───── More-menu / Save-as-contact state ─────
@@ -1753,7 +1903,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                 const { ok } = await copyText(shareUrl);
                 showToast({
                     message: ok ? 'Action link copied.' : 'Copy failed: clipboard unavailable',
-                    variant: ok ? 'success' : 'error',
+                    variant: ok ? 'default' : 'error',
                 });
             },
         });
@@ -1923,6 +2073,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                         Save {shortenAddress(contactPeer || '')} as
                         <input
                             type="text"
+                            enterKeyHint="go"
                             className={styles.saveContactInput}
                             value={contactName}
                             onChange={(e) => setContactName(e.target.value)}
@@ -2308,7 +2459,7 @@ function basicDetailRows(entry, chainTip, nativeAmount, nativeFiatValue, balance
     // Hero stays minimal: Action, Status, Network, Time only. Block,
     // Index, Tx hash, Source, Destination, Amount, Memo, and every
     // per-action field live in the Details tab below.
-    if (entry.timestamp) rows.push(['Time', formatRelativeTime(entry.timestamp) || formatTimestamp(entry.timestamp)]);
+    if (entry.timestamp) rows.push(['Time', formatTimestamp(entry.timestamp)]);
     return rows;
 }
 
@@ -2326,9 +2477,56 @@ function CopyableValue({ display, fullValue, ariaLabel }) {
     );
 }
 
+const DETAIL_FIELD_LABELS = Object.freeze({
+    action: 'Action',
+    action_index: 'Action number',
+    address: 'Wallet address',
+    block_index: 'Block',
+    chain: 'Chain',
+    chain_id: 'Chain',
+    destination: 'To',
+    source: 'From',
+    time: 'Time',
+    timestamp: 'Time',
+    tx_hash: 'Transaction ID',
+});
+
+/** Turn a protocol field name into the label shown in the Details table. */
+function detailFieldLabel(key) {
+    const normalized = String(key || '')
+        .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+        .replace(/[\s-]+/g, '_')
+        .toLowerCase();
+    if (DETAIL_FIELD_LABELS[normalized]) return DETAIL_FIELD_LABELS[normalized];
+    const words = normalized.replace(/_+/g, ' ').trim();
+    return words ? words.charAt(0).toUpperCase() + words.slice(1) : 'Field';
+}
+
+/** Translate wire enum values while leaving identifiers and free text intact. */
+function detailValue(value, key) {
+    if (typeof value !== 'string') return value;
+    const normalizedKey = String(key || '').replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
+    if (!/(^|_)(status|state|side|direction|type)$/.test(normalizedKey)) return value;
+    if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(value)) return value;
+    const words = value.toLowerCase().replace(/[_-]+/g, ' ');
+    return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+function copyLabelForDetailField(key) {
+    const normalized = String(key || '')
+        .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+        .toLowerCase();
+    if (/(^|_)(tx_hash|txid|transaction_id)$/.test(normalized)) return 'Copy transaction ID';
+    if (normalized === 'source' || normalized === 'from') return 'Copy from address';
+    if (normalized === 'destination' || normalized === 'to') return 'Copy to address';
+    if (normalized.includes('address')) return `Copy ${detailFieldLabel(key).toLowerCase()}`;
+    return null;
+}
+
 function CopyIconButton({ value, label = 'Copy to clipboard' }) {
     const [copied, setCopied] = useState(false);
     const { showToast } = useToast();
+    const haptic = useHapticFeedback();
     const handleClick = async (event) => {
         event.stopPropagation();
         const text = String(value ?? '');
@@ -2336,6 +2534,7 @@ function CopyIconButton({ value, label = 'Copy to clipboard' }) {
         if (ok) {
             setCopied(true);
             setTimeout(() => setCopied(false), 1500);
+            haptic.tap();
             return;
         }
         showToast({ message: 'Copy failed: clipboard unavailable', variant: 'error' });
@@ -2365,13 +2564,13 @@ function fullDetailRows(entry, balancesHidden = false) {
     const rows = [];
     const raw = entry.raw || {};
 
-    if (entry.action) rows.push(['action', entry.action]);
+    if (entry.action) rows.push(['Action', actionDisplayLabel(entry.action)]);
     if (entry.actionIndex) {
-        rows.push(['index', (
+        rows.push(['Action number', (
             <CopyableValue
-                display={Number(entry.actionIndex).toLocaleString('en-US')}
+                display={formatDecimalAmount(entry.actionIndex)}
                 fullValue={String(entry.actionIndex)}
-                ariaLabel="Copy index"
+                ariaLabel="Copy action number"
             />
         )]);
     }
@@ -2379,38 +2578,38 @@ function fullDetailRows(entry, balancesHidden = false) {
     // chain family and network kind read separately.
     if (entry.chainId) {
         const [coin = '', network = 'mainnet'] = String(entry.chainId).split('-');
-        if (coin) rows.push(['chain', coin]);
-        rows.push(['network', network]);
+        if (coin) rows.push(['Chain', capitalize(coin)]);
+        rows.push(['Network', capitalize(network)]);
     }
-    if (entry.blockIndex) rows.push(['block_index', Number(entry.blockIndex).toLocaleString('en-US')]);
-    else if (entry.blockIndex === 0) rows.push(['block_index', 'pending']);
+    if (entry.blockIndex) rows.push(['Block', formatDecimalAmount(entry.blockIndex)]);
+    else if (entry.blockIndex === 0) rows.push(['Block', 'Pending confirmation']);
     if (entry.timestamp) {
-        rows.push(['time', formatRelativeTime(entry.timestamp) || formatTimestamp(entry.timestamp)]);
+        rows.push(['Time', formatRelativeTime(entry.timestamp) || formatTimestamp(entry.timestamp)]);
     }
     if (entry.txHash) {
-        rows.push(['tx_hash', (
+        rows.push(['Transaction ID', (
             <CopyableValue
-                display={shortenAddress(entry.txHash)}
+                display={entry.txHash}
                 fullValue={entry.txHash}
-                ariaLabel="Copy tx hash"
+                ariaLabel="Copy transaction ID"
             />
         )]);
     }
     if (entry.source) {
-        rows.push(['source', (
+        rows.push(['From', (
             <CopyableValue
-                display={shortenAddress(entry.source)}
+                display={entry.source}
                 fullValue={entry.source}
-                ariaLabel="Copy source address"
+                ariaLabel="Copy from address"
             />
         )]);
     }
     if (entry.address) {
-        rows.push(['address', (
+        rows.push(['Wallet address', (
             <CopyableValue
-                display={shortenAddress(entry.address)}
+                display={entry.address}
                 fullValue={entry.address}
-                ariaLabel="Copy address"
+                ariaLabel="Copy wallet address"
             />
         )]);
     }
@@ -2449,9 +2648,16 @@ function fullDetailRows(entry, balancesHidden = false) {
         else if (typeof v === 'object') {
             try { display = JSON.stringify(v); } catch { display = String(v); }
         } else {
-            display = String(v);
+            display = detailValue(String(v), k);
         }
-        rows.push([k, display]);
+        const copyLabel = copyLabelForDetailField(k);
+        rows.push([detailFieldLabel(k), copyLabel && typeof v !== 'object' ? (
+            <CopyableValue
+                display={display}
+                fullValue={String(v ?? '')}
+                ariaLabel={copyLabel}
+            />
+        ) : display]);
     }
 
     return rows;
@@ -2476,15 +2682,7 @@ function isOraclePricedGetAmount(entry, raw, key, value) {
 // well as JS numbers. Uses BigInt for pure-integer strings so values
 // past Number.MAX_SAFE_INTEGER still round-trip correctly.
 function formatNumberWithCommas(value) {
-    if (value === null || value === undefined) return '';
-    const s = String(value).trim();
-    if (!s) return '';
-    if (/^-?\d+$/.test(s)) {
-        try { return BigInt(s).toLocaleString('en-US'); } catch { /* fall through */ }
-    }
-    const n = Number(s);
-    if (Number.isFinite(n)) return n.toLocaleString('en-US');
-    return s;
+    return formatDecimalAmount(value);
 }
 
 /**
@@ -2733,7 +2931,7 @@ function RecipientsBlock({ entry }) {
                 <Button type="button" variant="secondary" size="sm" onClick={load}>
                     {isDividend ? 'Show holders' : 'Show recipients'}
                 </Button>
-                {error ? <span style={{ color: 'var(--xc-error, #c33)', fontSize: 'var(--xc-text-xs)' }} role="alert">{error}</span> : null}
+                {error ? <span style={{ color: 'var(--xc-danger-fg)', fontSize: 'var(--xc-text-xs)' }} role="alert">{error}</span> : null}
             </div>
         );
     }
@@ -2784,7 +2982,10 @@ function RecipientsBlock({ entry }) {
                 </div>
             ) : (
                 <EmptyState
-                    title={<>No {isDividend ? 'holders' : 'recipients'} found.</>}
+                    title={<>No {isDividend ? 'holders' : 'recipients'} found</>}
+                    body={isDividend
+                        ? 'Token holders appear here after balances are indexed.'
+                        : 'Matching recipients appear here after history is indexed.'}
                     titleAs="p"
                 />
             )}
@@ -2820,7 +3021,7 @@ function RecipientsBlock({ entry }) {
                 </div>
             ) : null}
             {error ? (
-                <span style={{ color: 'var(--xc-error, #c33)', fontSize: 'var(--xc-text-xs)' }} role="alert">{error}</span>
+                <span style={{ color: 'var(--xc-danger-fg)', fontSize: 'var(--xc-text-xs)' }} role="alert">{error}</span>
             ) : null}
         </div>
     );
@@ -2897,7 +3098,7 @@ function coinOfChainId(chainId) {
 const NATIVE_TICKER_BY_COIN = { bitcoin: 'BTC', dogecoin: 'DOGE', litecoin: 'LTC' };
 
 /**
- * Resolve a numeric native-coin amount for `entry`, or `null` when the
+ * Resolve an exact native-coin amount for `entry`, or `null` when the
  * amount can't be trusted to price against the chain's own coin rate.
  *
  * IMPORTANT (old-numbering): a SEND action carries a
@@ -2910,7 +3111,7 @@ const NATIVE_TICKER_BY_COIN = { bitcoin: 'BTC', dogecoin: 'DOGE', litecoin: 'LTC
  * replicate it here.
  *
  * @param {import('./History.jsx').HistoryEntry | null | undefined} entry
- * @returns {number | null}
+ * @returns {string | null}
  */
 function nativeAmountFieldOf(entry) {
     if (!entry || String(entry.action || '').toUpperCase() !== 'SEND') return null;
@@ -2922,8 +3123,8 @@ function nativeAmountFieldOf(entry) {
     if (tick && String(tick).toUpperCase() !== nativeTicker) return null; // token movement
     const amt = raw.amount ?? raw.AMOUNT ?? raw.quantity ?? raw.QUANTITY;
     if (amt == null) return null;
-    const n = typeof amt === 'number' ? amt : parseFloat(amt);
-    return Number.isFinite(n) ? n : null;
+    const amount = String(amt).trim();
+    return /^-?\d+(\.\d+)?$/.test(amount) ? amount : null;
 }
 
 /**
@@ -3079,7 +3280,7 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
                 <span className={styles.rowMeta}>
                     {entry.blockIndex ? (
                         <>
-                            <span>Block {Number(entry.blockIndex).toLocaleString('en-US')}</span>
+                            <span>Block {formatDecimalAmount(entry.blockIndex)}</span>
                             {chainTip ? (
                                 <span className={styles.confirmationsPill}>
                                     {Math.max(0, chainTip - Number(entry.blockIndex) + 1)} Confirms
@@ -3093,7 +3294,10 @@ export function EntryRow({ entry, selected, showConnector, onClick, peerCache, i
                         </>
                     )}
                     {entry.timestamp ? (
-                        <span className={styles.rowRelativeTime}>
+                        <span
+                            className={styles.rowRelativeTime}
+                            title={formatTimestamp(entry.timestamp)}
+                        >
                             {formatRelativeTime(entry.timestamp)}
                         </span>
                     ) : null}
@@ -3175,7 +3379,11 @@ function GroupCard({ item, expanded, onToggle }) {
             </span>
             <span className={styles.rowSummary}>{displaySummary}</span>
             <span className={styles.rowMeta}>
-                {newest?.timestamp ? `Latest ${formatRelativeTime(newest.timestamp)}` : '-'}
+                {newest?.timestamp ? (
+                    <span title={formatTimestamp(newest.timestamp)}>
+                        Latest {formatRelativeTime(newest.timestamp)}
+                    </span>
+                ) : '-'}
                 <span className={styles.groupChevron} aria-hidden="true">
                     <DoubleChevron direction={expanded ? 'up' : 'down'} />
                 </span>
@@ -3317,30 +3525,7 @@ function StatusPill({ status }) {
 }
 
 function formatTimestamp(ts) {
-    if (!ts) return '-';
-    const ms = ts < 1e12 ? ts * 1000 : ts;
-    const d = new Date(ms);
-    if (Number.isNaN(d.getTime())) return '-';
-    return d.toISOString().replace('T', ' ').replace(/\..*/, ' UTC');
-}
-
-// Human-readable "X ago" from a unix timestamp (seconds or ms).
-function formatRelativeTime(ts) {
-    if (!ts) return '';
-    const ms = ts < 1e12 ? ts * 1000 : ts;
-    const diffSec = Math.floor((Date.now() - ms) / 1000);
-    if (diffSec < 5) return 'just now';
-    if (diffSec < 60) return `${diffSec} seconds ago`;
-    const min = Math.floor(diffSec / 60);
-    if (min < 60) return `${min} minute${min === 1 ? '' : 's'} ago`;
-    const hr = Math.floor(diffSec / 3600);
-    if (hr < 24) return `${hr} hour${hr === 1 ? '' : 's'} ago`;
-    const day = Math.floor(diffSec / 86400);
-    if (day < 30) return `${day} day${day === 1 ? '' : 's'} ago`;
-    const month = Math.floor(day / 30);
-    if (month < 12) return `${month} month${month === 1 ? '' : 's'} ago`;
-    const year = Math.floor(day / 365);
-    return `${year} year${year === 1 ? '' : 's'} ago`;
+    return formatLocalDateTime(ts) || '-';
 }
 
 /**
@@ -3727,12 +3912,12 @@ function ChainPicker({ activeChainIds, chainRegistry, enabledChains, onChange })
     );
 }
 
-function runExport({ entries, scope, format, columns }) {
+function runExport({ entries, scope, format, columns, fiatCurrency }) {
     if (!Array.isArray(entries) || entries.length === 0) return;
     const filename = flowsLib.buildExportFilename({ scope, format });
     const fileContent = format === 'csv'
-        ? flowsLib.entriesToCsv(entries, { columns })
-        : flowsLib.entriesToJson(entries, { scope, columns });
+        ? flowsLib.entriesToCsv(entries, { columns, fiatCurrency })
+        : flowsLib.entriesToJson(entries, { scope, columns, fiatCurrency });
     const mime = format === 'csv' ? 'text/csv;charset=utf-8' : 'application/json';
     const blob = new Blob([fileContent], { type: mime });
     const url = URL.createObjectURL(blob);
@@ -3802,13 +3987,13 @@ function ExportModal({
     onClose,
     format, setFormat,
     columns, setColumns,
-    fromDate, setFromDate,
-    toDate, setToDate,
-    scope, setScope,
-    activeFilterFromDate, activeFilterToDate,
-    visibleCount, totalCount,
+    visibleCount,
     onConfirm,
 }) {
+    // Opened by the 'e' key or its button: focus moves in, Tab stays in, and
+    // closing hands focus back to the opener.
+    const dialogRef = useRef(null);
+    useFocusTrap(dialogRef, { active: true });
     useEffect(() => {
         function onKey(e) { if (e.key === 'Escape') onClose(); }
         document.addEventListener('keydown', onKey);
@@ -3822,9 +4007,6 @@ function ExportModal({
         setColumns(next);
     };
 
-    const filterChanged = fromDate !== activeFilterFromDate || toDate !== activeFilterToDate;
-    const sourceCount = scope === 'all' ? totalCount : visibleCount;
-
     return (
         <div
             style={MODAL_SCRIM}
@@ -3833,6 +4015,7 @@ function ExportModal({
             tabIndex={-1}
         >
             <div
+                ref={dialogRef}
                 style={MODAL_CARD}
                 role="dialog"
                 aria-modal="true"
@@ -3878,55 +4061,9 @@ function ExportModal({
                     ))}
                 </fieldset>
 
-                <fieldset style={MODAL_FIELDSET}>
-                    <legend style={MODAL_LEGEND}>Scope</legend>
-                    <label style={MODAL_LABEL}>
-                        <input
-                            type="radio"
-                            name="export-scope"
-                            value="filtered"
-                            checked={scope === 'filtered'}
-                            onChange={() => setScope('filtered')}
-                        />
-                        Filtered ({visibleCount.toLocaleString()} row{visibleCount === 1 ? '' : 's'})
-                    </label>
-                    <label style={MODAL_LABEL}>
-                        <input
-                            type="radio"
-                            name="export-scope"
-                            value="all"
-                            checked={scope === 'all'}
-                            onChange={() => setScope('all')}
-                        />
-                        Everything loaded ({totalCount.toLocaleString()} row{totalCount === 1 ? '' : 's'})
-                    </label>
-                </fieldset>
-
-                <fieldset style={MODAL_FIELDSET}>
-                    <legend style={MODAL_LEGEND}>
-                        Date range {filterChanged ? '(overrides active filter)' : '(matches active filter)'}
-                    </legend>
-                    <label style={MODAL_LABEL}>
-                        From
-                        <input
-                            type="date"
-                            value={fromDate}
-                            onChange={(e) => setFromDate(e.target.value)}
-                            style={{ marginLeft: 'auto' }}
-                            aria-label="From date"
-                        />
-                    </label>
-                    <label style={MODAL_LABEL}>
-                        To
-                        <input
-                            type="date"
-                            value={toDate}
-                            onChange={(e) => setToDate(e.target.value)}
-                            style={{ marginLeft: 'auto' }}
-                            aria-label="To date"
-                        />
-                    </label>
-                </fieldset>
+                <p style={{ margin: 0, fontSize: 'var(--xc-text-sm)' }}>
+                    {visibleCount.toLocaleString()} filtered row{visibleCount === 1 ? '' : 's'} will be exported.
+                </p>
 
                 <div style={MODAL_ACTIONS}>
                     <button type="button" className={styles.chip} onClick={onClose}>Cancel</button>
@@ -3934,7 +4071,7 @@ function ExportModal({
                         type="button"
                         className={styles.chip}
                         onClick={onConfirm}
-                        disabled={sourceCount === 0 || columns.size === 0}
+                        disabled={visibleCount === 0 || columns.size === 0}
                     >
                         Export
                     </button>

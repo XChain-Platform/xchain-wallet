@@ -22,6 +22,9 @@ import {
     useAutoLockPolicy, resolveAutoLockMinutes, AUTO_LOCK_SHELLS,
 } from '../../../packages/core/src/shared/hooks/useAutoLockPolicy.js';
 import { useAutoLock } from '../../../packages/core/src/shared/hooks/useAutoLock.js';
+import { holdAutoLock } from '../../../packages/core/src/shared/hooks/autoLockGuard.js';
+import { shouldAutoLock } from '../../../packages/extension/src/background/autoLockState.js';
+import { createLockBackstop } from '../../../packages/extension/src/background/walletLock.js';
 import {
     AUTOLOCK_MINUTES_DEFAULT, AUTOLOCK_MINUTES_MAX, AUTOLOCK_NEVER,
 } from '../../../packages/core/src/schemas/settings.js';
@@ -174,6 +177,25 @@ describe('useAutoLockPolicy', () => {
         expect(messaging.lockWallet).toHaveBeenCalledTimes(1);
     });
 
+    it('applies a shorter timeout immediately without resetting prior idle time', async () => {
+        const messaging = makeMessaging({ autolockMinutes: 30 });
+        renderShell(<Shell messaging={messaging} />, { messaging });
+        await settle();
+
+        await idleFor(10 * MINUTE);
+        expect(messaging.lockWallet).not.toHaveBeenCalled();
+
+        await act(async () => {
+            window.dispatchEvent(new CustomEvent('xc:settings-changed', {
+                detail: { schemaVersion: 2, autolockMinutes: 5 },
+            }));
+            await Promise.resolve();
+        });
+        await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+
+        expect(messaging.lockWallet).toHaveBeenCalledTimes(1);
+    });
+
     it('never locks when the user picked "Never"', async () => {
         const messaging = makeMessaging({ autolockMinutes: 0 });
         renderShell(<Shell messaging={messaging} />, { messaging });
@@ -203,6 +225,41 @@ describe('useAutoLockPolicy', () => {
         expect(messaging.lockWallet).not.toHaveBeenCalled();
         await idleFor(1.5 * MINUTE);
         expect(messaging.lockWallet).toHaveBeenCalledTimes(1);
+    });
+
+    it('counts wall-clock time in the mobile background and locks on resume', async () => {
+        const onLock = vi.fn();
+        function Harness() {
+            useAutoLock(onLock, { idleMs: MINUTE });
+            return null;
+        }
+        render(<Harness />);
+        Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+        document.dispatchEvent(new Event('visibilitychange'));
+
+        vi.setSystemTime(Date.now() + 2 * MINUTE);
+        Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+        await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+
+        expect(onLock).toHaveBeenCalledTimes(1);
+    });
+
+    it('defers an elapsed lock through signing, explains it, then locks immediately', async () => {
+        const onLock = vi.fn();
+        const onDeferred = vi.fn();
+        function Harness() {
+            useAutoLock(onLock, { idleMs: MINUTE, onDeferred });
+            return null;
+        }
+        render(<Harness />);
+        const release = holdAutoLock();
+
+        await idleFor(1.5 * MINUTE);
+        expect(onLock).not.toHaveBeenCalled();
+        expect(onDeferred).toHaveBeenCalledTimes(1);
+
+        await act(async () => { release(); });
+        expect(onLock).toHaveBeenCalledTimes(1);
     });
 
     it('does not arm while the session is locked', async () => {
@@ -272,5 +329,30 @@ describe('useAutoLockPolicy', () => {
         await settle();
         await idleFor(5 * MINUTE);
         expect(messaging.lockWallet).not.toHaveBeenCalled();
+    });
+});
+
+describe('extension auto-lock backstop', () => {
+    it('does not tear down an active UI request and locks on the next check', async () => {
+        let requestActive = true;
+        const lock = vi.fn(async () => ({ locked: true }));
+        const backstop = createLockBackstop({
+            lockDeps: () => ({ sessionBackend: {}, signingSecretBackend: {} }),
+            tearDownHost: vi.fn(),
+            isUnlocked: () => true,
+            isRequestActive: () => requestActive,
+            readAutoLockState: async () => ({ armed: true, idleMs: MINUTE, lastActivity: 1 }),
+            clearAutoLockState: vi.fn(async () => {}),
+            shouldAutoLock,
+            now: () => 2 * MINUTE,
+            lock,
+        });
+
+        await expect(backstop.maybeAutoLock()).resolves.toBe('deferred');
+        expect(lock).not.toHaveBeenCalled();
+
+        requestActive = false;
+        await expect(backstop.maybeAutoLock()).resolves.toBe('locked');
+        expect(lock).toHaveBeenCalledTimes(1);
     });
 });

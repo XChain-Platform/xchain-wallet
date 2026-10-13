@@ -16,6 +16,20 @@ import { act, renderHook } from '@testing-library/react';
 import { useCommandPalette } from '../../../packages/core/src/shared/commandPalette/useCommandPalette.js';
 
 describe('useCommandPalette closes on navigation', () => {
+    it('only toggles for the catalogued modifier chord', () => {
+        const { result } = renderHook(() => useCommandPalette());
+
+        act(() => window.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'k', ctrlKey: true, shiftKey: true, bubbles: true,
+        })));
+        expect(result.current.open).toBe(false);
+
+        act(() => window.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'k', ctrlKey: true, bubbles: true,
+        })));
+        expect(result.current.open).toBe(true);
+    });
+
     it('closes when the shown view changes', () => {
         const { result, rerender } = renderHook(({ view }) => useCommandPalette({ currentView: view }), {
             initialProps: { view: 'settings' },

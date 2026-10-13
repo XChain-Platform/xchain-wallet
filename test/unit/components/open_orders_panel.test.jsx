@@ -21,6 +21,7 @@ const lane = vi.hoisted(() => ({
     run: vi.fn(),
     hook: vi.fn(),
     resolve: null,
+    openOnRun: true,
 }));
 
 vi.mock('../../../packages/core/src/shared/hooks/useOwnerActionLane.js', () => ({
@@ -31,7 +32,28 @@ vi.mock('../../../packages/core/src/shared/hooks/useOwnerActionLane.js', () => (
             composing: lane.composing,
             isWatcherMode: lane.isWatcherMode,
             run: lane.run,
-            confirmProps: { confirmAction: { phase: 'ready' } },
+            confirmProps: {
+                confirmAction: {
+                    phase: 'ready',
+                    composed: {
+                        chainId: 'bitcoin-mainnet',
+                        networkFeeSats: 1234,
+                        decoded: {
+                            summary: 'Cancel order (#17)',
+                            details: [{ label: 'Order action index', value: '17' }],
+                            warnings: [],
+                        },
+                    },
+                    report: { verdict: 'pass', findings: [] },
+                    acknowledged: new Set(),
+                    acknowledge: vi.fn(),
+                    canApprove: true,
+                    approve: vi.fn(),
+                    reject: vi.fn(),
+                },
+                password: '',
+                onPasswordChange: vi.fn(),
+            },
         };
     },
 }));
@@ -44,12 +66,6 @@ vi.mock('../../../packages/core/src/shared/hooks/useNativeFee.js', () => ({
     useNativeFee: () => ({ flag: false, mandatory: false }),
 }));
 
-vi.mock('../../../packages/core/src/shared/components/ActionConfirmScreen.jsx', () => ({
-    ActionConfirmScreen: () => (
-        <div data-testid="order-cancel-confirm">Network pre-flight confirmation</div>
-    ),
-}));
-
 const OWNER = {
     id: 'address-1',
     address: 'bc1qownerexampleexampleexampleexampleexample',
@@ -59,17 +75,24 @@ const OWNER = {
     signerId: 'signer-1',
 };
 
-function mountPanel() {
+const FUTURE = 1893456000;
+
+function orderRow(extra = {}) {
+    return {
+        action_index: 17,
+        type: 'sell',
+        price: '2.00000000',
+        amount: '10.00000000',
+        timestamp: 1760000000,
+        expiration: FUTURE,
+        ...extra,
+    };
+}
+
+function mountPanel(rows = [orderRow()]) {
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue({ 'bitcoin-mainnet': [OWNER] }),
-        getMarketOrders: vi.fn().mockResolvedValue([{
-            action_index: 17,
-            type: 'sell',
-            price: '2.00000000',
-            amount: '10.00000000',
-            timestamp: 1760000000,
-            expiration: 800000,
-        }]),
+        getMarketOrders: vi.fn().mockResolvedValue(rows),
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
         cancelOrder: vi.fn(),
         cancelOrderHw: vi.fn(),
@@ -92,10 +115,11 @@ beforeEach(() => {
     lane.composing = false;
     lane.isWatcherMode = false;
     lane.resolve = null;
+    lane.openOnRun = true;
     lane.hook.mockClear();
     lane.run.mockReset();
     lane.run.mockImplementation(() => {
-        lane.open = true;
+        lane.open = lane.openOnRun;
         return new Promise((resolve) => { lane.resolve = resolve; });
     });
 });
@@ -116,8 +140,8 @@ describe('OpenOrdersPanel cancellation confirmation', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
         fireEvent.click(screen.getByRole('button', { name: 'Cancel order' }));
 
-        await screen.findByTestId('order-cancel-confirm');
-        expect(screen.queryByText(/Cancel order #17/)).toBeNull();
+        expect(await screen.findByLabelText('Confirm Cancel order (#17)')).toBeTruthy();
+        expect(screen.getByTestId('confirm-fee')).toHaveTextContent('Network fee: 0.00001234 BTC');
         expect(lane.hook).toHaveBeenLastCalledWith(expect.objectContaining({
             walletId: 'wallet-1',
             chainId: 'bitcoin-mainnet',
@@ -141,6 +165,31 @@ describe('OpenOrdersPanel cancellation confirmation', () => {
         await waitFor(() => {
             expect(screen.getByText('No open orders on this market.')).toBeTruthy();
         });
+    });
+
+    it('keeps the cancel action busy while composition is pending', async () => {
+        lane.openOnRun = false;
+        mountPanel();
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+        const submit = screen.getByRole('button', { name: 'Cancel order' });
+        fireEvent.click(submit);
+
+        expect(submit).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Back' })).toBeDisabled();
+
+        await act(async () => lane.resolve({ txid: 'cancel-txid' }));
+    });
+
+    it('does not offer cancel for stale filled or expired rows', async () => {
+        mountPanel([
+            orderRow({ action_index: 18, current_status: 'filled' }),
+            orderRow({ action_index: 19, current_status: 'open', give_remaining: '0' }),
+            orderRow({ action_index: 20, expiration: 1 }),
+        ]);
+
+        expect(await screen.findByText('No open orders on this market.')).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
     });
 
     it('keeps the order open and shows the unsigned transaction in watcher mode', async () => {

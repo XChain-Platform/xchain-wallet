@@ -93,7 +93,10 @@ async function submitWizard(tick) {
     const field = await screen.findByLabelText('Token name (ticker)');
     fireEvent.change(field, { target: { value: tick } });
     fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1000' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Review token' }));
+    // A refused ticker stops at the details step, so only a valid one reaches the review.
+    const proceed = screen.queryByRole('button', { name: 'Continue to confirmation' });
+    if (proceed) fireEvent.click(proceed);
     return field;
 }
 

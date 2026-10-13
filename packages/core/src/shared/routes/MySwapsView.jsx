@@ -37,6 +37,7 @@ import {
     StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
+import { formatLocalDateTime } from '../utils/dateTime.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
 import { MarketLifecycleTimeline } from '../components/MarketLifecycleTimeline.jsx';
@@ -132,8 +133,10 @@ export function collectCancelledKeys(results) {
 
 function fmtDate(unixSec) {
     const n = Number(unixSec);
-    if (!Number.isFinite(n) || n <= 0) return null;
-    try { return new Date(n * 1000).toLocaleString(); } catch { return null; }
+    // Protocol expirations are Unix seconds. A current millisecond timestamp
+    // otherwise renders as a plausible date tens of thousands of years away.
+    if (!Number.isFinite(n) || n <= 0 || n >= 10_000_000_000) return null;
+    return formatLocalDateTime(n);
 }
 
 function withFormattedExpiration(confirmAction) {
@@ -205,9 +208,9 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
                 for (const a of addrs || []) pairs.push({ chainId, owner: a });
             }
             const results = await Promise.all(pairs.map((p) => Promise.all([
-                messaging.getSwapsForAddress({ chainId: p.chainId, address: p.owner.address }).catch(() => null),
+                messaging.getSwapsForAddress({ chainId: p.chainId, address: p.owner.address }),
                 (typeof messaging.getSwapCancelsForAddress === 'function'
-                    ? messaging.getSwapCancelsForAddress({ chainId: p.chainId, address: p.owner.address }).catch(() => null)
+                    ? messaging.getSwapCancelsForAddress({ chainId: p.chainId, address: p.owner.address })
                     : Promise.resolve(null)),
             ]).then(([s, c]) => ({ p, swaps: extractRows(s), cancels: extractRows(c) }))));
 
@@ -346,7 +349,7 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
                     <SectionHeader title="Open" />
                     <ul className={L.list} role="list" aria-label="Open swaps">{openItems.map(renderRow)}</ul>
                 </section>
-            ) : <EmptyState title="No open swaps." titleAs="p" />}
+            ) : <EmptyState title="No open swaps" body="Open atomic swaps appear here." titleAs="p" />}
             {closedItems.length > 0 ? (
                 <section>
                     <SectionHeader title="Closed" />

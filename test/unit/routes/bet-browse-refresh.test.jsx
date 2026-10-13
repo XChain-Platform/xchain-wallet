@@ -201,6 +201,38 @@ describe('BetFeedsList refresh', () => {
             'the list was fetched with no chain to fetch it for').toBe(0);
     });
 
+    it('leaves the no-address empty state when a different wallet has a betting address', async () => {
+        const { messaging } = harness([[market(1248, 'open')]]);
+        messaging.getAddressesByChain = vi.fn()
+            .mockResolvedValueOnce({})
+            .mockResolvedValue({ [CHAIN]: [HD_ADDRESS] });
+        let utils;
+        await domAct(async () => {
+            utils = render(React.createElement(
+                MessagingProvider,
+                { shell: 'web', messaging },
+                React.createElement(BetFeedsList, {
+                    walletId: 'empty-wallet', onOpenMarket() {}, onBack() {},
+                }),
+            ));
+            await drain();
+        });
+        expect(utils.container.textContent).toContain('No betting address');
+
+        await domAct(async () => {
+            utils.rerender(React.createElement(
+                MessagingProvider,
+                { shell: 'web', messaging },
+                React.createElement(BetFeedsList, {
+                    walletId: 'funded-wallet', onOpenMarket() {}, onBack() {},
+                }),
+            ));
+            await drain();
+        });
+        expect(utils.container.textContent).not.toContain('No betting address');
+        expect(utils.container.textContent).toContain('#1248');
+    });
+
     it('stops refreshing once the screen is gone', async () => {
         const { messaging, calls } = harness([[market(1248, 'open')]]);
         const { unmount } = await renderList(messaging);

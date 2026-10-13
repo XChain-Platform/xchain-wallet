@@ -23,7 +23,7 @@ import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
-import { formatWithThousands } from '../utils/amountFormat.js';
+import { formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import {
     perUnitMax,
     multiplyDecimal,
@@ -772,6 +772,16 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         const amt = String(amountPer).trim();
         if (!amt || Number(amt) <= 0) {
             setFormError('Per-recipient amount must be a positive number.');
+            return;
+        }
+        // Keep each payout within the dropped token's on-chain decimal scale.
+        const precisionError = tokenAmountPrecisionError(amt, {
+            divisibility: dropInfo?.divisibility,
+            tick: token,
+            noun: 'Per-recipient amount',
+        });
+        if (precisionError) {
+            setFormError(precisionError);
             return;
         }
         // Stop a drop the balance cannot cover here, not several
@@ -1715,8 +1725,9 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                                 : 'Paste addresses, one per line or comma-separated.'}
                             rows={8}
                             spellCheck={false}
-                            autoCapitalize="none"
+                            autoCapitalize="off"
                             autoCorrect="off"
+                            autoComplete="off"
                         />
                     </label>
                     <div className={styles.fromLine}>
@@ -1799,7 +1810,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         onChange={(e) => setTicksText(e.target.value)}
                         rows={6}
                         spellCheck={false}
-                        autoCapitalize="none"
+                        autoCapitalize="off"
                         placeholder="TICK1&#10;TICK2"
                     />
                     <div className={styles.fromLine}>
@@ -1988,8 +1999,8 @@ function ExistingListPickerScreen({ variant, messaging, chainId, addresses, onSe
     if (rows.length === 0) {
         return wrap(
             <EmptyState
-                title="No lists published from this chain's addresses yet."
-                body="Switch to Paste addresses or Token holders to publish one here, or use My Lists from Home once you have."
+                title="No published lists yet"
+                body="Address and token lists published from this chain appear here."
             />,
         );
     }
