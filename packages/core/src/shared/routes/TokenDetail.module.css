@@ -247,41 +247,11 @@
     white-space: nowrap;
 }
 
-/* ───── Quick actions - matches Home's quickActions ───── */
+/* ───── Quick actions ───── */
 
 .quickActions {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: var(--xc-space-2);
-}
-
-.quickAction {
-    appearance: none;
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-accent-primary);
-    border-radius: var(--xc-radius-md);
-    padding: var(--xc-space-3) var(--xc-space-1);
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: var(--xc-space-1);
-    cursor: pointer;
-    color: var(--xc-text);
-    font-family: inherit;
-    font-size: var(--xc-text-xs);
-    font-weight: 600;
-    min-height: 72px;
-    text-align: center;
-}
-.quickAction:hover:not(:disabled) { background: var(--xc-bg-muted); }
-.quickAction:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-.quickAction:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
 }
 
 .quickActionIcon {
@@ -293,20 +263,6 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-}
-
-.quickActionContent {
-    display: inline-flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--xc-space-1);
-}
-
-.quickActionReason {
-    color: var(--xc-text-muted);
-    font-size: 0.65rem;
-    font-weight: 500;
-    line-height: 1.2;
 }
 
 /* "More" entry in the 4-up quick-actions grid. Wrapper is a flex
@@ -520,6 +476,15 @@
     width: 100%;
     border-collapse: collapse;
     font-size: var(--xc-text-sm);
+}
+
+.detailList,
+.holdersList {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
 }
 
 .metaRow th,
@@ -892,10 +857,17 @@
 .holdersAddrWrap {
     display: inline-flex;
     align-items: center;
-    justify-content: flex-end;
     flex-wrap: wrap;
     gap: var(--xc-space-2);
     min-width: 0;
+}
+
+.copyableValue {
+    justify-content: flex-end;
+}
+
+.holdersAddrWrap {
+    justify-content: flex-start;
 }
 
 .lockedFlag {
