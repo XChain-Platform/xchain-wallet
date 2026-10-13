@@ -76,6 +76,7 @@
 }
 
 .rowMeta {
+    /* Half-grid spacing keeps metadata attached to its detail line. */
     margin-top: 2px;
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
@@ -98,8 +99,9 @@
 
 .chip {
     display: inline-block;
+    /* The one-pixel block inset preserves the compact status-chip height. */
     padding: 1px var(--xc-space-2);
-    border-radius: 999px;
+    border-radius: var(--xc-radius-pill);
     font-size: var(--xc-text-xs);
     font-weight: 600;
     white-space: nowrap;
