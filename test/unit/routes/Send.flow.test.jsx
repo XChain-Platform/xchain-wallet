@@ -19,6 +19,7 @@ const CHAIN_ID = 'bitcoin-mainnet';
 const WALLET_ID = 'send-flow-wallet';
 const FROM = 'bc1qsendersendersendersendersendersendersa';
 const TO = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
+const LTC_TO = 'ltc1qxvenxvenxvenxvenxvenxvenxvenxvenwcpknh';
 const AMOUNT = '0.01234567';
 const PASSWORD = 'correct horse battery staple';
 const PSBT = '70736274ff';
@@ -140,6 +141,44 @@ afterEach(() => {
 });
 
 describe('Send flow with mocked messaging', () => {
+    it('cleans a pasted recipient, shows both ends, and signs the full cleaned address', async () => {
+        const messaging = mount();
+        const toField = await screen.findByLabelText(/^To$/);
+        fireEvent.paste(toField, {
+            clipboardData: { getData: () => ` \u200B${TO}\uFEFF ` },
+        });
+
+        expect(toField).toHaveValue(TO);
+        expect(screen.getByText('Check pasted recipient')).toBeInTheDocument();
+        expect(screen.getByLabelText(TO)).toHaveTextContent('bc1qw5…v8f3t4');
+
+        fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: AMOUNT } });
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledWith(
+            expect.objectContaining({ to: TO }),
+        ));
+        await screen.findByTestId('confirm-modal');
+        await approveWithPassword(messaging);
+        expect(messaging.sendToken).toHaveBeenCalledWith(expect.objectContaining({ to: TO }));
+    });
+
+    it('plainly refuses a pasted address from another chain', async () => {
+        const messaging = mount();
+        const toField = await screen.findByLabelText(/^To$/);
+        fireEvent.paste(toField, {
+            clipboardData: { getData: () => LTC_TO },
+        });
+
+        expect(toField).toHaveValue(LTC_TO);
+        expect(await screen.findByText(
+            'This looks like a Litecoin address, not a Bitcoin address.',
+        )).toBeInTheDocument();
+
+        fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: AMOUNT } });
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
     it('reviews every payment field, signs with the password, and shows the txid', async () => {
         const messaging = mount();
         const confirm = await openPasswordConfirm(messaging);

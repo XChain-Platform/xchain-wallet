@@ -211,6 +211,30 @@
     font-weight: 600;
 }
 
+.pastedRecipient {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--xc-space-1) var(--xc-space-2);
+    margin: calc(-1 * var(--xc-space-2)) 0 var(--xc-space-3);
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-sm);
+    background: var(--xc-bg-muted);
+}
+
+.pastedRecipientLabel {
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+}
+
+.pastedRecipientHint {
+    flex-basis: 100%;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+}
+
 .amountFooter {
     display: flex;
     justify-content: space-between;
