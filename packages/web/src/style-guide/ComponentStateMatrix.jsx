@@ -46,6 +46,9 @@ const componentSizes = {
     Skeleton: ALL_SIZES,
     InfoTip: FIXED_SIZE,
     Icon: ALL_SIZES,
+    ListRow: FIXED_SIZE,
+    Chip: FIXED_SIZE,
+    Tabs: FIXED_SIZE,
 };
 
 export const COMPONENT_MATRIX = Object.freeze(Object.fromEntries(
@@ -153,6 +156,12 @@ function ComponentPreview({ name, size, state }) {
         return <UI.Skeleton shape="card" width={{ sm: 96, md: 128, lg: 160 }[size]} height={{ sm: 48, md: 64, lg: 80 }[size]} />;
     case 'InfoTip':
         return <UI.InfoTip label="More information about this setting." />;
+    case 'ListRow':
+        return <UI.ListRow title="Treasury" subtitle="Bitcoin" trailing="0.5 BTC" chevron onClick={noop} disabled={disabled} />;
+    case 'Chip':
+        return <UI.Chip pressed={false} onPressedChange={noop} disabled={disabled}>Watchlist</UI.Chip>;
+    case 'Tabs':
+        return <UI.Tabs items={[{ id: 'all', label: 'All' }, { id: 'popular', label: 'Popular' }]} value="all" onChange={noop} aria-label="Sample tabs" disabled={disabled} />;
     case 'Icon': {
         return (
             <span style={{ '--xc-icon-size': `var(--xc-icon-${size})` }}>
