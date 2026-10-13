@@ -17,6 +17,7 @@ import { isDemoGatedActionIndex } from '../../flows/demoGatedContent.js';
 import { StalenessLabel } from '../components/StalenessLabel.jsx';
 import { GatedFileViewer } from '../components/GatedFileViewer.jsx';
 import { Sparkline, synthesizeTokenChart } from '../components/Sparkline.jsx';
+import tableStyles from '../components/DataTable.module.css';
 import { isDemoWallet } from '../../flows/demoMode.js';
 import { RANGES as CHART_RANGES, resampleTo as resampleSeriesTo } from '../components/PortfolioChart.jsx';
 import portfolioChartStyles from '../components/PortfolioChart.module.css';
@@ -1053,7 +1054,7 @@ function DetailsPanel({
     const [balanceHidden] = useBalancesHidden();
     return (
         <div className={styles.infoStack}>
-            <table className={styles.metaTable}>
+            <table className={styles.metaTable} aria-label="Token details">
                 <tbody>
                     <tr className={styles.metaRow}>
                         <th scope="row">Name</th>
@@ -1217,7 +1218,7 @@ function DnsBlock({ dns }) {
     return (
         <div className={styles.metaBlock}>
             <h2 className={styles.metaBlockTitle}>DNS</h2>
-            <table className={styles.metaTable}>
+            <table className={styles.metaTable} aria-label="DNS records">
                 <tbody>
                     {dns.map((r, i) => (
                         <tr key={`${r.type}:${r.host}:${i}`} className={styles.metaRow}>
@@ -1418,7 +1419,7 @@ function OwnerBlock({ owner }) {
     return (
         <div className={styles.metaBlock}>
             <h2 className={styles.metaBlockTitle}>Owner</h2>
-            <table className={styles.metaTable}>
+            <table className={styles.metaTable} aria-label="Token owner">
                 <tbody>
                     {owner.name ? (
                         <tr className={styles.metaRow}>
@@ -1456,7 +1457,7 @@ function ContactsBlock({ contacts }) {
     return (
         <div className={styles.metaBlock}>
             <h2 className={styles.metaBlockTitle}>Contact</h2>
-            <table className={styles.metaTable}>
+            <table className={styles.metaTable} aria-label="Token contacts">
                 <tbody>
                     {contacts.map((c, i) => {
                         const label = CONTACT_LABELS[c.type] || (c.type.charAt(0).toUpperCase() + c.type.slice(1));
@@ -1492,7 +1493,7 @@ function CategoriesBlock({ categories }) {
     return (
         <div className={styles.metaBlock}>
             <h2 className={styles.metaBlockTitle}>Categories</h2>
-            <table className={styles.metaTable}>
+            <table className={styles.metaTable} aria-label="Token categories">
                 <tbody>
                     {categories.map((c, i) => (
                         <tr key={`${c.type}:${i}`} className={styles.metaRow}>
@@ -2262,28 +2263,39 @@ function HoldersPanel({
                     <StalenessLabel lastSyncedAt={holdersFetchedAt} warnAfterMs={10 * 60_000} />
                 </div>
             ) : null}
-            <ol className={styles.holdersList}>
-                {holders.map((h, i) => (
-                    <li key={holderIdentity(h) || `holder:${i}`} className={styles.holdersRow}>
-                        <span className={styles.holdersAddrWrap}>
-                            <span className={styles.holdersAddr} title={h.address || h.ADDRESS || undefined}>
-                                {shorten(h.address || h.ADDRESS || 'unknown')}
-                            </span>
-                            {(h.address || h.ADDRESS) ? (
-                                <CopyButton
-                                    value={h.address || h.ADDRESS}
-                                    ariaLabel={`Copy holder address ${i + 1}`}
-                                />
-                            ) : null}
-                        </span>
-                        <span className={styles.holdersQty}>
-                            {h.quantity != null || h.QUANTITY != null
-                                ? formatAmount(String(h.quantity ?? h.QUANTITY), divisibility)
-                                : formatWithThousands(String(h.amount ?? h.AMOUNT ?? '0'))}
-                        </span>
-                    </li>
-                ))}
-            </ol>
+            <table className={tableStyles.table}>
+                <caption className={tableStyles.visuallyHiddenCaption}>Holder balances</caption>
+                <thead>
+                    <tr>
+                        <th className={tableStyles.headerCell} scope="col">Address</th>
+                        <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Balance</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {holders.map((h, i) => (
+                        <tr key={holderIdentity(h) || `holder:${i}`}>
+                            <td className={tableStyles.cell} data-label="Address">
+                                <span className={styles.holdersAddrWrap}>
+                                    <span className={styles.holdersAddr} title={h.address || h.ADDRESS || undefined}>
+                                        {shorten(h.address || h.ADDRESS || 'unknown')}
+                                    </span>
+                                    {(h.address || h.ADDRESS) ? (
+                                        <CopyButton
+                                            value={h.address || h.ADDRESS}
+                                            ariaLabel={`Copy holder address ${i + 1}`}
+                                        />
+                                    ) : null}
+                                </span>
+                            </td>
+                            <td className={`${tableStyles.cell} ${tableStyles.numeric} ${styles.holdersQty}`} data-label="Balance">
+                                {h.quantity != null || h.QUANTITY != null
+                                    ? formatAmount(String(h.quantity ?? h.QUANTITY), divisibility)
+                                    : formatWithThousands(String(h.amount ?? h.AMOUNT ?? '0'))}
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
             {holdersMoreError ? (
                 <StatusMessage variant="error" className={styles.error}>{holdersMoreError}</StatusMessage>
             ) : null}
