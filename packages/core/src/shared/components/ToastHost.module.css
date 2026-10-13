@@ -100,11 +100,36 @@
     to   { opacity: 1; transform: translateY(0); }
 }
 
-.variant_success {
-    border-color: var(--xc-success, #2c7a3d);
+.variant_info {
+    border-color: var(--xc-info);
+    background: var(--xc-info-bg);
+    color: var(--xc-info-text);
 }
+
+.variant_warning {
+    border-color: var(--xc-warning);
+    background: var(--xc-warning-bg);
+    color: var(--xc-warning-text);
+}
+
+.variant_success {
+    border-color: var(--xc-success);
+    background: var(--xc-success-bg);
+    color: var(--xc-success);
+}
+
 .variant_error {
-    border-color: var(--xc-danger-fg);
+    border-color: var(--xc-danger);
+    background: var(--xc-danger-bg);
+    color: var(--xc-danger-text);
+}
+
+.icon {
+    flex: 0 0 auto;
+    align-self: flex-start;
+    font-size: var(--xc-icon-sm);
+    font-weight: 700;
+    line-height: 1.4;
 }
 
 .message {
@@ -124,7 +149,7 @@
 .actionBtn {
     background: transparent;
     border: none;
-    color: var(--xc-accent-text);
+    color: inherit;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -154,7 +179,7 @@
 .dismissBtn {
     background: transparent;
     border: none;
-    color: var(--xc-text-muted);
+    color: inherit;
     cursor: pointer;
     font-size: var(--xc-text-lg);
     line-height: 1;

@@ -101,6 +101,16 @@
     color: var(--xc-warning, #F59E0B);
 }
 
+.rowError .dot,
+.rowError .label,
+.rowError .state {
+    color: var(--xc-danger-fg);
+}
+
+.rowError .label {
+    font-weight: 600;
+}
+
 .sub {
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
