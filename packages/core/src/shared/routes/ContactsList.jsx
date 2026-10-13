@@ -916,6 +916,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 <div className={picker.search}>
                     <Input
                         type="search"
+                        size="md"
                         enterKeyHint="search"
                         autoCapitalize="off"
                         placeholder="Search"

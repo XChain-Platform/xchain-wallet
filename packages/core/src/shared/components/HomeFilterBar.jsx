@@ -11,7 +11,7 @@
 // HomeFilterBar keeps the token query and network filter visible together
 // directly above the Home asset tabs.
 
-import { Icon } from '@xchain-wallet/core/ui';
+import { Icon, Input } from '@xchain-wallet/core/ui';
 import { NetworkFilter } from './NetworkFilter.jsx';
 import styles from './HomeFilterBar.module.css';
 
@@ -38,8 +38,9 @@ export function HomeFilterBar({
                 <span className={styles.searchIcon} aria-hidden="true">
                     <Icon.SearchIcon />
                 </span>
-                <input
+                <Input
                     type="search"
+                    size="md"
                     enterKeyHint="search"
                     autoCapitalize="off"
                     autoCorrect="off"

@@ -433,6 +433,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
             <div className={local.searchField}>
                 <Input
                     type="search"
+                    size="md"
                     enterKeyHint="search"
                     autoCapitalize="off"
                     className={local.search}

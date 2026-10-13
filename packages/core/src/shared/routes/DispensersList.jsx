@@ -368,6 +368,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                     <div className={local.searchField}>
                         <Input
                             type="search"
+                            size="md"
                             enterKeyHint="search"
                             autoCapitalize="off"
                             className={local.search}
