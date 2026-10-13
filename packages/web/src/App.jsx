@@ -60,7 +60,7 @@ import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/Reacha
 // §6 / D4. Renders nothing unless a shell installed a direct-update
 // provider, which only a sideloaded Android APK does; see flows/directUpdate.js.
 import { UpdateNoticeBanner } from '@xchain-wallet/core/shared/components/UpdateNoticeBanner.jsx';
-import { isDemoWallet } from '@xchain-wallet/core/flows';
+import { isDemoWallet } from '../../core/src/flows/demoMode.js';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
 import { DemoBanner } from '@xchain-wallet/core/shared/components/DemoBanner.jsx';
 import { NetworkBanner } from '@xchain-wallet/core/shared/components/NetworkBanner.jsx';
@@ -69,8 +69,6 @@ import { AppHeader } from '@xchain-wallet/core/shared/components/AppHeader.jsx';
 import { CommandPalette } from '@xchain-wallet/core/shared/commandPalette/CommandPalette.jsx';
 import { useCommandPalette } from '@xchain-wallet/core/shared/commandPalette/useCommandPalette.js';
 import { buildCommands, contactsToCommands, parseFreeformCommands, balancesToCommands, sitesToCommands, settingsSectionsToCommands, helpToCommands } from '@xchain-wallet/core/shared/commandPalette/commandRegistry.js';
-import { buildBalanceRows } from '@xchain-wallet/core/shared/components/BalanceList.jsx';
-import { loadDisplayBalances } from '@xchain-wallet/core/shared/utils/displayBalances.js';
 import { useKeyboardShortcuts } from '@xchain-wallet/core/shared/keyboard/useKeyboardShortcuts.js';
 import { ShortcutHelp } from '@xchain-wallet/core/shared/keyboard/ShortcutHelp.jsx';
 import { dismissAllOverlays } from '@xchain-wallet/core/ui/backStack.js';
@@ -216,6 +214,14 @@ const pairTrezorSigner = (...args) => import('./signers/trezorFactory.js')
     .then((module) => module.pairTrezorSigner(...args));
 const pairLedgerSigner = (...args) => import('./signers/ledgerFactory.js')
     .then((module) => module.pairLedgerSigner(...args));
+const loadPaletteBalanceRows = async (messagingClient, walletId, accountId) => {
+    const [{ loadDisplayBalances }, { buildBalanceRows }] = await Promise.all([
+        import('@xchain-wallet/core/shared/utils/displayBalances.js'),
+        import('@xchain-wallet/core/shared/components/BalanceList.jsx'),
+    ]);
+    const balances = await loadDisplayBalances(messagingClient, walletId, accountId);
+    return buildBalanceRows(balances, APP_CHAIN_REGISTRY, null);
+};
 
 export function App() {
     const variantState = useActiveVariant();
@@ -525,10 +531,10 @@ function AppInner() {
             .catch(() => { /* palette still works without contacts */ });
         // The balances Home shows, so a coin opened from here matches
         // Home's figure (a demo wallet's are synthesized, not read).
-        loadDisplayBalances(messaging, activeWalletId, activeAccountId)
-            .then((balances) => {
+        loadPaletteBalanceRows(messaging, activeWalletId, activeAccountId)
+            .then((rows) => {
                 if (cancelled) return;
-                setPaletteTokenRows(buildBalanceRows(balances, APP_CHAIN_REGISTRY, null));
+                setPaletteTokenRows(rows);
             })
             .catch(() => { /* palette still works without token rows */ });
         messaging.listConnectedSites()

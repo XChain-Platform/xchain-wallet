@@ -33,7 +33,12 @@
 // able to say LOCKED or CORRUPT, because the caller turns a null into the
 // create-a-new-wallet screen (see core's VaultUnavailableError family).
 
-import { storage as coreStorage, crypto as coreCrypto } from '@xchain-wallet/core';
+import {
+    VaultLockedError,
+    VaultCorruptError,
+    VaultUnavailableError,
+} from '../../../core/src/storage/backend.js';
+import { bytesToBase64, base64ToBytes } from '../../../core/src/crypto/kdf.js';
 // The shell/plugin probe lives in core so the vault bridge and the clipboard
 // bridge ask the question the same way. Two hand-rolled copies of a
 // duck-type probe is the drift was filed about, and it would show up
@@ -42,9 +47,6 @@ import {
     getNativePlugin,
     isNativeShell as coreIsNativeShell,
 } from '@xchain-wallet/core/shared/nativeShell.js';
-
-const { VaultLockedError, VaultCorruptError, VaultUnavailableError } = coreStorage;
-const { bytesToBase64, base64ToBytes } = coreCrypto;
 
 /** The plugin name registered natively (`@CapacitorPlugin(name = ...)`). */
 export const PLUGIN_NAME = 'XChainVault';

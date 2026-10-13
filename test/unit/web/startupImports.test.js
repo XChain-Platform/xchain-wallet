@@ -13,6 +13,10 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const appSource = readFileSync(resolve(process.cwd(), 'packages/web/src/App.jsx'), 'utf8');
+const nativeVaultSource = readFileSync(
+    resolve(process.cwd(), 'packages/web/src/storage/nativeVault.js'),
+    'utf8',
+);
 const messagingSource = readFileSync(
     resolve(process.cwd(), 'packages/web/src/messaging.js'),
     'utf8',
@@ -89,5 +93,30 @@ describe('web startup imports', () => {
         expect(messagingSource).toContain("import('./hostBridge.js')");
         expect(messagingSource).toContain('hostBridgePromise ??=');
         expect(messagingSource).not.toMatch(/from ['"]\.\/hostBridge\.js['"]/);
+    });
+
+    it('defers command-palette demo fixtures until balances are requested', () => {
+        expect(appSource).toContain(
+            "import { isDemoWallet } from '../../core/src/flows/demoMode.js';",
+        );
+        expect(appSource).not.toContain("from '@xchain-wallet/core/flows'");
+        expect(appSource).toContain(
+            "import('@xchain-wallet/core/shared/utils/displayBalances.js')",
+        );
+        expect(appSource).toContain(
+            "import('@xchain-wallet/core/shared/components/BalanceList.jsx')",
+        );
+        expect(appSource).not.toMatch(
+            /import \{ loadDisplayBalances \} from '@xchain-wallet\/core\/shared\/utils\/displayBalances\.js'/,
+        );
+        expect(appSource).not.toMatch(
+            /import \{ buildBalanceRows \} from '@xchain-wallet\/core\/shared\/components\/BalanceList\.jsx'/,
+        );
+    });
+
+    it('keeps the native boot check off the aggregate core barrel', () => {
+        expect(nativeVaultSource).not.toContain("from '@xchain-wallet/core'");
+        expect(nativeVaultSource).toContain("from '../../../core/src/storage/backend.js'");
+        expect(nativeVaultSource).toContain("from '../../../core/src/crypto/kdf.js'");
     });
 });
