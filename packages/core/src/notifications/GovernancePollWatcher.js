@@ -242,8 +242,8 @@ export class GovernancePollWatcher {
                     kind: 'governance-poll',
                     title: binding ? 'Binding governance poll' : 'Governance poll',
                     body: binding
-                        ? `A binding poll (its result triggers a contract) is open for ${tick} on ${chainLabel}. Review it before it closes.`
-                        : `A new poll is open for ${tick} on ${chainLabel}.`,
+                        ? `A binding ${tick} poll is open on ${chainLabel}. Its result triggers a contract.`
+                        : `A ${tick} poll is open on ${chainLabel}.`,
                     data: {
                         chainId,
                         tick,
