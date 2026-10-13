@@ -12,6 +12,15 @@ import { useState } from 'react';
 import { useExtensionWallet } from '../useExtensionWallet.js';
 import styles from './ExtensionBanner.module.css';
 
+function readDismissed() {
+    try {
+        return typeof sessionStorage !== 'undefined'
+            && sessionStorage.getItem('xc:ext-banner:dismissed') === '1';
+    } catch (_err) {
+        return false;
+    }
+}
+
 /**
  * Detect the `window.xchain` provider, injected by the XChain Wallet
  * extension's content script, and offer to route the web app through the
@@ -36,10 +45,7 @@ import styles from './ExtensionBanner.module.css';
 export function ExtensionBanner() {
     const { present, enabled, connecting, error, enable, disable } =
         useExtensionWallet();
-    const [dismissed, setDismissed] = useState(
-        typeof sessionStorage !== 'undefined' &&
-            sessionStorage.getItem('xc:ext-banner:dismissed') === '1',
-    );
+    const [dismissed, setDismissed] = useState(readDismissed);
 
     // Nothing to show until the extension is present. The active state is
     // shown even if the user dismissed the notice earlier: once they
