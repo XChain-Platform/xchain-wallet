@@ -24,8 +24,8 @@ import styles from './FormPage.module.css';
  * The action row always closes the form, below the last field or section,
  * and its buttons wrap rather than overflow.
  *
- * The width decision is pure CSS on purpose. It used to come from the
- * shell (`isFull ? card : bare`), which put a card on a phone browser.
+ * The width decision is pure CSS, never the shell or a JS width check, so a
+ * phone browser gets the bare form and the first paint is already right.
  *
  * @param {object} props
  * @param {(e: import('react').FormEvent<HTMLFormElement>) => void} [props.onSubmit]
