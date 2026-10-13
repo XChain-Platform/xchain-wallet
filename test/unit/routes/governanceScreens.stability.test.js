@@ -43,7 +43,6 @@ describe('governance and staking screen theme colors', () => {
 
 describe('governance screen narrow layout', () => {
     it.each([
-        'GovernancePolls.jsx',
         'BetFeedsList.jsx',
         'MyBets.jsx',
         'BetFeedDetail.jsx',
@@ -76,5 +75,18 @@ describe('governance screen narrow layout', () => {
         const source = route('ListForkForm.jsx');
         expect(source).not.toContain("maxHeight: '260px'");
         expect(source).not.toContain("overflowY: 'auto'");
+    });
+
+    it('keeps governance cards, option rows, and result values shrinkable', () => {
+        const polls = route('GovernancePolls.module.css');
+        const detail = route('PollDetail.module.css');
+        expect(polls).toMatch(/\.pollHeader\s*\{[\s\S]*?flex-wrap:\s*wrap/);
+        expect(polls).toMatch(/\.pollText\s*\{[\s\S]*?overflow-wrap:\s*anywhere/);
+        expect(detail).toMatch(/\.resultHeader\s*\{[\s\S]*?flex-wrap:\s*wrap/);
+        expect(detail).toMatch(/\.resultOption\s*\{[\s\S]*?overflow-wrap:\s*anywhere/);
+        expect(detail).toMatch(/\.resultValues > span\s*\{[\s\S]*?overflow-wrap:\s*anywhere/);
+        expect(detail).toMatch(/\.splitOptionInput :global\(label\)\s*\{[\s\S]*?overflow-wrap:\s*anywhere/);
+        expect(detail).toMatch(/\.optionLabel\s*\{[\s\S]*?overflow-wrap:\s*anywhere/);
+        expect(detail).toMatch(/@media \(max-width:\s*399px\)[\s\S]*?\.resultValues\s*\{[\s\S]*?flex:\s*1 1 100%/);
     });
 });

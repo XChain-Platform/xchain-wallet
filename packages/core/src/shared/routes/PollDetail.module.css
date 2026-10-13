@@ -1,0 +1,110 @@
+.countdown {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.resultList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-3);
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.resultItem {
+    min-width: 0;
+}
+
+.resultHeader {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--xc-space-1) var(--xc-space-3);
+    min-width: 0;
+    margin-bottom: var(--xc-space-1);
+    font-size: var(--xc-text-sm);
+}
+
+.resultOption {
+    flex: 1 1 12rem;
+    min-width: 0;
+    color: var(--xc-text);
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.resultValues {
+    display: flex;
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    gap: var(--xc-space-1) var(--xc-space-3);
+    min-width: 0;
+    color: var(--xc-text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.resultValues > span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.resultTrack {
+    height: var(--xc-space-2);
+    overflow: hidden;
+    background: var(--xc-bg-muted);
+    border-radius: 999px;
+}
+
+.resultFill {
+    height: 100%;
+    background: var(--xc-accent-primary);
+    border-radius: inherit;
+}
+
+.ballotForm,
+.splitOptionRow,
+.splitOptionInput,
+.optionRow,
+.optionLabel {
+    min-width: 0;
+}
+
+.splitOptionRow {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--xc-space-2);
+}
+
+.splitOptionInput {
+    flex: 1 1 auto;
+}
+
+.splitOptionInput :global(label) {
+    overflow-wrap: anywhere;
+}
+
+.optionRow {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--xc-space-2);
+}
+
+.optionRow > input {
+    flex: 0 0 auto;
+    margin-top: 0.2rem;
+}
+
+.optionLabel {
+    flex: 1 1 auto;
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 399px) {
+    .resultValues {
+        flex: 1 1 100%;
+        justify-content: space-between;
+    }
+}
