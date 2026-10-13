@@ -127,8 +127,8 @@ assert.ok(
     'a rejected advanced field re-opens the panel so the user can see the field',
 );
 assert.ok(
-    submit.indexOf('validateAdvancedIssueFields') < submit.indexOf('openConfirmScreen()'),
-    'validation runs BEFORE the confirm screen composes the transaction',
+    submit.indexOf('validateAdvancedIssueFields') < submit.indexOf("setStage('preview')"),
+    'validation runs before the wizard opens its review step',
 );
 for (const key of ['supply', 'currentHeight', 'callbackTickDecimals']) {
     assert.ok(

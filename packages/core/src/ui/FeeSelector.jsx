@@ -16,6 +16,7 @@ import { InfoTip } from './InfoTip.jsx';
 const TIER_SPEEDS = ['low', 'normal', 'fast'];
 const SPEEDS_WITH_CUSTOM = [...TIER_SPEEDS, 'custom'];
 const SPEED_LABELS = { low: 'Low', normal: 'Normal', fast: 'Fast', custom: 'Custom' };
+const HIGH_FEE_MULTIPLIER = 100;
 // ETA-pill tint per priority: slower = warmer/riskier. Maps to the
 // per-tone classes in the stylesheet (red / orange / green / white).
 const ETA_TONE = { low: 'etaLow', normal: 'etaNormal', fast: 'etaFast', custom: 'etaCustom' };
@@ -74,12 +75,14 @@ export function FeeSelector({
 }) {
     const customInputId = useId();
     const feeInputId = useId();
+    const customFeedbackId = useId();
     // Exact-fee edit buffer. While non-null the fee readout renders as a
     // text input echoing exactly what the user typed (so "0.0" doesn't
     // get reformatted mid-keystroke); the derived rate flows out through
     // onChange on every change. Cleared on blur/Enter or when the user
     // moves the slider back to a preset tier.
     const [feeDraft, setFeeDraft] = useState(null);
+    const [customRateDraft, setCustomRateDraft] = useState(null);
     const SPEEDS = allowCustom ? SPEEDS_WITH_CUSTOM : TIER_SPEEDS;
     const MAX_INDEX = SPEEDS.length - 1;
 
@@ -139,6 +142,7 @@ export function FeeSelector({
     );
 
     const pickSpeed = (speed) => {
+        setCustomRateDraft(null);
         if (speed === 'custom') {
             onChange({ mode: 'custom', customRate: seedCustomRate() });
         } else {
@@ -185,6 +189,7 @@ export function FeeSelector({
     // with the tier's own rate so the input opens ready to tweak.
     const beginRateEdit = () => {
         if (disabled || !allowCustom) return;
+        setCustomRateDraft(null);
         onChange({
             mode: 'custom',
             customRate: activeEstimate?.rateValue ?? seedCustomRate(),
@@ -196,10 +201,46 @@ export function FeeSelector({
         pickSpeed(SPEEDS[i] || 'normal');
     };
 
+    const onSliderKeyDown = (event) => {
+        let nextIndex = sliderIndex;
+        if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') nextIndex -= 1;
+        else if (event.key === 'ArrowRight' || event.key === 'ArrowUp') nextIndex += 1;
+        else if (event.key === 'Home') nextIndex = 0;
+        else if (event.key === 'End') nextIndex = MAX_INDEX;
+        else return;
+
+        event.preventDefault();
+        pickSpeed(SPEEDS[Math.max(0, Math.min(MAX_INDEX, nextIndex))] || 'normal');
+    };
+
     const onCustomRateChange = (raw) => {
-        const n = parseFloat(raw);
+        setCustomRateDraft(raw);
+        const parsed = Number(raw);
+        const n = raw.trim() !== '' && parsed > 0 ? parsed : Number.NaN;
         onChange({ mode: 'custom', customRate: Number.isFinite(n) ? n : 0 });
     };
+
+    const customRateRaw = customRateDraft
+        ?? (Number.isFinite(value?.customRate) ? String(value.customRate) : '');
+    const customRateNumber = Number(customRateRaw);
+    const highestPresetRate = Math.max(
+        0,
+        ...tierList.map(({ estimate }) => estimate?.rateValue)
+            .filter((rate) => Number.isFinite(rate) && rate > 0),
+    );
+    let customFeedback = null;
+    let customFeedbackTone = null;
+    if (isCustom && customRateRaw.trim() === '') {
+        customFeedback = 'Enter a custom fee rate.';
+        customFeedbackTone = 'error';
+    } else if (isCustom && (!Number.isFinite(customRateNumber) || customRateNumber <= 0)) {
+        customFeedback = 'Custom fee rate must be greater than zero.';
+        customFeedbackTone = 'error';
+    } else if (isCustom && highestPresetRate > 0
+        && customRateNumber > highestPresetRate * HIGH_FEE_MULTIPLIER) {
+        customFeedback = 'This fee rate is unusually high. Check it carefully before sending.';
+        customFeedbackTone = 'warning';
+    }
 
     return (
         <div className={styles.wrap}>
@@ -212,6 +253,7 @@ export function FeeSelector({
                     step={1}
                     value={sliderIndex}
                     onChange={(e) => onSliderChange(e.target.value)}
+                    onKeyDown={onSliderKeyDown}
                     disabled={disabled}
                     aria-label="Network fee"
                     aria-valuetext={isCustom
@@ -241,7 +283,8 @@ export function FeeSelector({
                         : null;
                     const editingFee = feeDraft !== null;
                     return (
-                        <div className={styles.sliderReadout} role="status" aria-live="polite">
+                        <>
+                            <div className={styles.sliderReadout} role="status" aria-live="polite">
                             <span className={styles.sliderReadoutPrimary}>
                                 {editingFee ? (
                                     <span className={styles.customRow}>
@@ -293,11 +336,16 @@ export function FeeSelector({
                                         id={customInputId}
                                         type="number"
                                         inputMode="decimal"
-                                        min={0}
-                                        step={isPerKbUnit(tiers.unit) ? 1 : 0.1}
+                                        min={0.00000001}
+                                        step="any"
                                         className={styles.customInput}
-                                        value={Number.isFinite(value?.customRate) ? value.customRate : ''}
+                                        value={customRateRaw}
                                         onChange={(e) => onCustomRateChange(e.target.value)}
+                                        onBlur={() => {
+                                            if (customFeedbackTone !== 'error') setCustomRateDraft(null);
+                                        }}
+                                        aria-invalid={customFeedbackTone === 'error' ? 'true' : undefined}
+                                        aria-describedby={customFeedback ? customFeedbackId : undefined}
                                         aria-label={`Custom fee rate (${tiers.unit})`}
                                         disabled={disabled}
                                         autoFocus={!editingFee}
@@ -318,7 +366,17 @@ export function FeeSelector({
                             ) : (
                                 <span className={styles.sliderReadoutRate}>{activeEstimate.rate}</span>
                             )}
-                        </div>
+                            </div>
+                            {customFeedback ? (
+                                <div
+                                    id={customFeedbackId}
+                                    className={`${styles.customFeedback} ${styles[customFeedbackTone]}`.trim()}
+                                    role="alert"
+                                >
+                                    {customFeedback}
+                                </div>
+                            ) : null}
+                        </>
                     );
                 })() : null}
             </div>

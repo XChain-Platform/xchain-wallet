@@ -91,7 +91,9 @@ function openAdvanced() {
 }
 
 function submit() {
-    fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Review token' }));
+    const confirm = screen.queryByRole('button', { name: 'Continue to confirmation' });
+    if (confirm) fireEvent.click(confirm);
 }
 
 afterEach(() => cleanup());
@@ -119,6 +121,20 @@ describe('TokenWizard advanced disclosure (PC-06)', () => {
 
         submit();
         expect(await screen.findByRole('alert')).toHaveTextContent(message);
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('rejects an edition address limit below its per-mint amount', async () => {
+        mountWizard();
+        await driveToEditionDetails();
+        fireEvent.change(screen.getByLabelText('Limit per address (optional)'), {
+            target: { value: '5' },
+        });
+
+        submit();
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Limit per address must be at least the copies per mint.',
+        );
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 

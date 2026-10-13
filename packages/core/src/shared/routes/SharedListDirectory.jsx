@@ -22,8 +22,10 @@ import {
     shortOwner,
 } from '../utils/sharedListRows.js';
 import styles from './IssueTokenForm.module.css';
+import listStyles from './MyLists.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const PAGE_SIZE = 20;
 
 function listType(type) {
     const value = String(type ?? '').toLowerCase();
@@ -72,13 +74,16 @@ function valueOrUnknown(value) {
  * @param {'browse' | 'pick'} props.mode
  * @param {'token' | 'address'} [props.filterType]
  * @param {(selection: { actionIndex: unknown, homeChain: unknown, homeListIndex: unknown, memberCount: unknown, name?: string }) => void} props.onSelect
+ * @param {(chainId: string, actionIndex: string) => void} [props.onOpenList]
  * @param {() => void} props.onBack
  */
-export function SharedListDirectory({ walletId, chainId, mode, filterType, onSelect, onBack }) {
+export function SharedListDirectory({ walletId, chainId, mode, filterType, onSelect, onOpenList, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const [directory, setDirectory] = useState(/** @type {{ lists: any[], unavailable: string[] } | null} */ (null));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const [query, setQuery] = useState('');
+    const [visibleLimit, setVisibleLimit] = useState(PAGE_SIZE);
 
     useEffect(() => {
         let cancelled = false;
@@ -105,15 +110,40 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
             : orderSharedLists(directory.lists);
     }, [directory, filterType, mode]);
 
+    const matchingLists = useMemo(() => {
+        const needle = query.trim().toLowerCase();
+        if (!needle) return visibleLists;
+        return visibleLists.filter((entry) => {
+            const descriptor = homeDescriptor(entry.homeChain, chainId);
+            return [
+                entry.name,
+                entry.owner,
+                entry.homeChain,
+                descriptor?.displayName,
+                tickerForCoin(descriptor?.coin),
+                entry.homeListIndex,
+                entry.bindTarget,
+                entry.type === 'token' ? 'token list' : 'address list',
+                platformBadgeText(entry),
+            ].some((value) => String(value ?? '').toLowerCase().includes(needle));
+        });
+    }, [chainId, query, visibleLists]);
+
+    useEffect(() => {
+        setVisibleLimit(PAGE_SIZE);
+    }, [query, filterType, mode, directory]);
+
+    const pagedLists = matchingLists.slice(0, visibleLimit);
+
     const header = (
         <PageHeader
             onBack={onBack}
             title={mode === 'pick' ? 'Choose a shared list' : 'Shared lists'}
         />
     );
-    const wrap = (children) => (
+    const wrap = (children, toolbar) => (
         <Screen variant={variant} header={header}>
-            <ListPage>{children}</ListPage>
+            <ListPage toolbar={toolbar}>{children}</ListPage>
         </Screen>
     );
 
@@ -122,6 +152,21 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
     }
     if (!directory) return wrap(<p className={styles.hint}>Loading shared lists…</p>);
 
+    const toolbar = (
+        <input
+            type="search"
+            className={listStyles.search}
+            placeholder="Search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
+            aria-label="Search shared lists"
+        />
+    );
+
+    const filteredType = listType(filterType);
     return wrap(
         <>
             {directory.unavailable.map((unavailableChain) => {
@@ -133,30 +178,47 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
                 );
             })}
 
-            {visibleLists.length === 0 ? (
+            {matchingLists.length === 0 ? (
                 <EmptyState
-                    title={mode === 'pick'
-                        ? `No shared ${listType(filterType) || ''} lists are available on this chain.`
-                        : 'No shared lists are available.'}
+                    title={query.trim()
+                        ? 'No shared lists match your search.'
+                        : mode === 'pick'
+                            ? `No shared ${filteredType ? `${filteredType} ` : ''}lists are available on this chain.`
+                            : 'No shared lists are available.'}
                 />
             ) : (
-                <div role="list" aria-label="Shared lists">
-                    {visibleLists.map((entry) => (
-                        <SharedListRow
-                            key={`${entry.homeChain}:${entry.homeListIndex}`}
-                            entry={entry}
-                            chainId={chainId}
-                            pickable={mode === 'pick'}
-                            onSelect={onSelect}
-                        />
-                    ))}
-                </div>
+                <>
+                    <div role="list" aria-label="Shared lists">
+                        {pagedLists.map((entry) => (
+                            <SharedListRow
+                                key={`${entry.homeChain}:${entry.homeListIndex}`}
+                                entry={entry}
+                                chainId={chainId}
+                                pickable={mode === 'pick'}
+                                onSelect={onSelect}
+                                onOpenList={onOpenList}
+                            />
+                        ))}
+                    </div>
+                    {pagedLists.length < matchingLists.length ? (
+                        <div className={styles.actions}>
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                onClick={() => setVisibleLimit((limit) => limit + PAGE_SIZE)}
+                            >
+                                Load more
+                            </Button>
+                        </div>
+                    ) : null}
+                </>
             )}
         </>,
+        toolbar,
     );
 }
 
-function SharedListRow({ entry, chainId, pickable, onSelect }) {
+function SharedListRow({ entry, chainId, pickable, onSelect, onOpenList }) {
     const descriptor = homeDescriptor(entry.homeChain, chainId);
     const badge = platformBadgeText(entry);
     const typeLabel = entry.type === 'token' ? 'Token list' : 'Address list';
@@ -172,6 +234,8 @@ function SharedListRow({ entry, chainId, pickable, onSelect }) {
         memberCount: entry.memberCount,
         ...(entry.name ? { name: entry.name } : {}),
     });
+    const canOpen = !pickable && typeof onOpenList === 'function'
+        && descriptor?.id && entry.homeListIndex != null;
 
     return (
         <dl
@@ -212,6 +276,20 @@ function SharedListRow({ entry, chainId, pickable, onSelect }) {
                     <dt className={styles.detailsLabel}>Select</dt>
                     <dd className={styles.detailsValue}>
                         <Button type="button" variant="secondary" onClick={choose}>Choose list</Button>
+                    </dd>
+                </>
+            ) : null}
+            {canOpen ? (
+                <>
+                    <dt className={styles.detailsLabel}>Details</dt>
+                    <dd className={styles.detailsValue}>
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            onClick={() => onOpenList(descriptor.id, String(entry.homeListIndex))}
+                        >
+                            Open list
+                        </Button>
                     </dd>
                 </>
             ) : null}

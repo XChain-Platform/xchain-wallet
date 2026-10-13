@@ -87,10 +87,19 @@ export async function createAccount({
     const existing = await vault.accounts.findBy('walletId', walletId);
     const maxIndex = existing.reduce((m, a) => (a.index > m ? a.index : m), -1);
     const nextIndex = maxIndex + 1;
+    const requestedName = typeof name === 'string' ? name.trim() : '';
+    if (name !== undefined && requestedName.length === 0) {
+        throw new Error('createAccount: name must be a non-empty string');
+    }
+    const accountName = requestedName || `Account ${nextIndex + 1}`;
+    if (existing.some((candidate) => candidate.name.trim().toLocaleLowerCase()
+        === accountName.toLocaleLowerCase())) {
+        throw new Error(`An account named "${accountName}" already exists.`);
+    }
 
     const account = createAccountRecord({
         walletId,
-        name: name || `Account ${nextIndex + 1}`,
+        name: accountName,
         index: nextIndex,
     });
     await vault.accounts.put(account);

@@ -50,7 +50,7 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { currentListMemberCount } from '../../flows/listMembership.js';
-import { compareDecimalStrings } from '../utils/amountFormat.js';
+import { compareDecimalStrings, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { sharedBlockPickState } from '../utils/sharedBlockPick.js';
 import { listLabel } from '../utils/listLabel.js';
 
@@ -347,6 +347,11 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     // free Actions menu, where `ticker` changes as the owner picks a
     // token and this hook simply refetches.
     const assetInfo = useTokenInfo({ chainId, tick: ticker, skip: mode !== 'mint-settings' && mode !== 'lock' && mode !== 'callback-settings' && mode !== 'access-lists' && mode !== 'bridge-settings' });
+    const callbackTokenInfo = useTokenInfo({
+        chainId,
+        tick: callbackTick.trim().toUpperCase(),
+        skip: mode !== 'callback-settings' || !callbackTick.trim(),
+    });
     const tokenLocks = assetInfo?.locks || {};
     // Callback config gate (PC-03): the indexer only allows CALLBACK_BLOCK
     // /TICK/AMOUNT edits while LOCK_CALLBACK is unset AND supply is
@@ -680,6 +685,23 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 setFormError('Mint supply must be a positive number.');
                 return;
             }
+            // Keep all token quantities within this token's on-chain decimal scale.
+            for (const [value, noun] of [
+                [maxMint, 'Max mint per transaction'],
+                [mintAddressMax, 'Max mint per address'],
+                [mintSupply, 'Mint supply'],
+            ]) {
+                if (!value) continue;
+                const precisionError = tokenAmountPrecisionError(value, {
+                    divisibility: assetInfo?.divisibility,
+                    tick: ticker,
+                    noun,
+                });
+                if (precisionError) {
+                    setFormError(precisionError);
+                    return;
+                }
+            }
             if (mintStartBlock && !/^\d+$/.test(mintStartBlock.trim())) {
                 setFormError('Minting start must be a whole block number.');
                 return;
@@ -734,6 +756,16 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             }
             if (callbackAmount && !(Number(callbackAmount) > 0)) {
                 setFormError('Callback amount must be a positive number.');
+                return;
+            }
+            // Price callback payouts in the payout token's decimal scale.
+            const callbackPrecisionError = tokenAmountPrecisionError(callbackAmount, {
+                divisibility: callbackTokenInfo?.divisibility,
+                tick: callbackTick,
+                noun: 'Callback amount',
+            });
+            if (callbackPrecisionError) {
+                setFormError(callbackPrecisionError);
                 return;
             }
             // A usable callback needs all three set (block + tick + amount);

@@ -53,6 +53,8 @@
 //     §24.6 / Cluster Y FOLLOWUP 4 detach-pending-tx. The renderer
 //     asks main to spawn a fresh BrowserWindow pre-routed to the
 //     specified view + context (e.g. a pending tx detail).
+//     `xchainWalletWindow.onStateChange(listener)` keeps sibling windows
+//     aligned when the shared main-process session or active wallet changes.
 //
 //   - `xchainWalletRegistry.getRemoteDescriptors()`: §9.7 / G007
 //     chain-registry sync. The renderer CSP pins connect-src 'self',
@@ -87,6 +89,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 const MESSAGE_CHANNEL = 'xchain-wallet:message';
 const SIGNER_BRIDGE_CHANNEL = 'xchain-wallet:signer-bridge';
 const OPEN_WINDOW_CHANNEL = 'xchain:open-window';
+const STATE_CHANGE_CHANNEL = 'xchain:state-changed';
 const WIPE_STORAGE_CHANNEL = 'xchain:wipe-storage';
 const CHAIN_REGISTRY_CHANNEL = 'xchain:chain-registry';
 const UPDATER_EVENT_CHANNEL = 'xchain:updater';
@@ -126,6 +129,17 @@ contextBridge.exposeInMainWorld('xchainWalletWindow', {
      */
     openDetached(args) {
         return ipcRenderer.invoke(OPEN_WINDOW_CHANNEL, args);
+    },
+    /**
+     * Subscribe to process-wide session and active-wallet changes made by a
+     * sibling window. Returns an unsubscribe function.
+     * @param {(change: { kind: 'session' } | { kind: 'active-wallet', walletId: string }) => void} listener
+     * @returns {() => void}
+     */
+    onStateChange(listener) {
+        const wrapped = (_event, payload) => { listener(payload); };
+        ipcRenderer.on(STATE_CHANGE_CHANNEL, wrapped);
+        return () => ipcRenderer.removeListener(STATE_CHANGE_CHANNEL, wrapped);
     },
 });
 
