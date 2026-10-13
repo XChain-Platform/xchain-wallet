@@ -27,6 +27,8 @@ import {
     InfoTip,
     StatusMessage,
     FormErrorSummary,
+    Checkbox,
+    Switch,
 } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
@@ -3427,24 +3429,16 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                             />
                         </div>
                     ))}
-                    <label className={styles.rbfRow}>
-                        <span className={styles.rbfLabel}>
-                            <span>{t('send.recipient.differentToken')}</span>
-                            <span className={styles.rbfHint}>
-                                {t('send.recipient.differentTokenOff', {
-                                    token: tick.trim().toUpperCase() || t('send.recipient.tokenAbove'),
-                                })}
-                            </span>
-                        </span>
-                        {/* This segmented switch stays native because the kit has no switch control. */}
-                        <input
-                            type="checkbox"
-                            role="switch"
-                            aria-label={t('send.recipient.differentToken')}
-                            checked={perRecipientToken}
-                            onChange={(e) => setPerRecipientToken(e.target.checked)}
-                        />
-                    </label>
+                    <Switch
+                        className={styles.rbfRow}
+                        label={t('send.recipient.differentToken')}
+                        description={t('send.recipient.differentTokenOff', {
+                            token: tick.trim().toUpperCase() || t('send.recipient.tokenAbove'),
+                        })}
+                        aria-label={t('send.recipient.differentToken')}
+                        checked={perRecipientToken}
+                        onChange={(e) => setPerRecipientToken(e.target.checked)}
+                    />
                     {sendTotals.length > 0 && !nativeMultiSendBlock ? (
                         <p className={styles.hint}>
                             {t('send.recipient.total', {
@@ -3596,27 +3590,27 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                         </p>
                     </>
                 )}
-                <label className={styles.rbfRow}>
-                    <span className={styles.rbfLabel}>
-                        <span>{t('send.advanced.coinControl')}</span>
-                        <span className={styles.rbfHint}>
-                            {utxoLoadState === 'loading'
-                                ? t('send.advanced.loadingInputs')
-                                : utxoLoadState === 'ready'
-                                    ? t('send.advanced.coinControlReady')
-                                    : t('send.advanced.coinControlUnavailable')}
-                        </span>
-                    </span>
-                    {/* This segmented switch stays native because the kit has no switch control. */}
-                    <input
-                        type="checkbox"
-                        role="switch"
-                        aria-label={t('send.advanced.coinControlEnabled')}
-                        checked={coinControlEnabled}
-                        disabled={utxoLoadState !== 'ready'}
-                        onChange={(e) => setCoinControlEnabled(e.target.checked)}
-                    />
-                </label>
+                <Switch
+                    className={styles.rbfRow}
+                    label={(
+                        <>
+                            <span aria-hidden="true">{t('send.advanced.coinControl')}</span>
+                            <span id="send-coin-control-enabled-label" className="sr-only">
+                                {t('send.advanced.coinControlEnabled')}
+                            </span>
+                        </>
+                    )}
+                    description={utxoLoadState === 'loading'
+                        ? t('send.advanced.loadingInputs')
+                        : utxoLoadState === 'ready'
+                            ? t('send.advanced.coinControlReady')
+                            : t('send.advanced.coinControlUnavailable')}
+                    aria-label={t('send.advanced.coinControlEnabled')}
+                    aria-labelledby="send-coin-control-enabled-label"
+                    checked={coinControlEnabled}
+                    disabled={utxoLoadState !== 'ready'}
+                    onChange={(e) => setCoinControlEnabled(e.target.checked)}
+                />
                 {coinControlEnabled ? (
                     <fieldset className={styles.coinControlList}>
                         <legend>{t('send.advanced.inputs')}</legend>
@@ -3655,33 +3649,33 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                                     const isDust = valueSats !== null && dustFloor !== null
                                         && valueSats < BigInt(dustFloor);
                                     return (
-                                        <label key={key} className={styles.coinControlRow}>
-                                            {/* UTXO selection stays native because the kit has no checkbox control. */}
-                                            <input
-                                                type="checkbox"
-                                                checked={selectedUtxoKeys.has(key)}
-                                                onChange={(e) => setSelectedUtxoKeys((current) => {
-                                                    const next = new Set(current);
-                                                    if (e.target.checked) next.add(key);
-                                                    else next.delete(key);
-                                                    return next;
-                                                })}
-                                            />
-                                            <span className={styles.coinControlValue}>
-                                                <span>
-                                                    {utxoAmount(utxo, descriptor)} {nativeTickerFor(descriptor)}
-                                                    {isDust ? (
-                                                        <span
-                                                            className={styles.coinControlDust}
-                                                            title={t('send.advanced.dustTitle', { sats: formatWithThousands(String(dustFloor)) })}
-                                                        >
-                                                            {t('send.advanced.dust')}
-                                                        </span>
-                                                    ) : null}
+                                        <Checkbox
+                                            key={key}
+                                            className={styles.coinControlRow}
+                                            checked={selectedUtxoKeys.has(key)}
+                                            onChange={(e) => setSelectedUtxoKeys((current) => {
+                                                const next = new Set(current);
+                                                if (e.target.checked) next.add(key);
+                                                else next.delete(key);
+                                                return next;
+                                            })}
+                                            label={(
+                                                <span className={styles.coinControlValue}>
+                                                    <span>
+                                                        {utxoAmount(utxo, descriptor)} {nativeTickerFor(descriptor)}
+                                                        {isDust ? (
+                                                            <span
+                                                                className={styles.coinControlDust}
+                                                                title={t('send.advanced.dustTitle', { sats: formatWithThousands(String(dustFloor)) })}
+                                                            >
+                                                                {t('send.advanced.dust')}
+                                                            </span>
+                                                        ) : null}
+                                                    </span>
+                                                    <small>{utxoOutpoint(utxo)}</small>
                                                 </span>
-                                                <small>{utxoOutpoint(utxo)}</small>
-                                            </span>
-                                        </label>
+                                            )}
+                                        />
                                     );
                                 })}
                             </div>
@@ -3726,33 +3720,27 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     settings.fees[chainId].rbfByDefault (see the effect
                     above); the live value flows into the send payload as
                     `rbf: rbfForSend`, off and disabled where the chain has no RBF. */}
-                <label className={styles.rbfRow}>
-                    <span className={styles.rbfLabel}>
-                        <span>
+                <Switch
+                    className={styles.rbfRow}
+                    label={(
+                        <>
                             {t('send.rbf.label')}
                             <InfoTip
                                 aria={t('send.rbf.helpLabel')}
                                 label={t('send.rbf.help')}
                             />
-                        </span>
-                        <span className={styles.rbfHint}>
-                            {rbfSupported
-                                ? t('send.rbf.enabledHint')
-                                : t('send.rbf.unsupported', {
-                                    chain: descriptor?.displayName ?? t('send.rbf.thisChain'),
-                                })}
-                        </span>
-                    </span>
-                    {/* This segmented switch stays native because the kit has no switch control. */}
-                    <input
-                        type="checkbox"
-                        role="switch"
-                        aria-label={t('send.rbf.label')}
-                        checked={rbfForSend}
-                        disabled={!rbfSupported}
-                        onChange={(e) => setRbfEnabled(e.target.checked)}
-                    />
-                </label>
+                        </>
+                    )}
+                    description={rbfSupported
+                        ? t('send.rbf.enabledHint')
+                        : t('send.rbf.unsupported', {
+                            chain: descriptor?.displayName ?? t('send.rbf.thisChain'),
+                        })}
+                    aria-label={t('send.rbf.label')}
+                    checked={rbfForSend}
+                    disabled={!rbfSupported}
+                    onChange={(e) => setRbfEnabled(e.target.checked)}
+                />
             </details>
             {testSendGateBanner}
         </FormPage>,

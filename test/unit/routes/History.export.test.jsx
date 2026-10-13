@@ -226,7 +226,7 @@ describe('large History export', () => {
         vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
         vi.stubGlobal('Blob', NodeBlob);
         fireEvent.click(screen.getByRole('button', { name: 'Export…' }));
-        fireEvent.click(screen.getByLabelText(/^JSON/));
+        fireEvent.click(screen.getByRole('radio', { name: /^JSON/ }));
         fireEvent.click(screen.getByRole('button', { name: 'Export' }));
         await act(async () => { await vi.advanceTimersByTimeAsync(100); });
 

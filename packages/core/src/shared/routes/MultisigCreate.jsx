@@ -9,7 +9,20 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, ChainBadge, ChainPicker, FormPage, FormSection, Input, ListPage, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import {
+    Button,
+    ChainBadge,
+    ChainPicker,
+    FormPage,
+    FormSection,
+    Input,
+    ListPage,
+    PageHeader,
+    RadioGroup,
+    Screen,
+    Select,
+    StatusMessage,
+} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
@@ -468,24 +481,16 @@ export function MultisigCreate({ walletId, onBack }) {
             </FormSection>
 
             <FormSection title="Scheme">
-                {SCHEMES.map((s) => (
-                    <label key={s.value} className={styles.checkRow} style={{ alignItems: 'flex-start' }}>
-                        {/* The kit has no radio primitive, so the native control preserves radiogroup behavior. */}
-                        <input
-                            type="radio"
-                            name="scheme"
-                            value={s.value}
-                            checked={scheme === s.value}
-                            onChange={() => setScheme(s.value)}
-                        />
-                        <span>
-                            <strong>{s.label}</strong>
-                            <span style={{ display: 'block', fontSize: '0.85em', color: 'var(--xc-text-muted)' }}>
-                                {s.description}
-                            </span>
-                        </span>
-                    </label>
-                ))}
+                <RadioGroup
+                    legend={<span className="sr-only">Scheme</span>}
+                    name="scheme"
+                    value={scheme}
+                    onChange={setScheme}
+                    options={SCHEMES.map((option) => ({
+                        ...option,
+                        label: <strong>{option.label}</strong>,
+                    }))}
+                />
             </FormSection>
 
             <FormSection title="Configuration">

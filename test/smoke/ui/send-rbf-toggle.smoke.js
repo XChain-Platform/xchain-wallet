@@ -79,7 +79,7 @@ assert.doesNotMatch(
 
 // --- toggle UI ------------------------------------------------------
 
-assert.match(sendSrc, /role="switch"/, 'toggle uses switch role');
+assert.match(sendSrc, /<Switch\b/, 'toggle uses the kit Switch');
 assert.match(sendSrc, /checked=\{rbfForSend\}/);
 assert.match(sendSrc, /disabled=\{!rbfSupported\}/, 'toggle disabled where the chain has no RBF');
 assert.match(sendSrc, /aria-label=\{t\('send\.rbf\.label'\)\}/, 'the switch is named by the visible label key');
