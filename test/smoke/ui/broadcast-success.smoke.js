@@ -84,12 +84,10 @@ for (const appPath of [
 
 // --- 6. Copy-txid affordance is wired to the clipboard ------------------
 
-// Copies go through the shared copyText helper, which owns the native
-// plugin / browser split; the Done stage reports a failed copy in a toast.
-assert.ok(/import \{ copyText \} from '\.\.\/clipboard\.js'/.test(send)
-        && /await copyText\(txid\)/.test(send)
-        && /Copy failed: clipboard unavailable/.test(send),
-    'Done stage copy-txid goes through copyText and toasts a failed copy');
+// CopyButton owns the native plugin / browser split and reports failures inline.
+assert.ok(/<CopyButton[\s\S]*?value=\{txid\}[\s\S]*?ariaLabel=\{t\('common\.copyTransactionId'\)\}[\s\S]*?\/>/.test(send)
+        && /onCopied=\{\(\) => showToast\(\{ message: 'Transaction ID copied to clipboard\.' \}\)\}/.test(send),
+    'Done stage copy-txid uses CopyButton and retains successful-copy feedback');
 
 // --- 7. CSS additions ----------------------------------------------------
 

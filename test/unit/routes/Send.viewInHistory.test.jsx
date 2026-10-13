@@ -144,7 +144,7 @@ describe('Send success card: "View in history" (M2.4)', () => {
         expect(screen.getByRole('button', { name: /^Done$/ })).toBeInTheDocument();
     });
 
-    it('reports clipboard failure instead of claiming the transaction ID was copied', async () => {
+    it('uses the shared copy control to report clipboard failure', async () => {
         Object.defineProperty(document, 'execCommand', {
             configurable: true,
             value: vi.fn(() => false),
@@ -152,8 +152,10 @@ describe('Send success card: "View in history" (M2.4)', () => {
         const { messaging } = mount();
         await driveToBroadcastDone(messaging);
 
-        fireEvent.click(screen.getByRole('button', { name: /Copy transaction ID/i }));
+        const copyButton = screen.getByRole('button', { name: /Copy transaction ID/i });
+        fireEvent.click(copyButton);
 
-        expect(await screen.findByText('Copy failed: clipboard unavailable')).toBeInTheDocument();
+        await waitFor(() => expect(copyButton).toHaveAttribute('data-state', 'failed'));
+        expect(copyButton).toHaveTextContent('Copy failed: the clipboard is unavailable.');
     });
 });

@@ -49,8 +49,12 @@ async function renderManage({ isOwner = true, ...handlers } = {}) {
 }
 
 function sharedBlockListRow() {
-    fireEvent.click(screen.getByRole('button', { name: 'More' }));
-    return screen.getByRole('menuitem', { name: 'Use a shared block list' });
+    const moreButton = screen.getByRole('button', { name: 'More' });
+    expect(moreButton).toHaveAttribute('aria-busy', 'false');
+    fireEvent.click(moreButton);
+    const row = screen.getByRole('menuitem', { name: 'Use a shared block list' });
+    expect(row).toHaveAttribute('aria-busy', 'false');
+    return row;
 }
 
 describe('ManageToken shared block list action', () => {

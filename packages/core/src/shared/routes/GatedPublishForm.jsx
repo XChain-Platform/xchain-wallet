@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, FormPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, EmptyState, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -579,12 +579,15 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 </StatusMessage>
             ) : null}
 
-            <label className={styles.pickerLabel}>
-                {t('gatedPublish.fileLimit', {
+            <Input
+                type="file"
+                label={t('gatedPublish.fileLimit', {
                     bytes: plainCapFor(fileMeta?.name || `file${'.bin'}`, fileMeta?.type || 'application/octet-stream').toLocaleString(),
                 })}
-                <input type="file" aria-label={t('gatedPublish.fileToPublish')} onChange={handlePickFile} disabled={ownerMissing} />
-            </label>
+                aria-label={t('gatedPublish.fileToPublish')}
+                onChange={handlePickFile}
+                disabled={ownerMissing}
+            />
             {fileMeta ? (
                 <>
                     {previewUrl ? (
@@ -608,36 +611,32 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 </>
             ) : null}
 
-            <label className={styles.pickerLabel}>
-                {t('gatedPublish.titleOptional')}
-                <input
-                    type="text"
-                    enterKeyHint="next"
-                    aria-label={t('gatedPublish.titleField')}
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    maxLength={120}
-                    disabled={ownerMissing}
-                />
-            </label>
-            <label className={styles.pickerLabel}>
-                {t('gatedPublish.memoOptional')}
-                <input
-                    type="text"
-                    enterKeyHint={thresholdActive ? 'next' : 'go'}
-                    aria-label={t('send.memo')}
-                    value={memo}
-                    onChange={(e) => setMemo(e.target.value)}
-                    maxLength={120}
-                    disabled={ownerMissing}
-                />
-            </label>
+            <Input
+                type="text"
+                label={t('gatedPublish.titleOptional')}
+                enterKeyHint="next"
+                aria-label={t('gatedPublish.titleField')}
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                maxLength={120}
+                disabled={ownerMissing}
+            />
+            <Input
+                type="text"
+                label={t('gatedPublish.memoOptional')}
+                enterKeyHint={thresholdActive ? 'next' : 'go'}
+                aria-label={t('send.memo')}
+                value={memo}
+                onChange={(e) => setMemo(e.target.value)}
+                maxLength={120}
+                disabled={ownerMissing}
+            />
 
             {thresholdActive ? (
-                <label className={styles.pickerLabel}>
-                    {t('gatedPublish.unlockThresholdOptional')}
-                    <input
+                <>
+                    <Input
                         type="text"
+                        label={t('gatedPublish.unlockThresholdOptional')}
                         inputMode="decimal"
                         enterKeyHint="go"
                         aria-label={t('gatedPublish.unlockThreshold')}
@@ -650,12 +649,13 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                     <span id="gated-publish-threshold-hint" className={styles.hint}>
                         {t('gatedPublish.thresholdHint', { tick })}
                     </span>
-                </label>
+                </>
             ) : null}
 
             <fieldset style={{ border: 0, padding: 0, margin: "0 0 var(--xc-space-3)" }} disabled={ownerMissing}>
                 <legend>{t('gatedPublish.pack')}</legend>
                 <label className={styles.checkRow}>
+                    {/* Pack choices stay native because the kit has no radio-group control. */}
                     <input
                         type="radio"
                         name="pack"
@@ -666,6 +666,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 </label>
                 {(packs || []).map((p) => (
                     <label key={p.keyHash} className={styles.checkRow}>
+                        {/* Reusable pack choices stay native because the kit has no radio-group control. */}
                         <input
                             type="radio"
                             name="pack"
@@ -681,9 +682,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 ) : packsError ? (
                     <StatusMessage variant="error" className={styles.error}>{packsError}</StatusMessage>
                 ) : packs.length === 0 ? (
-                    <p className={styles.hint}>
-                        {t('gatedPublish.pack.empty')}
-                    </p>
+                    <EmptyState title={t('gatedPublish.pack.empty')} titleAs="p" />
                 ) : null}
             </fieldset>
 
@@ -699,6 +698,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
             ) : null}
 
             <label className={styles.checkRow}>
+                {/* The permanent-publish acknowledgement stays native because the kit has no checkbox control. */}
                 <input
                     type="checkbox"
                     checked={ackForever}

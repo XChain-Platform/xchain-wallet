@@ -13,7 +13,9 @@ import {
     Screen,
     PageHeader,
     Button,
+    CopyButton,
     Input,
+    Select,
     AddressCombobox,
     AddressField,
     ChainBadge,
@@ -198,7 +200,6 @@ import { HwSignBlock } from '../components/HwSignBlock.jsx';
 import { BalanceChanges } from '../components/BalanceChanges.jsx';
 import { RawPsbtViewer } from '../components/RawPsbtViewer.jsx';
 import { useToast } from '../components/ToastHost.jsx';
-import { copyText } from '../clipboard.js';
 import { AmountField } from '../components/AmountField.jsx';
 import { TokenField } from '../components/TokenField.jsx';
 import { DraftDiscardButton } from '../components/DraftDiscardButton.jsx';
@@ -2641,15 +2642,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             // setPreviewResult(null) call referenced a non-existent setter and
             // threw a ReferenceError the moment "Send another" was tapped.
         };
-        const copyTxid = async () => {
-            if (!txid) return;
-            const { ok } = await copyText(txid);
-            if (!mountedRef.current) return;
-            showToast({
-                message: ok ? 'Transaction ID copied to clipboard.' : 'Copy failed: clipboard unavailable',
-                variant: ok ? 'default' : 'error',
-            });
-        };
         const canSaveRecipient = Boolean(txid && toAddress && desc?.coin && !matchedContact);
         const saveRecipient = async (event) => {
             event.preventDefault();
@@ -2706,12 +2698,13 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         if (result?.queued) {
             return wrap(
                 <>
-                    <div className={styles.successCard} role="status" aria-live="polite">
-                        <div className={styles.successIcon} aria-hidden="true">⏳</div>
-                        <h2 className={styles.successTitle}>{SIGNED_NOT_BROADCAST_TITLE}</h2>
-                        <p className={styles.successHint}>
-                            {t('send.queued.body')}
-                        </p>
+                    <div role="status" aria-live="polite">
+                        <EmptyState
+                            role="presentation"
+                            icon="⏳"
+                            title={SIGNED_NOT_BROADCAST_TITLE}
+                            body={t('send.queued.body')}
+                        />
                     </div>
                     <div className={styles.actions}>
                         <Button variant="primary" onClick={onDone || leaveGuard.guardedOnBack}>{t('common.done')}</Button>
@@ -2757,14 +2750,12 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                             <p className={styles.successLabel}>{t('send.txid')}</p>
                             <div className={styles.successTxidRow}>
                                 <code className={styles.txid}>{txid}</code>
-                                <button
-                                    type="button"
-                                    className={styles.successLink}
-                                    onClick={copyTxid}
-                                    aria-label={t('common.copyTransactionId')}
-                                >
-                                    {t('send.success.copy')}
-                                </button>
+                                <CopyButton
+                                    value={txid}
+                                    label={t('send.success.copy')}
+                                    ariaLabel={t('common.copyTransactionId')}
+                                    onCopied={() => showToast({ message: 'Transaction ID copied to clipboard.' })}
+                                />
                             </div>
                             {explorerUrl ? (
                                 <a
@@ -3417,6 +3408,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                                 })}
                             </span>
                         </span>
+                        {/* This segmented switch stays native because the kit has no switch control. */}
                         <input
                             type="checkbox"
                             role="switch"
@@ -3587,6 +3579,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                                     : t('send.advanced.coinControlUnavailable')}
                         </span>
                     </span>
+                    {/* This segmented switch stays native because the kit has no switch control. */}
                     <input
                         type="checkbox"
                         role="switch"
@@ -3602,8 +3595,10 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                         <div className={styles.coinControlToolbar}>
                             <span>{t('send.advanced.availableCount', { count: availableUtxos.length })}</span>
                             <span className={styles.coinControlActions}>
-                                <button
+                                <Button
                                     type="button"
+                                    variant="ghost"
+                                    size="sm"
                                     disabled={availableUtxos.length === 0
                                         || selectedUtxos.length === availableUtxos.length}
                                     onClick={() => setSelectedUtxoKeys(
@@ -3611,14 +3606,16 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                                     )}
                                 >
                                     {t('send.advanced.selectAll')}
-                                </button>
-                                <button
+                                </Button>
+                                <Button
                                     type="button"
+                                    variant="ghost"
+                                    size="sm"
                                     disabled={selectedUtxos.length === 0}
                                     onClick={() => setSelectedUtxoKeys(new Set())}
                                 >
                                     {t('common.clear')}
-                                </button>
+                                </Button>
                             </span>
                         </div>
                         {availableUtxos.length > 0 ? (
@@ -3631,6 +3628,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                                         && valueSats < BigInt(dustFloor);
                                     return (
                                         <label key={key} className={styles.coinControlRow}>
+                                            {/* UTXO selection stays native because the kit has no checkbox control. */}
                                             <input
                                                 type="checkbox"
                                                 checked={selectedUtxoKeys.has(key)}
@@ -3659,7 +3657,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                                     );
                                 })}
                             </div>
-                        ) : <p className={styles.hint}>{t('send.advanced.noInputs')}</p>}
+                        ) : (
+                            <EmptyState title={t('send.advanced.noInputs')} titleAs="p" />
+                        )}
                         <dl
                             className={styles.coinControlSummary}
                             aria-label={t('send.advanced.summaryLabel')}
@@ -3679,22 +3679,21 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                         </dl>
                     </fieldset>
                 ) : null}
-                <label className={styles.advancedSelectLabel}>
-                    <span>{t('send.advanced.changeAddress')}</span>
-                    <select
-                        aria-label={t('send.advanced.changeAddress')}
-                        value={changeAddressId}
-                        onChange={(e) => setChangeAddressId(e.target.value)}
-                    >
-                        <option value="">{t('send.advanced.automaticChange', { address: automaticChangeLabel })}</option>
-                        {(addressesByChain?.[chainId] || []).map((address) => (
-                            <option key={address.id} value={address.id}>
-                                {address.label ? `${address.label}: ` : ''}{address.address}
-                            </option>
-                        ))}
-                    </select>
-                    <span className={styles.rbfHint}>{t('send.advanced.changeHint')}</span>
-                </label>
+                <Select
+                    label={t('send.advanced.changeAddress')}
+                    aria-label={t('send.advanced.changeAddress')}
+                    value={changeAddressId}
+                    onChange={(e) => setChangeAddressId(e.target.value)}
+                    hint={t('send.advanced.changeHint')}
+                >
+                    {/* Native options stay raw because Select provides the control wrapper. */}
+                    <option value="">{t('send.advanced.automaticChange', { address: automaticChangeLabel })}</option>
+                    {(addressesByChain?.[chainId] || []).map((address) => (
+                        <option key={address.id} value={address.id}>
+                            {address.label ? `${address.label}: ` : ''}{address.address}
+                        </option>
+                    ))}
+                </Select>
                 {/* §44.3 per-send RBF toggle. Default seeds from
                     settings.fees[chainId].rbfByDefault (see the effect
                     above); the live value flows into the send payload as
@@ -3716,6 +3715,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                                 })}
                         </span>
                     </span>
+                    {/* This segmented switch stays native because the kit has no switch control. */}
                     <input
                         type="checkbox"
                         role="switch"
