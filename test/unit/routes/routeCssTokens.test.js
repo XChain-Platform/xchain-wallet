@@ -23,7 +23,7 @@ const rawPixelExceptions = {
     'AddAddressModal.module.css': ['1px', '1px'],
     'AddressList.wif.module.css': ['1px', '1px', '1px', '2px', '1px'],
     'ContractScreens.module.css': ['200px'],
-    'CreateWallet.module.css': ['96px', '2px', '1px', '1px', '1px', '3px', '520px', '64px'],
+    'CreateWallet.module.css': ['96px', '2px', '1px', '1px', '1px', '520px', '64px'],
 };
 
 describe('route CSS token coverage', () => {
@@ -39,9 +39,6 @@ describe('route CSS token coverage', () => {
         );
         expect(styles['ContractScreens.module.css']).toMatch(
             /\.codeSource\s*\{[^}]*font-size:\s*var\(--xc-text-md\)/s,
-        );
-        expect(styles['CreateWallet.module.css']).toMatch(
-            /\.persistingSpinner\s*\{[^}]*width:\s*var\(--xc-control-h-md\);[^}]*height:\s*var\(--xc-control-h-md\)/s,
         );
     });
 
