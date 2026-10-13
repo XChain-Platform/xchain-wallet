@@ -30,6 +30,7 @@
 
 import { Fragment, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Skeleton } from '@xchain-wallet/core/ui';
+import { ScrollRestoration } from '@xchain-wallet/core/ui/Screen.jsx';
 import { useSupportedChains } from '@xchain-wallet/core/shared/hooks/useSupportedChains.js';
 import { useAutoLockPolicy } from '@xchain-wallet/core/shared/hooks/useAutoLockPolicy.js';
 import { useLastView } from '@xchain-wallet/core/shared/hooks/useLastView.js';
@@ -2915,14 +2916,16 @@ function AppInner() {
                         ) : null
                     }
                 >
-                    <RouteErrorBoundary
-                        resetKey={`${unlockedView}:${palette.navigationKey}`}
-                        onHome={() => setUnlockedView('home')}
-                    >
-                        <Suspense fallback={<Skeleton.List rows={5} />}>
-                            <Fragment key={palette.navigationKey}>{routeNode}</Fragment>
-                        </Suspense>
-                    </RouteErrorBoundary>
+                    <ScrollRestoration routeKey={unlockedView}>
+                        <RouteErrorBoundary
+                            resetKey={`${unlockedView}:${palette.navigationKey}`}
+                            onHome={() => setUnlockedView('home')}
+                        >
+                            <Suspense fallback={<Skeleton.List rows={5} />}>
+                                <Fragment key={palette.navigationKey}>{routeNode}</Fragment>
+                            </Suspense>
+                        </RouteErrorBoundary>
+                    </ScrollRestoration>
                     {messageSentNotice ? (
                         <NoticeModal
                             title="Message sent"
