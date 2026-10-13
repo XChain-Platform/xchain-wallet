@@ -249,6 +249,20 @@ describe('Onboarding: explainer gating', () => {
         expect(screen.getByRole('button', { name: /Create new wallet/ })).toBeInTheDocument();
     });
 
+    it('introduces the XChain Platform before naming current chain support', () => {
+        stubMatchMedia(false);
+        acceptLicense();
+        mountOnboarding();
+
+        const tabs = screen.getAllByRole('tab');
+        fireEvent.click(tabs[tabs.length - 1]);
+
+        expect(screen.getByRole('heading', { name: 'Built for the XChain Platform' }))
+            .toBeInTheDocument();
+        expect(screen.getByText(/XChain Platform on Bitcoin, Litecoin, and Dogecoin/))
+            .toBeInTheDocument();
+    });
+
     it('skips the carousel for the unlocked-vault Add-Wallet lane (onBack)', () => {
         stubMatchMedia(false);
         acceptLicense();

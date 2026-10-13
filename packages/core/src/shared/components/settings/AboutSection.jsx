@@ -143,6 +143,10 @@ export function AboutSection() {
 
     return (
         <div style={STACK}>
+            <p style={{ ...PARAGRAPH, color: 'var(--xc-text-muted)', lineHeight: 1.5 }}>
+                A self-custodial wallet for the XChain Platform. Current chain support:
+                {' '}Bitcoin, Litecoin, and Dogecoin.
+            </p>
             <Row label="Version">
                 <span style={ROW_VALUE}>{WALLET_VERSION}</span>
             </Row>

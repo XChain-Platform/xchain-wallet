@@ -3,7 +3,7 @@
     "name": "XChain Wallet",
     "version": "0.341.2",
     "version_name": "0.341.2",
-    "description": "Self-custodial multi-chain wallet for the XChain Platform. Supports Bitcoin, Dogecoin, and Litecoin at launch.",
+    "description": "Self-custodial wallet for the XChain Platform. Current chain support: Bitcoin, Litecoin, and Dogecoin.",
     "homepage_url": "https://github.com/XChain-Platform/xchain-wallet",
     "icons": {
         "16": "icons/icon-16.png",

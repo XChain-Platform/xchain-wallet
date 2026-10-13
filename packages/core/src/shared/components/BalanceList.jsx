@@ -63,7 +63,7 @@ export function BalanceList({
     multisig,
     multisigChainId,
     emptyTitle = 'No balances yet',
-    emptyBody = 'Balances appear here after this wallet receives funds.',
+    emptyBody = 'XChain Platform coins and tokens appear here after this wallet receives funds on Bitcoin, Litecoin, or Dogecoin.',
     onReceive,
     emptyActionLabel,
     onEmptyAction,
