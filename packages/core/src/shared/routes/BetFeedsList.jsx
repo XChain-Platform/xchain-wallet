@@ -13,6 +13,7 @@ import { Button, EmptyState, ListPage, NetworkField, PageHeader, Screen, StatusM
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useChainIdsWithAction } from '../hooks/useSupportedChains.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './IssueTokenForm.module.css';
 import local from './BetFeedsList.module.css';
 import rowStyles from './ActionsMenu.module.css';
@@ -94,6 +95,8 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
     const [openOnly, setOpenOnly] = useState(true);
     const [rows, setRows] = useState(/** @type {any[] | null} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    const [addressesReload, setAddressesReload] = useState(0);
+    const [feedsReload, setFeedsReload] = useState(0);
 
     useEffect(() => {
         let cancelled = false;
@@ -110,9 +113,11 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
                 if (avail.length > 0) setChainId(avail[0]);
                 else setNoChain(true);
             })
-            .catch((err) => { if (!cancelled) setError(err?.message || 'Failed to load addresses.'); });
+            .catch((err) => {
+                if (!cancelled) setError(userFacingMessage(err, 'Could not load betting addresses. Try again.'));
+            });
         return () => { cancelled = true; };
-    }, [walletId, messaging, betChainIds]);
+    }, [walletId, messaging, betChainIds, addressesReload]);
 
     useEffect(() => {
         if (!chainId) return undefined;
@@ -135,7 +140,7 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
                     // are still the best thing known about the chain, and
                     // replacing them with an error would punish a momentary blip.
                     if (cancelled) return;
-                    if (clear) setError(err?.message || 'Failed to load markets.');
+                    if (clear) setError(userFacingMessage(err, 'Could not load betting markets. Try again.'));
                 });
         };
 
@@ -155,7 +160,7 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
         // last had the tab in front of them.
         const timer = setInterval(() => load(false), REFRESH_MS);
         return () => { cancelled = true; clearInterval(timer); };
-    }, [chainId, openOnly, messaging]);
+    }, [chainId, openOnly, messaging, feedsReload]);
 
     const header = <PageHeader onBack={onBack} title="Betting" />;
     const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
@@ -170,7 +175,28 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
             </ListPage>,
         );
     }
-    if (!chainId && !error) return wrap(<ListPage><p>Loading…</p></ListPage>);
+    if (!chainId && !error) {
+        return wrap(
+            <ListPage>
+                <div role="status" aria-label="Loading betting addresses" aria-busy="true">
+                    Loading betting addresses…
+                </div>
+            </ListPage>,
+        );
+    }
+    if (!chainId) {
+        return wrap(
+            <ListPage>
+                <StatusMessage
+                    variant="error"
+                    className={styles.error}
+                    recovery={{ label: 'Try again', onAction: () => setAddressesReload((value) => value + 1) }}
+                >
+                    {error}
+                </StatusMessage>
+            </ListPage>,
+        );
+    }
 
     return wrap(
         <ListPage
@@ -197,8 +223,20 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
                 </div>
             ) : null}
 
-            {error ? <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage> : null}
-            {chainId && !rows && !error ? <p>Loading markets…</p> : null}
+            {error ? (
+                <StatusMessage
+                    variant="error"
+                    className={styles.error}
+                    recovery={{ label: 'Try again', onAction: () => setFeedsReload((value) => value + 1) }}
+                >
+                    {error}
+                </StatusMessage>
+            ) : null}
+            {chainId && !rows && !error ? (
+                <div role="status" aria-label="Loading betting markets" aria-busy="true">
+                    Loading betting markets…
+                </div>
+            ) : null}
             {rows && rows.length === 0 ? (
                 <EmptyState
                     title="No markets"

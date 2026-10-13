@@ -14,6 +14,7 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { CROSS_CHAIN_TEMPLATES } from '../../templates/cross-chain/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './ActionsMenu.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -76,7 +77,7 @@ export function CrossChainTemplates({ walletId, onLaunch, onBack }) {
             })
             .catch((err) => {
                 if (!cancelled) {
-                    setLoadError(err?.message || 'Failed to load wallet.');
+                    setLoadError(userFacingMessage(err, 'Could not load wallet chains. Try again.'));
                     setLoading(false);
                 }
             });
@@ -131,7 +132,13 @@ export function CrossChainTemplates({ walletId, onLaunch, onBack }) {
         </Screen>
     );
 
-    if (loading) return wrap(<p className={styles.entryDescription}>Loading templates…</p>);
+    if (loading) {
+        return wrap(
+            <div role="status" aria-label="Loading cross-chain templates" aria-busy="true" className={styles.entryDescription}>
+                Loading templates…
+            </div>,
+        );
+    }
 
     if (loadError) {
         if (chainsWithAddresses.length < 2 && loadError.startsWith('Cross-chain templates need')) {

@@ -11,6 +11,7 @@
 import { useEffect, useState } from 'react';
 import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
@@ -35,11 +36,14 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
 
     const [accounts, setAccounts] = useState(/** @type {any[] | null} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    const [reload, setReload] = useState(0);
 
     useEffect(() => {
         let cancelled = false;
+        setAccounts(null);
+        setError(null);
         if (typeof messaging.listAccounts !== 'function') {
-            setError('messaging.listAccounts is not available in this shell.');
+            setError('Could not load accounts. Try again.');
             return undefined;
         }
         messaging.listAccounts(walletId)
@@ -50,9 +54,11 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                     : [];
                 setAccounts(sorted);
             })
-            .catch((err) => { if (!cancelled) setError(err?.message || 'Failed to load accounts.'); });
+            .catch((err) => {
+                if (!cancelled) setError(userFacingMessage(err, 'Could not load accounts. Try again.'));
+            });
         return () => { cancelled = true; };
-    }, [walletId, messaging]);
+    }, [walletId, messaging, reload]);
 
     const header = <PageHeader onBack={onBack} title="Accounts" />;
     const activeAccount = accounts?.find((account) => account.id === activeAccountId) || null;
@@ -77,9 +83,17 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
         <Screen variant={variant} header={header} footer={footer}>
             <ListPage>
                 {error ? (
-                    <StatusMessage variant="error" className={styles.entryDescription}>{error}</StatusMessage>
+                    <StatusMessage
+                        variant="error"
+                        className={styles.entryDescription}
+                        recovery={{ label: 'Try again', onAction: () => setReload((value) => value + 1) }}
+                    >
+                        {error}
+                    </StatusMessage>
                 ) : accounts === null ? (
-                    <div className={styles.entryDescription}>Loading…</div>
+                    <div role="status" aria-label="Loading accounts" aria-busy="true" className={styles.entryDescription}>
+                        Loading accounts…
+                    </div>
                 ) : accounts.length === 0 ? (
                     <EmptyState title="No accounts yet" body="Accounts added to this wallet appear here." titleAs="p" />
                 ) : accounts.map((a) => {
