@@ -27,7 +27,7 @@
 // state. `HwSignBlock` exposes the status via the `useSignerStatus`
 // hook so the parent can gate Submit on `status === 'available'`.
 
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useSignerStatus } from '../hooks/useSignerStatus.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { DerivationPathCrossCheck } from './DerivationPathCrossCheck.jsx';
@@ -61,15 +61,23 @@ export function HwSignBlock({
     requireExplicitConfirmReason,
     onConfirmedChange,
 }) {
-    const { status, detail, refresh } = useSignerStatus({ getStatus, chainId });
-
-    // Surface the live state so the parent form can gate its Submit
-    // button without re-polling. Parents store it with setState, so it is
-    // reported after commit: calling a parent setter during this render is
-    // the "Cannot update a component while rendering a different component"
-    // React error. The ref keeps an inline parent callback from re-firing it.
+    const getStatusRef = useRef(getStatus);
+    getStatusRef.current = getStatus;
+    // Callers commonly adapt their signer API inline. Keep that wrapper from
+    // restarting polling while still rotating the reader with signer identity.
+    const statusReader = useCallback(
+        (options) => getStatusRef.current?.(options),
+        [signerKind, signerName, path, address],
+    );
+    const { status, detail, refresh } = useSignerStatus({
+        getStatus: getStatus ? statusReader : null,
+        chainId,
+    });
     const onStatusChangeRef = useRef(onStatusChange);
     onStatusChangeRef.current = onStatusChange;
+
+    // Notify after commit so a parent can update its submit gate without
+    // receiving a state update while this component renders.
     useEffect(() => {
         onStatusChangeRef.current?.({ status, detail, refresh });
     }, [status, detail, refresh]);

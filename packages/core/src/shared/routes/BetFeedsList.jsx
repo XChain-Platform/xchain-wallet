@@ -122,11 +122,13 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
     useEffect(() => {
         if (!chainId) return undefined;
         let cancelled = false;
+        let latestRequestId = 0;
 
         // `clear` separates the FIRST read of a chain/filter from the refreshes
         // that follow it: blanking the rows is what shows "Loading markets…",
         // and doing that every 30 seconds would flash the whole list.
         const load = (clear) => {
+            const requestId = ++latestRequestId;
             if (clear) { setRows(null); setError(null); }
             // Filter on the stored feed status rather than fetching everything and
             // deciding client-side, so paging stays meaningful on a busy chain.
@@ -134,12 +136,17 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
                 ? { chainId, query: 'open', type: 'status', opts: { limit: 50 } }
                 : { chainId, opts: { limit: 50 } };
             return messaging.betFeeds(req)
-                .then((resp) => { if (!cancelled) { setRows(extractRows(resp)); setError(null); } })
+                .then((resp) => {
+                    if (!cancelled && requestId === latestRequestId) {
+                        setRows(extractRows(resp));
+                        setError(null);
+                    }
+                })
                 .catch((err) => {
                     // A failed REFRESH keeps the markets already on screen: they
                     // are still the best thing known about the chain, and
                     // replacing them with an error would punish a momentary blip.
-                    if (cancelled) return;
+                    if (cancelled || requestId !== latestRequestId) return;
                     if (clear) setError(userFacingMessage(err, 'Could not load betting markets. Try again.'));
                 });
         };

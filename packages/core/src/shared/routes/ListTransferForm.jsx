@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     AddressText,
     Button,
@@ -50,7 +50,13 @@ function shortAddress(value) {
  * @param {() => void} props.onBack
  * @param {() => void} [props.onDone]
  */
-export function ListTransferForm({ walletId, listRef, onBack, onDone = onBack }) {
+export function ListTransferForm(props) {
+    const { walletId, listRef } = props;
+    const formKey = `${walletId}:${listRef.chainId}:${String(listRef.actionIndex)}`;
+    return <ListTransferFormScreen key={formKey} {...props} />;
+}
+
+function ListTransferFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
     const chainId = listRef.chainId;
     const listActionIndex = String(listRef.actionIndex);
     const { messaging, shell } = useMessaging();
@@ -73,6 +79,7 @@ export function ListTransferForm({ walletId, listRef, onBack, onDone = onBack })
     const [typedConfirm, setTypedConfirm] = useState('');
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
+    const submitInFlightRef = useRef(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -183,7 +190,9 @@ export function ListTransferForm({ walletId, listRef, onBack, onDone = onBack })
 
     async function handleReview(event) {
         event.preventDefault();
+        if (submitInFlightRef.current) return;
         if (!validate()) return;
+        submitInFlightRef.current = true;
         setFormError(null);
         const params = {
             VERSION: '3',
@@ -203,6 +212,8 @@ export function ListTransferForm({ walletId, listRef, onBack, onDone = onBack })
                 chainId,
                 fallback: err?.message || 'List transfer failed.',
             }));
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 

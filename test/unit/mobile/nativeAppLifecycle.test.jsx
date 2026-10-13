@@ -81,6 +81,59 @@ afterEach(async () => {
 });
 
 describe('Capacitor app resume', () => {
+    it('ignores document lifecycle events outside a verified native shell', () => {
+        globalThis.Capacitor = { Plugins: {} };
+        const onBackground = vi.fn();
+        render(provider(
+            makeMessaging(0),
+            <LifecycleHarness onBackground={onBackground} />,
+        ));
+
+        document.dispatchEvent(new Event('pause'));
+
+        expect(onBackground).not.toHaveBeenCalled();
+    });
+
+    it('uses Capacitor document lifecycle events when the narrow App plugin has no state event', async () => {
+        globalThis.Capacitor = { isNativePlatform: () => true, Plugins: {} };
+        const messaging = makeMessaging(0);
+        const onBackground = vi.fn();
+        const onResume = vi.fn();
+        const view = render(provider(
+            messaging,
+            <LifecycleHarness onBackground={onBackground} onResume={onResume} />,
+        ));
+
+        act(() => document.dispatchEvent(new Event('pause')));
+        expect(view.getByTestId('private-screen')).toHaveTextContent('covered');
+        act(() => document.dispatchEvent(new Event('resume')));
+
+        expect(onBackground).toHaveBeenCalledTimes(1);
+        expect(onResume).toHaveBeenCalledTimes(1);
+        expect(view.getByTestId('private-screen')).toHaveTextContent('balances');
+    });
+
+    it('deduplicates plugin and document notifications for one background cycle', async () => {
+        const messaging = makeMessaging(0);
+        const onBackground = vi.fn();
+        const onResume = vi.fn();
+        render(provider(
+            messaging,
+            <LifecycleHarness onBackground={onBackground} onResume={onResume} />,
+        ));
+        await act(async () => { await Promise.resolve(); });
+
+        act(() => {
+            appStateChange({ isActive: false });
+            document.dispatchEvent(new Event('pause'));
+            appStateChange({ isActive: true });
+            document.dispatchEvent(new Event('resume'));
+        });
+
+        expect(onBackground).toHaveBeenCalledTimes(1);
+        expect(onResume).toHaveBeenCalledTimes(1);
+    });
+
     it('checks the configured idle deadline and locks after an elapsed background', async () => {
         vi.useFakeTimers();
         const messaging = makeMessaging(1);
@@ -172,6 +225,20 @@ describe('Capacitor app resume', () => {
         const view = render(provider(messaging, <LifecycleHarness />));
         view.unmount();
         await waitFor(() => expect(removeListener).toHaveBeenCalledTimes(1));
+    });
+
+    it('removes document lifecycle listeners on unmount', () => {
+        globalThis.Capacitor = { isNativePlatform: () => true, Plugins: {} };
+        const onBackground = vi.fn();
+        const view = render(provider(
+            makeMessaging(0),
+            <LifecycleHarness onBackground={onBackground} />,
+        ));
+        view.unmount();
+
+        document.dispatchEvent(new Event('pause'));
+
+        expect(onBackground).not.toHaveBeenCalled();
     });
 });
 

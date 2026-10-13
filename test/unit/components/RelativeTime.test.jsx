@@ -45,4 +45,21 @@ describe('RelativeTime', () => {
         act(() => vi.advanceTimersByTime(500));
         expect(screen.getByText('Jan 15, 2026, 3:58 AM PST')).toBeTruthy();
     });
+
+    it('cancels a pending long press when the timestamp changes', () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(NOW);
+        vi.spyOn(Date.prototype, 'toLocaleString')
+            .mockReturnValueOnce('Jan 15, 2026, 3:58 AM PST')
+            .mockReturnValue('Jan 15, 2026, 3:57 AM PST');
+
+        const { rerender } = render(<RelativeTime timestamp={NOW.getTime() - 2 * 60_000} />);
+        fireEvent.pointerDown(screen.getByText('2 min ago'), { pointerType: 'touch' });
+
+        rerender(<RelativeTime timestamp={NOW.getTime() - 3 * 60_000} />);
+        act(() => vi.advanceTimersByTime(500));
+
+        expect(screen.getByText('3 min ago')).toBeTruthy();
+        expect(screen.queryByText('Jan 15, 2026, 3:57 AM PST')).toBeNull();
+    });
 });

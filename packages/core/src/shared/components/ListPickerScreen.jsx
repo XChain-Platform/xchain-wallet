@@ -87,16 +87,20 @@ export function ListPickerScreen({
         let cancelled = false;
         setRows(null);
         setLoadError(null);
+        setCounts({});
+        setDescriptions({});
         const addrList = (addresses || []).map((a) => a.address).filter(Boolean);
         if (addrList.length === 0) { setRows([]); return undefined; }
-        Promise.all(addrList.map((addr) => messaging.getListsForSource({ chainId, address: addr })
+        Promise.all(addrList.map((addr) => Promise.resolve()
+            .then(() => messaging.getListsForSource({ chainId, address: addr }))
             .then((resp) => extractListRows(resp))))
             .then(async (results) => {
                 if (cancelled) return;
                 const merged = results.flat();
                 const seen = new Set();
                 let uniq = merged.filter((row) => {
-                    const key = String(row.action_index ?? row.tx_hash ?? JSON.stringify(row));
+                    if (row?.action_index == null || row.action_index === '') return false;
+                    const key = String(row.action_index);
                     if (seen.has(key)) return false;
                     seen.add(key);
                     return true;
@@ -119,41 +123,29 @@ export function ListPickerScreen({
                 }
                 uniq.sort((a, b) => Number(b.block_index || 0) - Number(a.block_index || 0));
                 setRows(uniq);
+                if (typeof messaging.getListByActionIndex !== 'function') return;
+                for (const row of uniq) {
+                    const idx = String(row.action_index);
+                    try {
+                        const detail = await messaging.getListByActionIndex({ chainId, actionIndex: idx });
+                        if (cancelled) return;
+                        setCounts((prev) => ({ ...prev, [idx]: currentListMemberCount(detail) }));
+                        setDescriptions((prev) => ({
+                            ...prev,
+                            [idx]: typeof detail?.description === 'string' && detail.description.length > 0
+                                ? detail.description
+                                : null,
+                        }));
+                    } catch {
+                        if (cancelled) return;
+                        setCounts((prev) => ({ ...prev, [idx]: null }));
+                        setDescriptions((prev) => ({ ...prev, [idx]: null }));
+                    }
+                }
             })
             .catch(() => { if (!cancelled) setLoadError('Couldn’t load lists. Check your connection and try again.'); });
         return () => { cancelled = true; };
     }, [chainId, addresses, messaging, filterType, includeUnions, loadAttempt]);
-
-    // Best-effort member counts for the shown lists (one detail read each).
-    useEffect(() => {
-        if (!rows || rows.length === 0) return undefined;
-        if (typeof messaging.getListByActionIndex !== 'function') return undefined;
-        let cancelled = false;
-        (async () => {
-            for (const row of rows) {
-                const idx = String(row.action_index ?? '');
-                if (!idx || counts[idx] !== undefined) continue;
-                try {
-                    const detail = await messaging.getListByActionIndex({ chainId, actionIndex: idx });
-                    if (cancelled) return;
-                    // Count the newest valid edit's members: what a gate bound to this index checks
-                    setCounts((prev) => ({ ...prev, [idx]: currentListMemberCount(detail) }));
-                    setDescriptions((prev) => ({
-                        ...prev,
-                        [idx]: typeof detail?.description === 'string' && detail.description.length > 0
-                            ? detail.description
-                            : null,
-                    }));
-                } catch {
-                    if (cancelled) return;
-                    setCounts((prev) => ({ ...prev, [idx]: null }));
-                    setDescriptions((prev) => ({ ...prev, [idx]: null }));
-                }
-            }
-        })();
-        return () => { cancelled = true; };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [rows, chainId, messaging]);
 
     const visibleRows = useMemo(() => {
         const q = query.trim().toLowerCase();

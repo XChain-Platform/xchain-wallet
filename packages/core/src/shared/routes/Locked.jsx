@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
 import { Button, FormPage, Input, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
@@ -94,6 +94,8 @@ export function Locked({ onUnlocked }) {
     const [busy, setBusy] = useState(false);
     const [showUnlockingNote, setShowUnlockingNote] = useState(false);
     const unlockInFlightRef = useRef(false);
+    const unlockingNoteTimerRef = useRef(/** @type {number | null} */ (null));
+    const restorePasswordFocusRef = useRef(false);
     const [lockout, setLockout] = useState(getLockoutState);
     const [remainingMs, setRemainingMs] = useState(() =>
         getRemainingMs(getLockoutState()),
@@ -114,6 +116,13 @@ export function Locked({ onUnlocked }) {
     const forgotTriggerRef = useRef(/** @type {HTMLButtonElement | null} */ (null));
     const forgotDialogRef = useRef(/** @type {HTMLDivElement | null} */ (null));
     const haptic = useHaptic();
+
+    const clearUnlockingNoteTimer = useCallback(() => {
+        if (unlockingNoteTimerRef.current !== null) {
+            window.clearTimeout(unlockingNoteTimerRef.current);
+            unlockingNoteTimerRef.current = null;
+        }
+    }, []);
 
     // Demo wallets use a randomly-generated 64-char hex password held in
     // the session cache. If the cache evaporates (auto-lock, tab close
@@ -261,13 +270,19 @@ export function Locked({ onUnlocked }) {
                 await messaging.unlockWallet(pw);
                 if (cancelled) return;
                 recordLockoutSuccess();
+                setLockout({ failedAttempts: 0, lockedUntilMs: 0 });
+                setRemainingMs(0);
+                clearUnlockingNoteTimer();
+                setShowUnlockingNote(false);
+                setBusy(false);
+                setError(null);
                 onUnlocked?.();
             } catch {
                 if (!cancelled) setBusy(false);
             }
         })();
         return () => { cancelled = true; };
-    }, [demoWalletId, messaging, onUnlocked]);
+    }, [clearUnlockingNoteTimer, demoWalletId, messaging, onUnlocked]);
 
     const isLockedOut = remainingMs > 0;
 
@@ -276,17 +291,37 @@ export function Locked({ onUnlocked }) {
 
     useEffect(() => {
         if (!busy || inCaptureStep) {
+            clearUnlockingNoteTimer();
             setShowUnlockingNote(false);
             return undefined;
         }
-        const handle = window.setTimeout(() => setShowUnlockingNote(true), 2000);
-        return () => window.clearTimeout(handle);
-    }, [busy, inCaptureStep]);
+        unlockingNoteTimerRef.current = window.setTimeout(() => {
+            unlockingNoteTimerRef.current = null;
+            setShowUnlockingNote(true);
+        }, 2000);
+        return clearUnlockingNoteTimer;
+    }, [busy, clearUnlockingNoteTimer, inCaptureStep]);
+
+    useEffect(() => {
+        if (busy || !restorePasswordFocusRef.current) return;
+        restorePasswordFocusRef.current = false;
+        inputRef.current?.focus();
+        inputRef.current?.select();
+    }, [busy]);
+
+    function finishFailedUnlock() {
+        restorePasswordFocusRef.current = true;
+        setBusy(false);
+    }
 
     // The one place `onUnlocked` is called from the password paths. It
     // unmounts this screen in every shell, so the password is dropped here
     // and nowhere earlier: step 2 needs it to encrypt the passphrase.
     function finishUnlock() {
+        clearUnlockingNoteTimer();
+        setShowUnlockingNote(false);
+        setBusy(false);
+        setError(null);
         setPassword('');
         setCapturePassword('');
         setCaptureQueue([]);
@@ -304,6 +339,9 @@ export function Locked({ onUnlocked }) {
      * @param {string} opened   the password that opened the vault
      */
     function afterUnlock(reply, opened) {
+        clearUnlockingNoteTimer();
+        setShowUnlockingNote(false);
+        setError(null);
         recordLockoutSuccess();
         setLockout({ failedAttempts: 0, lockedUntilMs: 0 });
         setRemainingMs(0);
@@ -362,9 +400,7 @@ export function Locked({ onUnlocked }) {
                     : 'Could not unlock the wallet. Close and reopen the app, then try again.');
                 haptic.error();
             }
-            setBusy(false);
-            inputRef.current?.focus();
-            inputRef.current?.select();
+            finishFailedUnlock();
         } finally {
             unlockInFlightRef.current = false;
         }
@@ -385,13 +421,7 @@ export function Locked({ onUnlocked }) {
         } catch (err) {
             // A closed prompt is a choice: back to the password field, quietly.
             if (err?.name === 'BiometricCancelledError') {
-                setBusy(false);
-                // The input stays disabled until React applies the busy-state
-                // update, so focus it on the next task when it accepts input.
-                window.setTimeout(() => {
-                    inputRef.current?.focus();
-                    inputRef.current?.select();
-                }, 0);
+                finishFailedUnlock();
                 return;
             }
             if (err?.name === 'BiometricNotRegisteredError') {
@@ -401,8 +431,7 @@ export function Locked({ onUnlocked }) {
                     + ' then re-enrol it in Settings.',
                 );
                 haptic.error();
-                setBusy(false);
-                inputRef.current?.focus();
+                finishFailedUnlock();
                 return;
             }
             // The native retry message is authored for this screen. Every
@@ -413,7 +442,7 @@ export function Locked({ onUnlocked }) {
                 : 'Biometric unlock failed. Unlock with your wallet password, '
                     + 'then set up biometrics again in Settings.');
             haptic.error();
-            setBusy(false);
+            finishFailedUnlock();
         } finally {
             unlockInFlightRef.current = false;
         }

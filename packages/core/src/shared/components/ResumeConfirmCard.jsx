@@ -27,13 +27,19 @@ import { flows as flowsLib } from '@xchain-wallet/core';
  * @param {string} [props.className]
  */
 export function ResumeConfirmCard({ sessions, onResume, onDiscard, className }) {
-    const offerable = flowsLib.resumableSessions(sessions);
+    const seenIds = new Set();
+    const offerable = flowsLib.resumableSessions(sessions)
+        .map((session) => ({ session, info: flowsLib.describeResumeSession(session) }))
+        .filter(({ info }) => {
+            if (seenIds.has(info.id)) return false;
+            seenIds.add(info.id);
+            return true;
+        });
     if (offerable.length === 0) return null;
 
     return (
         <div role="group" aria-label="Unfinished transactions">
-            {offerable.map((session) => {
-                const info = flowsLib.describeResumeSession(session);
+            {offerable.map(({ session, info }) => {
                 const actionString = typeof session?.composed?.actionString === 'string'
                     ? session.composed.actionString
                     : '';

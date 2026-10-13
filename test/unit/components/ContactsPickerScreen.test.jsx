@@ -102,6 +102,20 @@ describe('ContactsPickerScreen empty and listing states', () => {
             'bobD-bob',
         ]);
     });
+
+    it('uses distinct row keys when a contact repeats an address', () => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        mount({
+            contacts: [{
+                id: 'alice',
+                name: 'Alice',
+                entries: [bitcoinEntry, { ...bitcoinEntry, label: 'Spending' }],
+            }],
+        });
+
+        expect(screen.getAllByRole('listitem')).toHaveLength(2);
+        expect(consoleError.mock.calls.flat().join(' ')).not.toContain('same key');
+    });
 });
 
 describe('ContactsPickerScreen filters', () => {

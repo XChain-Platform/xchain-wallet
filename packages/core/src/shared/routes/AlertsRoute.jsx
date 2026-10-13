@@ -28,7 +28,7 @@ import { NotificationsSection } from '../components/settings/NotificationsSectio
  * @param {object} props
  * @param {() => void} props.onBack
  * @param {string} [props.walletId]
- * @param {Array<{ id: string, severity: 'info' | 'warning' | 'critical', title: string, message: string, read?: boolean, action?: { label: string, onSelect: () => void } }>} [props.alerts]
+ * @param {Array<{ id: string, severity: 'info' | 'warning' | 'critical', title: string, message: string, read?: boolean, action?: { label: string, onSelect: () => void | PromiseLike<void> } }>} [props.alerts]
  */
 export function AlertsRoute({ onBack, walletId, alerts = [] }) {
     const { shell } = useMessaging();
@@ -39,7 +39,7 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
     const [pendingFocus, setPendingFocus] = useState(null);
     const [centerState, setCenterState] = useState(() => readAlertCenter(walletId));
     const [notificationsOpen, setNotificationsOpen] = useState(false);
-    const visibleAlerts = sourceAlerts.filter((alert) => !centerState.cleared.has(alertVersion(alert)));
+    const visibleAlerts = sourceAlerts.filter((alert) => !centerState.cleared.has(alert.id));
     const unreadAlerts = visibleAlerts.filter((alert) => !alert.read && !centerState.read.has(alertVersion(alert)));
 
     useEffect(() => {
@@ -71,9 +71,13 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
         });
     };
 
-    const openAlert = (alert) => {
+    const openAlert = async (alert) => {
         markRead(alert);
-        alert.action?.onSelect();
+        try {
+            await alert.action?.onSelect();
+        } catch (_err) {
+            // Alert actions navigate outside this route, so their failures must not reject the click handler.
+        }
     };
 
     if (notificationsOpen) {
@@ -126,7 +130,7 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
                         ...centerState,
                         cleared: new Set([
                             ...centerState.cleared,
-                            ...visibleAlerts.map(alertVersion),
+                            ...visibleAlerts.map((alert) => alert.id),
                         ]),
                     });
                 }}

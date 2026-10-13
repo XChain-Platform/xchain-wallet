@@ -102,16 +102,31 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const panelVersionRef = useRef(0);
+
+    useEffect(() => {
+        panelVersionRef.current += 1;
+        setStage('form');
+        setSubmitError(null);
+        setFormError(null);
+        setResult(null);
+        setPassword('');
+        return () => { panelVersionRef.current += 1; };
+    }, [walletId, chainId, tick1, tick2]);
 
     useEffect(() => {
         if (stage !== 'review') return undefined;
+        const focusTimer = setTimeout(() => passwordRef.current?.focus(), 0);
         const handleEscape = (event) => {
             if (event.key !== 'Escape' || event.defaultPrevented) return;
             event.preventDefault();
             setStage('form');
         };
         window.addEventListener('keydown', handleEscape);
-        return () => window.removeEventListener('keydown', handleEscape);
+        return () => {
+            clearTimeout(focusTimer);
+            window.removeEventListener('keydown', handleEscape);
+        };
     }, [stage]);
 
     const { payFeeInNativeCoin, setPayFeeInNativeCoin, mandatory: nativeFeeMandatory } =
@@ -217,7 +232,8 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
 
     // Aggregate outstanding auto-pay exposure (the bound the user accepts).
     useEffect(() => {
-        if (!autopayArm || typeof messaging.getAutopayExposure !== 'function') return;
+        setExposure(null);
+        if (!autopayArm || typeof messaging.getAutopayExposure !== 'function') return undefined;
         let cancelled = false;
         messaging.getAutopayExposure({ walletId })
             .then((e) => { if (!cancelled) setExposure(e || {}); })
@@ -309,6 +325,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
     // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
     // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
     async function openConfirmScreen() {
+        const panelVersion = panelVersionRef.current;
         const from = {
             address: fromAddress.address,
             publicKey: fromAddress.publicKey,
@@ -335,11 +352,13 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     prebuiltPsbt,
                 }),
             });
+            if (panelVersion !== panelVersionRef.current) return;
             setResult(res);
             setPassword('');
             setStage('done');
             onOrderPlaced?.();
         } catch (err) {
+            if (panelVersion !== panelVersionRef.current) return;
             if (isUserRejection(err)) return;
             // Same mapping the sign path already does: NativeFeeForfeitError's own message is
             // wire wording, and this confirm path is the one the flow actually takes.
@@ -402,7 +421,6 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
         setStage('review');
         // Focus the password field on the review screen so the user
         // can immediately start typing without an extra click.
-        setTimeout(() => passwordRef.current?.focus(), 0);
     }
 
     // Executes the ORDER sign and broadcast. Only reachable from the
@@ -413,6 +431,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
         if (stage === 'submitting') return;
         setStage('submitting');
         setSubmitError(null);
+        const panelVersion = panelVersionRef.current;
         try {
             const base = {
                 walletId,
@@ -442,11 +461,13 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
             } else {
                 res = await messaging.orderAction({ ...base, password });
             }
+            if (panelVersion !== panelVersionRef.current) return;
             setResult(res);
             setPassword('');
             setStage('done');
             if (!isWatcherMode) onOrderPlaced?.();
         } catch (err) {
+            if (panelVersion !== panelVersionRef.current) return;
             let errorMessage;
             if (err?.name === 'InvalidPasswordError') {
                 errorMessage = 'Incorrect password.';

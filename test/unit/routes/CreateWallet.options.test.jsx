@@ -180,6 +180,21 @@ describe('MnemonicGrid narrow layout', () => {
         expect(screen.queryByText('abandon')).toBeNull();
     });
 
+    it('requires a fresh reveal when returning to an earlier phrase', () => {
+        const view = render(<MnemonicGrid mnemonic="abandon ability able about" />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal recovery phrase' }));
+        expect(screen.getByText('abandon')).toBeInTheDocument();
+
+        view.rerender(<MnemonicGrid mnemonic="zoo zone zero zebra" />);
+        expect(screen.queryByText('zoo')).not.toBeInTheDocument();
+
+        view.rerender(<MnemonicGrid mnemonic="abandon ability able about" />);
+        expect(screen.queryByText('abandon')).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Reveal recovery phrase' }))
+            .toHaveAttribute('aria-expanded', 'false');
+    });
+
     it('keeps onboarding controls contained and compact in short landscape screens', () => {
         const onboardingCss = css('packages/core/src/shared/routes/Onboarding.module.css');
         const createCss = css('packages/core/src/shared/routes/CreateWallet.module.css');

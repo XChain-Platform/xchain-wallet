@@ -86,6 +86,7 @@ import {
     sha512File,
     verifyDownloadedUpdate,
 } from './updateVerify.js';
+import { reportMainFailure } from './errorBoundary.js';
 
 /** Where the signed release manifests live. Matches the publish block. */
 export const UPDATE_FEED_BASE_URL = 'https://downloads.xchain.io/wallet/';
@@ -573,14 +574,22 @@ export async function attachUpdater({
     let prepared = false;
     let downloadInFlight = null;
 
-    autoUpdater.on('checking-for-update', () => onEvent({ type: 'checking' }));
-    autoUpdater.on('update-available', (info) => onEvent({ type: 'available', info }));
-    autoUpdater.on('update-not-available', (info) => onEvent({ type: 'not-available', info }));
-    autoUpdater.on('error', (err) => onEvent({ type: 'error', info: { message: String(err?.message || err) } }));
-    autoUpdater.on('download-progress', (info) => onEvent({ type: 'progress', info }));
+    const emit = (event) => {
+        try {
+            onEvent(event);
+        } catch (error) {
+            reportMainFailure('updater event delivery', error);
+        }
+    };
+
+    autoUpdater.on('checking-for-update', () => emit({ type: 'checking' }));
+    autoUpdater.on('update-available', (info) => emit({ type: 'available', info }));
+    autoUpdater.on('update-not-available', (info) => emit({ type: 'not-available', info }));
+    autoUpdater.on('error', (err) => emit({ type: 'error', info: { message: String(err?.message || err) } }));
+    autoUpdater.on('download-progress', (info) => emit({ type: 'progress', info }));
     autoUpdater.on('update-downloaded', (info) => {
         downloaded = info || null;
-        onEvent({ type: 'downloaded', info });
+        emit({ type: 'downloaded', info });
     });
 
     /**
@@ -615,7 +624,7 @@ export async function attachUpdater({
             try {
                 await autoUpdater.checkForUpdates();
             } catch (err) {
-                onEvent({ type: 'error', info: { message: String(err?.message || err) } });
+                emit({ type: 'error', info: { message: String(err?.message || err) } });
             }
         },
 
@@ -641,7 +650,14 @@ export async function attachUpdater({
                 autoUpdater.quitAndInstall();
                 return { ok: true };
             } catch (err) {
-                return { ok: false, reason: String(err?.message || err), retryable: true };
+                const cause = classifyInstallFailure(err);
+                return {
+                    ok: false,
+                    reason: String(err?.message || err),
+                    cause,
+                    // A read-only location does not fix itself on retry.
+                    retryable: cause !== 'read-only',
+                };
             }
         },
     };
@@ -659,7 +675,7 @@ export async function attachUpdater({
                 return reject('update downloaded but its version was not reported');
             }
 
-            onEvent({ type: 'verifying', info: { version } });
+            emit({ type: 'verifying', info: { version } });
 
             const tag = version.startsWith('v') ? version : `v${version}`;
             const fetched = await fetchReleaseManifest({
@@ -695,7 +711,7 @@ export async function attachUpdater({
             if (!verdict.ok) return reject(verdict.reason);
 
             prepared = true;
-            onEvent({ type: 'ready', info: { version } });
+            emit({ type: 'ready', info: { version } });
             return { ok: true };
         } catch (err) {
             return reject(String(err?.message || err));
@@ -708,10 +724,27 @@ export async function attachUpdater({
             if (artifactPath) {
                 await rm(artifactPath, { force: true }).catch(() => { /* best effort */ });
             }
-            onEvent({ type: 'rejected', info: { reason } });
+            emit({ type: 'rejected', info: { reason } });
             return { ok: false, reason };
         }
     }
+}
+
+/**
+ * Name the cause of an install failure that happened AFTER the signature
+ * check passed. The result is one of a fixed set of constants, never the
+ * error text, so the renderer can pick its own copy without printing
+ * anything an outside party chose.
+ *
+ * @param {any} err
+ * @returns {'read-only' | 'permission' | 'unknown'}
+ */
+export function classifyInstallFailure(err) {
+    const code = String(err?.code || '');
+    const message = String(err?.message || err || '');
+    if (code === 'EROFS' || /read[- ]only/i.test(message)) return 'read-only';
+    if (code === 'EACCES' || code === 'EPERM') return 'permission';
+    return 'unknown';
 }
 
 function defaultLoader() {

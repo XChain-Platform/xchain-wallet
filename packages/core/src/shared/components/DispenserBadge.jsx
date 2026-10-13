@@ -13,17 +13,18 @@
 // which tokens can also be bought via an open dispenser (Phase 2
 // §40.7.2's explorer surface).
 //
-// Cache: module-level session-scoped Map keyed by `${chainId}::${tick}`
-// so the same (chain, tick) pair doesn't re-query when the row
-// re-renders (filter flips, watchlist toggles, etc.). Cleared only by
-// page reload; stale data is fine: "is there AT LEAST ONE open
-// dispenser for this token" flips rarely on mainnet timescales.
+// Cache: module-level session-scoped Maps keyed by chain ID and ticker,
+// with weak keys for messaging instances. Rows sharing a transport and token
+// reuse one request when the list re-renders (filter flips, watchlist toggles, etc.).
+// A page reload clears the cache; stale data is acceptable because open
+// dispenser availability changes rarely on mainnet timescales.
 
 import { useEffect, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
 import { isOpenDispenserSelling } from '../utils/dispenserPricing.js';
 
-/** @type {Map<string, { state: 'loading' | 'ready', count: number, promise?: Promise<number> }>} */
+/** @typedef {{ state: 'loading' | 'ready', count: number, promise?: Promise<number> }} CacheEntry */
+/** @type {Map<string, Map<string, WeakMap<object, CacheEntry>>>} */
 const CACHE = new Map();
 
 function extractRows(resp) {
@@ -47,8 +48,8 @@ export function isDispenserRowOpen(row) {
 
 /**
  * Resolve the open-dispenser count for `(chainId, tick)`. Shared across
- * component instances so a MarketsList with 20 rows referencing the
- * same ticker only fires one explorer request.
+ * component instances using the same messaging transport so a MarketsList
+ * with 20 rows referencing the same ticker only fires one explorer request.
  *
  * @param {{ getDispensersForToken: (req: { chainId: string, tick: string }) => Promise<any> }} messaging
  * @param {string} chainId
@@ -56,23 +57,33 @@ export function isDispenserRowOpen(row) {
  * @returns {Promise<number>}
  */
 function resolveCount(messaging, chainId, tick) {
-    const key = `${chainId}::${tick}`;
-    const cached = CACHE.get(key);
+    let chainCache = CACHE.get(chainId);
+    if (!chainCache) {
+        chainCache = new Map();
+        CACHE.set(chainId, chainCache);
+    }
+    let tickerCache = chainCache.get(tick);
+    if (!tickerCache) {
+        tickerCache = new WeakMap();
+        chainCache.set(tick, tickerCache);
+    }
+    const cached = tickerCache.get(messaging);
     if (cached && cached.state === 'ready') return Promise.resolve(cached.count);
     if (cached && cached.promise) return cached.promise;
-    const promise = messaging.getDispensersForToken({ chainId, tick })
+    const promise = Promise.resolve()
+        .then(() => messaging.getDispensersForToken({ chainId, tick }))
         .then((resp) => {
             const open = extractRows(resp).filter(isDispenserRowOpen).length;
-            CACHE.set(key, { state: 'ready', count: open });
+            tickerCache.set(messaging, { state: 'ready', count: open });
             return open;
         })
         .catch(() => {
             // Isolated failure; cache as zero so we don't hammer the
             // explorer. User can reload the page to retry.
-            CACHE.set(key, { state: 'ready', count: 0 });
+            tickerCache.set(messaging, { state: 'ready', count: 0 });
             return 0;
         });
-    CACHE.set(key, { state: 'loading', count: 0, promise });
+    tickerCache.set(messaging, { state: 'loading', count: 0, promise });
     return promise;
 }
 

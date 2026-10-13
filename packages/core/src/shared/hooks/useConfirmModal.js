@@ -16,7 +16,7 @@
 // this hook (so it stays a plain .js): render
 // `{request ? <ConfirmModal {...request} onConfirm={onConfirm} onCancel={onCancel} /> : null}`.
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
  * @returns {{
@@ -44,6 +44,12 @@ export function useConfirmModal() {
 
     const onConfirm = useCallback(() => settle(true), [settle]);
     const onCancel = useCallback(() => settle(false), [settle]);
+
+    useEffect(() => () => {
+        const resolve = resolverRef.current;
+        resolverRef.current = null;
+        resolve?.(false);
+    }, []);
 
     return { confirm, request, onConfirm, onCancel };
 }

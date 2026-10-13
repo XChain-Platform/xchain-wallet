@@ -130,7 +130,7 @@ export function MarketLifecycleTimeline({ messaging, kind, chainId, address, act
         {errorNotice}
         <ul className={S.timeline} aria-label="Trade lifecycle">
             {state.events.slice(0, 40).map((e, i) => (
-                <li key={`${e.kind}-${e.row.action_index ?? i}`} className={S.event}>
+                <li key={`${e.kind}-${e.row.action_index ?? 'unknown'}-${i}`} className={S.event}>
                     <span className={S.label}>{LABEL[e.kind] || e.kind}</span>
                     <span className={S.meta}>
                         {e.kind === 'matches' && e.row.give_amount != null

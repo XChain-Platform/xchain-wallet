@@ -129,6 +129,40 @@ describe('OrderbookPanel market display', () => {
         expect(container).not.toHaveTextContent('NaN');
         expect(container).not.toHaveTextContent('undefined');
     });
+
+    it('does not let an older poll overwrite a newer order book', async () => {
+        const older = deferred();
+        const newer = deferred();
+        const getOrderbook = vi.fn()
+            .mockImplementationOnce(() => older.promise)
+            .mockImplementationOnce(() => newer.promise);
+        renderBook(getOrderbook);
+
+        fireEvent(document, new Event('visibilitychange'));
+        expect(getOrderbook).toHaveBeenCalledTimes(2);
+
+        await act(async () => newer.resolve({ bids: [['2', '4']], asks: [] }));
+        expect(await screen.findByTitle('2')).toBeInTheDocument();
+
+        await act(async () => older.resolve({ bids: [['1', '3']], asks: [] }));
+        expect(screen.getByTitle('2')).toBeInTheDocument();
+        expect(screen.queryByTitle('1')).toBeNull();
+    });
+
+    it('gives repeated price levels distinct React keys', async () => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            renderBook(vi.fn().mockResolvedValue({
+                bids: [['1', '2'], ['1', '3']],
+                asks: [],
+            }));
+
+            expect(await screen.findAllByTitle('1')).toHaveLength(2);
+            expect(consoleError.mock.calls.flat().join(' ')).not.toMatch(/same key/i);
+        } finally {
+            consoleError.mockRestore();
+        }
+    });
 });
 
 describe('market data table semantics', () => {
@@ -161,6 +195,31 @@ describe('market data table semantics', () => {
         expect(table.querySelectorAll('th[scope="col"]')).toHaveLength(4);
         expect(screen.getByRole('columnheader', { name: 'Price' }).className).toContain('numeric');
         expect(table.querySelector('td[data-label="Size (XCHAIN)"]').className).toContain('numeric');
+    });
+
+    it('gives repeated recent trades distinct React keys', async () => {
+        const repeated = {
+            action_index: 7,
+            type: 'buy',
+            price: '0.25',
+            amount: '12',
+            timestamp: 1_700_000_000,
+        };
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            render(
+                <MessagingProvider shell="web" messaging={{
+                    getMarketHistory: vi.fn().mockResolvedValue([repeated, { ...repeated }]),
+                }}>
+                    <RecentTradesPanel chainId="bitcoin-mainnet" tick1="XCHAIN" tick2="BTC" />
+                </MessagingProvider>,
+            );
+
+            expect(await screen.findAllByText('0.250000')).toHaveLength(2);
+            expect(consoleError.mock.calls.flat().join(' ')).not.toMatch(/same key/i);
+        } finally {
+            consoleError.mockRestore();
+        }
     });
 
     it('gives wallet trade history a caption, scoped headers, and stacked labels', async () => {

@@ -19,7 +19,7 @@
 // already met given `currentPrice` (the alert is still valid, it'll just
 // fire on the next check.
 
-import { useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { COINGECKO_SUPPORTED_CHAINS } from '../../flows/priceOracle.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 
@@ -87,6 +87,13 @@ export function PriceAlertForm({
     );
     const [busy, setBusy] = useState(false);
     const [err, setErr] = useState(/** @type {string|null} */ (null));
+    const mountedRef = useRef(false);
+    const inputVersionRef = useRef(0);
+
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => { mountedRef.current = false; };
+    }, []);
 
     const targetFiat = Number(targetStr);
     const valid = Boolean(chainId) && Number.isFinite(targetFiat) && targetFiat > 0;
@@ -104,17 +111,29 @@ export function PriceAlertForm({
         return direction === 'above' ? currentPrice >= targetFiat : currentPrice <= targetFiat;
     }, [currentPrice, valid, direction, targetFiat]);
 
+    const updateInput = (setter, value, currentValue) => {
+        if (value === currentValue) return;
+        inputVersionRef.current += 1;
+        setErr(null);
+        setter(value);
+    };
+
     const submit = async () => {
         if (!valid || busy) return;
+        const inputVersion = inputVersionRef.current;
         setBusy(true);
         setErr(null);
         try {
             await onCreate({ chainId, direction, targetFiat, fiatCurrency: cur });
-            if (!editing) setTargetStr('');
+            if (mountedRef.current && inputVersionRef.current === inputVersion && !editing) {
+                setTargetStr('');
+            }
         } catch (e) {
-            setErr(userFacingMessage(e, 'Could not save the alert. Try again.'));
+            if (mountedRef.current && inputVersionRef.current === inputVersion) {
+                setErr(userFacingMessage(e, 'Could not save the alert. Try again.'));
+            }
         } finally {
-            setBusy(false);
+            if (mountedRef.current) setBusy(false);
         }
     };
 
@@ -129,7 +148,7 @@ export function PriceAlertForm({
                     <select
                         aria-label="Coin"
                         value={chainId}
-                        onChange={(e) => setChainId(e.target.value)}
+                        onChange={(e) => updateInput(setChainId, e.target.value, chainId)}
                         style={FIELD}
                     >
                         {MAINNET_PRICE_CHAINS.map((c) => (
@@ -140,7 +159,7 @@ export function PriceAlertForm({
                 <select
                     aria-label="Direction"
                     value={direction}
-                    onChange={(e) => setDirection(e.target.value)}
+                    onChange={(e) => updateInput(setDirection, e.target.value, direction)}
                     style={FIELD}
                 >
                     <option value="above">rises above</option>
@@ -156,7 +175,11 @@ export function PriceAlertForm({
                     value={targetStr}
                     aria-invalid={invalidTarget}
                     aria-describedby={disabledReason ? disabledReasonId : undefined}
-                    onChange={(e) => setTargetStr(normalizeDecimalEntry(e.target.value, targetStr))}
+                    onChange={(e) => updateInput(
+                        setTargetStr,
+                        normalizeDecimalEntry(e.target.value, targetStr),
+                        targetStr,
+                    )}
                     onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
                     style={{ ...FIELD, width: 110 }}
                 />

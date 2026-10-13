@@ -40,17 +40,29 @@ export function isValidFiatAmount(amount) {
     return /^\d+(\.\d{1,2})?$/.test(String(amount ?? ''));
 }
 
+function fiatDisplayState(value) {
+    const raw = String(value).trim();
+    if (!raw) return null;
+    const numericValue = Number(raw);
+    const zeroComparison = compareDecimalStrings(raw, '0');
+    if (zeroComparison === null && !Number.isFinite(numericValue)) return null;
+    const compare = (target) => compareDecimalStrings(raw, target)
+        ?? (numericValue === Number(target) ? 0 : numericValue < Number(target) ? -1 : 1);
+    const direction = zeroComparison ?? (numericValue === 0 ? 0 : numericValue < 0 ? -1 : 1);
+    const tinyPositive = direction === 1 && compare('0.01') === -1;
+    const tinyNegative = direction === -1 && compare('-0.01') === 1;
+    return {
+        displayValue: tinyPositive ? '0.01' : tinyNegative ? '-0.01' : direction === 0 ? '0' : raw,
+        threshold: tinyPositive ? '< ' : tinyNegative ? '> ' : '',
+    };
+}
+
 /** Format an exact decimal value in the selected currency and language. */
 export function formatFiatAmount(value, currency = 'USD', locale, options = {}) {
     if (value === null || value === undefined) return '';
+    const state = fiatDisplayState(value);
+    if (!state) return '';
     const code = String(currency || 'USD').toUpperCase();
-    const zeroComparison = compareDecimalStrings(value, '0');
-    const centComparison = compareDecimalStrings(value, '0.01');
-    const numericValue = Number(value);
-    const isTinyPositive = zeroComparison === null || centComparison === null
-        ? Number.isFinite(numericValue) && numericValue > 0 && numericValue < 0.01
-        : zeroComparison === 1 && centComparison === -1;
-    const displayValue = isTinyPositive ? '0.01' : String(value);
     const omitCodeSymbol = options?.omitCodeSymbol === true;
     let formatter;
     try {
@@ -62,15 +74,15 @@ export function formatFiatAmount(value, currency = 'USD', locale, options = {}) 
             maximumFractionDigits: 2,
         });
     } catch {
-        const formatted = formatDecimalAmount(displayValue, locale, {
+        const formatted = formatDecimalAmount(state.displayValue, locale, {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
         });
-        return `${isTinyPositive ? '< ' : ''}${formatted}${omitCodeSymbol ? '' : ` ${code}`}`;
+        return `${state.threshold}${formatted}${omitCodeSymbol ? '' : ` ${code}`}`;
     }
-    let formatted = formatter.format(displayValue);
+    let formatted = formatter.format(state.displayValue);
     if (omitCodeSymbol) {
-        const parts = formatter.formatToParts(displayValue);
+        const parts = formatter.formatToParts(state.displayValue);
         const currencyIsCode = parts.some(
             (part) => part.type === 'currency' && part.value.toUpperCase() === code,
         );
@@ -82,12 +94,14 @@ export function formatFiatAmount(value, currency = 'USD', locale, options = {}) 
                 .trim();
         }
     }
-    return `${isTinyPositive ? '< ' : ''}${formatted}`;
+    return `${state.threshold}${formatted}`;
 }
 
 /** Format a fiat value with a currency name for assistive technology. */
 export function formatFiatAmountForSpeech(value, currency = 'USD', locale) {
     if (value === null || value === undefined) return '';
+    const state = fiatDisplayState(value);
+    if (!state) return '';
     const code = String(currency || 'USD').toUpperCase();
     let formatter;
     try {
@@ -95,20 +109,21 @@ export function formatFiatAmountForSpeech(value, currency = 'USD', locale) {
             style: 'currency',
             currency: code,
             currencyDisplay: 'name',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
         });
     } catch {
-        return `${formatDecimalAmount(value, locale, {
-            minimumFractionDigits: 0,
+        const formatted = formatDecimalAmount(state.displayValue, locale, {
+            minimumFractionDigits: 2,
             maximumFractionDigits: 2,
-        })} ${code}`;
+        });
+        const threshold = state.threshold === '< '
+            ? 'less than '
+            : state.threshold === '> ' ? 'more than ' : '';
+        return `${threshold}${formatted} ${code}`;
     }
-    const fractionDigits = formatter.resolvedOptions().maximumFractionDigits;
-    const minorUnit = fractionDigits === 0
-        ? '1'
-        : `0.${'0'.repeat(fractionDigits - 1)}1`;
-    if (compareDecimalStrings(value, '0') === 1
-        && compareDecimalStrings(value, minorUnit) === -1) {
-        return `less than ${formatter.format(minorUnit)}`;
-    }
-    return formatter.format(String(value));
+    const threshold = state.threshold === '< '
+        ? 'less than '
+        : state.threshold === '> ' ? 'more than ' : '';
+    return `${threshold}${formatter.format(state.displayValue)}`;
 }

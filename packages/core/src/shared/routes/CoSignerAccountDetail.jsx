@@ -18,7 +18,7 @@
 // A disabled account is refused by the daemon and treated as unknown by the
 // bridge resolver, so the toggle is the safe kill-switch.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
     PageHeader,
@@ -64,70 +64,148 @@ export function CoSignerAccountDetail({ accountId, onBack }) {
     const [name, setName] = useState('');
     const [policyDraft, setPolicyDraft] = useState(null);
     const [editError, setEditError] = useState(/** @type {string | null} */ (null));
+    const editBaselineRef = useRef('');
+    const viewRef = useRef(0);
+    const operationRef = useRef(0);
+    const busyRef = useRef(false);
+
+    function editableSnapshot(value) {
+        return JSON.stringify(editableFields(value));
+    }
+
+    function editableFields(value) {
+        return {
+            name: value?.name,
+            policy: value?.policy,
+            allowedOutputs: value?.allowedOutputs,
+        };
+    }
 
     useEffect(() => {
+        const view = viewRef.current + 1;
+        viewRef.current = view;
+        operationRef.current += 1;
+        busyRef.current = false;
         let cancelled = false;
-        messaging.getCoSignerAccount({ id: accountId })
+        setAccount(null);
+        setError(null);
+        setBusy(false);
+        setEditing(false);
+        setName('');
+        setPolicyDraft(null);
+        setEditError(null);
+        editBaselineRef.current = '';
+        confirmDialog.onCancel();
+        Promise.resolve()
+            .then(() => messaging.getCoSignerAccount({ id: accountId }))
             .then((a) => {
-                if (cancelled) return;
+                if (cancelled || viewRef.current !== view) return;
                 if (!a) { setError('Agent account not found.'); return; }
                 setAccount(a);
             })
-            .catch((err) => { if (!cancelled) setError(userFacingMessage(err, 'Failed to load the agent account.')); });
-        return () => { cancelled = true; };
-    }, [accountId, messaging]);
+            .catch((err) => {
+                if (!cancelled && viewRef.current === view) {
+                    setError(userFacingMessage(err, 'Failed to load the agent account.'));
+                }
+            });
+        return () => {
+            cancelled = true;
+            if (viewRef.current === view) {
+                viewRef.current += 1;
+                operationRef.current += 1;
+                busyRef.current = false;
+            }
+        };
+    }, [accountId, messaging, confirmDialog.onCancel]);
 
     async function toggleEnabled() {
-        if (!account) return;
-        if (account.enabled && !(await confirmDialog.confirm({
+        if (!account || busyRef.current) return;
+        const target = account;
+        const view = viewRef.current;
+        if (target.enabled && !(await confirmDialog.confirm({
             title: 'Disable this agent account?',
             message: 'This revokes the agent\'s signing access until you enable the account again. Funds already sent to the shared address are not moved.',
             confirmLabel: 'Disable',
             danger: true,
         }))) return;
+        if (viewRef.current !== view || busyRef.current) return;
+        const operation = operationRef.current + 1;
+        operationRef.current = operation;
+        busyRef.current = true;
         setBusy(true);
         setError(null);
         try {
             const updated = await messaging.updateCoSignerAccount({
-                id: account.id,
-                patch: { enabled: !account.enabled },
+                id: target.id,
+                patch: { enabled: !target.enabled },
             });
-            setAccount(updated);
+            if (viewRef.current === view && operationRef.current === operation) setAccount(updated);
         } catch (err) {
-            setError(userFacingMessage(err, 'Failed to update the agent account.'));
+            if (viewRef.current === view && operationRef.current === operation) {
+                setError(userFacingMessage(err, 'Failed to update the agent account.'));
+            }
         } finally {
-            setBusy(false);
+            if (viewRef.current === view && operationRef.current === operation) {
+                busyRef.current = false;
+                setBusy(false);
+            }
         }
     }
 
     function startEdit() {
         setName(account.name);
         setPolicyDraft(draftFromAccount(account));
+        editBaselineRef.current = editableSnapshot(account);
         setEditError(null);
         setEditing(true);
     }
 
     async function saveEdit(event) {
         event?.preventDefault();
+        if (!account || busyRef.current) return;
         const built = buildPolicyDraft(policyDraft);
         if (built.error) { setEditError(built.error); return; }
+        const target = account;
+        const view = viewRef.current;
+        const operation = operationRef.current + 1;
+        operationRef.current = operation;
+        busyRef.current = true;
         setBusy(true);
         setEditError(null);
         try {
+            const fresh = await messaging.getCoSignerAccount({ id: target.id });
+            if (viewRef.current !== view || operationRef.current !== operation) return;
+            if (!fresh) throw new Error('This agent account no longer exists.');
+            if (editableSnapshot(fresh) !== editBaselineRef.current) {
+                setAccount(fresh);
+                setName(fresh.name);
+                setPolicyDraft(draftFromAccount(fresh));
+                editBaselineRef.current = editableSnapshot(fresh);
+                setEditError('This agent account changed after you opened the editor. Review the latest policy, then save again.');
+                return;
+            }
             const updated = await messaging.updateCoSignerAccount({
-                id: account.id,
+                id: target.id,
                 patch: {
-                    name: name.trim() || account.name,
+                    expectedEditable: editableFields(fresh),
+                    name: name.trim() || target.name,
                     policy: built.policy,
                     allowedOutputs: built.allowedOutputs,
                 },
             });
-            setAccount(updated);
-            setEditing(false);
+            if (viewRef.current === view && operationRef.current === operation) {
+                setAccount(updated);
+                setEditing(false);
+            }
         } catch (err) {
-            setEditError(userFacingMessage(err, 'Failed to save changes.'));
+            if (viewRef.current === view && operationRef.current === operation) {
+                setEditError(userFacingMessage(err, 'Failed to save changes.'));
+            }
         } finally {
-            setBusy(false);
+            if (viewRef.current === view && operationRef.current === operation) {
+                busyRef.current = false;
+                setBusy(false);
+            }
         }
     }
 

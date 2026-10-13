@@ -78,7 +78,9 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
     const [chainId, setChainId] = useState(/** @type {string | null} */ (null));
     const [noChain, setNoChain] = useState(false);
     const [governChains, setGovernChains] = useState(/** @type {string[]} */ ([]));
-    const [rows, setRows] = useState(/** @type {any[] | null} */ (null));
+    const [pollState, setPollState] = useState(
+        /** @type {{ walletId: string, chainId: string, rows: any[] | null, error: string | null } | null} */ (null),
+    );
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [addressesReload, setAddressesReload] = useState(0);
     const [pollsReload, setPollsReload] = useState(0);
@@ -91,7 +93,7 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
         setChainId(null);
         setNoChain(false);
         setGovernChains([]);
-        setRows(null);
+        setPollState(null);
         setError(null);
         messaging.getAddressesByChain(walletId)
             .then((byChain) => {
@@ -110,15 +112,29 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
     useEffect(() => {
         if (!chainId) return;
         let cancelled = false;
-        setRows(null);
-        setError(null);
+        setPollState({ walletId, chainId, rows: null, error: null });
         messaging.governancePolls({ chainId, opts: { limit: 50 } })
-            .then((resp) => { if (!cancelled) setRows(extractRows(resp)); })
+            .then((resp) => {
+                if (!cancelled) setPollState({ walletId, chainId, rows: extractRows(resp), error: null });
+            })
             .catch((err) => {
-                if (!cancelled) setError(userFacingMessage(err, t('governance.error.polls')));
+                if (!cancelled) {
+                    setPollState({
+                        walletId,
+                        chainId,
+                        rows: null,
+                        error: userFacingMessage(err, t('governance.error.polls')),
+                    });
+                }
             });
         return () => { cancelled = true; };
-    }, [chainId, messaging, pollsReload]);
+    }, [walletId, chainId, messaging, pollsReload]);
+
+    const currentPollState = pollState?.walletId === walletId && pollState?.chainId === chainId
+        ? pollState
+        : null;
+    const rows = currentPollState?.rows ?? null;
+    const pollError = currentPollState?.error ?? null;
 
     const header = <PageHeader onBack={onBack} title={t('governance.title')} />;
     const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
@@ -163,16 +179,16 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
             </>
         )}>
 
-            {error ? (
+            {pollError ? (
                 <StatusMessage
                     variant="error"
                     className={styles.error}
                     recovery={{ label: t('common.tryAgain'), onAction: () => setPollsReload((value) => value + 1) }}
                 >
-                    {error}
+                    {pollError}
                 </StatusMessage>
             ) : null}
-            {chainId && !rows && !error ? (
+            {chainId && !rows && !pollError ? (
                 <div role="status" aria-label={t('governance.loadingPollsLabel')} aria-busy="true">
                     {t('governance.loadingPolls')}
                 </div>

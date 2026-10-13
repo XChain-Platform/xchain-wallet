@@ -248,34 +248,48 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                 ]);
                 return out;
             });
-            Promise.all(perAddress).then((results) => {
-                if (cancelled) return;
-                const merged = {
-                    stakes: [], delegations: [], rewards: [], rewardClaims: [],
-                    contractStakes: [], contractUnstakes: [],
-                };
-                const errs = [];
-                for (const r of results) {
-                    merged.stakes.push(...r.stakes);
-                    merged.delegations.push(...r.delegations);
-                    merged.rewards.push(...r.rewards);
-                    merged.rewardClaims.push(...r.rewardClaims);
-                    merged.contractStakes.push(...r.contractStakes);
-                    merged.contractUnstakes.push(...r.contractUnstakes);
-                    errs.push(...r.errors);
-                }
-                setStateByChain((prev) => ({
-                    ...prev,
-                    [cid]: {
-                        loading: false,
-                        rows: buildRows({ chainId: cid, ...merged }),
-                        positions: merged,
-                        rewards: merged.rewards,
-                        rewardClaims: merged.rewardClaims,
-                        error: errs.length > 0 ? errs.join('; ') : null,
-                    },
-                }));
-            });
+            Promise.all(perAddress)
+                .then((results) => {
+                    if (cancelled) return;
+                    const merged = {
+                        stakes: [], delegations: [], rewards: [], rewardClaims: [],
+                        contractStakes: [], contractUnstakes: [],
+                    };
+                    const errs = [];
+                    for (const r of results) {
+                        merged.stakes.push(...r.stakes);
+                        merged.delegations.push(...r.delegations);
+                        merged.rewards.push(...r.rewards);
+                        merged.rewardClaims.push(...r.rewardClaims);
+                        merged.contractStakes.push(...r.contractStakes);
+                        merged.contractUnstakes.push(...r.contractUnstakes);
+                        errs.push(...r.errors);
+                    }
+                    setStateByChain((prev) => ({
+                        ...prev,
+                        [cid]: {
+                            loading: false,
+                            rows: buildRows({ chainId: cid, ...merged }),
+                            positions: merged,
+                            rewards: merged.rewards,
+                            rewardClaims: merged.rewardClaims,
+                            error: errs.length > 0 ? errs.join('; ') : null,
+                        },
+                    }));
+                })
+                .catch((err) => {
+                    if (cancelled) return;
+                    setStateByChain((prev) => ({
+                        ...prev,
+                        [cid]: {
+                            loading: false,
+                            rows: [],
+                            rewards: [],
+                            rewardClaims: [],
+                            error: err?.message || 'Failed to load staking positions.',
+                        },
+                    }));
+                });
         }
         return () => { cancelled = true; };
     }, [chainsWithAddresses, validatorChainIds, addressesByChain, messaging, walletId, stakingReload]);

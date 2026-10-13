@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { CreatePollForm } from '../../../packages/core/src/shared/routes/CreatePollForm.jsx';
@@ -133,6 +133,52 @@ describe('governance route audit', () => {
         expect(messaging.composeVoteForConfirm).not.toHaveBeenCalled();
     });
 
+    it('starts a new poll with fresh fields when the wallet context changes', async () => {
+        const messaging = messagingWith();
+        const renderForm = (walletId) => React.createElement(
+            MessagingProvider,
+            { shell: 'web', messaging },
+            React.createElement(CreatePollForm, {
+                walletId, chainId: CHAIN, presetTick: 'VOTE', onBack() {},
+            }),
+        );
+        const mounted = render(renderForm('wallet-1'));
+        await screen.findByDisplayValue(ADDRESS.address);
+        fireEvent.change(screen.getByLabelText('Question (optional)'), { target: { value: 'Old question' } });
+        fireEvent.change(screen.getByLabelText('Tally mode'), { target: { value: 'split' } });
+
+        mounted.rerender(renderForm('wallet-2'));
+
+        expect(await screen.findByLabelText('Question (optional)')).toHaveValue('');
+        expect(screen.getByLabelText('Tally mode')).toHaveValue('approval');
+    });
+
+    it('admits only one watcher poll build from batched submit events', async () => {
+        const never = new Promise(() => {});
+        const buildActionPsbtRequest = vi.fn(() => never);
+        const messaging = messagingWith({
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher', activeNetwork: 'mainnet' }),
+            buildActionPsbtRequest,
+        });
+        mount(CreatePollForm, {
+            walletId: 'wallet-1', chainId: CHAIN, presetTick: 'VOTE', onBack() {},
+        }, messaging);
+        await screen.findByDisplayValue(ADDRESS.address);
+        fireEvent.change(screen.getByLabelText('Option 0'), { target: { value: 'Yes' } });
+        fireEvent.change(screen.getByLabelText('Option 1'), { target: { value: 'No' } });
+        fireEvent.change(screen.getByLabelText('Closes at block'), { target: { value: '244' } });
+        fireEvent.click(await screen.findByRole('button', { name: 'Preview' }));
+        const submit = await screen.findByRole('button', { name: 'Create unsigned transaction: poll' });
+        const form = submit.closest('form');
+
+        act(() => {
+            form.requestSubmit();
+            form.requestSubmit();
+        });
+
+        expect(buildActionPsbtRequest).toHaveBeenCalledOnce();
+    });
+
     it('keeps delegation required-field messages reachable from the primary action', async () => {
         mount(DelegateVoteForm, { walletId: 'wallet-1', chainId: CHAIN, onBack() {} });
         await screen.findByDisplayValue(ADDRESS.address);
@@ -140,6 +186,50 @@ describe('governance route audit', () => {
         expect(action).toBeEnabled();
         fireEvent.click(action);
         expect(await screen.findByText('Governance token is required.')).toBeTruthy();
+    });
+
+    it('starts a new delegation with fresh fields when the wallet context changes', async () => {
+        const messaging = messagingWith();
+        const renderForm = (walletId) => React.createElement(
+            MessagingProvider,
+            { shell: 'web', messaging },
+            React.createElement(DelegateVoteForm, {
+                walletId, chainId: CHAIN, presetTick: 'VOTE', onBack() {},
+            }),
+        );
+        const mounted = render(renderForm('wallet-1'));
+        await screen.findByDisplayValue(ADDRESS.address);
+        fireEvent.change(screen.getByLabelText('Delegate to address'), { target: { value: 'bc1qolddelegate' } });
+        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'Old memo' } });
+
+        mounted.rerender(renderForm('wallet-2'));
+
+        expect(await screen.findByLabelText('Delegate to address')).toHaveValue('');
+        expect(screen.getByLabelText('Memo (optional)')).toHaveValue('');
+    });
+
+    it('admits only one watcher delegation build from batched submit events', async () => {
+        const never = new Promise(() => {});
+        const buildActionPsbtRequest = vi.fn(() => never);
+        const messaging = messagingWith({
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher', activeNetwork: 'mainnet' }),
+            buildActionPsbtRequest,
+        });
+        mount(DelegateVoteForm, {
+            walletId: 'wallet-1', chainId: CHAIN, presetTick: 'VOTE', onBack() {},
+        }, messaging);
+        await screen.findByDisplayValue(ADDRESS.address);
+        fireEvent.change(screen.getByLabelText('Delegate to address'), { target: { value: 'bc1qdelegate' } });
+        fireEvent.click(await screen.findByRole('button', { name: 'Preview' }));
+        const submit = await screen.findByRole('button', { name: 'Create unsigned transaction: delegate votes' });
+        const form = submit.closest('form');
+
+        act(() => {
+            form.requestSubmit();
+            form.requestSubmit();
+        });
+
+        expect(buildActionPsbtRequest).toHaveBeenCalledOnce();
     });
 
     it('unwraps explorer poll rows and displays finalized results', async () => {
@@ -269,6 +359,34 @@ describe('governance route audit', () => {
         });
         expect(await screen.findByText('No polls yet')).toBeTruthy();
         expect(screen.getByText('Polls created on this chain appear here.')).toBeTruthy();
+    });
+
+    it('hides poll rows that belong to the previous wallet while the next list loads', async () => {
+        const never = new Promise(() => {});
+        const governancePolls = vi.fn()
+            .mockResolvedValueOnce([{
+                action_index: 19,
+                tick: 'VOTE',
+                question: 'Previous wallet poll',
+                poll_status: 'open',
+                end_block: 300,
+            }])
+            .mockImplementation(() => never);
+        const messaging = messagingWith({ governancePolls });
+        const renderPolls = (walletId) => React.createElement(
+            MessagingProvider,
+            { shell: 'web', messaging },
+            React.createElement(GovernancePolls, {
+                walletId, onOpenPoll() {}, onCreate() {}, onDelegate() {}, onBack() {},
+            }),
+        );
+        const mounted = render(renderPolls('wallet-1'));
+        expect(await screen.findByText('Previous wallet poll')).toBeTruthy();
+
+        mounted.rerender(renderPolls('wallet-2'));
+
+        expect(screen.queryByText('Previous wallet poll')).toBeNull();
+        expect(screen.getByRole('status', { name: 'Loading governance addresses' })).toBeTruthy();
     });
 
     it('renders a long poll-list card and its actions at 320px', async () => {

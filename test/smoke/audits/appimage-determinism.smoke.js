@@ -43,6 +43,16 @@
 //      superblock that fails its own block_size/block_log self-check, and
 //      an argument shape it does not recognise. Silently skipping the
 //      patch would reproduce the original defect invisibly.
+//   7. FILE MODES ARE PINNED TOO, for the AppImage AND the .deb. The
+//      v0.341.3 reproduce check failed on all four Linux packages because
+//      build/icon.png, copied verbatim (mode included) as the 1024x1024
+//      icon, was 0644 in the CI checkout and 0664 in one made under umask
+//      002. The mode rule (group/other = owner's r+x, never w; special
+//      bits kept) is checked directly, then through the config's linux
+//      beforePack (build resources) and afterPack (packed app), and the
+//      installed mksquashfs wrapper is checked to apply the same rule to
+//      its stage tree. Trees here are built under umask 002 on purpose:
+//      that is the host the defect came from.
 
 import { strict as assert } from 'node:assert';
 import { createRequire } from 'node:module';
@@ -63,6 +73,7 @@ const requireCjs = createRequire(import.meta.url);
 
 const WRAPPER = join(desktop, 'scripts', 'mksquashfs-deterministic.cjs');
 const TOOLSET = join(desktop, 'scripts', 'appimage-toolset.cjs');
+const MODES = join(desktop, 'scripts', 'deterministic-modes.cjs');
 
 const ARCH_X64 = 1; // builder-util Arch.x64
 const EPOCH = 1785601315;
@@ -99,6 +110,20 @@ try {
             before,
             `beforePack is inert for ${platform}: no Linux toolset is fetched on that lane`,
         );
+    }
+
+    assert.equal(
+        typeof config.afterPack,
+        'function',
+        'electron-builder config declares an afterPack hook (it pins the packed app\'s modes)',
+    );
+    for (const platform of ['darwin', 'win32']) {
+        // A path that does not exist: walking it would throw, so returning
+        // cleanly is the proof the hook did not touch the mac/win app.
+        await config.afterPack({
+            electronPlatformName: platform,
+            appOutDir: join(work, 'no-such-app-out-dir'),
+        });
     }
 
     // --- 3. Materializing a shim over a fixture toolset ----------------
@@ -221,6 +246,14 @@ fs.writeFileSync(output, Buffer.concat([Buffer.alloc(offset, 0), sb, payload]));
         writeFileSync(join(stage, 'AppRun'), '#!/bin/sh\nexec ./app\n', { mode: 0o755 });
         writeFileSync(join(stage, 'resources', 'app.asar'), 'asar');
         symlinkSync('resources/app.asar', join(stage, 'app.asar.link'));
+        // What a umask-002 checkout hands the stage: the icon copied with
+        // group write (the v0.341.3 defect), and a group-writable exec.
+        mkdirSync(join(stage, 'usr', 'share', 'icons'), { recursive: true });
+        writeFileSync(join(stage, 'usr', 'share', 'icons', 'xchain-wallet.png'), 'png');
+        chmodSync(join(stage, 'usr', 'share', 'icons', 'xchain-wallet.png'), 0o664);
+        writeFileSync(join(stage, 'helper'), '#!/bin/sh\n');
+        chmodSync(join(stage, 'helper'), 0o775);
+        chmodSync(join(stage, 'usr'), 0o775);
     }
 
     function runWrapper(shimRoot, { epoch, output, args }) {
@@ -256,6 +289,22 @@ fs.writeFileSync(output, Buffer.concat([Buffer.alloc(offset, 0), sb, payload]));
             Math.floor(stats.mtimeMs / 1000),
             EPOCH,
             `stage entry ${rel} is stamped with the epoch before mksquashfs reads it`,
+        );
+    }
+
+    // The wrapper's copy of the mode rule, on the stage it was handed.
+    const modeOf = (entry) => lstatSync(entry).mode & 0o7777;
+    for (const [rel, wanted] of [
+        [join('usr', 'share', 'icons', 'xchain-wallet.png'), 0o644],
+        ['helper', 0o755],
+        ['usr', 0o755],
+        ['AppRun', 0o755],
+        [join('resources', 'app.asar'), 0o644],
+    ]) {
+        assert.equal(
+            modeOf(join(stage, rel)).toString(8),
+            wanted.toString(8),
+            `the wrapper pins stage entry ${rel} to ${wanted.toString(8)} whatever the host umask gave it`,
         );
     }
 
@@ -307,6 +356,110 @@ fs.writeFileSync(output, Buffer.concat([Buffer.alloc(offset, 0), sb, payload]));
     });
     assert.notEqual(badArgs.status, 0, 'an unrecognised argument shape fails the build');
 
+    // --- 7. File modes, for both Linux packages -----------------------
+
+    const { canonicalMode, normalizeTreeModes } = requireCjs(MODES);
+    for (const [from, to] of [
+        [0o664, 0o644], // the v0.341.3 icon
+        [0o644, 0o644],
+        [0o775, 0o755],
+        [0o755, 0o755],
+        [0o600, 0o644], // a umask-077 checkout
+        [0o700, 0o755],
+        [0o444, 0o444], // deliberately read-only stays read-only
+        [0o4755, 0o4755], // chrome-sandbox: setuid is kept, the deb postinst relies on it
+        [0o100664, 0o644], // a full st_mode, file-type bits included
+    ]) {
+        assert.equal(
+            canonicalMode(from).toString(8),
+            to.toString(8),
+            `canonicalMode(${from.toString(8)}) is ${to.toString(8)}`,
+        );
+    }
+
+    // The wrapper cannot require the helper (it is installed alone into the
+    // shim), so it carries its own copy of the rule. Prove the two agree on
+    // every permission value rather than trusting a reviewer to diff them.
+    const wrapperSource = readFileSync(WRAPPER, 'utf8');
+    const ruleMatch = /function canonicalMode\(mode\) \{[\s\S]*?\n\}/.exec(wrapperSource);
+    assert.ok(ruleMatch, 'the mksquashfs wrapper carries canonicalMode');
+    // eslint-disable-next-line no-new-func
+    const wrapperRule = new Function(`${ruleMatch[0]}; return canonicalMode;`)();
+    for (let mode = 0; mode <= 0o7777; mode += 1) {
+        if (wrapperRule(mode) !== canonicalMode(mode)) {
+            assert.fail(`wrapper and helper disagree on mode ${mode.toString(8)}`);
+        }
+    }
+
+    // A tree built the way a umask-002 host builds one.
+    function makeUmask002Tree(root) {
+        const saved = process.umask(0o002);
+        try {
+            mkdirSync(join(root, 'icons'), { recursive: true });
+            writeFileSync(join(root, 'icon.png'), 'png');
+            writeFileSync(join(root, 'icons', '512x512.png'), 'png');
+            writeFileSync(join(root, 'run.sh'), '#!/bin/sh\n', { mode: 0o777 });
+            writeFileSync(join(root, 'chrome-sandbox'), 'elf');
+            chmodSync(join(root, 'chrome-sandbox'), 0o4755);
+            symlinkSync('does-not-exist', join(root, 'dangling'));
+        } finally {
+            process.umask(saved);
+        }
+        assert.equal(
+            (lstatSync(join(root, 'icon.png')).mode & 0o777).toString(8),
+            '664',
+            'fixture sanity: the tree really carries the umask-002 mode',
+        );
+    }
+    function assertCanonical(root, label) {
+        for (const [rel, wanted] of [
+            ['.', 0o755],
+            ['icons', 0o755],
+            ['icon.png', 0o644],
+            [join('icons', '512x512.png'), 0o644],
+            ['run.sh', 0o755],
+            ['chrome-sandbox', 0o4755],
+        ]) {
+            assert.equal(
+                (lstatSync(join(root, rel)).mode & 0o7777).toString(8),
+                wanted.toString(8),
+                `${label}: ${rel} is ${wanted.toString(8)}`,
+            );
+        }
+        assert.ok(lstatSync(join(root, 'dangling')).isSymbolicLink(), `${label}: symlinks are left alone`);
+    }
+
+    const direct = join(work, 'modes-direct');
+    makeUmask002Tree(direct);
+    assert.ok(normalizeTreeModes(direct) > 0, 'normalizeTreeModes reports what it changed');
+    assertCanonical(direct, 'normalizeTreeModes');
+    assert.equal(normalizeTreeModes(direct), 0, 'a second pass changes nothing (idempotent)');
+
+    // The config's linux afterPack over a stand-in packed app.
+    const appOut = join(work, 'linux-unpacked');
+    makeUmask002Tree(appOut);
+    await config.afterPack({ electronPlatformName: 'linux', appOutDir: appOut });
+    assertCanonical(appOut, 'afterPack (linux)');
+
+    // The config's linux beforePack over stand-in build resources. It also
+    // materializes the AppImage shim, so it is pointed at the fixture
+    // toolset: nothing here may reach the network.
+    const resources = join(work, 'build-resources');
+    makeUmask002Tree(resources);
+    const savedTools = process.env.APPIMAGE_TOOLS_PATH;
+    process.env.APPIMAGE_TOOLS_PATH = goodFixture;
+    try {
+        await config.beforePack({
+            electronPlatformName: 'linux',
+            arch: ARCH_X64,
+            packager: { buildResourcesDir: resources },
+        });
+    } finally {
+        if (savedTools === undefined) delete process.env.APPIMAGE_TOOLS_PATH;
+        else process.env.APPIMAGE_TOOLS_PATH = savedTools;
+    }
+    assertCanonical(resources, 'beforePack (linux) build resources');
+
     console.log(
         'OK: AppImage determinism smoke (DD7: electron-builder config declares a linux-only'
             + 'beforePack hook; the hook materializes a shimmed AppImage toolset and exports '
@@ -316,7 +469,11 @@ fs.writeFileSync(output, Buffer.concat([Buffer.alloc(offset, 0), sb, payload]));
             + 'to SOURCE_DATE_EPOCH, so two builds at different wall clocks are byte-identical; dev '
             + 'builds without the epoch pass through unpatched and unstamped; and the wrapper '
             + 'fails closed on a failing tool, missing magic, unknown squashfs major, a failed '
-            + 'superblock self-check, and an unrecognised argument shape)',
+            + 'superblock self-check, and an unrecognised argument shape; file modes are pinned for '
+            + 'the AppImage and the .deb alike - group/other take the owner\'s read+execute and never '
+            + 'write, special bits kept - by the config\'s linux beforePack over the build resources, '
+            + 'its linux afterPack over the packed app, and the wrapper over the AppImage stage, so a '
+            + 'checkout made under umask 002 packages the same bytes as one made under 022)',
     );
 } finally {
     rmSync(work, { recursive: true, force: true });

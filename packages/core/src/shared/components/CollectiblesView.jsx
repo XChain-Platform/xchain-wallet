@@ -136,6 +136,7 @@ export function CollectiblesView({
 
 function CollectibleCard({ row, demo, pinned, hidden, onSelect, onTogglePin, onToggleHide, allowRemoteImages }) {
     const [failedImageUrl, setFailedImageUrl] = useState(null);
+    const [failedChainIconUrl, setFailedChainIconUrl] = useState(null);
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
     // Fetch tick metadata to surface a real image when the row payload
     // doesn't already carry one. `useTokenInfo`'s module-level cache means
@@ -211,7 +212,7 @@ function CollectibleCard({ row, demo, pinned, hidden, onSelect, onTogglePin, onT
                             onError={() => setFailedImageUrl(effectiveImageUrl)}
                         />
                     ) : null}
-                    {chainIconUrl ? (
+                    {chainIconUrl && failedChainIconUrl !== chainIconUrl ? (
                         <img
                             src={chainIconUrl}
                             width={20}
@@ -222,6 +223,7 @@ function CollectibleCard({ row, demo, pinned, hidden, onSelect, onTogglePin, onT
                             className={styles.chainOverlay}
                             loading="lazy"
                             decoding="async"
+                            onError={() => setFailedChainIconUrl(chainIconUrl)}
                         />
                     ) : null}
                 </div>

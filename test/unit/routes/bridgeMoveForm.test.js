@@ -68,6 +68,9 @@ const WAIT = { timeout: 4000 };
  * @param {any} [opts.feeQuote]
  * @param {any} [opts.tokenInfo]
  * @param {string} [opts.initialTick]
+ * @param {string} [opts.walletMode]
+ * @param {Function} [opts.requoteNativeFee]
+ * @param {Function} [opts.buildActionPsbtRequest]
  */
 function mount(opts = {}) {
     const byChain = opts.byChain || { [BTC]: [BTC_ADDRESS], [DOGE]: [DOGE_ADDRESS] };
@@ -93,8 +96,8 @@ function mount(opts = {}) {
         )),
         getWalletBalances: vi.fn().mockResolvedValue(walletBalances),
         getTokenInfo: vi.fn().mockResolvedValue(opts.tokenInfo ?? null),
-        requoteNativeFee: vi.fn().mockResolvedValue(opts.feeQuote ?? null),
-        getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+        requoteNativeFee: opts.requoteNativeFee || vi.fn().mockResolvedValue(opts.feeQuote ?? null),
+        getSettings: vi.fn().mockResolvedValue({ walletMode: opts.walletMode || 'full' }),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
         composeForConfirm: vi.fn().mockResolvedValue({
@@ -105,6 +108,7 @@ function mount(opts = {}) {
             version: 1,
         }),
         preflight: vi.fn().mockResolvedValue({ verdict: 'pass', findings: [] }),
+        ...(opts.buildActionPsbtRequest ? { buildActionPsbtRequest: opts.buildActionPsbtRequest } : {}),
     };
     const messaging = new Proxy(base, {
         get(target, prop) {
@@ -154,6 +158,59 @@ describe('BridgeMoveForm: the destination is resolved from the user\'s own accou
             WAIT,
         );
         expect(messaging.getNewestAddress).toHaveBeenCalledWith('w', DOGE, undefined);
+    });
+
+    it('clears source-scoped input and ignores an old fee quote after the chain pair changes', async () => {
+        let resolveQuote;
+        const quote = new Promise((resolve) => { resolveQuote = resolve; });
+        const requoteNativeFee = vi.fn(() => quote);
+        const messaging = mount({
+            byChain: { [BTC]: [BTC_ADDRESS], [DOGE]: [DOGE_ADDRESS], [LTC]: [LTC_ADDRESS] },
+            requoteNativeFee,
+        });
+        await waitFor(
+            () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
+            WAIT,
+        );
+        vi.useFakeTimers();
+        fireEvent.change(amountInput(), { target: { value: '1' } });
+        await advanceFeeQuote();
+        expect(requoteNativeFee).toHaveBeenCalled();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Move from: Bitcoin' }));
+        fireEvent.click(screen.getByRole('option', { name: /Dogecoin/ }));
+        expect(amountInput()).toHaveValue('');
+        expect(screen.queryByText(/protocol fee is/i)).toBeNull();
+
+        await act(async () => { resolveQuote({ supported: true, xchainFee: '0.5' }); });
+        expect(screen.queryByText(/protocol fee is 0.5 XCHAIN/i)).toBeNull();
+        vi.useRealTimers();
+        await waitFor(
+            () => expect(screen.getByLabelText('Receive at')).toHaveValue(BTC_ADDRESS.address),
+            WAIT,
+        );
+        expect(messaging.requoteNativeFee).toHaveBeenCalledTimes(1);
+    });
+
+    it('dispatches one watcher build when the move form is submitted twice in one turn', async () => {
+        let resolveBuild;
+        const build = new Promise((resolve) => { resolveBuild = resolve; });
+        const buildActionPsbtRequest = vi.fn(() => build);
+        const messaging = mount({ walletMode: 'watcher', buildActionPsbtRequest });
+        await waitFor(
+            () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
+            WAIT,
+        );
+        await waitFor(() => expect(messaging.getSettings).toHaveBeenCalled(), WAIT);
+        fireEvent.change(amountInput(), { target: { value: '1' } });
+        const form = moveButton().closest('form');
+        await act(async () => {
+            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        });
+        expect(buildActionPsbtRequest).toHaveBeenCalledTimes(1);
+
+        await act(async () => { resolveBuild({ psbtHex: 'aa00' }); });
     });
 
     it('never offers a free-text destination: the field is read-only and changed only by picking another OWN address', async () => {

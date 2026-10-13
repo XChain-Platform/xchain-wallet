@@ -12,7 +12,11 @@ import {
     connectToBackground,
 } from '../../../packages/extension/src/popup/backgroundConnection.jsx';
 import { getSessionStatus } from '../../../packages/extension/src/popup/messaging.js';
-import { RUNTIME_MESSAGE_TIMEOUT_MS } from '../../../packages/extension/src/shared/chromeMessaging.js';
+import {
+    RUNTIME_MESSAGE_TIMEOUT_MS,
+    RUNTIME_REQUEST_TIMEOUT_MS,
+    sendMessage,
+} from '../../../packages/extension/src/shared/chromeMessaging.js';
 
 function reply(runtime, callback, response, lastError) {
     runtime.lastError = lastError;
@@ -63,6 +67,32 @@ afterEach(() => {
 });
 
 describe('popup background connection recovery', () => {
+    it('applies a finite deadline to ordinary background requests', async () => {
+        const runtime = { lastError: undefined, sendMessage: vi.fn() };
+        vi.stubGlobal('chrome', { runtime });
+        const request = sendMessage('wallet.list');
+        const rejection = expect(request).rejects.toMatchObject({ code: 'RUNTIME_TIMEOUT' });
+
+        await vi.advanceTimersByTimeAsync(RUNTIME_REQUEST_TIMEOUT_MS);
+
+        await rejection;
+    });
+
+    it('does not time out a user-authorized action while hardware may still be waiting', async () => {
+        let replyAction;
+        const runtime = {
+            lastError: undefined,
+            sendMessage: vi.fn((_message, callback) => { replyAction = callback; }),
+        };
+        vi.stubGlobal('chrome', { runtime });
+        const request = sendMessage('action.send.hw', { walletId: 'wallet-1' });
+
+        await vi.advanceTimersByTimeAsync(RUNTIME_REQUEST_TIMEOUT_MS);
+        replyAction({ ok: true, result: { txid: 'abc' } });
+
+        await expect(request).resolves.toEqual({ txid: 'abc' });
+    });
+
     it('shows reconnecting and recovers when the service worker restarts', async () => {
         const runtime = { lastError: undefined, sendMessage: vi.fn() };
         runtime.sendMessage

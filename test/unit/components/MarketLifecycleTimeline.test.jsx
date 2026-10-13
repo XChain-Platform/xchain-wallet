@@ -99,4 +99,17 @@ describe('MarketLifecycleTimeline', () => {
         expect(within(timeline).getByText('Edited')).toBeInTheDocument();
         expect(within(timeline).getByText('Created')).toBeInTheDocument();
     });
+
+    it('uses unique keys when lifecycle rows repeat an action index', async () => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const getOrderLifecycle = vi.fn(({ kind }) => Promise.resolve(kind === 'edits' ? [
+            { action_index: 51, order_action_index: 42, block_index: 110 },
+            { action_index: 51, order_action_index: 42, block_index: 109 },
+        ] : []));
+        render(<MarketLifecycleTimeline {...BASE_PROPS} messaging={{ getOrderLifecycle }} />);
+
+        await waitFor(() => expect(screen.getAllByText('Edited')).toHaveLength(2));
+        expect(consoleError.mock.calls.flat().join(' ')).not.toMatch(/same key/i);
+        consoleError.mockRestore();
+    });
 });

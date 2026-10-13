@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AddressText, Button, ChainBadge, EmptyState, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -83,6 +83,18 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
     const [lastQueried, setLastQueried] = useState(/** @type {string | null} */ (null));
     const [lastSearchMode, setLastSearchMode] = useState(/** @type {'token' | 'address'} */ ('token'));
     const searchRequestId = useRef(0);
+    const searchInFlightRef = useRef(/** @type {string | null} */ (null));
+    const loadMoreInFlightRef = useRef(/** @type {Set<string>} */ (new Set()));
+    useEffect(() => {
+        if (chainFilter === 'all' || chains.includes(chainFilter)) return;
+        searchRequestId.current += 1;
+        searchInFlightRef.current = null;
+        loadMoreInFlightRef.current.clear();
+        setChainFilter('all');
+        setSearching(false);
+        setRowsByChain({});
+        setLastQueried(null);
+    }, [chainFilter, chains]);
     const searchDisabledReason = !settings
         ? 'Loading available networks…'
         : chains.length === 0
@@ -100,6 +112,9 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
         const q = query.trim();
         if (!q) return;
         const mode = searchMode;
+        const targetChains = chainFilter === 'all' ? chains : [chainFilter];
+        const searchKey = `${mode}\u0000${q}\u0000${targetChains.join('\u0000')}`;
+        if (searchInFlightRef.current === searchKey) return;
         const requestId = searchRequestId.current + 1;
         searchRequestId.current = requestId;
         const tokenError = mode === 'token'
@@ -111,13 +126,15 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
             setLastQueried(q);
             return;
         }
+        searchInFlightRef.current = searchKey;
+        loadMoreInFlightRef.current.clear();
         setSearching(true);
         setLastQueried(q);
         setLastSearchMode(mode);
         setRowsByChain({});
 
-        const targetChains = chainFilter === 'all' ? chains : [chainFilter];
         if (targetChains.length === 0) {
+            searchInFlightRef.current = null;
             setSearching(false);
             setRowsByChain({ _error: { rows: [], error: 'No network is available to search yet.' } });
             setLastQueried(q);
@@ -182,6 +199,7 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
             }
             setRowsByChain(next);
             setSearching(false);
+            if (searchInFlightRef.current === searchKey) searchInFlightRef.current = null;
         });
     }
 
@@ -192,6 +210,8 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
 
     function resetFilters() {
         searchRequestId.current += 1;
+        searchInFlightRef.current = null;
+        loadMoreInFlightRef.current.clear();
         setSearchMode('token');
         setQuery('');
         setChainFilter('all');
@@ -206,6 +226,9 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
         if (!state?.hasMore || state.loadingMore || !lastQueried) return;
         const requestId = searchRequestId.current;
         const nextPage = (state.page || 1) + 1;
+        const loadKey = `${requestId}\u0000${cid}\u0000${nextPage}`;
+        if (loadMoreInFlightRef.current.has(loadKey)) return;
+        loadMoreInFlightRef.current.add(loadKey);
         setRowsByChain((current) => ({
             ...current,
             [cid]: { ...current[cid], loadingMore: true, moreError: null },
@@ -244,7 +267,9 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                     },
                 };
             });
+            loadMoreInFlightRef.current.delete(loadKey);
         }).catch((err) => {
+            loadMoreInFlightRef.current.delete(loadKey);
             if (requestId !== searchRequestId.current) return;
             setRowsByChain((current) => ({
                 ...current,

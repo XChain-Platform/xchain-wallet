@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { flows as flowsLib } from '@xchain-wallet/core';
 import { Button } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../useMessaging.js';
@@ -40,7 +40,7 @@ const NARROW_VIEWPORT = '(max-width: 599px)';
 export function DemoBanner({ activeWalletId, onExited }) {
     const { messaging } = useMessaging();
     const detailsId = useId();
-    const [isDemo, setIsDemo] = useState(false);
+    const isDemo = flowsLib.isDemoWallet(activeWalletId);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [confirmOpen, setConfirmOpen] = useState(false);
@@ -48,6 +48,7 @@ export function DemoBanner({ activeWalletId, onExited }) {
     const [now, setNow] = useState(() => Date.now());
     const [autoWiped, setAutoWiped] = useState(false);
     const [expanded, setExpanded] = useState(viewportStartsExpanded);
+    const exitGenerationRef = useRef(0);
 
     useEffect(() => {
         if (typeof window.matchMedia !== 'function') return undefined;
@@ -59,13 +60,24 @@ export function DemoBanner({ activeWalletId, onExited }) {
     }, []);
 
     useEffect(() => {
-        setIsDemo(flowsLib.isDemoWallet(activeWalletId));
+        const generation = ++exitGenerationRef.current;
         setExpiry(flowsLib.getDemoWalletExpiry());
         setNow(Date.now());
+        setAutoWiped(false);
+        setBusy(false);
+        setError(null);
+        setConfirmOpen(false);
+        return () => {
+            if (exitGenerationRef.current === generation) {
+                exitGenerationRef.current += 1;
+            }
+        };
     }, [activeWalletId]);
 
-    async function handleExit() {
+    const handleExit = useCallback(async () => {
         if (busy || !activeWalletId) return;
+        const generation = exitGenerationRef.current;
+        const isCurrent = () => exitGenerationRef.current === generation;
         setBusy(true);
         setError(null);
         try {
@@ -76,15 +88,19 @@ export function DemoBanner({ activeWalletId, onExited }) {
                 messaging,
                 walletId: activeWalletId,
             });
+            if (!isCurrent()) return;
             if (reloaded) return;
+            setAutoWiped(true);
             setConfirmOpen(false);
             if (typeof onExited === 'function') onExited();
         } catch {
-            setError('Could not exit demo mode. Please try again.');
+            if (isCurrent()) {
+                setError('Could not exit demo mode. Please try again.');
+            }
         } finally {
-            setBusy(false);
+            if (isCurrent()) setBusy(false);
         }
-    }
+    }, [activeWalletId, busy, messaging, onExited]);
 
     // Cluster J FOLLOWUP 6: auto-expire. When the demo wallet's TTL
     // has elapsed, fire a one-shot wipe + onExited so the user lands
@@ -98,16 +114,13 @@ export function DemoBanner({ activeWalletId, onExited }) {
             setNow(tickNow);
             if (flowsLib.isDemoWalletExpired({ now: tickNow })) {
                 setAutoWiped(true);
-                handleExit();
+                void handleExit();
             }
         };
         tick();
         const id = setInterval(tick, 60_000);
         return () => clearInterval(id);
-        // handleExit is stable enough; re-running on busy flips would
-        // double-fire the exit. Intentionally omit it from deps.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isDemo, activeWalletId, autoWiped, busy]);
+    }, [isDemo, autoWiped, busy, handleExit]);
 
     if (!isDemo) return null;
 

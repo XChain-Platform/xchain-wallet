@@ -52,13 +52,18 @@ export function useDispenserDestination({
         const sentTick = String(paymentTick || '').trim().toUpperCase();
         if (!enabled || !chainId || !dest || !sentTick) return undefined;
         if (typeof messaging?.getDispensersForAddress !== 'function') return undefined;
+        let active = true;
         // Debounced: the destination changes per keystroke when typed by hand.
         const timer = setTimeout(() => {
-            loadDispensersAt(messaging, chainId, dest, sentTick, isNativePayment)
+            loadDispensersAt(messaging, chainId, dest, sentTick, isNativePayment, () => active)
                 .then((rows) => { if (seqRef.current === seq) setFound(rows); })
                 .catch(() => { /* best-effort, see above */ });
         }, 400);
-        return () => { clearTimeout(timer); };
+        return () => {
+            active = false;
+            clearTimeout(timer);
+            if (seqRef.current === seq) seqRef.current += 1;
+        };
     }, [messaging, chainId, to, paymentTick, isNativePayment, enabled]);
     return found;
 }
@@ -71,8 +76,9 @@ export function useDispenserDestination({
  * @property {'live' | 'dark' | null} oracle  null when not oracle-priced or unreadable
  */
 
-async function loadDispensersAt(messaging, chainId, dest, sentTick, isNativePayment) {
+async function loadDispensersAt(messaging, chainId, dest, sentTick, isNativePayment, isActive) {
     const resp = await messaging.getDispensersForAddress({ chainId, address: dest });
+    if (!isActive()) return [];
     const rows = Array.isArray(resp) ? resp : (Array.isArray(resp?.data) ? resp.data : []);
     // Pay-to is GET_ADDRESS when set, otherwise SOURCE (the rule the detail
     // page uses). GET_TICK selects one payment token; an empty GET_TICK selects

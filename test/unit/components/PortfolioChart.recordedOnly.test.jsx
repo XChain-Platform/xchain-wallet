@@ -196,4 +196,41 @@ describe('PortfolioChart on the demo wallet', () => {
         await waitFor(() => expect(document.querySelector('svg polyline')).not.toBeNull());
         expect(rangeLabels()).toEqual(['24h', '7d', '30d', '90d', 'All']);
     });
+
+    it('opens each wallet mode on its own default range when the active wallet changes', async () => {
+        const messaging = {
+            getSettings: vi.fn(async () => ({})),
+            getNativePricesRequest: vi.fn(async () => ({
+                prices: { 'bitcoin-mainnet': { sparkline: [70000, 71000] } },
+            })),
+        };
+        const view = render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <PortfolioChart rows={ROWS} walletId="real-wallet-1" />
+            </MessagingProvider>,
+        );
+        const selectedRange = () => screen.getAllByRole('tab')
+            .find((tab) => tab.getAttribute('aria-selected') === 'true')?.textContent;
+
+        await screen.findByRole('img');
+        expect(selectedRange()).toBe('7d');
+
+        markDemoWallet('demo-wallet-1');
+        view.rerender(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <PortfolioChart rows={ROWS} walletId="demo-wallet-1" />
+            </MessagingProvider>,
+        );
+
+        await waitFor(() => expect(selectedRange()).toBe('30d'));
+
+        clearDemoWalletId();
+        view.rerender(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <PortfolioChart rows={ROWS} walletId="real-wallet-2" />
+            </MessagingProvider>,
+        );
+
+        await waitFor(() => expect(selectedRange()).toBe('7d'));
+    });
 });

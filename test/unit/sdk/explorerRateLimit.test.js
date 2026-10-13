@@ -204,6 +204,22 @@ describe('429 retry', () => {
 });
 
 describe('the wait cap', () => {
+    it('cancels a paused request before the Retry-After wait expires', async () => {
+        const limiter = new HostRateLimiter({ random: () => 0 });
+        const controller = new AbortController();
+        let sent = 0;
+        limiter.block('h', 30_000);
+
+        const pending = limiter.request(
+            'h', null, async () => { sent += 1; return ok(1); }, () => null,
+            undefined, controller.signal,
+        );
+        controller.abort();
+
+        await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+        expect(sent).toBe(0);
+    });
+
     it('does not sit through a wait longer than the cap; it surfaces the 429 at once', async () => {
         const { limiter, sleeps } = fakeLimiter({ maxWaitMs: 10_000 });
         let calls = 0;
@@ -290,6 +306,52 @@ describe('coalescing identical GETs', () => {
     });
 });
 
+describe('explorer response integrity', () => {
+    it('requires strict JSON parsing on the axios client', () => {
+        const client = {
+            defaults: { baseURL: 'https://explorer.test' },
+            get: async () => ok({}),
+        };
+        installExplorerRateLimit({ explorer: { client } }, fakeLimiter().limiter);
+
+        expect(client.defaults.responseType).toBe('json');
+        expect(client.defaults.transitional).toMatchObject({ silentJSONParsing: false });
+    });
+
+    it('rejects a response from a client replaced during the request', async () => {
+        let finish;
+        let markStarted;
+        const started = new Promise((resolve) => { markStarted = resolve; });
+        const first = {
+            defaults: { baseURL: 'https://old-explorer.test' },
+            get: () => new Promise((resolve) => {
+                finish = resolve;
+                markStarted();
+            }),
+        };
+        const second = {
+            defaults: { baseURL: 'https://new-explorer.test' },
+            get: async () => ok('new'),
+        };
+        const explorer = {
+            client: first,
+            buildClient() { this.client = second; },
+            get(path) { return this.client.get(path); },
+        };
+        installExplorerRateLimit({ explorer }, fakeLimiter().limiter);
+
+        const pending = explorer.get('/status');
+        await started;
+        explorer.buildClient();
+        finish(ok('old'));
+
+        await expect(pending).rejects.toMatchObject({
+            name: 'NetworkChangedError',
+            code: 'EXPLORER_NETWORK_CHANGED',
+        });
+    });
+});
+
 describe('pacing when ratelimit-remaining runs low', () => {
     it('spreads requests over what is left of the window', async () => {
         const { limiter, sleeps } = fakeLimiter({ lowWater: 5 });
@@ -354,6 +416,25 @@ describe.skipIf(!sdkReady)('installed on the real SDK ExplorerClient', () => {
         const sdk = installExplorerRateLimit({ explorer: ex }, limiter);
         await expect(sdk.explorer.get('/lists/bc1qx/address')).resolves.toEqual({ data: ['list'] });
         expect(calls).toBe(2);
+    });
+
+    it('rejects malformed JSON instead of returning it as successful data', async () => {
+        const ExplorerClient = requireSdkDeep('explorerClient');
+        const ex = new ExplorerClient({
+            network: 'bitcoin-mainnet',
+            explorerUrl: 'https://explorer.example',
+        });
+        installExplorerRateLimit({ explorer: ex }, fakeLimiter().limiter);
+        ex.client.defaults.adapter = async (config) => ({
+            data: '{"broken":',
+            status: 200,
+            statusText: 'OK',
+            headers: { 'content-type': 'application/json' },
+            config,
+            request: {},
+        });
+
+        await expect(ex.client.get('/BTC/api/status')).rejects.toBeTruthy();
     });
 
     it('surfaces an exhausted 429 as the plain sentence, with the wait kept for the screens', async () => {

@@ -112,6 +112,35 @@ describe('ToastHost', () => {
         expect(screen.queryByText('Contact deleted')).toBeNull();
     });
 
+    it('replaces a repeated toast id and gives the replacement a fresh timeout', () => {
+        setup();
+        show({ id: 'save-result', message: 'Saving failed', durationMs: 1000 });
+        act(() => vi.advanceTimersByTime(500));
+
+        show({ id: 'save-result', message: 'Saved', durationMs: 1000 });
+
+        expect(screen.queryByText('Saving failed')).toBeNull();
+        expect(screen.getByText('Saved')).toBeTruthy();
+        act(() => vi.advanceTimersByTime(500));
+        expect(screen.getByText('Saved')).toBeTruthy();
+        act(() => vi.advanceTimersByTime(500));
+        expect(screen.queryByText('Saved')).toBeNull();
+    });
+
+    it('contains synchronous action failures and still dismisses the toast', () => {
+        setup();
+        show({
+            id: 'undo',
+            message: 'Contact deleted',
+            actionLabel: 'Undo',
+            onAction: () => { throw new Error('restore failed'); },
+            durationMs: 0,
+        });
+
+        expect(() => fireEvent.click(screen.getByRole('button', { name: 'Undo' }))).not.toThrow();
+        expect(screen.queryByText('Contact deleted')).toBeNull();
+    });
+
     it('dismisses a focused toast with Escape', () => {
         setup();
         show({ id: 'persistent', message: 'Copied', durationMs: 0 });

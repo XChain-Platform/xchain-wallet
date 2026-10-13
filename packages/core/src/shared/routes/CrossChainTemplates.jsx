@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button, EmptyState, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { CROSS_CHAIN_TEMPLATES } from '../../templates/cross-chain/index.js';
@@ -58,6 +58,9 @@ export function CrossChainTemplates({ walletId, onLaunch, onBack }) {
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [loading, setLoading] = useState(true);
     const [loadReload, setLoadReload] = useState(0);
+    const [launchError, setLaunchError] = useState(/** @type {string | null} */ (null));
+    const [launchingId, setLaunchingId] = useState(/** @type {string | null} */ (null));
+    const launchInFlightRef = useRef(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -84,8 +87,11 @@ export function CrossChainTemplates({ walletId, onLaunch, onBack }) {
         return () => { cancelled = true; };
     }, [walletId, messaging, loadReload]);
 
-    const launchTemplate = (template) => {
-        if (chainsWithAddresses.length === 0) return;
+    const launchTemplate = async (template) => {
+        if (chainsWithAddresses.length === 0 || launchInFlightRef.current) return;
+        launchInFlightRef.current = true;
+        setLaunchingId(template.id);
+        setLaunchError(null);
         const resolveChainId = (hint) => {
             const slot = hint === 'primary' ? 0 : hint === 'secondary' ? 1 : 2;
             return chainsWithAddresses[slot]
@@ -117,7 +123,14 @@ export function CrossChainTemplates({ walletId, onLaunch, onBack }) {
                 note: row.note,
             };
         });
-        onLaunch(prefill);
+        try {
+            await onLaunch(prefill);
+        } catch (err) {
+            setLaunchError(userFacingMessage(err, 'Could not open this template. Try again.'));
+        } finally {
+            launchInFlightRef.current = false;
+            setLaunchingId(null);
+        }
     };
 
     const header = (
@@ -161,7 +174,13 @@ export function CrossChainTemplates({ walletId, onLaunch, onBack }) {
     }
 
     return wrap(
-        CROSS_CHAIN_TEMPLATES.map((t) => (
+        <>
+            {launchError ? (
+                <StatusMessage variant="error" className={styles.entryDescription}>
+                    {launchError}
+                </StatusMessage>
+            ) : null}
+            {CROSS_CHAIN_TEMPLATES.map((t) => (
             <article key={t.id} className={styles.entry} style={{ display: 'block' }}>
                 {/* Block lines: the card is display:block, so these spans
                     were inline and the title ran straight into the text. */}
@@ -184,14 +203,16 @@ export function CrossChainTemplates({ walletId, onLaunch, onBack }) {
                 <div style={{ marginTop: '0.75rem', display: 'flex', justifyContent: 'flex-end' }}>
                     <Button
                         variant="primary"
-                        onClick={() => launchTemplate(t)}
-                        disabled={chainsWithAddresses.length === 0}
+                        onClick={() => { void launchTemplate(t); }}
+                        loading={launchingId === t.id}
+                        disabled={chainsWithAddresses.length === 0 || launchingId !== null}
                     >
                         Use template
                     </Button>
                 </div>
             </article>
-        )),
+            ))}
+        </>,
     );
 }
 

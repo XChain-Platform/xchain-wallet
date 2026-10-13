@@ -232,4 +232,16 @@ describe('MarketChart states and timeframes', () => {
         expect(screen.getByText('No trades yet in this market.')).toBeInTheDocument();
         expect(getMarketHistory).toHaveBeenCalledTimes(2);
     });
+
+    it('removes a partially initialized chart when series setup fails', async () => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        chartHarness.addLineSeries.mockImplementationOnce(() => {
+            throw new Error('series setup failed');
+        });
+        renderChart(vi.fn().mockResolvedValue([]));
+
+        expect(await screen.findByText('The price chart is unavailable right now.')).toBeInTheDocument();
+        expect(chartHarness.remove).toHaveBeenCalledTimes(1);
+        consoleError.mockRestore();
+    });
 });

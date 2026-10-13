@@ -7,7 +7,7 @@
 // General Public License v3.0 or later; see LICENSE.md.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -60,6 +60,33 @@ function mount(messaging) {
             onBack() {},
         }),
     ));
+}
+
+function deferred() {
+    let resolve;
+    let reject;
+    const promise = new Promise((res, rej) => {
+        resolve = res;
+        reject = rej;
+    });
+    return { promise, resolve, reject };
+}
+
+function inboxTree(messaging, activeAccountId) {
+    return React.createElement(
+        MessagingProvider,
+        { shell: 'web', messaging },
+        React.createElement(MessagingInbox, {
+            walletId: 'wallet-1',
+            activeAccountId,
+            onCompose() {},
+            onBack() {},
+        }),
+    );
+}
+
+function incoming({ from, to = OWNER.address, txid, text, timestamp }) {
+    return { format: 3, chainId: CHAIN, from, to, txid, text, timestamp };
 }
 
 afterEach(() => {
@@ -182,5 +209,91 @@ describe('MessagingInbox audit states', () => {
         expect(attachment).toHaveAttribute('download', 'notes.txt');
         expect(attachment.getAttribute('href')).toBe('data:text/plain;base64,aGVsbG8=');
         expect(document.body.textContent).not.toContain('xchain-attachment:v1');
+    });
+});
+
+describe('MessagingInbox scope and thread isolation', () => {
+    it('ignores an older account sweep after the next account finishes loading', async () => {
+        const sweeps = { 'owner-a': deferred(), 'owner-b': deferred() };
+        const messaging = messagingFor();
+        messaging.getAddressesByChain.mockImplementation((_walletId, accountId) => Promise.resolve({
+            [CHAIN]: [{ ...OWNER, id: `owner-${accountId}` }],
+        }));
+        messaging.getMessagingInboxSweep.mockImplementation(({ addressIds }) => (
+            sweeps[addressIds[0]].promise
+        ));
+
+        const utils = render(inboxTree(messaging, 'a'));
+        await waitFor(() => expect(messaging.getMessagingInboxSweep).toHaveBeenCalledWith(
+            expect.objectContaining({ addressIds: ['owner-a'] }),
+        ));
+
+        utils.rerender(inboxTree(messaging, 'b'));
+        await waitFor(() => expect(messaging.getMessagingInboxSweep).toHaveBeenCalledWith(
+            expect.objectContaining({ addressIds: ['owner-b'] }),
+        ));
+
+        await act(async () => {
+            sweeps['owner-b'].resolve({
+                messages: [incoming({ from: 'peer-b', txid: 'tx-b', text: 'account B', timestamp: 2 })],
+            });
+            await Promise.resolve();
+        });
+        expect(await screen.findByText('account B')).toBeTruthy();
+
+        await act(async () => {
+            sweeps['owner-a'].resolve({
+                messages: [incoming({ from: 'peer-a', txid: 'tx-a', text: 'account A', timestamp: 3 })],
+            });
+            await Promise.resolve();
+        });
+        expect(screen.getByText('account B')).toBeTruthy();
+        expect(screen.queryByText('account A')).toBeNull();
+    });
+
+    it('writes opened-thread read state only to the active account scope', async () => {
+        const messaging = messagingFor();
+        messaging.getAddressesByChain.mockImplementation((_walletId, accountId) => Promise.resolve({
+            [CHAIN]: [{ ...OWNER, id: `owner-${accountId}` }],
+        }));
+        messaging.getMessagingInboxSweep.mockImplementation(({ addressIds }) => {
+            const suffix = addressIds[0].slice(-1);
+            return Promise.resolve({
+                messages: [incoming({
+                    from: `peer-${suffix}`,
+                    txid: `tx-${suffix}`,
+                    text: `account ${suffix.toUpperCase()}`,
+                    timestamp: suffix === 'a' ? 1 : 2,
+                })],
+            });
+        });
+
+        const utils = render(inboxTree(messaging, 'a'));
+        expect(await screen.findByText('account A')).toBeTruthy();
+        utils.rerender(inboxTree(messaging, 'b'));
+        fireEvent.click(await screen.findByText('account B'));
+
+        const accountB = JSON.parse(localStorage.getItem('xc:msgRead:wallet-1:b'));
+        expect(accountB).toEqual({ 'peer-b': ['tx-b'] });
+        expect(localStorage.getItem('xc:msgRead:wallet-1:a')).toBeNull();
+    });
+
+    it('keeps a separate docked-composer draft for each conversation', async () => {
+        mount(messagingFor({ messages: [
+            incoming({ from: 'peer-a', txid: 'tx-a', text: 'message A', timestamp: 2 }),
+            incoming({ from: 'peer-b', txid: 'tx-b', text: 'message B', timestamp: 1 }),
+        ] }));
+
+        fireEvent.click(await screen.findByText('message A'));
+        fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'draft for A' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+
+        fireEvent.click(screen.getByText('message B'));
+        expect(screen.getByLabelText('Message').value).toBe('');
+        fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'draft for B' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+
+        fireEvent.click(screen.getByText('message A'));
+        expect(screen.getByLabelText('Message').value).toBe('draft for A');
     });
 });

@@ -64,6 +64,7 @@ const chainRegistry = registryLib.defaultRegistry();
 export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, initialCounterparty }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
+    const scope = `${walletId}:${activeAccountId || 'default'}`;
     // Whether the session can sign without a per-action password. The shared
     // confirmation screen uses this to either show the unlocked note or ask
     // for the wallet password before sharing a key.
@@ -90,8 +91,13 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     // from localStorage. Drives the unread dot in the list. `unreadFrom` captures
     // the seen-set at the moment a thread is opened, so the thread can still show
     // where the unread run began even after we mark its messages seen.
-    const [readMap, setReadMap] = useState(/** @type {Record<string, string[]>} */ ({}));
-    const [declinedRequestIds, setDeclinedRequestIds] = useState(/** @type {string[]} */ ([]));
+    const [readMap, setReadMap] = useState(
+        /** @type {Record<string, string[]>} */ (() => readMsgRead(walletId, activeAccountId)),
+    );
+    const readMapRef = useRef(readMap);
+    const [declinedRequestIds, setDeclinedRequestIds] = useState(
+        /** @type {string[]} */ (() => readMsgRequestDeclined(walletId, activeAccountId)),
+    );
     const [unreadFrom, setUnreadFrom] = useState(/** @type {Set<string> | null} */ (null));
     const firstUnreadRef = useRef(/** @type {HTMLLIElement | null} */ (null));
     // In-page conversation filters: free-text search (address or contact name)
@@ -102,14 +108,47 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     // onCompose, which opens the standard New-message form pre-filled with the
     // recipient + body and the encryption locked to the conversation's method;
     // the user reviews (and can adjust delivery network + fee) there.
-    const [draftText, setDraftText] = useState('');
+    const [draftsByCounterparty, setDraftsByCounterparty] = useState(
+        /** @type {Record<string, string>} */ ({}),
+    );
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const [stateScope, setStateScope] = useState(scope);
+    const scopeRef = useRef(scope);
+    const inboxRequestRef = useRef(0);
+    const autoOpenedRef = useRef(false);
 
-    // Reset the composer when switching conversations so a half-typed draft
-    // never leaks into a different thread.
+    // A mounted route can move to another account without remounting. Reset all
+    // account-owned state and invalidate any sweep still resolving for the old
+    // scope before the new address load can open its inbox.
     useEffect(() => {
-        setDraftText('');
-    }, [selectedCounterparty]);
+        if (scopeRef.current === scope) return;
+        scopeRef.current = scope;
+        inboxRequestRef.current += 1;
+        autoOpenedRef.current = false;
+        setAddressesByChain(null);
+        setLoadError(null);
+        setPassword('');
+        setUnlockError(null);
+        setStage('pick');
+        setMessages([]);
+        setSelectedCounterparty(initialCounterparty || null);
+        setUnreadFrom(null);
+        setDraftsByCounterparty({});
+        const nextReadMap = readMsgRead(walletId, activeAccountId);
+        readMapRef.current = nextReadMap;
+        setReadMap(nextReadMap);
+        setDeclinedRequestIds(readMsgRequestDeclined(walletId, activeAccountId));
+        setStateScope(scope);
+    }, [scope, walletId, activeAccountId, initialCounterparty]);
+
+    // Hosts may retarget the open inbox to another thread while preserving the
+    // route instance. Draft selection remains keyed by the recipient below.
+    useEffect(() => {
+        setSelectedCounterparty(initialCounterparty || null);
+        setUnreadFrom(null);
+    }, [initialCounterparty]);
+
+    useEffect(() => () => { inboxRequestRef.current += 1; }, []);
 
     useEffect(() => {
         let cancelled = false;
@@ -130,12 +169,6 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
             setTimeout(() => passwordRef.current?.focus(), 0);
         }
     }, [stage]);
-
-    // Load this account's read marks once the wallet/account scope is known.
-    useEffect(() => {
-        setReadMap(readMsgRead(walletId, activeAccountId));
-        setDeclinedRequestIds(readMsgRequestDeclined(walletId, activeAccountId));
-    }, [walletId, activeAccountId]);
 
     useEffect(() => {
         if (typeof messaging.listContacts !== 'function') return undefined;
@@ -200,28 +233,32 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     // string on the password path.
     async function fetchInbox(pw) {
         if (sweepAddrs.length === 0) return;
+        const requestId = ++inboxRequestRef.current;
         setStage('submitting');
         setUnlockError(null);
 
-        // Demo wallet: no on-chain history, fabricate a couple of threads.
-        if (flowsLib.isDemoWallet(walletId)) {
-            setMessages(flowsLib.synthesizeDemoMessages(sweepAddrs[0]?.address));
-            setStage('inbox');
-            setPassword('');
-            return;
-        }
-
         try {
+            // Demo wallet: no on-chain history, fabricate a couple of threads.
+            if (flowsLib.isDemoWallet(walletId)) {
+                const demoMessages = flowsLib.synthesizeDemoMessages(sweepAddrs[0]?.address);
+                if (requestId !== inboxRequestRef.current) return;
+                setMessages(demoMessages);
+                setStage('inbox');
+                setPassword('');
+                return;
+            }
             const result = await messaging.getMessagingInboxSweep({
                 walletId,
                 addressIds: sweepAddrs.map((a) => a.id),
                 type: 'all',
                 ...(pw ? { password: pw } : {}),
             });
+            if (requestId !== inboxRequestRef.current) return;
             setMessages(Array.isArray(result?.messages) ? result.messages : []);
             setStage('inbox');
             setPassword('');
         } catch (err) {
+            if (requestId !== inboxRequestRef.current) return;
             const name = err?.name;
             if (name === 'WrongPasswordError' || name === 'InvalidPasswordError') {
                 setUnlockError('Incorrect password.');
@@ -238,7 +275,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     function handleUnlock(event) {
         event.preventDefault();
         if (stage === 'submitting' || password.length === 0) return;
-        fetchInbox(password);
+        void fetchInbox(password);
     }
 
     // Skip the standalone intro screen: open the inbox as soon as the
@@ -247,19 +284,18 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     // prompt. We probe signer readiness directly (async) and only then decide,
     // so an already-unlocked session never flashes the password screen while
     // the readiness check is still in flight.
-    const autoOpenedRef = useRef(false);
     useEffect(() => {
         if (autoOpenedRef.current) return undefined;
         if (stage !== 'pick') return undefined;
         if (!addressesByChain || sweepAddrs.length === 0) return undefined;
         autoOpenedRef.current = true;
-        if (flowsLib.isDemoWallet(walletId)) { fetchInbox(null); return undefined; }
+        if (flowsLib.isDemoWallet(walletId)) { void fetchInbox(null); return undefined; }
         if (typeof messaging.signerReady !== 'function') { setStage('password'); return undefined; }
         let cancelled = false;
         messaging.signerReady({ walletId })
             .then((r) => {
                 if (cancelled) return;
-                if (r?.ready) fetchInbox(null);
+                if (r?.ready) void fetchInbox(null);
                 else setStage('password');
             })
             .catch(() => { if (!cancelled) setStage('password'); });
@@ -298,6 +334,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     }, [messages, ownerSet, declinedRequestIds]);
 
     function handleRequestDeclined(id) {
+        if (stateScope !== scope) return;
         setDeclinedRequestIds((prev) => {
             const next = (prev.includes(id) ? prev : [...prev, id]).slice(-500);
             writeMsgRequestDeclined(walletId, activeAccountId, next);
@@ -333,10 +370,10 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     // badge with a premature 0 before the inbox has loaded. Uses the same unread
     // map as the list rows, so the badge can't disagree with the dots.
     useEffect(() => {
-        if (stage !== 'inbox') return;
+        if (stage !== 'inbox' || stateScope !== scope) return;
         const unread = Object.values(unreadByCp).filter(Boolean).length;
         writeMsgUnread(walletId, activeAccountId, unread);
-    }, [unreadByCp, stage, walletId, activeAccountId]);
+    }, [unreadByCp, stage, walletId, activeAccountId, stateScope, scope]);
     // Apply the toolbar's search + network filters. Search matches the
     // counterparty address or its contact name; the network filter keeps a
     // conversation when any of its messages live on the selected coin.
@@ -415,19 +452,21 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     // where unread began), record every currently-shown incoming txid as seen so
     // the list dot clears, and persist. The seen-set is replaced rather than
     // merged, which prunes txids no longer in the inbox and keeps storage bounded
-    // to the thread's size. The persist runs inside a functional state update so
-    // a rapid second open can't overwrite this one with a stale snapshot.
+    // to the thread's size. The ref advances before React schedules the render,
+    // so another open merges from the latest snapshot while storage writes stay
+    // outside React's replayable state updater.
     function openConversation(c) {
+        if (stateScope !== scope) return;
         const cp = c.counterparty;
-        const prior = new Set(readMap[cp] || []);
+        const current = readMapRef.current;
+        const prior = new Set(current[cp] || []);
         const hasUnread = c.incomingTxids.some((txid) => !prior.has(txid));
         setUnreadFrom(hasUnread ? prior : null);
         if (hasUnread) {
-            setReadMap((prev) => {
-                const next = { ...prev, [cp]: c.incomingTxids.slice() };
-                writeMsgRead(walletId, activeAccountId, next);
-                return next;
-            });
+            const next = { ...current, [cp]: c.incomingTxids.slice() };
+            readMapRef.current = next;
+            setReadMap(next);
+            writeMsgRead(walletId, activeAccountId, next);
         }
         setSelectedCounterparty(cp);
     }
@@ -643,12 +682,18 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
         // form is where the user reviews and can adjust delivery network + fee.
         const composer = replyRecord && onCompose ? (
             <ThreadComposer
-                value={draftText}
-                onChange={setDraftText}
+                value={draftsByCounterparty[selectedCounterparty] || ''}
+                onChange={(value) => setDraftsByCounterparty((prev) => ({
+                    ...prev,
+                    [selectedCounterparty]: value,
+                }))}
                 onSubmit={() => {
-                    const t = draftText.trim();
+                    const t = (draftsByCounterparty[selectedCounterparty] || '').trim();
                     if (!t) return;
-                    setDraftText('');
+                    setDraftsByCounterparty((prev) => ({
+                        ...prev,
+                        [selectedCounterparty]: '',
+                    }));
                     onCompose({
                         toAddress: selectedCounterparty,
                         message: t,

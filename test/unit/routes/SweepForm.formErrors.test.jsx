@@ -30,7 +30,7 @@
 // before it reports anything.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { act, render, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { SweepForm } from '../../../packages/core/src/shared/routes/SweepForm.jsx';
@@ -51,6 +51,15 @@ const SOURCE = Object.freeze({
 // A valid address the wallet does not own, so validation passes the
 // format gate and reaches the later branches.
 const OTHER = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
+const SECOND_CHAIN = 'litecoin-mainnet';
+const SECOND_SOURCE = Object.freeze({
+    id: 'addr-2',
+    address: 'ltc1qyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zuxktx9',
+    publicKey: '02bb',
+    derivationPath: "m/84'/2'/0'/0/0",
+    source: 'hd',
+    signerId: 'signer-2',
+});
 
 const EMPTY_PREVIEW = Object.freeze({
     balances: { rows: [], error: null },
@@ -61,11 +70,17 @@ const EMPTY_PREVIEW = Object.freeze({
     gatedTicks: { rows: [], error: null, partial: false },
 });
 
-async function mountSweep({ walletMode = 'full', sweepPreview } = {}) {
+async function mountSweep({
+    walletMode = 'full',
+    sweepPreview,
+    addressesByChain = { [CHAIN]: [SOURCE] },
+    activeByChain = { [CHAIN]: { id: SOURCE.id } },
+    props = {},
+} = {}) {
     const onBack = vi.fn();
     const target = {
-        getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [SOURCE] }),
-        getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: SOURCE.id } }),
+        getAddressesByChain: vi.fn().mockResolvedValue(addressesByChain),
+        getActiveAddresses: vi.fn().mockResolvedValue(activeByChain),
         signerReady: () => Promise.resolve({ ready: true }),
         getSettings: () => Promise.resolve({ walletMode }),
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
@@ -83,7 +98,7 @@ async function mountSweep({ walletMode = 'full', sweepPreview } = {}) {
         React.createElement(
             MessagingProvider,
             { shell: 'web', messaging },
-            React.createElement(SweepForm, { walletId: 'w', onBack }),
+            React.createElement(SweepForm, { walletId: 'w', onBack, ...props }),
         ),
     );
 
@@ -130,7 +145,17 @@ async function mountSweep({ walletMode = 'full', sweepPreview } = {}) {
         expect(q.submit()).toBeTruthy();
         expect(q.submit().disabled).toBe(false);
     });
-    return { ...q, onBack };
+    return { ...q, onBack, messaging };
+}
+
+function deferred() {
+    let resolve;
+    let reject;
+    const promise = new Promise((res, rej) => {
+        resolve = res;
+        reject = rej;
+    });
+    return { promise, resolve, reject };
 }
 
 async function mountGatedSweep() {
@@ -299,6 +324,68 @@ describe('SweepForm preview and navigation states', () => {
             expect(q.container.textContent).toContain('Preview unavailable.');
             expect(q.container.textContent).not.toContain('upstream host secret detail');
         });
+    });
+
+    it('handles a preview transport that throws before returning a promise', async () => {
+        const q = await mountSweep({
+            sweepPreview: () => { throw new Error('transport disconnected'); },
+        });
+
+        await waitFor(() => {
+            expect(q.container.textContent).toContain('Preview unavailable.');
+            expect(q.container.textContent).not.toContain('transport disconnected');
+        });
+    });
+
+    it('does not let an older chain preview replace the current source preview', async () => {
+        const first = deferred();
+        const second = deferred();
+        const q = await mountSweep({
+            addressesByChain: {
+                [CHAIN]: [SOURCE],
+                [SECOND_CHAIN]: [SECOND_SOURCE],
+            },
+            activeByChain: {
+                [CHAIN]: { id: SOURCE.id },
+                [SECOND_CHAIN]: { id: SECOND_SOURCE.id },
+            },
+            props: { initialChainId: CHAIN },
+            sweepPreview: vi.fn(({ chainId }) => (
+                chainId === CHAIN ? first.promise : second.promise
+            )),
+        });
+
+        await waitFor(() => expect(q.messaging.sweepPreview).toHaveBeenCalledWith({
+            chainId: CHAIN,
+            address: SOURCE.address,
+        }));
+        fireEvent.click(q.container.querySelector('button[aria-label^="Network:"]'));
+        const litecoin = Array.from(q.container.querySelectorAll('[role="option"]'))
+            .find((option) => option.textContent.includes('Litecoin'));
+        fireEvent.click(litecoin);
+        await waitFor(() => expect(q.messaging.sweepPreview).toHaveBeenCalledWith({
+            chainId: SECOND_CHAIN,
+            address: SECOND_SOURCE.address,
+        }));
+
+        await act(async () => {
+            second.resolve({
+                ...EMPTY_PREVIEW,
+                balances: { rows: [{ tick: 'CURRENT', quantity: '1', divisibility: 0 }], error: null },
+            });
+            await second.promise;
+        });
+        await waitFor(() => expect(q.container.textContent).toContain('1 CURRENT'));
+
+        await act(async () => {
+            first.resolve({
+                ...EMPTY_PREVIEW,
+                balances: { rows: [{ tick: 'STALE', quantity: '1', divisibility: 0 }], error: null },
+            });
+            await first.promise;
+        });
+        expect(q.container.textContent).toContain('1 CURRENT');
+        expect(q.container.textContent).not.toContain('1 STALE');
     });
 
     it('opens the wallet address picker for the destination', async () => {

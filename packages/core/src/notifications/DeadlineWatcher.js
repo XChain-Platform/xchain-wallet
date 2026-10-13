@@ -255,12 +255,17 @@ export class DeadlineWatcher {
             if (!liveKeys.has(key)) { seen.delete(key); changed = true; }
         }
 
-        const fresh = due.filter((d) => !seen.has(d.key));
+        // Keep the soonest deadlines when the seen set is nearly full, and
+        // offer only as many as it can still record: an untracked overflow
+        // would look fresh and notify again every cycle. An entry is marked
+        // seen only once its notification is delivered, so a failed delivery
+        // retries on the next tick.
+        const fresh = due
+            .filter((d) => !seen.has(d.key))
+            .sort((a, b) => a.remaining - b.remaining)
+            .slice(0, Math.max(0, SEEN_CAP_PER_CHAIN - seen.size));
         this._seen.set(chainId, seen);
         if (fresh.length === 0) return changed;
-
-        // Soonest first: if the burst is capped, the user sees the urgent ones.
-        fresh.sort((a, b) => a.remaining - b.remaining);
 
         if (fresh.length > MAX_NOTIFICATIONS_PER_TICK) {
             const delivered = await this._safeNotify({

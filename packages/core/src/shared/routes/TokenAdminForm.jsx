@@ -241,6 +241,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const submitPendingRef = useRef(false);
 
     // The active map and the settings read are best-effort: a host without
     // `getActiveAddresses` / `getSettings`, or one whose call fails, still
@@ -347,11 +348,18 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     // free Actions menu, where `ticker` changes as the owner picks a
     // token and this hook simply refetches.
     const assetInfo = useTokenInfo({ chainId, tick: ticker, skip: mode !== 'mint-settings' && mode !== 'lock' && mode !== 'callback-settings' && mode !== 'access-lists' && mode !== 'bridge-settings' });
+    const callbackTickKey = callbackTick.trim().toUpperCase();
     const callbackTokenInfo = useTokenInfo({
         chainId,
-        tick: callbackTick.trim().toUpperCase(),
-        skip: mode !== 'callback-settings' || !callbackTick.trim(),
+        tick: callbackTickKey,
+        skip: mode !== 'callback-settings' || !callbackTickKey,
     });
+    // Accept decimal metadata only for the exact chain and ticker still in the field.
+    const callbackTokenDivisibility = callbackTokenInfo?.chainId === chainId
+        && callbackTokenInfo?.tick === callbackTickKey
+        && Number.isInteger(callbackTokenInfo?.divisibility)
+        ? callbackTokenInfo.divisibility
+        : null;
     const tokenLocks = assetInfo?.locks || {};
     // Callback config gate (PC-03): the indexer only allows CALLBACK_BLOCK
     // /TICK/AMOUNT edits while LOCK_CALLBACK is unset AND supply is
@@ -759,9 +767,14 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 setFormError('Callback amount must be a positive number.');
                 return;
             }
+            // Hold fractional payouts until the newly typed token lookup resolves.
+            if (callbackAmount.includes('.') && callbackTokenDivisibility == null) {
+                setFormError(`Callback amount must be a whole number until the wallet confirms whether ${callbackTickKey || 'the callback token'} supports decimals.`);
+                return;
+            }
             // Price callback payouts in the payout token's decimal scale.
             const callbackPrecisionError = tokenAmountPrecisionError(callbackAmount, {
-                divisibility: callbackTokenInfo?.divisibility,
+                divisibility: callbackTokenDivisibility,
                 tick: callbackTick,
                 noun: 'Callback amount',
             });
@@ -889,9 +902,10 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
+        if (submitPendingRef.current) return;
         if (!isWatcherMode && !isHwSource && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && isHwSource && hwStatus !== 'available') return;
+        submitPendingRef.current = true;
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -946,6 +960,8 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
             }
+        } finally {
+            submitPendingRef.current = false;
         }
     }
 
@@ -957,7 +973,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         const header = (
         <PageHeader
             onBack={stage === 'review'
-                ? () => { setSubmitError(null); setStage('form'); }
+                ? () => { setSubmitError(null); setTypedConfirm(''); setStage('form'); }
                 : onBack}
             backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'

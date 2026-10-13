@@ -45,7 +45,13 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {() => void} [props.onOpenSharedLists]   shows "Shared lists" when passed
  * @param {() => void} props.onBack
  */
-export function MyLists({ walletId, activeAccountId, onOpenList, onCreateList, onCreateUnionList, onOpenSharedLists, onBack }) {
+export function MyLists(props) {
+    const { walletId, activeAccountId } = props;
+    const listKey = `${walletId}:${activeAccountId || ''}`;
+    return <MyListsScreen key={listKey} {...props} />;
+}
+
+function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, onCreateUnionList, onOpenSharedLists, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
 

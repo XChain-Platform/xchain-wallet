@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { t } from '../../i18n/index.js';
@@ -48,6 +48,7 @@ export function WalletPicker({
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [switchingWalletId, setSwitchingWalletId] = useState(/** @type {string | null} */ (null));
     const [switchError, setSwitchError] = useState(/** @type {string | null} */ (null));
+    const switchingRef = useRef(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -55,18 +56,20 @@ export function WalletPicker({
             setError('messaging.listWallets is not available in this shell.');
             return undefined;
         }
-        messaging.listWallets()
+        Promise.resolve()
+            .then(() => messaging.listWallets())
             .then((list) => { if (!cancelled) setWallets(Array.isArray(list) ? list : []); })
             .catch((err) => { if (!cancelled) setError(err?.message || 'Failed to load wallets.'); });
         return () => { cancelled = true; };
     }, [messaging]);
 
     async function handleSelect(walletId, active) {
-        if (switchingWalletId) return;
+        if (switchingRef.current) return;
         if (active) {
             onBack();
             return;
         }
+        switchingRef.current = true;
         setSwitchingWalletId(walletId);
         setSwitchError(null);
         try {
@@ -75,6 +78,7 @@ export function WalletPicker({
         } catch (err) {
             setSwitchError(userFacingMessage(err, 'Could not switch wallets. Try again.'));
         } finally {
+            switchingRef.current = false;
             setSwitchingWalletId(null);
         }
     }
@@ -118,11 +122,11 @@ export function WalletPicker({
                     <div className={styles.entryDescription}>{t('common.loading')}</div>
                 ) : wallets.length === 0 ? (
                     <EmptyState title={t('walletPicker.emptyTitle')} body={t('walletPicker.emptyBody')} />
-                ) : wallets.map((w) => {
+                ) : wallets.map((w, index) => {
                     const active = w.id === activeWalletId;
                     const walletName = w.name || 'Unnamed wallet';
                     return (
-                        <div key={w.id} className={pickerStyles.rowWrap}>
+                        <div key={`${w.id}:${index}`} className={pickerStyles.rowWrap}>
                             <button
                                 type="button"
                                 className={`${styles.entry} ${active ? pickerStyles.rowCurrent : ''}`}

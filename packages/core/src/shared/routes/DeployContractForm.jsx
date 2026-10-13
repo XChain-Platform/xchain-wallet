@@ -245,6 +245,7 @@ export function DeployContractForm({ walletId, onBack }) {
     const [toolBusy, setToolBusy] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const submitInFlightRef = useRef(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -763,9 +764,10 @@ export function DeployContractForm({ walletId, onBack }) {
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
+        if (stage === 'submitting' || submitInFlightRef.current) return;
         if (!isWatcherMode && !isHwSource && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && isHwSource && hwStatus !== 'available') return;
+        submitInFlightRef.current = true;
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -867,6 +869,8 @@ export function DeployContractForm({ walletId, onBack }) {
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
             }
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 

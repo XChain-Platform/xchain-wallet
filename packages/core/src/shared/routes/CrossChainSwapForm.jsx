@@ -126,6 +126,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const [hwStatus, setHwStatus] = useState('idle');
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const submitInFlightRef = useRef(false);
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
     useEffect(() => {
@@ -380,6 +381,8 @@ export function CrossChainSwapForm({ walletId, onBack }) {
     // Compose, tamper-check and pre-flight run HOST-side; Approve signs the
     // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
     async function openConfirmScreen() {
+        if (submitInFlightRef.current) return;
+        submitInFlightRef.current = true;
         const from = {
             address: fromAddress.address,
             publicKey: fromAddress.publicKey,
@@ -419,6 +422,8 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                 mandatory: nativeFee.mandatory,
                 fallback: err?.message || 'Sign failed.',
             }));
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 
@@ -441,7 +446,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
             return;
         }
         setFormError(null);
-        if (singleEncode) { openConfirmScreen(); return; }
+        if (singleEncode) { void openConfirmScreen(); return; }
         setStage('review');
     }
 
@@ -452,7 +457,9 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         if (validationError) return;
         if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && hw && hwStatus !== 'available') return;
+        if (submitInFlightRef.current) return;
 
+        submitInFlightRef.current = true;
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -516,6 +523,8 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
             }
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 
@@ -828,7 +837,14 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                     <ChainPicker
                         label="Give chain"
                         value={giveChainId || ''}
-                        onChange={setGiveChainId}
+                        onChange={(cid) => {
+                            if (cid === giveChainId) return;
+                            setGiveChainId(cid);
+                            setGiveTick('');
+                            setGiveAmount('');
+                            setGiveOwnership(false);
+                            setFormError(null);
+                        }}
                         chainIds={chainIds}
                         chainRegistry={chainRegistry}
                     />
@@ -878,8 +894,14 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                         label="Get chain"
                         value={getChainId || ''}
                         onChange={(cid) => {
+                            if (cid === getChainId) return;
                             setGetChainId(cid);
+                            setGetAddress('');
                             setGetAddressTouched(false);
+                            setGetTick('');
+                            setGetAmount('');
+                            setGetOwnership(false);
+                            setFormError(null);
                         }}
                         chainIds={chainIds}
                         chainRegistry={chainRegistry}

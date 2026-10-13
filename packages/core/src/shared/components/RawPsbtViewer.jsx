@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { copyText } from '../clipboard.js';
 import styles from './RawPsbtViewer.module.css';
 import { useHapticFeedback } from '../hooks/useHaptic.js';
@@ -45,23 +45,63 @@ export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
     }));
     const haptic = useHapticFeedback();
     const { announce } = useToast();
-
-    if (!developerMode) return null;
-
     const hasPsbt = typeof psbtHex === 'string' && psbtHex.length > 0;
     const hasFields = actionFields && typeof actionFields === 'object' && Object.keys(actionFields).length > 0;
+    const fieldsJson = hasFields ? safeJson(actionFields) : '';
+    const mountedRef = useRef(false);
+    const copyAttemptRef = useRef(0);
+    const resetTimerRef = useRef(null);
+
+    useEffect(() => {
+        mountedRef.current = true;
+        copyAttemptRef.current += 1;
+        if (resetTimerRef.current !== null) {
+            clearTimeout(resetTimerRef.current);
+            resetTimerRef.current = null;
+        }
+        setCopyState((current) => current.status === 'idle'
+            ? current
+            : { target: null, status: 'idle' });
+
+        return () => {
+            mountedRef.current = false;
+            copyAttemptRef.current += 1;
+            if (resetTimerRef.current !== null) {
+                clearTimeout(resetTimerRef.current);
+                resetTimerRef.current = null;
+            }
+        };
+    }, [developerMode, fieldsJson, psbtHex]);
+
+    if (!developerMode) return null;
     if (!hasPsbt && !hasFields) return null;
 
-    const fieldsJson = hasFields ? safeJson(actionFields) : '';
     async function handleCopy(target, value) {
-        const { ok } = await copyText(value);
+        const attempt = ++copyAttemptRef.current;
+        if (resetTimerRef.current !== null) {
+            clearTimeout(resetTimerRef.current);
+            resetTimerRef.current = null;
+        }
+        let ok = false;
+        try {
+            ({ ok } = await copyText(value));
+        } catch {
+            // Clipboard adapters are expected to return failures, but a rejected
+            // platform promise still produces the same safe, visible result.
+        }
+        if (!mountedRef.current || copyAttemptRef.current !== attempt) return;
+
         setCopyState({ target, status: ok ? 'copied' : 'failed' });
         announce(ok ? 'Copied' : 'Copy failed: clipboard unavailable');
         if (ok) haptic.tap();
         else haptic.error();
-        setTimeout(() => setCopyState((current) => current.target === target
-            ? { target: null, status: 'idle' }
-            : current), 1500);
+        resetTimerRef.current = setTimeout(() => {
+            resetTimerRef.current = null;
+            if (!mountedRef.current || copyAttemptRef.current !== attempt) return;
+            setCopyState((current) => current.target === target
+                ? { target: null, status: 'idle' }
+                : current);
+        }, 1500);
     }
 
     function copyLabel(target, label) {

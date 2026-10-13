@@ -59,7 +59,12 @@ const PROTOCOL_COIN_TICKER = {
  * @param {string} [props.presetTick]
  * @param {() => void} props.onBack
  */
-export function DelegateVoteForm({ mode: initialMode = 'delegate', walletId, chainId: initialChainId, presetTick, onBack }) {
+export function DelegateVoteForm(props) {
+    const { mode, walletId, chainId, presetTick } = props;
+    return <DelegateVoteFormState key={JSON.stringify([mode, walletId, chainId, presetTick])} {...props} />;
+}
+
+function DelegateVoteFormState({ mode: initialMode = 'delegate', walletId, chainId: initialChainId, presetTick, onBack }) {
     // Seeded from the launching context; the Network field lets the user retarget.
     const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
@@ -89,6 +94,7 @@ export function DelegateVoteForm({ mode: initialMode = 'delegate', walletId, cha
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const submitInFlightRef = useRef(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -153,19 +159,21 @@ export function DelegateVoteForm({ mode: initialMode = 'delegate', walletId, cha
     // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
     // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
     async function openConfirmScreen() {
-        const submitParams = isClear
-            ? { tick: tick.trim(), ...(memo.trim() && { memo: memo.trim() }) }
-            : { tick: tick.trim(), delegateTo: delegateTo.trim(), ...(memo.trim() && { memo: memo.trim() }) };
-        const from = {
-            address: fromAddress.address,
-            publicKey: fromAddress.publicKey,
-            derivationPath: fromAddress.derivationPath,
-            addressId: fromAddress.id,
-            source: fromAddress.source,
-            signerId: fromAddress.signerId,
-        };
+        if (submitInFlightRef.current) return;
+        submitInFlightRef.current = true;
         setSubmitError(null);
         try {
+            const submitParams = isClear
+                ? { tick: tick.trim(), ...(memo.trim() && { memo: memo.trim() }) }
+                : { tick: tick.trim(), delegateTo: delegateTo.trim(), ...(memo.trim() && { memo: memo.trim() }) };
+            const from = {
+                address: fromAddress.address,
+                publicKey: fromAddress.publicKey,
+                derivationPath: fromAddress.derivationPath,
+                addressId: fromAddress.id,
+                source: fromAddress.source,
+                signerId: fromAddress.signerId,
+            };
             const res = await actionConfirm.run({
                 chainId,
                 from,
@@ -198,6 +206,8 @@ export function DelegateVoteForm({ mode: initialMode = 'delegate', walletId, cha
             setFormError(submitFailureMessage(err, {
                 chainId, coinTicker, fallback: err?.message || (verb + ' failed.'),
             }));
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 
@@ -241,15 +251,16 @@ export function DelegateVoteForm({ mode: initialMode = 'delegate', walletId, cha
         if (!tick.trim()) { setFormError('Governance token is required.'); return; }
         if (!isClear && !delegateTo.trim()) { setFormError('Delegate-to address is required.'); return; }
         setFormError(null);
-        if (singleEncode) { openConfirmScreen(); return; }
+        if (singleEncode) { void openConfirmScreen(); return; }
         setStage('review');
     }
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
+        if (submitInFlightRef.current) return;
         if (!isWatcherMode && !isHwSource && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && isHwSource && hwStatus !== 'available') return;
+        submitInFlightRef.current = true;
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -296,6 +307,8 @@ export function DelegateVoteForm({ mode: initialMode = 'delegate', walletId, cha
             }));
             setStage('review');
             if (!isWatcherMode && !isHwSource) { passwordRef.current?.focus(); passwordRef.current?.select(); }
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 

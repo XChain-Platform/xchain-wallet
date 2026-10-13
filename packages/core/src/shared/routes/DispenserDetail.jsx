@@ -136,6 +136,11 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const variant = screenVariantFor(shell);
     // A demo wallet's dispensers are fixtures; no explorer or chain read applies.
     const isDemoWallet = flowsLib.isDemoWallet(walletId);
+    const detailIdentity = `${walletId}\u0000${chainId}\u0000${actionIndex}`;
+    const detailIdentityRef = useRef(detailIdentity);
+    detailIdentityRef.current = detailIdentity;
+    const buyInFlightRef = useRef(false);
+    const ownerActionInFlightRef = useRef(false);
 
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
@@ -571,6 +576,8 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     // price match after the payment has already moved), pay too much and the
     // remainder is floored away and kept as a tip.
     useEffect(() => {
+        setOracleQuote(null);
+        setOracleQuoteChecked(false);
         if (!oracleAddress || fiatAmount != null) { setOracleQuoteChecked(true); return undefined; }
         if (typeof messaging?.oracleFeeds !== 'function') { setOracleQuoteChecked(true); return undefined; }
         let cancelled = false;
@@ -582,6 +589,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 // fiat). Picking any other would quote a different asset's
                 // price with total confidence.
                 const match = (Array.isArray(feeds) ? feeds : []).find((f) => f
+                    && String(f.coin || '').toUpperCase() === String(getCoin || '').toUpperCase()
                     && String(f.tick || '').toUpperCase() === String(giveTick || '').toUpperCase()
                     && String(f.fiat || '').toUpperCase() === String(fiatCode || '').toUpperCase());
                 // `live`, never `pending`: a published quote is inert for 24
@@ -592,7 +600,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             })
             .catch(() => { if (!cancelled) setOracleQuoteChecked(true); });
         return () => { cancelled = true; };
-    }, [oracleAddress, fiatAmount, fiatCode, giveTick, chainId, messaging]);
+    }, [oracleAddress, fiatAmount, fiatCode, getCoin, giveTick, chainId, messaging]);
 
     // Live status: everything that can change after the create - the 1-hour
     // "cancelling" close window, expiry, sold-out - plus the post-edit
@@ -921,9 +929,11 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         return descriptions;
     });
 
-    const refreshBuyerEligibility = useCallback(async () => {
+    const refreshBuyerEligibility = useCallback(async (expectedIdentity = detailIdentityRef.current) => {
+        if (expectedIdentity !== detailIdentityRef.current) return true;
         setEligibilityChecking(true);
         const policies = await readBuyerPolicies();
+        if (expectedIdentity !== detailIdentityRef.current) return true;
         setBuyerPolicies(policies);
         setEligibilityChecking(false);
         const payerVerdict = buyerListVerdict({
@@ -1177,17 +1187,20 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             }));
 
     const beginBuy = useCallback(async () => {
-        if (buyStage === 'submitting' || !buyRequest) return;
+        if (buyInFlightRef.current || buyStage === 'submitting' || !buyRequest) return;
         if (priceStale) {
             setBuyError(DISPENSER_PRICE_STALE_MESSAGE);
             return;
         }
-        // Resolve every buyer and pay-to list before any transaction reaches Confirm.
-        if (await refreshBuyerEligibility()) return;
-        if (buyUnderfunded || buyDustBlock || fillsError || inventoryError) return;
-        setBuyStage('submitting');
-        setBuyError(null);
+        buyInFlightRef.current = true;
+        const expectedIdentity = detailIdentityRef.current;
         try {
+            // Resolve every buyer and pay-to list before any transaction reaches Confirm.
+            if (await refreshBuyerEligibility(expectedIdentity)) return;
+            if (expectedIdentity !== detailIdentityRef.current
+                || buyUnderfunded || buyDustBlock || fillsError || inventoryError) return;
+            setBuyStage('submitting');
+            setBuyError(null);
             const res = ownerLane.isWatcherMode
                 ? await messaging.buildSendPsbtRequest(buyRequest)
                 : await buyConfirm.run({
@@ -1196,7 +1209,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     compose: () => messaging.composeForConfirm(buyRequest),
                     onApprove: async (prebuiltPsbt) => {
                         // Recheck at approval because list edits can land while Confirm is open.
-                        if (await refreshBuyerEligibility()) {
+                        if (await refreshBuyerEligibility(expectedIdentity)) {
                             const refused = new Error(
                                 'The selected paying address or dispenser address is refused by a current access list.',
                             );
@@ -1206,13 +1219,16 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         return submitConfirmedBuy({ ...buyRequest, prebuiltPsbt });
                     },
                 });
+            if (expectedIdentity !== detailIdentityRef.current) return;
             setBuyResult(res);
             setBuyStage('done');
         } catch (err) {
+            if (expectedIdentity !== detailIdentityRef.current) return;
             setBuyStage('idle');
             if (!isUserRejection(err)) setBuyError(submitFailureText(err, 'Buy failed.'));
         } finally {
-            setBuyPassword('');
+            buyInFlightRef.current = false;
+            if (expectedIdentity === detailIdentityRef.current) setBuyPassword('');
         }
     }, [buyStage, buyRequest, priceStale, refreshBuyerEligibility, buyUnderfunded, buyDustBlock,
         fillsError, inventoryError,
@@ -1225,17 +1241,21 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
      * the form quietly. Watcher mode builds an unsigned transaction instead.
      */
     async function runOwnerAction({ params, setStage, setError, setResult, fallback, onSigned }) {
+        if (ownerActionInFlightRef.current) return;
+        ownerActionInFlightRef.current = true;
+        const expectedIdentity = detailIdentityRef.current;
         setStage('submitting');
         setError(null);
-        // Demo wallet: fabricated dispensers can't broadcast; simulate.
-        if (flowsLib.isDemoWallet(walletId)) {
-            await new Promise((resolve) => setTimeout(resolve, 600));
-            setResult({ txid: null });
-            setStage('done');
-            onSigned?.({ txid: null });
-            return;
-        }
         try {
+            // Demo wallet: fabricated dispensers can't broadcast; simulate.
+            if (flowsLib.isDemoWallet(walletId)) {
+                await new Promise((resolve) => setTimeout(resolve, 600));
+                if (expectedIdentity !== detailIdentityRef.current) return;
+                setResult({ txid: null });
+                setStage('done');
+                onSigned?.({ txid: null });
+                return;
+            }
             const res = await ownerLane.run({
                 actionData: { action: 'DISPENSER', params },
                 encoderOpts: {
@@ -1246,12 +1266,16 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 },
                 submitExtra: { params },
             });
+            if (expectedIdentity !== detailIdentityRef.current) return;
             setResult(res || {});
             setStage('done');
             onSigned?.(res || {});
         } catch (err) {
+            if (expectedIdentity !== detailIdentityRef.current) return;
             setStage('confirm');
             if (!isUserRejection(err)) setError(submitFailureText(err, fallback));
+        } finally {
+            ownerActionInFlightRef.current = false;
         }
     }
 

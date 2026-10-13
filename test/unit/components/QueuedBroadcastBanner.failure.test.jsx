@@ -12,7 +12,7 @@
 // before throwing leaves at once, and the user reads plain words for what happened.
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, waitFor, act } from '@testing-library/react';
 import React from 'react';
 
 let queue = [];
@@ -25,7 +25,7 @@ const toasts = [];
 // One stable messaging object, as the provider gives: a fresh one per render
 // re-arms the banner's list effect on every render.
 const messaging = {
-    listQueuedBroadcasts: () => listImpl(),
+    listQueuedBroadcasts: (req) => listImpl(req),
     broadcastQueuedRequest: (req) => broadcastImpl(req),
     discardQueuedRequest: (req) => discardImpl(req),
 };
@@ -143,6 +143,67 @@ describe('QueuedBroadcastBanner after a failed broadcast', () => {
 });
 
 describe('QueuedBroadcastBanner actions and announcements', () => {
+    it('renders only one action row for a duplicate queue id', async () => {
+        await renderWith([entry('same', 'First copy'), entry('same', 'Duplicate copy')]);
+        expect(screen.getByText('First copy')).toBeTruthy();
+        expect(screen.queryByText('Duplicate copy')).toBeNull();
+        expect(screen.getAllByRole('button', { name: /send now/i })).toHaveLength(1);
+    });
+
+    it('admits only one broadcast when clicks are batched before a rerender', async () => {
+        let finish;
+        broadcastImpl = vi.fn(() => new Promise((resolve) => { finish = resolve; }));
+        await renderWith([entry('a', 'Send 1 XCP')]);
+        const button = screen.getByRole('button', { name: 'Send now: Send 1 XCP' });
+
+        act(() => {
+            button.click();
+            button.click();
+        });
+
+        expect(broadcastImpl).toHaveBeenCalledTimes(1);
+        finish();
+        await waitFor(() => expect(toasts.some((toast) => toast.message === 'Transaction sent.')).toBe(true));
+    });
+
+    it('does not let an old wallet refresh replace the current wallet queue', async () => {
+        let resolveFirst;
+        let resolveSecond;
+        listImpl = ({ walletId }) => new Promise((resolve) => {
+            if (walletId === 'w1') resolveFirst = resolve;
+            else resolveSecond = resolve;
+        });
+        const view = render(<QueuedBroadcastBanner walletId="w1" intervalMs={0} />);
+        view.rerender(<QueuedBroadcastBanner walletId="w2" intervalMs={0} />);
+
+        await act(async () => { resolveSecond([entry('new', 'Current wallet send')]); });
+        expect(screen.getByText('Current wallet send')).toBeTruthy();
+        await act(async () => { resolveFirst([entry('old', 'Old wallet send')]); });
+
+        expect(screen.getByText('Current wallet send')).toBeTruthy();
+        expect(screen.queryByText('Old wallet send')).toBeNull();
+    });
+
+    it('does not refresh or toast after a broadcast finishes following unmount', async () => {
+        let finish;
+        let listCalls = 0;
+        listImpl = async () => {
+            listCalls += 1;
+            return queue;
+        };
+        broadcastImpl = () => new Promise((resolve) => { finish = resolve; });
+        queue = [entry('a', 'Send 1 XCP')];
+        const view = render(<QueuedBroadcastBanner walletId="w1" intervalMs={0} />);
+        await screen.findByText('Send 1 XCP');
+        pressBroadcast();
+        view.unmount();
+
+        await act(async () => { finish(); });
+
+        expect(listCalls).toBe(1);
+        expect(toasts).toHaveLength(0);
+    });
+
     it('keeps the static queue count out of a competing live region', async () => {
         await renderWith([entry('a', 'Send 1 XCP')]);
         expect(screen.getByText('Waiting to send (1)')).not.toHaveAttribute('aria-live');

@@ -108,6 +108,16 @@ describe('NetworkFilter selection', () => {
         expect(screen.queryByRole('listbox')).toBeNull();
         expect(trigger).toHaveAttribute('aria-expanded', 'false');
     });
+
+    it('keeps repeated family rows uniquely keyed', () => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        mount({ coinFamilies: ['bitcoin', 'bitcoin'] });
+
+        openList();
+
+        expect(screen.getAllByRole('option', { name: /^Bitcoin/ })).toHaveLength(2);
+        expect(consoleError.mock.calls.flat().join(' ')).not.toMatch(/same key|unique "key" prop/i);
+    });
 });
 
 describe('NetworkFilter dismissal', () => {

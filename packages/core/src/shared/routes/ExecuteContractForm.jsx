@@ -160,9 +160,14 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const submitInFlightRef = useRef(false);
+    const contractIdentityRef = useRef(`${chainId}\0${contractActionIndex}`);
 
     useEffect(() => {
         let cancelled = false;
+        setAddressesByChain(null);
+        setFromAddressId(null);
+        setLoadError(null);
         Promise.all([
             messaging.getAddressesByChain(walletId),
             typeof messaging.getActiveAddresses === 'function'
@@ -199,8 +204,24 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
     // method the abi does NOT know keeps manual mode so the link's intent
     // is preserved verbatim.
     useEffect(() => {
-        if (typeof messaging.getContractByActionIndex !== 'function') return undefined;
         let cancelled = false;
+        const contractIdentity = `${chainId}\0${contractActionIndex}`;
+        if (contractIdentityRef.current !== contractIdentity) {
+            contractIdentityRef.current = contractIdentity;
+            setContractAbi(null);
+            setOwnerWithdraw(null);
+            setManualMode(false);
+            setMethod(initialMethod || '');
+            setParamsText(initialParamsText || '');
+            setAbiParamValues([]);
+            setDepositTick('');
+            setDepositQuantity('');
+            setFormError(null);
+            setSubmitError(null);
+            setResult(null);
+            setStage('form');
+        }
+        if (typeof messaging.getContractByActionIndex !== 'function') return undefined;
         messaging.getContractByActionIndex({ chainId, contractActionIndex })
             .then((resp) => {
                 if (cancelled) return;
@@ -549,9 +570,10 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
+        if (stage === 'submitting' || submitInFlightRef.current) return;
         if (!isWatcherMode && !isHwSource && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && isHwSource && hwStatus !== 'available') return;
+        submitInFlightRef.current = true;
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -628,6 +650,8 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
             }
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 

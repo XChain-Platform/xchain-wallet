@@ -100,7 +100,12 @@ const WEIGHT_MODE_LABEL = {
  * @param {() => void} props.onBack
  * @param {() => void} [props.onCreated]
  */
-export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, onBack, onCreated }) {
+export function CreatePollForm(props) {
+    const { walletId, chainId, presetTick } = props;
+    return <CreatePollFormState key={JSON.stringify([walletId, chainId, presetTick])} {...props} />;
+}
+
+function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, onBack, onCreated }) {
     // Seeded from the launching context; the Network field lets the user retarget.
     const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
@@ -142,6 +147,7 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const submitInFlightRef = useRef(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -346,16 +352,18 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
     // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
     // byte-identical prebuilt PSBT via createPollAction.prebuiltPsbt.
     async function openConfirmScreen() {
-        const from = {
-            address: fromAddress.address,
-            publicKey: fromAddress.publicKey,
-            derivationPath: fromAddress.derivationPath,
-            addressId: fromAddress.id,
-            source: fromAddress.source,
-            signerId: fromAddress.signerId,
-        };
+        if (submitInFlightRef.current) return;
+        submitInFlightRef.current = true;
         setSubmitError(null);
         try {
+            const from = {
+                address: fromAddress.address,
+                publicKey: fromAddress.publicKey,
+                derivationPath: fromAddress.derivationPath,
+                addressId: fromAddress.id,
+                source: fromAddress.source,
+                signerId: fromAddress.signerId,
+            };
             const res = await actionConfirm.run({
                 chainId,
                 from,
@@ -386,6 +394,8 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
             setFormError(submitFailureMessage(err, {
                 chainId, coinTicker, fallback: err?.message || 'Create poll failed.',
             }));
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 
@@ -420,15 +430,16 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
         }
         if (bindingErrors.length > 0) { setFormError(bindingErrors[0]); return; }
         setFormError(null);
-        if (singleEncode) { openConfirmScreen(); return; }
+        if (singleEncode) { void openConfirmScreen(); return; }
         setStage('review');
     }
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
+        if (submitInFlightRef.current) return;
         if (!isWatcherMode && !isHwSource && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && isHwSource && hwStatus !== 'available') return;
+        submitInFlightRef.current = true;
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -471,6 +482,8 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
             }));
             setStage('review');
             if (!isWatcherMode && !isHwSource) { passwordRef.current?.focus(); passwordRef.current?.select(); }
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 

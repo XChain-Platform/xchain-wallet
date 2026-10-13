@@ -11,8 +11,20 @@ import {
 import {
     formatAtomicAmount,
     formatDecimalAmount,
+    formatDisplayAmount,
+    formatTokenQuantity,
+    formatWithThousands,
+    normalizeLocalizedDecimal,
+    trimAmountTail,
 } from '../../../packages/core/src/shared/utils/amountFormat.js';
-import { formatFiatAmount } from '../../../packages/core/src/shared/utils/fiatAmountFormat.js';
+import {
+    formatFiatAmount,
+    formatFiatAmountForSpeech,
+} from '../../../packages/core/src/shared/utils/fiatAmountFormat.js';
+import {
+    formatLocalDateTime as formatZonedDateTime,
+    formatRelativeTime,
+} from '../../../packages/core/src/shared/utils/dateTime.js';
 import {
     formatLocalDateTime,
     formatRelativeDateTime,
@@ -38,6 +50,26 @@ describe('locale-aware exact amount formatting', () => {
         await setLocale('de-DE');
         expect(formatAtomicAmount('123450', 2)).toBe('1.234,50');
         expect(formatDecimalAmount('1234567.89')).toBe('1.234.567,89');
+    });
+
+    it('normalizes locale grouping patterns beyond groups of three', () => {
+        expect(normalizeLocalizedDecimal('12,34,567.89', 'en-IN')).toBe('1234567.89');
+        expect(normalizeLocalizedDecimal('1,234,567.89', 'en-IN')).toBe('1234567.89');
+        expect(normalizeLocalizedDecimal('123,45,678.90', 'en-IN')).toBeNull();
+    });
+
+    it('does not expose a negative sign for exact zero', () => {
+        expect(formatDecimalAmount('-0.000', 'en-US')).toBe('0.000');
+        expect(formatAtomicAmount('-0', 2, 'en-US')).toBe('0.00');
+        expect(trimAmountTail('-0.000')).toBe('0');
+    });
+
+    it('leaves missing and non-finite amounts blank', () => {
+        expect(formatAtomicAmount(undefined, 8, 'en-US')).toBe('');
+        expect(formatDecimalAmount(Number.NaN, 'en-US')).toBe('');
+        expect(formatDisplayAmount(Number.NaN, 'en-US')).toBe('');
+        expect(formatTokenQuantity(Number.POSITIVE_INFINITY, 8, 'en-US')).toBe('');
+        expect(formatWithThousands(Number.NaN, 'en-US')).toBe('');
     });
 });
 
@@ -95,6 +127,21 @@ describe('locale-aware exact fiat formatting', () => {
     ])('$label', ({ value, currency, locale, expected }) => {
         expect(formatFiatAmount(value, currency, locale)).toBe(expected);
     });
+
+    it('handles negative zero, negative dust, and non-finite inputs', () => {
+        expect(formatFiatAmount('-0.00', 'USD', 'en-US')).toBe('$0.00');
+        expect(formatFiatAmount('-0.004', 'USD', 'en-US')).toBe('> -$0.01');
+        expect(formatFiatAmount(Number.NaN, 'USD', 'en-US')).toBe('');
+        expect(formatFiatAmount('', 'USD', 'en-US')).toBe('');
+    });
+
+    it('uses the same rounding policy for visual and spoken currency values', () => {
+        expect(formatFiatAmount('1234.5', 'JPY', 'en-US')).toBe('¥1,234.50');
+        expect(formatFiatAmountForSpeech('1234.5', 'JPY', 'en-US'))
+            .toBe('1,234.50 Japanese yen');
+        expect(formatFiatAmountForSpeech('-0.004', 'USD', 'en-US'))
+            .toBe('more than -0.01 US dollars');
+    });
 });
 
 describe('local History date formatting', () => {
@@ -113,5 +160,27 @@ describe('local History date formatting', () => {
         await setLocale('de-DE');
         const now = timestampSeconds * 1000 + 2 * 60 * 1000;
         expect(formatRelativeDateTime(timestampSeconds, now)).toBe('vor 2 Minuten');
+    });
+
+    it('recognizes millisecond timestamps before September 2001', () => {
+        const timestampMs = Date.parse('2000-01-15T20:30:00Z');
+        const date = new Date(timestampMs);
+        const expected = new Intl.DateTimeFormat('en-US', {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+        }).format(date);
+        const expectedZoned = date.toLocaleString('en-US', {
+            year: 'numeric', month: 'short', day: 'numeric',
+            hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
+        });
+
+        expect(formatLocalDateTime(timestampMs, 'en-US')).toBe(expected);
+        expect(formatZonedDateTime(timestampMs)).toBe(expectedZoned);
+    });
+
+    it('rejects timestamps outside the Date range', () => {
+        expect(formatLocalDateTime(1e100, 'en-US')).toBe('-');
+        expect(formatZonedDateTime(1e100)).toBeNull();
+        expect(formatRelativeTime(1e100)).toBe('');
     });
 });

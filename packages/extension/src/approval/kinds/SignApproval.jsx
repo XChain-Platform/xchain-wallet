@@ -115,6 +115,11 @@ export function SignApproval({ id, kind, payload, onReject }) {
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
 
     const [walletId, setWalletId] = useState(/** @type {string | null} */ (null));
+    // True once listWallets has answered either way. The PSBT decode waits on
+    // it so the panel is built once, with the wallet's own addresses, instead
+    // of rendering, dropping back to "Decoding" when walletId lands, and
+    // rendering again with different change labels and totals.
+    const [walletsSettled, setWalletsSettled] = useState(false);
     const [password, setPassword] = useState('');
     const [savePermanent, setSavePermanent] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
@@ -161,6 +166,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
     useEffect(() => {
         let cancelled = false;
         setWalletId(null);
+        setWalletsSettled(false);
         async function loadSigningWallet() {
             try {
                 const list = await listWallets();
@@ -203,6 +209,10 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 if (cancelled) return;
                 // Show the error but still let the user reject cleanly.
                 setError(err?.message || 'Failed to load wallets.');
+            } finally {
+                // Every answer, a match, no match or a failure, settles the
+                // list so the PSBT decode runs exactly once.
+                if (!cancelled) setWalletsSettled(true);
             }
         }
         void loadSigningWallet();
@@ -333,7 +343,9 @@ export function SignApproval({ id, kind, payload, onReject }) {
     const psbtHexForSign = kind === 'signPsbt' ? payload?.payload?.psbtHex : null;
     const [psbtIntent, setPsbtIntent] = useState(
         /** @type {{ loading: boolean, error: string | null, decomposed: any | null, ownAddresses: Set<string>, action: any | null, actionDecodeReason: string | null, feeMode: string | null }} */
-        ({ loading: false, error: null, decomposed: null, ownAddresses: new Set(), action: null, actionDecodeReason: null, feeMode: null }),
+        // Starts loading for a PSBT so the first paint says "Decoding", not the
+        // undecodable alert the panel shows for a settled null decode.
+        ({ loading: kind === 'signPsbt', error: null, decomposed: null, ownAddresses: new Set(), action: null, actionDecodeReason: null, feeMode: null }),
     );
     useEffect(() => {
         if (kind !== 'signPsbt') return undefined;
@@ -354,6 +366,10 @@ export function SignApproval({ id, kind, payload, onReject }) {
             loading: true, error: null, decomposed: null, ownAddresses: new Set(),
             action: null, actionDecodeReason: null, feeMode: null,
         });
+        // Decode once, after the wallet list is known, so the own-address set
+        // (change labels, "Leaving this wallet", the own-inputs refusal) comes
+        // in the same result as the decode rather than in a second pass.
+        if (!walletsSettled) return undefined;
         async function loadIntent() {
             try {
                 // Own-address set is best-effort: it only labels change vs
@@ -408,7 +424,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
         }
         loadIntent();
         return () => { cancelled = true; };
-    }, [kind, chainId, psbtHexForSign, walletId]);
+    }, [kind, chainId, psbtHexForSign, walletId, walletsSettled]);
 
     const psbtSourceAddress = useMemo(() => {
         if (kind !== 'signPsbt' || !Array.isArray(psbtIntent.decomposed?.inputs)) return null;

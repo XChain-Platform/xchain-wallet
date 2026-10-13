@@ -21,6 +21,8 @@
 
 import { createContact, validateContact } from '../schemas/contact.js';
 
+const contactMutationTails = new WeakMap();
+
 /**
  * List every contact in the wallet. Contacts aren't scoped to a
  * specific wallet record; they're shared across all wallets in the
@@ -53,9 +55,10 @@ export async function findContactByAddress({ vault, chain, address }) {
         throw new Error('findContactByAddress: address is required');
     }
     const rows = await vault.contacts.list();
+    const needle = normalizedEntryKey({ chain, address });
     for (const c of rows) {
         for (const e of c.entries || []) {
-            if (e.chain === chain && e.address === address) return c;
+            if (normalizedEntryKey(e) === needle) return c;
         }
     }
     return null;
@@ -66,45 +69,53 @@ export async function findContactByAddress({ vault, chain, address }) {
  * (updates in place, bumping `updatedAt`) or the `createContact`
  * input shape (creates a new one).
  *
- * @param {{ vault: import('../storage/Vault.js').Vault, record?: object, input?: object, replaceIds?: string[] }} opts
+ * @param {{ vault: import('../storage/Vault.js').Vault, record?: object, input?: object, replaceIds?: string[], expectedUpdatedAt?: string | null }} opts
  */
-export async function saveContact({ vault, record, input, replaceIds = [] }) {
+export async function saveContact({ vault, record, input, replaceIds = [], expectedUpdatedAt }) {
     if (!vault) throw new Error('saveContact: vault is required');
-    /** @type {any} */
-    let rec;
-    if (record) {
-        rec = { ...record, updatedAt: new Date().toISOString() };
-    } else if (input) {
-        if (!input.name || !input.entries || input.entries.length === 0) {
-            throw new Error('saveContact: input.name and input.entries[] are required');
+    if (!record && !input) throw new Error('saveContact: record or input is required');
+    if (input && (!input.name || !input.entries || input.entries.length === 0)) {
+        throw new Error('saveContact: input.name and input.entries[] are required');
+    }
+    return withContactMutationLock(vault, async () => {
+        const existing = await vault.contacts.list();
+        const current = record ? existing.find((contact) => contact.id === record.id) : null;
+        assertExpectedVersion(current, expectedUpdatedAt);
+
+        /** @type {any} */
+        let rec;
+        if (record) {
+            rec = { ...record, updatedAt: nextUpdatedAt(current?.updatedAt || record.updatedAt) };
+        } else if (input) {
+            rec = createContact(input);
         }
-        rec = createContact(input);
-    } else {
-        throw new Error('saveContact: record or input is required');
-    }
-    const validation = validateContact(rec);
-    if (!validation.ok) {
-        throw new Error(`saveContact: invalid contact: ${validation.errors.join('; ')}`);
-    }
-    const seen = new Set();
-    for (const entry of rec.entries) {
-        const key = normalizedAddress(entry.address);
-        if (seen.has(key)) {
-            throw new Error(`saveContact: address appears more than once: ${entry.address}`);
+        const validation = validateContact(rec);
+        if (!validation.ok) {
+            throw new Error(`saveContact: invalid contact: ${validation.errors.join('; ')}`);
         }
-        seen.add(key);
-    }
-    const existing = await vault.contacts.list();
-    const replaced = new Set(Array.isArray(replaceIds) ? replaceIds : []);
-    for (const contact of existing) {
-        if (contact.id === rec.id || replaced.has(contact.id)) continue;
-        const duplicate = (contact.entries || []).find((entry) => seen.has(normalizedAddress(entry.address)));
-        if (duplicate) {
-            throw new Error(`saveContact: address already belongs to ${contact.name}: ${duplicate.address}`);
+        const seen = new Set();
+        for (const entry of rec.entries) {
+            const key = normalizedEntryKey(entry);
+            if (seen.has(key)) {
+                throw new Error(`saveContact: address appears more than once: ${entry.address}`);
+            }
+            seen.add(key);
         }
-    }
-    await vault.contacts.put(rec);
-    return rec;
+        const replaced = new Set(Array.isArray(replaceIds) ? replaceIds : []);
+        for (const contact of existing) {
+            if (contact.id === rec.id || replaced.has(contact.id)) continue;
+            const duplicate = (contact.entries || []).find((entry) => seen.has(normalizedEntryKey(entry)));
+            if (duplicate) {
+                throw new Error(`saveContact: address already belongs to ${contact.name}: ${duplicate.address}`);
+            }
+        }
+        await vault.contacts.put(rec);
+        return rec;
+    });
+}
+
+function normalizedEntryKey(entry) {
+    return `${String(entry?.chain || '').trim().toLowerCase()}|${normalizedAddress(entry?.address)}`;
 }
 
 function normalizedAddress(address) {
@@ -113,15 +124,46 @@ function normalizedAddress(address) {
     return /^(bc|tb|bcrt|ltc|tltc|rltc)1/.test(lower) ? lower : trimmed;
 }
 
+function nextUpdatedAt(previous) {
+    const previousMs = Date.parse(previous);
+    const timestamp = Number.isFinite(previousMs) ? Math.max(Date.now(), previousMs + 1) : Date.now();
+    return new Date(timestamp).toISOString();
+}
+
+function assertExpectedVersion(current, expectedUpdatedAt) {
+    if (expectedUpdatedAt === undefined) return;
+    if (expectedUpdatedAt === null ? current : current?.updatedAt !== expectedUpdatedAt) {
+        throw new Error('Contact changed since this screen loaded. Reopen it and try again.');
+    }
+}
+
+async function withContactMutationLock(vault, mutation) {
+    const previous = contactMutationTails.get(vault) || Promise.resolve();
+    const run = previous.then(mutation);
+    const tail = run.catch(() => {});
+    contactMutationTails.set(vault, tail);
+    try {
+        return await run;
+    } finally {
+        if (contactMutationTails.get(vault) === tail) contactMutationTails.delete(vault);
+    }
+}
+
 /**
- * Delete a contact by id.
+ * Delete a contact by id. When supplied, `expectedUpdatedAt` prevents a
+ * confirmation opened for an older revision from deleting a newer edit.
  *
- * @param {{ vault: import('../storage/Vault.js').Vault, id: string }} opts
+ * @param {{ vault: import('../storage/Vault.js').Vault, id: string, expectedUpdatedAt?: string | null }} opts
  */
-export async function deleteContact({ vault, id }) {
+export async function deleteContact({ vault, id, expectedUpdatedAt }) {
     if (!vault) throw new Error('deleteContact: vault is required');
     if (typeof id !== 'string' || id.length === 0) {
         throw new Error('deleteContact: id is required');
     }
-    return vault.contacts.delete(id);
+    return withContactMutationLock(vault, async () => {
+        const existing = await vault.contacts.list();
+        const current = existing.find((contact) => contact.id === id);
+        assertExpectedVersion(current, expectedUpdatedAt);
+        return vault.contacts.delete(id);
+    });
 }

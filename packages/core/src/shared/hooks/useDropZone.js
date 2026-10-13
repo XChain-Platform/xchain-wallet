@@ -77,6 +77,7 @@ export function useDropZone({
 } = {}) {
     const [isDragOver, setIsDragOver] = useState(false);
     const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const mountedRef = useRef(true);
 
     const handleFile = useCallback(async (file) => {
         if (!file) return;
@@ -91,9 +92,10 @@ export function useDropZone({
         }
         try {
             const content = await readFile(file, readAs);
+            if (!mountedRef.current) return;
             await onFile({ file, content });
         } catch (err) {
-            onError?.(err?.message || 'Could not read the file.');
+            if (mountedRef.current) onError?.(err?.message || 'Could not read the file.');
         }
     }, [onFile, onError, accept, maxBytes, readAs]);
 
@@ -140,8 +142,14 @@ export function useDropZone({
         style: { display: 'none' },
     };
 
-    // Drop the visual indicator if the component unmounts mid-drag.
-    useEffect(() => () => setIsDragOver(false), []);
+    useEffect(() => {
+        if (disabled) setIsDragOver(false);
+    }, [disabled]);
+
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => { mountedRef.current = false; };
+    }, []);
 
     const rootProps = {
         onDragOver,

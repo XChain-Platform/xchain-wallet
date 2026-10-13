@@ -122,6 +122,14 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const submitInFlightRef = useRef(false);
+    const [reviewParams, setReviewParams] = useState(
+        /** @type {Record<string, string> | null} */ (null),
+    );
+
+    useEffect(() => {
+        setChainId(initialChainId);
+    }, [initialChainId]);
 
     // Declared before the effects below; the detection effect's dependency
     // array references fromAddress, which would hit the temporal dead zone
@@ -268,27 +276,29 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
 
     // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
     // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
-    async function openConfirmScreen() {
-        const from = {
-            address: fromAddress.address,
-            publicKey: fromAddress.publicKey,
-            derivationPath: fromAddress.derivationPath,
-            addressId: fromAddress.id,
-            source: fromAddress.source,
-            signerId: fromAddress.signerId,
-        };
-        setSubmitError(null);
+    async function openConfirmScreen(params) {
+        if (submitInFlightRef.current) return;
+        submitInFlightRef.current = true;
         try {
+            const from = {
+                address: fromAddress.address,
+                publicKey: fromAddress.publicKey,
+                derivationPath: fromAddress.derivationPath,
+                addressId: fromAddress.id,
+                source: fromAddress.source,
+                signerId: fromAddress.signerId,
+            };
+            setSubmitError(null);
             const res = await actionConfirm.run({
                 chainId,
                 from,
-                actionData: { action: 'STAKE', params: actionParams },
+                actionData: { action: 'STAKE', params },
                 ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
                 onApprove: (prebuiltPsbt) => submitConfirmed({
                     walletId,
                     chainId,
                     from,
-                    params: actionParams,
+                    params,
                     ...(feePerKb != null ? { feePerKb } : {}),
                     prebuiltPsbt,
                 }),
@@ -301,6 +311,8 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
             setFormError(submitFailureMessage(err, {
                 chainId, coinTicker, fallback: err?.message || 'Stake failed.',
             }));
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 
@@ -391,15 +403,19 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
             return;
         }
         setFormError(null);
-        if (singleEncode) { openConfirmScreen(); return; }
+        const params = { ...actionParams };
+        if (singleEncode) { void openConfirmScreen(params); return; }
+        setReviewParams(params);
         setStage('review');
     }
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
+        if (stage === 'submitting' || submitInFlightRef.current) return;
         if (!isWatcherMode && !isHwSource && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && isHwSource && hwStatus !== 'available') return;
+        const params = reviewParams || actionParams;
+        submitInFlightRef.current = true;
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -414,7 +430,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                     source: fromAddress.source,
                     signerId: fromAddress.signerId,
                 },
-                params: actionParams,
+                params,
                 ...(feePerKb != null ? { feePerKb } : {}),
             };
             let res;
@@ -422,7 +438,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                 res = await messaging.buildActionPsbtRequest({
                     chainId,
                     from: base.from,
-                    actionData: { action: 'STAKE', params: actionParams },
+                    actionData: { action: 'STAKE', params },
                     ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
                 });
             } else if (isHwSource) {
@@ -447,18 +463,26 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
             }
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 
     function handleBuildAnother() {
         setResult(null);
         setSubmitError(null);
+        setReviewParams(null);
+        setStage('form');
+    }
+
+    function leaveReview() {
+        setReviewParams(null);
         setStage('form');
     }
 
     const header = (
         <PageHeader
-            onBack={stage === 'review' ? () => setStage('form') : onBack}
+            onBack={stage === 'review' ? leaveReview : onBack}
             backDisabled={stage === 'submitting' || actionConfirm.composing}
             title={stage === 'review' || stage === 'submitting' ? 'Review stake' : 'Stake XCHAIN'}
         />
@@ -508,7 +532,8 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
     }
 
     if (stage === 'review' || stage === 'submitting') {
-        const verb = stakeMode === '2' ? 'Top up' : 'Stake';
+        const reviewedParams = reviewParams || actionParams;
+        const verb = reviewedParams.VERSION === '2' ? 'Top up' : 'Stake';
         return wrap(
             <FormPage
                 label="Review stake"
@@ -536,8 +561,8 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                 )}
             >
                 <p className={styles.summary}>
-                    {verb} {actionParams.AMOUNT} XCHAIN for signing public key{' '}
-                    {actionParams.SIGNING_PUBKEY.slice(0, 12)}….
+                    {verb} {reviewedParams.AMOUNT} XCHAIN for signing public key{' '}
+                    {reviewedParams.SIGNING_PUBKEY.slice(0, 12)}….
                 </p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Chain</dt>
@@ -550,14 +575,14 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
                     </dd>
                     <dt className={styles.detailsLabel}>Mode</dt>
                     <dd className={styles.detailsValue}>
-                        {stakeMode === '2' ? 'Top up an existing stake' : 'New stake'}
+                        {reviewedParams.VERSION === '2' ? 'Top up an existing stake' : 'New stake'}
                     </dd>
                     <dt className={styles.detailsLabel}>Signing public key</dt>
                     <dd className={styles.detailsValue} style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
-                        {actionParams.SIGNING_PUBKEY}
+                        {reviewedParams.SIGNING_PUBKEY}
                     </dd>
                     <dt className={styles.detailsLabel}>Amount</dt>
-                    <dd className={styles.detailsValue}>{actionParams.AMOUNT} XCHAIN</dd>
+                    <dd className={styles.detailsValue}>{reviewedParams.AMOUNT} XCHAIN</dd>
                     <dt className={styles.detailsLabel}>Network fee</dt>
                     <dd className={styles.detailsValue}>
                         {feeEstimate

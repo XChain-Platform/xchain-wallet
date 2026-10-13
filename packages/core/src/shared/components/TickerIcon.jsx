@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { useState } from 'react';
 import { branding as brandingLib, registry as registryLib } from '@xchain-wallet/core';
 import { tickerColor } from './BalanceList.jsx';
 import { tickerForDescriptor } from '../../registry/coinTicker.js';
@@ -29,6 +30,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {number} [props.size=28]
  */
 export function TickerIcon({ chainId, tick, size = 28 }) {
+    const [failedImageUrl, setFailedImageUrl] = useState(null);
     const descriptor = chainRegistry.get(chainId);
     const tickUpper = String(tick || '').toUpperCase();
     const nativeTicker = tickerForDescriptor(descriptor);
@@ -81,9 +83,10 @@ export function TickerIcon({ chainId, tick, size = 28 }) {
         ? `${nativeIconSmallUrl} 144w, ${nativeIconUrl} 500w`
         : undefined;
     const chainPipUrl = descriptor ? brandingLib.chainIconSmallUrl(descriptor.id) : null;
+    const showNativeIcon = isNative && nativeIconUrl && failedImageUrl !== nativeIconUrl;
     return (
         <span role="img" aria-label={accessibleName} style={wrapStyle}>
-            {isNative && nativeIconUrl ? (
+            {showNativeIcon ? (
                 <img
                     src={nativeIconUrl}
                     srcSet={nativeIconSrcSet}
@@ -94,14 +97,14 @@ export function TickerIcon({ chainId, tick, size = 28 }) {
                     aria-hidden="true"
                     style={imgStyle}
                     decoding="async"
-                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    onError={() => setFailedImageUrl(nativeIconUrl)}
                 />
             ) : (
                 <span style={fallbackStyle} aria-hidden="true">
                     {tickUpper.slice(0, 1) || '?'}
                 </span>
             )}
-            {!isNative && chainPipUrl ? (
+            {!isNative && chainPipUrl && failedImageUrl !== chainPipUrl ? (
                 <img
                     src={chainPipUrl}
                     width={pipSize}
@@ -111,6 +114,7 @@ export function TickerIcon({ chainId, tick, size = 28 }) {
                     title={descriptor?.displayName}
                     style={pipStyle}
                     decoding="async"
+                    onError={() => setFailedImageUrl(chainPipUrl)}
                 />
             ) : null}
         </span>

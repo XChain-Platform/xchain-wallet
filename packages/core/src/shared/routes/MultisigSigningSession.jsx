@@ -50,6 +50,48 @@ const CONTRIBUTION_LABELS = {
 };
 const contributionLabel = (k) => CONTRIBUTION_LABELS[k] || 'Signature';
 
+// Count each configured identity once so duplicated records cannot satisfy a threshold.
+function contributionProgress(session) {
+    const cosignerPubkeys = [...new Set(session?.cosignerPubkeys || [])];
+    const isMusig2 = session?.scheme === 'taproot-musig2';
+    const isResponseStep = isMusig2 && session?.status === 'collecting-nonces';
+    const contributions = isResponseStep
+        ? session?.nonces
+        : isMusig2
+            ? session?.partialSigs
+            : session?.signatures;
+    const contributedPubkeys = new Set((contributions || []).map((item) => item.pubkey));
+    const contributed = cosignerPubkeys.filter((pk) => contributedPubkeys.has(pk));
+    const unsigned = cosignerPubkeys.filter((pk) => !contributedPubkeys.has(pk));
+    return { contributed, unsigned, isResponseStep };
+}
+
+function distinctContributionCount(session, contributions) {
+    const cosignerPubkeys = new Set(session?.cosignerPubkeys || []);
+    return new Set(
+        (contributions || [])
+            .map((item) => item.pubkey)
+            .filter((pubkey) => cosignerPubkeys.has(pubkey)),
+    ).size;
+}
+
+function signingProgressSummary(session) {
+    const summary = progressSummary(session);
+    // Preserve terminal summaries while live stages report distinct contributions.
+    if (!summary || !['collecting-nonces', 'collecting-sigs', 'ready-to-finalize'].includes(session.status)) {
+        return summary;
+    }
+    return { ...summary, current: contributionProgress(session).contributed.length };
+}
+
+function hasFinalizationThreshold(session) {
+    if (!session) return false;
+    const contributions = session.scheme === 'taproot-musig2'
+        ? session.partialSigs
+        : session.signatures;
+    return distinctContributionCount(session, contributions) >= session.threshold;
+}
+
 function sessionRefFor(session) {
     return {
         scheme: session.scheme,
@@ -129,6 +171,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
     const [signResult, setSignResult] = useState(/** @type {string | null} */ (null));
     const listRequestId = useRef(0);
     const activeRequestId = useRef(0);
+    const mountedRef = useRef(false);
 
     // (error-recovery sweep remainder): each error surface offers a
     // one-click "Try again" against whatever action last failed. The
@@ -169,6 +212,19 @@ export function MultisigSigningSession({ walletId, onBack }) {
         }
     }, [messaging, fail]);
 
+    // Stop action continuations from polling after their screen has unmounted.
+    const refreshAfterAction = useCallback(async (id) => {
+        if (!mountedRef.current) return;
+        await refreshActive(id);
+        if (!mountedRef.current) return;
+        await refreshList();
+    }, [refreshActive, refreshList]);
+
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => { mountedRef.current = false; };
+    }, []);
+
     useEffect(() => {
         refreshList();
         return () => { listRequestId.current += 1; };
@@ -185,8 +241,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
         setError(null);
         try {
             await messaging.aggregateMultisigSession({ sessionId: active.id });
-            await refreshActive(active.id);
-            await refreshList();
+            await refreshAfterAction(active.id);
         } catch (err) {
             console.error('Multisig aggregate failed:', err); // eslint-disable-line no-console
             fail(userFacingMessage(err, 'Could not combine the cosigner replies.'), handleAggregate);
@@ -202,8 +257,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
         setError(null);
         try {
             await messaging.cancelMultisigSigningSession({ sessionId: active.id });
-            await refreshActive(active.id);
-            await refreshList();
+            await refreshAfterAction(active.id);
         } catch (err) {
             console.error('Multisig cancel failed:', err); // eslint-disable-line no-console
             fail(userFacingMessage(err, 'Cancel failed.'), handleCancel);
@@ -214,13 +268,13 @@ export function MultisigSigningSession({ walletId, onBack }) {
     }
 
     async function handleFinalize() {
-        if (!active || busy) return;
+        // Require distinct configured cosigners even if persisted status is stale.
+        if (!active || busy || !hasFinalizationThreshold(active)) return;
         setBusy(true);
         setError(null);
         try {
             await messaging.finalizeMultisigSigningSession({ sessionId: active.id });
-            await refreshActive(active.id);
-            await refreshList();
+            await refreshAfterAction(active.id);
         } catch (err) {
             console.error('Multisig finalization failed:', err); // eslint-disable-line no-console
             fail(userFacingMessage(err, 'Could not finalize the signed transaction.'), handleFinalize);
@@ -238,8 +292,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
                 sessionId: active.id,
                 broadcast: true,
             });
-            await refreshActive(active.id);
-            await refreshList();
+            await refreshAfterAction(active.id);
         } catch (err) {
             console.error('Multisig broadcast failed:', err); // eslint-disable-line no-console
             fail(userFacingMessage(err, 'Could not broadcast the signed transaction.'), handleBroadcast);
@@ -366,8 +419,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
                 console.error('Multisig scan: unsupported reply kind:', envelope.kind); // eslint-disable-line no-console
                 fail('That QR code is not a cosigner reply for this session. Ask your cosigner to scan the request code from this session, then scan the code their wallet shows.', null);
             }
-            await refreshActive(active.id);
-            await refreshList();
+            await refreshAfterAction(active.id);
             setCollectorState(createXcwCollector());
             setPasteInput('');
         } catch (err) {
@@ -376,7 +428,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
         } finally {
             setBusy(false);
         }
-    }, [active, busy, collectorState, messaging, refreshActive, refreshList, fail]);
+    }, [active, busy, collectorState, messaging, refreshAfterAction, fail]);
 
     async function handleSignLocally() {
         if (!active || busy || signPassword.length === 0) return;
@@ -392,8 +444,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
                 `${contributionLabel(result?.contributionKind)} from ${shortPk(result?.pubkey || '')} added.`,
             );
             setSignPassword('');
-            await refreshActive(active.id);
-            await refreshList();
+            await refreshAfterAction(active.id);
         } catch (err) {
             console.error('Multisig local signing failed:', err); // eslint-disable-line no-console
             fail(userFacingMessage(err, 'Local-signing failed.'), handleSignLocally);
@@ -474,8 +525,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
                 setBusy(false);
                 return;
             }
-            await refreshActive(active.id);
-            await refreshList();
+            await refreshAfterAction(active.id);
             setCollectorState(createXcwCollector());
             setPasteInput('');
         } catch (err) {
@@ -534,7 +584,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
                 <p className={styles.hint}>Pick a session to inspect its contribution state.</p>
                 <ul className={styles.list} aria-label="Multisig sessions">
                     {sessions.map((s) => {
-                        const summary = progressSummary(s);
+                        const summary = signingProgressSummary(s);
                         return (
                             <li key={s.id}>
                                 <button
@@ -572,17 +622,9 @@ export function MultisigSigningSession({ walletId, onBack }) {
         return wrap(<p className={styles.hint}>Loading session…</p>);
     }
 
-    const summary = progressSummary(active);
+    const summary = signingProgressSummary(active);
     const isMusig2 = active.scheme === 'taproot-musig2';
-    const isResponseStep = isMusig2 && active.status === 'collecting-nonces';
-    const contributions = isResponseStep
-        ? active.nonces
-        : isMusig2
-            ? active.partialSigs
-            : active.signatures;
-    const contributedPubkeys = new Set(contributions.map((item) => item.pubkey));
-    const contributed = active.cosignerPubkeys.filter((pk) => contributedPubkeys.has(pk));
-    const unsigned = active.cosignerPubkeys.filter((pk) => !contributedPubkeys.has(pk));
+    const { contributed, unsigned, isResponseStep } = contributionProgress(active);
     const remaining = Math.max(active.threshold - contributed.length, 0);
     const canCollect = ['collecting-nonces', 'collecting-sigs'].includes(active.status);
     const stepLabel = isMusig2
@@ -746,19 +788,26 @@ export function MultisigSigningSession({ walletId, onBack }) {
         );
     }
 
+    const nonceCount = distinctContributionCount(active, active.nonces);
+    const signatureCount = distinctContributionCount(
+        active,
+        isMusig2 ? active.partialSigs : active.signatures,
+    );
     const canAggregate =
         isMusig2 && (
             (active.status === 'collecting-nonces'
-                && active.nonces.length >= active.threshold)
+                && nonceCount >= active.threshold)
             || (active.status === 'collecting-sigs'
-                && active.partialSigs.length >= active.threshold
+                && signatureCount >= active.threshold
                 && !!active.aggNonce));
+    const canFinalize = active.status === 'ready-to-finalize'
+        && signatureCount >= active.threshold;
     const isTerminal = ['cancelled', 'broadcast'].includes(active.status);
     const readiness = active.status === 'finalized'
         ? 'This signed transaction is ready to broadcast.'
         : active.status === 'broadcast'
             ? `Broadcast complete${active.txid ? `: ${active.txid}` : '.'}`
-            : active.status === 'ready-to-finalize'
+            : canFinalize
                 ? 'Required signatures are collected. The transaction must be finalized before it can be broadcast.'
                 : null;
 
@@ -780,10 +829,10 @@ export function MultisigSigningSession({ walletId, onBack }) {
             </p>
             {isMusig2 ? (
                 <p className={styles.hint}>
-                    Step 1: Cosigners responded: {active.nonces.length} of {active.threshold}
+                    Step 1: Cosigners responded: {nonceCount} of {active.threshold}
                     {active.aggNonce ? ' (combined)' : ''}
                     <br />
-                    Step 2: Signatures collected: {active.partialSigs.length} of {active.threshold}
+                    Step 2: Signatures collected: {signatureCount} of {active.threshold}
                     {active.aggregatedSchnorrSig ? ' (combined)' : ''}
                 </p>
             ) : null}
@@ -865,7 +914,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
                     </Button>
                 ) : null}
                 {active.status === 'ready-to-finalize' ? (
-                    <Button variant="primary" onClick={handleFinalize} loading={busy && !canceling} disabled={busy}>
+                    <Button variant="primary" onClick={handleFinalize} loading={busy && !canceling} disabled={busy || !canFinalize}>
                         Finalize transaction
                     </Button>
                 ) : null}

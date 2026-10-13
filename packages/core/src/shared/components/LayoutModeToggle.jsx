@@ -49,18 +49,26 @@ export function LayoutModeToggle() {
 
     useEffect(() => {
         if (!isExtensionContext()) return;
+        let active = true;
+        let storageChanged = false;
         setAvailable(true);
+        const onChanged = (changes, area) => {
+            if (area !== 'local') return;
+            if (!Object.prototype.hasOwnProperty.call(changes, STORAGE_KEY)) return;
+            storageChanged = true;
+            const next = changes[STORAGE_KEY]?.newValue;
+            if (active && (next === 'popup' || next === 'sidepanel')) setMode(next);
+        };
+        chrome.storage.onChanged.addListener(onChanged);
         chrome.storage.local.get(STORAGE_KEY, (items) => {
+            if (!active || storageChanged) return;
             const v = items?.[STORAGE_KEY];
             if (v === 'popup' || v === 'sidepanel') setMode(v);
         });
-        const onChanged = (changes, area) => {
-            if (area !== 'local') return;
-            const next = changes[STORAGE_KEY]?.newValue;
-            if (next === 'popup' || next === 'sidepanel') setMode(next);
+        return () => {
+            active = false;
+            chrome.storage.onChanged.removeListener(onChanged);
         };
-        chrome.storage.onChanged.addListener(onChanged);
-        return () => chrome.storage.onChanged.removeListener(onChanged);
     }, []);
 
     if (!available) return null;
@@ -68,7 +76,12 @@ export function LayoutModeToggle() {
     function pick(next) {
         if (next === mode) return;
         setMode(next);
-        chrome.storage.local.set({ [STORAGE_KEY]: next });
+        try {
+            const pending = chrome.storage.local.set({ [STORAGE_KEY]: next });
+            if (typeof pending?.catch === 'function') void pending.catch(() => {});
+        } catch {
+            // Extension reloads can invalidate the storage context between render and click.
+        }
     }
 
     return (

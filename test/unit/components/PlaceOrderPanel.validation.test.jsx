@@ -200,4 +200,91 @@ describe('PlaceOrderPanel validation', () => {
         expect(screen.getByLabelText('Size (XCHAIN)')).toHaveValue('3');
         expect(screen.queryByRole('button', { name: 'Edit order' })).toBeNull();
     });
+
+    it('clears the review focus timer on unmount', async () => {
+        const watchAddress = { ...ADDRESS, source: 'watch' };
+        mount({}, {
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [watchAddress] }),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+        });
+        fireEvent.change(await screen.findByLabelText('Price (BTC)'), { target: { value: '2' } });
+        fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '3' } });
+        const setTimer = vi.spyOn(globalThis, 'setTimeout').mockImplementationOnce(() => 424242);
+        const clearTimer = vi.spyOn(globalThis, 'clearTimeout');
+        try {
+            fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+            expect(setTimer).toHaveBeenCalled();
+            cleanup();
+            expect(clearTimer).toHaveBeenCalledWith(424242);
+        } finally {
+            setTimer.mockRestore();
+            clearTimer.mockRestore();
+        }
+    });
+
+    it('ignores a watcher result after the wallet changes', async () => {
+        const watchAddress = { ...ADDRESS, source: 'watch' };
+        const request = deferred();
+        const messaging = {
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [watchAddress] }),
+            getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: watchAddress.id }),
+            getWalletBalances: vi.fn().mockResolvedValue({}),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+            signerReady: vi.fn().mockResolvedValue({ ready: true }),
+            getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
+            composeForConfirm: vi.fn(),
+            buildActionPsbtRequest: vi.fn(() => request.promise),
+        };
+        const view = render(
+            <MessagingProvider shell="desktop" messaging={messaging}>
+                <PlaceOrderPanel walletId="wallet-old" chainId={CHAIN} tick1="XCHAIN" tick2="BTC" />
+            </MessagingProvider>,
+        );
+        fireEvent.change(await screen.findByLabelText('Price (BTC)'), { target: { value: '2' } });
+        fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '3' } });
+        fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Create unsigned transaction' }));
+
+        view.rerender(
+            <MessagingProvider shell="desktop" messaging={messaging}>
+                <PlaceOrderPanel walletId="wallet-new" chainId={CHAIN} tick1="XCHAIN" tick2="BTC" />
+            </MessagingProvider>,
+        );
+        await act(async () => request.resolve({ psbtHex: 'stale', encoding: 'psbt' }));
+
+        expect(screen.queryByDisplayValue('stale')).toBeNull();
+        expect(await screen.findByLabelText('Price (BTC)')).toBeInTheDocument();
+    });
+
+    it('clears autopay exposure while a different wallet loads', async () => {
+        const nextExposure = deferred();
+        const getAutopayExposure = vi.fn()
+            .mockResolvedValueOnce({ [CHAIN]: '100000000' })
+            .mockImplementationOnce(() => nextExposure.promise);
+        const messaging = {
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
+            getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: ADDRESS.id }),
+            getWalletBalances: vi.fn().mockResolvedValue({}),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            signerReady: vi.fn().mockResolvedValue({ ready: true }),
+            getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
+            composeForConfirm: vi.fn(),
+            getAutopayExposure,
+        };
+        const view = render(
+            <MessagingProvider shell="desktop" messaging={messaging}>
+                <PlaceOrderPanel walletId="wallet-old" chainId={CHAIN} tick1="XCHAIN" tick2="BTC" />
+            </MessagingProvider>,
+        );
+        expect(await screen.findByText(/Outstanding auto-pay exposure on this chain/)).toBeInTheDocument();
+
+        view.rerender(
+            <MessagingProvider shell="desktop" messaging={messaging}>
+                <PlaceOrderPanel walletId="wallet-new" chainId={CHAIN} tick1="XCHAIN" tick2="BTC" />
+            </MessagingProvider>,
+        );
+
+        expect(screen.queryByText(/Outstanding auto-pay exposure on this chain/)).toBeNull();
+        expect(getAutopayExposure).toHaveBeenLastCalledWith({ walletId: 'wallet-new' });
+    });
 });

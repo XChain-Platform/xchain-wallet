@@ -5,10 +5,12 @@
 
 import { getFormatLocale } from '../../i18n/index.js';
 
+const MILLISECOND_TIMESTAMP_FLOOR = 1e11;
+
 function dateFromTimestamp(timestamp) {
     const numeric = Number(timestamp);
     if (!Number.isFinite(numeric) || numeric === 0) return null;
-    const date = new Date(numeric < 1e12 ? numeric * 1000 : numeric);
+    const date = new Date(numeric < MILLISECOND_TIMESTAMP_FLOOR ? numeric * 1000 : numeric);
     return Number.isNaN(date.getTime()) ? null : date;
 }
 

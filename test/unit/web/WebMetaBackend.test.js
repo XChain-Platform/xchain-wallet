@@ -13,6 +13,10 @@ import {
     DEFAULT_META_KEY,
     WebMetaBackend,
 } from '../../../packages/web/src/storage/WebMetaBackend.js';
+import {
+    VaultCorruptError,
+    VaultUnavailableError,
+} from '../../../packages/core/src/storage/backend.js';
 
 function memoryStorage(seed = {}) {
     const values = new Map(Object.entries(seed));
@@ -80,14 +84,14 @@ describe('WebMetaBackend', () => {
         expect(storage.values.get('unrelated')).toBe('keep me');
     });
 
-    it('returns null for malformed metadata', async () => {
+    it('reports malformed metadata as corruption instead of an empty index', async () => {
         const storage = memoryStorage({ broken: '{not json' });
         const backend = new WebMetaBackend({ key: 'broken', storage });
 
-        await expect(backend.load()).resolves.toBeNull();
+        await expect(backend.load()).rejects.toThrow(VaultCorruptError);
     });
 
-    it('handles storage read, quota, and clear failures', async () => {
+    it('reports storage read, quota, and clear failures', async () => {
         const storage = {
             getItem: vi.fn(() => { throw new Error('storage disabled'); }),
             setItem: vi.fn(() => { throw new Error('quota exceeded'); }),
@@ -95,11 +99,11 @@ describe('WebMetaBackend', () => {
         };
         const backend = new WebMetaBackend({ storage });
 
-        await expect(backend.load()).resolves.toBeNull();
+        await expect(backend.load()).rejects.toThrow(VaultUnavailableError);
         await expect(backend.save({ kdfParams: {} })).rejects.toThrow(
             /metadata could not be persisted: quota exceeded/,
         );
-        await expect(backend.clear()).resolves.toBeUndefined();
+        await expect(backend.clear()).rejects.toThrow(VaultUnavailableError);
     });
 
     it('handles a throwing localStorage accessor', async () => {
@@ -111,11 +115,11 @@ describe('WebMetaBackend', () => {
 
         try {
             const backend = new WebMetaBackend();
-            await expect(backend.load()).resolves.toBeNull();
+            await expect(backend.load()).rejects.toThrow(VaultUnavailableError);
             await expect(backend.save({ kdfParams: {} })).rejects.toThrow(
                 /localStorage is not available/,
             );
-            await expect(backend.clear()).resolves.toBeUndefined();
+            await expect(backend.clear()).rejects.toThrow(VaultUnavailableError);
         } finally {
             Object.defineProperty(globalThis, 'localStorage', descriptor);
         }

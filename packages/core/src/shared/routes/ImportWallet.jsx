@@ -208,6 +208,8 @@ export function ImportWallet({
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [validationAttempt, setValidationAttempt] = useState(0);
     const [busy, setBusy] = useState(false);
+    const [continuing, setContinuing] = useState(false);
+    const [noticeError, setNoticeError] = useState(/** @type {string | null} */ (null));
     // §36.1: an import ends on the same ADS notice a created wallet does,
     // and only its Continue hands control back to App.
     const [adsNotice, setAdsNotice] = useState(false);
@@ -216,6 +218,12 @@ export function ImportWallet({
     const textareaRef = useRef(/** @type {HTMLTextAreaElement | null} */ (null));
     const headingRef = useRef(/** @type {HTMLHeadingElement | null} */ (null));
     const adsContinuedRef = useRef(false);
+    const activeLaneRef = useRef(lane);
+    const inputGenerationRef = useRef(0);
+    const busyRef = useRef(false);
+    const continuePendingRef = useRef(false);
+    const mountedRef = useRef(true);
+    const inputGeneration = inputGenerationRef.current;
     const wifChains = useSupportedChains().filter(
         (descriptor) => Number.isInteger(descriptor.wifVersionByte),
     );
@@ -224,10 +232,66 @@ export function ImportWallet({
         headingRef.current?.focus();
     }, [lane]);
 
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => {
+            mountedRef.current = false;
+            inputGenerationRef.current += 1;
+        };
+    }, []);
+
     useBackHandler(handleBack, busy || adsNotice);
+
+    function clearSensitiveState() {
+        setMnemonic('');
+        setMnemonicCursor(0);
+        setWif('');
+        setWifWarningAck(false);
+        setPassword('');
+        setConfirm('');
+        setShowPassphrase(false);
+        setBip39Passphrase('');
+        setBackupContent('');
+        setBackupPassword('');
+        setBackupWalletPassword('');
+        setBackupDevicePassword('');
+        setBackupOverwrite(false);
+        setBackupFileName(null);
+        setBackupPointer(null);
+        setBackupScanning(false);
+        setScanning(false);
+        setDragOver(false);
+    }
+
+    function invalidatePendingInput() {
+        inputGenerationRef.current += 1;
+    }
+
+    function changeLane(nextLane) {
+        if (nextLane === activeLaneRef.current) return;
+        activeLaneRef.current = nextLane;
+        invalidatePendingInput();
+        clearSensitiveState();
+        setLane(nextLane);
+        setError(null);
+    }
+
+    function beginBusy() {
+        if (busyRef.current) return false;
+        busyRef.current = true;
+        setBusy(true);
+        return true;
+    }
+
+    function endBusy() {
+        busyRef.current = false;
+        setBusy(false);
+    }
 
     function handleBack() {
         if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        // Back first closes an open scanner, as the iOS swipe and Android
+        // Back expect; only a second Back leaves the import flow.
         if (scanning) {
             setScanning(false);
             return;
@@ -236,24 +300,14 @@ export function ImportWallet({
             setBackupScanning(false);
             return;
         }
-        setMnemonic('');
-        setMnemonicCursor(0);
-        setPassword('');
-        setConfirm('');
-        setBip39Passphrase('');
-        setBackupContent('');
-        setBackupPassword('');
-        setBackupWalletPassword('');
-        setBackupDevicePassword('');
-        setBackupFileName(null);
-        setBackupPointer(null);
-        setBackupScanning(false);
-        setScanning(false);
+        invalidatePendingInput();
+        clearSensitiveState();
         setError(null);
         onBack();
     }
 
     function handleQrFrame(text) {
+        if (inputGeneration !== inputGenerationRef.current || activeLaneRef.current !== 'mnemonic') return;
         if (typeof text !== 'string' || text.length === 0) return;
         // Strip an optional `bip39:` prefix that some QR generators emit.
         const cleaned = normalizePhraseEntry(text.replace(/^\s*bip39:\s*/i, ''));
@@ -288,6 +342,7 @@ export function ImportWallet({
         readAs: 'text',
         disabled: busy,
         onError: (message) => {
+            if (inputGeneration !== inputGenerationRef.current || activeLaneRef.current !== 'backup') return;
             const validation = typeof message === 'string'
                 && /^(?:File is too large|File type not accepted)/.test(message);
             setError(validation
@@ -295,6 +350,7 @@ export function ImportWallet({
                 : 'Could not read the backup file. Choose another file and try again.');
         },
         onFile: ({ file, content }) => {
+            if (inputGeneration !== inputGenerationRef.current || activeLaneRef.current !== 'backup') return;
             setBackupPointer(null);
             setBackupScanning(false);
             setBackupFileName(file.name);
@@ -308,6 +364,7 @@ export function ImportWallet({
     // rejected with a hint (those belong to the recovery-phrase lane and
     // we never silently import secret material from a stray scan).
     function handleBackupQrFrame(text) {
+        if (inputGeneration !== inputGenerationRef.current || activeLaneRef.current !== 'backup') return;
         if (typeof text !== 'string' || text.trim().length === 0) return;
         const detected = detectQrContent(text.trim());
         if (detected.type === 'backup-pointer') {
@@ -330,7 +387,7 @@ export function ImportWallet({
     async function handleBackupSubmit(event) {
         event.preventDefault();
         setValidationAttempt((attempt) => attempt + 1);
-        if (busy) return;
+        if (busyRef.current) return;
         const usingPointer = backupPointer !== null;
         if (!usingPointer && backupContent.trim().length === 0) {
             setError(NO_BACKUP_CONTENT_MESSAGE);
@@ -353,7 +410,7 @@ export function ImportWallet({
         }
         const conflictArg = backupOverwrite ? 'overwrite' : 'error';
         setError(null);
-        setBusy(true);
+        if (!beginBusy()) return;
         try {
             // A fresh install has no vault, so it has no host, so the
             // host-registered restore has nothing to answer it. `fresh` goes to
@@ -363,7 +420,7 @@ export function ImportWallet({
             if (mode === 'fresh') {
                 if (typeof messaging.importBackupFresh !== 'function') {
                     setError('Restoring a backup onto a fresh install is not available in this shell.');
-                    setBusy(false);
+                    endBusy();
                     return;
                 }
                 await messaging.importBackupFresh({
@@ -372,13 +429,13 @@ export function ImportWallet({
                     walletPassword: backupWalletPassword,
                     ...(usingPointer ? { pointer: backupPointer } : { fileContent: backupContent }),
                 });
-                setAdsNotice(true);
+                finishWalletImport();
                 return;
             }
             if (usingPointer) {
                 if (typeof messaging.importBackupPointerRequest !== 'function') {
                     setError('Backup-pointer restore is not available in this shell.');
-                    setBusy(false);
+                    endBusy();
                     return;
                 }
                 await messaging.importBackupPointerRequest({
@@ -392,7 +449,7 @@ export function ImportWallet({
             } else {
                 if (typeof messaging.importBackupRequest !== 'function') {
                     setError('Backup restore is not available in this shell.');
-                    setBusy(false);
+                    endBusy();
                     return;
                 }
                 await messaging.importBackupRequest({
@@ -412,7 +469,7 @@ export function ImportWallet({
                     mode,
                 });
             }
-            setAdsNotice(true);
+            finishWalletImport();
         } catch (err) {
             // A restore has three passwords in play, so "wrong
             // password" is never an answer. Whatever came back, the screen
@@ -421,7 +478,7 @@ export function ImportWallet({
                 restoreFailureMessage(err, { mode }),
                 'That backup could not be restored. Check the backup file and try again.',
             ));
-            setBusy(false);
+            endBusy();
         }
     }
 
@@ -459,6 +516,7 @@ export function ImportWallet({
                     }
                 })
                 .catch(() => {
+                    if (inputGeneration !== inputGenerationRef.current || activeLaneRef.current !== 'mnemonic') return;
                     setError(
                         'Could not read a QR code from that image. Choose another image or use Scan QR.',
                     );
@@ -474,6 +532,7 @@ export function ImportWallet({
         }
         const reader = new FileReader();
         reader.onload = () => {
+            if (inputGeneration !== inputGenerationRef.current || activeLaneRef.current !== 'mnemonic') return;
             const raw = typeof reader.result === 'string' ? reader.result : '';
             // Strip common surrounding text; many users paste a paragraph
             // they wrote around the seed. We pick the longest line whose
@@ -487,6 +546,7 @@ export function ImportWallet({
             if (error) setError(null);
         };
         reader.onerror = () => {
+            if (inputGeneration !== inputGenerationRef.current || activeLaneRef.current !== 'mnemonic') return;
             setError('Could not read that file. Choose another file and try again.');
         };
         reader.readAsText(file);
@@ -495,7 +555,7 @@ export function ImportWallet({
     async function handleSubmit(event) {
         event.preventDefault();
         setValidationAttempt((attempt) => attempt + 1);
-        if (busy) return;
+        if (busyRef.current) return;
         const trimmed = normalizePhraseEntry(mnemonic);
         if (trimmed.length === 0) {
             setError('Enter a recovery phrase.');
@@ -529,7 +589,7 @@ export function ImportWallet({
             return;
         }
         setError(null);
-        setBusy(true);
+        if (!beginBusy()) return;
         try {
             const passphraseArg = !isFreeWallet && showPassphrase
                 ? bip39Passphrase
@@ -549,7 +609,9 @@ export function ImportWallet({
                 if (restoredMessage) showToast({ message: restoredMessage });
                 // Home reads labels when it mounts. If the user has already
                 // continued past the notice, refresh it after the vault write.
-                if (labelSync?.restored && adsContinuedRef.current) onImported();
+                if (labelSync?.restored && adsContinuedRef.current) {
+                    void Promise.resolve().then(() => onImported()).catch(() => {});
+                }
             };
             if (result?.labelSyncToken && typeof messaging.labelSyncRestoreResult === 'function') {
                 void messaging.labelSyncRestoreResult({ token: result.labelSyncToken })
@@ -563,17 +625,21 @@ export function ImportWallet({
                 err,
                 'Could not import the wallet. Check the recovery phrase and try again.',
             ));
-            setBusy(false);
+            endBusy();
         }
     }
 
     function finishWalletImport() {
+        invalidatePendingInput();
+        clearSensitiveState();
+        endBusy();
+        setNoticeError(null);
         setAdsNotice(true);
     }
 
     async function handleWifSubmit(event) {
         event.preventDefault();
-        if (busy) return;
+        if (busyRef.current) return;
         const trimmedWif = wif.trim();
         if (trimmedWif.length === 0) {
             setError('WIF private key is required.');
@@ -600,7 +666,7 @@ export function ImportWallet({
             return;
         }
         setError(null);
-        setBusy(true);
+        if (!beginBusy()) return;
         try {
             await messaging.importMnemonic({
                 password,
@@ -614,7 +680,7 @@ export function ImportWallet({
                 err,
                 'Could not import that private key. Check the key and the chain, then try again.',
             ));
-            setBusy(false);
+            endBusy();
         }
     }
 
@@ -664,7 +730,7 @@ export function ImportWallet({
                 role="tab"
                 aria-selected={lane === 'mnemonic'}
                 className={`${styles.laneTab} ${lane === 'mnemonic' ? styles.laneTabActive : ''}`}
-                onClick={() => { setLane('mnemonic'); setError(null); }}
+                onClick={() => changeLane('mnemonic')}
                 disabled={busy}
             >
                 {t('importWallet.recoveryPhrase')}
@@ -675,7 +741,7 @@ export function ImportWallet({
                     role="tab"
                     aria-selected={lane === 'wif'}
                     className={`${styles.laneTab} ${lane === 'wif' ? styles.laneTabActive : ''}`}
-                    onClick={() => { setLane('wif'); setError(null); }}
+                    onClick={() => changeLane('wif')}
                     disabled={busy}
                 >
                     {t('importWallet.wif.tab')}
@@ -686,7 +752,7 @@ export function ImportWallet({
                 role="tab"
                 aria-selected={lane === 'backup'}
                 className={`${styles.laneTab} ${lane === 'backup' ? styles.laneTabActive : ''}`}
-                onClick={() => { setLane('backup'); setError(null); }}
+                onClick={() => changeLane('backup')}
                 disabled={busy}
             >
                 {t('importWallet.encryptedBackup')}
@@ -1000,6 +1066,7 @@ export function ImportWallet({
                         disabled={busy}
                         label={t('importWallet.pastePhrase')}
                         onPaste={(text) => {
+                            if (inputGeneration !== inputGenerationRef.current || activeLaneRef.current !== 'mnemonic') return;
                             const normalized = normalizePhraseEntry(text);
                             setMnemonic(normalized);
                             setMnemonicCursor(normalized.length);
@@ -1267,20 +1334,55 @@ export function ImportWallet({
     );
 
     const continueAfterNotice = () => {
+        if (continuePendingRef.current) return;
+        continuePendingRef.current = true;
+        setContinuing(true);
+        setNoticeError(null);
         adsContinuedRef.current = true;
-        onImported();
+        let result;
+        try {
+            result = onImported();
+        } catch (err) {
+            handleContinueError(err);
+            finishContinue();
+            return;
+        }
+        void Promise.resolve(result)
+            .catch((err) => {
+                handleContinueError(err);
+            })
+            .finally(finishContinue);
+
+        function handleContinueError(err) {
+            adsContinuedRef.current = false;
+            if (mountedRef.current) {
+                setNoticeError(userFacingMessage(
+                    err,
+                    'The wallet was imported, but the app could not continue. Try again.',
+                ));
+            }
+        }
+
+        function finishContinue() {
+            continuePendingRef.current = false;
+            if (mountedRef.current) setContinuing(false);
+        }
     };
 
     if (adsNotice) {
         const noticeBody = (
-            <AdsNotice
-                onContinue={continueAfterNotice}
-                isFull={isFull}
-                headClass={headClass}
-                titleClass={titleClass}
-                subtitleClass={subtitleClass}
-                actionsClass={actionsClass}
-            />
+            <>
+                <AdsNotice
+                    onContinue={continueAfterNotice}
+                    isFull={isFull}
+                    headClass={headClass}
+                    titleClass={titleClass}
+                    subtitleClass={subtitleClass}
+                    actionsClass={actionsClass}
+                    busy={continuing}
+                />
+                {noticeError ? <StatusMessage variant="error">{noticeError}</StatusMessage> : null}
+            </>
         );
         return (
             <Screen variant={variant}>

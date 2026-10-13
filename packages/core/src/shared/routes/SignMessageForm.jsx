@@ -69,9 +69,9 @@ export function SignMessageForm({ walletId, onBack }) {
     const [password, setPassword] = useState('');
 
     const [error, setError] = useState(/** @type {string | null} */ (null));
-    const [signature, setSignature] = useState(/** @type {string | null} */ (null));
-    const [signedMessage, setSignedMessage] = useState('');
-    const [signedAddress, setSignedAddress] = useState('');
+    const [signedResult, setSignedResult] = useState(
+        /** @type {null | { signature: string, message: string, address: string, chainId: string }} */ (null),
+    );
 
     // §37 / G125: form-draft persistence. Persists chain / address /
     // message; password stays in component state only.
@@ -82,9 +82,9 @@ export function SignMessageForm({ walletId, onBack }) {
     const draft = useFormDraft({ view: 'sign-message', walletId, ttlMs: formDraftTtlMs });
     const [draftPending, setDraftPending] = useState(() => draft.hasDraft());
     useEffect(() => {
-        if (signature || !draftPending) return;
+        if (signedResult || !draftPending) return;
         draft.save({ chainId, addressId, message });
-    }, [signature, draftPending, draft, chainId, addressId, message]);
+    }, [signedResult, draftPending, draft, chainId, addressId, message]);
     const restoreDraft = useCallback(() => {
         const v = draft.load();
         if (!v) { setDraftPending(false); return; }
@@ -184,44 +184,53 @@ export function SignMessageForm({ walletId, onBack }) {
     // re-prompt on a bad password, terminal states).
     const confirmAction = useConfirmAction();
     const passwordValueRef = useRef('');
+    const pendingRequestRef = useRef(null);
     passwordValueRef.current = password;
 
-    function applySigned(result) {
-        setSignature(result?.signature || '');
-        setSignedMessage(message);
-        setSignedAddress(selectedAddress?.address || '');
+    function applySigned(result, request) {
+        setSignedResult({
+            signature: result?.signature || '',
+            message: request.message,
+            address: request.address,
+            chainId: request.chainId,
+        });
+        pendingRequestRef.current = null;
         setPassword('');
         draft.clear();
         setDraftPending(false);
     }
 
-    async function openConfirmScreen() {
-        try {
-            const result = await confirmAction.confirm({
-                chainId,
-                source: selectedAddress?.address,
-                compose: async () => ({ message, actionString: null, encoding: 'message' }),
-                onApprove: () => messaging.signMessageRequest({
-                    walletId,
-                    addressId,
-                    password: passwordValueRef.current,
-                    message,
-                }),
-            });
-            applySigned(result);
-        } catch (err) {
-            if (isUserRejection(err)) return;
-            setError(
-                err?.name === 'InvalidPasswordError'
-                    ? 'Incorrect password.'
-                    : readFailureMessage(err, 'sign this message'),
-            );
-        }
+    function openConfirmScreen(request) {
+        return confirmAction.confirm({
+            chainId: request.chainId,
+            source: request.address,
+            compose: async () => ({
+                message: request.message,
+                actionString: null,
+                encoding: 'message',
+            }),
+            onApprove: () => messaging.signMessageRequest({
+                walletId: request.walletId,
+                addressId: request.addressId,
+                password: passwordValueRef.current,
+                message: request.message,
+            }),
+        }).then((result) => applySigned(result, request));
     }
 
-    async function handleSubmit(event) {
+    function handleSignFailure(err, request) {
+        if (pendingRequestRef.current === request) pendingRequestRef.current = null;
+        if (isUserRejection(err)) return;
+        setError(
+            err?.name === 'InvalidPasswordError'
+                ? 'Incorrect password.'
+                : readFailureMessage(err, 'sign this message'),
+        );
+    }
+
+    function handleSubmit(event) {
         event.preventDefault();
-        if (confirmAction.composing) return;
+        if (confirmAction.composing || pendingRequestRef.current) return;
         setError(null);
         if (!chainId) { setError('Pick a chain.'); return; }
         if (!addressId || !selectedAddress) { setError('Pick an address.'); return; }
@@ -232,8 +241,15 @@ export function SignMessageForm({ walletId, onBack }) {
         }
         // The password is collected ON the confirm page (§5.5 message
         // variant), so there is no credential guard here.
-        openConfirmScreen();
-        return;
+        const request = Object.freeze({
+            walletId,
+            chainId,
+            addressId,
+            address: selectedAddress.address,
+            message,
+        });
+        pendingRequestRef.current = request;
+        void openConfirmScreen(request).catch((err) => handleSignFailure(err, request));
     }
 
     const header = (
@@ -265,7 +281,7 @@ export function SignMessageForm({ walletId, onBack }) {
         );
     }
 
-    if (signature !== null) {
+    if (signedResult !== null) {
         const body = (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-3)' }}>
                 <div>
@@ -275,10 +291,10 @@ export function SignMessageForm({ walletId, onBack }) {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         {/* ChainBadge takes a descriptor, not an id: passing an
                             id crashed this screen on every successful signing. */}
-                        {chainRegistry.get(chainId)
-                            ? <ChainBadge descriptor={chainRegistry.get(chainId)} size="sm" />
-                            : <span>{chainId}</span>}
-                        <AddressText address={signedAddress} />
+                        {chainRegistry.get(signedResult.chainId)
+                            ? <ChainBadge descriptor={chainRegistry.get(signedResult.chainId)} size="sm" />
+                            : <span>{signedResult.chainId}</span>}
+                        <AddressText address={signedResult.address} />
                     </div>
                 </div>
                 <div>
@@ -293,7 +309,7 @@ export function SignMessageForm({ walletId, onBack }) {
                         whiteSpace: 'pre-wrap',
                         wordBreak: 'break-word',
                         fontSize: 'var(--xc-text-sm)',
-                    }}>{signedMessage}</pre>
+                    }}>{signedResult.message}</pre>
                 </div>
                 <div>
                     <div style={{
@@ -305,7 +321,7 @@ export function SignMessageForm({ walletId, onBack }) {
                         <span style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}>
                             Signature
                         </span>
-                        <CopyButton value={signature} label="Copy signature" />
+                        <CopyButton value={signedResult.signature} label="Copy signature" />
                     </div>
                     <pre style={{
                         background: 'var(--xc-surface)',
@@ -316,15 +332,13 @@ export function SignMessageForm({ walletId, onBack }) {
                         wordBreak: 'break-all',
                         fontSize: 'var(--xc-text-xs)',
                         fontFamily: 'var(--xc-font-mono)',
-                    }}>{signature}</pre>
+                    }}>{signedResult.signature}</pre>
                 </div>
                 <Button
                     variant="ghost"
                     block
                     onClick={() => {
-                        setSignature(null);
-                        setSignedMessage('');
-                        setSignedAddress('');
+                        setSignedResult(null);
                     }}
                 >
                     Sign another message
@@ -350,7 +364,7 @@ export function SignMessageForm({ walletId, onBack }) {
         );
     }
 
-    const draftBanner = draft.hasDraft() && !draftPending && !signature ? (
+    const draftBanner = draft.hasDraft() && !draftPending && !signedResult ? (
         <StatusMessage
             variant="status"
             recovery={{ label: 'Restore', onAction: restoreDraft }}
@@ -386,6 +400,7 @@ export function SignMessageForm({ walletId, onBack }) {
                     chainIds={chainIds}
                     chainRegistry={chainRegistry}
                     value={chainId || ''}
+                    disabled={confirmAction.composing}
                     onChange={(nextChainId) => {
                         setAddressId(null);
                         setChainId(nextChainId);
@@ -409,6 +424,7 @@ export function SignMessageForm({ walletId, onBack }) {
                 <select
                     id="sign-message-address"
                     value={addressId || ''}
+                    disabled={confirmAction.composing}
                     onChange={(e) => { setAddressId(e.target.value || null); if (error) setError(null); }}
                     aria-label="Address"
                     style={{
@@ -444,6 +460,7 @@ export function SignMessageForm({ walletId, onBack }) {
                 <textarea
                     id="sign-message-text"
                     value={message}
+                    disabled={confirmAction.composing}
                     onChange={(e) => { setMessage(e.target.value); if (error) setError(null); }}
                     placeholder="Type the message you want to sign…"
                     rows={5}
@@ -470,13 +487,14 @@ export function SignMessageForm({ walletId, onBack }) {
     // §5.5 confirm page (message variant), rendered in place of the
     // form; the draft stays intact behind it so Reject loses nothing.
     if (isConfirmOpenPhase(confirmAction.phase)) {
+        const request = pendingRequestRef.current;
         return (
             <MessageConfirmScreen
                 confirmAction={confirmAction}
                 screenVariant={variant}
-                message={message}
-                chainLabel={chainRegistry.get(chainId)?.displayName || chainId}
-                signingAddress={selectedAddress?.address}
+                message={request?.message || ''}
+                chainLabel={chainRegistry.get(request?.chainId)?.displayName || request?.chainId}
+                signingAddress={request?.address}
                 signerReady={signerReady}
                 password={password}
                 onPasswordChange={setPassword}

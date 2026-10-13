@@ -85,7 +85,9 @@ import { createChromeNotifier } from './background/chromeNotifications.js';
 (async () => {
     const mode = await readLayoutMode();
     await applyLayoutMode(mode);
-})();
+})().catch((err) => {
+    console.warn('[xchain-wallet/extension] layout mode initialization failed:', err);
+});
 attachLayoutModeListener();
 
 const surfaceStateEvents = createSurfaceStateBroadcaster();
@@ -169,6 +171,9 @@ export const sdkResolved = resolveSdkFactory({ devMockFactory: createDevMockSdk,
         }
         return 'dev-mock';
     });
+// Keep the exported promise rejected for callers while marking the boot-time
+// branch handled when production SDK resolution fails before any caller joins it.
+void sdkResolved.catch(() => {});
 
 // Module-scoped so the broker survives across unlock / lock cycles;
 // rejecting any pending approval on window-close continues to work even

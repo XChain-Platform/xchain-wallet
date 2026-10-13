@@ -361,6 +361,88 @@ describe('§5.5 SignMessageForm routes through the message confirm variant', () 
         expect(writeText).toHaveBeenCalledWith('sig-abc');
     });
 
+    it('keeps the confirmed address, message, result, and copied signature in one submission', async () => {
+        const secondAddress = {
+            ...HD_ADDRESS,
+            id: 'addr-hd-1',
+            address: OTHER,
+            derivationPath: "m/84'/0'/0'/0/1",
+        };
+        const { messaging, calls } = recordingMessaging({
+            getAddressesByChain: () => Promise.resolve({ [CHAIN]: [HD_ADDRESS, secondAddress] }),
+            signMessageRequest: (args) => {
+                calls.push({ method: 'signMessageRequest', args });
+                return Promise.resolve({ signature: 'signature-for-own' });
+            },
+        });
+        const writeText = vi.fn().mockResolvedValue(undefined);
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: { writeText },
+        });
+        let utils;
+        await domAct(async () => {
+            utils = mount(SignMessageForm, messaging);
+            await drainMicrotasks();
+        });
+        await domAct(async () => {
+            fireEvent.change(utils.getByLabelText('Address'), { target: { value: HD_ADDRESS.id } });
+            typeIn(utils, 'Message', 'approved message');
+            await drainMicrotasks();
+        });
+        await domAct(async () => {
+            fireEvent.click(findButton(utils, /Sign message/i));
+            fireEvent.change(utils.getByLabelText('Address'), { target: { value: secondAddress.id } });
+            typeIn(utils, 'Message', 'later edit');
+            await drainMicrotasks();
+        });
+
+        expect(utils.getByTestId('confirm-message-text').textContent).toBe('approved message');
+        expect(utils.container.textContent).toContain(OWN);
+        expect(utils.container.textContent).not.toContain(OTHER);
+        await domAct(async () => {
+            typeIn(utils, 'Password', 'hunter2');
+            fireEvent.click(utils.getByTestId('confirm-approve'));
+            await drainMicrotasks();
+        });
+
+        const submit = calls.find((c) => c.method === 'signMessageRequest');
+        expect(submit.args).toMatchObject({
+            addressId: HD_ADDRESS.id,
+            message: 'approved message',
+        });
+        expect(utils.container.textContent).toContain('signature-for-own');
+        expect(utils.container.textContent).toContain('approved message');
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: 'Copy signature' }));
+            await drainMicrotasks();
+        });
+        expect(writeText).toHaveBeenCalledWith('signature-for-own');
+    });
+
+    it('surfaces a rejected signing request without leaking its promise', async () => {
+        const { messaging } = recordingMessaging({
+            signMessageRequest: () => Promise.reject(new Error('signing backend unavailable')),
+        });
+        let utils;
+        await domAct(async () => {
+            utils = mount(SignMessageForm, messaging);
+            await drainMicrotasks();
+        });
+        await domAct(async () => {
+            typeIn(utils, 'Message', 'proof of control');
+            fireEvent.click(findButton(utils, /Sign message/i));
+            await drainMicrotasks();
+        });
+        await domAct(async () => {
+            typeIn(utils, 'Password', 'hunter2');
+            fireEvent.click(utils.getByTestId('confirm-approve'));
+            await drainMicrotasks();
+        });
+
+        expect(utils.getByRole('alert').textContent).toContain('signing backend unavailable');
+    });
+
     it('Reject signs nothing and returns to the form with the draft intact', async () => {
         const { utils, calls } = await drive('keep me');
         await domAct(async () => {

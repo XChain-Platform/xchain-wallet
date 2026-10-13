@@ -160,6 +160,8 @@ export function CreateBetFeedForm({
     const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any} */ (null));
+    const [submitting, setSubmitting] = useState(false);
+    const submitLockRef = useRef(false);
     const [duplicated, setDuplicated] = useState(false);
 
     // A stable "now" for the cost quote. Refreshed slowly on purpose: the quote
@@ -423,6 +425,9 @@ export function CreateBetFeedForm({
         event?.preventDefault?.();
         const problem = validate();
         if (problem) { setFormError(problem); return; }
+        if (submitLockRef.current) return;
+        submitLockRef.current = true;
+        setSubmitting(true);
         setFormError(null);
         const from = sourceDescriptor();
         try {
@@ -465,6 +470,9 @@ export function CreateBetFeedForm({
                 coinTicker, mandatory: nativeFee.mandatory,
                 fallback: err?.message || 'Creating the market failed.',
             }));
+        } finally {
+            submitLockRef.current = false;
+            setSubmitting(false);
         }
     }
 
@@ -623,8 +631,8 @@ export function CreateBetFeedForm({
                 <Button
                     type="submit"
                     variant="primary"
-                    loading={actionConfirm.composing}
-                    disabled={actionConfirm.composing}
+                    loading={submitting || actionConfirm.composing}
+                    disabled={submitting || actionConfirm.composing}
                 >
                     {actionConfirm.composing
                         ? 'Preparing review…'

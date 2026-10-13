@@ -761,7 +761,7 @@ function AppInner() {
             // later last-view restore. A link that arrives while a native shell
             // is backgrounded is held the same way and applied on resume, so the
             // view never changes out of sight.
-            launchRouteState.current.remember(route.view, status.state);
+            launchRouteState.current.remember(route.view, statusStateRef.current);
             if (canApplyNativeIntent(statusStateRef.current, nativeSuspendedRef.current)) {
                 setUnlockedView(route.view);
             } else if (statusStateRef.current === 'unlocked') {
@@ -771,7 +771,7 @@ function AppInner() {
             // The shared router returns an error route for malformed input;
             // this remains defensive against an unexpected parser failure.
         }
-    }, [status.state]);
+    }, []);
 
     // §47 / Cluster L FOLLOWUP 1: consume `?uri=` from location.search
     // when the SPA boots (e.g. after the user clicked an `xchain:` link

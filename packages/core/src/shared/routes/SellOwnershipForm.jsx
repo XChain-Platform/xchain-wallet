@@ -98,6 +98,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const [hwStatus, setHwStatus] = useState('idle');
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const submitPendingRef = useRef(false);
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
     useEffect(() => {
@@ -291,6 +292,8 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                 mandatory: nativeFee.mandatory,
                 fallback: err?.message || 'Sign failed.',
             }));
+        } finally {
+            submitPendingRef.current = false;
         }
     }
 
@@ -318,17 +321,23 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
             return;
         }
         setFormError(null);
-        if (singleEncode) { openConfirmScreen(); return; }
+        if (singleEncode) {
+            if (submitPendingRef.current) return;
+            submitPendingRef.current = true;
+            void openConfirmScreen();
+            return;
+        }
         setStage('review');
     }
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
+        if (stage === 'submitting' || submitPendingRef.current) return;
         if (!fromAddress || !chainId) return;
         if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && hw && hwStatus !== 'available') return;
 
+        submitPendingRef.current = true;
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -396,6 +405,8 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
             }
+        } finally {
+            submitPendingRef.current = false;
         }
     }
 
@@ -585,6 +596,8 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
         <FormPage
             label={`Sell ${tokenUpper} name`}
             onSubmit={handleReview}
+            inert={actionConfirm.composing ? '' : undefined}
+            aria-busy={actionConfirm.composing ? 'true' : undefined}
             onChangeCapture={() => { if (formError) setFormError(null); }}
             status={validationError || formError ? (
                 <>

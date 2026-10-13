@@ -64,6 +64,9 @@ export function PortfolioChart({ rows, walletId }) {
     const isDemo = isDemoWallet(walletId);
     const ranges = isDemo ? RANGES : RANGES.filter((r) => r.realCapable);
     const [rangeId, setRangeId] = useState(isDemo ? '30d' : '7d');
+    useEffect(() => {
+        setRangeId(isDemo ? '30d' : '7d');
+    }, [isDemo]);
     const range = ranges.find((r) => r.id === rangeId) || ranges[ranges.length - 1];
 
     // Pull native price entries (with sparkline) for any native row in
