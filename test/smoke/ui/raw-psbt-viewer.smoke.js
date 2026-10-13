@@ -71,12 +71,17 @@ assert.match(compSrc, /aria-label="Unsigned transaction hex"/);
 assert.match(compSrc, /aria-label="Action fields"/);
 assert.match(compSrc, /aria-label="Parsed inputs \/ outputs"/);
 assert.match(compSrc, /parser not wired yet/, 'placeholder is honest about the parser limit');
-assert.match(compSrc, /copyText\(copyTarget\)/, 'copy uses the shared clipboard path');
+assert.match(compSrc, /copyText\(value\)/, 'copy uses the shared clipboard path');
 assert.match(compSrc, /Copy failed: clipboard unavailable/, 'copy failure is visible in plain words');
 assert.match(
     compSrc,
-    /Copy \$\{hasPsbt \? 'unsigned transaction hex' : 'action fields'\}/,
-    'copy button labels what it copies',
+    /copyLabel\('psbt', 'unsigned transaction hex'\)/,
+    'PSBT copy button labels what it copies',
+);
+assert.match(
+    compSrc,
+    /copyLabel\('fields', 'action fields'\)/,
+    'action-fields copy button labels what it copies',
 );
 
 // CSS hooks for every visible piece.

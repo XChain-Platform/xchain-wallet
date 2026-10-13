@@ -30,6 +30,12 @@ export function ActionIntentSummary({ decoded, simulation }) {
         <div className={styles.intent} data-testid="action-intent">
             <p className={styles.summary}>{decoded.summary}</p>
 
+            {decoded.warnings.length > 0 ? (
+                <ul className={styles.warnings}>
+                    {decoded.warnings.map((w, i) => (<li key={i}>{w}</li>))}
+                </ul>
+            ) : null}
+
             {decoded.details.length > 0 ? (
                 <dl className={styles.details}>
                     {decoded.details.map((d, i) => (
@@ -39,12 +45,6 @@ export function ActionIntentSummary({ decoded, simulation }) {
                         </div>
                     ))}
                 </dl>
-            ) : null}
-
-            {decoded.warnings.length > 0 ? (
-                <ul className={styles.warnings}>
-                    {decoded.warnings.map((w, i) => (<li key={i}>{w}</li>))}
-                </ul>
             ) : null}
 
             {simulation && Array.isArray(simulation.deltas) && simulation.deltas.length > 0 ? (
