@@ -8,8 +8,16 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { describe, expect, it, vi } from 'vitest';
-import { createUndoSendRequest } from '../../../packages/core/src/flows/undoSend.js';
+import { describe, expect, it, vi, afterEach } from 'vitest';
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import React from 'react';
+import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
+import {
+    createUndoSendController,
+    createUndoSendRequest,
+    isUndoSendCancellation,
+} from '../../../packages/core/src/flows/undoSend.js';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
 
 describe('createUndoSendRequest', () => {
@@ -36,5 +44,156 @@ describe('createUndoSendRequest', () => {
         settings.grace.undoSendSeconds = 600;
 
         expect(createUndoSendRequest(settings, () => 'id-1').undoSeconds).toBe(30);
+    });
+});
+
+describe('createUndoSendController', () => {
+    it('counts down and elapses without calling the cancel route', () => {
+        let now = 10_000;
+        let tick;
+        const onTick = vi.fn();
+        const onElapsed = vi.fn();
+        const holdCancel = vi.fn();
+        const controller = createUndoSendController({
+            now: () => now,
+            setTick: (fn) => {
+                tick = fn;
+                return 7;
+            },
+            clearTick: vi.fn(),
+            onTick,
+            onElapsed,
+            onCancel: holdCancel,
+        });
+
+        controller.start(2);
+        expect(onTick).toHaveBeenLastCalledWith(2);
+        now += 1_000;
+        tick();
+        expect(onTick).toHaveBeenLastCalledWith(1);
+        now += 1_000;
+        tick();
+        expect(controller.state()).toBe('elapsed');
+        expect(onElapsed).toHaveBeenCalledOnce();
+        expect(holdCancel).not.toHaveBeenCalled();
+    });
+
+    it('Cancel calls holdCancel once and prevents the held send from elapsing', () => {
+        const holdCancel = vi.fn();
+        const onElapsed = vi.fn();
+        const clearTick = vi.fn();
+        const controller = createUndoSendController({
+            now: () => 10_000,
+            setTick: vi.fn(() => 7),
+            clearTick,
+            onElapsed,
+            onCancel: holdCancel,
+        });
+
+        controller.start(5);
+        expect(controller.cancel()).toBe(true);
+        expect(controller.cancel()).toBe(false);
+        expect(controller.state()).toBe('cancelled');
+        expect(holdCancel).toHaveBeenCalledOnce();
+        expect(onElapsed).not.toHaveBeenCalled();
+        expect(clearTick).toHaveBeenCalledWith(7);
+    });
+});
+
+describe('isUndoSendCancellation', () => {
+    it('recognizes only the host cancellation error', () => {
+        expect(isUndoSendCancellation({ name: 'SendHoldCancelledError' })).toBe(true);
+        expect(isUndoSendCancellation(new Error('send hold cancelled'))).toBe(false);
+        expect(isUndoSendCancellation(null)).toBe(false);
+    });
+});
+
+// Drives the real Send route: Approve must show the countdown toast, and its
+// Cancel button must reach the host through messaging.sendHoldCancel with the
+// same hold id that was sent to sendToken. The controller tests above cannot
+// see that wiring.
+describe('Send route undo-send countdown toast', () => {
+    const CHAIN = 'bitcoin-mainnet';
+    const FROM = 'bc1qsendersendersendersendersendersendersa';
+    const TO = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
+
+    afterEach(() => cleanup());
+
+    async function mountAndApprove() {
+        const settings = createDefaultSettings();
+        settings.grace.undoSendEnabled = true;
+        settings.grace.undoSendSeconds = 10;
+        settings.grace.testSendThresholdSats = '100000000000';
+        let rejectSend;
+        const base = {
+            getAddressesByChain: vi.fn().mockResolvedValue({
+                [CHAIN]: [{
+                    id: 'addr-1', address: FROM, publicKey: '02ab',
+                    derivationPath: "m/84'/0'/0'/0/0", source: 'hd',
+                }],
+            }),
+            getAddressBalances: vi.fn().mockResolvedValue({
+                native: { tick: 'BTC', quantity: '100000000', divisibility: 8 },
+                tokens: [],
+            }),
+            getSettings: vi.fn().mockResolvedValue(settings),
+            getSignerStatus: vi.fn().mockResolvedValue({ unlocked: true }),
+            listContacts: vi.fn().mockResolvedValue([]),
+            getRecentDestinations: vi.fn().mockResolvedValue([]),
+            gatedSendReadiness: vi.fn().mockResolvedValue({ state: 'ungated' }),
+            composeForConfirm: vi.fn().mockResolvedValue({
+                psbt: '70736274ff', encoding: 'P2SH', actionString: 'SEND|1|x', version: 1,
+            }),
+            preflight: vi.fn().mockResolvedValue({ verdict: 'pass', findings: [] }),
+            checkInputLiveness: vi.fn().mockResolvedValue({ verdict: 'live', spent: [] }),
+            reserve: vi.fn().mockResolvedValue({}),
+            releaseReservation: vi.fn().mockResolvedValue({}),
+            getAddressHistory: vi.fn().mockResolvedValue([{ action: 'SEND', destination: TO }]),
+            sendToken: vi.fn(() => new Promise((_resolve, reject) => { rejectSend = reject; })),
+            sendHoldCancel: vi.fn().mockResolvedValue(undefined),
+        };
+        const messaging = new Proxy(base, {
+            get(target, prop) {
+                if (prop in target) return target[prop];
+                if (typeof prop !== 'string') return undefined;
+                target[prop] = vi.fn().mockResolvedValue(null);
+                return target[prop];
+            },
+        });
+        render(
+            React.createElement(
+                MessagingProvider,
+                { shell: 'web', messaging },
+                React.createElement(Send, { walletId: 'w', onBack() {} }),
+            ),
+        );
+        fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: TO } });
+        fireEvent.change(await screen.findByLabelText(/^Amount \(/), { target: { value: '0.001' } });
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+        const approve = await screen.findByRole('button', { name: /^(Approve|Confirm|Sign)/i });
+        fireEvent.change(await screen.findByLabelText(/^Password/), { target: { value: 'pw' } });
+        await waitFor(() => expect(approve.disabled).toBe(false));
+        fireEvent.click(approve);
+        return { messaging, rejectSend: (e) => rejectSend(e) };
+    }
+
+    it('shows the countdown from Approve and Cancel calls sendHoldCancel', async () => {
+        const { messaging, rejectSend } = await mountAndApprove();
+        await waitFor(() => expect(messaging.sendToken).toHaveBeenCalledOnce());
+        const { holdId, undoSeconds } = messaging.sendToken.mock.calls[0][0];
+        expect(holdId).toMatch(/^undo-send:/);
+        expect(undoSeconds).toBe(10);
+
+        expect(await screen.findByText(/Sending in \d+ s/)).toBeInTheDocument();
+        expect(messaging.sendHoldCancel).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: /^Cancel$/ }));
+
+        expect(messaging.sendHoldCancel).toHaveBeenCalledOnce();
+        expect(messaging.sendHoldCancel).toHaveBeenCalledWith(holdId);
+        const err = new Error('send hold cancelled');
+        err.name = 'SendHoldCancelledError';
+        rejectSend(err);
+        await waitFor(() => expect(screen.queryByText(/Sending in \d+ s|Send cancelled/)).toBeNull());
+        expect(await screen.findByLabelText(/^To$/)).toBeInTheDocument();
     });
 });
