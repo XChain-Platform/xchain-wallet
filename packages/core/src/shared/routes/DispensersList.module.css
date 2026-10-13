@@ -2,21 +2,6 @@
    Send token selector (BalanceList) but with a 48px token logo (matching the token selector) and
    the chain icon overlaid in its lower-right corner. */
 
-/* Page containers: a plain column (no grid, no inter-item gap) so the
-   toolbar's own margin is the only space above the list. The full variant
-   fills the content area, as every list does (operator ruling 2026-10-12). */
-.wrapFull {
-    display: flex;
-    flex-direction: column;
-    margin: var(--xc-space-6) 0 0;
-    padding: var(--xc-space-4) 0;
-}
-
-.wrapPopup {
-    display: flex;
-    flex-direction: column;
-}
-
 .toolbar {
     display: flex;
     flex-direction: row;

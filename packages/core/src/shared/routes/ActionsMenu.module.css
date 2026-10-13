@@ -19,6 +19,9 @@
     flex-direction: row;
     align-items: center;
     gap: var(--xc-space-3);
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
     padding: var(--xc-space-3) var(--xc-space-4);
     background: var(--xc-surface-raised);
     border: 1px solid var(--xc-border);
@@ -45,6 +48,7 @@
 }
 
 .entryText {
+    flex: 1 1 auto;
     display: flex;
     flex-direction: column;
     align-items: flex-start;

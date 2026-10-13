@@ -14,6 +14,7 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useChainIdsWithAction } from '../hooks/useSupportedChains.js';
 import styles from './IssueTokenForm.module.css';
+import rowStyles from './ActionsMenu.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -217,17 +218,19 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
                                 key={String(id)}
                                 type="button"
                                 onClick={() => onOpenMarket(chainId, id)}
-                                className={styles.card}
+                                className={rowStyles.entry}
                                 style={{ textAlign: 'left', cursor: 'pointer', width: '100%' }}
                             >
-                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                                    <strong>#{String(id)} · {m.tick || 'n/a'}</strong>
-                                    <StatusPill status={m.feed_status} />
+                                <div className={rowStyles.entryText}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', width: '100%' }}>
+                                        <strong>#{String(id)} · {m.tick || 'n/a'}</strong>
+                                        <StatusPill status={m.feed_status} />
+                                    </div>
+                                    <div className={styles.hint}>{String(label).slice(0, 100)}</div>
+                                    {outcomes.length ? (
+                                        <div className={styles.hint}>{outcomes.slice(0, 4).join(' / ')}{outcomes.length > 4 ? ' …' : ''}</div>
+                                    ) : null}
                                 </div>
-                                <div className={styles.hint}>{String(label).slice(0, 100)}</div>
-                                {outcomes.length ? (
-                                    <div className={styles.hint}>{outcomes.slice(0, 4).join(' / ')}{outcomes.length > 4 ? ' …' : ''}</div>
-                                ) : null}
                             </button>
                         );
                     })}

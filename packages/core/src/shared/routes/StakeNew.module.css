@@ -1,20 +1,5 @@
-/* New-stake chooser: two large option cards (validator staking vs
-   contract staking), plus an inline network list when the wallet has
-   addresses on more than one Bitcoin chain. Card styling follows the
-   surface/border tokens used by the detail-page info cards. */
-
-.wrapFull {
-    display: flex;
-    flex-direction: column;
-    max-width: 560px;
-    margin: var(--xc-space-6) auto 0;
-    padding: var(--xc-space-4);
-}
-
-.wrapPopup {
-    display: flex;
-    flex-direction: column;
-}
+/* New-stake chooser: two option rows (validator staking vs contract
+   staking), plus an inline network list when more than one chain qualifies. */
 
 .lede {
     margin: 0 0 var(--xc-space-3);
@@ -26,35 +11,6 @@
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-3);
-}
-
-.option {
-    appearance: none;
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-3);
-    padding: var(--xc-space-4);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
-    color: var(--xc-text);
-    font-family: inherit;
-    text-align: start;
-    cursor: pointer;
-}
-
-.option:hover:not(:disabled) {
-    background: var(--xc-bg-muted);
-}
-
-.option:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-
-.option:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
 }
 
 .optionIcon {
@@ -92,28 +48,11 @@
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
-    margin-top: var(--xc-space-3);
 }
 
-.chainBtn {
-    appearance: none;
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    padding: var(--xc-space-3);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    color: var(--xc-text);
-    font-family: inherit;
+.chainLabel {
     font-size: var(--xc-text-sm);
     font-weight: 600;
-    text-align: start;
-    cursor: pointer;
-}
-
-.chainBtn:hover {
-    background: var(--xc-bg-muted);
 }
 
 .chainIcon {

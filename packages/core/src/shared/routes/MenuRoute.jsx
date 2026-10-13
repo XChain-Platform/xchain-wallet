@@ -12,13 +12,13 @@
 // Back-titled header, opened from the shared AppHeader's pancake button
 // (`unlockedView === 'menu'`). This is the single live nav menu; the old
 // `HeaderActionMenu` overlay drawer was removed (it had become orphaned
-// dead code, its trigger was never rendered). It still reuses
-// `HeaderActionMenu.module.css` for row styling.
+// dead code, its trigger was never rendered).
 
-import { Screen, PageHeader, Icon } from '@xchain-wallet/core/ui';
+import { Icon, ListPage, PageHeader, Screen } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { LayoutModeToggle } from '../components/LayoutModeToggle.jsx';
 import menuStyles from '../components/HeaderActionMenu.module.css';
+import rowStyles from './ActionsMenu.module.css';
 
 /**
  * Props mirror HeaderActionMenu so the host can hand the same handlers
@@ -95,79 +95,81 @@ export function MenuRoute({
 
     return (
         <Screen variant={variant} header={header}>
-            <div className={menuStyles.scroll}>
-                {primary.length > 0 || typeof onSettings === 'function' ? (
-                    <ul className={menuStyles.list} role="list">
-                        {primary.map(({ id, label, Icon: ItemIcon, handler }) => (
-                            <li key={id}>
-                                <button
-                                    type="button"
-                                    className={menuStyles.row}
-                                    onClick={handler}
-                                >
-                                    <span className={menuStyles.rowIcon} aria-hidden="true">
-                                        <ItemIcon />
-                                    </span>
-                                    <span className={menuStyles.rowLabel}>{label}</span>
-                                    <span className={menuStyles.rowChevron} aria-hidden="true">
-                                        <Icon.ForwardIcon />
-                                    </span>
-                                </button>
-                            </li>
-                        ))}
-                        {typeof onSwitchWallet === 'function' ? (
-                            <li>
-                                <button
-                                    type="button"
-                                    className={menuStyles.row}
-                                    onClick={onSwitchWallet}
-                                >
-                                    <span className={menuStyles.rowIcon} aria-hidden="true">
-                                        <Icon.KeyIcon />
-                                    </span>
-                                    <span className={menuStyles.rowLabel}>Switch wallet</span>
-                                    <span className={menuStyles.rowChevron} aria-hidden="true">
-                                        <Icon.ForwardIcon />
-                                    </span>
-                                </button>
-                            </li>
-                        ) : null}
-                        {typeof onSettings === 'function' ? (
-                            <li>
-                                <button
-                                    type="button"
-                                    className={menuStyles.row}
-                                    onClick={onSettings}
-                                >
-                                    <span className={menuStyles.rowIcon} aria-hidden="true">
-                                        <Icon.GearIcon />
-                                    </span>
-                                    <span className={menuStyles.rowLabel}>Settings</span>
-                                    <span className={menuStyles.rowChevron} aria-hidden="true">
-                                        <Icon.ForwardIcon />
-                                    </span>
-                                </button>
-                            </li>
-                        ) : null}
-                    </ul>
-                ) : null}
-            </div>
-            <LayoutModeToggle />
-            {typeof onLock === 'function' ? (
-                <div className={menuStyles.lockBlock}>
-                    <button
-                        type="button"
-                        className={menuStyles.lockBtn}
-                        onClick={onLock}
-                        disabled={locking}
-                    >
-                        <span className={menuStyles.rowIcon} aria-hidden="true">
-                            <Icon.LockIcon />
-                        </span>
-                        <span className={menuStyles.rowLabel}>Lock wallet</span>
-                    </button>
+            <ListPage className={menuStyles.page}>
+                <div className={menuStyles.scroll}>
+                    {primary.length > 0 || typeof onSettings === 'function' ? (
+                        <ul className={menuStyles.list} role="list">
+                            {primary.map(({ id, label, Icon: ItemIcon, handler }) => (
+                                <li key={id}>
+                                    <button
+                                        type="button"
+                                        className={rowStyles.entry}
+                                        onClick={handler}
+                                    >
+                                        <span className={menuStyles.rowIcon} aria-hidden="true">
+                                            <ItemIcon />
+                                        </span>
+                                        <span className={menuStyles.rowLabel}>{label}</span>
+                                        <span className={menuStyles.rowChevron} aria-hidden="true">
+                                            <Icon.ForwardIcon />
+                                        </span>
+                                    </button>
+                                </li>
+                            ))}
+                            {typeof onSwitchWallet === 'function' ? (
+                                <li>
+                                    <button
+                                        type="button"
+                                        className={rowStyles.entry}
+                                        onClick={onSwitchWallet}
+                                    >
+                                        <span className={menuStyles.rowIcon} aria-hidden="true">
+                                            <Icon.KeyIcon />
+                                        </span>
+                                        <span className={menuStyles.rowLabel}>Switch wallet</span>
+                                        <span className={menuStyles.rowChevron} aria-hidden="true">
+                                            <Icon.ForwardIcon />
+                                        </span>
+                                    </button>
+                                </li>
+                            ) : null}
+                            {typeof onSettings === 'function' ? (
+                                <li>
+                                    <button
+                                        type="button"
+                                        className={rowStyles.entry}
+                                        onClick={onSettings}
+                                    >
+                                        <span className={menuStyles.rowIcon} aria-hidden="true">
+                                            <Icon.GearIcon />
+                                        </span>
+                                        <span className={menuStyles.rowLabel}>Settings</span>
+                                        <span className={menuStyles.rowChevron} aria-hidden="true">
+                                            <Icon.ForwardIcon />
+                                        </span>
+                                    </button>
+                                </li>
+                            ) : null}
+                        </ul>
+                    ) : null}
                 </div>
-            ) : null}
+                <LayoutModeToggle />
+                {typeof onLock === 'function' ? (
+                    <div className={menuStyles.lockBlock}>
+                        <button
+                            type="button"
+                            className={menuStyles.lockBtn}
+                            onClick={onLock}
+                            disabled={locking}
+                        >
+                            <span className={menuStyles.rowIcon} aria-hidden="true">
+                                <Icon.LockIcon />
+                            </span>
+                            <span className={menuStyles.rowLabel}>Lock wallet</span>
+                        </button>
+                    </div>
+                ) : null}
+            </ListPage>
         </Screen>
     );
 }
