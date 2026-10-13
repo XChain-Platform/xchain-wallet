@@ -14,7 +14,7 @@
 // keeps its synthesized chart and every range.
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import {
     PortfolioChart,
@@ -42,6 +42,16 @@ function rangeLabels() {
     return screen.getAllByRole('tab').map((t) => t.textContent);
 }
 
+function deferred() {
+    let resolve;
+    let reject;
+    const promise = new Promise((resolvePromise, rejectPromise) => {
+        resolve = resolvePromise;
+        reject = rejectPromise;
+    });
+    return { promise, resolve, reject };
+}
+
 afterEach(() => {
     cleanup();
     clearDemoWalletId();
@@ -61,6 +71,33 @@ describe('PortfolioChart on a real wallet', () => {
         await waitFor(() => expect(messaging.getNativePricesRequest).toHaveBeenCalled());
         expect(await screen.findByText(/No price history/)).toBeTruthy();
         expect(document.querySelector('svg polyline')).toBeNull();
+    });
+
+    it('distinguishes loading, failure, and empty price history', async () => {
+        const emptyRequest = deferred();
+        const messaging = mount('real-wallet-1', emptyRequest.promise);
+
+        expect(screen.getByRole('status')).toHaveTextContent('Loading price history…');
+        expect(screen.queryByText(/No price history/)).toBeNull();
+        expect(screen.getByRole('region', { name: 'Portfolio performance' })).toHaveAttribute('aria-busy', 'true');
+
+        await act(async () => emptyRequest.resolve({}));
+
+        expect(await screen.findByText(/No price history/)).toBeInTheDocument();
+        expect(screen.queryByRole('status')).toBeNull();
+
+        const failedRequest = deferred();
+        messaging.getNativePricesRequest.mockImplementationOnce(() => failedRequest.promise);
+        window.dispatchEvent(new CustomEvent('xc:settings-changed', {
+            detail: { fiatCurrency: 'EUR' },
+        }));
+
+        expect(await screen.findByRole('status')).toHaveTextContent('Loading price history…');
+        await act(async () => failedRequest.reject(new Error('network unavailable')));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load portfolio price history.");
+        expect(screen.queryByText(/No price history/)).toBeNull();
+        expect(screen.getByRole('region', { name: 'Portfolio performance' })).not.toHaveAttribute('aria-busy');
     });
 
     it('offers only the ranges recorded history covers, opening on 7d', async () => {

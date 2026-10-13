@@ -92,6 +92,7 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
             flat.sort((a, b) => rowTime(b) - rowTime(a));
             setRows(flat);
         } catch (err) {
+            setRows([]);
             setLoadError(readFailureMessage(err, 'load your trade history'));
         } finally {
             setLoading(false);
