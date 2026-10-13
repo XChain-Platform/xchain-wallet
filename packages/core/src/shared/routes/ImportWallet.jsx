@@ -1090,6 +1090,7 @@ export function ImportWallet({
                             if (error) setError(null);
                         }}
                         autoComplete="off"
+                        spellCheck={false}
                         disabled={busy}
                     />
                     <Select
