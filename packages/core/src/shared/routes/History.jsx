@@ -70,18 +70,26 @@ import styles from './History.module.css';
 const HISTORY_CHAIN_FILTER_KEY = 'history';
 const GROUPING_MODE_STORAGE_KEY = 'xc:historyGroupingMode';
 
-function readPersistedGroupingMode() {
+function historyChainFilterKey(walletId) {
+    return `${HISTORY_CHAIN_FILTER_KEY}:${walletId || 'none'}`;
+}
+
+function groupingModeStorageKey(walletId) {
+    return `${GROUPING_MODE_STORAGE_KEY}:${walletId || 'none'}`;
+}
+
+function readPersistedGroupingMode(walletId) {
     try {
-        const v = globalThis.localStorage?.getItem(GROUPING_MODE_STORAGE_KEY);
+        const v = globalThis.localStorage?.getItem(groupingModeStorageKey(walletId));
         return v === 'flat' ? 'flat' : 'grouped';
     } catch {
         return 'grouped';
     }
 }
 
-function writePersistedGroupingMode(mode) {
+function writePersistedGroupingMode(walletId, mode) {
     try {
-        globalThis.localStorage?.setItem(GROUPING_MODE_STORAGE_KEY, mode);
+        globalThis.localStorage?.setItem(groupingModeStorageKey(walletId), mode);
     } catch { /* best-effort */ }
 }
 
@@ -439,10 +447,12 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const [crossChainOnly, setCrossChainOnly] = useState(false);
     const [multisigOnly, setMultisigOnly] = useState(false);
     const [multisigAddress, setMultisigAddress] = useState(/** @type {string | null} */ (null));
-    const [groupingMode, setGroupingModeState] = useState(/** @type {'grouped' | 'flat'} */ (readPersistedGroupingMode));
+    const [groupingMode, setGroupingModeState] = useState(
+        /** @type {'grouped' | 'flat'} */ (() => readPersistedGroupingMode(walletId)),
+    );
     const setGroupingMode = (mode) => {
         setGroupingModeState(mode);
-        writePersistedGroupingMode(mode);
+        writePersistedGroupingMode(walletId, mode);
     };
     const [expandedGroups, setExpandedGroups] = useState(/** @type {Set<string>} */ (new Set()));
     const [searchQuery, setSearchQuery] = useState(initialSearchQuery || '');
@@ -480,6 +490,21 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
 
     // Step 1: resolve the wallet's addresses grouped by chainId.
     useEffect(() => {
+        setAddressesByChain(null);
+        setEntries([]);
+        setHistoryFetchedAt(null);
+        setLoadingChains(new Set());
+        setLoadError(null);
+        setIndexerWatermarkByChainId({});
+        setMultisigAddress(null);
+        setSelectedKey(null);
+        selectedTxRef.current = null;
+        setPeerCache({});
+        setExpandedGroups(new Set());
+        setGroupingModeState(readPersistedGroupingMode(walletId));
+        observedAtRef.current.clear();
+        lastMempoolSeenRef.current.clear();
+        initialFocusFiredRef.current = false;
         let cancelled = false;
         messaging.getAddressesByChain(walletId, accountId)
             .then((byChain) => {
@@ -508,7 +533,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 // choice if one is stored, intersected with the wallet's
                 // currently-active chains so a removed chain doesn't
                 // leave a stale entry. Falls back to "all enabled".
-                const remembered = readChainSet(HISTORY_CHAIN_FILTER_KEY, all);
+                const remembered = readChainSet(historyChainFilterKey(walletId), all);
                 setEnabledChains(remembered ?? all);
             })
             .catch((err) => {
@@ -527,6 +552,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         let cancelled = false;
         const btcChain = chainRegistry.byCoin('bitcoin')[0]?.id;
         if (!btcChain) return undefined;
+        setMultisigAddress(null);
         messaging.getMultisigReceiveAddress({ walletId, chainId: btcChain })
             .then((r) => {
                 if (cancelled) return;
@@ -821,7 +847,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         });
 
         return () => { cancelled = true; };
-    }, [addressesByChain, messaging, refreshTick]);
+    }, [addressesByChain, messaging, refreshTick, walletId, accountId]);
 
     // Lowercase set of every wallet address across every chain. Used by
     // the action-type filter to discriminate Send (wallet is source)
@@ -1006,7 +1032,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         setEnabledChains(new Set(activeChainIds));
         setCrossChainOnly(false);
         setMultisigOnly(false);
-        writeChainSet(HISTORY_CHAIN_FILTER_KEY, null);
+        writeChainSet(historyChainFilterKey(walletId), null);
         if (hadAny) {
             showToast({
                 message: 'Filter cleared',
@@ -1021,7 +1047,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     setCrossChainOnly(snapshot.crossChainOnly);
                     setMultisigOnly(snapshot.multisigOnly);
                     writeChainSet(
-                        HISTORY_CHAIN_FILTER_KEY,
+                        historyChainFilterKey(walletId),
                         snapshot.chainFilterActive ? snapshot.enabledChains : null,
                     );
                 },
@@ -1150,7 +1176,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             const next = new Set(prev);
             if (next.has(cid)) next.delete(cid);
             else next.add(cid);
-            writeChainSet(HISTORY_CHAIN_FILTER_KEY, next);
+            writeChainSet(historyChainFilterKey(walletId), next);
             return next;
         });
     };
@@ -1343,7 +1369,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             enabledChains={enabledChains}
                             onChange={(next) => {
                                 setEnabledChains(next);
-                                writeChainSet(HISTORY_CHAIN_FILTER_KEY, next);
+                                writeChainSet(historyChainFilterKey(walletId), next);
                             }}
                         />
 

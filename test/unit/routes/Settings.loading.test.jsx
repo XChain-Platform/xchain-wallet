@@ -57,4 +57,29 @@ describe('Settings while settings are loading', () => {
         fireEvent.click(screen.getByText('Accounts & Addresses').closest('button'));
         expect(onOpenAccountPicker).toHaveBeenCalledOnce();
     });
+
+    it('drops This Wallet confirmation state when the active wallet changes', () => {
+        const messaging = {
+            getSettings: () => new Promise(() => {}),
+            listConnectedSites: () => Promise.resolve([]),
+            removeWallet: vi.fn(),
+        };
+        const tree = (wallet) => (
+            <MessagingProvider shell="web" messaging={messaging}>
+                <Settings
+                    onBack={() => {}}
+                    activeWallet={wallet}
+                    initialSubpageId="this-wallet"
+                />
+            </MessagingProvider>
+        );
+        const view = render(tree({ id: 'wallet-a', name: 'Alpha' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Remove…' }));
+        expect(screen.getByLabelText('Confirm wallet name')).toBeTruthy();
+
+        view.rerender(tree({ id: 'wallet-b', name: 'Beta' }));
+
+        expect(screen.queryByLabelText('Confirm wallet name')).toBeNull();
+        expect(screen.getByText('Beta')).toBeTruthy();
+    });
 });

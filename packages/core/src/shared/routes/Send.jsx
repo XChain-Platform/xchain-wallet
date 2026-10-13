@@ -235,6 +235,7 @@ function destinationAddressError(address, descriptor) {
 /**
  * @param {object} props
  * @param {string} props.walletId
+ * @param {string} [props.accountId]   active BIP44 account; when set, scopes source addresses to that account
  * @param {() => void} props.onBack
  * @param {{ address?: string, amount?: string, tick?: string, chainId?: string, memo?: string, feePriority?: 'low' | 'normal' | 'fast' }} [props.prefill]
  *        §47 Cluster L FOLLOWUP 1: initial form values from a deep-link
@@ -255,7 +256,7 @@ function destinationAddressError(address, descriptor) {
  *        pending record) even though the network has not sighted it yet;
  *        the card's copy says as much. Omit to hide the action.
  */
-export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHistory }) {
+export function Send({ walletId, accountId, onBack, prefill = null, onChangeAsset, onViewHistory }) {
     const { messaging, shell } = useMessaging();
     // Unlocked software session signs without a password.
     const signerReady = useSignerReady(walletId);
@@ -428,8 +429,15 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
     // without `getSettings`, or a failed read, still yields a usable form.
     useEffect(() => {
         let cancelled = false;
+        setAddressesByChain(null);
+        setLoadError(null);
+        setChainId(prefill?.chainId || null);
+        setFromAddressId(null);
+        setActiveByChain({});
+        setPickedSourceChain(null);
+        setHistoryRows([]);
         Promise.all([
-            messaging.getAddressesByChain(walletId),
+            messaging.getAddressesByChain(walletId, accountId),
             typeof messaging.getSettings === 'function'
                 ? Promise.resolve(messaging.getSettings()).catch(() => null)
                 : Promise.resolve(null),
@@ -455,7 +463,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
             });
         return () => { cancelled = true; };
-    }, [walletId, messaging]);
+    }, [walletId, accountId, messaging, prefill?.chainId]);
 
     // §18.4 firmware-warning support. When the source address is HW we
     // need vendor / model / firmwareVersion to render the warning banner
@@ -482,6 +490,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
     const [historyRows, setHistoryRows] = useState(/** @type {any[]} */ ([]));
     useEffect(() => {
         if (!chainId || !addressesByChain) return undefined;
+        setHistoryRows([]);
         const ownAddrs = (addressesByChain[chainId] || []).map((a) => a.address);
         if (ownAddrs.length === 0) {
             setHistoryRows([]);
@@ -920,11 +929,12 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
     useEffect(() => {
         if (!walletId || typeof messaging.getActiveAddresses !== 'function') return undefined;
         let cancelled = false;
-        messaging.getActiveAddresses(walletId)
+        setActiveByChain({});
+        messaging.getActiveAddresses(walletId, accountId)
             .then((m) => { if (!cancelled) setActiveByChain(m || {}); })
             .catch(() => { if (!cancelled) setActiveByChain({}); });
         return () => { cancelled = true; };
-    }, [walletId, messaging]);
+    }, [walletId, accountId, messaging]);
 
     const tickRef = useRef(tick);
     tickRef.current = tick;
@@ -1022,8 +1032,10 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         // Fetch on review (for the simulator) AND on form (so Max + the
         // "Available: X" hint know what's spendable). Form-stage fetches
         // are non-blocking; failure leaves Max disabled, the hint hidden.
-        if (stage !== 'review' && stage !== 'form') return undefined;
-        if (!chainId || !fromAddress) return undefined;
+        if ((stage !== 'review' && stage !== 'form') || !chainId || !fromAddress) {
+            setPreviewBalances({ loading: false, error: null, sdkShape: null });
+            return undefined;
+        }
         let cancelled = false;
         setPreviewBalances({ loading: true, error: null, sdkShape: null });
         messaging.getAddressBalances(chainId, fromAddress.address)

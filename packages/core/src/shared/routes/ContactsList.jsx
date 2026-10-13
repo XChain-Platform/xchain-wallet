@@ -34,9 +34,13 @@ import picker from './ContactsList.module.css';
 const chainRegistry = registryLib.defaultRegistry();
 const CONTACTS_SORT_STORAGE_KEY = 'xc:contacts:sort';
 
-function readContactsSort() {
+function contactsSortStorageKey(walletId) {
+    return `${CONTACTS_SORT_STORAGE_KEY}:${walletId || 'none'}`;
+}
+
+function readContactsSort(walletId) {
     try {
-        return globalThis.localStorage?.getItem(CONTACTS_SORT_STORAGE_KEY) === 'newest'
+        return globalThis.localStorage?.getItem(contactsSortStorageKey(walletId)) === 'newest'
             ? 'newest'
             : 'name';
     } catch {
@@ -44,9 +48,9 @@ function readContactsSort() {
     }
 }
 
-function persistContactsSort(value) {
+function persistContactsSort(walletId, value) {
     try {
-        globalThis.localStorage?.setItem(CONTACTS_SORT_STORAGE_KEY, value);
+        globalThis.localStorage?.setItem(contactsSortStorageKey(walletId), value);
     } catch {
         // Storage can be unavailable in privacy-restricted shells.
     }
@@ -104,10 +108,11 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     // happen. Dismissal lasts for this visit only: the edits stay unpublished.
     const [unpublished, setUnpublished] = useState(0);
     const [nudgeDismissed, setNudgeDismissed] = useState(false);
-    const refreshUnpublished = useCallback(async () => {
+    const refreshUnpublished = useCallback(async (isCurrent = () => true) => {
         if (typeof messaging?.labelSyncStatusRequest !== 'function') return;
         try {
             const s = await messaging.labelSyncStatusRequest();
+            if (!isCurrent()) return;
             const count = Number(s?.batch?.changeCount ?? s?.changeCount ?? 0);
             setUnpublished(s?.due || s?.pending ? Math.max(1, count) : 0);
         } catch {
@@ -131,7 +136,9 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     const [query, setQuery] = useState('');
     const [networkFilter, setNetworkFilter] = useState(/** @type {'all' | string} */ ('all'));
     // A long address book was unsorted (storage order); name is the default.
-    const [sortBy, setSortBy] = useState(/** @type {'name' | 'newest'} */ (readContactsSort));
+    const [sortBy, setSortBy] = useState(
+        /** @type {'name' | 'newest'} */ (() => readContactsSort(walletId)),
+    );
     // One-line "Added to <name>" shown on the detail view after a save that
     // joined an existing contact instead of creating a second one.
     const [notice, setNotice] = useState(/** @type {string | null} */ (null));
@@ -166,20 +173,36 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     // Message action needs the user to choose which address to use.
     const [addrPicker, setAddrPicker] = useState(/** @type {'send' | 'message' | null} */ (null));
     const actionsRef = useRef(null);
+    const walletScopeRef = useRef(walletId);
+    walletScopeRef.current = walletId;
 
     const loadContacts = useCallback(async () => {
+        const scope = walletId;
         try {
             const rows = await messaging.listContacts();
+            if (walletScopeRef.current !== scope) return;
             setContacts(Array.isArray(rows) ? rows : []);
         } catch (err) {
+            if (walletScopeRef.current !== scope) return;
             setLoadError(err?.message || 'Failed to load contacts.');
         }
         // Every mutation on this screen ends in a reload, so this is the one
         // place the unpublished count needs refreshing.
-        await refreshUnpublished();
-    }, [messaging, refreshUnpublished]);
+        if (walletScopeRef.current === scope) {
+            await refreshUnpublished(() => walletScopeRef.current === scope);
+        }
+    }, [messaging, refreshUnpublished, walletId]);
 
-    useEffect(() => { loadContacts(); }, [loadContacts]);
+    useEffect(() => {
+        setContacts(null);
+        setLoadError(null);
+        setMode('list');
+        setActiveId(null);
+        setSortBy(readContactsSort(walletId));
+        setUnpublished(0);
+        setNudgeDismissed(false);
+        loadContacts();
+    }, [loadContacts, walletId]);
 
     const active = useMemo(() => {
         if (!activeId || !contacts) return null;
@@ -836,7 +859,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     onChange={(e) => {
                         const value = /** @type {'name' | 'newest'} */ (e.target.value);
                         setSortBy(value);
-                        persistContactsSort(value);
+                        persistContactsSort(walletId, value);
                     }}
                     aria-label="Sort contacts"
                 >

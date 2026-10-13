@@ -158,6 +158,21 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     const [multisigQrs, setMultisigQrs] = useState(/** @type {Record<string, string>} */ ({}));
 
     useEffect(() => {
+        setChainsByWallet(null);
+        setActiveChainId(prefill?.chainId || null);
+        setAddress(null);
+        setAddressType('');
+        setRenderedQr(null);
+        setLoadError(null);
+        setGenerateError(null);
+        setNoAddresses(false);
+        setMultisigs([]);
+        setMultisigQrs({});
+        setAddressPickerOpen(false);
+        setAddAddressOpen(false);
+    }, [walletId, accountId, prefill?.chainId]);
+
+    useEffect(() => {
         let cancelled = false;
         (async () => {
             try {
@@ -275,6 +290,8 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             return undefined;
         }
         let cancelled = false;
+        setMultisigs([]);
+        setMultisigQrs({});
         if (typeof messaging.listMultisigReceiveAddresses === 'function') {
             messaging.listMultisigReceiveAddresses({ walletId, chainId: activeChainId })
                 .then((list) => {
