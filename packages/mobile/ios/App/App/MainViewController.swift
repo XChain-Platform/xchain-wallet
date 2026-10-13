@@ -168,6 +168,8 @@ class MainViewController: CAPBridgeViewController {
     /// UIKit's corner-adapted value. Full screen, where the two agree, is unchanged.
     private func clearWindowControls() {
         guard #available(iOS 26.0, *) else { return }
+        // Window controls exist only on iPad; an iPhone keeps its plain safe area untouched.
+        guard traitCollection.userInterfaceIdiom == .pad else { return }
         let base = view.safeAreaInsets.top - additionalSafeAreaInsets.top
         let adapted = view.edgeInsets(for: .safeArea(cornerAdaptation: .vertical)).top
         let extra = max(0, adapted - base)
