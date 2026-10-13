@@ -1,13 +1,14 @@
-/* List template. Full width at every viewport: no max-width and no
-   breakpoint, so a list, table or card grid always reaches the edge of
-   Screen's content box, which stops at the reserved scrollbar gutter. */
+/* List template. Lists fill compact layouts but stop growing before rows
+   become difficult to scan across a wide desktop pane. */
 
 .page {
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-3);
     width: 100%;
+    max-width: 1280px;
     min-width: 0;
+    margin-inline: auto;
 }
 
 /* Children stretch to the full width; min-width 0 lets long content

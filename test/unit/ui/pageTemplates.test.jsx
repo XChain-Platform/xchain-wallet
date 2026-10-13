@@ -248,12 +248,14 @@ describe('<ListPage>', () => {
     });
 });
 
-describe('ListPage.module.css: full width at every viewport', () => {
+describe('ListPage.module.css: readable width at every viewport', () => {
     const text = css('ListPage.module.css');
 
-    it('fills the content width and never caps it', () => {
-        expect(ruleBody(text, '.page')).toMatch(/width:\s*100%/);
-        expect(text).not.toMatch(/max-width:\s*\d+(px|rem|em|ch)/);
+    it('fills compact layouts and caps wide desktop rows', () => {
+        const page = ruleBody(text, '.page');
+        expect(page).toMatch(/width:\s*100%/);
+        expect(page).toMatch(/max-width:\s*1280px/);
+        expect(page).toMatch(/margin-inline:\s*auto/);
         expect(text).not.toMatch(/@media|@container/);
     });
 
