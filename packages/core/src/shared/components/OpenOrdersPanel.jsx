@@ -20,7 +20,7 @@
 // Reuses the AirdropForm / OrderbookPanel visibility-gated pattern.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, AddressText } from '@xchain-wallet/core/ui';
+import { Button, AddressText, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
@@ -40,6 +40,13 @@ import {
 
 const POLL_INTERVAL_MS = 5000;
 const chainRegistry = registryLib.defaultRegistry();
+const ORDER_GRID_COLUMNS = 'minmax(3rem, 0.6fr) repeat(3, minmax(5.5rem, 1fr)) minmax(4.75rem, auto)';
+const NUMERIC_CELL_STYLE = {
+    minWidth: 0,
+    textAlign: 'right',
+    fontVariantNumeric: 'tabular-nums',
+    overflowWrap: 'anywhere',
+};
 
 /**
  * @param {object} props
@@ -54,6 +61,8 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
     const [balancesHidden] = useBalancesHidden();
     const [addresses, setAddresses] = useState(/** @type {any[]} */ ([]));
     const [orders, setOrders] = useState(/** @type {any[]} */ ([]));
+    const [addressesLoading, setAddressesLoading] = useState(true);
+    const [ordersLoading, setOrdersLoading] = useState(true);
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [confirmOrder, setConfirmOrder] = useState(/** @type {any | null} */ (null));
     const [submitting, setSubmitting] = useState(false);
@@ -62,12 +71,23 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
 
     useEffect(() => {
         let cancelled = false;
+        setAddresses([]);
+        setOrders([]);
+        setAddressesLoading(true);
+        setOrdersLoading(true);
+        setLoadError(null);
         messaging.getAddressesByChain(walletId)
             .then((byChain) => {
                 if (cancelled) return;
                 setAddresses(byChain?.[chainId] || []);
+                setAddressesLoading(false);
             })
-            .catch(() => {});
+            .catch((err) => {
+                if (cancelled) return;
+                setLoadError(readFailureMessage(err, 'load your open orders'));
+                setAddressesLoading(false);
+                setOrdersLoading(false);
+            });
         return () => { cancelled = true; };
     }, [messaging, walletId, chainId]);
 
@@ -104,8 +124,14 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
     }
 
     useEffect(() => {
-        if (addresses.length === 0) return undefined;
+        if (addressesLoading) return undefined;
+        if (addresses.length === 0) {
+            setOrders([]);
+            setOrdersLoading(false);
+            return undefined;
+        }
         let cancelled = false;
+        setOrdersLoading(true);
         const tick = async () => {
             if (cancelled) return;
             if (typeof document !== 'undefined'
@@ -115,7 +141,6 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                     messaging.getMarketOrders({
                         chainId, tick1, tick2, address: addr.address,
                     }).then((resp) => ({ addr, rows: extractRows(resp) }))
-                      .catch(() => ({ addr, rows: [] }))
                 ));
                 if (cancelled) return;
                 const flat = [];
@@ -124,14 +149,18 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                 }
                 setOrders(flat);
                 setLoadError(null);
+                setOrdersLoading(false);
             } catch (err) {
-                if (!cancelled) setLoadError(readFailureMessage(err, 'load your open orders'));
+                if (!cancelled) {
+                    setLoadError(readFailureMessage(err, 'load your open orders'));
+                    setOrdersLoading(false);
+                }
             }
         };
         tick();
         const handle = setInterval(tick, POLL_INTERVAL_MS);
         return () => { cancelled = true; clearInterval(handle); };
-    }, [messaging, chainId, tick1, tick2, addresses]);
+    }, [messaging, chainId, tick1, tick2, addresses, addressesLoading]);
 
     const rows = useMemo(() => {
         return orders.map((o) => summarizeOrder(o, tick1, tick2)).filter(Boolean);
@@ -211,24 +240,23 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
     }
 
     return (
-        <div
+        <section
+            aria-label="Open orders"
+            aria-busy={addressesLoading || ordersLoading || undefined}
             style={{
                 border: '1px solid var(--xc-border)',
                 borderRadius: '4px',
                 padding: '0.5rem',
             }}
         >
-            {loadError ? (
-                <p style={{
-                    margin: 'var(--xc-space-3) 0',
-                    color: 'var(--xc-text-muted)',
-                    fontSize: 'var(--xc-text-sm)',
-                    textAlign: 'center',
-                }}>
-                    {loadError}
-                </p>
+            <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>Open orders</p>
+            {addressesLoading || ordersLoading ? (
+                <StatusMessage variant="status">Loading open orders…</StatusMessage>
             ) : null}
-            {!loadError && rows.length === 0 ? (
+            {loadError ? (
+                <StatusMessage variant="error">{loadError}</StatusMessage>
+            ) : null}
+            {!loadError && !addressesLoading && !ordersLoading && rows.length === 0 ? (
                 <p style={{
                     margin: 'var(--xc-space-3) 0',
                     color: 'var(--xc-text-muted)',
@@ -238,66 +266,88 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                     No open orders on this market.
                 </p>
             ) : null}
-            <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                {rows.map((r) => (
-                    <li
-                        key={r.actionIndex}
-                        style={{
-                            display: 'grid',
-                            gridTemplateColumns: '0.5fr 1fr 1fr 1fr 0.75fr',
-                            gap: '0.25rem',
-                            padding: '0.25rem',
-                            fontSize: '0.8rem',
-                            alignItems: 'center',
-                        }}
-                    >
-                        <span style={{ color: r.side === 'buy' ? '#26a69a' : '#ef5350' }}>
-                            {r.side === 'buy' ? 'Buy' : 'Sell'}
-                        </span>
-                        <span>{balancesHidden ? '•••••' : r.price}</span>
-                        <span>{balancesHidden ? '•••••' : r.size}</span>
-                        <span>
-                            {r.filled > 0
-                                ? (balancesHidden ? '••••• filled' : `${r.filled}/${r.size} filled`)
-                                : <span style={{ color: 'var(--xc-fg-muted)' }}>open</span>}
-                        </span>
-                        <Button
-                            variant="danger"
-                            size="sm"
-                            onClick={() => {
-                                setConfirmOrder(r.raw);
-                                setSubmitError(null);
-                            }}
-                            disabled={submitting}
-                        >
-                            Cancel
-                        </Button>
-                        {(() => {
-                            const consent = autopayByIndex.get(String(r.actionIndex));
-                            if (!consent) return null;
-                            const on = consent.autopay === true;
-                            return (
-                                <label style={{
-                                    gridColumn: '1 / -1',
-                                    display: 'flex',
-                                    gap: '0.35rem',
+            {rows.length > 0 ? (
+                <div style={{ maxWidth: '100%', overflowX: 'auto' }}>
+                    <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: ORDER_GRID_COLUMNS,
+                        gap: '0.25rem',
+                        minWidth: '28rem',
+                        padding: '0 0.25rem 0.25rem',
+                        color: 'var(--xc-text-muted)',
+                        fontSize: '0.75rem',
+                    }}>
+                        <span>Side</span>
+                        <span style={NUMERIC_CELL_STYLE}>Price</span>
+                        <span style={NUMERIC_CELL_STYLE}>Size ({tick1})</span>
+                        <span style={NUMERIC_CELL_STYLE}>Filled</span>
+                        <span style={{ textAlign: 'right' }}>Action</span>
+                    </div>
+                    <ul style={{ listStyle: 'none', padding: 0, margin: 0, minWidth: '28rem' }}>
+                        {rows.map((r) => (
+                            <li
+                                key={r.actionIndex}
+                                style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: ORDER_GRID_COLUMNS,
+                                    gap: '0.25rem',
+                                    padding: '0.25rem',
+                                    fontSize: '0.8rem',
                                     alignItems: 'center',
-                                    fontSize: '0.7rem',
-                                    color: 'var(--xc-text-muted)',
-                                    cursor: 'pointer',
+                                }}
+                            >
+                                <span style={{
+                                    color: r.side === 'buy' ? 'var(--xc-success)' : 'var(--xc-danger)',
+                                    fontWeight: 600,
                                 }}>
-                                    <input
-                                        type="checkbox"
-                                        checked={on}
-                                        onChange={() => handleAutopayToggle(consent)}
-                                    />
-                                    CoinPay auto-pay {on ? 'on' : 'off (notify-only)'}
-                                </label>
-                            );
-                        })()}
-                    </li>
-                ))}
-            </ul>
+                                    {r.side === 'buy' ? 'Buy' : 'Sell'}
+                                </span>
+                                <span style={NUMERIC_CELL_STYLE}>{balancesHidden ? '•••••' : r.price}</span>
+                                <span style={NUMERIC_CELL_STYLE}>{balancesHidden ? '•••••' : r.size}</span>
+                                <span style={NUMERIC_CELL_STYLE}>
+                                    {r.filled > 0
+                                        ? (balancesHidden ? '••••• filled' : `${r.filled}/${r.size} filled`)
+                                        : <span style={{ color: 'var(--xc-fg-muted)' }}>open</span>}
+                                </span>
+                                <Button
+                                    variant="danger"
+                                    size="sm"
+                                    onClick={() => {
+                                        setConfirmOrder(r.raw);
+                                        setSubmitError(null);
+                                    }}
+                                    disabled={submitting}
+                                >
+                                    Cancel
+                                </Button>
+                                {(() => {
+                                    const consent = autopayByIndex.get(String(r.actionIndex));
+                                    if (!consent) return null;
+                                    const on = consent.autopay === true;
+                                    return (
+                                        <label style={{
+                                            gridColumn: '1 / -1',
+                                            display: 'flex',
+                                            gap: '0.35rem',
+                                            alignItems: 'center',
+                                            fontSize: '0.7rem',
+                                            color: 'var(--xc-text-muted)',
+                                            cursor: 'pointer',
+                                        }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={on}
+                                                onChange={() => handleAutopayToggle(consent)}
+                                            />
+                                            CoinPay auto-pay {on ? 'on' : 'off (notify-only)'}
+                                        </label>
+                                    );
+                                })()}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            ) : null}
             {confirmOrder ? (
                 <form
                     onSubmit={handleCancel}
@@ -340,7 +390,7 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                     </div>
                 </form>
             ) : null}
-        </div>
+        </section>
     );
 }
 
