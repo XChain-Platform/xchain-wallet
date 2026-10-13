@@ -196,13 +196,14 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
     const allowRemoteImages = Boolean(settings)
         && settings.privacy?.metadataFetchEnabled !== false;
     const nativeCoins = useMemo(() => {
-        if (settingsLoading || isDemo) return [];
+        if (isDemo) return [];
         return displayRows.filter((r) => r.kind === 'native').map((r) => r.coin || coinFromChainId(r.chainId));
-    }, [displayRows, settingsLoading, isDemo]);
+    }, [displayRows, isDemo]);
     const nativeRates = useNativeFiatRates({
         chainCoins: nativeCoins,
         fiatCurrency: settings?.fiatCurrency || 'USD',
         allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
+        refreshEnabled: !settingsLoading,
         refreshKey: balancesFetchedAt,
     });
     const spamKeys = useMemo(
@@ -210,7 +211,7 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
         [builtRows],
     );
     const tokenRequests = useMemo(() => {
-        if (settingsLoading || isDemoWallet(walletId)) return [];
+        if (isDemoWallet(walletId)) return [];
         return displayRows
             .filter((r) => r.kind !== 'native'
                 && typeof r.fiatRate !== 'number'
@@ -223,11 +224,12 @@ export function HomeTabs({ chainRegistry, balances, activeByChain = null, balanc
                     nativeTicker: tickerForCoin(descriptor?.coin),
                 };
             });
-    }, [displayRows, chainRegistry, settingsLoading, spamKeys, walletId]);
+    }, [displayRows, chainRegistry, spamKeys, walletId]);
     const tokenRates = useTokenFiatRates({
         tokens: tokenRequests,
         fiatCurrency: settings?.fiatCurrency || 'USD',
         allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
+        refreshEnabled: !settingsLoading,
         refreshKey: balancesFetchedAt,
     });
     const allRows = useMemo(

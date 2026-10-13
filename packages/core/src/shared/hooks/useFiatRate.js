@@ -180,6 +180,7 @@ export function useTickFiatRate({
  * @param {string[]} opts.chainCoins                     coin families, e.g. ['bitcoin', 'litecoin']
  * @param {string} [opts.fiatCurrency]                   default 'USD'
  * @param {boolean} [opts.allowCoingeckoFallback]        pass privacy.priceDataEnabled !== false
+ * @param {boolean} [opts.refreshEnabled]                false reads cached rates without network work
  * @param {unknown} [opts.refreshKey]                    any value; a change triggers a refresh
  * @returns {Record<string, import('../../flows/priceLookup.js').FiatRate>}
  */
@@ -187,6 +188,7 @@ export function useNativeFiatRates({
     chainCoins,
     fiatCurrency = 'USD',
     allowCoingeckoFallback = true,
+    refreshEnabled = true,
     refreshKey,
 } = {}) {
     const coins = Array.isArray(chainCoins)
@@ -201,19 +203,19 @@ export function useNativeFiatRates({
         () => coins
             .map((coin) => {
                 const r = getFiatRate({ chainCoin: coin, fiatCurrency });
-                return r ? `${coin}=${r.rate}@${r.fetchedAt}` : `${coin}=`;
+                return r ? `${coin}=${r.rate}@${r.fetchedAt}:${r.stale === true}` : `${coin}=`;
             })
             .join('|'),
     );
 
     useEffect(() => {
-        if (coinKey.length === 0) return;
+        if (coinKey.length === 0 || !refreshEnabled) return;
         refreshFiatRates({
             chainCoins: coinKey.split(','),
             fiatCurrency,
             allowCoingeckoFallback,
         }).catch(() => { /* cache keeps its last value; rows stay unpriced */ });
-    }, [coinKey, fiatCurrency, allowCoingeckoFallback, refreshKey]);
+    }, [coinKey, fiatCurrency, allowCoingeckoFallback, refreshEnabled, refreshKey]);
 
     return useMemo(() => {
         /** @type {Record<string, import('../../flows/priceLookup.js').FiatRate>} */
@@ -239,6 +241,7 @@ export function useNativeFiatRates({
  * @param {Array<{chainCoin: string, tick: string, nativeTicker: string}>} opts.tokens
  * @param {string} [opts.fiatCurrency]
  * @param {boolean} [opts.allowCoingeckoFallback]
+ * @param {boolean} [opts.refreshEnabled]
  * @param {unknown} [opts.refreshKey]
  * @returns {Record<string, import('../../flows/priceLookup.js').FiatRate>}
  */
@@ -246,6 +249,7 @@ export function useTokenFiatRates({
     tokens,
     fiatCurrency = 'USD',
     allowCoingeckoFallback = true,
+    refreshEnabled = true,
     refreshKey,
 } = {}) {
     const wanted = Array.isArray(tokens)
@@ -269,19 +273,19 @@ export function useTokenFiatRates({
                 fiatCurrency,
             });
             return rate
-                ? `${t.chainCoin}|${t.tick}=${rate.rate}@${rate.fetchedAt}`
+                ? `${t.chainCoin}|${t.tick}=${rate.rate}@${rate.fetchedAt}:${rate.stale === true}`
                 : `${t.chainCoin}|${t.tick}=`;
         }).join(','),
     );
 
     useEffect(() => {
-        if (wanted.length === 0) return;
+        if (wanted.length === 0 || !refreshEnabled) return;
         Promise.all(wanted.map((t) => refreshTokenFiatRate({
             ...t,
             fiatCurrency,
             allowCoingeckoFallback,
         }))).catch(() => { /* individual misses leave their rows unpriced */ });
-    }, [tokenKey, fiatCurrency, allowCoingeckoFallback, refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [tokenKey, fiatCurrency, allowCoingeckoFallback, refreshEnabled, refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
     return useMemo(() => {
         const out = {};
@@ -335,6 +339,7 @@ export function priceNativeRows(rows, ratesByCoin) {
             fiatRate: rate,
             fiatRateSource: fiatRate.source,
             fiatRateFetchedAt: fiatRate.fetchedAt,
+            fiatRateStale: fiatRate.stale === true,
         };
     });
     return changed ? out : rows;
@@ -372,6 +377,7 @@ export function priceTokenRows(rows, ratesByToken) {
             fiatRate: rate.rate,
             fiatRateSource: rate.source,
             fiatRateFetchedAt: rate.fetchedAt,
+            fiatRateStale: rate.stale === true,
             change24hPct: Number.isFinite(rate.change24hPct) ? rate.change24hPct : null,
         };
     });

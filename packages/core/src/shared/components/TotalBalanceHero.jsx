@@ -140,13 +140,14 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
     const filterLabel = networkFilter === 'all' ? null : networkFilter.toUpperCase();
     const hasUnpriced = unpriced > 0;
     const hasSync = typeof lastSyncedAt === 'number' && lastSyncedAt > 0;
+    const stalePriceAsOf = oldestStalePriceTimestamp(rows);
     const hasPriceSync = typeof pricesFetchedAt === 'number' && pricesFetchedAt > 0;
     const hasChange = !hidden
         && change24h
         && Number.isFinite(change24h.delta)
         && Number.isFinite(change24h.pct);
     const changeDisplay = hasChange ? percentChangeDisplay(change24h.pct) : null;
-    const showMeta = !hidden && (hasChange || hasUnpriced || hasSync || hasPriceSync);
+    const showMeta = !hidden && (hasChange || hasUnpriced || hasSync || hasPriceSync || stalePriceAsOf !== null);
 
     return (
         // Home's rows hold only the ACTIVE address on each chain (Home.jsx), so
@@ -291,7 +292,14 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                             className={styles.metaRight}
                         />
                     ) : null}
-                    {hasPriceSync ? (
+                    {stalePriceAsOf !== null ? (
+                        <StalenessLabel
+                            lastSyncedAt={stalePriceAsOf}
+                            prefix="Prices as of"
+                            warnAfterMs={0}
+                            className={styles.metaRight}
+                        />
+                    ) : hasPriceSync ? (
                         <StalenessLabel
                             lastSyncedAt={pricesFetchedAt}
                             prefix="Prices updated"
@@ -303,6 +311,17 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
             ) : null}
         </section>
     );
+}
+
+function oldestStalePriceTimestamp(rows) {
+    let oldest = null;
+    for (const row of rows || []) {
+        if (row?.fiatRateStale !== true || typeof row.fiatRate !== 'number') continue;
+        const timestamp = Date.parse(row.fiatRateFetchedAt);
+        if (!Number.isFinite(timestamp)) continue;
+        if (oldest === null || timestamp < oldest) oldest = timestamp;
+    }
+    return oldest;
 }
 
 // The "not priced" note, naming coins and tokens apart: BTC, LTC and DOGE
