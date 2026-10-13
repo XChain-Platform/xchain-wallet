@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, FormSection, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, Checkbox, FeeSelector, FormPage, FormSection, Input, NetworkField, PageHeader, RadioGroup, Screen, StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -728,16 +728,16 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                     spellCheck={false}
                 />
 
-                <label className={styles.checkRow}>
-                    {/* Native radios preserve single-choice keyboard behavior because the kit has no radio primitive. */}
-                    <input type="radio" name="order-exp" checked={expMode === 'default'} onChange={() => setExpMode('default')} />
-                    {' '}Default window
-                </label>
-                <label className={styles.checkRow}>
-                    {/* Native radios preserve single-choice keyboard behavior because the kit has no radio primitive. */}
-                    <input type="radio" name="order-exp" checked={expMode === 'custom'} onChange={() => setExpMode('custom')} />
-                    {' '}Expire at a specific time
-                </label>
+                <RadioGroup
+                    legend="Expiration"
+                    name="order-exp"
+                    value={expMode}
+                    onChange={setExpMode}
+                    options={[
+                        { value: 'default', label: 'Default window' },
+                        { value: 'custom', label: 'Expire at a specific time' },
+                    ]}
+                />
                 {expMode === 'custom' ? (
                     <Input
                         label="Expires"
@@ -773,11 +773,12 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
 
                 {autopayEligible ? (
                     <>
-                        <label className={styles.checkRow}>
-                            {/* Native checkboxes preserve toggle keyboard behavior because the kit has no checkbox primitive. */}
-                            <input type="checkbox" checked={autopayEnabled} onChange={(e) => setAutopayEnabled(e.target.checked)} />
-                            {' '}<span><strong>Enable CoinPay auto-pay</strong><br />We watch for matches on this order and pay each one automatically.</span>
-                        </label>
+                        <Switch
+                            label={<strong>Enable CoinPay auto-pay</strong>}
+                            description="We watch for matches on this order and pay each one automatically."
+                            checked={autopayEnabled}
+                            onChange={(e) => setAutopayEnabled(e.target.checked)}
+                        />
                         {autopayArm && exposure && Number.isFinite(Number(exposure.total)) ? (
                             <p className={styles.hint}>
                                 Even if the service that reports matches were fully compromised, auto-pay could send
@@ -785,11 +786,11 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                             </p>
                         ) : null}
                         {ackRequired ? (
-                            <label className={styles.checkRow}>
-                                {/* Native checkboxes preserve toggle keyboard behavior because the kit has no checkbox primitive. */}
-                                <input type="checkbox" checked={keepOpenAck} onChange={(e) => setKeepOpenAck(e.target.checked)} />
-                                {' '}I understand this web wallet only auto-pays while it is open and unlocked.
-                            </label>
+                            <Checkbox
+                                label="I understand this web wallet only auto-pays while it is open and unlocked."
+                                checked={keepOpenAck}
+                                onChange={(e) => setKeepOpenAck(e.target.checked)}
+                            />
                         ) : null}
                     </>
                 ) : giveIsNative ? (
@@ -820,16 +821,16 @@ function SideEditor({ heading, type, onType, tick, onTick, amount, onAmount, own
     return (
         <>
             {showHeading ? <p className={styles.successLabel}>{heading}</p> : null}
-            <label className={styles.checkRow}>
-                {/* Native radios preserve single-choice keyboard behavior because the kit has no radio primitive. */}
-                <input type="radio" name={`${heading}-type`} checked={type === 'token'} onChange={() => onType('token')} />
-                {' '}A token
-            </label>
-            <label className={styles.checkRow}>
-                {/* Native radios preserve single-choice keyboard behavior because the kit has no radio primitive. */}
-                <input type="radio" name={`${heading}-type`} checked={type === 'coin'} onChange={() => onType('coin')} />
-                {' '}Native {coinTicker || 'coin'}
-            </label>
+            <RadioGroup
+                legend={heading}
+                name={`${heading}-type`}
+                value={type}
+                onChange={onType}
+                options={[
+                    { value: 'token', label: 'A token' },
+                    { value: 'coin', label: `Native ${coinTicker || 'coin'}` },
+                ]}
+            />
             {type === 'token' ? (
                 <>
                     <Input
@@ -840,11 +841,11 @@ function SideEditor({ heading, type, onType, tick, onTick, amount, onAmount, own
                         autoCorrect="off"
                         spellCheck={false}
                     />
-                    <label className={styles.checkRow}>
-                        {/* Native checkboxes preserve toggle keyboard behavior because the kit has no checkbox primitive. */}
-                        <input type="checkbox" checked={ownership} onChange={(e) => onOwnership(e.target.checked)} />
-                        {' '}Trade ownership of this ticker (not a balance)
-                    </label>
+                    <Checkbox
+                        label="Trade ownership of this ticker (not a balance)"
+                        checked={ownership}
+                        onChange={(e) => onOwnership(e.target.checked)}
+                    />
                 </>
             ) : null}
             {!(type === 'token' && ownership) ? (
