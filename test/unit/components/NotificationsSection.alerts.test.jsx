@@ -138,7 +138,9 @@ describe('price alert manager', () => {
 
     it('creates a price alert from the empty state', async () => {
         render(<NotificationsSection walletId="wallet-1" />);
-        expect(screen.getByText('No price alerts yet. Add one below.')).toBeTruthy();
+        expect(screen.getAllByRole('status').some(
+            (region) => region.textContent === 'No price alerts yet. Add one below.',
+        )).toBe(true);
 
         fireEvent.change(screen.getByLabelText('Target price'), { target: { value: '71000' } });
         fireEvent.click(screen.getByRole('button', { name: 'Add alert' }));

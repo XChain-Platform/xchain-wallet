@@ -8,8 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Activate and Deactivate each set one border shorthand, so React never
-// sees a shorthand mixed with borderColor and the colour survives a swap.
+// Panic mode actions use the style-guide Button's semantic variants.
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
@@ -18,18 +17,20 @@ import { PanicModeRow } from '../../../packages/core/src/shared/components/setti
 
 afterEach(() => { cleanup(); clearPanicModeState(); vi.restoreAllMocks(); });
 
-describe('PanicModeRow borders', () => {
-    it('uses the danger border on Activate and the neutral border on Deactivate without warnings', () => {
+describe('PanicModeRow style-guide actions', () => {
+    it('uses danger actions for activation and a ghost action for deactivation', () => {
         const warn = vi.spyOn(console, 'error').mockImplementation(() => {});
         render(<PanicModeRow />);
         const activate = screen.getByRole('button', { name: 'Activate' });
-        expect(activate.style.border).toContain('var(--xc-danger)');
+        expect(activate.className).toMatch(/danger/);
+        expect(activate.style.border).toBe('');
         fireEvent.click(activate);
         const confirm = screen.getByRole('button', { name: 'Confirm 24-hour freeze' });
-        expect(confirm.style.border).toContain('var(--xc-danger)');
+        expect(confirm.className).toMatch(/danger/);
         fireEvent.click(confirm);
         const deactivate = screen.getByRole('button', { name: 'Deactivate' });
-        expect(deactivate.style.border).toContain('var(--xc-border-strong)');
+        expect(deactivate.className).toMatch(/ghost/);
+        expect(deactivate.style.border).toBe('');
         expect(warn).not.toHaveBeenCalled();
     });
 });

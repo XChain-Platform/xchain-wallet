@@ -30,7 +30,7 @@
 // equal it. Disable remains available to the unlocked session.
 
 import { useRef, useState } from 'react';
-import { StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, Input, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
 import {
     isDuressConfigured,
@@ -105,24 +105,6 @@ export function DuressPassphraseRow() {
     }
 
     const labelStyle = { color: 'var(--xc-text)', fontWeight: 500 };
-    const buttonStyle = {
-        background: 'var(--xc-surface-raised)',
-        color: 'var(--xc-text)',
-        border: '1px solid var(--xc-border-strong)',
-        borderRadius: 'var(--xc-radius-sm)',
-        padding: 'var(--xc-space-1) var(--xc-space-3)',
-        fontSize: 'var(--xc-text-sm)',
-        cursor: 'pointer',
-    };
-    const inputStyle = {
-        background: 'var(--xc-bg)',
-        color: 'var(--xc-text)',
-        border: '1px solid var(--xc-border)',
-        borderRadius: 'var(--xc-radius-sm)',
-        padding: 'var(--xc-space-2)',
-        fontSize: 'var(--xc-text-sm)',
-    };
-
     if (configured) {
         return (
             <div style={ROW}>
@@ -133,9 +115,9 @@ export function DuressPassphraseRow() {
                         panic mode while showing a normal-looking wrong-password message.
                     </span>
                 </div>
-                <button type="button" onClick={handleClear} style={buttonStyle}>
+                <Button type="button" size="sm" variant="ghost" icon={null} onClick={handleClear}>
                     Disable
-                </button>
+                </Button>
             </div>
         );
     }
@@ -151,7 +133,7 @@ export function DuressPassphraseRow() {
                         the same UI a wrong password produces.
                     </span>
                 </div>
-                <input
+                <Input
                     type="password"
                     enterKeyHint="next"
                     value={currentPassword}
@@ -159,9 +141,8 @@ export function DuressPassphraseRow() {
                     placeholder="Current wallet password"
                     autoComplete="current-password"
                     aria-label="Current wallet password"
-                    style={inputStyle}
                 />
-                <input
+                <Input
                     type="password"
                     enterKeyHint="next"
                     value={pass}
@@ -169,9 +150,8 @@ export function DuressPassphraseRow() {
                     placeholder="Duress passphrase"
                     autoComplete="new-password"
                     aria-label="Duress passphrase"
-                    style={inputStyle}
                 />
-                <input
+                <Input
                     type="password"
                     enterKeyHint="done"
                     value={confirm}
@@ -179,7 +159,6 @@ export function DuressPassphraseRow() {
                     placeholder="Confirm passphrase"
                     autoComplete="new-password"
                     aria-label="Confirm duress passphrase"
-                    style={inputStyle}
                 />
                 {error ? (
                     <StatusMessage
@@ -190,8 +169,11 @@ export function DuressPassphraseRow() {
                     </StatusMessage>
                 ) : null}
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--xc-space-2)' }}>
-                    <button
+                    <Button
                         type="button"
+                        size="sm"
+                        variant="ghost"
+                        icon={null}
                         onClick={() => {
                             setShowForm(false);
                             setCurrentPassword('');
@@ -199,18 +181,18 @@ export function DuressPassphraseRow() {
                             setConfirm('');
                             setError(null);
                         }}
-                        style={buttonStyle}
                         disabled={busy}
                     >
                         Cancel
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                         type="submit"
-                        style={{ ...buttonStyle, fontWeight: 600 }}
+                        size="sm"
+                        icon={null}
                         disabled={busy || currentPassword.length === 0 || pass.length === 0 || confirm.length === 0}
                     >
                         {busy ? 'Verifying…' : 'Save'}
-                    </button>
+                    </Button>
                 </div>
             </form>
         );
@@ -225,9 +207,9 @@ export function DuressPassphraseRow() {
                     (24-hour signing freeze) without giving the observer any visible cue.
                 </span>
             </div>
-            <button type="button" onClick={() => setShowForm(true)} style={buttonStyle}>
+            <Button type="button" size="sm" variant="ghost" icon={null} onClick={() => setShowForm(true)}>
                 Set
-            </button>
+            </Button>
         </div>
     );
 }
