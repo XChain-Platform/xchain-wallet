@@ -26,6 +26,14 @@ const row = (tick, overrides = {}) => ({
 });
 
 describe('BalanceList ordering and visibility', () => {
+    it('positions an empty wallet around the XChain Platform and its current chains', () => {
+        render(<BalanceList rows={[]} />);
+
+        expect(screen.getByText(
+            'XChain Platform coins and tokens appear here after this wallet receives funds on Bitcoin, Litecoin, or Dogecoin.',
+        )).toBeInTheDocument();
+    });
+
     it('moves pinned rows first without disturbing either group order', () => {
         render(
             <BalanceList
