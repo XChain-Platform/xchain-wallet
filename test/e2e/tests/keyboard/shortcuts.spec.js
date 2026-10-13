@@ -69,7 +69,7 @@ test.describe('keyboard shortcut residuals', () => {
         await expect(unlockButton(page)).toBeVisible();
     });
 
-    test('History: e opens the export modal, / focuses search (§34.2)', async ({ page }) => {
+    test('History: / focuses search, e stays inert on an empty history (§34.2)', async ({ page }) => {
         await createWallet(page);
         await page.keyboard.press('g');
         await page.keyboard.press('h');
@@ -82,7 +82,11 @@ test.describe('keyboard shortcut residuals', () => {
         await page.keyboard.press('Escape');
         await page.getByRole('searchbox', { name: 'Search history' }).blur();
 
+        // A new wallet has no history rows, so the Export button is disabled
+        // and its shortcut must not reach the same action. The opening path
+        // with rows is covered in test/unit/routes/History.export.test.jsx.
+        await expect(page.getByRole('button', { name: 'Export…' })).toBeDisabled();
         await page.keyboard.press('e');
-        await expect(page.getByRole('dialog', { name: 'Export history' })).toBeVisible();
+        await expect(page.getByRole('dialog', { name: 'Export history' })).toHaveCount(0);
     });
 });

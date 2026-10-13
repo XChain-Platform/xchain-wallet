@@ -11,7 +11,7 @@
 // Smoke for the queued-broadcast copy must match the shipped
 // behaviour.
 //
-// The wallet used to tell a user whose broadcast failed that the signed
+// The copy must never tell a user whose broadcast failed that the signed
 // transaction "will be re-broadcast automatically". Nothing in the wallet
 // re-broadcasts anything. The one and only caller of the broadcast route is
 // the user pressing "Send now" in QueuedBroadcastBanner; what the wallet

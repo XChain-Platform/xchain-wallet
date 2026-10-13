@@ -82,7 +82,7 @@ describe('staking chooser and list read states', () => {
             }),
         );
 
-        expect(await screen.findByText('No staking positions could be loaded, so try again later.')).toBeInTheDocument();
+        expect(await screen.findByText(/Couldn't load some staking data/)).toBeInTheDocument();
         expect(screen.queryByText(/Nothing staked yet/)).toBeNull();
     });
 });

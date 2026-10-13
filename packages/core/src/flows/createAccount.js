@@ -92,7 +92,7 @@ export async function createAccount({
         throw new Error('createAccount: name must be a non-empty string');
     }
     const accountName = requestedName || `Account ${nextIndex + 1}`;
-    if (existing.some((candidate) => candidate.name.trim().toLocaleLowerCase()
+    if (existing.some((candidate) => String(candidate.name ?? '').trim().toLocaleLowerCase()
         === accountName.toLocaleLowerCase())) {
         throw new Error(`An account named "${accountName}" already exists.`);
     }

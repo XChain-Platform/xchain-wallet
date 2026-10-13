@@ -215,7 +215,7 @@ describe('governance route audit', () => {
         mount(GovernancePolls, {
             walletId: 'wallet-1', onOpenPoll() {}, onCreate() {}, onDelegate() {}, onBack() {},
         });
-        expect(await screen.findByText('No polls on this chain yet.')).toBeTruthy();
-        expect(screen.getByText('Create the first one.')).toBeTruthy();
+        expect(await screen.findByText('No polls yet')).toBeTruthy();
+        expect(screen.getByText('Polls created on this chain appear here.')).toBeTruthy();
     });
 });

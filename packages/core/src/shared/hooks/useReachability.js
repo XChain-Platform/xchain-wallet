@@ -20,8 +20,8 @@
 // "active chain" definition `bridge.getActiveChains` uses (§43.2),
 // keeping the user's view consistent with what dApps see.
 //
-// Three separate paths used to make this hook accuse the user's
-// internet connection when nothing was wrong with it.
+// Three paths could make this hook blame the user's internet
+// connection when nothing was wrong with it, and each is guarded:
 //   1. An empty chain set was probed anyway, and the host maps "no chains"
 //      to `overall: 'offline'`. Settings live in the encrypted vault, so
 //      the chain set is EMPTY on the first paint of a cold load and again

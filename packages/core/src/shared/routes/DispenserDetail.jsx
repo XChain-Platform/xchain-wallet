@@ -1359,7 +1359,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
 
     if (loading) return wrap(<StatusMessage variant="status">Loading dispenser…</StatusMessage>);
     if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
-    if (!action) return wrap(<EmptyState title="Dispenser not found." />);
+    if (!action) return wrap(<EmptyState title="Dispenser not found" body="It may have been closed or not indexed yet." />);
 
     // The confirm page stands in for whichever owner form opened it; that
     // form's state stays intact behind it, so Reject lands back on it.
