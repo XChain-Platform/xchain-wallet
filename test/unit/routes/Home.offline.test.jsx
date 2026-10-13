@@ -58,7 +58,7 @@ describe('Home offline behavior', () => {
         mountHome(messaging, onSend);
 
         await waitFor(() => expect(screen.getByText('BTC · Bitcoin')).toBeTruthy());
-        expect(screen.getByText(/Last synced/)).toBeTruthy();
+        expect(screen.getByText(/^Updated /)).toBeTruthy();
 
         // A failed background read leaves the last successful rows and sync
         // time intact instead of returning Home to a loading state.
@@ -72,7 +72,9 @@ describe('Home offline behavior', () => {
         setNavigatorOnline(false);
         act(() => { window.dispatchEvent(new Event('offline')); });
         await waitFor(() => expect(screen.getByText(/Showing cached balances/)).toBeTruthy());
-        expect(screen.getByText(/Last synced/)).toBeTruthy();
+        // Offline, the freshness label names the saved data and keeps the last
+        // sync time in its title.
+        expect(screen.getByText('Offline, showing saved data').getAttribute('title')).toBeTruthy();
 
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));
         expect(onSend).not.toHaveBeenCalled();
