@@ -1722,7 +1722,7 @@ export async function unlockAfterReload(page, password) {
 
     if (await unlock.count() === 0) return;
 
-    await page.getByLabel('Password').fill(password);
+    await page.getByLabel('Password', { exact: true }).fill(password);
     await unlock.click();
     // Home's balance hero, not the Lock button: the popup renders no nav at
     // all, and below 600px Lock sits inside the closed More sheet.
