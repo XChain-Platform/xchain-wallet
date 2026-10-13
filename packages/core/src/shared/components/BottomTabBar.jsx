@@ -14,6 +14,7 @@ import { activeLeftNavItem, formatBadgeCount, isNavItemActive } from './LeftNav.
 import styles from './BottomTabBar.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
+import PLATFORM_LINKS from '../platform-links.json';
 
 /**
  * §24.3 / G054: mobile bottom-sheet navigation.
@@ -45,6 +46,8 @@ import { useFocusTrap } from '../utils/focusTrap.js';
  * @param {() => void} [props.onLock]
  * @param {() => void} [props.onOpenSettings]
  * @param {() => void} [props.onOpenWalletPicker]
+ * @param {() => void} [props.onCommandPalette]
+ * @param {string} [props.platformCurrent] web-only key used to expose sibling platform sites in the More sheet
  * @param {boolean} [props.hasVmAddress] gates the Contracts sheet row (the registry carries DEPLOY in COMMON_ACTIONS, so LTC and DOGE qualify too)
  * @param {boolean} [props.hasDexSurface] false only in a build that compiled the DEX surface out; the row is then absent, not disabled
  * @param {boolean} [props.isSignerMode] §20 air-gapped signer mode; drops the Send tab and the Receive sheet row
@@ -88,6 +91,8 @@ export function BottomTabBar({
     onLock,
     onOpenSettings,
     onOpenWalletPicker,
+    onCommandPalette,
+    platformCurrent,
     hasVmAddress = false,
     hasDexSurface = true,
     isSignerMode = false,
@@ -281,6 +286,23 @@ export function BottomTabBar({
                             <div className={styles.sheetDivider} />
                             {/* Safari needs an explicit list role because this class removes list styling. */}
                             <ul className={styles.sheetList} role="list">
+                                {onCommandPalette ? (
+                                    <li>
+                                        <button
+                                            type="button"
+                                            className={styles.sheetItem}
+                                            onClick={() => {
+                                                setSheetOpen(false);
+                                                onCommandPalette();
+                                            }}
+                                        >
+                                            <span className={styles.sheetIcon} aria-hidden="true">
+                                                <Icon.SearchIcon />
+                                            </span>
+                                            <span>Search</span>
+                                        </button>
+                                    </li>
+                                ) : null}
                                 {onOpenWalletPicker ? (
                                     <li>
                                         <button
@@ -332,6 +354,25 @@ export function BottomTabBar({
                                         </button>
                                     </li>
                                 ) : null}
+                                {platformCurrent ? PLATFORM_LINKS.links
+                                    .filter((site) => site.key !== platformCurrent)
+                                    .map((site) => (
+                                        <li key={site.key}>
+                                            <a
+                                                className={styles.sheetItem}
+                                                href={site.href}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                style={{ textDecoration: 'none' }}
+                                                onClick={() => setSheetOpen(false)}
+                                            >
+                                                <span className={styles.sheetIcon} aria-hidden="true">
+                                                    <Icon.ExternalLinkIcon />
+                                                </span>
+                                                <span>{site.label}</span>
+                                            </a>
+                                        </li>
+                                    )) : null}
                             </ul>
                         </div>
                     </div>
