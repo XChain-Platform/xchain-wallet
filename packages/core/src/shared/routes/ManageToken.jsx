@@ -779,6 +779,7 @@ export function ManageToken({
                                             key={a.id}
                                             type="button"
                                             role="menuitem"
+                                            data-destructive={a.danger ? 'true' : undefined}
                                             variant={a.danger ? 'danger' : 'ghost'}
                                             size="sm"
                                             block
