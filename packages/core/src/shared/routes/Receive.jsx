@@ -530,9 +530,13 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         tick: reqTick,
         skip: isNativeRequest || !reqTick,
     });
-    const selectedDivisibility = Number(
-        prefill?.divisibility ?? requestTokenInfo?.divisibility,
-    );
+    // The live explorer omits divisibility, so TokenInfo carries null. Number(null)
+    // is 0, which would cap a divisible token at whole units and erase a valid
+    // amount; an unknown divisibility keeps the coin-precision fallback instead.
+    const divisibilityRaw = prefill?.divisibility ?? requestTokenInfo?.divisibility;
+    const selectedDivisibility = divisibilityRaw == null || divisibilityRaw === ''
+        ? Number.NaN
+        : Number(divisibilityRaw);
     const requestDivisibility = isNativeRequest
         ? NATIVE_COIN_DECIMALS
         : Number.isInteger(selectedDivisibility) && selectedDivisibility >= 0

@@ -236,6 +236,31 @@ describe('Receive keyboard operation', () => {
         ));
     });
 
+    it('keeps a fractional request amount when the explorer omits divisibility', async () => {
+        const getTokenInfo = vi.fn().mockResolvedValue({ tick: 'NODECIMALS', divisibility: null });
+        renderReceive({ getTokenInfo }, {
+            prefill: {
+                chainId: 'bitcoin-regtest',
+                tick: 'NODECIMALS',
+                kind: 'token',
+            },
+        });
+
+        const amount = await screen.findByRole('textbox', { name: 'Amount (NODECIMALS)' });
+        await waitFor(() => expect(getTokenInfo).toHaveBeenCalled());
+        await act(async () => { await getTokenInfo.mock.results[0].value; });
+        fireEvent.change(amount, { target: { value: '0.5' } });
+
+        expect(amount).toHaveValue('0.5');
+        expect(screen.queryByText(/Amount can have at most/)).toBeNull();
+        await waitFor(() => expect(qrToDataURL).toHaveBeenLastCalledWith(
+            expect.stringContaining('amount=0.5'),
+            expect.any(Object),
+        ));
+        await act(async () => {});
+        expect(amount).toHaveValue('0.5');
+    });
+
     it('saves a label with Enter and cancels a later draft with Escape', async () => {
         const user = userEvent.setup();
         const setAddressLabel = vi.fn().mockResolvedValue({ ok: true });
