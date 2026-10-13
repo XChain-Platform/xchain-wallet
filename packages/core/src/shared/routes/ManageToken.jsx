@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { CopyButton, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, CopyButton, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -700,6 +700,7 @@ export function ManageToken({
                                 <Sparkline series={chartSeries} height={40} />
                             </div>
                             <div className={portfolioChartStyles.ranges} role="tablist" aria-label="Chart range">
+                                {/* Chart-range tabs stay native because Button does not implement tab semantics. */}
                                 {CHART_RANGES.map((r) => (
                                     <button
                                         key={r.id}
@@ -742,10 +743,12 @@ export function ManageToken({
                 {/* Action buttons: same 3-primary + More pattern as Home. */}
                 <div className={styles.manageGrid} role="group" aria-label="Manage actions">
                     {primaryActions.map((a) => (
-                        <button
+                        <Button
                             key={a.id}
                             type="button"
-                            className={`${styles.manageBtn} ${a.danger ? styles.manageBtnDanger : ''}`}
+                            variant={a.danger ? 'danger' : 'secondary'}
+                            block
+                            icon={<a.Icon />}
                             // A row the protocol has frozen stays on screen and
                             // says why on hover, instead of being filtered out
                             // like an action this wallet simply cannot sign.
@@ -753,43 +756,39 @@ export function ManageToken({
                             title={a.disabled ? a.disabledReason : undefined}
                             onClick={a.onSelect}
                         >
-                            <span className={styles.manageIcon} aria-hidden="true">
-                                <a.Icon />
-                            </span>
-                            <span className={styles.manageLabel}>{a.label}</span>
-                        </button>
+                            {a.label}
+                        </Button>
                     ))}
                     {overflowActions.length > 0 ? (
                         <div className={styles.manageMoreWrap} ref={moreWrapRef}>
-                            <button
+                            <Button
                                 type="button"
-                                className={styles.manageBtn}
+                                variant="secondary"
+                                block
+                                icon={<Icon.MoreIcon />}
                                 aria-haspopup="menu"
                                 aria-expanded={moreOpen}
                                 onClick={() => setMoreOpen((o) => !o)}
                             >
-                                <span className={styles.manageIcon} aria-hidden="true">
-                                    <Icon.MoreIcon />
-                                </span>
-                                <span className={styles.manageLabel}>More</span>
-                            </button>
+                                More
+                            </Button>
                             {moreOpen ? (
                                 <div className={styles.manageMoreMenu} role="menu">
                                     {overflowActions.map((a) => (
-                                        <button
+                                        <Button
                                             key={a.id}
                                             type="button"
                                             role="menuitem"
-                                            className={`${styles.manageMoreItem} ${a.danger ? styles.manageMoreItemDanger : ''}`}
+                                            variant={a.danger ? 'danger' : 'ghost'}
+                                            size="sm"
+                                            block
+                                            icon={<a.Icon />}
                                             disabled={!!a.disabled}
                                             title={a.disabled ? a.disabledReason : undefined}
                                             onClick={() => { setMoreOpen(false); a.onSelect(); }}
                                         >
-                                            <span className={styles.manageMoreItemIcon} aria-hidden="true">
-                                                <a.Icon />
-                                            </span>
-                                            <span>{a.label}</span>
-                                        </button>
+                                            {a.label}
+                                        </Button>
                                     ))}
                                 </div>
                             ) : null}
@@ -799,6 +798,7 @@ export function ManageToken({
 
                 {/* Tab strip + panels: matches TokenDetail's tab pattern. */}
                 <div className={styles.tabs} role="tablist" aria-label="Token management panels">
+                    {/* Token panels stay native because Button does not implement tab semantics. */}
                     {tabs.map((t) => (
                         <button
                             key={t.id}
@@ -923,7 +923,7 @@ function DispensersPanel({ listings, listingsError, tick, chainId, onOpenDispens
     // A Mode B row carries no price on this lane; it comes from its oracle.
     const oracleEntries = useMemo(() => (listings || []).map((row) => ({ chainId, row })), [listings, chainId]);
     const oracleFeedsFor = useOracleFeeds(messaging, oracleEntries);
-    if (listingsError) return <p className={styles.error}>{listingsError}</p>;
+    if (listingsError) return <StatusMessage variant="error" className={styles.error}>{listingsError}</StatusMessage>;
     if (listings === null) return (
         <div className={styles.list}>
             <Skeleton height={72} />
@@ -979,7 +979,7 @@ function DispensersPanel({ listings, listingsError, tick, chainId, onOpenDispens
 }
 
 function OrdersPanel({ orders, error, tick, chainId }) {
-    if (error) return <p className={styles.error}>{error}</p>;
+    if (error) return <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>;
     if (orders === null) return (
         <div className={styles.list}>
             <Skeleton height={72} />
@@ -1017,7 +1017,7 @@ function OrdersPanel({ orders, error, tick, chainId }) {
 }
 
 function SwapsPanel({ swaps, error, tick }) {
-    if (error) return <p className={styles.error}>{error}</p>;
+    if (error) return <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>;
     if (swaps === null) return (
         <div className={styles.list}>
             <Skeleton height={72} />
@@ -1105,16 +1105,16 @@ function HoldersPanel({ holders, error, onViewAll, divisibility }) {
                 </tbody>
             </table>
             {typeof onViewAll === 'function' && holders.length > 10 ? (
-                <button type="button" className={styles.viewAll} onClick={onViewAll}>
+                <Button type="button" variant="ghost" size="sm" onClick={onViewAll}>
                     View all {holders.length} holders
-                </button>
+                </Button>
             ) : null}
         </>
     );
 }
 
 function ActivityPanel({ activity, error, onViewAll, tick }) {
-    if (error) return <p className={styles.error}>{error}</p>;
+    if (error) return <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>;
     if (activity === null) return (
         <div className={styles.list}>
             <Skeleton height={36} />
@@ -1158,9 +1158,9 @@ function ActivityPanel({ activity, error, onViewAll, tick }) {
                 })}
             </ul>
             {typeof onViewAll === 'function' ? (
-                <button type="button" className={styles.viewAll} onClick={onViewAll}>
+                <Button type="button" variant="ghost" size="sm" onClick={onViewAll}>
                     View all activity
-                </button>
+                </Button>
             ) : null}
         </>
     );
@@ -1178,10 +1178,7 @@ function HistoryRow({ as, chainId, tick, action, status, statusLabel, source, su
         : status === 'pending' ? styles.histStatusPending
         : styles.histStatusOpen;
     const blockNum = blockIndex != null ? Number(blockIndex) : null;
-    const Tag = (as === 'button' && typeof onClick === 'function') ? 'button' : 'div';
-    const interactiveProps = Tag === 'button'
-        ? { type: 'button', onClick, disabled }
-        : null;
+    const interactive = as === 'button' && typeof onClick === 'function';
     // When a tick is given we lead the row with a 40px TickerIcon
     // (letter avatar + chain pip): used by OrdersPanel so each row
     // visually anchors on the token being traded. The small chain icon
@@ -1189,7 +1186,7 @@ function HistoryRow({ as, chainId, tick, action, status, statusLabel, source, su
     // already carries the chain pip.
     const showTickerIcon = !!(tick && chainId);
     const contentStack = (
-        <div className={showTickerIcon ? styles.histContent : null}>
+        <span className={showTickerIcon ? styles.histContent : undefined}>
             <span className={styles.histHeader}>
                 {!showTickerIcon && d ? (
                     <img
@@ -1222,21 +1219,32 @@ function HistoryRow({ as, chainId, tick, action, status, statusLabel, source, su
                     <span className={styles.histTime}>{formatRelativeTime(timestamp)}</span>
                 ) : null}
             </span>
-        </div>
+        </span>
     );
+    const tickerIcon = showTickerIcon ? (
+        <span className={styles.histTickerIcon}>
+            <TickerIcon chainId={chainId} tick={tick} size={40} />
+        </span>
+    ) : null;
+    const rowClass = `${styles.histRow} ${showTickerIcon ? styles.histRowWithIcon : ''}`;
     return (
         <li>
-            <Tag
-                className={`${styles.histRow} ${showTickerIcon ? styles.histRowWithIcon : ''}`}
-                {...interactiveProps}
-            >
-                {showTickerIcon ? (
-                    <span className={styles.histTickerIcon} aria-hidden="true">
-                        <TickerIcon chainId={chainId} tick={tick} size={40} />
-                    </span>
-                ) : null}
-                {contentStack}
-            </Tag>
+            {interactive ? (
+                <Button
+                    type="button"
+                    className={rowClass}
+                    icon={tickerIcon}
+                    onClick={onClick}
+                    disabled={disabled}
+                >
+                    {contentStack}
+                </Button>
+            ) : (
+                <div className={rowClass}>
+                    {tickerIcon ? <span aria-hidden="true">{tickerIcon}</span> : null}
+                    {contentStack}
+                </div>
+            )}
         </li>
     );
 }

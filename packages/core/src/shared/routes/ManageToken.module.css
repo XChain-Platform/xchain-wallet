@@ -203,59 +203,17 @@
     }
 }
 
-.manageBtn {
-    appearance: none;
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-accent-primary);
-    border-radius: var(--xc-radius-md);
-    padding: var(--xc-space-3) var(--xc-space-1);
-    display: flex;
+.manageGrid > button,
+.manageMoreWrap > button {
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: var(--xc-space-1);
-    cursor: pointer;
-    color: var(--xc-text);
-    font-family: inherit;
-    font-size: var(--xc-text-xs);
-    font-weight: 600;
     min-height: 72px;
-    text-align: center;
 }
 
-.manageBtn:hover { background: var(--xc-bg-muted); }
-.manageBtn:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-
-.manageBtnDanger {
-    border-color: var(--xc-danger, #DC2626);
-    color: var(--xc-danger-fg, #DC2626);
-}
-
-.manageIcon {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
-    color: var(--xc-accent-text);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.manageBtnDanger .manageIcon {
-    background: color-mix(in srgb, var(--xc-danger, #DC2626) 12%, transparent);
-    color: var(--xc-danger-fg, #DC2626);
-}
-
-.manageIcon > svg {
+.manageGrid > button svg,
+.manageMoreWrap > button svg {
     width: 18px;
     height: 18px;
 }
-
-.manageLabel { font-weight: 600; }
 
 /* "More" dropdown - mirrors Home's quickActionMore. */
 
@@ -265,7 +223,7 @@
     align-self: stretch;
 }
 
-.manageMoreWrap > .manageBtn {
+.manageMoreWrap > button {
     flex: 1 1 auto;
     width: 100%;
 }
@@ -285,40 +243,9 @@
     padding: var(--xc-space-1) 0;
 }
 
-.manageMoreItem {
-    appearance: none;
-    background: transparent;
-    border: none;
-    text-align: start;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    font-size: var(--xc-text-sm);
-    font-family: inherit;
-    color: var(--xc-text);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
+.manageMoreMenu > button {
+    justify-content: flex-start;
 }
-
-.manageMoreItem:hover { background: var(--xc-bg-muted); }
-.manageMoreItem:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: -2px;
-}
-
-.manageMoreItemDanger { color: var(--xc-danger-fg, #DC2626); }
-
-.manageMoreItemIcon {
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 16px;
-    height: 16px;
-    color: var(--xc-accent-text);
-}
-
-.manageMoreItemDanger .manageMoreItemIcon { color: var(--xc-danger-fg, #DC2626); }
 
 /* ───── Tabs - match TokenDetail's pattern. ───── */
 
@@ -445,20 +372,6 @@ button.row:hover:not(:disabled) {
     font-size: var(--xc-text-sm);
 }
 
-.viewAll {
-    align-self: center;
-    background: transparent;
-    border: 0;
-    color: var(--xc-accent-text);
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-    cursor: pointer;
-    padding: var(--xc-space-2);
-    font-family: inherit;
-}
-
-.viewAll:hover { text-decoration: underline; }
-
 /* ───── Genesis + subassets section - read-only metadata block at
    the bottom of the page. Two-column key/value list + chip-style
    subasset list so the bottom of the page has structured info
@@ -553,6 +466,18 @@ button.row:hover:not(:disabled) {
     flex-direction: row;
     align-items: flex-start;
     gap: var(--xc-space-3);
+}
+
+.histRow > span:last-child {
+    width: 100%;
+    justify-content: flex-start;
+    text-align: start;
+}
+
+.histRowWithIcon > span:last-child {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: auto;
 }
 
 .histTickerIcon {

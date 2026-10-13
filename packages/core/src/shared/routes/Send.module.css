@@ -341,23 +341,6 @@
     gap: var(--xc-space-2);
 }
 
-.coinControlActions button {
-    min-height: var(--xc-tap-min);
-    padding: var(--xc-space-1) var(--xc-space-2);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-bg);
-    color: var(--xc-accent-text);
-    font: inherit;
-    font-weight: 600;
-    cursor: pointer;
-}
-
-.coinControlActions button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
 .coinControlRows {
     max-height: 18rem;
     margin-top: var(--xc-space-2);
@@ -428,24 +411,6 @@
     font-family: var(--xc-font-mono);
     font-size: var(--xc-text-sm);
     overflow-wrap: anywhere;
-}
-
-.advancedSelectLabel {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-1);
-    margin: var(--xc-space-3) 0;
-    font-size: var(--xc-text-sm);
-    font-weight: 500;
-}
-
-.advancedSelectLabel select {
-    min-height: var(--xc-tap-min);
-    padding: var(--xc-space-2);
-    color: var(--xc-text);
-    background: var(--xc-bg);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
 }
 
 .successTitle {
