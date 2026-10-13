@@ -67,6 +67,7 @@ export function isAssetImageSourceAllowed(src, allowRemoteImages = true) {
  * @param {'full'|'trim'|'plain'} [props.numberFormat] exact balance amount presentation
  * @param {boolean} [props.showChain]: force each row's chain into the subtitle. Multi-chain row sets enable this automatically; callers can still force it for a single-chain context that needs an explicit label.
  * @param {boolean} [props.allowRemoteImages] permits issuer-selected image URLs. Privacy-sensitive callers pass false until settings explicitly allow them.
+ * @param {(row: BalanceRow) => number} [props.getRowTabIndex] assigns the single tab stop for a composite picker
  */
 export function BalanceList({
     rows,
@@ -90,6 +91,7 @@ export function BalanceList({
     showChain = false,
     fiatCurrency = 'USD',
     allowRemoteImages = true,
+    getRowTabIndex,
 }) {
     const [hiddenExpanded, setHiddenExpanded] = useState(false);
     const [smallExpanded, setSmallExpanded] = useState(false);
@@ -155,6 +157,7 @@ export function BalanceList({
                         verify={verifyMap ? verifyMap[key] : null}
                         showChain={labelChains}
                         allowRemoteImages={allowRemoteImages}
+                        getTabIndex={getRowTabIndex}
                     />
                 );
             })}
@@ -189,6 +192,7 @@ export function BalanceList({
                                 verify={verifyMap ? verifyMap[key] : null}
                                 showChain={labelChains}
                                 allowRemoteImages={allowRemoteImages}
+                                getTabIndex={getRowTabIndex}
                             />
                         );
                     }) : null}
@@ -225,6 +229,7 @@ export function BalanceList({
                                 verify={verifyMap ? verifyMap[key] : null}
                                 showChain={labelChains}
                                 allowRemoteImages={allowRemoteImages}
+                                getTabIndex={getRowTabIndex}
                             />
                         );
                     }) : null}
@@ -234,7 +239,7 @@ export function BalanceList({
     );
 }
 
-function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onTogglePin, hidden, onToggleHide, verify, showChain, allowRemoteImages, fiatCurrency = 'USD', numberFormat = 'full' }) {
+function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onTogglePin, hidden, onToggleHide, verify, showChain, allowRemoteImages, getTabIndex, fiatCurrency = 'USD', numberFormat = 'full' }) {
     const isNative = row.kind === 'native';
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
     const tokenImageUrl = isAssetImageSourceAllowed(row.imageUrl, allowRemoteImages)
@@ -296,6 +301,7 @@ function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onToggl
         : undefined;
     const showPin = typeof onTogglePin === 'function';
     const pinKey = `${row.chainId}:${row.tick}`;
+    const roving = typeof getTabIndex === 'function';
     const ContentTag = clickable ? 'button' : 'div';
     const quantityLabel = formatAmount(row.quantity, row.divisibility, numberFormat);
     const escrowLabel = row.escrowed ? escrowLine(row) : null;
@@ -326,6 +332,8 @@ function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onToggl
                 type={clickable ? 'button' : undefined}
                 onClick={handleClick}
                 aria-label={clickable ? rowAccessibleLabel : undefined}
+                tabIndex={roving ? getTabIndex(row) : undefined}
+                data-balance-option={roving ? pinKey : undefined}
             >
                 <div className={styles.iconWrap}>
                     <span

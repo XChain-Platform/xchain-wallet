@@ -10,6 +10,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { userEvent } from '../../helpers/userEvent.js';
 import { AppHeader } from '../../../packages/core/src/shared/components/AppHeader.jsx';
 import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
 import { isNavItemActive, LeftNav } from '../../../packages/core/src/shared/components/LeftNav.jsx';
@@ -77,6 +78,30 @@ describe('navigation route highlighting', () => {
 });
 
 describe('More sheet dismissal', () => {
+    it('roves one bottom-bar tab stop and supports jump keys', async () => {
+        const user = userEvent.setup();
+        const onSelect = vi.fn();
+        render(<BottomTabBar currentView="home" onSelect={onSelect} />);
+        const tabs = ['Home', 'History', 'Send', 'Scan', 'More'].map((name) => (
+            screen.getByRole('button', { name })
+        ));
+
+        expect(tabs.map((tab) => tab.tabIndex)).toEqual([0, -1, -1, -1, -1]);
+        await user.tab();
+        expect(tabs[0]).toHaveFocus();
+        fireEvent.keyDown(tabs[0], { key: 'ArrowRight' });
+        expect(tabs[1]).toHaveFocus();
+        expect(tabs.map((tab) => tab.tabIndex)).toEqual([-1, 0, -1, -1, -1]);
+        expect(onSelect).toHaveBeenLastCalledWith('history');
+        fireEvent.keyDown(tabs[1], { key: 'End' });
+        expect(screen.getByRole('dialog', { name: 'More' })).toBeInTheDocument();
+        await user.keyboard('{Escape}');
+        expect(tabs[4]).toHaveFocus();
+        expect(tabs.map((tab) => tab.tabIndex)).toEqual([-1, -1, -1, -1, 0]);
+        fireEvent.keyDown(tabs[4], { key: 'Home' });
+        expect(tabs[0]).toHaveFocus();
+    });
+
     it('closes immediately when a destination or footer action is selected', () => {
         const onSelect = vi.fn();
         const onOpenSettings = vi.fn();
@@ -92,13 +117,13 @@ describe('More sheet dismissal', () => {
         fireEvent.click(more);
         fireEvent.click(screen.getByRole('button', { name: 'Receive' }));
         expect(onSelect).toHaveBeenCalledWith('receive');
-        expect(screen.queryByRole('dialog', { name: 'More navigation' })).toBeNull();
+        expect(screen.queryByRole('dialog', { name: 'More' })).toBeNull();
         expect(more).toHaveFocus();
 
         fireEvent.click(more);
         fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
         expect(onOpenSettings).toHaveBeenCalledOnce();
-        expect(screen.queryByRole('dialog', { name: 'More navigation' })).toBeNull();
+        expect(screen.queryByRole('dialog', { name: 'More' })).toBeNull();
         expect(more).toHaveFocus();
     });
 
@@ -110,7 +135,7 @@ describe('More sheet dismissal', () => {
 
         fireEvent.keyDown(document, { key: 'Escape' });
 
-        expect(screen.queryByRole('dialog', { name: 'More navigation' })).toBeNull();
+        expect(screen.queryByRole('dialog', { name: 'More' })).toBeNull();
         expect(more).toHaveFocus();
     });
 });
