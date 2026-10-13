@@ -155,12 +155,14 @@
     color: var(--xc-text);
     margin: 0 0 var(--xc-space-3);
     line-height: 1.4;
+    overflow-wrap: anywhere;
 }
 
 .detailsList {
     display: grid;
-    grid-template-columns: auto 1fr;
+    grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
     gap: var(--xc-space-1) var(--xc-space-3);
+    min-width: 0;
     margin: 0 0 var(--xc-space-4);
     padding: var(--xc-space-3);
     background: var(--xc-bg-muted);
@@ -181,8 +183,9 @@
 .detailsValue {
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
+    min-width: 0;
     margin: 0;
-    word-break: break-word;
+    overflow-wrap: anywhere;
 }
 
 .warnings {
@@ -205,9 +208,20 @@
 
 .actions {
     display: flex;
+    flex-wrap: wrap;
     gap: var(--xc-space-2);
     justify-content: flex-end;
     margin-top: var(--xc-space-4);
+}
+
+@media (max-width: 399px) {
+    .detailsList {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .detailsLabel:not(:first-child) {
+        margin-top: var(--xc-space-2);
+    }
 }
 
 .successTitle {
