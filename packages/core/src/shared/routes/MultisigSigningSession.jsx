@@ -111,8 +111,8 @@ function replyMismatchMessage(envelope, session) {
  */
 export function MultisigSigningSession({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
-    const variant = screenVariantFor(shell);
     const { isWatcherMode } = useWalletMode();
+    const variant = screenVariantFor(shell);
 
     const [sessions, setSessions] = useState(/** @type {any[] | null} */ (null));
     const [activeId, setActiveId] = useState(/** @type {string | null} */ (null));
@@ -476,8 +476,8 @@ export function MultisigSigningSession({ walletId, onBack }) {
         if (sessions.length === 0) {
             return wrap(
                 <EmptyState
-                    title="No multisig signing sessions for this wallet."
-                    body="A session starts when you compose a multisig spend, and signers add their contributions by scanning the transaction QR code."
+                    title="No signing sessions"
+                    body="Multisig spending sessions for this wallet appear here."
                 />,
             );
         }
@@ -599,7 +599,20 @@ export function MultisigSigningSession({ walletId, onBack }) {
         );
     }
 
-    if (view === 'sign-locally' && !isWatcherMode) {
+    if (view === 'sign-locally') {
+        if (isWatcherMode) {
+            return wrap(
+                <>
+                    <StatusMessage variant="status">
+                        This watch-only wallet can coordinate the multisig session but cannot
+                        add a local signature. Scan the request with a signer wallet instead.
+                    </StatusMessage>
+                    <div className={styles.actions}>
+                        <Button variant="ghost" onClick={() => setView('tracker')}>Back to tracker</Button>
+                    </div>
+                </>,
+            );
+        }
         return wrap(
             <>
                 <p className={styles.successTitle}>Sign with my key</p>
@@ -620,6 +633,7 @@ export function MultisigSigningSession({ walletId, onBack }) {
                     value={signPassword}
                     onChange={(e) => setSignPassword(e.target.value)}
                     placeholder="Wallet password"
+                    autoComplete="current-password"
                 />
                 {signResult ? <p className={styles.hint}>{signResult}</p> : null}
                 {error ? <StatusMessage variant="error" recovery={errorRecovery}>{error}</StatusMessage> : null}

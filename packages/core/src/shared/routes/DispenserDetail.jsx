@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     AddressText, Button, ChainBadge, EmptyState, FeeSelector, FormPage, Icon,
-    Input, ListPage, PageHeader, Screen, StatusMessage,
+    Input, ListPage, PageHeader, Screen, SectionHeader, StatusMessage,
 } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
@@ -33,10 +33,11 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
-import { coinToFiat } from '../../flows/priceLookup.js';
+import { coinToFiatExact } from '../../flows/priceLookup.js';
+import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
 import { useFiatRate } from '../hooks/useFiatRate.js';
 import { useSettings } from '../hooks/useSettings.js';
-import { formatFiat } from '../components/BalanceList.jsx';
+import { useHapticFeedback } from '../hooks/useHaptic.js';
 import * as branding from '../../branding/branding.js';
 import { explorerCoinCode } from '../../registry/coinTicker.js';
 import styles from './IssueTokenForm.module.css';
@@ -70,6 +71,8 @@ import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { isUserRejection, useActionConfirmFlow, useConfirmSubmit } from '../hooks/useActionConfirmFlow.js';
 import { dispenserDestinationNotice, useDispenserDestination } from '../hooks/useDispenserDestination.js';
+import { copyText } from '../clipboard.js';
+import { formatLocalDateTime, formatRelativeTime } from '../utils/dateTime.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -77,13 +80,10 @@ const chainRegistry = registryLib.defaultRegistry();
 // so PreflightPanel's acknowledgment set is a constant rather than state.
 const NO_ACKNOWLEDGMENTS = new Set();
 
-// Address rows in the stats hero: one line, full address shown when it
-// fits, CSS-ellipsized only when the cell actually runs out of width
-// (never the fixed first6…last6 truncation, never a second line).
+// Address rows in the stats hero keep every character visible and wrap
+// within the value column on narrow screens.
 const ADDRESS_CELL_STYLE = {
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
+    overflowWrap: 'anywhere',
     minWidth: 0,
 };
 
@@ -126,6 +126,7 @@ const ADDRESS_CELL_STYLE = {
  *   terms; a shell that does not pass it gets no Open again button
  */
 export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanceled, onOpenAgain }) {
+    const haptic = useHapticFeedback();
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
@@ -153,6 +154,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     // PC-21 trade lifecycle: non-dispense events (refills/edits, closes,
     // expirations) merged with dispenses into one timeline under a tab.
     const [lifecycle, setLifecycle] = useState(/** @type {any[]} */ ([]));
+    const [lifecycleLoaded, setLifecycleLoaded] = useState(false);
     const [tab, setTab] = useState(/** @type {'dispenses' | 'lifecycle'} */ ('dispenses'));
     // The wallet address that signs close / refill / edit: the creator when
     // this wallet holds it, otherwise the dispenser's own address.
@@ -257,6 +259,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const buyPasswordRef = useRef('');
     buyPasswordRef.current = buyPassword;
     const [copied, setCopied] = useState(/** @type {string | null} */ (null));
+    const [copyError, setCopyError] = useState(/** @type {string | null} */ (null));
 
     const descriptor = chainRegistry.get(chainId);
 
@@ -292,9 +295,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
     });
     const fiatForFee = useMemo(() => (coinAmount) => {
-        const v = coinToFiat(coinAmount, feeFiatRate);
-        if (v == null || !Number.isFinite(v) || v <= 0) return null;
-        return formatFiat(v, feeFiatRate?.fiatCurrency || fiatCurrency);
+        const value = coinToFiatExact(coinAmount, feeFiatRate);
+        if (value == null || !(Number(value) > 0)) return null;
+        return formatFiatAmount(value, feeFiatRate?.fiatCurrency || fiatCurrency);
     }, [feeFiatRate, fiatCurrency]);
     const NATIVE_TICKER_BY_CHAIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
     const feeCoinTicker = descriptor?.coin
@@ -343,8 +346,17 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         let cancelled = false;
         setLoading(true);
         setLoadError(null);
+        setAction(null);
+        setDispenser(null);
         setDispenses([]);
         setDispensesLoaded(false);
+        setLifecycle([]);
+        setLifecycleLoaded(false);
+        setOwnerAddress(null);
+        setCreatorHeld(false);
+        setHeldAddresses([]);
+        setBuyerAddresses([]);
+        setBuyerAddressId(null);
         // Demo wallet: resolve the fixture row (owned by the first address
         // on this chain) instead of querying an explorer.
         const isDemo = isDemoWallet;
@@ -371,7 +383,6 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             const act = pickAction(resp);
             const disp = pickDispenser(resp);
             if (!act) {
-                setLoadError('Action not found.');
                 setLoading(false);
                 return;
             }
@@ -409,6 +420,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             if (isDemo) {
                 setDispenses(flowsLib.synthesizeDemoDispenses(actionIndex));
                 setDispensesLoaded(true);
+                setLifecycleLoaded(true);
             } else if (source) {
                 // Fills of THIS dispenser, keyed by its action index. The source
                 // lane answers "fills on this address", which over-reports as soon
@@ -428,7 +440,8 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                             setDispenses(extractRows(d));
                             setDispensesLoaded(true);
                         }))
-                    .catch(() => { /* best-effort; detail still usable without dispenses */ });
+                    .catch(() => { /* best-effort; detail still usable without dispenses */ })
+                    .finally(() => { if (!cancelled) setDispensesLoaded(true); });
                 // PC-21: the rest of the lifecycle (refills/edits, closes,
                 // expirations). Best-effort; scoped to this dispenser by its
                 // action index when the event rows carry it.
@@ -463,9 +476,15 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                                 }
                             }
                             setLifecycle(evs);
+                            setLifecycleLoaded(true);
                         })
-                        .catch(() => { /* best-effort */ });
+                        .catch(() => { if (!cancelled) setLifecycleLoaded(true); });
+                } else {
+                    setLifecycleLoaded(true);
                 }
+            } else {
+                setDispensesLoaded(true);
+                setLifecycleLoaded(true);
             }
         }).catch((err) => {
             if (!cancelled) {
@@ -771,13 +790,17 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     }, [oracleQuote, giveAmount]);
 
     async function handleCopy(text, label) {
-        try {
-            await navigator.clipboard?.writeText(text);
+        const { ok } = await copyText(text);
+        if (ok) {
+            setCopyError(null);
             setCopied(label);
             setTimeout(() => setCopied(null), 1500);
-        } catch {
-            /* swallow; older browsers or locked-down contexts */
+            haptic.tap();
+            return;
         }
+        setCopied(null);
+        haptic.error();
+        setCopyError('Copy failed: clipboard unavailable');
     }
 
     const buyerAddress = useMemo(() => {
@@ -1300,8 +1323,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         </Screen>
     );
 
-    if (loading) return wrap(<p className={styles.hint}>Loading…</p>);
+    if (loading) return wrap(<StatusMessage variant="status">Loading dispenser…</StatusMessage>);
     if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+    if (!action) return wrap(<EmptyState title="Dispenser not found" body="It may have been closed or not indexed yet." />);
 
     // The confirm page stands in for whichever owner form opened it; that
     // form's state stays intact behind it, so Reject lands back on it.
@@ -1833,6 +1857,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             {/* Stats hero: what's dispensed at what rate, how it's paid,
                 where it lives, how it's doing. Block height / action index
                 are secondary (action index lives in the More menu). */}
+            <SectionHeader title="Dispenser details" />
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>Dispensing</dt>
                 <dd className={styles.detailsValue}>
@@ -1925,6 +1950,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 ) : null}
             </dl>
 
+            <SectionHeader title="Actions" />
             <div className={local.quickActions} role="group" aria-label="Dispenser actions">
                 {/* Terminal statuses drop Close / Refill / Edit outright: the
                     chain refuses all three unless the status is open, and a
@@ -2030,7 +2056,10 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 </div>
             </div>
 
-            <div className={local.tabBar} role="tablist">
+            {copyError ? <StatusMessage variant="error">{copyError}</StatusMessage> : null}
+
+            <SectionHeader title="Activity" />
+            <div className={local.tabBar} role="tablist" aria-label="Dispenser activity">
                 <button
                     type="button"
                     role="tab"
@@ -2051,61 +2080,67 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 </button>
             </div>
             {tab === 'lifecycle' ? (
+                !lifecycleLoaded ? (
+                    <StatusMessage variant="status">Loading lifecycle…</StatusMessage>
+                ) : (
+                    <ul className={local.dispenseList}>
+                        {lifecycleTimeline.length === 0 ? (
+                            <li><EmptyState title="No lifecycle events yet" body="Dispenser lifecycle changes appear here." titleAs="p" /></li>
+                        ) : lifecycleTimeline.slice(0, 40).map((e) => {
+                            const refused = e.kind === 'dispense' && !e.row.valid;
+                            return (
+                                <li key={`${e.kind}-${e.row.action_index}`}>
+                                    <div className={`${local.dispenseRow} ${refused ? local.dispenseInvalid : ''}`}>
+                                        <span className={local.dispenseAmount}>
+                                            {refused ? 'Dispense refused' : (LIFECYCLE_LABEL[e.kind] || e.kind)}
+                                        </span>
+                                        <span className={local.dispensePaid}>
+                                            {e.kind === 'dispense'
+                                                ? `${formatNum(e.row.give_amount)} ${e.row.give_tick || giveTick || ''}`
+                                                : (e.row.expiration ? `expires ${formatUnixDate(e.row.expiration)}` : `#${e.row.action_index}`)}
+                                            {refused ? <InvalidMarker row={e.row} /> : null}
+                                        </span>
+                                        <span className={local.dispenseWhen}>
+                                            {e.row.block_index ? `block ${e.row.block_index}` : ''}
+                                        </span>
+                                    </div>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                )
+            ) : !dispensesLoaded ? (
+                <StatusMessage variant="status">Loading dispenses…</StatusMessage>
+            ) : (
                 <ul className={local.dispenseList}>
-                    {lifecycleTimeline.length === 0 ? (
-                        <li><EmptyState title="No lifecycle events yet." titleAs="p" /></li>
-                    ) : lifecycleTimeline.slice(0, 40).map((e) => {
-                        const refused = e.kind === 'dispense' && !e.row.valid;
+                    {matchingDispenses.length === 0 ? (
+                        <li><EmptyState title="No dispenses yet" body="Completed dispenses appear here." titleAs="p" /></li>
+                    ) : matchingDispenses.slice(0, 25).map((d) => {
+                        const paidAmount = d.get_amount ?? getAmount;
+                        const paidUnit = d.get_tick || d.get_coin || getTick || getCoin || '';
                         return (
-                            <li key={`${e.kind}-${e.row.action_index}`}>
-                                <div className={`${local.dispenseRow} ${refused ? local.dispenseInvalid : ''}`}>
+                            <li key={String(d.action_index)}>
+                                <div className={`${local.dispenseRow} ${d.valid ? '' : local.dispenseInvalid}`}>
                                     <span className={local.dispenseAmount}>
-                                        {refused ? 'Dispense refused' : (LIFECYCLE_LABEL[e.kind] || e.kind)}
+                                        {formatNum(d.give_amount)} {d.give_tick || giveTick || ''}
                                     </span>
                                     <span className={local.dispensePaid}>
-                                        {e.kind === 'dispense'
-                                            ? `${formatNum(e.row.give_amount)} ${e.row.give_tick || giveTick || ''}`
-                                            : (e.row.expiration ? `expires ${e.row.expiration}` : `#${e.row.action_index}`)}
-                                        {refused ? <InvalidMarker row={e.row} /> : null}
+                                        {paidAmount != null ? `for ${formatNum(paidAmount)} ${paidUnit}`.trim() : ''}
+                                        {d.valid ? null : <InvalidMarker row={d} />}
                                     </span>
                                     <span className={local.dispenseWhen}>
-                                        {e.row.block_index ? `block ${e.row.block_index}` : ''}
+                                        {formatRelativeTime(d.timestamp || d.block_time)}
                                     </span>
                                 </div>
                             </li>
                         );
                     })}
                 </ul>
-            ) : (
-            <ul className={local.dispenseList}>
-                {matchingDispenses.length === 0 ? (
-                    <li><EmptyState title="No dispenses yet." titleAs="p" /></li>
-                ) : matchingDispenses.slice(0, 25).map((d) => {
-                    const paidAmount = d.get_amount ?? getAmount;
-                    const paidUnit = d.get_tick || d.get_coin || getTick || getCoin || '';
-                    return (
-                        <li key={String(d.action_index)}>
-                            <div className={`${local.dispenseRow} ${d.valid ? '' : local.dispenseInvalid}`}>
-                                <span className={local.dispenseAmount}>
-                                    {formatNum(d.give_amount)} {d.give_tick || giveTick || ''}
-                                </span>
-                                <span className={local.dispensePaid}>
-                                    {paidAmount != null ? `for ${formatNum(paidAmount)} ${paidUnit}`.trim() : ''}
-                                    {d.valid ? null : <InvalidMarker row={d} />}
-                                </span>
-                                <span className={local.dispenseWhen}>
-                                    {relativeTime(d.timestamp || d.block_time)}
-                                </span>
-                            </div>
-                        </li>
-                    );
-                })}
-            </ul>
             )}
 
             {canBuyWithSend ? (
                 <section style={{ marginTop: '1rem', padding: '0.75rem', border: '1px solid var(--xc-border)', borderRadius: '4px' }}>
-                    <p className={styles.successLabel}>Buy from this dispenser</p>
+                    <SectionHeader title="Buy from this dispenser" />
                     <p className={styles.hint}>
                         {isTokenPaid
                             ? `Send ${getAmount} ${getTick} per fill. Tokens dispense when the SEND`
@@ -2119,7 +2154,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                             <select
                                 value={buyerAddressId || ''}
                                 onChange={(e) => setBuyerAddressId(e.target.value)}
-                                style={{ marginLeft: '0.5rem' }}
+                                style={{ marginLeft: '0.5rem', maxWidth: '100%' }}
                             >
                                 {buyerAddresses.map((a) => (
                                     <option key={a.id} value={a.id}>{a.address}</option>
@@ -2195,7 +2230,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
 
             {showPayHere ? (
                 <section style={{ marginTop: '1rem', padding: '0.75rem', border: '1px solid var(--xc-border)', borderRadius: '4px' }}>
-                    <p className={styles.successLabel}>Pay to buy</p>
+                    <SectionHeader title="Pay to buy" />
                     {canBuyWithSend ? null : listWarnings}
                     <p className={styles.hint}>
                         This dispenser accepts bare {getCoin} payments.
@@ -2219,7 +2254,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                                 onClick={() => handleCopy(dispAddr, 'address')}
                                 style={{ marginLeft: '0.5rem' }}
                             >
-                                {copied === 'address' ? 'Copied' : 'Copy'}
+                                {copied === 'address' ? 'Copied' : 'Copy dispenser payment address'}
                             </button>
                         </dd>
                         {isFiatPriced ? (
@@ -2327,42 +2362,11 @@ function formatNum(v) {
     return frac != null ? `${grouped}.${frac}` : grouped;
 }
 
-// Human-readable "X ago". Accepts unix seconds or ms; '' for invalid
-// input so the row just omits the time. (Same shape as TxStatusTimeline's.)
-function relativeTime(ts) {
-    const n = Number(ts);
-    if (!n || !Number.isFinite(n)) return '';
-    const ms = n < 1e12 ? n * 1000 : n;
-    const diffSec = Math.floor((Date.now() - ms) / 1000);
-    if (diffSec < 5) return 'just now';
-    if (diffSec < 60) return `${diffSec} seconds ago`;
-    const min = Math.floor(diffSec / 60);
-    if (min < 60) return `${min} minute${min === 1 ? '' : 's'} ago`;
-    const hr = Math.floor(diffSec / 3600);
-    if (hr < 24) return `${hr} hour${hr === 1 ? '' : 's'} ago`;
-    const day = Math.floor(diffSec / 86400);
-    if (day < 30) return `${day} day${day === 1 ? '' : 's'} ago`;
-    const month = Math.floor(day / 30);
-    if (month < 12) return `${month} month${month === 1 ? '' : 's'} ago`;
-    const year = Math.floor(day / 365);
-    return `${year} year${year === 1 ? '' : 's'} ago`;
-}
-
 // Format a Unix timestamp (seconds; tolerates ms) as a short local
 // date-time with the zone named, so it reads against the edit field's
 // local-time entry. '' for unparseable input so callers can omit the row.
 export function formatUnixDate(ts) {
-    const n = Number(ts);
-    if (!n || !Number.isFinite(n)) return '';
-    const ms = n < 1e12 ? n * 1000 : n;
-    try {
-        return new Date(ms).toLocaleString(undefined, {
-            year: 'numeric', month: 'short', day: 'numeric',
-            hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
-        });
-    } catch {
-        return new Date(ms).toUTCString();
-    }
+    return formatLocalDateTime(ts) || '';
 }
 
 // The close-window banner copy. Escrow returns to whichever address closed

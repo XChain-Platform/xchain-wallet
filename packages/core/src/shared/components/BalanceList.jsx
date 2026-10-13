@@ -15,11 +15,13 @@ import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import styles from './BalanceList.module.css';
 import { addPlainDecimals } from '../../flows/escrowedTokens.js';
 import {
-    compareDecimalStrings,
     decimalFromBaseUnits,
+    formatAtomicAmount,
+    formatDecimalAmount,
     multiplyDecimalStrings,
     sumDecimalStrings,
 } from '../utils/amountFormat.js';
+import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
 
 /**
  * Renders a flat list of balance rows. Filtering, tab selection, and
@@ -36,7 +38,7 @@ import {
  * @param {() => void} [props.onReceive]             when supplied, the empty-state shows a Receive CTA
  * @param {string} [props.emptyActionLabel]          label for a caller-defined empty-state action; takes the button over from Receive
  * @param {() => void} [props.onEmptyAction]         runs that action (e.g. clearing the filter that emptied the list)
- * @param {(token: { chainId: string, tick: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string }) => void} [props.onSelectToken]
+ * @param {(token: { chainId: string, tick: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, fiatRateSource?: string, quantity: string }) => void} [props.onSelectToken]
  *        Click handler for a balance row. Surfaces the §27.6 Token detail page (G071) when supplied.
  * @param {Set<string> | null} [props.pinnedKeys]    `chainId:tick` keys pinned by the user. Pinned rows sort to the top (§27.3 / G072).
  * @param {(key: string, nextPinned: boolean) => void} [props.onTogglePin]   per-row pin/unpin callback; when supplied each row renders a star button
@@ -53,7 +55,7 @@ export function BalanceList({
     multisig,
     multisigChainId,
     emptyTitle = 'No balances yet',
-    emptyBody,
+    emptyBody = 'Balances appear here after this wallet receives funds.',
     onReceive,
     emptyActionLabel,
     onEmptyAction,
@@ -253,6 +255,7 @@ function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, on
             displayName: row.displayName,
             divisibility: row.divisibility,
             fiatRate: row.fiatRate,
+            fiatRateSource: row.fiatRateSource,
             quantity: row.quantity,
             imageUrl: row.imageUrl,
         })
@@ -352,8 +355,8 @@ function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, on
                             : row.unavailable === 'all'
                                 ? <span title={row.unavailableReason || undefined}>Balance couldn&apos;t be loaded</span>
                                 : row.unavailable === 'partial'
-                                    ? <span title={row.unavailableReason || undefined}>At least {formatFiat(fiat, fiatCurrency)}</span>
-                                    : formatFiat(fiat, fiatCurrency)}
+                                    ? <span title={row.unavailableReason || undefined}>At least {formatRowFiat(row, fiat, fiatCurrency)}</span>
+                                    : formatRowFiat(row, fiat, fiatCurrency)}
                     </div>
                 </div>
             </ContentTag>
@@ -754,22 +757,27 @@ function safeBigInt(v) {
     return 0n;
 }
 
+/**
+ * Atomic quantity at its divisibility, grouped for the selected language.
+ * numberFormat: 'full' keeps every place, 'trim' drops trailing zeros, and
+ * 'plain' skips grouping and locale entirely.
+ */
 export function formatAmount(quantityStr, divisibility, numberFormat = 'full') {
-    const q = String(quantityStr || '0');
-    const group = numberFormat === 'plain' ? (value) => String(value) : groupThousands;
-    if (!divisibility || divisibility <= 0) return group(q);
-    const negative = q.startsWith('-');
-    const abs = negative ? q.slice(1) : q;
-    const padded = abs.padStart(divisibility + 1, '0');
-    const whole = padded.slice(0, padded.length - divisibility);
-    let frac = padded.slice(padded.length - divisibility);
-    if (numberFormat === 'trim') frac = frac.replace(/0+$/, '');
-    const out = frac ? `${group(whole)}.${frac}` : group(whole);
-    return negative ? `-${out}` : out;
-}
-
-function groupThousands(s) {
-    return String(s).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    if (numberFormat === 'plain') {
+        const q = String(quantityStr || '0');
+        if (!divisibility || divisibility <= 0) return q;
+        const negative = q.startsWith('-');
+        const abs = negative ? q.slice(1) : q;
+        const padded = abs.padStart(divisibility + 1, '0');
+        const whole = padded.slice(0, padded.length - divisibility);
+        const frac = padded.slice(padded.length - divisibility);
+        const out = frac ? `${whole}.${frac}` : whole;
+        return negative ? `-${out}` : out;
+    }
+    if (numberFormat !== 'trim') return formatAtomicAmount(quantityStr, divisibility);
+    const plain = formatAmount(quantityStr, divisibility, 'plain');
+    const trimmed = plain.includes('.') ? plain.replace(/0+$/, '').replace(/\.$/, '') : plain;
+    return formatDecimalAmount(trimmed);
 }
 
 export function fiatValue(quantityStr, divisibility, fiatRate) {
@@ -808,24 +816,13 @@ export function sumFiatValue(rows) {
  * @param {string} [currency]   ISO code; defaults to USD
  */
 export function formatFiat(value, currency = 'USD') {
-    if (value === null || value === undefined) return '';
-    let fmt;
-    try {
-        fmt = new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: String(currency || 'USD').toUpperCase(),
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-        });
-    } catch {
-        // An unknown code (a custom currency) still renders, just without a symbol.
-        return `${value} ${currency}`;
-    }
-    if (compareDecimalStrings(value, '0') === 0) return fmt.format(0);
-    if (compareDecimalStrings(value, '0') === 1 && compareDecimalStrings(value, '0.01') === -1) {
-        return `<${fmt.format(0.01)}`;
-    }
-    return fmt.format(String(value));
+    return formatFiatAmount(value, currency);
+}
+
+function formatRowFiat(row, value, currency) {
+    const formatted = formatFiat(value, currency);
+    if (!formatted || row?.kind === 'native' || row?.fiatRateSource !== 'market') return formatted;
+    return `${formatted} · DEX price`;
 }
 
 // Every chip carries white text, so each swatch is dark enough for 4.5:1

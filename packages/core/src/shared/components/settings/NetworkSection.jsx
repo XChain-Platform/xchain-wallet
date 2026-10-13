@@ -25,18 +25,17 @@ import { useState } from 'react';
 import { useSettings } from '../../hooks/useSettings.js';
 import { useConfirmModal } from '../../hooks/useConfirmModal.js';
 import { useMessaging } from '../../useMessaging.js';
+import {
+    activeNetworkLabel,
+    activeNetworkOptions,
+    normalizeActiveNetwork,
+    persistActiveNetwork,
+} from '../../utils/activeNetworkSwitch.js';
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
-import { NETWORKS, NETWORK_DEFAULT } from '../../../schemas/settings.js';
 import { ROW, SELECT, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
 import { ConfirmModal } from '../ConfirmModal.jsx';
 
-const NETWORK_OPTIONS = /** @type {const} */ ([
-    { value: 'mainnet', label: 'Mainnet' },
-    { value: 'testnet', label: 'Testnet' },
-    { value: 'regtest', label: 'Regtest' },
-]);
-
-export function NetworkSection({ activeWallet } = {}) {
+export function NetworkSection({ activeWallet, reload = reloadPage } = {}) {
     const { settings, loading, error, update } = useSettings();
     const { messaging } = useMessaging();
     const confirmDialog = useConfirmModal();
@@ -48,24 +47,21 @@ export function NetworkSection({ activeWallet } = {}) {
     if (error) return <SettingsLoadError error={error} />;
     if (!settings) return <Status text="Settings unavailable." tone="error" />;
 
-    const current = NETWORKS.includes(settings.activeNetwork)
-        ? settings.activeNetwork
-        : NETWORK_DEFAULT;
+    const current = normalizeActiveNetwork(settings.activeNetwork);
 
     // Regtest is a developer-only local network. Hide it from ordinary
     // users (the app already promises this in the Developer Mode copy),
     // but keep it visible when it is the active network so a user who is
     // already on regtest with dev mode off still has a way to switch back.
-    const showRegtest = Boolean(settings.developerMode) || current === 'regtest';
-    const options = showRegtest
-        ? NETWORK_OPTIONS
-        : NETWORK_OPTIONS.filter((opt) => opt.value !== 'regtest');
+    const options = activeNetworkOptions({
+        developerMode: Boolean(settings.developerMode),
+        current,
+    });
 
     const onChange = async (next) => {
-        if (!NETWORKS.includes(next)) return;
         if (next === current) return;
-        const nextLabel = NETWORK_OPTIONS.find((option) => option.value === next)?.label || next;
-        const currentLabel = NETWORK_OPTIONS.find((option) => option.value === current)?.label || current;
+        const nextLabel = activeNetworkLabel(next);
+        const currentLabel = activeNetworkLabel(current);
         const confirmed = await confirmDialog.confirm({
             title: `Switch to ${nextLabel}?`,
             message: `The wallet will reload and show ${nextLabel} chains. Your ${currentLabel} balances and chain settings stay unchanged.`,
@@ -75,18 +71,10 @@ export function NetworkSection({ activeWallet } = {}) {
         setSwitchError(null);
         setSwitching(true);
         try {
-            // Prefer the host route that ALSO derives the first
-            // address on each chain of the network being switched to.
-            // Flipping the setting alone only changes a filter, which is how
-            // this control used to strand a wallet with no addresses and no UI
-            // path to create one. Falls back to the plain settings write for a
-            // shell that predates the route, so the switch itself never breaks.
-            if (typeof messaging?.setActiveNetwork === 'function' && walletId) {
-                await messaging.setActiveNetwork({ walletId, network: next });
-            } else {
-                await update({ activeNetwork: next });
-            }
-            if (typeof window !== 'undefined') window.location.reload();
+            // Prepare destination addresses before reloading so every
+            // balance, history, and chain picker mounts against usable data.
+            await persistActiveNetwork({ messaging, update, walletId, network: next });
+            reload();
         } catch (err) {
             setSwitchError(userFacingMessage(err, 'Could not switch networks. Try again.'));
         } finally {
@@ -111,7 +99,7 @@ export function NetworkSection({ activeWallet } = {}) {
                 </select>
             </div>
             {switchError ? (
-                <div role="alert" style={{ color: 'var(--xc-danger, #c33)', fontSize: 'var(--xc-text-xs)' }}>
+                <div role="alert" style={{ color: 'var(--xc-danger-fg, #c33)', fontSize: 'var(--xc-text-xs)' }}>
                     {switchError}
                 </div>
             ) : null}
@@ -124,4 +112,8 @@ export function NetworkSection({ activeWallet } = {}) {
             ) : null}
         </>
     );
+}
+
+function reloadPage() {
+    if (typeof window !== 'undefined') window.location.reload();
 }

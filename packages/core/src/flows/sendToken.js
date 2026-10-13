@@ -83,6 +83,8 @@ export function assertValidDestination(fnName, address, chainRegistry, chainId) 
  * @property {number} [fee]                           absolute sats
  * @property {number} [feePerKb]
  * @property {boolean} [rbf]
+ * @property {string} [change]                        explicit wallet-owned change address
+ * @property {unknown[]} [utxos]                      hand-selected funding outputs
  * @property {import('../sdk/submitWithSigner.js').PrebuiltPsbt} [prebuiltPsbt] single-encode pipeline: sign this exact composed PSBT byte-identically (the one the ConfirmActionModal previewed + tamper-checked) instead of rebuilding.
  * @property {string} [actionSummary]                 PendingTx label in place of the generic "Send X TICK to ..." (a dispenser purchase names the dispenser so History reads as a buy)
  * @property {import('../signers/Signer.js').Signer} [signer]    pre-built signer (RemoteSigner for HW)
@@ -179,18 +181,19 @@ export async function sendToken(opts) {
         actionData,
         encoderOpts: {
             pubkey: source.publicKey,
-            // D-7 (atomic/HW path parity): the spender address is both the change
-            // sink and the funding source, so it goes in twice on purpose.
+            // D-7 (atomic/HW path parity): sourceAddress always identifies the
+            // spender, while change defaults there unless the user chooses another
+            // wallet-owned destination.
             // `change` supplies the change output; `sourceAddress` is what makes
             // the SDK pre-select UTXOs by address. Both are required - the SDK
             // states outright that `change` is "deliberately NOT a fallback" for
             // `sourceAddress` (xchain-sdk/src/encoder.js createTx), because a
             // change address is not always the spender. Passing only `change` left
             // the encoder resolving UTXOs from the raw `pubkey`, which is the
-            // opaque "has no matching Script" failure this comment used to claim
-            // was handled.
-            change: source.address,
+            // opaque "has no matching Script" failure.
+            change: opts.change || source.address,
             sourceAddress: source.address,
+            ...(Array.isArray(opts.utxos) && opts.utxos.length > 0 ? { utxos: opts.utxos } : {}),
             ...(nativeOut ? { customOutputs: [nativeOut] } : {}),
             ...(opts.fee !== undefined && { fee: opts.fee }),
             ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),

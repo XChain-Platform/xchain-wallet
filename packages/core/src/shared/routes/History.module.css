@@ -460,6 +460,19 @@
     padding: 0;
 }
 
+.pagination {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-4) 0;
+}
+
+.paginationCount {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+}
+
 .row {
     position: relative;
     display: flex;
@@ -1271,6 +1284,13 @@
     list-style: none;
     margin: 0;
     padding: 0;
+}
+
+.groupPagination {
+    display: flex;
+    justify-content: center;
+    padding: var(--xc-space-3);
+    border-top: 1px solid var(--xc-border);
 }
 
 .groupCardWrap {

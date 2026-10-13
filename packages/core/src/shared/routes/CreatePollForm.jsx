@@ -738,15 +738,15 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
             {showAdvanced ? (
                 <>
                     <Input label="Quorum (optional)" hint="Smallest share of the token supply that must vote for the result to count, e.g. 0.2 means 20%."
-                        value={quorum} onChange={(e) => setQuorum(e.target.value)} autoComplete="off" />
+                        value={quorum} onChange={(e) => setQuorum(e.target.value)} inputMode="decimal" autoComplete="off" />
                     <Input label="Minimum voters (optional)" hint="Minimum distinct qualifying voters."
                         value={minVoters} onChange={(e) => setMinVoters(e.target.value)} inputMode="numeric" autoComplete="off" />
                     <Input label="Minimum vote balance (optional)" hint="A voter counts toward the participation gate only if they hold at least this much. Required for quadratic weighting."
-                        value={minVoteBalance} onChange={(e) => setMinVoteBalance(e.target.value)} autoComplete="off" />
+                        value={minVoteBalance} onChange={(e) => setMinVoteBalance(e.target.value)} inputMode="decimal" autoComplete="off" />
                     <Input label="Early-decide threshold (optional)" hint="Fraction of supply an option must reach to close the poll early."
-                        value={decideThreshold} onChange={(e) => setDecideThreshold(e.target.value)} autoComplete="off" />
+                        value={decideThreshold} onChange={(e) => setDecideThreshold(e.target.value)} inputMode="decimal" autoComplete="off" />
                     <Input label="Creation deposit (optional)" hint="A GAS deposit held while the poll runs as anti-spam: returned when the poll closes, kept if too few people vote."
-                        value={deposit} onChange={(e) => setDeposit(e.target.value)} autoComplete="off" />
+                        value={deposit} onChange={(e) => setDeposit(e.target.value)} inputMode="decimal" autoComplete="off" />
                 </>
             ) : null}
 
@@ -778,7 +778,7 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
                             <Input label="Extra arguments (optional)" hint='A JSON list appended after the poll result, e.g. ["treasury", 1000].'
                                 value={callbackParams} onChange={(e) => setCallbackParams(e.target.value)} autoComplete="off" />
                             <Input label="Escrow to fund the call (optional)" hint="GAS locked at creation to pay for running the contract; released when the poll finishes."
-                                value={gasEscrow} onChange={(e) => setGasEscrow(e.target.value)} autoComplete="off" />
+                                value={gasEscrow} onChange={(e) => setGasEscrow(e.target.value)} inputMode="decimal" autoComplete="off" />
                             {timelockActive ? (
                                 <Input label="Delay before the call runs (optional)" hint="Blocks between the poll closing and the contract running. A delay gives holders time to react to a result before it takes effect."
                                     value={callbackDelayBlocks} onChange={(e) => setCallbackDelayBlocks(e.target.value)} inputMode="numeric" autoComplete="off" />

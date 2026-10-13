@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { formatLocalDateTime } from '../../../packages/core/src/shared/utils/dateTime.js';
 import { MyOrdersView } from '../../../packages/core/src/shared/routes/MyOrdersView.jsx';
 import { MySwapsView } from '../../../packages/core/src/shared/routes/MySwapsView.jsx';
 
@@ -159,7 +160,7 @@ describe.each(VIEWS)('$noun action wording', (view) => {
         fireEvent.click(screen.getByRole('button', { name: `Edit ${view.noun}` }));
 
         const intent = await screen.findByTestId('action-intent');
-        const formatted = new Date(Number(EDIT_EXPIRATION) * 1000).toLocaleString();
+        const formatted = formatLocalDateTime(Number(EDIT_EXPIRATION));
         expect(intent).toHaveTextContent(formatted);
         expect(intent).not.toHaveTextContent(EDIT_EXPIRATION);
         expect(composeForConfirm).toHaveBeenCalledWith(expect.objectContaining({

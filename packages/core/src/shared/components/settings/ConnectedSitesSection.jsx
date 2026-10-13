@@ -304,7 +304,11 @@ function BlocklistAuditPanel() {
                 an unexpected change to the blocklist before it costs you.
             </span>
             {entries.length === 0 ? (
-                <EmptyState title="No mutations yet." titleAs="p" />
+                <EmptyState
+                    title="No blocklist changes"
+                    body="Recent changes to blocked origins appear here."
+                    titleAs="p"
+                />
             ) : (
                 <ul
                     style={{
@@ -462,6 +466,8 @@ function SignThrottlePanel() {
                     <span style={{ color: 'var(--xc-text-muted)' }}>Burst</span>
                     <input
                         type="number"
+                        inputMode="numeric"
+                        enterKeyHint="next"
                         min={SIGN_THROTTLE_BURST_MIN}
                         max={SIGN_THROTTLE_BURST_MAX}
                         step={1}
@@ -476,6 +482,8 @@ function SignThrottlePanel() {
                     <span style={{ color: 'var(--xc-text-muted)' }}>Window (seconds)</span>
                     <input
                         type="number"
+                        inputMode="numeric"
+                        enterKeyHint="go"
                         min={SIGN_THROTTLE_WINDOW_MS_MIN / 1000}
                         max={SIGN_THROTTLE_WINDOW_MS_MAX / 1000}
                         step={0.001}
@@ -515,7 +523,11 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
                     too if you want to cover it).
                 </span>
                 {blocked.length === 0 ? (
-                    <EmptyState title="No origins blocked." titleAs="p" />
+                    <EmptyState
+                        title="No blocked origins"
+                        body="Origins added to the blocklist appear here."
+                        titleAs="p"
+                    />
                 ) : (
                     <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)' }}>
                         {blocked.map((origin) => (
@@ -534,6 +546,10 @@ function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, o
                 <form onSubmit={onSubmit} style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 'var(--xc-space-2)' }}>
                     <input
                         type="text"
+                        enterKeyHint="go"
+                        autoCapitalize="off"
+                        autoCorrect="off"
+                        spellCheck={false}
                         value={manualBlock}
                         onChange={(e) => setManualBlock(e.target.value)}
                         placeholder="https://example.com or *.example.com"

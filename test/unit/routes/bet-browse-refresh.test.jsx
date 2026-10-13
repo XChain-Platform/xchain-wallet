@@ -193,7 +193,7 @@ describe('BetFeedsList refresh', () => {
         messaging.getAddressesByChain = () => Promise.resolve({});
         const { container } = await renderList(messaging);
 
-        expect(container.textContent).toContain('No address on a chain that supports betting');
+        expect(container.textContent).toContain('No betting address');
         expect(container.textContent,
             'the no-chain state reads as a chain with no markets on it')
             .not.toContain('No markets are taking bets');

@@ -15,8 +15,8 @@ vi.mock('@xchain-wallet/core/ui', () => ({
     Screen: ({ header, children }) => <div>{header}<main>{children}</main></div>,
     PageHeader: ({ title }) => <header><h1>{title}</h1></header>,
     ListPage: ({ toolbar, children }) => <section data-testid="list-page">{toolbar}{children}</section>,
-    EmptyState: ({ title, role, titleAs: Title = 'h2' }) => (
-        <div data-testid="empty-state" role={role}><Title>{title}</Title></div>
+    EmptyState: ({ title, body, role, titleAs: Title = 'h2' }) => (
+        <div data-testid="empty-state" role={role}><Title>{title}</Title>{body ? <p>{body}</p> : null}</div>
     ),
     Icon: { UsersIcon: () => <span /> },
 }));
@@ -73,7 +73,8 @@ describe('ContactsPickerScreen empty and listing states', () => {
     ])('shows the empty state for %s', (_label, emptyContacts) => {
         mount({ contacts: emptyContacts });
 
-        expect(screen.getByText('You have no contacts yet')).toBeInTheDocument();
+        expect(screen.getByText('No contacts yet')).toBeInTheDocument();
+        expect(screen.getByText('Saved contacts with addresses appear here.')).toBeInTheDocument();
         expect(screen.getByTestId('list-page')).toContainElement(screen.getByTestId('empty-state'));
         expect(screen.getByTestId('empty-state')).not.toHaveAttribute('role');
         expect(screen.queryByRole('textbox', { name: 'Search contacts' })).toBeNull();
@@ -120,7 +121,8 @@ describe('ContactsPickerScreen filters', () => {
             target: { value: 'not saved' },
         });
 
-        expect(screen.getByText('No addresses match your filters.')).toBeInTheDocument();
+        expect(screen.getByText('No matching addresses')).toBeInTheDocument();
+        expect(screen.getByText('Try a different search or network filter.')).toBeInTheDocument();
         expect(screen.getByTestId('list-page')).toContainElement(screen.getByTestId('empty-state'));
         expect(screen.queryAllByRole('listitem')).toHaveLength(0);
     });

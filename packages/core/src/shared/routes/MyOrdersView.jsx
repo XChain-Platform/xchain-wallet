@@ -44,6 +44,7 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { boundListIndex } from '../../flows/accessListSlots.js';
 import { isListEditRemoveActive } from '../../flows/protocolActivations.js';
 import { explorerCoinCode } from '../../registry/coinTicker.js';
+import { formatLocalDateTime } from '../utils/dateTime.js';
 import L from './ObligationsView.module.css';
 import F from './IssueTokenForm.module.css';
 
@@ -147,9 +148,7 @@ function fmtDate(unixSec) {
     // Protocol expirations are Unix seconds. A current millisecond timestamp
     // otherwise renders as a plausible date tens of thousands of years away.
     if (!Number.isFinite(n) || n <= 0 || n >= 10_000_000_000) return null;
-    const date = new Date(n * 1000);
-    if (Number.isNaN(date.getTime())) return null;
-    return date.toLocaleString();
+    return formatLocalDateTime(n);
 }
 
 function withFormattedExpiration(confirmAction) {
@@ -205,9 +204,19 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
     const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000));
 
     useEffect(() => {
-        const t = setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 30000);
+        const current = Math.floor(Date.now() / 1000);
+        setNowSec(current);
+        const hasLiveExpiration = () => (items || []).some((item) => {
+            const expiration = Number(item.fill?.expiration ?? item.row?.expiration);
+            return Number.isFinite(expiration) && expiration > Math.floor(Date.now() / 1000);
+        });
+        if (!hasLiveExpiration()) return undefined;
+        const t = setInterval(() => {
+            setNowSec(Math.floor(Date.now() / 1000));
+            if (!hasLiveExpiration()) clearInterval(t);
+        }, 30000);
         return () => clearInterval(t);
-    }, []);
+    }, [items]);
 
     const load = useCallback(async () => {
         if (typeof messaging?.getAddressesByChain !== 'function'
@@ -407,7 +416,7 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
             <SectionHeader title="Open" />
             {openItems.length > 0 ? (
                 <ul className={L.list} role="list" aria-label="Open orders">{openItems.map(renderRow)}</ul>
-            ) : <EmptyState title="No open orders." titleAs="p" />}
+            ) : <EmptyState title="No open orders" body="Open DEX orders appear here." titleAs="p" />}
             {closedItems.length > 0 ? (
                 <>
                     <SectionHeader title="Closed" />

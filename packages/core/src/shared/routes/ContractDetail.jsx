@@ -93,7 +93,7 @@ export function ContractDetail({
     const variant = screenVariantFor(shell);
     const descriptor = chainRegistry.get(chainId);
 
-    const [contract, setContract] = useState(/** @type {any} */ (null));
+    const [contract, setContract] = useState(/** @type {any} */ (undefined));
     const [contractError, setContractError] = useState(/** @type {string | null} */ (null));
     const [deployAction, setDeployAction] = useState(/** @type {any} */ (null));
     const [deployError, setDeployError] = useState(/** @type {string | null} */ (null));
@@ -104,12 +104,21 @@ export function ContractDetail({
     const [executions, setExecutions] = useState(/** @type {any[]} */ ([]));
     const [executionsTotal, setExecutionsTotal] = useState(/** @type {number | null} */ (null));
     const [executionsError, setExecutionsError] = useState(/** @type {string | null} */ (null));
+    const [executionsLoading, setExecutionsLoading] = useState(true);
     const [executionsPage, setExecutionsPage] = useState(1);
     const [stateExpanded, setStateExpanded] = useState(false);
     const [walletAddresses, setWalletAddresses] = useState(/** @type {string[]} */ ([]));
 
     useEffect(() => {
         let cancelled = false;
+        setContract(undefined);
+        setContractError(null);
+        setDeployAction(null);
+        setDeployError(null);
+        setState(null);
+        setStateError(null);
+        setBalances(null);
+        setBalancesError(null);
         messaging.getContractByActionIndex({ chainId, contractActionIndex })
             .then((resp) => {
                 if (cancelled) return;
@@ -145,13 +154,23 @@ export function ContractDetail({
 
     useEffect(() => {
         let cancelled = false;
+        setExecutions([]);
+        setExecutionsTotal(null);
+        setExecutionsError(null);
+        setExecutionsLoading(true);
         messaging.getExecutionsForContract({ chainId, contractActionIndex, opts: { page: executionsPage } })
             .then((resp) => {
                 if (cancelled) return;
                 setExecutions(extractRows(resp));
                 setExecutionsTotal(typeof resp?.total === 'number' ? resp.total : null);
+                setExecutionsLoading(false);
             })
-            .catch((e) => { if (!cancelled) setExecutionsError(readFailureMessage(e, 'load the execution history')); });
+            .catch((e) => {
+                if (!cancelled) {
+                    setExecutionsError(readFailureMessage(e, 'load the execution history'));
+                    setExecutionsLoading(false);
+                }
+            });
         return () => { cancelled = true; };
     }, [chainId, contractActionIndex, executionsPage, messaging]);
 
@@ -179,11 +198,11 @@ export function ContractDetail({
     const isStakeable = cooldownBlocks !== null && cooldownBlocks !== undefined;
     const ownerWithdraw = contractOwnerWithdraw(contract);
 
-        const header = (
+    const header = (
         <PageHeader
             onBack={onBack}
             backLabel="Back to contracts list"
-            title={contractAddress || `Contract #${contractActionIndex}`}
+            title="Contract detail"
         />
     );
     if (contractError) {
@@ -195,11 +214,20 @@ export function ContractDetail({
             </Screen>
         );
     }
-    if (!contract) {
+    if (contract === undefined) {
         return (
             <Screen variant={variant} header={header}>
                 <ListPage>
-                    <p className={styles.entryDescription}>Loading contract…</p>
+                    <StatusMessage variant="status">Loading contract…</StatusMessage>
+                </ListPage>
+            </Screen>
+        );
+    }
+    if (contract === null) {
+        return (
+            <Screen variant={variant} header={header}>
+                <ListPage>
+                    <EmptyState title="Contract not found" body="It may have been removed or not indexed yet." />
                 </ListPage>
             </Screen>
         );
@@ -216,9 +244,9 @@ export function ContractDetail({
                     />
                     {/* 512 bytes: this is the one surface wide enough for it, so
                         the list rows carry the name and version alone. */}
-                    <dl className={styles.entryDescription} style={{ margin: 0 }}>
+                    <dl className={styles.entryDescription} style={{ margin: 0, overflowWrap: 'anywhere' }}>
                         {contractAddress ? (
-                            <div><strong>Address:</strong> {contractAddress}</div>
+                            <div><strong>Address:</strong>{' '}<AddressText address={contractAddress} truncate={false} /></div>
                         ) : null}
                         <div><strong>Owner:</strong>{' '}
                             {owner
@@ -228,7 +256,7 @@ export function ContractDetail({
                         <div><strong>Published:</strong> block {deployBlock}</div>
                         <div><strong>Gas limit:</strong> {gasLimit}</div>
                         <div><strong>Status:</strong> {status}</div>
-                        <div><strong>Code hash:</strong> {String(codeHash)}</div>
+                        <div><strong>Code hash:</strong> <code>{String(codeHash)}</code></div>
                         {isStakeable ? (
                             <>
                                 <div><strong>Stakeable:</strong> yes, {String(cooldownBlocks)}-block cooldown</div>
@@ -270,7 +298,7 @@ export function ContractDetail({
                             {stateError}
                         </StatusMessage>
                     ) : state === null ? (
-                        <p className={styles.entryDescription}>Loading state…</p>
+                        <StatusMessage variant="status">Loading state…</StatusMessage>
                     ) : stateExpanded ? (
                         <StateTable state={state} />
                     ) : (
@@ -286,20 +314,23 @@ export function ContractDetail({
                             {balancesError}
                         </StatusMessage>
                     ) : balances === null ? (
-                        <p className={styles.entryDescription}>Loading balances…</p>
+                        <StatusMessage variant="status">Loading balances…</StatusMessage>
                     ) : (
                         <BalancesTable balances={balances} />
                     )}
                 </Section>
 
                 <Section title="Execution history">
-                    {executionsError && executions.length === 0 ? (
+                    {executionsLoading && executions.length === 0 ? (
+                        <StatusMessage variant="status">Loading execution history…</StatusMessage>
+                    ) : executionsError && executions.length === 0 ? (
                         <StatusMessage variant="error" className={styles.entryDescription}>
                             {executionsError}
                         </StatusMessage>
                     ) : executions.length === 0 ? (
                         <EmptyState
-                            title="No contract calls recorded against this contract yet."
+                            title="No contract calls yet"
+                            body="Calls recorded against this contract appear here."
                             titleAs="p"
                         />
                     ) : (
@@ -328,51 +359,53 @@ export function ContractDetail({
                     )}
                 </Section>
 
-                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '1rem' }}>
-                    <Button
-                        variant="primary"
-                        onClick={onExecute ? () => onExecute({ chainId, contractActionIndex }) : undefined}
-                        disabled={!onExecute}
-                    >
-                        Call method
-                    </Button>
-                    <Button
-                        variant="secondary"
-                        onClick={onDeposit ? () => onDeposit({ chainId, contractActionIndex }) : undefined}
-                        disabled={!onDeposit}
-                    >
-                        Deposit
-                    </Button>
-                    {ownerWithdraw === false ? null : (
+                <Section title="Actions">
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <Button
+                            variant="primary"
+                            onClick={onExecute ? () => onExecute({ chainId, contractActionIndex }) : undefined}
+                            disabled={!onExecute}
+                        >
+                            Call method
+                        </Button>
                         <Button
                             variant="secondary"
-                            onClick={onWithdraw ? () => onWithdraw({ chainId, contractActionIndex }) : undefined}
-                            disabled={!onWithdraw}
+                            onClick={onDeposit ? () => onDeposit({ chainId, contractActionIndex }) : undefined}
+                            disabled={!onDeposit}
                         >
-                            Withdraw
+                            Deposit
                         </Button>
-                    )}
-                    {isStakeable ? (
-                        <Button
-                            variant="secondary"
-                            onClick={onStakeToContract ? () => onStakeToContract({ chainId, contractActionIndex }) : undefined}
-                            disabled={!onStakeToContract}
-                        >
-                            Stake here
-                        </Button>
+                        {ownerWithdraw === false ? null : (
+                            <Button
+                                variant="secondary"
+                                onClick={onWithdraw ? () => onWithdraw({ chainId, contractActionIndex }) : undefined}
+                                disabled={!onWithdraw}
+                            >
+                                Withdraw
+                            </Button>
+                        )}
+                        {isStakeable ? (
+                            <Button
+                                variant="secondary"
+                                onClick={onStakeToContract ? () => onStakeToContract({ chainId, contractActionIndex }) : undefined}
+                                disabled={!onStakeToContract}
+                            >
+                                Stake here
+                            </Button>
+                        ) : null}
+                    </div>
+                    {ownerWithdraw === false ? (
+                        <p className={styles.entryDescription} data-testid="owner-withdraw-disabled">
+                            {OWNER_WITHDRAW_DISABLED_REASON}
+                        </p>
                     ) : null}
-                </div>
-                {ownerWithdraw === false ? (
-                    <p className={styles.entryDescription} data-testid="owner-withdraw-disabled">
-                        {OWNER_WITHDRAW_DISABLED_REASON}
-                    </p>
-                ) : null}
-                {!onExecute && !onDeposit && !onWithdraw ? (
-                    <p className={styles.entryDescription}>
-                        Contract call, deposit, and withdraw forms are coming in
-                        an upcoming release. Viewing is available now.
-                    </p>
-                ) : null}
+                    {!onExecute && !onDeposit && !onWithdraw ? (
+                        <p className={styles.entryDescription}>
+                            Contract call, deposit, and withdraw forms are coming in
+                            an upcoming release. Viewing is available now.
+                        </p>
+                    ) : null}
+                </Section>
             </ListPage>
         </Screen>
     );
@@ -390,17 +423,17 @@ function Section({ title, rightSlot, children }) {
 function StateTable({ state }) {
     const entries = toKeyValueEntries(state);
     if (entries.length === 0) {
-        return <EmptyState title="No state keys set yet." titleAs="p" />;
+        return <EmptyState title="No state keys yet" body="Published contract state appears here." titleAs="p" />;
     }
     return (
-        <table style={{ width: '100%', fontSize: '0.85rem' }}>
+        <table style={{ width: '100%', tableLayout: 'fixed', fontSize: '0.85rem' }}>
             <thead>
                 <tr><th align="left">Key</th><th align="left">Value</th></tr>
             </thead>
             <tbody>
                 {entries.map(([k, v]) => (
                     <tr key={k}>
-                        <td style={{ verticalAlign: 'top', paddingRight: '0.5rem', fontFamily: 'monospace' }}>{k}</td>
+                        <td style={{ verticalAlign: 'top', paddingRight: '0.5rem', fontFamily: 'monospace', overflowWrap: 'anywhere' }}>{k}</td>
                         <td style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>{renderStateValue(v)}</td>
                     </tr>
                 ))}
@@ -412,18 +445,18 @@ function StateTable({ state }) {
 function BalancesTable({ balances }) {
     const rows = contractBalanceRows(balances);
     if (rows.length === 0) {
-        return <EmptyState title="Contract holds no tokens." titleAs="p" />;
+        return <EmptyState title="No contract tokens" body="Tokens held by this contract appear here." titleAs="p" />;
     }
     return (
-        <table style={{ width: '100%', fontSize: '0.85rem' }}>
+        <table style={{ width: '100%', tableLayout: 'fixed', fontSize: '0.85rem' }}>
             <thead>
                 <tr><th align="left">Token</th><th align="right">Amount</th></tr>
             </thead>
             <tbody>
                 {rows.map((r, i) => (
                     <tr key={String(r.tick) + ':' + i}>
-                        <td style={{ fontFamily: 'monospace' }}>{r.tick}</td>
-                        <td align="right" style={{ fontFamily: 'monospace' }}>{String(r.quantity)}</td>
+                        <td style={{ fontFamily: 'monospace', overflowWrap: 'anywhere' }}>{r.tick}</td>
+                        <td align="right" style={{ fontFamily: 'monospace', overflowWrap: 'anywhere' }}>{String(r.quantity)}</td>
                     </tr>
                 ))}
             </tbody>

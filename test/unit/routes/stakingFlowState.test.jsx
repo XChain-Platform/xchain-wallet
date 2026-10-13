@@ -82,7 +82,7 @@ describe('staking chooser and list read states', () => {
             }),
         );
 
-        expect(await screen.findByText('No staking positions could be loaded. Try again later.')).toBeInTheDocument();
+        expect(await screen.findByText(/Couldn't load some staking data/)).toBeInTheDocument();
         expect(screen.queryByText(/Nothing staked yet/)).toBeNull();
     });
 });
@@ -102,7 +102,7 @@ describe('stake detail state', () => {
 
         expect(await screen.findByText('Nothing staked in this contract')).toBeInTheDocument();
         expect(screen.getByText('inactive')).toBeInTheDocument();
-        expect(screen.getByText('No positions found for this contract.')).toBeInTheDocument();
+        expect(screen.getByText('Staking positions for this contract appear here.')).toBeInTheDocument();
     });
 
     it('resets the selected tab when the route changes staking kind', async () => {

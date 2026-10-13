@@ -71,6 +71,19 @@ afterEach(() => {
 });
 
 describe('ThisWalletSection removal completion', () => {
+    it('submits an exact wallet-name confirmation with Enter', async () => {
+        const { messaging } = mount([OTHER_WALLET]);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Remove…' }));
+        const confirmation = screen.getByLabelText('Confirm wallet name');
+        expect(confirmation).toHaveAttribute('enterkeyhint', 'done');
+        fireEvent.change(confirmation, { target: { value: ACTIVE_WALLET.name } });
+        fireEvent.keyDown(confirmation, { key: 'Enter' });
+
+        await screen.findByText('Wallet removed.');
+        expect(messaging.removeWallet).toHaveBeenCalledWith({ walletId: ACTIVE_WALLET.id });
+    });
+
     it('locks confirmation and Settings navigation while removal is in flight', async () => {
         let finishRemoval;
         mount([OTHER_WALLET], {

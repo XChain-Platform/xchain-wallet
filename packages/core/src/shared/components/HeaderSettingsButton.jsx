@@ -12,21 +12,28 @@ import { useEffect, useRef, useState } from 'react';
 import { Icon } from '@xchain-wallet/core/ui';
 import { NetworkFilter } from './NetworkFilter.jsx';
 import { useViewportClamp } from '../hooks/useViewportClamp.js';
+import {
+    activeNetworkLabel,
+    activeNetworkOptions,
+    confirmActiveNetworkSwitch,
+    normalizeActiveNetwork,
+} from '../utils/activeNetworkSwitch.js';
 import styles from './HeaderSettingsButton.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 
 /**
- * Header gear-icon → settings popover. Three sections:
+ * Header gear-icon → settings popover. Four sections:
  *
  *   ▸ Wallet     summary row showing the active wallet name; click
  *                navigates to the WalletPicker route (full list +
  *                Add Wallet affordance)
  *   ▸ Account    same shape; click navigates to AccountPicker
- *   ▸ Network    inline coin-family filter (quick toggle, no nav)
+ *   ▸ Network    active Mainnet / Testnet / Regtest switch
+ *   ▸ Chain filter inline coin-family filter (quick toggle, no nav)
  *
  * Every section is opt-in: a host that only wires the pickers gets a
- * pure wallet/account switcher, and a host that only wires the filter
- * gets the old filter-only button. Sections whose handlers are missing
+ * pure wallet/account switcher, and a host that only wires a network
+ * control gets a network-only button. Sections whose handlers are missing
  * are omitted rather than rendered inert.
  *
  * Keeping the popover compact: full lists + add affordances belong on
@@ -34,8 +41,8 @@ import { useBackHandler } from '../../ui/backStack.js';
  * confirmation. The popover is just "what's active" + "tap to change".
  *
  * The gear icon shows a small dot when ANY non-default setting is
- * active (non-`all` network filter, non-first wallet, or non-first
- * account). Click outside / Escape closes.
+ * active (non-Mainnet network, non-`all` chain filter, non-first wallet,
+ * or non-first account). Click outside / Escape closes.
  *
  * @param {object} props
  * @param {{ id: string, name: string } | null} [props.activeWallet]      the wallet to display in the summary row
@@ -48,6 +55,9 @@ import { useBackHandler } from '../../ui/backStack.js';
  * @param {string[]} [props.coinFamilies]
  * @param {string} [props.networkFilter]
  * @param {(coin: string) => void} [props.onNetworkFilterChange]   omit (or omit the registry / families) to drop the Network section entirely
+ * @param {'mainnet'|'testnet'|'regtest'} [props.activeNetwork]
+ * @param {boolean} [props.developerMode]
+ * @param {(network: 'mainnet'|'testnet'|'regtest') => Promise<void>} [props.onActiveNetworkChange]
  */
 export function HeaderSettingsButton({
     activeWallet,
@@ -60,8 +70,12 @@ export function HeaderSettingsButton({
     coinFamilies,
     networkFilter,
     onNetworkFilterChange,
+    activeNetwork,
+    developerMode = false,
+    onActiveNetworkChange,
 }) {
     const [open, setOpen] = useState(false);
+    const [switchingNetwork, setSwitchingNetwork] = useState(false);
     // The system Back gesture closes this before it leaves the screen.
     useBackHandler(open ? () => setOpen(false) : undefined);
     const wrapRef = useRef(null);
@@ -92,16 +106,48 @@ export function HeaderSettingsButton({
         && Array.isArray(coinFamilies)
         && coinFamilies.length > 0
         && typeof onNetworkFilterChange === 'function';
+    const hasActiveNetwork = activeNetwork === 'mainnet'
+        || activeNetwork === 'testnet'
+        || activeNetwork === 'regtest';
+    const showActiveNetwork = hasActiveNetwork && typeof onActiveNetworkChange === 'function';
+    const currentNetwork = normalizeActiveNetwork(activeNetwork);
+    const networkOptions = activeNetworkOptions({ developerMode, current: currentNetwork });
 
     const filterActive = showNetwork && networkFilter && networkFilter !== 'all';
-    const anyNonDefault = Boolean(filterActive) || walletNonDefault || accountNonDefault;
+    const anyNonDefault = Boolean(filterActive)
+        || (hasActiveNetwork && currentNetwork !== 'mainnet')
+        || walletNonDefault
+        || accountNonDefault;
 
     const walletLabel = activeWallet?.name || null;
     const accountLabel = activeAccount?.name
         || (Number.isInteger(activeAccount?.index) ? `Account ${activeAccount.index + 1}` : null);
 
+    const switchNetwork = async (next) => {
+        if (next === currentNetwork) return;
+        if (!confirmActiveNetworkSwitch(currentNetwork, next)) return;
+        setSwitchingNetwork(true);
+        try {
+            await onActiveNetworkChange(next);
+        } catch (err) {
+            // Keep the current badge and selection when persistence fails.
+            setSwitchingNetwork(false);
+            // eslint-disable-next-line no-console
+            console.error('activeNetwork update failed:', err);
+        }
+    };
+
     return (
         <div ref={wrapRef} className={styles.wrap}>
+            {hasActiveNetwork ? (
+                <span
+                    className={`${styles.networkBadge} ${currentNetwork === 'mainnet' ? '' : styles.networkBadgeNonMainnet}`}
+                    aria-label={`Active network: ${activeNetworkLabel(currentNetwork)}`}
+                    title={`Active network: ${activeNetworkLabel(currentNetwork)}`}
+                >
+                    {activeNetworkLabel(currentNetwork)}
+                </span>
+            ) : null}
             <button
                 type="button"
                 className={`${styles.btn} ${anyNonDefault ? styles.btnActive : ''}`}
@@ -152,8 +198,24 @@ export function HeaderSettingsButton({
                         </Section>
                     ) : null}
 
-                    {showNetwork ? (
+                    {showActiveNetwork ? (
                         <Section title="Network">
+                            <select
+                                className={styles.networkSelect}
+                                value={currentNetwork}
+                                disabled={switchingNetwork}
+                                onChange={(event) => switchNetwork(event.target.value)}
+                                aria-label="Active network in header"
+                            >
+                                {networkOptions.map((option) => (
+                                    <option key={option.value} value={option.value}>{option.label}</option>
+                                ))}
+                            </select>
+                        </Section>
+                    ) : null}
+
+                    {showNetwork ? (
+                        <Section title="Chain filter">
                             <NetworkFilter
                                 chainRegistry={chainRegistry}
                                 coinFamilies={coinFamilies}

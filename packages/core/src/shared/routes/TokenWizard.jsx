@@ -17,10 +17,10 @@ import {
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
-import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
+import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { blockDateEstimateText } from '../utils/blockDateEstimate.js';
@@ -699,6 +699,7 @@ export function TokenWizard({ walletId, onBack }) {
                 warnings: advancedIssueWarnings(advanced),
             },
             formError,
+            onEdit: () => { if (formError) setFormError(null); },
             onSubmit: handleDetailsSubmit,
             submitLabel: 'Review token',
         })}
@@ -1211,7 +1212,7 @@ function renderDetailsStage({
     mintStopBlock, setMintStopBlock,
     payFeeInNativeCoin, setPayFeeInNativeCoin, coinTicker, nativeFeeMandatory,
     advancedPanel,
-    formError, onSubmit, submitLabel = 'Preview', submitLoading = false,
+    formError, onEdit, onSubmit, submitLabel = 'Preview', submitLoading = false,
 }) {
     const resolved = resolveTemplate(template);
     const show = TEMPLATE_FIELDS[resolved] || TEMPLATE_FIELDS.custom;
@@ -1220,6 +1221,7 @@ function renderDetailsStage({
         <FormPage
             label="Token details"
             onSubmit={onSubmit}
+            onChangeCapture={onEdit}
             intro={<>Template: <strong>{resolved}</strong></>}
             status={formError ? (
                 <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
@@ -1305,7 +1307,7 @@ function renderDetailsStage({
                     value={imageUrl}
                     onChange={(e) => setImageUrl(e.target.value)}
                     autoComplete="off"
-                    autoCapitalize="none"
+                    autoCapitalize="off"
                     autoCorrect="off"
                     maxLength={250}
                 />
@@ -1336,7 +1338,7 @@ function renderDetailsStage({
                 <Input
                     label="Minting opens at block (optional)"
                     hint="Block height when public minting starts. Leave blank to open immediately."
-                    inputMode="decimal"
+                    inputMode="numeric"
                     value={mintStartBlock}
                     onChange={(e) => setMintStartBlock(e.target.value)}
                     autoComplete="off"
@@ -1346,7 +1348,7 @@ function renderDetailsStage({
                 <Input
                     label="Minting closes at block (optional)"
                     hint="Block height when public minting ends. Leave blank to keep it open until sold out."
-                    inputMode="decimal"
+                    inputMode="numeric"
                     value={mintStopBlock}
                     onChange={(e) => setMintStopBlock(e.target.value)}
                     autoComplete="off"
@@ -1369,7 +1371,7 @@ function renderDetailsStage({
                     value={transferTo}
                     onChange={(e) => setTransferTo(e.target.value)}
                     autoComplete="off"
-                    autoCapitalize="none"
+                    autoCapitalize="off"
                     autoCorrect="off"
                 />
             ) : null}
@@ -1380,7 +1382,7 @@ function renderDetailsStage({
                     value={transferSupplyTo}
                     onChange={(e) => setTransferSupplyTo(e.target.value)}
                     autoComplete="off"
-                    autoCapitalize="none"
+                    autoCapitalize="off"
                     autoCorrect="off"
                 />
             ) : null}
@@ -1515,7 +1517,7 @@ function AdvancedIssuePanel({
                         hint={callbackBlockEstimate
                             ? `The earliest block you can trigger the callback. Est. ${callbackBlockEstimate}.`
                             : 'The earliest block height you can trigger the callback. Must be a future block.'}
-                        inputMode="decimal"
+                        inputMode="numeric"
                         value={callbackBlock}
                         onChange={(e) => setCallbackBlock(e.target.value)}
                         autoComplete="off"
