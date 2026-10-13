@@ -2679,10 +2679,10 @@ function AppInner() {
                             isSignerMode={isSignerMode}
                         />
                     )}
-                >
-                    {activeWalletId ? (
+                    header={activeWalletId ? (
                         <DemoBanner activeWalletId={activeWalletId} onExited={refresh} />
                     ) : null}
+                >
                     <WatchOnlyBadge visible={isWatcherMode} />
                     <ScrollRestoration routeKey={unlockedView}>
                         <RouteErrorBoundary
