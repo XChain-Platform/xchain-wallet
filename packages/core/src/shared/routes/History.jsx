@@ -62,6 +62,7 @@ import {
 import { readChainSet, writeChainSet } from '../utils/chainFilterMemory.js';
 import { contractDisplayLabel } from './contractResponseShape.js';
 import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
+import { useFocusTrap } from '../utils/focusTrap.js';
 import { findContactByName, withEntriesAdded } from '../utils/contactMerge.js';
 import { copyText } from '../clipboard.js';
 import styles from './History.module.css';
@@ -3790,6 +3791,10 @@ function ExportModal({
     visibleCount, totalCount,
     onConfirm,
 }) {
+    // Opened by the 'e' key or its button: focus moves in, Tab stays in, and
+    // closing hands focus back to the opener.
+    const dialogRef = useRef(null);
+    useFocusTrap(dialogRef, { active: true });
     useEffect(() => {
         function onKey(e) { if (e.key === 'Escape') onClose(); }
         document.addEventListener('keydown', onKey);
@@ -3814,6 +3819,7 @@ function ExportModal({
             tabIndex={-1}
         >
             <div
+                ref={dialogRef}
                 style={MODAL_CARD}
                 role="dialog"
                 aria-modal="true"

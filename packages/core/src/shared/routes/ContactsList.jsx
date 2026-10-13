@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, EmptyState, FormPage, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
+import { useFocusTrap } from '../utils/focusTrap.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useToast } from '../components/ToastHost.jsx';
 import { NETWORK_OPTIONS, NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
@@ -132,6 +133,9 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
 
     // Add-address modal (launched from the detail view's + button).
     const [addAddrOpen, setAddAddrOpen] = useState(false);
+    // The add-address dialog traps Tab and returns focus to its opener on close.
+    const addAddrRef = useRef(null);
+    useFocusTrap(addAddrRef, { active: addAddrOpen });
     const [addAddrValue, setAddAddrValue] = useState('');
     const [addAddrError, setAddAddrError] = useState(/** @type {string | null} */ (null));
     const [addAddrSaving, setAddAddrSaving] = useState(false);
@@ -737,6 +741,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
 
                 {addAddrOpen ? (
                     <div
+                        ref={addAddrRef}
                         className={picker.modalOverlay}
                         role="dialog"
                         aria-modal="true"
