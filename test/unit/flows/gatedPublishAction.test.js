@@ -32,6 +32,7 @@ vi.mock('../../../packages/core/src/flows/composeActionForConfirm.js', () => ({
 import {
     gatedPublishAction,
     buildGatedPublishPsbtRequest,
+    clearPendingGeneratedKeysForWallet,
     composeGatedPublishForConfirm,
     MAX_GATED_PLAINTEXT_BYTES,
 } from '../../../packages/core/src/flows/gatedPublishAction.js';
@@ -137,6 +138,28 @@ describe('gatedPublishAction validation', () => {
 });
 
 describe('gatedPublishAction composition', () => {
+    it('clears only the removed wallet pending generated keys', async () => {
+        const first = makeOpts({ walletId: 'removed-wallet' });
+        const second = makeOpts({ walletId: 'kept-wallet' });
+        const removed = await composeGatedPublishForConfirm(first);
+        const kept = await composeGatedPublishForConfirm(second);
+
+        clearPendingGeneratedKeysForWallet('removed-wallet');
+
+        await expect(gatedPublishAction({
+            ...first,
+            prebuiltPsbt: { psbtHex: removed.psbt },
+            prebuiltActionData: removed.gatedPublish.actionData,
+            prebuiltKeyHash: removed.gatedPublish.keyHash,
+        })).rejects.toThrow(/prepared pack key is unavailable/);
+        await expect(gatedPublishAction({
+            ...second,
+            prebuiltPsbt: { psbtHex: kept.psbt },
+            prebuiltActionData: kept.gatedPublish.actionData,
+            prebuiltKeyHash: kept.gatedPublish.keyHash,
+        })).resolves.toBeTruthy();
+    });
+
     it('composes once for confirmation and signs those prepared bytes', async () => {
         const sdk = makeSdk();
         const vault = makeVault();

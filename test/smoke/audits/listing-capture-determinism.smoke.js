@@ -181,7 +181,7 @@ for (const [label, ...parts] of [
         + 'the demo promises not to make and a coin flip in every capture.');
 }
 assert.match(read('packages', 'core', 'src', 'shared', 'components', 'HomeTabs.jsx'),
-    /<TotalBalanceHero\s*\n\s*rows=\{filteredRows\}\s*\n\s*walletId=\{walletId\}/,
+    /<TotalBalanceHero\s*\n\s*rows=\{portfolioRows\}\s*\n\s*walletId=\{walletId\}/,
     'HomeTabs must pass walletId to the hero, or the hero cannot tell a demo wallet apart '
     + 'and the demo-price branch above is dead code');
 

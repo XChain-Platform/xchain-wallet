@@ -9,8 +9,7 @@
 // Unit: flows/searchTokens. Substring token search over one chain via
 // sdk.getTokens. Normalizes the explorer's {data:[...]} envelope and the
 // dev-mock's bare array, upper-cases ticks, clamps the limit to [1,50],
-// and swallows failures into an empty list (the picker just shows fewer
-// rows rather than an error).
+// and preserves failures so the picker can offer a retry action.
 
 import { describe, it, expect, vi } from 'vitest';
 import { searchPlatformTokens } from '../../../packages/core/src/flows/searchTokens.js';
@@ -64,9 +63,10 @@ describe('flows/searchTokens searchPlatformTokens', () => {
         expect(out).toEqual([{ tick: 'OK', totalSupply: null, maxSupply: null }]);
     });
 
-    it('swallows a getTokens rejection into an empty list', async () => {
+    it('preserves a getTokens rejection for the retryable UI', async () => {
         const sdk = { getTokens: async () => { throw new Error('network down'); } };
-        expect(await searchPlatformTokens({ sdkRegistry: mkRegistry(sdk), chainId: 'c', query: 'x' })).toEqual([]);
+        await expect(searchPlatformTokens({ sdkRegistry: mkRegistry(sdk), chainId: 'c', query: 'x' }))
+            .rejects.toThrow('network down');
     });
 
     it('returns [] when the resolved SDK has no getTokens method', async () => {

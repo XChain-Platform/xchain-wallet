@@ -81,11 +81,11 @@ describe('ListForkForm addition validation', () => {
         fireEvent.change(additions, { target: { value: 'BAD TICK' } });
         fireEvent.click(screen.getByRole('button', { name: 'Review' }));
 
-        expect(await screen.findByText("These don't look like token names: BAD TICK.")).toBeTruthy();
+        expect(await screen.findByText('Remove 1 invalid token name before reviewing.')).toBeTruthy();
         expect(screen.queryByRole('button', { name: 'Publish add' })).toBeNull();
 
         fireEvent.change(additions, { target: { value: 'GOOD' } });
-        expect(screen.queryByText(/don't look like token names/)).toBeNull();
+        expect(screen.queryByText(/invalid token name before reviewing/)).toBeNull();
     });
 
     it('keeps an address from another network out of review', async () => {
@@ -95,7 +95,7 @@ describe('ListForkForm addition validation', () => {
         });
         fireEvent.click(screen.getByRole('button', { name: 'Review' }));
 
-        expect(await screen.findByText(new RegExp(`aren't valid .* addresses: ${LITECOIN_ADDRESS}\\.$`))).toBeTruthy();
+        expect(await screen.findByText('Remove 1 invalid address before reviewing.')).toBeTruthy();
         expect(screen.queryByRole('button', { name: 'Publish add' })).toBeNull();
     });
 });

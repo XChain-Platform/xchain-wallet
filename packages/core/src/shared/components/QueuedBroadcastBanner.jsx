@@ -175,17 +175,9 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
             <div
                 id={titleId}
                 className={styles.title}
-                role="status"
-                aria-live="polite"
-                aria-atomic="true"
             >
                 Waiting to send ({queue.length})
             </div>
-            <span className={styles.srOnly} aria-live="polite" aria-atomic="true">
-                {busyId
-                    ? `${busyKind === 'remove' ? 'Removing' : 'Sending'} ${queue.find((entry) => entry.id === busyId)?.summary || 'transaction'}.`
-                    : ''}
-            </span>
             <ul className={styles.list}>
                 {queue.map((entry) => (
                     <li key={entry.id} className={styles.row}>

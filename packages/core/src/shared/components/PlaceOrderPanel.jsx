@@ -26,7 +26,7 @@
 // behind the same form surface (Phase 2 HW Sign pattern).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Input } from '@xchain-wallet/core/ui';
+import { Button, Input, StatusMessage } from '@xchain-wallet/core/ui';
 import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useGatedTickNotice, gatedTickWarningCopy } from '../hooks/useGatedTickNotice.js';
@@ -93,6 +93,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
     const [balances, setBalances] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
+    const [accountLoading, setAccountLoading] = useState(true);
     const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
     const [password, setPassword] = useState('');
     const [stage, setStage] = useState(/** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'));
@@ -119,6 +120,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
 
     useEffect(() => {
         let cancelled = false;
+        setAccountLoading(true);
         (async () => {
             try {
                 const [byChain, active] = await Promise.all([
@@ -147,6 +149,9 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 }
                 if (!cancelled) setBalances(b);
             } catch { /* surfaced via submit error on place */ }
+            finally {
+                if (!cancelled) setAccountLoading(false);
+            }
         })();
         return () => { cancelled = true; };
     }, [messaging, walletId, chainId]);
@@ -567,13 +572,20 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
             border: '1px solid var(--xc-border)',
             borderRadius: 'var(--xc-radius-sm)',
             display: 'grid',
-            gridTemplateColumns: 'auto 1fr',
+            gridTemplateColumns: 'minmax(0, auto) minmax(0, 1fr)',
             columnGap: 'var(--xc-space-3)',
             rowGap: 2,
             fontSize: 'var(--xc-text-xs)',
         };
         const dtStyle = { color: 'var(--xc-text-muted)' };
-        const ddStyle = { margin: 0, color: 'var(--xc-text)', textAlign: 'right', fontVariantNumeric: 'tabular-nums' };
+        const ddStyle = {
+            margin: 0,
+            minWidth: 0,
+            color: 'var(--xc-text)',
+            textAlign: 'right',
+            fontVariantNumeric: 'tabular-nums',
+            overflowWrap: 'anywhere',
+        };
 
         return (
             <div style={panelStyle}>
@@ -634,7 +646,12 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                             {submitError}
                         </p>
                     ) : null}
-                    <div style={{ display: 'flex', gap: 'var(--xc-space-2)', marginTop: '0.5rem' }}>
+                    <div style={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        gap: 'var(--xc-space-2)',
+                        marginTop: '0.5rem',
+                    }}>
                         <Button
                             type="button"
                             variant="ghost"
@@ -693,12 +710,17 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
         <form
             onSubmit={handleReview}
             noValidate
+            aria-busy={accountLoading || actionConfirm.composing || undefined}
             style={{
                 border: '1px solid var(--xc-border)',
                 borderRadius: '4px',
                 padding: '0.5rem',
+                minWidth: 0,
             }}
         >
+            {accountLoading ? (
+                <StatusMessage variant="status">Loading wallet balances…</StatusMessage>
+            ) : null}
             <dl style={{
                 margin: '0 0 var(--xc-space-2)',
                 padding: 'var(--xc-space-2) var(--xc-space-3)',
@@ -706,7 +728,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 border: '1px solid var(--xc-border)',
                 borderRadius: 'var(--xc-radius-sm)',
                 display: 'grid',
-                gridTemplateColumns: 'auto 1fr',
+                gridTemplateColumns: 'minmax(0, auto) minmax(0, 1fr)',
                 columnGap: 'var(--xc-space-3)',
                 rowGap: 2,
                 fontSize: 'var(--xc-text-xs)',
@@ -720,13 +742,19 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     {balanceFor(tick2) ?? '-'}
                 </dd>
             </dl>
-            <div style={{ display: 'flex', gap: 'var(--xc-space-2)', marginBottom: 'var(--xc-space-2)' }}>
+            <div style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 'var(--xc-space-2)',
+                marginBottom: 'var(--xc-space-2)',
+            }}>
                 <button
                     type="button"
                     onClick={() => setSide('buy')}
                     aria-pressed={side === 'buy'}
                     style={{
                         flex: 1,
+                        minWidth: '8rem',
                         appearance: 'none',
                         font: 'inherit',
                         fontWeight: 700,
@@ -747,6 +775,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     aria-pressed={side === 'sell'}
                     style={{
                         flex: 1,
+                        minWidth: '8rem',
                         appearance: 'none',
                         font: 'inherit',
                         fontWeight: 700,
@@ -768,6 +797,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 onChange={(e) => setPrice(normalizeDecimalEntry(e.target.value, price))}
                 inputMode="decimal"
                 autoComplete="off"
+                style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}
             />
             <Input
                 label={`Size (${tick1})`}
@@ -775,6 +805,7 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 onChange={(e) => setSize(normalizeDecimalEntry(e.target.value, size))}
                 inputMode="decimal"
                 autoComplete="off"
+                style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}
             />
             <div style={{
                 display: 'flex',
@@ -831,7 +862,12 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 />
             ) : null}
             {summary ? (
-                <p style={{ margin: '0.5rem 0 0', fontSize: '0.85rem' }}>
+                <p style={{
+                    margin: '0.5rem 0 0',
+                    fontSize: '0.85rem',
+                    overflowWrap: 'anywhere',
+                    fontVariantNumeric: 'tabular-nums',
+                }}>
                     {summary}
                 </p>
             ) : null}
@@ -941,9 +977,11 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                     variant="primary"
                     block
                     loading={actionConfirm.composing}
-                    disabled={actionConfirm.composing}
+                    disabled={accountLoading || actionConfirm.composing}
                 >
-                    {actionConfirm.composing
+                    {accountLoading
+                        ? 'Loading wallet…'
+                        : actionConfirm.composing
                         ? 'Preparing review…'
                         : (singleEncode ? `Place ${side} order` : 'Review')}
                 </Button>

@@ -72,7 +72,8 @@ describe('Automatic Donation System settings', () => {
         expect(screen.getByLabelText('Bitcoin per-transaction amount').value).toBe('1000');
         expect(screen.getByLabelText('Bitcoin trigger threshold').value).toBe('25000');
         expect(screen.getByText(/About 25 outgoing transactions to reach the threshold, then sent with the next one/)).toBeTruthy();
-        expect(screen.getByText('Pending donation').nextElementSibling.textContent).toBe('12,345 sats');
+        expect(screen.getByText('Pending donation').nextElementSibling.textContent)
+            .toBe(`${(12_345).toLocaleString()} sats`);
     });
 
     it('writes the switch and both donation choices', () => {

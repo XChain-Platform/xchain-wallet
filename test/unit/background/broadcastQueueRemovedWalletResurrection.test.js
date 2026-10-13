@@ -47,10 +47,15 @@ async function removableVault() {
         addresses: memCollection(),
         pendingTxs: memCollection(),
         pendingAirdrops: memCollection(),
+        pendingDeploys: memCollection(),
         multisigSigningSessions: memCollection(),
+        coSignerAccounts: memCollection(),
         watchlistEntries: memCollection(),
         priceAlerts: memCollection(),
+        gatedKeys: memCollection(),
+        autopayOrders: memCollection(),
         signers: memCollection(),
+        connectedSites: memCollection(),
         settings: { get: async () => ({ schemaVersion: 2, ads: { enabled: false, perChain: {} } }), put: async () => {} },
     };
 }

@@ -32,9 +32,32 @@ export const EXPORT_COLUMNS = /** @type {const} */ ([
     'timestamp',
     'iso',
     'source',
+    'tick',
+    'amount',
     'memo',
     'fiatCurrency',
 ]);
+
+/**
+ * Human-readable names and meanings for every selectable export field.
+ * The keys remain stable for JSON consumers while CSV and the export dialog
+ * can explain fields whose storage names are terse.
+ */
+export const EXPORT_COLUMN_DETAILS = Object.freeze({
+    chainId: Object.freeze({ label: 'Chain', description: 'Chain and network identifier.' }),
+    address: Object.freeze({ label: 'Wallet address', description: 'Wallet address associated with the history row.' }),
+    action: Object.freeze({ label: 'Action', description: 'Transaction action type.' }),
+    actionIndex: Object.freeze({ label: 'Action index', description: 'Chain action index.' }),
+    txHash: Object.freeze({ label: 'Transaction hash', description: 'Transaction identifier.' }),
+    blockIndex: Object.freeze({ label: 'Block index', description: 'Confirmed block height, or zero while pending.' }),
+    timestamp: Object.freeze({ label: 'Unix timestamp', description: 'Source timestamp in seconds or milliseconds.' }),
+    iso: Object.freeze({ label: 'Date (ISO 8601 UTC)', description: 'Timestamp normalized to ISO 8601 with a UTC zone.' }),
+    source: Object.freeze({ label: 'Source', description: 'Sending address reported by the action.' }),
+    tick: Object.freeze({ label: 'Asset', description: 'Native coin or token ticker for the amount.' }),
+    amount: Object.freeze({ label: 'Amount', description: 'Exact source decimal text with no floating-point conversion.' }),
+    memo: Object.freeze({ label: 'Memo', description: 'Action memo, when present.' }),
+    fiatCurrency: Object.freeze({ label: 'Fiat currency', description: 'Selected three-letter fiat currency code.' }),
+});
 
 const COLUMN_SET = new Set(EXPORT_COLUMNS);
 
@@ -57,6 +80,15 @@ function timestampToSeconds(timestamp) {
     return value >= 1e12 ? value / 1000 : value;
 }
 
+function rawValue(entry, ...keys) {
+    const raw = entry?.raw || {};
+    for (const key of keys) {
+        const value = entry?.[key] ?? raw?.[key];
+        if (value !== null && value !== undefined) return value;
+    }
+    return '';
+}
+
 function valueFor(entry, column, { fiatCurrency }) {
     if (column === 'iso') {
         const timestamp = timestampToSeconds(entry?.timestamp);
@@ -65,10 +97,26 @@ function valueFor(entry, column, { fiatCurrency }) {
             : '';
     }
     if (column === 'memo') {
-        return entry?.raw?.memo ?? entry?.raw?.MEMO ?? '';
+        return rawValue(entry, 'memo', 'MEMO');
+    }
+    if (column === 'tick') return rawValue(entry, 'tick', 'TICK', 'token');
+    // String conversion performs no arithmetic, so source decimal strings
+    // remain exact instead of passing through IEEE-754 operations.
+    if (column === 'amount') {
+        const value = rawValue(entry, 'amount', 'AMOUNT', 'quantity', 'QUANTITY');
+        return value === '' ? '' : String(value);
     }
     if (column === 'fiatCurrency') return fiatCurrency;
     return entry?.[column];
+}
+
+function headerFor(column, fiatCurrency) {
+    const label = EXPORT_COLUMN_DETAILS[column]?.label || column;
+    return column === 'fiatCurrency' ? `${label} (${fiatCurrency})` : label;
+}
+
+function columnHeaders(columns, fiatCurrency) {
+    return Object.fromEntries(columns.map((column) => [column, headerFor(column, fiatCurrency)]));
 }
 
 /**
@@ -79,7 +127,7 @@ function valueFor(entry, column, { fiatCurrency }) {
 export function entriesToCsv(entries, opts = {}) {
     const cols = pickColumns(opts.columns);
     const fiatCurrency = normalizeFiatCurrency(opts.fiatCurrency);
-    const lines = [cols.join(',')];
+    const lines = [cols.map((column) => csvField(headerFor(column, fiatCurrency))).join(',')];
     for (const e of entries || []) {
         const row = cols
             .map((c) => valueFor(e, c, { fiatCurrency }))
@@ -105,6 +153,7 @@ export function entriesToJson(entries, meta) {
         ...metaRest,
         fiatCurrency,
         columns: cols,
+        columnHeaders: columnHeaders(cols, fiatCurrency),
         entries: (entries || []).map((e) => {
             const row = {};
             for (const c of cols) {
