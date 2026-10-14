@@ -23,7 +23,7 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { BackupSection } from '../../../packages/core/src/shared/components/settings/BackupSection.jsx';
 
-const CHAIN_ID = 'dogecoin-mainnet';
+const CHAIN_ID = 'dogecoin-testnet';
 const ADDRESS = {
     id: 'address-1',
     address: 'D9restorelabelsaddress0000000000000',
@@ -71,6 +71,8 @@ describe('BackupSection: check chain for backed-up contacts', () => {
         const messaging = mount(restoreLabelsRequest);
 
         await openRestoreForm();
+        expect(screen.getByRole('option', { name: 'Dogecoin' })).toBeTruthy();
+        expect(screen.queryByText(/testnet/i)).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Check' }));
 
         await waitFor(() => expect(messaging.restoreLabelsRequest).toHaveBeenCalledWith({
@@ -103,7 +105,7 @@ describe('BackupSection: check chain for backed-up contacts', () => {
         await openRestoreForm();
         fireEvent.click(screen.getByRole('button', { name: 'Check' }));
 
-        expect(await screen.findByText(`No backed-up labels found on ${CHAIN_ID}.`)).toBeTruthy();
+        expect(await screen.findByText('No backed-up labels found on Dogecoin.')).toBeTruthy();
     });
 
     it('surfaces a thrown error (e.g. a wrong password) without losing the typed password field', async () => {

@@ -117,9 +117,6 @@ export function FeesSection() {
                 const fees = resolveFeeConfig(settings.fees[chainId], chainRegistry.get(chainId));
                 const descriptor = chainRegistry.get(chainId);
                 const displayName = descriptor?.displayName || chainId;
-                const networkSuffix = descriptor && descriptor.networkKind !== 'mainnet'
-                    ? ` · ${descriptor.networkKind}`
-                    : '';
                 // Derive the unit and seed from the descriptor (a fixed 1000 is 1 sat/vB but 0.00001 DOGE/kB).
                 const unit = resolveFeeUnit(descriptor);
                 const seedRate = defaultCustomSettingsRate(unit);
@@ -127,7 +124,7 @@ export function FeesSection() {
                 const rateErrorId = `fee-rate-${chainId}-error`;
                 return (
                     <div key={chainId} style={CHAIN_BLOCK} role="group" aria-labelledby={headingId}>
-                        <div id={headingId} style={CHAIN_HEADER}>{displayName}{networkSuffix}</div>
+                        <div id={headingId} style={CHAIN_HEADER}>{displayName}</div>
 
                         <SettingsFieldRow
                             label="Fee strategy"

@@ -53,6 +53,18 @@ import { ROW, ROW_COPY, ROW_HINT, ROW_LABEL, STACK, SettingsLoadError, Status, T
 const chainRegistry = registryLib.defaultRegistry();
 const SEARCH_DEBOUNCE_MS = 200;
 
+function tokenDisplayName(key, chains) {
+    const tokenKey = String(key);
+    const separator = tokenKey.lastIndexOf(':');
+    if (separator < 0) return tokenKey;
+    const chainId = tokenKey.slice(0, separator);
+    const ticker = tokenKey.slice(separator + 1);
+    const descriptor = chains.find((chain) => chain.id === chainId) || chainRegistry.get(chainId);
+    const chainName = descriptor?.displayName
+        || chainId.replace(/-(?:mainnet|testnet|regtest)$/i, '');
+    return `${chainName}:${ticker}`;
+}
+
 const KEY_TEXT = {
     color: 'var(--xc-text)',
     fontFamily: 'var(--xc-font-mono, monospace)',
@@ -188,7 +200,7 @@ export function DisplaySection() {
             return;
         }
         const chain = chains.find((candidate) => candidate.id === watchChainId);
-        const chainLabel = chain ? `${chain.displayName} (${chain.networkKind})` : watchChainId;
+        const chainLabel = chain?.displayName || watchChainId;
         const enteredKey = `${watchChainId}:${tick}`;
         if (watched.includes(enteredKey)) {
             setWatchMessage(`${tick} is already watched on ${chainLabel}.`);
@@ -400,7 +412,7 @@ export function DisplaySection() {
                     {/* Native options remain because Select owns the listbox control, not its choices. */}
                     {chains.map((chain) => (
                         <option key={chain.id} value={chain.id}>
-                            {chain.displayName} ({chain.networkKind})
+                            {chain.displayName}
                         </option>
                     ))}
                 </Select>
@@ -421,20 +433,23 @@ export function DisplaySection() {
                 </Button>
             </form>
             {watchMessage ? <span role="status" aria-live="polite" style={ROW_HINT}>{watchMessage}</span> : null}
-            {watched.map((key) => (
-                <div key={key} style={ROW}>
-                    <span style={KEY_TEXT} title={key}>{key}</span>
-                    <Button
-                        size="sm"
-                        variant="ghost"
-                        icon={null}
-                        onClick={() => removeWatchedToken(key)}
-                        aria-label={`Remove watched token ${key}`}
-                    >
-                        Remove
-                    </Button>
-                </div>
-            ))}
+            {watched.map((storedKey) => {
+                const key = tokenDisplayName(storedKey, chains);
+                return (
+                    <div key={storedKey} style={ROW}>
+                        <span style={KEY_TEXT} title={key}>{key}</span>
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            icon={null}
+                            onClick={() => removeWatchedToken(storedKey)}
+                            aria-label={`Remove watched token ${key}`}
+                        >
+                            Remove
+                        </Button>
+                    </div>
+                );
+            })}
 
             {(pinned.length > 0 || hidden.length > 0) ? (
                 <div style={{ display: 'flex', gap: 'var(--xc-space-1)' }}>
@@ -481,10 +496,11 @@ export function DisplaySection() {
                         body={`No pinned tokens match "${debouncedTokenQuery.trim()}".`}
                     />
                 ) : (
-                    filteredPinned.map((key) => {
-                        const idx = pinned.indexOf(key);
+                    filteredPinned.map((storedKey) => {
+                        const idx = pinned.indexOf(storedKey);
+                        const key = tokenDisplayName(storedKey, chains);
                         return (
-                            <div key={key} style={ROW} data-token-setting-result="true">
+                            <div key={storedKey} style={ROW} data-token-setting-result="true">
                                 <span style={KEY_TEXT} title={key}>{key}</span>
                                 <div style={ACTIONS}>
                                     <Button
@@ -511,7 +527,7 @@ export function DisplaySection() {
                                         size="sm"
                                         variant="ghost"
                                         icon={null}
-                                        onClick={() => unpin(key)}
+                                        onClick={() => unpin(storedKey)}
                                         aria-label={`Unpin ${key}`}
                                     >
                                         <Icon.XIcon />
@@ -543,22 +559,25 @@ export function DisplaySection() {
                     />
                 ) : (
                     <>
-                        {filteredHidden.map((key) => (
-                            <div key={key} style={ROW} data-token-setting-result="true">
-                                <span style={KEY_TEXT} title={key}>{key}</span>
-                                <div style={ACTIONS}>
-                                    <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        icon={null}
-                                        onClick={() => unhide(key)}
-                                        aria-label={`Unhide ${key}`}
-                                    >
-                                        Unhide
-                                    </Button>
+                        {filteredHidden.map((storedKey) => {
+                            const key = tokenDisplayName(storedKey, chains);
+                            return (
+                                <div key={storedKey} style={ROW} data-token-setting-result="true">
+                                    <span style={KEY_TEXT} title={key}>{key}</span>
+                                    <div style={ACTIONS}>
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            icon={null}
+                                            onClick={() => unhide(storedKey)}
+                                            aria-label={`Unhide ${key}`}
+                                        >
+                                            Unhide
+                                        </Button>
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                         <div style={ROW}>
                             <span style={ROW_LABEL}>{hidden.length} hidden</span>
                             <Button size="sm" variant="secondary" icon={null} onClick={unhideAll}>
