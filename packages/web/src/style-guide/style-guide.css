@@ -36,7 +36,7 @@ body {
     margin: 0 0 32px;
     padding: 14px 16px;
     border: 1px solid var(--xc-border);
-    border-left: 3px solid var(--xc-accent-primary);
+    border-inline-start: 3px solid var(--xc-accent-primary);
     border-radius: 6px;
     background: color-mix(in srgb, var(--xc-accent-primary) 6%, transparent);
     font-size: 14px;
@@ -338,7 +338,7 @@ body {
 }
 
 .sg-view-switch button + button {
-    border-left: 1px solid var(--xc-border-strong);
+    border-inline-start: 1px solid var(--xc-border-strong);
 }
 
 .sg-view-switch button[aria-pressed="true"] {

@@ -98,6 +98,8 @@
     flex-direction: column;
     align-items: flex-end;
     gap: 2px;
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 .qty {
     font-family: var(--xc-font-mono);

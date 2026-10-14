@@ -82,9 +82,11 @@ describe('DesktopUpdateBanner', () => {
 
         const card = screen.getByRole('status');
         expect(card.style.position).toBe('fixed');
-        expect(card.style.left).not.toBe('');
-        expect(card.style.right).not.toBe('');
-        expect(card.style.maxWidth).not.toBe('');
+        expect(card.style.insetInline).toContain('safe-area-inset-left');
+        expect(card.style.insetInline).toContain('safe-area-inset-right');
+        expect(card.style.maxInlineSize).not.toBe('');
+        expect(card.style.left).toBe('');
+        expect(card.style.right).toBe('');
     });
 
     it('keeps the floating card inside the device safe-area insets', () => {

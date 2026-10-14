@@ -52,7 +52,7 @@
 /* ───── Sidebar preview - Chrome side-panel approximation ─────
    Matches the `small` wrapper's WIDTH exactly (375 px) so the wallet
    content inside lays out identically in both modes. The only
-   differences are POSITION (right-docked vs centered) and HEIGHT
+   differences are POSITION (inline-end-docked vs centered) and HEIGHT
    (full viewport vs fixed 600 px). In a real Chrome side panel,
    Chrome owns these - width is user-resizable, height is full
    browser height. */
@@ -72,6 +72,10 @@
     border-inline-start: 1px solid var(--xc-border, #E4E7EB);
     box-shadow: -16px 0 40px rgba(0, 0, 0, 0.35);
     overflow: hidden;
+}
+
+.sidebarFrame:dir(rtl) {
+    box-shadow: 16px 0 40px rgba(0, 0, 0, 0.35);
 }
 
 /* ───── Extension preview - Chrome toolbar dropdown approximation ─────
