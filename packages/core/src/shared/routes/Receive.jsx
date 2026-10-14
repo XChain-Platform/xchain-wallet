@@ -22,6 +22,7 @@ import { useSettings } from '../hooks/useSettings.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useToast } from '../components/ToastHost.jsx';
 import { copyText } from '../clipboard.js';
+import { shareContent, ShareOutcome } from '../share.js';
 import { dataUrlToBlob } from '../dataUrl.js';
 import { AmountField } from '../components/AmountField.jsx';
 import { TokenField } from '../components/TokenField.jsx';
@@ -801,29 +802,21 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             url: qrUri,
         };
         const nav = typeof navigator === 'undefined' ? null : navigator;
-        if (typeof nav?.share === 'function') {
+        let data = shareData;
+        if (typeof nav?.canShare === 'function') {
             try {
-                let data = shareData;
-                if (typeof nav.canShare === 'function') {
-                    try {
-                        const blob = dataUrlToBlob(qrDataUrl);
-                        const withFile = {
-                            ...shareData,
-                            files: [new File([blob], qrFileName, { type: blob.type })],
-                        };
-                        if (nav.canShare(withFile)) data = withFile;
-                    } catch { /* text and URL remain shareable without the QR image */ }
-                }
-                await nav.share(data);
-                return;
-            } catch (err) {
-                if (err?.name === 'AbortError') return;
-                console.error('Receive QR share failed:', err); // eslint-disable-line no-console
-            }
+                const blob = dataUrlToBlob(qrDataUrl);
+                const withFile = {
+                    ...shareData,
+                    files: [new File([blob], qrFileName, { type: blob.type })],
+                };
+                if (nav.canShare(withFile)) data = withFile;
+            } catch { /* text and URL remain shareable without the QR image */ }
         }
 
-        const { ok } = await copyText(qrUri);
-        showToast(ok
+        const outcome = await shareContent(data, { fallbackText: qrUri });
+        if (outcome === ShareOutcome.SHARED || outcome === ShareOutcome.CANCELED) return;
+        showToast(outcome === ShareOutcome.COPIED
             ? { message: 'Sharing is unavailable, so the payment link was copied to the clipboard.' }
             : { message: 'Could not share or copy the payment link.', variant: 'error' });
     }, [qrDataUrl, qrUri, reqTick, nativeTicker, descriptor?.displayName, reqAmount, qrFileName, showToast]);
