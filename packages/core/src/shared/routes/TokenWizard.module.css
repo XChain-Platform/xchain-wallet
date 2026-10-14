@@ -140,6 +140,12 @@
     overflow-wrap: anywhere;
 }
 
+.detailsValue code,
+.txid {
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
 .warnings {
     border: 1px solid color-mix(in srgb, var(--xc-warning, #B07A00) 40%, transparent);
     background: color-mix(in srgb, var(--xc-warning, #B07A00) 12%, transparent);
@@ -231,7 +237,8 @@
 .lockFlagHint {
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
-    margin: 0 0 0 calc(var(--xc-space-2) + 1em);
+    margin: 0;
+    margin-inline-start: calc(var(--xc-space-2) + 1em);
     line-height: 1.4;
 }
 

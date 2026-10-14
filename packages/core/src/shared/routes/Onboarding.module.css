@@ -230,7 +230,9 @@
     background: var(--xc-danger-bg);
     border-inline-start: 3px solid var(--xc-danger);
     padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: 0 var(--xc-radius-sm) var(--xc-radius-sm) 0;
+    border-radius: 0;
+    border-start-end-radius: var(--xc-radius-sm);
+    border-end-end-radius: var(--xc-radius-sm);
     margin: var(--xc-space-2) 0;
 }
 

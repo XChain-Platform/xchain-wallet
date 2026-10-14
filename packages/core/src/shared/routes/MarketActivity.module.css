@@ -54,6 +54,10 @@
     color: var(--xc-text-muted);
 }
 
+:global([dir='rtl']) .marketSelectorChevron {
+    transform: scaleX(-1);
+}
+
 .section {
     margin-top: var(--xc-space-4);
 }

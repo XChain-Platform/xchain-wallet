@@ -108,6 +108,8 @@
     font-weight: 600;
     min-width: 0;
     overflow-wrap: anywhere;
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .eventMeta {
@@ -122,6 +124,8 @@
     white-space: nowrap;
     color: var(--xc-text-muted);
     font-size: var(--xc-text-xs);
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 /* Slash events read as warnings. */
@@ -130,6 +134,8 @@
     min-width: 0;
     overflow-wrap: anywhere;
     color: var(--xc-danger-fg);
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 /* Status pill in the hero, tinted per state (mirrors the list chips). */

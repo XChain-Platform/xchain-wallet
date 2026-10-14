@@ -104,6 +104,15 @@
     word-break: break-word;
 }
 
+.detailsValue code,
+.coinControlValue,
+.coinControlSummary dd,
+.txid,
+.successMono {
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
 .warnings {
     border: 1px solid var(--xc-warning);
     background: var(--xc-warning-bg);
