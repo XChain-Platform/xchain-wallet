@@ -114,6 +114,23 @@ test('clip measurement skips text nobody can see', async ({ page, browserName })
     ]);
 });
 
+test('overlap measurement reports controls drawn over each other, not overlays', async ({ page }) => {
+    await page.setContent(`
+        <style>
+            body { margin: 0; }
+            button { position: absolute; top: 10px; height: 40px; width: 80px; }
+            .sheet { position: fixed; inset: 100px 0 0 0; background: white; }
+        </style>
+        <button style="left: 10px">Contacts</button>
+        <button style="left: 60px">Paste</button>
+        <button style="left: 200px">Apart</button>
+        <button style="left: 10px; top: 150px">Under the sheet</button>
+        <div class="sheet"><button style="left: 20px; top: 40px">On the sheet</button></div>
+    `);
+    const { overlaps } = await page.evaluate(measureInPage, {});
+    expect(overlaps).toEqual([{ el: 'button "Contacts"', with: 'button "Paste"', w: 30, h: 40 }]);
+});
+
 test('layout sweep', async ({ page }, testInfo) => {
     test.setTimeout(45 * 60 * 1000);
     const venue = testInfo.project.name;

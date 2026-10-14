@@ -11,8 +11,8 @@
 // Layout sweep: walk every screen the wallet can reach and measure it for the
 // faults a user sees but no functional test catches - content off the edge of
 // the screen, text cut off by a clipping parent, a page that scrolls sideways,
-// panels that scroll when they should fit, and content below the fold that
-// nothing lets you reach.
+// panels that scroll when they should fit, content below the fold that
+// nothing lets you reach, and controls drawn over each other.
 //
 // It runs the same walk in every venue (Chromium at Android sizes, WebKit at
 // iPhone and iPad sizes, the Electron desktop app at several window sizes),
@@ -126,8 +126,41 @@ export function measureInPage(opts = {}) {
     }
     res.layout = measureLayout();
     res.narrow = measureNarrowLists();
+    res.overlaps = measureOverlaps();
     if (opts.contrast) measureContrast();
     return res;
+
+    // Controls drawn over each other: an in-field icon that a wider Paste
+    // button runs into at large text, say. Only controls a tap can reach at
+    // their own centre count, so a menu or dialog laid over the page (which
+    // covers the page's controls by design) is not an overlap.
+    function measureOverlaps() {
+        const found = [];
+        const controls = [...document.querySelectorAll(
+            'button, a[href], [role="button"], select, input[type="checkbox"], input[type="radio"]',
+        )].filter((el) => {
+            const r = el.getBoundingClientRect();
+            if (r.width < 1.5 || r.height < 1.5) return false;
+            const x = r.left + r.width / 2;
+            const y = r.top + r.height / 2;
+            if (x < 0 || y < 0 || x > vw || y > vh) return false;
+            const hit = document.elementFromPoint(x, y);
+            return Boolean(hit && (hit === el || el.contains(hit)));
+        });
+        for (let i = 0; i < controls.length && found.length < 15; i += 1) {
+            for (let j = i + 1; j < controls.length && found.length < 15; j += 1) {
+                const a = controls[i];
+                const b = controls[j];
+                if (a.contains(b) || b.contains(a)) continue;
+                const ra = a.getBoundingClientRect();
+                const rb = b.getBoundingClientRect();
+                const w = Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left);
+                const h = Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top);
+                if (w > 2 && h > 2) found.push({ el: desc(a), with: desc(b), w: Math.round(w), h: Math.round(h) });
+            }
+        }
+        return found;
+    }
 
     // The route contract is measured from the main scroller's inner border.
     // This keeps a left navigation rail out of page-gutter coordinates and
