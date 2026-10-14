@@ -10,13 +10,14 @@
 
 import { Component } from 'react';
 import { Button, FormPage, StatusMessage } from '@xchain-wallet/core/ui';
+import { logConsole } from '../utils/logConsole.js';
 import styles from './RouteErrorBoundary.module.css';
 
 /**
  * Keeps a failed route from replacing the application with a blank screen.
  * The Home action changes only shell navigation state, so providers and the
- * unlocked session stay mounted. Reload remains available when Home itself
- * is the failing route or the boundary covers a non-wallet screen.
+ * unlocked session stay mounted. A boundary without shell navigation falls
+ * back to reloading the application entry point.
  */
 export class RouteErrorBoundary extends Component {
     constructor(props) {
@@ -29,6 +30,11 @@ export class RouteErrorBoundary extends Component {
     }
 
     componentDidCatch(error, info) {
+        logConsole.record({
+            level: 'error',
+            source: 'ui:route',
+            message: 'Route render failed',
+        });
         this.props.onError?.(error, info);
     }
 
@@ -38,7 +44,11 @@ export class RouteErrorBoundary extends Component {
         }
     }
 
-    reload = () => {
+    goHome = () => {
+        if (this.props.onHome) {
+            this.props.onHome();
+            return;
+        }
         if (this.props.onReload) {
             this.props.onReload();
             return;
@@ -64,16 +74,11 @@ export class RouteErrorBoundary extends Component {
 
         const actions = (
             <>
-                {this.props.onHome ? (
-                    <Button type="button" variant="secondary" onClick={this.props.onHome}>
-                        Back to Home
-                    </Button>
-                ) : null}
+                <Button type="button" variant="secondary" onClick={this.goHome}>
+                    Go to Home
+                </Button>
                 <Button type="button" variant="primary" onClick={this.retry}>
                     Try again
-                </Button>
-                <Button type="button" variant="secondary" onClick={this.reload}>
-                    Reload
                 </Button>
             </>
         );
@@ -83,9 +88,7 @@ export class RouteErrorBoundary extends Component {
                 <FormPage label="This screen could not be shown" actions={actions}>
                     <h1 className={styles.title}>This screen could not be shown</h1>
                     <p className={styles.body}>
-                        {this.props.onHome
-                            ? 'Something went wrong while showing this screen. Try again, go back Home without locking your wallet, or reload the app.'
-                            : 'Something went wrong while showing this screen. Try again or reload the app.'}
+                        Something went wrong while showing this screen. Try again or go to Home.
                     </p>
                 </FormPage>
             </div>
