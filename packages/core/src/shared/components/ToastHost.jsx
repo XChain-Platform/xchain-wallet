@@ -15,6 +15,10 @@ import { HapticProvider, useHaptic } from '../hooks/useHaptic.js';
 import { clearToastRoom, placeToastStack } from './toastPlacement.js';
 
 const VISIBLE_LIMIT = 3;
+// One duration for every toast, set here rather than per call: 8 s to read a
+// message, and 12 s when it carries an action (Undo, Review), so the action
+// can still be reached. Callers do not pass durationMs; specs pass 0 to keep a
+// toast until it is dismissed.
 const DEFAULT_DURATION_MS = 8000;
 const ACTION_MIN_DURATION_MS = 12000;
 
