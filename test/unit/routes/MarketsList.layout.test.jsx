@@ -26,7 +26,7 @@ function deferred() {
 }
 
 describe('MarketsList narrow layout', () => {
-    it('shows only the native asset icon for a non-mainnet selection', async () => {
+    it('names the selected chain without its network kind', async () => {
         render(
             <MessagingProvider shell="web" messaging={{
                 getMarkets: vi.fn().mockResolvedValue([]),
@@ -43,7 +43,10 @@ describe('MarketsList narrow layout', () => {
 
         await screen.findByText('No markets for BTC');
         const selector = screen.getByRole('button', { name: /Change asset/ });
-        expect(selector.textContent).not.toMatch(/Bitcoin|BTC|regtest|testnet|Not mainnet/i);
+        // The selector card names the chain (coordinator ruling) but never
+        // the network kind.
+        expect(selector).toHaveTextContent('Bitcoin');
+        expect(selector.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
         expect(document.body.textContent).not.toMatch(/regtest|testnet|Not mainnet/i);
     });
 

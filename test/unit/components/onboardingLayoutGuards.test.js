@@ -116,10 +116,10 @@ describe('onboarding and Home layout guards', () => {
             /<Button\s+variant="primary"\s+block\s+onClick=\{handleAcceptLicense\}/,
         );
         expect(onboardingCss).toMatch(
-            /\.licenseActions > \*\s*\{[^}]*width:\s*100%;/s,
+            /\.licenseActions > button\s*\{[^}]*width:\s*100%;/s,
         );
         expect(onboardingCss).toMatch(
-            /@media \(min-width: 600px\)[\s\S]*?\.licenseActions\s*\{[^}]*justify-content:\s*flex-end;[^}]*\}[\s\S]*?\.licenseActions > \*\s*\{[^}]*width:\s*auto;/,
+            /@media \(min-width: 600px\)[\s\S]*?\.licenseActions\s*\{[^}]*justify-content:\s*flex-end;[^}]*\}[\s\S]*?\.licenseActions > button\s*\{[^}]*width:\s*auto;/,
         );
     });
 

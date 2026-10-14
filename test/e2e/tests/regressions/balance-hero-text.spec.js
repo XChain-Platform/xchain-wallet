@@ -4,12 +4,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {
-    dismissIntroCarousel,
+    createWallet,
     expect,
+    gotoSection,
     test,
-    unlockedShell,
 } from '../../fixtures/wallet.js';
-import { enterDemoWallet } from '../../fixtures/responsive.js';
+import { switchToRegtest } from '../../fixtures/regtest.js';
+
+const PASSWORD = 'balance-hero-text-password';
 
 const VIEWPORTS = [
     { name: 'phone', width: 360, height: 800, maxLines: 2 },
@@ -70,10 +72,12 @@ async function buttonsOverlappingLabel(hero, label) {
 
 test('balance hero sentences stay secondary and clear of actions', async ({ page }) => {
     await page.setViewportSize({ width: VIEWPORTS[0].width, height: VIEWPORTS[0].height });
-    await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
-
-    await expect(page.getByRole('status', { name: 'Demo wallet' })).toBeVisible();
-    await expect(page.getByRole('status', { name: /Active network: Regtest/ })).toBeVisible();
+    // Demo wallets price their sample holdings, so the unpriced sentence comes
+    // from an ordinary wallet on a test network. The shell shows no demo or
+    // network status chips (operator ruling).
+    await createWallet(page, { password: PASSWORD, name: 'Unpriced hero wallet' });
+    await switchToRegtest(page, PASSWORD);
+    await gotoSection(page, 'Home');
 
     const hero = page.getByRole('region', { name: 'Active address balance' });
     const amount = hero.locator([

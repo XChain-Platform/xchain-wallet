@@ -250,19 +250,21 @@ describe('<Button>', () => {
         const addressComboboxSource = readFileSync('packages/core/src/ui/AddressCombobox.jsx', 'utf8');
         const addressPaste = addressComboboxCss.match(/\.pasteAction button\s*\{[^}]*\}/s)?.[0] || '';
         expect(addressComboboxSource).toMatch(/className=\{styles\.pasteAction\}/);
-        expect(addressPaste).toMatch(/inset-inline-end:\s*0/);
-        expect(addressPaste).toMatch(/height:\s*var\(--address-control-height\)/);
-        expect(addressPaste).toMatch(/min-height:\s*var\(--address-control-height\)/);
+        // Paste sits inside the field box, inset from its end edge.
+        expect(addressPaste).toMatch(/inset-inline-end:\s*var\(--xc-space-1\)/);
+        // At the field's inner height: the control height less the inset.
+        expect(addressPaste).toMatch(/height:\s*calc\(var\(--address-control-height\) - var\(--xc-space-2\)\)/);
+        expect(addressPaste).toMatch(/min-height:\s*calc\(var\(--address-control-height\) - var\(--xc-space-2\)\)/);
 
         const amountCss = readCss('shared/components/AmountField.module.css');
         const amountSource = readFileSync('packages/core/src/shared/components/AmountField.jsx', 'utf8');
-        const amountActions = amountCss.match(/\.pasteAction button,\s*\.maxAction\s*\{[^}]*\}/s)?.[0] || '';
+        const amountActions = amountCss.match(/\.amountFieldWrap \.pasteAction button,\s*\.amountFieldWrap \.maxAction\s*\{[^}]*\}/s)?.[0] || '';
         expect(amountSource).toMatch(/className=\{styles\.pasteAction\}/);
         expect(amountSource).toMatch(/className=\{styles\.maxAction\}/);
         expect(amountActions).toMatch(/position:\s*absolute/);
-        expect(amountActions).toMatch(/height:\s*var\(--amount-control-height\)/);
-        expect(amountActions).toMatch(/min-height:\s*var\(--amount-control-height\)/);
-        expect(amountCss).toMatch(/\.maxAction\s*\{[^}]*inset-inline-end:\s*0/s);
+        expect(amountActions).toMatch(/height:\s*calc\(var\(--amount-control-height\) - var\(--xc-space-2\)\)/);
+        expect(amountActions).toMatch(/min-height:\s*calc\(var\(--amount-control-height\) - var\(--xc-space-2\)\)/);
+        expect(amountCss).toMatch(/\.maxAction\s*\{[^}]*inset-inline-end:\s*var\(--xc-space-1\)/s);
 
         const addressFieldCss = readCss('ui/AddressField.module.css');
         const readOnlyValue = addressFieldCss.match(/\.readOnlyValue\s*\{[^}]*\}/s)?.[0] || '';

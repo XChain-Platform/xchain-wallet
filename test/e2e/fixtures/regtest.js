@@ -1703,6 +1703,9 @@ export async function switchToRegtest(page, password) {
     // stranding the wallet with no addresses and no UI path to make one -
     // so if this ever regresses, the funding step below is where it shows.
     await activeNetworkControl(page).selectOption('regtest');
+    // The switch reloads the wallet, so Settings asks first.
+    const confirm = page.getByRole('dialog', { name: 'Switch to Regtest?' });
+    await confirm.getByRole('button', { name: 'Switch network', exact: true }).click();
 
     await unlockAfterReload(page, password);
 }

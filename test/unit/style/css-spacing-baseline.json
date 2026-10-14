@@ -214,6 +214,14 @@
   {
     "file": "packages/core/src/shared/components/LeftNav.module.css",
     "property": "padding-inline",
+    "value": "0px",
+    "lines": [
+      102
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/LeftNav.module.css",
+    "property": "padding-inline",
     "value": "1px",
     "lines": [
       264
