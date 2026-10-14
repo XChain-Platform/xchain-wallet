@@ -48,47 +48,13 @@
 import { nativeFeeErrorMessage } from '../../sdk/nativeFeePreflight.js';
 import { encoderErrorMessage } from '../../sdk/encoderErrors.js';
 import { explorerErrorMessage } from '../../sdk/explorerErrors.js';
+import { knownSdkErrorMessage, unknownSdkErrorCode } from '../../sdk/sdkErrorMessages.js';
 import { validationErrorMessage } from '../../sdk/validationErrors.js';
 import { broadcastFailureKindFromError } from '../../flows/broadcastPermanence.js';
 import { humanizeError } from './humanizeError.js';
 import { actionDisplayLabel } from './actionDisplayLabel.js';
 import { CHUNK_LANE_OPENER_RE } from './chunkLaneCopy.js';
 import { protocolRefusalReason, userFacingMessage } from './userFacingMessage.js';
-
-const SDK_ERROR_MESSAGES = Object.freeze({
-    SDKHubError: 'The wallet could not reach its service directory. Check your connection and try again.',
-    SDKConfigError: 'The wallet is not configured for this request. Check the selected network in Settings and try again.',
-    SDKFormatError: 'The wallet could not prepare this action from the form values. Review the form and try again.',
-    SDKContractError: 'The contract request could not be prepared. Check the contract details and try again.',
-    SDKWalletError: 'The wallet could not prepare or sign this request. Check the wallet details and try again.',
-    SDKAuthError: 'The wallet could not authorize this request. Check the account details and try again.',
-    SDKMessagingError: 'The wallet could not prepare this message. Check the recipient and message, then try again.',
-    SDKActionError: 'The action could not be completed. Check its status and try again.',
-    SDKMuSigError: 'The wallet could not complete the shared signature. Reconnect every signer and try again.',
-    SDKGatedFileError: 'The protected file could not be prepared. Check the file and key, then try again.',
-    SDKCompressionError: 'The file could not be compressed for this action. Choose a smaller file and try again.',
-    SDKPolicyError: 'This request does not meet the signing policy. Review the policy and try again.',
-    SDKX402Error: 'The service payment could not be verified. Check the payment details and try again.',
-    SDKPreflightError: 'This action would be rejected before it confirms. Review the form and try again.',
-    SDKRateLimitedError: 'The service is receiving too many requests. Wait a moment and try again.',
-    SDKError: 'The wallet service could not complete this request. Try again, and report it if it continues.',
-    OracleFeeUnpayableError: 'The wallet could not confirm the required oracle fee. Check the oracle settings and try again.',
-    NonFiniteAmountError: 'A wallet service returned an invalid amount. Try again, and report it if it continues.',
-    InvalidSatsAmountError: 'A wallet service returned an invalid amount. Try again, and report it if it continues.',
-    UnknownChainError: 'The wallet does not recognize the selected network. Choose a supported network in Settings and try again.',
-    RevealInputsRefusedError: 'The follow-up transaction did not match the transaction already sent, so it was not signed. Retry the reveal, and report it if it continues.',
-});
-
-function knownSdkErrorMessage(err) {
-    if (!err || typeof err !== 'object') return null;
-    const e = /** @type {any} */ (err);
-    if (e.code === 'HUB_UNAVAILABLE') return SDK_ERROR_MESSAGES.SDKHubError;
-    if (e.code === 'NON_FINITE_AMOUNT' || e.code === 'INVALID_SATS_AMOUNT') {
-        return SDK_ERROR_MESSAGES[e.code === 'NON_FINITE_AMOUNT' ? 'NonFiniteAmountError' : 'InvalidSatsAmountError'];
-    }
-    if (e.code === 'REVEAL_INPUTS_REFUSED') return SDK_ERROR_MESSAGES.RevealInputsRefusedError;
-    return SDK_ERROR_MESSAGES[String(e.name || '')] || null;
-}
 
 const NEXT_STEP_RE = /\b(?:add|check|choose|enter|give|reconnect|report|retry(?:ing)?|review|try|update|wait)\b/i;
 const SIGNER_CANCELLED_RE = /\b(?:user (?:cancelled|canceled)|(?:cancelled|canceled) (?:by the user|on (?:the )?device)|user rejected on (?:the )?device)\b/i;
@@ -293,6 +259,7 @@ export function submitFailureMessage(
     const generic = `Couldn't ${verb}. Something went wrong. Try again.`;
     const protocolRefusal = protocolRefusalReason(err);
     if (protocolRefusal) return protocolRefusal;
+    if (unknownSdkErrorCode(err)) return generic;
     if (isSignerCancellation(err)) {
         return 'Signing was cancelled. Nothing was signed. Review the details and try again when you are ready.';
     }
@@ -357,6 +324,9 @@ export function submitFailureMessage(
  * @returns {string}
  */
 export function submitFailureDetails(err, message) {
+    const unknownCode = unknownSdkErrorCode(err);
+    if (unknownCode) return unknownCode;
+    if (knownSdkErrorMessage(err)) return '';
     const details = String(humanizeError(err).details || '').trim();
     if (!details) return '';
     const fold = (text) => String(text || '').toLowerCase().replace(/[\s.!?]+$/, '');
