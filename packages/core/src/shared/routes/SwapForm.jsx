@@ -971,7 +971,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                     Give this token&apos;s ownership instead of an amount
                 </label>
                 {giveOwnership ? (
-                    <p className={styles.hint} style={{ margin: '0 0 0.5rem' }}>
+                    <p className={styles.hintLeft} style={{ margin: '0 0 0.5rem' }}>
                         Transfers the entire ownership of {giveTick.trim() ? giveTick.trim().toUpperCase() : 'this token'} (single-fill, no partial matches).
                     </p>
                 ) : null}
@@ -1005,7 +1005,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                     Require the matcher to give that token&apos;s ownership instead of an amount
                 </label>
                 {getOwnership ? (
-                    <p className={styles.hint} style={{ margin: '0 0 0.5rem' }}>
+                    <p className={styles.hintLeft} style={{ margin: '0 0 0.5rem' }}>
                         The matcher must currently own {getTick.trim() ? getTick.trim().toUpperCase() : 'this token'}; on match its ownership transfers to you.
                     </p>
                 ) : null}
@@ -1090,7 +1090,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                         </Button>
                         {blockListIdx ? <Button variant="secondary" size="sm" onClick={() => setBlockListIdx('')}>Clear</Button> : null}
                     </div>
-                    <p className={styles.hint}>Allow/block lists are address lists you published (see My Lists).</p>
+                    <p className={styles.hintLeft}>Allow/block lists are address lists you published (see My Lists).</p>
                 </div>
             ) : null}
 

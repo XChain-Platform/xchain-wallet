@@ -729,7 +729,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                     chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])}
                     chainRegistry={chainRegistry}
                 />
-                <p className={styles.hint}>
+                <p className={styles.hintLeft}>
                     Both sides of this order settle on the same chain. To get a token on another chain, use Cross-chain order.
                 </p>
 
@@ -847,7 +847,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                             </Button>
                             {blockListIdx ? <Button variant="secondary" size="sm" onClick={() => { setBlockListIdx(''); setBlockListCount(null); }}>Clear</Button> : null}
                         </div>
-                        <p className={styles.hint}>Allow/block lists are address lists you published (see My Lists).</p>
+                        <p className={styles.hintLeft}>Allow/block lists are address lists you published (see My Lists).</p>
                         <Input label="Memo (optional)" value={memo} onChange={(e) => setMemo(e.target.value)} autoComplete="off" />
                     </>
                 ) : null}
@@ -861,7 +861,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                             onChange={(e) => setAutopayEnabled(e.target.checked)}
                         />
                         {autopayArm && exposure && Number.isFinite(Number(exposure.total)) ? (
-                            <p className={styles.hint}>
+                            <p className={styles.hintLeft}>
                                 Even if the service that reports matches were fully compromised, auto-pay could send
                                 at most the combined amounts you give across all your orders with auto-pay on.
                             </p>
@@ -875,7 +875,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                         ) : null}
                     </>
                 ) : giveIsNative ? (
-                    <p className={styles.hint}>
+                    <p className={styles.hintLeft}>
                         {isWatcherMode
                             ? 'Watcher and hardware wallets cannot auto-pay; you will be notified to pay any match manually.'
                             : 'Hardware wallets cannot auto-pay; you will be notified to pay any match manually.'}
