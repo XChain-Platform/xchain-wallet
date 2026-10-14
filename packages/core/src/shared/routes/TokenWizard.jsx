@@ -274,6 +274,7 @@ export function TokenWizard({ walletId, onBack }) {
         [chainId],
     );
     const { formatNativeFee, formatProtocolFee } = useFeeFiat({
+        chainId: descriptor?.id,
         chainCoin: descriptor?.coin,
         nativeTicker: coinTicker,
         settings,

@@ -135,9 +135,11 @@ function TokenDetailContent({
     const descriptor = chainRegistry.get(chainId);
     const isNative = kind === 'native';
     const isDemo = isDemoWallet(walletId);
-    const fiatSupported = settings
+    // A mainnet holding shows its value before settings load; the demo wallet
+    // prices its synthetic test holdings.
+    const fiatSupported = isDemo || (settings
         ? settings.activeNetwork !== 'testnet' && settings.activeNetwork !== 'regtest'
-        : Boolean(settingsError);
+        : Boolean(settingsError) || descriptor?.networkKind === 'mainnet');
     const displayFiatRate = fiatSupported ? fiatRate : null;
 
     // §27.6 / Cluster I FOLLOWUP 3 + Cluster C FOLLOWUP 3: pull
