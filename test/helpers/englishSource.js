@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { en } from '../../packages/core/src/i18n/locales/en/index.js';
 
 // Source-reading contract tests match the English copy a component renders.
@@ -13,7 +14,8 @@ import { en } from '../../packages/core/src/i18n/locales/en/index.js';
 // `prop: t('k')` becomes `prop: 'text'`, and any other plain t('k') becomes the
 // quoted English string. Calls with arguments and keys that predate the sweep
 // are left as written, so tests that audit t() usage keep seeing it.
-const EN_FILE = new URL('../../packages/core/src/i18n/locales/en/index.js', import.meta.url);
+// Tests and smokes both run from the wallet repo root.
+const EN_FILE = resolve(process.cwd(), 'packages/core/src/i18n/locales/en/index.js');
 const SWEEP_MARKER = '// Copy moved out of JSX literals by the i18n sweep.';
 const dictionarySource = readFileSync(EN_FILE, 'utf8');
 const sweepKeys = new Set(
