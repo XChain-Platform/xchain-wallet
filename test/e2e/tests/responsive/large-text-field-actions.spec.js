@@ -72,6 +72,7 @@ test('Send field actions stay apart and inside their fields at 100, 130 and 150 
     await gotoSection(page, 'Send');
     const main = page.getByRole('main');
     const to = main.getByRole('combobox', { name: 'To' });
+    const amount = main.getByRole('textbox', { name: /^Amount/ });
     await expect(to).toBeVisible();
 
     for (const viewport of VIEWPORTS) {
@@ -80,6 +81,7 @@ test('Send field actions stay apart and inside their fields at 100, 130 and 150 
             const where = `${viewport.width}px at ${Math.round(scale * 100)}%`;
             await setFontScale(page, scale);
             expect(await fieldActionFaults(to, ['Open address book', 'Paste from clipboard']), `${where}: To`).toEqual([]);
+            expect(await fieldActionFaults(amount, ['Paste from clipboard', 'Use max available amount']), `${where}: Amount`).toEqual([]);
         }
     }
 });
