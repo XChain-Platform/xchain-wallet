@@ -116,7 +116,7 @@ describe('ConnectedSitesSection settings controls', () => {
         };
         rerender(<ConnectedSitesSection />);
 
-        expect(await screen.findAllByText('https://new.example')).toHaveLength(2);
+        expect(await screen.findAllByText('https://new.example')).toHaveLength(1);
         resolveOld([{
             id: 'old-site',
             origin: 'https://old.example',
@@ -125,8 +125,23 @@ describe('ConnectedSitesSection settings controls', () => {
         await Promise.resolve();
         await Promise.resolve();
 
-        expect(screen.getAllByText('https://new.example')).toHaveLength(2);
+        expect(screen.getAllByText('https://new.example')).toHaveLength(1);
         expect(screen.queryAllByText('https://old.example')).toHaveLength(0);
+    });
+
+    it('shows the origin under a named site but never repeats an origin title', async () => {
+        messaging = {
+            ...messaging,
+            listConnectedSites: vi.fn(async () => [
+                { id: 'named', origin: 'https://named.example', appName: 'Named App', permissions: {} },
+                { id: 'bare', origin: 'https://bare.example', permissions: {} },
+            ]),
+        };
+        render(<ConnectedSitesSection />);
+
+        expect(await screen.findByText('Named App')).toBeInTheDocument();
+        expect(screen.getAllByText('https://named.example')).toHaveLength(1);
+        expect(screen.getAllByText('https://bare.example')).toHaveLength(1);
     });
 
     it('ignores an audit-log load from a replaced messaging source', async () => {
