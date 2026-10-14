@@ -31,7 +31,6 @@ import {
     FormSection,
     Icon,
     Input,
-    SectionHeader,
     Select,
     Switch,
 } from '@xchain-wallet/core/ui';
@@ -51,7 +50,7 @@ import {
 } from '../../../schemas/settings.js';
 import { clearAllChainFilters } from '../../utils/chainFilterMemory.js';
 import { readActiveWallet } from '../../utils/activeWalletMemory.js';
-import { EMBEDDED_ROW, ROW_COPY, ROW_HINT, ROW_LABEL, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
+import { ROW, ROW_COPY, ROW_HINT, ROW_LABEL, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 const SEARCH_DEBOUNCE_MS = 200;
@@ -318,10 +317,9 @@ export function DisplaySection() {
     };
 
     return (
-        <FormPage as="div" sectioned fullWidth label="Display settings">
-            <FormSection title="Display options">
-            <SectionHeader as="h3" title="Balance display" />
-            <div style={EMBEDDED_ROW}>
+        <FormPage ref={tokenListsRef} as="div" sectioned fullWidth label="Display settings">
+            <FormSection title="Balance display">
+            <div style={ROW}>
                 <Switch
                     label="Hide small balances"
                     description="Collapse balances below the selected threshold into an expandable section while keeping pinned and escrowed balances visible."
@@ -330,7 +328,7 @@ export function DisplaySection() {
                 />
             </div>
             <DisplaySaveError error={saveError} controlKey="hideSmallBalances" />
-            <div className={layoutStyles.fieldRow}>
+            <div className={layoutStyles.fieldRow} style={{ ...ROW, display: 'grid' }}>
                 <div style={ROW_COPY}>
                     <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Small-balance threshold</span>
                     <span style={ROW_HINT}>Use each network&apos;s relay limit for dust and 0.0001 units for divisible tokens, while applying other choices in whole asset units.</span>
@@ -348,7 +346,7 @@ export function DisplaySection() {
                 </Select>
             </div>
             <DisplaySaveError error={saveError} controlKey="smallBalanceThreshold" />
-            <div className={layoutStyles.fieldRow}>
+            <div className={layoutStyles.fieldRow} style={{ ...ROW, display: 'grid' }}>
                 <div style={ROW_COPY}>
                     <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Balance number format</span>
                     <span style={ROW_HINT}>Change displayed formatting without changing stored or submitted values.</span>
@@ -365,14 +363,13 @@ export function DisplaySection() {
                 </Select>
             </div>
             <DisplaySaveError error={saveError} controlKey="numberFormat" />
+            </FormSection>
 
-            <SectionHeader
-                as="h3"
-                className={layoutStyles.sectionHeader}
+            <FormSection
                 title="Row affordances"
                 description="Choose whether balance rows show quick pin and hide buttons while keeping existing pinned and hidden tokens active."
-            />
-            <div style={EMBEDDED_ROW}>
+            >
+            <div style={ROW}>
                 <Switch
                     label="Show pin button on rows"
                     description="Display a star on each balance row for pinning or unpinning the token on Home."
@@ -381,7 +378,7 @@ export function DisplaySection() {
                 />
             </div>
             <DisplaySaveError error={saveError} controlKey="showPinAffordance" />
-            <div style={EMBEDDED_ROW}>
+            <div style={ROW}>
                 <Switch
                     label="Show hide button on rows"
                     description="Display a hide affordance on each balance row to collapse the token into the Hidden section."
@@ -390,14 +387,13 @@ export function DisplaySection() {
                 />
             </div>
             <DisplaySaveError error={saveError} controlKey="showHideAffordance" />
+            </FormSection>
 
-            <SectionHeader
-                as="h3"
-                className={layoutStyles.sectionHeader}
+            <FormSection
                 title={`Watched tokens (${watched.length})`}
                 description="Add a token by chain and ticker to keep it in Balances even when its balance is zero."
-            />
-            <form className={layoutStyles.fieldRow} onSubmit={addWatchedToken}>
+            >
+            <form className={layoutStyles.fieldRow} style={{ ...ROW, display: 'grid' }} onSubmit={addWatchedToken}>
                 <div style={ROW_COPY}>
                     <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Token to watch</span>
                 </div>
@@ -437,7 +433,7 @@ export function DisplaySection() {
             </form>
             {watchMessage ? <span role="status" aria-live="polite" style={ROW_HINT}>{watchMessage}</span> : null}
             {watched.map((key) => (
-                <div key={key} style={EMBEDDED_ROW}>
+                <div key={key} style={ROW}>
                     <span style={KEY_TEXT} title={key}>{key}</span>
                     <Button
                         size="sm"
@@ -450,7 +446,12 @@ export function DisplaySection() {
                     </Button>
                 </div>
             ))}
+            </FormSection>
 
+            <FormSection
+                title={`Pinned tokens (${pinned.length})`}
+                description="Pinned tokens float to the top of every balance tab in this order. Use ↑ / ↓ to reorder, ✕ to unpin."
+            >
             {(pinned.length > 0 || hidden.length > 0) ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-1)' }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -476,13 +477,6 @@ export function DisplaySection() {
                 </div>
             ) : null}
 
-            <div ref={tokenListsRef} style={{ display: 'contents' }}>
-                <SectionHeader
-                    as="h3"
-                    className={layoutStyles.sectionHeader}
-                    title={`Pinned tokens (${pinned.length})`}
-                    description="Pinned tokens float to the top of every balance tab in this order. Use ↑ / ↓ to reorder, ✕ to unpin."
-                />
                 <DisplaySaveError error={saveError} controlKey="pinnedTokens" />
                 {pinned.length === 0 ? (
                     <EmptyState
@@ -500,7 +494,7 @@ export function DisplaySection() {
                     filteredPinned.map((key) => {
                         const idx = pinned.indexOf(key);
                         return (
-                            <div key={key} style={EMBEDDED_ROW} data-token-setting-result="true">
+                            <div key={key} style={ROW} data-token-setting-result="true">
                                 <span style={KEY_TEXT} title={key}>{key}</span>
                                 <div style={ACTIONS}>
                                     <Button
@@ -537,13 +531,12 @@ export function DisplaySection() {
                         );
                     })
                 )}
+            </FormSection>
 
-                <SectionHeader
-                    as="h3"
-                    className={layoutStyles.sectionHeader}
-                    title={`Hidden tokens (${hidden.length})`}
-                    description={'Hidden tokens collapse into the "Show N hidden" footer of each balance tab. Unhide individually or all at once.'}
-                />
+            <FormSection
+                title={`Hidden tokens (${hidden.length})`}
+                description={'Hidden tokens collapse into the "Show N hidden" footer of each balance tab. Unhide individually or all at once.'}
+            >
                 <DisplaySaveError error={saveError} controlKey="hiddenTokens" />
                 {hidden.length === 0 ? (
                     <EmptyState
@@ -560,7 +553,7 @@ export function DisplaySection() {
                 ) : (
                     <>
                         {filteredHidden.map((key) => (
-                            <div key={key} style={EMBEDDED_ROW} data-token-setting-result="true">
+                            <div key={key} style={ROW} data-token-setting-result="true">
                                 <span style={KEY_TEXT} title={key}>{key}</span>
                                 <div style={ACTIONS}>
                                     <Button
@@ -575,7 +568,7 @@ export function DisplaySection() {
                                 </div>
                             </div>
                         ))}
-                        <div style={EMBEDDED_ROW}>
+                        <div style={ROW}>
                             <span style={ROW_LABEL}>{hidden.length} hidden</span>
                             <Button size="sm" variant="secondary" icon={null} onClick={unhideAll}>
                                 Unhide all
@@ -583,15 +576,13 @@ export function DisplaySection() {
                         </div>
                     </>
                 )}
-            </div>
+            </FormSection>
 
-            <SectionHeader
-                as="h3"
-                className={layoutStyles.sectionHeader}
+            <FormSection
                 title="List preferences"
                 description={'Remember the last selected chain filter for each balance and history list until you reset every list to "show all."'}
-            />
-            <div style={EMBEDDED_ROW}>
+            >
+            <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={ROW_LABEL}>Saved chain filters</span>
                     {resetMessage ? (
@@ -602,9 +593,10 @@ export function DisplaySection() {
                     Reset list preferences
                 </Button>
             </div>
+            </FormSection>
 
-            <SectionHeader as="h3" className={layoutStyles.sectionHeader} title="Defaults" />
-            <div style={EMBEDDED_ROW}>
+            <FormSection title="Defaults">
+            <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={ROW_LABEL}>Reset display settings</span>
                     <span style={ROW_HINT}>Restores balance display options and clears watched, pinned, hidden, and saved list preferences.</span>
