@@ -72,6 +72,7 @@ import { blurNumberInputOnWheel } from '../../utils/formInput.js';
 import { useProtectedScreen } from '../../utils/screenGuard.js';
 import { submitOnlyFromLastField } from '../../../ui/formEnter.js';
 import { ROW_HINT, STACK, SettingsActionRow, Status } from './_settingsPrimitives.jsx';
+import cardStyles from '../../../ui/Card.module.css';
 import styles from './BackupSection.module.css';
 
 /** How often the Backup panel asks the background whether a batched publish came due. */
@@ -614,7 +615,7 @@ function LabelSyncDueNotice({ changeCount, disabled, onPublish, onDismiss }) {
         <FormSection
             title="Labels changed since the last publish"
             description={`${what} have not been saved to the blockchain yet. Publishing needs your wallet password, so the wallet asks once instead of after every rename.`}
-            className={styles.formSection}
+            className={cardStyles.card}
         >
             <div className={styles.actions}>
                 <Button variant="ghost" size="sm" onClick={onDismiss}>
@@ -657,7 +658,7 @@ function UnlockPrompt({ label, hint, busy, error, onCancel, onSubmit }) {
     };
     return (
         <form onSubmit={submit} noValidate>
-            <FormSection title={label} description={hint} className={styles.formSection}>
+            <FormSection title={label} description={hint} className={cardStyles.card}>
                 <Input
                     type="password"
                     revealable
@@ -719,7 +720,7 @@ function RevealedMnemonic({
         <FormSection
             title="Your recovery phrase"
             description={`${RECOVERY_PHRASE_WARNING} Write it on paper or store it in a password manager.`}
-            className={`${styles.formSection} ${styles.recoverySheet}`}
+            className={`${cardStyles.card} ${styles.recoverySheet}`}
         >
             <div className={styles.sheetMeta} data-xc-recovery-sheet>Wallet: {walletName}</div>
             {/* The words and the passphrase refuse a copy: the only way out of
@@ -844,7 +845,7 @@ function DryRunForm({ busy, error, onCancel, onSubmit }) {
             <FormSection
                 title="Test backup"
                 description={`Enter the recovery phrase from your paper backup (or password manager). The wallet rebuilds the first ${gapLimitValid ? gapLimitNumber : 'selected'} addresses on every active chain from it and lists any that don't match. Nothing is saved.`}
-                className={styles.formSection}
+                className={cardStyles.card}
             >
                 <Textarea
                     value={mn}
@@ -927,7 +928,7 @@ function DryRunReport({ result, onDone }) {
         ? '✓ Backup matches this wallet on every active chain.'
         : '✗ Backup does NOT match this wallet on at least one chain.';
     return (
-        <FormSection title={title} className={styles.formSection}>
+        <FormSection title={title} className={cardStyles.card}>
             {perChain.length > 0 ? (
                 <div className={styles.reportList}>
                     {perChain.map((c) => (
@@ -1032,7 +1033,7 @@ function PasswordPrompt({ label, hint, busy, operationTime, error, onCancel, onS
             <FormSection
                 title="Export encrypted backup"
                 description={hint}
-                className={styles.formSection}
+                className={cardStyles.card}
             >
                 <Input
                     label={label}
@@ -1114,7 +1115,7 @@ function BackupExportResult({ result, onDone }) {
     };
 
     return (
-        <FormSection title="Backup file saved" className={styles.formSection}>
+        <FormSection title="Backup file saved" className={cardStyles.card}>
             <Status text={result.fileName} />
             <div style={ROW_HINT}>
                 Your browser sent this file to its configured download location, usually the Downloads folder. Move it somewhere safe and recoverable. The password is not in the file and cannot be recovered.
@@ -1232,7 +1233,7 @@ function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, 
         <FormSection
             title="Publish labels on-chain"
             description="The labels + contacts are encrypted under a key derived from this wallet's seed and stored on the blockchain. Only someone who already has your seed can decrypt them. The transaction pays a network fee."
-            className={styles.formSection}
+            className={cardStyles.card}
         >
             {chains === null ? (
                 <div style={ROW_HINT}>Loading chains…</div>
@@ -1293,7 +1294,7 @@ function PublishLabelsReport({ result, onDone }) {
     if (!txid) {
         return (
             <div data-testid="publish-labels-queued">
-                <FormSection title="Labels signed, not broadcast yet" className={styles.formSection}>
+                <FormSection title="Labels signed, not broadcast yet" className={cardStyles.card}>
                     <div style={ROW_HINT}>
                         {result?.queued
                             ? 'The label transaction is waiting in the queued-transactions banner and will be sent from there.'
@@ -1307,7 +1308,7 @@ function PublishLabelsReport({ result, onDone }) {
         );
     }
     return (
-        <FormSection title="✓ Labels published" className={styles.formSection}>
+        <FormSection title="✓ Labels published" className={cardStyles.card}>
             <dl style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px var(--xc-space-3)', margin: 0 }}>
                 <dt style={ROW_HINT}>Transaction ID</dt>
                 <dd style={{ margin: 0, fontFamily: 'var(--xc-font-mono)', fontSize: 'var(--xc-text-xs)', wordBreak: 'break-all' }}>{txid}</dd>
@@ -1370,7 +1371,7 @@ function RestoreLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
         <FormSection
             title="Check chain for backed-up contacts"
             description="Decrypts the labels + contacts FILE this wallet's seed published on the chain below, if any, and merges anything found into this wallet. Nothing already here is removed."
-            className={styles.formSection}
+            className={cardStyles.card}
         >
             {chains === null ? (
                 <div style={ROW_HINT}>Loading chains…</div>
@@ -1455,7 +1456,7 @@ function restoreLabelsMessage(result) {
  */
 function RestoreLabelsReport({ result, onDone }) {
     return (
-        <FormSection title={restoreLabelsMessage(result)} className={styles.formSection}>
+        <FormSection title={restoreLabelsMessage(result)} className={cardStyles.card}>
             <div className={styles.actions}>
                 <Button variant="ghost" size="sm" onClick={onDone}>Done</Button>
             </div>

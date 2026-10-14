@@ -29,6 +29,7 @@ import { sweepMsgMemoryForWallet } from '../../utils/msgReadMemory.js';
 import { clearRemovedWalletStorage } from '../../utils/wipeWalletStorage.js';
 import { retireBiometricAfterPasswordChange } from '../../../flows/biometricUnlock.js';
 import { SettingsActionRow, Status } from './_settingsPrimitives.jsx';
+import cardStyles from '../../../ui/Card.module.css';
 import styles from './ThisWalletSection.module.css';
 
 const PUBLIC_EXTENDED_KEY_RE = /^(?:xpub|tpub)[1-9A-HJ-NP-Za-km-z]+$/;
@@ -405,7 +406,7 @@ function ChangePasswordRow({ walletId, disabled }) {
             <FormSection
                 title="Change wallet password"
                 description={`Use at least ${MIN_WALLET_PASSWORD_LENGTH} characters. A unique, longer password is stronger. Keep it safe because it cannot be recovered.`}
-                className={styles.panel}
+                className={cardStyles.card}
             >
                 <Input
                     ref={currentRef}
@@ -474,7 +475,7 @@ function PublicKeyExport({
         <FormSection
             title={`Extended public keys${accountName ? ` for ${accountName}` : ''}`}
             description="An extended public key does not contain private keys and cannot spend funds. Anyone with it can derive and monitor every address below that account path, including future addresses. Share it only with a watch-only wallet you trust."
-            className={styles.panel}
+            className={cardStyles.card}
         >
             {stage === 'password' ? (
                 <form onSubmit={onSubmit} className={styles.form}>
@@ -507,7 +508,6 @@ function PublicKeyExport({
                             title={publicKeyTitle(entry)}
                             description={entry.path ? `Account path: ${entry.path}` : undefined}
                             headingLevel="h3"
-                            className={styles.keyPanel}
                         >
                             <div className={styles.xpub}>{entry.xpub}</div>
                             <div className={styles.qr}>
@@ -567,7 +567,7 @@ function RemoveConfirm({ walletName, busy, error, onCancel, onConfirm }) {
                     <strong className={styles.confirmName}>{walletName}</strong> to confirm.
                 </>
             )}
-            className={`${styles.panel} ${styles.dangerPanel}`}
+            className={cardStyles.card}
         >
             <Input
                 type="text"
