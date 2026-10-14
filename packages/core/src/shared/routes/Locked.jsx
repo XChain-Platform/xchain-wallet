@@ -12,20 +12,26 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
 import { Button, FormPage, Icon, Input, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
+// Direct module imports, not the flows barrel: the barrel keeps every flow
+// module in the startup bundle, and this screen is part of first paint.
 import {
     getLockoutState,
     getRemainingMs,
-    recordLockoutFailure,
-    recordLockoutSuccess,
+    recordFailure as recordLockoutFailure,
+    recordSuccess as recordLockoutSuccess,
+} from '../../flows/lockoutTracking.js';
+import {
     isBiometricSupported,
     isBiometricRegistered,
     unlockWithBiometric,
-    tripDuressIfMatch,
+} from '../../flows/biometricUnlock.js';
+import { tripDuressIfMatch } from '../../flows/duressPassphrase.js';
+import {
     getDemoWalletId,
     getDemoWalletPassword,
     isDemoWalletExpired,
     clearDemoWalletId,
-} from '@xchain-wallet/core/flows';
+} from '../../flows/demoMode.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useHaptic } from '../hooks/useHaptic.js';
 import { clearLastView } from '../utils/lastViewMemory.js';
