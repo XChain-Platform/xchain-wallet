@@ -366,6 +366,8 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                         value={mnemonic}
                         onChange={(e) => setMnemonic(e.target.value)}
                         autoComplete="off"
+                        autoCapitalize="off"
+                        autoCorrect="off"
                         spellCheck={false}
                         disabled={busy}
                     />

@@ -466,11 +466,13 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     const [amount, setAmount] = useState(prefill?.amount || '');
     const [maxActive, setMaxActive] = useState(false);
     const [maxBusy, setMaxBusy] = useState(false);
+    const [maxUnavailable, setMaxUnavailable] = useState(false);
     const [maxNote, setMaxNote] = useState(/** @type {string | null} */ (null));
     const maxRequestRef = useRef(0);
     const maxContextRef = useRef(/** @type {string | null} */ (null));
     const cancelMax = useCallback(() => {
         setMaxActive(false);
+        setMaxUnavailable(false);
         setMaxNote(null);
         maxRequestRef.current += 1;
         setMaxBusy(false);
@@ -741,8 +743,26 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         if (detected.type === 'bip21') {
             e.preventDefault();
             const parts = detected.parts;
-            const requestChainId = uriLib.safeChainIdParam(parts.params?.chain);
+            const chainParam = parts.params?.chain;
+            const requestChainId = uriLib.safeChainIdParam(chainParam);
             const requestDescriptor = requestChainId ? chainRegistry.get(requestChainId) : null;
+            const requestError = parts.required.length > 0
+                ? 'This payment request requires a feature this wallet does not support.'
+                : (chainParam !== undefined && (
+                    !requestChainId
+                    || !requestDescriptor
+                    || String(requestDescriptor.uriScheme || '').toLowerCase() !== detected.scheme
+                    || !(addressesByChain?.[requestChainId]?.length > 0)
+                )
+                    ? 'This payment request names a network this wallet cannot use.'
+                    : null);
+            if (requestError) {
+                setPastedRecipient(null);
+                setPasteHint(null);
+                setToError(requestError);
+                setPasteWarning(null);
+                return;
+            }
             const tickParam = parts.params?.tick;
             const nextTick = typeof tickParam === 'string' && tickParam.length > 0
                 ? neutralizeControlText(tickParam).toUpperCase()
@@ -848,7 +868,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 if (!res.ok) setPasteWarning(res.reason || 'The clipboard changed after you pasted. Check the address before sending.');
             })
             .catch(() => { /* silent */ });
-    }, [chainId, perRecipientToken, tick, cancelMax]);
+    }, [addressesByChain, chainId, perRecipientToken, tick, cancelMax]);
 
     // §21.4 test-send protection. Session-scoped acknowledgement set;
     // marking an address tested suppresses the gate for the rest of
@@ -1855,7 +1875,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             });
             if (!quote || typeof quote.maxSats !== 'string') return null;
             const sats = BigInt(quote.maxSats);
-            return sats > 0n ? { ...quote, maxSats: sats } : null;
+            return sats >= 0n ? { ...quote, maxSats: sats } : null;
         } catch {
             // A quote is an optimisation, never a gate: a failed one must not be
             // able to stop the user filling the field.
@@ -1879,6 +1899,10 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             // by whole sats, leaving dust behind or overshooting the balance.
             const balanceSats = exactSatsBigIntFromDecimalString(sourceBalance.amount, descriptor);
             if (balanceSats == null || balanceSats <= 0n) {
+                setAmount('');
+                setFiatAmount('');
+                setMaxUnavailable(true);
+                setMaxNote('There is no spendable balance, so Max cannot create a payment.');
                 setMaxBusy(false);
                 return;
             }
@@ -1894,10 +1918,13 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             const floor = BigInt(dustThresholdForCoin(descriptor?.coin) || 0);
             const tickerUpper = nativeTickerFor(descriptor) || tick.trim().toUpperCase();
             if (maxSats <= 0n || (floor > 0n && maxSats < floor)) {
-                setMaxNote(floor > 0n
-                    ? `The spendable balance after the selected network fee is below the ${decimalStringFromSats(floor, descriptor)} `
-                        + `${tickerUpper} dust minimum, so Max cannot create a payment.`
-                    : 'The selected network fee uses the available balance, so Max cannot create a payment.');
+                setAmount('');
+                setFiatAmount('');
+                setMaxUnavailable(true);
+                setMaxNote(maxSats <= 0n
+                    ? 'The selected network fee uses the available balance, so Max cannot create a payment.'
+                    : `The spendable balance after the selected network fee is below the ${decimalStringFromSats(floor, descriptor)} `
+                        + `${tickerUpper} dust minimum, so Max cannot create a payment.`);
                 setMaxBusy(false);
                 return;
             }
@@ -1930,6 +1957,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             }
         }
         if (requestId !== maxRequestRef.current) return;
+        setMaxUnavailable(false);
         setAmount(display);
         setMaxNote(note);
         if (amountInputMode === 'fiat' && amountFiatRate) {
@@ -1999,7 +2027,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
 
     function handleReview(event) {
         event.preventDefault();
-        if (networkOffline) return;
+        if (networkOffline || maxUnavailable) return;
         setValidationAttempt((attempt) => attempt + 1);
         if (!chainId || !fromAddress) {
             setFormError('Choose the address to send from.');
@@ -3177,7 +3205,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     type="submit"
                     variant="primary"
                     loading={confirmAction.composing}
-                    disabled={networkOffline || !!testSendGate}
+                    disabled={networkOffline || !!testSendGate || maxUnavailable}
                     title={networkOffline ? t('send.offline.title') : undefined}
                 >
                     {t('send.title')}

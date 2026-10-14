@@ -136,7 +136,19 @@ export function useAutoLockPolicy({ sessionState, activeWalletId, onLocked } = {
         });
     }, [showToast]);
 
-    const checkNow = useAutoLock(lock, { enabled: armed, idleMs, onDeferred: explainDeferredLock });
+    const reportActivity = useCallback(() => {
+        if (!armed || typeof messaging?.reportAutoLock !== 'function') return;
+        Promise.resolve()
+            .then(() => messaging.reportAutoLock({ armed: true, idleMs, activity: true }))
+            .catch(() => { /* best-effort */ });
+    }, [messaging, armed, idleMs]);
+
+    const checkNow = useAutoLock(lock, {
+        enabled: armed,
+        idleMs,
+        onDeferred: explainDeferredLock,
+        onActivity: reportActivity,
+    });
 
     // §26 out-of-renderer backstop: the foreground hook above dies with the
     // renderer, so hand the shell's own process the arm decision and the

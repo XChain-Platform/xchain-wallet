@@ -398,6 +398,20 @@ describe('Receive QR copy and share toasts', () => {
         expect(consoleError.mock.calls.some(([, err]) => err?.message === BROWSER_TEXT)).toBe(true);
     });
 
+    it('copies the payment link through the shared fallback when image copying rejects', async () => {
+        const write = vi.fn(async () => { throw new Error('permission denied'); });
+        const writeText = vi.fn(async () => {});
+        stubBrowser({ write, writeText });
+        renderReceive();
+
+        await clickWhenEnabled('Copy QR code');
+
+        await waitFor(() => expect(writeText).toHaveBeenCalledWith('bitcoin:bcrt1qexample'));
+        expect(showToast).toHaveBeenCalledWith({
+            message: 'Could not copy the QR code, so the payment link was copied instead.',
+        });
+    });
+
     it('shares a title, text, and the exact payment URL when Web Share is available', async () => {
         const share = vi.fn(async () => {});
         const writeText = vi.fn(async () => {});

@@ -120,7 +120,7 @@ const chainRegistry = {
 function makeWatcher(over = {}) {
     const vault = over.vault ?? makeVault();
     const { registry } = over.sdkRegistryPair ?? makeSdkRegistry();
-    const ledger = { reserve: vi.fn(async () => {}), release: vi.fn(async () => {}) };
+    const ledger = over.ledger ?? { reserve: vi.fn(async () => {}), release: vi.fn(async () => {}) };
     const notify = vi.fn(async () => {});
     const settings = over.settings ?? { notifications: { incomingReceipts: true } };
     const signer = over.signer === undefined ? { id: 'signer-1' } : over.signer;
@@ -140,6 +140,9 @@ function makeWatcher(over = {}) {
         intervalMs: 60_000,
         now: () => over.now ?? NOW,
         coinpayAction,
+        instanceId: over.instanceId,
+        loadNotified: over.loadNotified,
+        saveNotified: over.saveNotified,
     });
     return { watcher, vault, ledger, notify, coinpayAction, settings };
 }
@@ -204,6 +207,83 @@ describe('happy path', () => {
         expect(lease.shellKind).toBe('web');
         await watcher.pollOnce();
         expect(vault.leaseStore.get(PAYER_LEASE_ID).holderId).toBe(lease.holderId);
+    });
+});
+
+describe('service-worker restart recovery', () => {
+    it('renews the extension payer lease immediately with its stable identity', async () => {
+        const vault = makeVault({
+            lease: {
+                schemaVersion: 1,
+                id: PAYER_LEASE_ID,
+                holderId: 'extension-service-worker',
+                shellKind: 'extension',
+                renewedAt: new Date(NOW).toISOString(),
+            },
+        });
+        const { watcher, coinpayAction } = makeWatcher({
+            vault,
+            shellKind: 'extension',
+            instanceId: 'extension-service-worker',
+        });
+
+        await watcher.pollOnce();
+
+        expect(watcher.statusSnapshot()?.payer).toBe(true);
+        expect(coinpayAction).toHaveBeenCalledTimes(1);
+    });
+
+    it('restores and releases a persisted auto-pay reservation', async () => {
+        const hold = {
+            id: 'autopay:bitcoin-regtest:900',
+            chainId: 'bitcoin-regtest',
+            tick: 'BTC',
+            amount: '0.0051',
+        };
+        const ledger = {
+            all: vi.fn(async () => [hold]),
+            reserve: vi.fn(async () => {}),
+            release: vi.fn(async () => {}),
+        };
+        const { registry } = makeSdkRegistry({
+            obligations: [obligationRow({ coinpay_status: 'completed' })],
+        });
+        const { watcher } = makeWatcher({ vault: makeVault(), sdkRegistry: registry, ledger });
+
+        await watcher.pollOnce();
+
+        expect(ledger.release).toHaveBeenCalledWith(hold.id);
+    });
+
+    it('restores CoinPay notification markers without repeating attention alerts', async () => {
+        const vault = makeVault();
+        let stored = [];
+        const loadNotified = vi.fn(async () => stored);
+        const saveNotified = vi.fn(async (keys) => { stored = [...keys]; });
+        const first = makeWatcher({
+            vault,
+            signer: null,
+            shellKind: 'extension',
+            instanceId: 'extension-service-worker',
+            loadNotified,
+            saveNotified,
+        });
+        await first.watcher.pollOnce();
+        expect(first.notify).toHaveBeenCalledTimes(1);
+        expect(stored).toEqual(['bitcoin-regtest:900:locked']);
+
+        const restarted = makeWatcher({
+            vault,
+            signer: null,
+            shellKind: 'extension',
+            instanceId: 'extension-service-worker',
+            loadNotified,
+            saveNotified,
+        });
+        await restarted.watcher.pollOnce();
+
+        expect(restarted.watcher.statusSnapshot()?.payer).toBe(true);
+        expect(restarted.notify).not.toHaveBeenCalled();
     });
 });
 

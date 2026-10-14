@@ -47,12 +47,18 @@ afterEach(() => {
 });
 
 describe('BackupReminderCard', () => {
-    it('stays out of the receive path until funds arrive', async () => {
-        const { rerenderCard } = mount({ hasFunds: false });
-        await waitFor(() => expect(screen.queryByRole('region')).toBeNull());
-
-        rerenderCard({ hasFunds: true });
+    it('shows before the wallet receives funds', async () => {
+        mount({ hasFunds: false });
         expect(await screen.findByRole('region', { name: 'Back up your wallet' })).toBeTruthy();
+    });
+
+    it.each([
+        ['demo', { isDemo: true }],
+        ['watch-only', { walletMode: 'watcher' }],
+        ['not-yet-classified', { walletMode: null }],
+    ])('never renders for a %s wallet', async (_label, walletType) => {
+        mount(walletType);
+        await waitFor(() => expect(screen.queryByRole('region')).toBeNull());
     });
 
     it('shows accurate recovery options only for an unverified wallet', async () => {

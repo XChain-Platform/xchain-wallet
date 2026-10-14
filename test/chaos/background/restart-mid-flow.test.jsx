@@ -129,6 +129,8 @@ describe('chaos/background/restart-mid-flow', () => {
         expect(await screen.findByText('Could not unlock the wallet. Close and reopen the app, then try again.')).toBeInTheDocument();
         expect(screen.queryByText(RESTART_MESSAGE)).toBeNull();
         expect(onUnlocked).not.toHaveBeenCalled();
+        // The failed attempt clears the typed password; retype it for a fresh unlock.
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'wallet password' } });
         expect(screen.getByRole('button', { name: 'Unlock Wallet' })).toBeEnabled();
 
         fireEvent.click(screen.getByRole('button', { name: 'Unlock Wallet' }));

@@ -157,13 +157,14 @@ export function autoLockStatePathFor(userDataDir) {
 /**
  * Fold a renderer `session.autolock` (AUTO_LOCK_REPORT_TYPE) signal into the stored record.
  *
- * Arming re-stamps `lastActivity` so the user always gets a full window
- * from the moment they armed, never an instant lock. Disarming keeps a
- * record with `armed: false`, which is what tells the launch gate "the
- * user chose Never" as against "no report has ever arrived".
+ * A newly armed session starts a full idle window. Updating an armed session
+ * keeps its activity stamp so a shorter timeout takes effect against idle
+ * time that has already elapsed. Disarming keeps a record with `armed: false`,
+ * which tells the launch gate "the user chose Never" rather than "no report
+ * has ever arrived".
  *
  * @param {FileAutoLockStore} store
- * @param {{ armed?: unknown, idleMs?: unknown }} signal
+ * @param {{ armed?: unknown, idleMs?: unknown, activity?: unknown }} signal
  * @param {number} now
  */
 export async function applyAutoLockReport(store, signal, now) {
@@ -179,7 +180,13 @@ export async function applyAutoLockReport(store, signal, now) {
         await store.clear();
         return;
     }
-    await store.save({ armed: true, idleMs, lastActivity: now });
+    const current = await store.load();
+    if (signal.activity === true && !current?.armed) return;
+    let lastActivity = now;
+    if (signal.activity !== true && current?.armed && current.lastActivity > 0) {
+        lastActivity = current.lastActivity;
+    }
+    await store.save({ armed: true, idleMs, lastActivity });
 }
 
 /**

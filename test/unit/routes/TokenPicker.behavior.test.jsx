@@ -269,6 +269,20 @@ describe('TokenPicker keyboard and return behavior', () => {
         }));
     });
 
+    it('announces loaded results and moves from search to either end with arrow keys', async () => {
+        mount();
+        await screen.findByText(LONG_NAME);
+        const search = screen.getByRole('searchbox', { name: 'Search coins or tokens' });
+        const rows = screen.getAllByRole('button', { name: /^Select / });
+
+        expect(search).toHaveAttribute('aria-controls', 'xc-token-picker-results');
+        fireEvent.keyDown(search, { key: 'ArrowUp' });
+        expect(rows.at(-1)).toHaveFocus();
+        search.focus();
+        fireEvent.keyDown(search, { key: 'ArrowDown' });
+        expect(rows[0]).toHaveFocus();
+    });
+
     it('does not commit rows from the previous wallet while the next wallet loads', async () => {
         let switchWallet;
         const sawStaleRows = vi.fn();

@@ -36,6 +36,7 @@ import {
     undoCancel,
 } from '../../flows/rbfReplace.js';
 import { rbfFailureMessage } from '../utils/rbfFailureMessage.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -56,6 +57,7 @@ import { normalizeHistoryRow } from '../utils/historyRow.js';
 import {
     compareMergedEntries,
     mempoolRowToEntry,
+    mergeMonotonicChainHeights,
     mergePendingEntries,
     pendingDisplayState,
     pendingTxToEntry,
@@ -667,7 +669,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     setAddressesByChain(cached.addressesByChain);
                     return;
                 }
-                setLoadError(err?.message || 'Failed to load addresses.');
+                setLoadError(userFacingMessage(err, 'Failed to load addresses.'));
             });
         return () => { cancelled = true; };
     }, [walletId, accountId, messaging, initialChainCoin, addressesReload]);
@@ -1155,7 +1157,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             for (const { cid, watermark } of results) {
                 if (Number.isFinite(watermark) && watermark > 0) next[cid] = watermark;
             }
-            setIndexerWatermarkByChainId(next);
+            setIndexerWatermarkByChainId((previous) => (
+                mergeMonotonicChainHeights(previous, next)
+            ));
         });
         return () => { cancelled = true; };
     }, [addressesByChain, messaging, walletId, browserOnline, refreshTick]);
@@ -1615,7 +1619,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                                 [pKey]: {
                                     loading: false,
                                     action: null,
-                                    error: err?.message || String(err),
+                                    error: userFacingMessage(err, 'Could not load the linked action. Try again.'),
                                 },
                             };
                             peerCacheRef.current = next;
@@ -2457,7 +2461,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
             }
             setContactSaveStage('saved');
         } catch (err) {
-            setContactSaveError(err?.message || 'Save failed.');
+            setContactSaveError(userFacingMessage(err, 'Could not save this contact. Try again.'));
             setContactSaveStage('editing');
         }
     }
@@ -3386,7 +3390,7 @@ function RecipientsBlock({ entry }) {
             setName(defaultName);
             setStage('loaded');
         } catch (err) {
-            setError(err?.message || 'Failed to load recipients.');
+            setError(userFacingMessage(err, 'Failed to load recipients.'));
             setStage('idle');
         }
     }
@@ -3412,7 +3416,7 @@ function RecipientsBlock({ entry }) {
             });
             setStage('saved');
         } catch (err) {
-            setError(err?.message || 'Save failed.');
+            setError(userFacingMessage(err, 'Could not save these recipients. Try again.'));
             setStage('loaded');
         }
     }
@@ -4083,7 +4087,7 @@ function decodeActionToText(row) {
     try {
         return JSON.stringify(row, null, 2);
     } catch (err) {
-        return String(err);
+        return userFacingMessage(err, 'This action data could not be displayed.');
     }
 }
 

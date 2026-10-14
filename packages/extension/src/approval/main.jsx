@@ -47,21 +47,27 @@ try {
         .catch(() => { /* soft enhancement; bundled descriptors keep serving */ });
 } catch { /* never block approval boot */ }
 
+const container = document.getElementById('xchain-approval-root');
+if (!container) {
+    throw new Error('approval: #xchain-approval-root missing; check approval.html');
+}
+const root = createRoot(container);
+const renderRouter = () => root.render(<Router />);
+
 // The settings record supplies this standalone realm with custom chains and
 // the chosen language. The approval window sits outside MessagingProvider,
 // so it hydrates both directly. A locked vault or read failure leaves bundled
 // descriptors and the default locale serving. Never blocks boot.
 try {
     getSettings()
-        .then((s) => {
+        .then(async (s) => {
             registry.hydrateCustomChainsFromSettings(registry.defaultRegistry(), s);
-            if (i18n.availableLocales().includes(s?.language)) i18n.setLocale(s.language);
+            if (i18n.availableLocales().includes(s?.language)) {
+                await i18n.setLocale(s.language);
+                renderRouter();
+            }
         })
         .catch(() => { /* locked vault or read failure; bundled descriptors keep serving */ });
 } catch { /* never block approval boot */ }
 
-const container = document.getElementById('xchain-approval-root');
-if (!container) {
-    throw new Error('approval: #xchain-approval-root missing; check approval.html');
-}
-createRoot(container).render(<Router />);
+renderRouter();

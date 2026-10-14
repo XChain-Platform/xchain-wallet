@@ -57,8 +57,10 @@ const PROTOCOL_COIN_TICKER = {
     dogecoin: 'DOGE',
 };
 
-const isPlainPositive = (value) => /^\d+(\.\d+)?$/.test(String(value).trim())
-    && Number(String(value).trim()) > 0;
+const isPlainPositive = (value) => {
+    const text = String(value).trim();
+    return /^\d+(\.\d+)?$/.test(text) && /[1-9]/.test(text);
+};
 
 function withFormattedExpiration(confirmAction) {
     const decoded = confirmAction?.composed?.decoded;

@@ -13,6 +13,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { DEMO_TOKEN_ICONS } from '../../../packages/core/src/flows/demoFixtures.js';
+import { DESKTOP_RENDERER_CSP } from '../../../packages/desktop/main/security.js';
 import {
     BUILD_PROFILES,
     contentSecurityPolicyFor,
@@ -102,6 +103,7 @@ function policyFromMetaTag(tag) {
 
 function expectNoExecutableStringSources(directives) {
     expect(directives['script-src']).not.toContain("'unsafe-inline'");
+    expect(directives['script-src'].some((source) => source.includes('*'))).toBe(false);
     for (const sources of Object.values(directives)) {
         expect(sources).not.toContain("'unsafe-eval'");
         expect(sources).not.toContain("'wasm-unsafe-eval'");
@@ -142,13 +144,17 @@ describe('built web CSPs', () => {
 });
 
 describe('packaged shell CSPs', () => {
-    it('parses the desktop policy and keeps renderer connections local', () => {
+    it('parses the desktop header and meta policies and keeps renderer connections local', () => {
         const html = readFileSync(resolve(REPO, 'packages/desktop/renderer/index.html'), 'utf8');
-        const directives = parsePolicy(policyFromMetaTag(html));
+        const header = parsePolicy(DESKTOP_RENDERER_CSP);
+        const meta = parsePolicy(policyFromMetaTag(html));
 
-        expect(directives['connect-src']).toEqual(["'self'"]);
-        expect(directives['img-src']).toEqual(LOCAL_IMAGE_SOURCES);
-        expectNoExecutableStringSources(directives);
+        expect(meta).toEqual(Object.fromEntries(
+            Object.entries(header).filter(([name]) => name !== 'frame-ancestors'),
+        ));
+        expect(header['connect-src']).toEqual(["'self'"]);
+        expect(header['img-src']).toEqual(LOCAL_IMAGE_SOURCES);
+        expectNoExecutableStringSources(header);
     });
 
     it('parses the extension policy and limits it to documented connection classes', () => {

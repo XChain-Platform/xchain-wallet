@@ -45,10 +45,14 @@ describe('Locked paint failure recovery', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Unlock Wallet' }));
 
         expect(await screen.findByText('Could not prepare unlock')).toBeTruthy();
+        // A failed unlock clears the typed password, so the submit button waits
+        // for a new entry; the form itself is no longer busy.
         await waitFor(() => {
-            expect(screen.getByRole('button', { name: 'Unlock Wallet' })).not.toBeDisabled();
+            expect(screen.getByLabelText('Password')).not.toBeDisabled();
         });
-        expect(screen.getByLabelText('Password')).not.toBeDisabled();
+        expect(screen.getByLabelText('Password')).toHaveValue('');
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password' } });
+        expect(screen.getByRole('button', { name: 'Unlock Wallet' })).not.toBeDisabled();
         expect(unlockWallet).not.toHaveBeenCalled();
     });
 });

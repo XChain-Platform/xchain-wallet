@@ -113,7 +113,7 @@ describe('Locked unlock progress', () => {
         expect(screen.getByText('Could not unlock the wallet. Close and reopen the app, then try again.')).toBeTruthy();
     });
 
-    it('restores focus and selection after a failed attempt re-enables the field', async () => {
+    it('clears and refocuses the password field after a failed attempt', async () => {
         const pending = deferred();
         mount(vi.fn(() => pending.promise));
         const password = screen.getByLabelText('Password');
@@ -125,8 +125,9 @@ describe('Locked unlock progress', () => {
         await act(async () => pending.reject(new Error('Unlock failed')));
 
         expect(password).toHaveFocus();
+        expect(password).toHaveValue('');
         expect(password.selectionStart).toBe(0);
-        expect(password.selectionEnd).toBe('wallet password'.length);
+        expect(password.selectionEnd).toBe(0);
     });
 
     it('clears a prior error when a retry succeeds', async () => {
@@ -145,6 +146,7 @@ describe('Locked unlock progress', () => {
         // An unexpected failure shows the plain unlock copy, not the raw error.
         expect(screen.getByText('Could not unlock the wallet. Close and reopen the app, then try again.')).toBeTruthy();
 
+        fireEvent.change(password, { target: { value: 'wallet password' } });
         await act(async () => {
             fireEvent.click(screen.getByRole('button', { name: 'Unlock Wallet' }));
             await Promise.resolve();

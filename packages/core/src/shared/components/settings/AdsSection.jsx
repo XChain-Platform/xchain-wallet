@@ -136,7 +136,9 @@ export function AdsSection() {
                             </span>
                             <input
                                 type="text"
-                                inputMode="decimal"
+                                inputMode="numeric"
+                                enterKeyHint="done"
+                                autoComplete="off"
                                 defaultValue={resolved.perTxAmountSats}
                                 onBlur={(e) => {
                                     // Empty field = drop the override and follow
@@ -178,7 +180,9 @@ export function AdsSection() {
                             </div>
                             <input
                                 type="text"
-                                inputMode="decimal"
+                                inputMode="numeric"
+                                enterKeyHint="done"
+                                autoComplete="off"
                                 defaultValue={resolved.triggerAmountSats}
                                 onBlur={(e) => {
                                     if (e.target.value.trim() === '') {

@@ -66,18 +66,18 @@ const webApp = readFileSync(
     join(wsRoot, 'packages', 'web', 'src', 'App.jsx'),
     'utf8',
 );
-// The web App delegates to the desktop shell's deepLinkRoute; its branches
+// The web App delegates to the desktop shell's claimed-link router; its branches
 // are pinned by test/unit/uriIntentMapping.test.js.
-assert.ok(/import \{ deepLinkRoute \} from '\.\.\/\.\.\/desktop\/renderer\/deepLinkRoute\.js'/.test(webApp),
-    'web App imports the shared deepLinkRoute mapping');
+assert.ok(/import \{ claimedDeepLinkRoute \} from '\.\.\/\.\.\/desktop\/renderer\/deepLinkRoute\.js'/.test(webApp),
+    'web App imports the shared claimed-link mapping');
 assert.ok(/const \[sendPrefill, setSendPrefill\] = useState/.test(webApp),
     'web App declares a sendPrefill state slot');
 assert.ok(
     /new URLSearchParams\(window\.location\.search\)[\s\S]*?\.get\('uri'\)/.test(webApp),
     'web App reads ?uri= from location.search',
 );
-assert.ok(/deepLinkRoute\(raw,\s*APP_CHAIN_REGISTRY\)/.test(webApp),
-    'web App passes the raw URI to deepLinkRoute WITH the chain registry (coin-code URIs need it to resolve chainId)');
+assert.ok(/claimedDeepLinkRoute\(raw,\s*APP_CHAIN_REGISTRY\)/.test(webApp),
+    'web App passes the raw URI to claimedDeepLinkRoute WITH the chain registry (coin-code URIs need it to resolve chainId)');
 assert.ok(
     /route\.view === 'send'\) setSendPrefill\(route\.sendPrefill\)/.test(webApp),
     'web App seeds the Send prefill from a send route',

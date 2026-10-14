@@ -65,14 +65,14 @@ describe('fee estimate source fallback', () => {
         expect(tiers.normal.rateValue).toBe(6);
     });
 
-    it('rounds a fractional live fee up to a whole satoshi', async () => {
+    it('rounds a valid fractional live fee up to a whole satoshi', async () => {
         const tiers = await fetchTiers(async () => ({
-            normal: { rate: 0.005 },
+            normal: { rate: 1.005 },
         }));
 
         expect(tiers.normal.source).toBe('sdk');
-        expect(tiers.normal.sats).toBe(2);
-        expect(tiers.normal.coinAmount).toBe('0.00000002');
+        expect(tiers.normal.sats).toBe(252);
+        expect(tiers.normal.coinAmount).toBe('0.00000252');
     });
 
     it('falls back to the relay floor when the estimator returns zero', async () => {

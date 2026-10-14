@@ -95,7 +95,7 @@ import { useGovernanceAddressesPresent } from '@xchain-wallet/core/shared/hooks/
 import { registerSigner as registerLocalSigner, unregisterSigner as unregisterLocalSigner } from './signerBridge.js';
 import * as messaging from './messaging.js';
 import { getSessionStatus, listWallets, lockWallet, listAccounts } from './messaging.js';
-import { deepLinkRoute } from '../../desktop/renderer/deepLinkRoute.js';
+import { claimedDeepLinkRoute } from '../../desktop/renderer/deepLinkRoute.js';
 import { subscribeToNativeDeepLinks } from './deeplinks/nativeDeepLinks.js';
 import { canApplyNativeIntent, useNativeAppLifecycle } from './platform/nativeAppLifecycle.js';
 import { ExtensionBanner } from './components/ExtensionBanner.jsx';
@@ -745,7 +745,7 @@ function AppInner() {
             // The mapping is shared with the desktop shell; it parses with
             // the registry, hardens the free text and routes only links that
             // carry what their form needs.
-            const route = deepLinkRoute(raw, APP_CHAIN_REGISTRY);
+            const route = claimedDeepLinkRoute(raw, APP_CHAIN_REGISTRY);
             if (!route) return;
             if (route.view === 'deep-link-error') {
                 setDeepLinkNotice(route.message);

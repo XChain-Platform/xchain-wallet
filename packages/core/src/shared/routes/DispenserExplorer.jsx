@@ -21,6 +21,7 @@ import {
     isOpenDispenserSelling,
 } from '../utils/dispenserPricing.js';
 import { actionRowIdentity, explorerPage, uniqueRows } from '../utils/pagedRows.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './ActionsMenu.module.css';
 import local from './DispenserExplorer.module.css';
 
@@ -169,16 +170,21 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                 })
                 .catch((err) => {
                     const message = err?.message || String(err);
-                    // D-34(b): the explorer answers 404 for "this token has no
-                    // dispensers", which is an ordinary empty result and not a
-                    // failure. Showing it raw put
-                    // "Couldn't search: Explorer returned HTTP 404 for
-                    // /BTC/api/dispensers/XCHAIN/token" in front of a user who
-                    // had simply searched for a ticker nobody dispenses. Every
-                    // other status still surfaces: a 500 or a dead host is a
-                    // real failure and hiding it would be worse than the noise.
+                    // Treat an explorer 404 as an ordinary empty result because
+                    // this endpoint uses it to report that no dispensers match.
+                    // Avoid presenting an absent ticker as a broken search.
+
+                    // Keep every other failure visible through plain fallback
+                    // copy, while the shared filter removes provider and runtime
+                    // details that do not help someone retry the search.
+
+                    // Preserve the per-chain failure so partial results remain
+                    // useful when another network succeeds.
                     if (/\b404\b/.test(message)) return { cid, rows: [] };
-                    return { cid, error: message };
+                    return {
+                        cid,
+                        error: userFacingMessage(err, 'Could not search for dispensers. Try again.'),
+                    };
                 })
         )).then((results) => {
             if (requestId !== searchRequestId.current) return;
@@ -276,7 +282,7 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
                 [cid]: {
                     ...current[cid],
                     loadingMore: false,
-                    moreError: err?.message || String(err),
+                    moreError: userFacingMessage(err, 'Could not load more dispensers. Try again.'),
                 },
             }));
         });

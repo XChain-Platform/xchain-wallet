@@ -25,7 +25,7 @@
 // All inputs are passed in explicitly so the function stays pure and
 // testable without mocking React state.
 
-import { entryTimeMs } from './pendingHistory.js';
+import { entryTimeMs, pendingDisplayState } from './pendingHistory.js';
 
 /**
  * @typedef {{
@@ -104,9 +104,15 @@ export function classifyEntryAction(entry, walletAddresses) {
  * - A blockless entry whose own record proves a block (`pending.chainConfirmed`)
  *   → confirmed: the wallet retired it itself, and no explorer row will
  *   ever arrive to say so in the usual way.
+ * - A transaction absent after a successful mempool sighting and its grace
+ *   period → failed. The row retains its dropped explanation, while the
+ *   status badge and filter stop calling it pending forever.
  * - Anything else → pending.
+ *
+ * @param {HistoryEntry} entry
+ * @param {number} [nowMs]
  */
-export function classifyEntryStatus(entry) {
+export function classifyEntryStatus(entry, nowMs = Date.now()) {
     if (!entry) return 'pending';
     const raw = entry.raw || {};
     const statusField = String(raw.status || raw.STATUS || '').toLowerCase();
@@ -114,6 +120,7 @@ export function classifyEntryStatus(entry) {
     if (raw.valid === 0 || raw.valid === false) return 'failed';
     if (Number(entry.blockIndex) > 0) return 'confirmed';
     if (entry.pending?.chainConfirmed === true) return 'confirmed';
+    if (entry.pending && pendingDisplayState(entry, nowMs) === 'dropped') return 'failed';
     return 'pending';
 }
 
