@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, Icon } from '@xchain-wallet/core/ui';
 import { NetworkFilter } from './NetworkFilter.jsx';
 import { useAnchoredPopover } from '../hooks/useViewportClamp.js';
@@ -82,8 +82,11 @@ export function HeaderSettingsButton({
     const triggerRef = useRef(null);
     // The system Back gesture and Escape close this before it leaves the
     // screen; the shared stack consumes Escape, so focus goes back here.
-    const focusTrigger = () => triggerRef.current?.querySelector('button')?.focus();
-    useBackHandler(open ? () => { setOpen(false); focusTrigger(); } : undefined);
+    const closePopover = useCallback(() => {
+        setOpen(false);
+        triggerRef.current?.querySelector('button')?.focus();
+    }, []);
+    useBackHandler(open ? closePopover : undefined);
     // Flex wrapping can move the gear independently of the header slot, so
     // the open panel derives its viewport coordinates from the gear itself.
     const popoverPlacement = useAnchoredPopover(open, triggerRef);
@@ -92,20 +95,11 @@ export function HeaderSettingsButton({
         if (!open) return undefined;
         const onClick = (e) => {
             if (wrapRef.current?.contains(e.target)) return;
-            setOpen(false);
-        };
-        const onKey = (e) => {
-            if (e.key !== 'Escape') return;
-            setOpen(false);
-            focusTrigger();
+            closePopover();
         };
         window.addEventListener('mousedown', onClick);
-        window.addEventListener('keydown', onKey);
-        return () => {
-            window.removeEventListener('mousedown', onClick);
-            window.removeEventListener('keydown', onKey);
-        };
-    }, [open]);
+        return () => window.removeEventListener('mousedown', onClick);
+    }, [closePopover, open]);
 
     // The Network section needs all four pieces to render anything
     // useful; NetworkFilter dereferences the registry and maps over the
@@ -194,7 +188,7 @@ export function HeaderSettingsButton({
                             <button
                                 type="button"
                                 className={styles.summaryRow}
-                                onClick={() => { setOpen(false); onOpenWalletPicker(); }}
+                                onClick={() => { closePopover(); onOpenWalletPicker(); }}
                                 title={walletLabel || 'Choose wallet'}
                             >
                                 <span className={`${styles.summaryName} ${walletLabel ? '' : styles.summaryEmpty}`}>
@@ -210,7 +204,7 @@ export function HeaderSettingsButton({
                             <button
                                 type="button"
                                 className={styles.summaryRow}
-                                onClick={() => { setOpen(false); onOpenAccountPicker(); }}
+                                onClick={() => { closePopover(); onOpenAccountPicker(); }}
                                 title={accountLabel || 'Choose account'}
                             >
                                 <span className={`${styles.summaryName} ${accountLabel ? '' : styles.summaryEmpty}`}>
@@ -253,7 +247,7 @@ export function HeaderSettingsButton({
                             <button
                                 type="button"
                                 className={styles.summaryRow}
-                                onClick={() => { setOpen(false); onOpenSettings(); }}
+                                onClick={() => { closePopover(); onOpenSettings(); }}
                                 title="All settings"
                             >
                                 <span className={styles.summaryName}>All settings</span>

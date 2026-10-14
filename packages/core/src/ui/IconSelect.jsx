@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { ChevronIcon } from './ChainPicker.icons.jsx';
+import { useBackHandler } from './backStack.js';
 import styles from './IconSelect.module.css';
 
 /**
@@ -47,25 +48,17 @@ export function IconSelect({
         setOpen(false);
         if (restoreFocus) triggerRef.current?.focus();
     }, []);
+    useBackHandler(open ? () => closeSelect(true) : undefined);
 
     useEffect(() => {
         if (!open) return undefined;
         const onClick = (e) => {
             if (triggerRef.current?.contains(e.target)) return;
             if (popoverRef.current?.contains(e.target)) return;
-            closeSelect();
-        };
-        const onKey = (e) => {
-            if (e.key !== 'Escape') return;
-            e.preventDefault();
             closeSelect(true);
         };
         window.addEventListener('mousedown', onClick);
-        window.addEventListener('keydown', onKey);
-        return () => {
-            window.removeEventListener('mousedown', onClick);
-            window.removeEventListener('keydown', onKey);
-        };
+        return () => window.removeEventListener('mousedown', onClick);
     }, [closeSelect, open]);
 
     const selected = options.find((o) => o.value === value) || null;
