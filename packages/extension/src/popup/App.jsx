@@ -184,6 +184,11 @@ import {
     shellForExtensionView,
 } from './launchState.js';
 import { usePopupPaletteData } from './usePopupPaletteData.js';
+import {
+    activeTabSupportsWallet,
+    isSidePanelView,
+    watchActiveTab,
+} from './activeTabSupport.js';
 
 const lazyRoute = (load, name) => lazy(() => load().then((module) => ({ default: module[name] })));
 
@@ -228,6 +233,44 @@ const pairLedgerSigner = (...args) => import('../signers/ledgerFactory.js')
 export function App() {
     const shell = shellForExtensionView();
     const canOpenInTab = isToolbarPopupView();
+    const sidePanel = isSidePanelView();
+    const [activeTabSupport, setActiveTabSupport] = useState(
+        sidePanel ? 'checking' : 'supported',
+    );
+    useEffect(() => {
+        if (!sidePanel) return undefined;
+        let disposed = false;
+        let requestId = 0;
+        const refresh = async () => {
+            const currentRequest = ++requestId;
+            const supported = await activeTabSupportsWallet();
+            if (!disposed && currentRequest === requestId) {
+                setActiveTabSupport(supported ? 'supported' : 'unsupported');
+            }
+        };
+        const stopWatching = watchActiveTab(refresh);
+        void refresh();
+        return () => {
+            disposed = true;
+            stopWatching();
+        };
+    }, [sidePanel]);
+
+    if (activeTabSupport === 'checking') {
+        return (
+            <main role="status" aria-live="polite">
+                <p>Checking page availability...</p>
+            </main>
+        );
+    }
+    if (activeTabSupport === 'unsupported') {
+        return (
+            <main role="status" aria-live="polite">
+                <p>XChain Wallet cannot connect to this page.</p>
+                <p>Open a regular website to use the wallet.</p>
+            </main>
+        );
+    }
     return (
         <MessagingProvider shell={shell} messaging={messaging}>
             <ToastHost>

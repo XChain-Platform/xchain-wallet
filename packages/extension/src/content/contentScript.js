@@ -31,6 +31,23 @@
     // second provider with the iframe's origin and permission context.
     if (window.top !== window) return;
 
+    function isInjectablePage() {
+        try {
+            const protocol = window.location.protocol;
+            const hostname = window.location.hostname.toLowerCase();
+            const pathname = window.location.pathname;
+            if ((protocol !== 'https:' && protocol !== 'http:')
+                || window.location.origin === 'null'
+                || document.contentType === 'application/pdf') return false;
+            return hostname !== 'chromewebstore.google.com'
+                && !(hostname === 'chrome.google.com' && pathname.startsWith('/webstore'));
+        } catch {
+            return false;
+        }
+    }
+
+    if (!isInjectablePage()) return;
+
     const SOURCE = 'xchain-inject';
     const RESPONSE_SOURCE = 'xchain-inject-response';
     const EVENT_SOURCE = 'xchain-inject-event';
@@ -83,19 +100,29 @@
         return false;
     }
 
+    let providerAvailable = null;
+    const pendingProbes = new Set();
+    const settleProvider = (available) => {
+        if (providerAvailable !== null) return;
+        providerAvailable = available;
+        for (const respond of pendingProbes) respond({ available });
+        pendingProbes.clear();
+    };
+
     try {
         const script = document.createElement('script');
         script.src = chrome.runtime.getURL(INJECT_PATH);
         script.type = 'text/javascript';
         script.async = false;
+        const finish = (available) => {
+            settleProvider(available);
+            try { script.remove(); } catch { /* The document may be navigating away. */ }
+        };
+        script.addEventListener('load', () => finish(true));
+        script.addEventListener('error', () => finish(false));
         (document.head || document.documentElement).appendChild(script);
-        script.addEventListener('load', () => script.remove());
-    } catch (e) {
-        // If injection fails the page simply won't see window.xchain.
-        // Logging here for dev debugging only. Production should not
-        // reach this path since web_accessible_resources is configured
-        // in the manifest.
-        console.warn('[xchain] inject failed:', e);
+    } catch {
+        settleProvider(false);
     }
 
     window.addEventListener('message', (event) => {
@@ -191,7 +218,15 @@
     // sent by bridge/bridgeEvents.js with account ids and names) to the page.
     // The origin and payload checks are required trust gates, never dead code.
     if (chrome.runtime?.onMessage?.addListener) {
-        chrome.runtime.onMessage.addListener((message) => {
+        chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+            if (isRecord(message) && message.type === 'xchain.contentProbe') {
+                if (providerAvailable === null && typeof sendResponse === 'function') {
+                    pendingProbes.add(sendResponse);
+                    return true;
+                }
+                sendResponse?.({ available: providerAvailable === true });
+                return undefined;
+            }
             // The broadcaster picked this tab from a URL snapshot and addressed
             // the send by tab id, so a navigation since then means the event
             // belongs to the previous origin, not this document. This listener
