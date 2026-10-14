@@ -31,7 +31,7 @@ function chunk(fileName, code, options = {}) {
 describe('web initial bundle budget', () => {
     it('keeps a small margin above the measured production entry', () => {
         expect(WEB_INITIAL_JS_SIZE_LIMIT).toBe(900_000);
-        expect(WEB_INITIAL_CSS_SIZE_LIMIT).toBe(100_000);
+        expect(WEB_INITIAL_CSS_SIZE_LIMIT).toBe(120_000);
     });
 
     it('counts static JS and CSS while excluding lazy route assets', () => {

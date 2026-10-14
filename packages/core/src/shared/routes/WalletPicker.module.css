@@ -1,12 +1,3 @@
-/* Legacy picker header helpers retained for detail routes that share this file. */
-.header {
-    display: grid;
-    grid-template-columns: 40px 1fr 40px;
-    align-items: center;
-    gap: var(--xc-space-2);
-    width: 100%;
-}
-
 /* WalletDetails read-only metadata list. */
 .detailList {
     display: flex;

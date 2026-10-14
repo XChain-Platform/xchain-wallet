@@ -9,7 +9,9 @@
 // contact legal@dankest.llc.
 
 export const WEB_INITIAL_JS_SIZE_LIMIT = 900_000;
-export const WEB_INITIAL_CSS_SIZE_LIMIT = 100_000;
+// The kit controls, OverlaySurface and control-scale tokens load with the shell,
+// so the merged 21b and 22 entry measured 116,557 bytes of CSS.
+export const WEB_INITIAL_CSS_SIZE_LIMIT = 120_000;
 
 function sourceBytes(source) {
     return typeof source === 'string' ? Buffer.byteLength(source) : source.byteLength;

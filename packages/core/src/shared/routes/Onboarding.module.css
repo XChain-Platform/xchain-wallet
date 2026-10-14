@@ -12,27 +12,6 @@
     margin-bottom: var(--xc-space-4);
 }
 
-.actionsPopup {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-2);
-    animation: actionsEnter 460ms cubic-bezier(0.2, 0.8, 0.3, 1) 140ms both;
-    min-width: 0;
-    width: 100%;
-}
-
-.actionsFull {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-2);
-    /* Match the action column to the established form measure, which has no size token. */
-    max-width: 360px;
-    margin: 0 auto;
-    animation: actionsEnter 540ms cubic-bezier(0.2, 0.8, 0.3, 1) 180ms both;
-    min-width: 0;
-    width: 100%;
-}
-
 /* Short landscape viewports keep the first actions near the fold while the
    Screen body remains the single scroll container for every later action. */
 @media (max-height: 520px) {
@@ -41,17 +20,6 @@
         /* Preserve the compact landscape artwork width, which has no size token. */
         width: 96px;
         margin-bottom: var(--xc-space-1);
-    }
-}
-
-@keyframes actionsEnter {
-    from {
-        opacity: 0;
-        transform: translateY(var(--xc-space-2));
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
     }
 }
 
@@ -76,8 +44,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .actionsPopup,
-    .actionsFull,
     .logoPopup,
     .logoFull {
         animation: none;
@@ -189,11 +155,6 @@
         /* Preserve the compact landscape artwork width, which has no size token. */
         width: 96px;
         margin-bottom: var(--xc-space-1);
-    }
-
-    .actionsPopup,
-    .actionsFull {
-        gap: var(--xc-space-1);
     }
 
     .licenseScroll {

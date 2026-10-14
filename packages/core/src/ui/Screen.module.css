@@ -40,20 +40,6 @@
     background: var(--xc-surface-raised);
 }
 
-/* The shared scroll class: content ends at the scrollbar and never runs
-   under it, and a screen that scrolls is as wide as one that does not.
-   Safari 16 lacks scrollbar-gutter, so the reservation sits behind
-   @supports; iOS overlay scrollbars need no reserved gutter there. */
-@supports (scrollbar-gutter: stable) {
-    .body {
-        scrollbar-gutter: stable;
-    }
-
-    .scrollArea {
-        scrollbar-gutter: stable;
-    }
-}
-
 /* The WebKit rules are the Chrome 102-safe path and make overlay scrollbars
    consume their own narrow lane. Touch screens keep their transient indicator.
    No standard scrollbar-width / scrollbar-color here, since Chromium 121+
@@ -88,6 +74,20 @@
     overflow-y: auto;
     overflow-x: hidden;
     scroll-padding-block: var(--xc-space-3);
+}
+
+/* The shared scroll class: content ends at the scrollbar and never runs
+   under it, and a screen that scrolls is as wide as one that does not.
+   Safari 16 lacks scrollbar-gutter, so the reservation sits behind
+   @supports; iOS overlay scrollbars need no reserved gutter there. */
+@supports (scrollbar-gutter: stable) {
+    .body {
+        scrollbar-gutter: stable;
+    }
+
+    .scrollArea {
+        scrollbar-gutter: stable;
+    }
 }
 
 /* Keep the screen's last row clear of the iOS home indicator. Whichever of

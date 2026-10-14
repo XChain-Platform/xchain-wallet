@@ -88,21 +88,6 @@
     font-style: italic;
 }
 
-.checkRow {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--xc-space-2);
-    margin: var(--xc-space-2) 0 var(--xc-space-3);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    line-height: 1.4;
-}
-
-.checkRow input[type="checkbox"] {
-    /* The native checkbox needs a sub-grid optical adjustment against its label. */
-    margin-top: 3px;
-}
-
 .summary {
     font-size: var(--xc-text-md);
     font-weight: 600;
@@ -248,10 +233,6 @@
 
 .lockFlagRow:last-child {
     border-bottom: none;
-}
-
-.lockFlagRow .checkRow {
-    margin-bottom: var(--xc-space-1);
 }
 
 .listRow {
