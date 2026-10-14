@@ -172,19 +172,13 @@
 .labelEditor {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
+    align-items: end;
     gap: var(--xc-space-2);
     margin-bottom: var(--xc-space-3);
 }
 
 .labelEditor > * {
     margin-bottom: 0;
-}
-
-@media (max-width: 480px) {
-    .labelEditor {
-        grid-template-columns: 1fr;
-    }
 }
 
 /* The "no addresses anywhere" fallback. Centred so the CTA reads
@@ -201,33 +195,35 @@
 
 .qrActions {
     margin-top: 0;
+    align-items: center;
 }
 
 .qrActions > * {
-    flex: 1 1 0;
-    min-width: 0;
+    flex: 0 0 auto;
+    height: var(--xc-control-h-md);
+    white-space: nowrap;
 }
 
-@media not all and (min-width: 480px) {
-    .qrActions {
-        flex-direction: column;
-    }
-
-    .qrActions > * {
-        flex-basis: auto;
-        width: 100%;
-    }
+.qrActions > * > span {
+    white-space: nowrap;
 }
 
-/* A row item beside the QR buttons stretches to their height, but in the
-   narrow column below 400px a bare link shrinks to its one text line (17px),
-   under the 24px pointer-target floor. State the floor instead. */
 .explorerLink {
+    composes: btn secondary md from '../../ui/Button.module.css';
     display: inline-flex;
     align-items: center;
     justify-content: center;
     min-height: var(--xc-tap-min);
     cursor: pointer;
+}
+
+.amountEditor button {
+    --xc-button-height: var(--xc-control-h-md);
+    --xc-button-font-size: var(--xc-control-font-md, 14px);
+    --xc-button-padding-x: var(--xc-button-pad-x-md, 16px);
+    --xc-icon-size: var(--xc-control-icon-md, 20px);
+
+    min-height: var(--xc-control-h-md);
 }
 
 .generateAddressAction {

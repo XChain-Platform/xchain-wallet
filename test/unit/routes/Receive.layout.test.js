@@ -11,22 +11,38 @@ const css = readFileSync(
     join(process.cwd(), 'packages/core/src/shared/routes/Receive.module.css'),
     'utf8',
 );
+const qrCss = readFileSync(
+    join(process.cwd(), 'packages/core/src/ui/QrDisplay.module.css'),
+    'utf8',
+);
+const receive = readFileSync(
+    join(process.cwd(), 'packages/core/src/shared/routes/Receive.jsx'),
+    'utf8',
+);
 
 describe('Receive action layout', () => {
-    it('stacks full-width actions on narrow phones without fixed pixel widths', () => {
-        const narrowBreakpoint = css.match(
-            /@media not all and \(min-width: (\d+)px\) \{[\s\S]*?\.qrActions/,
-        );
-        expect(Number(narrowBreakpoint?.[1])).toBeGreaterThan(412);
+    it.each([360, 1280])('wraps whole one-line kit actions at %ipx', (viewportWidth) => {
+        expect(viewportWidth).toBeGreaterThanOrEqual(360);
+        expect(qrCss).toMatch(/\.actions\s*\{[^}]*display:\s*flex;[^}]*flex-wrap:\s*wrap;/);
         expect(css).toMatch(
-            /@media not all and \(min-width: 480px\) \{[\s\S]*?\.qrActions\s*\{\s*flex-direction: column;[\s\S]*?\.qrActions > \*\s*\{[\s\S]*?width: 100%;/,
+            /\.qrActions > \*\s*\{[^}]*flex:\s*0 0 auto;[^}]*height:\s*var\(--xc-control-h-md\);[^}]*white-space:\s*nowrap;/,
         );
+        expect(css).toMatch(/\.qrActions > \* > span\s*\{[^}]*white-space:\s*nowrap;/);
+        expect(css).not.toMatch(/\.qrActions\s*\{[^}]*flex-direction:\s*column;/);
+        expect(receive).toMatch(/>\s*Copy QR\s*</);
+        expect(receive).toMatch(/>\s*Share QR\s*</);
+        expect(receive).toMatch(/>\s*Explorer\s*<span[^>]*>↗<\/span>/);
+        expect(receive).toMatch(/aria-label="Generate new address"[\s\S]*?>\s*New address\s*</);
+    });
 
-        const actionRules = [...css.matchAll(/\.qrActions > \*\s*\{([^}]*)\}/g)];
-        expect(actionRules).toHaveLength(2);
-        for (const [, declarations] of actionRules) {
-            expect(declarations).not.toMatch(/(?:^|;)\s*(?:min-|max-)?width:\s*\d+(?:\.\d+)?px/);
-        }
+    it('keeps field actions attached at the medium kit size', () => {
+        expect(css).toMatch(
+            /\.labelEditor\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto;[^}]*align-items:\s*end;/,
+        );
+        expect(css).not.toMatch(/@media[^}]+\{[\s\S]*?\.labelEditor\s*\{[^}]*grid-template-columns:\s*1fr;/);
+        expect(css).toMatch(
+            /\.amountEditor button\s*\{[^}]*--xc-button-height:\s*var\(--xc-control-h-md\);[^}]*min-height:\s*var\(--xc-control-h-md\);/,
+        );
     });
 
     it('caps the complete QR box to the visible height on landscape phones', () => {
