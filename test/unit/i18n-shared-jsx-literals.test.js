@@ -83,6 +83,7 @@ const PLURAL_ONLY_FILES = [
 const PARTIAL_COPY_FILES = [
     '/settings/AdsSection.jsx',
     '/settings/DeveloperModeSection.jsx',
+    '/routes/CreateOrderForm.jsx',
 ];
 
 describe('shipping JSX localization', () => {
