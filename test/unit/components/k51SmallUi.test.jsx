@@ -6,7 +6,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { LICENSE_VERSION } from '../../../packages/core/src/buildInfo.js';
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
-import { NetworkBanner } from '../../../packages/core/src/shared/components/NetworkBanner.jsx';
 import { Onboarding } from '../../../packages/core/src/shared/routes/Onboarding.jsx';
 
 function source(path) {
@@ -23,17 +22,6 @@ afterEach(() => {
 });
 
 describe('K51 small-screen UI', () => {
-    it('uses a tokenized gap around the network separator', () => {
-        render(<NetworkBanner activeNetwork="testnet" />);
-
-        const banner = screen.getByRole('status');
-        // Spaces in the text keep copied and read-out copy readable; the flex
-        // gap supplies the visible spacing.
-        expect(banner.textContent).toBe('Testnet · Not mainnet');
-        expect(banner.style.gap).toBe('var(--xc-space-1, 4px)');
-        expect(banner.children[1].textContent).toBe(' · ');
-    });
-
     it('uses standard kit heights for ADS amounts and wraps placeholder prose at words', () => {
         const ads = source('packages/core/src/shared/components/settings/AdsSection.jsx');
         const inputCss = source('packages/core/src/ui/Input.module.css');

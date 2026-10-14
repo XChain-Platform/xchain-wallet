@@ -93,15 +93,6 @@
     ]
   },
   {
-    "file": "packages/core/src/shared/components/DemoBanner.module.css",
-    "property": "gap",
-    "value": "2px",
-    "lines": [
-      19,
-      60
-    ]
-  },
-  {
     "file": "packages/core/src/shared/components/DerivationPathCrossCheck.module.css",
     "property": "margin-top",
     "value": "3px",

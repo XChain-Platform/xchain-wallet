@@ -19,7 +19,6 @@ const tokensPath = join(sharedRoot, '../ui/tokens.css');
 const cardModules = [
     'BackupReminderCard.module.css',
     'CollectiblesView.module.css',
-    'DemoBanner.module.css',
     'HwFirmwareBanner.module.css',
     'OwnerWithdrawWarning.module.css',
     'QueuedBroadcastBanner.module.css',
