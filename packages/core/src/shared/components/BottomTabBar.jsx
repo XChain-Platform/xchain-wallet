@@ -95,8 +95,11 @@ function bottomTabOwner(currentView, primaryTabs = PRIMARY_TABS) {
     if (!routeGroup) return null;
     if (WALLET_MANAGEMENT_VIEWS.has(currentView)) return 'more';
     if (primaryTabs.some((tab) => tab.id === routeGroup)) return routeGroup;
+    // Marketplace is its own desktop rail row but has no sheet row, so the
+    // phone bar keeps it under More as it was when it shared the DEX group.
     if (
         routeGroup === 'settings'
+        || routeGroup === 'market-activity'
         || SHEET_PRIMARY.some((row) => row.id === routeGroup)
     ) return 'more';
     return null;
