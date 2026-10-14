@@ -181,6 +181,48 @@ describe('MultisigCreate local cosigner', () => {
 });
 
 describe('MultisigCreate key validation', () => {
+    it('round trips a shared cosigner setup into the editable key fields', async () => {
+        await mount(mkMessaging());
+        const payload = JSON.stringify({
+            type: 'xchain-multisig-cosigner',
+            version: 1,
+            network: 'testnet',
+            address: 'tb1qexternal',
+            xpub: EXTERNAL.xpub,
+            pubkey: EXTERNAL.pubkey,
+            fingerprint: 'AABBCCDD',
+            derivationPath: EXTERNAL.path,
+        });
+        fireEvent.change(screen.getByLabelText(/Shared cosigner setup/i), {
+            target: { value: payload },
+        });
+        fireEvent.click(screen.getByRole('button', { name: /Import shared setup/i }));
+
+        expect(screen.getByLabelText(/^xpub$/i)).toHaveValue(EXTERNAL.xpub);
+        expect(screen.getAllByLabelText(/Public key \(hex/i)[1]).toHaveValue(EXTERNAL.pubkey);
+        expect(screen.getAllByLabelText(/Master fingerprint/i)[1]).toHaveValue('aabbccdd');
+        expect(screen.getAllByLabelText(/^Derivation path/i)[1]).toHaveValue(EXTERNAL.path);
+    });
+
+    it('refuses a shared cosigner setup for another network with plain copy', async () => {
+        await mount(mkMessaging());
+        const payload = JSON.stringify({
+            type: 'xchain-multisig-cosigner',
+            version: 1,
+            network: 'mainnet',
+            xpub: MAINNET_EXTERNAL.xpub,
+            pubkey: MAINNET_EXTERNAL.pubkey,
+            fingerprint: 'aabbccdd',
+            derivationPath: MAINNET_EXTERNAL.path,
+        });
+        fireEvent.change(screen.getByLabelText(/Shared cosigner setup/i), {
+            target: { value: payload },
+        });
+        fireEvent.click(screen.getByRole('button', { name: /Import shared setup/i }));
+
+        expect(screen.getByText('Shared cosigner setup is for mainnet, not testnet.')).toBeTruthy();
+    });
+
     it.each([
         ['', /Threshold is required/i],
         ['0', /Threshold must be at least 1/i],
