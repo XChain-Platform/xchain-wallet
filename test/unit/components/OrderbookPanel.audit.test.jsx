@@ -197,6 +197,8 @@ describe('market data table semantics', () => {
         const table = await screen.findByRole('table', { name: 'Recent trades' });
         expect(table.querySelectorAll('th[scope="col"]')).toHaveLength(4);
         expect(table.className).toContain('keepColumns');
+        // The Time heading sits over its right-aligned times.
+        expect(screen.getByRole('columnheader', { name: 'Time' }).className).toContain('numeric');
         expect(screen.getByRole('columnheader', { name: 'Price' }).className).toContain('numeric');
         expect(table.querySelector('td[data-label="Size (XCHAIN)"]').className).toContain('numeric');
     });

@@ -189,7 +189,7 @@ export function TradeHistoryPanel({ walletId, chainId, tick1, tick2, onOpenTx })
                         <caption className={tableStyles.caption}>Trade history</caption>
                         <thead>
                             <tr>
-                                <th className={tableStyles.headerCell} scope="col">Time</th>
+                                <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Time</th>
                                 <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Price</th>
                                 <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Size ({tick1})</th>
                                 <th className={tableStyles.headerCell} scope="col">Side</th>

@@ -87,7 +87,7 @@ export function RecentTradesPanel({ chainId, tick1, tick2, demo = false, onOpenT
                     <caption className={tableStyles.caption}>Recent trades</caption>
                     <thead>
                         <tr>
-                            <th className={tableStyles.headerCell} scope="col">Time</th>
+                            <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Time</th>
                             <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Price</th>
                             <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Size ({tick1})</th>
                             <th className={tableStyles.headerCell} scope="col">Side</th>
