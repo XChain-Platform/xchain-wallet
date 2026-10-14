@@ -31,3 +31,17 @@ describe('My lists rows', () => {
         expect(body).toMatch(/text-overflow:\s*ellipsis/);
     });
 });
+
+describe('Messaging conversation rows', () => {
+    const css = () => read('packages/core/src/shared/routes/MessagingInbox.module.css');
+
+    it('draws a straight separator, not a rounded button edge', () => {
+        expect(rule(css(), '.convItem')).toMatch(/border-radius:\s*0;/);
+    });
+
+    it('keeps the whole timestamp and lets the name truncate', () => {
+        const body = rule(css(), '.convTime');
+        expect(body).toMatch(/flex:\s*0 0 auto/);
+        expect(body).not.toMatch(/text-overflow/);
+    });
+});
