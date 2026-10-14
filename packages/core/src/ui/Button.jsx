@@ -67,7 +67,8 @@ export function Button({
             className={classes}
             disabled={disabled || loading}
             onClick={onClick}
-            aria-busy={loading ? 'true' : 'false'}
+            // A caller that tracks its own pending write keeps its busy state.
+            aria-busy={loading || String(rest['aria-busy']) === 'true' ? 'true' : 'false'}
         >
             {loading ? <span className={styles.spinner} aria-hidden="true" /> : null}
             {!loading && resolvedIcon ? <span className={styles.icon} aria-hidden="true">{resolvedIcon}</span> : null}
