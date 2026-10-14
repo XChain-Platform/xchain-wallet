@@ -13,8 +13,8 @@ import { Icon } from '@xchain-wallet/core/ui';
 import {
     formatBadgeCount,
     isNavItemActive,
-    LEFT_NAV_VIEW_GROUPS,
 } from './LeftNav.jsx';
+import { ROUTE_NAV_SECTIONS } from '../routeRegistry.js';
 import { OverlaySurface } from './OverlaySurface.jsx';
 import styles from './BottomTabBar.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
@@ -79,31 +79,9 @@ const SHEET_PRIMARY = [
     { id: 'obligations', label: 'Payments due', Icon: Icon.ClockIcon, group: ['obligations'] },
 ];
 
-const WALLET_MANAGEMENT_VIEWS = new Set([
-    'wallet-picker',
-    'account-picker',
-    'wallet-details',
-    'wallet-rename',
-    'account-rename',
-    'add-wallet',
-    'add-account',
-    'migrate-bip39',
-]);
-
 function bottomTabOwner(currentView, primaryTabs = PRIMARY_TABS) {
-    const routeGroup = Object.entries(LEFT_NAV_VIEW_GROUPS)
-        .find(([, views]) => views.includes(currentView))?.[0];
-    if (!routeGroup) return null;
-    if (WALLET_MANAGEMENT_VIEWS.has(currentView)) return 'more';
-    if (primaryTabs.some((tab) => tab.id === routeGroup)) return routeGroup;
-    // Marketplace is its own desktop rail row but has no sheet row, so the
-    // phone bar keeps it under More as it was when it shared the DEX group.
-    if (
-        routeGroup === 'settings'
-        || routeGroup === 'market-activity'
-        || SHEET_PRIMARY.some((row) => row.id === routeGroup)
-    ) return 'more';
-    return null;
+    const section = ROUTE_NAV_SECTIONS[currentView];
+    return primaryTabs.some((tab) => tab.id === section) ? section : null;
 }
 
 function scrollMainToTop() {
@@ -178,11 +156,10 @@ export function BottomTabBar({
     // dot on the More tab itself or the user would never see it while collapsed.
     const sheetHasUnread = sheetRows.some((row) => badges[row.id] > 0);
     const activeTab = bottomTabOwner(currentView, primaryTabs);
-    const moreActive = activeTab === 'more';
     const primaryIds = primaryTabs.map((tab) => tab.id);
     const tabStop = (rovingTab && [...primaryIds, 'more'].includes(rovingTab))
         ? rovingTab
-        : (moreActive ? 'more' : (activeTab || primaryIds[0]));
+        : (activeTab || primaryIds[0]);
 
     const onBarKeyDown = (e) => {
         if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
@@ -253,8 +230,7 @@ export function BottomTabBar({
                     type="button"
                     data-bottom-tab="more"
                     tabIndex={tabStop === 'more' ? 0 : -1}
-                    className={`${styles.tab} ${sheetOpen || moreActive ? styles.tabActive : ''}`}
-                    aria-current={moreActive ? 'page' : undefined}
+                    className={`${styles.tab} ${sheetOpen ? styles.tabActive : ''}`}
                     aria-expanded={sheetOpen ? 'true' : 'false'}
                     aria-controls="xc-bottom-sheet"
                     onFocus={() => setRovingTab('more')}
