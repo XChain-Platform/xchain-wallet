@@ -928,20 +928,6 @@ function buildTokenLookup(balances) {
     return m;
 }
 
-// Format a satoshi-string amount using the tick's divisibility. Plain
-// string math, no BigInt; these are demo values and stay small.
-function formatAmount(raw, divisibility) {
-    const s = String(raw ?? '').trim();
-    if (!s) return '';
-    const div = Number.isFinite(divisibility) ? divisibility : 8;
-    if (div === 0) return s;
-    if (!/^\d+$/.test(s)) return s;
-    const padded = s.padStart(div + 1, '0');
-    const whole = padded.slice(0, -div);
-    const frac = padded.slice(-div).replace(/0+$/, '');
-    return frac ? `${whole}.${frac}` : whole;
-}
-
 const ACTION_ICON = {
     send:       (k) => <Icon.SendIcon key={k} />,
     receive:    (k) => <Icon.ReceiveIcon key={k} />,
@@ -977,9 +963,12 @@ const ActivityEntryRow = memo(function ActivityEntryRow({ entry, walletAddresses
         .replace('DOGECOIN', 'DOGE');
     const isNative = tick === nativeTicker;
     const rawAmount = entry.raw?.amount ?? entry.raw?.AMOUNT ?? entry.raw?.quantity ?? entry.raw?.QUANTITY ?? '';
-    const amount = rawAmount ? formatAmount(rawAmount, tokenInfo?.divisibility ?? 8) : '';
     const label = actionDisplayLabel(kind) || actionDisplayLabel(entry.action) || 'Event';
     const direction = kind === 'send' ? 'out' : kind === 'receive' ? 'in' : null;
+    // History rows carry whole-unit decimal amounts (the same shape the
+    // History route prints), so the figure is formatted as-is; reading it as
+    // base units showed a 100 BTC receive as 0.000001 BTC.
+    const amount = rawAmount ? String(rawAmount) : '';
     const primary = amount
         ? `${formatHistoryAmount(amount, direction)}${tick ? ` ${tick}` : ''}`
         : (tick || nativeTicker);
