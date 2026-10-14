@@ -264,7 +264,7 @@ describe('Send flow with mocked messaging', () => {
     it('replaces an SDK send failure and its raw details with actionable copy', async () => {
         const sdkFailure = Object.assign(
             new Error('SDK wallet exploded\n    at signer.js:9:3'),
-            { name: 'SDKWalletError', code: 'SDK_WALLET_FAILED' },
+            { name: 'SDKWalletError', code: 'SIGN_FAILED' },
         );
         const messaging = mount({ sendResult: sdkFailure });
         await openPasswordConfirm(messaging);

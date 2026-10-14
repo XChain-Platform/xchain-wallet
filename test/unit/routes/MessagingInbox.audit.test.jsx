@@ -160,7 +160,7 @@ describe('MessagingInbox audit states', () => {
     it('shows an inbox key-share encoder failure as plain copy', async () => {
         const failure = new Error('no spendable UTXOs found for the funding address');
         failure.name = 'SDKEncoderError';
-        failure.code = 'ENCODER_NO_UTXOS';
+        failure.code = 'ENCODER_NETWORK';
         const messaging = messagingFor({ messages: [REQUEST] });
         messaging.composeForConfirm = vi.fn().mockRejectedValue(failure);
         mount(messaging);
@@ -168,7 +168,7 @@ describe('MessagingInbox audit states', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'Share my key' }));
 
         const alert = await screen.findByRole('alert');
-        expect(alert.textContent).toMatch(/transaction service could not complete this request/i);
+        expect(alert.textContent).toMatch(/could not reach the transaction service/i);
         expect(alert.textContent).not.toMatch(/no spendable UTXOs/i);
     });
 
