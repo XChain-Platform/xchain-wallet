@@ -13,6 +13,7 @@ import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector
 import { registry as registryLib } from '@xchain-wallet/core';
 import { validatorLaneChainIds } from '../../registry/actions.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { AmountField } from '../components/AmountField.jsx';
@@ -85,6 +86,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
     // Seeded from the launching context; the Network field lets the user retarget.
     const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -567,6 +569,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
         const verb = reviewedParams.VERSION === '2' ? 'Top up' : 'Stake';
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review stake"
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
@@ -696,6 +699,7 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Stake XCHAIN"
             onSubmit={handleReview}
             onChangeCapture={() => { if (formError) setFormError(null); }}

@@ -13,6 +13,7 @@ import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector
 import { registry as registryLib } from '@xchain-wallet/core';
 import { validatorLaneChainIds } from '../../registry/actions.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
@@ -71,6 +72,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
     // Seeded from the launching context; the Network field lets the user retarget.
     const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const isDelegate = mode === 'delegate';
@@ -448,6 +450,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
         const shownPubkey = actionParams.NEW_SIGNING_PUBKEY || actionParams.SIGNING_PUBKEY;
         return wrapForm(
             <FormPage
+                demoGuard={demoGuard}
                 label={`Review ${verb.toLowerCase()}`}
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
@@ -569,6 +572,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
 
     return wrapForm(
         <FormPage
+            demoGuard={demoGuard}
             label={verb}
             onSubmit={handleReview}
             status={formError || prefillError ? (

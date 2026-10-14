@@ -15,6 +15,7 @@ import {
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -80,6 +81,7 @@ export function CoinpayForm({
     onBack,
 }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -474,6 +476,7 @@ export function CoinpayForm({
 
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review matched order payment"
                 onSubmit={handleSubmit}
                 status={submitError ? (
@@ -623,6 +626,7 @@ export function CoinpayForm({
 
             {selected && summary ? (
                 <FormPage
+                    demoGuard={demoGuard}
                     label="Selected payment obligation"
                     onSubmit={handleReview}
                     status={(submitError || insufficientBalanceMessage) ? (

@@ -193,7 +193,7 @@ export function ConnectedSitesSection() {
     return (
         <FormPage as="div" sectioned fullWidth label="Connected sites and dApp permissions">
             <FormSection
-                title="Connected sites"
+                title="Allowed sites"
                 description="Review dApp connections and control each site's permissions."
             >
                 {(!sites || sites.length === 0) ? (

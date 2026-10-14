@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, EmptyState, FormPage, Input, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
@@ -154,6 +155,7 @@ const loadFailed = (err) => humanizeError(err, 'load this market').message;
  */
 export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSettleMarket, onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const variant = screenVariantFor(shell);
     const signerReady = useSignerReady(walletId);
     const { isWatcherMode } = useWalletMode();
@@ -624,13 +626,14 @@ export function BetFeedDetail({ walletId, chainId, feedIndex, onOpenOracle, onSe
                     <>
                         <SectionHeader as="h3" title="Place a bet" />
                         <FormPage
+                            demoGuard={demoGuard}
                             label="Place a bet"
                             onSubmit={(event) => event.preventDefault()}
                             actions={(
                                 <Button
                                     variant="primary"
                                     loading={submitting || actionConfirm.composing}
-                                    disabled={submitting || actionConfirm.composing}
+                                    disabled={demoGuard.blocked || submitting || actionConfirm.composing}
                                     onClick={placeBet}
                                 >
                                     {actionConfirm.composing

@@ -88,6 +88,15 @@ describe('Onboarding add-wallet lane inside the demo', () => {
         expect(screen.getByRole('button', { name: /Keep exploring the demo/ })).toBeInTheDocument();
     });
 
+    it('names the screen Add wallet so the header does not repeat the gate heading', () => {
+        globalThis.localStorage.setItem(DEMO_ID_KEY, 'demo-1');
+        mount({ mode: 'add' });
+
+        expect(screen.getByRole('heading', { name: 'Add wallet' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Leave the demo first' })).toBeInTheDocument();
+        expect(screen.queryByText('Leave the demo')).not.toBeInTheDocument();
+    });
+
     it('leaves the normal add-wallet lane alone when no demo is running', () => {
         mount({ mode: 'add' });
         expect(screen.queryByText('Leave the demo first')).not.toBeInTheDocument();

@@ -150,4 +150,16 @@ describe('<AddressCombobox>', () => {
         expect(onIconClick).toHaveBeenCalledOnce();
         expect(screen.queryByRole('listbox')).toBeNull();
     });
+
+    it('keeps suggestion addresses out of the tab order', () => {
+        render(
+            <ControlledCombobox
+                suggestions={[{ address: 'demo1erincallowaybtc0000000000000000001', label: 'Erin', source: 'contact' }]}
+            />,
+        );
+        fireEvent.focus(screen.getByLabelText('To'));
+
+        const option = screen.getByRole('option');
+        expect(option.querySelectorAll('[tabindex]')).toHaveLength(0);
+    });
 });

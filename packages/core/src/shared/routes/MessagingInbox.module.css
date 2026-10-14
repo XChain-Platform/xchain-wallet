@@ -234,6 +234,14 @@
     border-bottom: none;
 }
 
+/* The row is a ghost Button, whose hover fill is a dark slate meant for
+   white label text. This row keeps theme text, so hover uses the muted
+   surface through the Button's own hover tokens. */
+.convList .convItem {
+    --xc-button-hover-bg: var(--xc-bg-muted);
+    --xc-button-hover-border: var(--xc-border);
+}
+
 .convItem:hover {
     background: var(--xc-bg-muted);
 }
