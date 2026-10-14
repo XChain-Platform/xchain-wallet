@@ -67,3 +67,17 @@ export function getNativePlugin(name, { env = globalThis, method } = {}) {
     if (method && typeof plugin[method] !== 'function') return null;
     return plugin;
 }
+
+/**
+ * The OS name of the native shell ("android" or "ios"), or null in a browser
+ * or an extension. Lets About and the diagnostic dump name the real platform
+ * where the shell reports only "web" because Capacitor wraps the web build.
+ *
+ * @param {any} [env]  injectable globals for tests
+ * @returns {'android' | 'ios' | null}
+ */
+export function nativePlatformName(env = globalThis) {
+    if (!isNativeShell(env)) return null;
+    const name = /** @type {any} */ (env).Capacitor.getPlatform?.();
+    return name === 'android' || name === 'ios' ? name : null;
+}

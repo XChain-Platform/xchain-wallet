@@ -28,7 +28,7 @@ import {
 } from '../../../schemas/settings.js';
 import { useSettings } from '../../hooks/useSettings.js';
 import { useMessaging } from '../../useMessaging.js';
-import { INPUT, ROW, ROW_LABEL, ToggleRow } from './_settingsPrimitives.jsx';
+import { INPUT, ROW, ROW_TITLE, ToggleRow } from './_settingsPrimitives.jsx';
 import { t } from '../../../i18n/index.js';
 import { blurNumberInputOnWheel } from '../../utils/formInput.js';
 
@@ -58,7 +58,7 @@ export function UndoSendRow() {
                 }}
             />
             <div style={ROW}>
-                <span style={ROW_LABEL}>{t('settings.undoSend.durationLabel')}</span>
+                <span style={ROW_TITLE}>{t('settings.undoSend.durationLabel')}</span>
                 <input
                     key={seconds}
                     type="number"

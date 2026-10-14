@@ -154,7 +154,7 @@ describe('History export button', () => {
             const additionalDetails = screen.getByRole('button', { name: 'Additional details' });
             const showFiat = screen.getByRole('button', { name: 'Show fiat: Off' });
             const grouping = screen.getByRole('radiogroup', { name: 'Grouping mode' });
-            const toolbar = trigger.closest(`.${historyStyles.filterFooter}`);
+            const toolbar = additionalDetails.parentElement;
             const phone = mediaBlock(historyCss, 'not all and (min-width: 480px)');
 
             expect(window.innerWidth).toBe(360);
@@ -162,7 +162,10 @@ describe('History export button', () => {
             expect(additionalDetails.parentElement).toBe(toolbar);
             expect(showFiat.parentElement).toBe(toolbar);
             expect(grouping.parentElement).toBe(toolbar);
-            expect(trigger.parentElement).toBe(toolbar);
+            // Export sits in the always-visible top row, outside the foldable
+            // filter card, so it stays reachable while the filters are folded.
+            expect(trigger.parentElement).toHaveClass(historyStyles.toolbarTop);
+            expect(trigger.closest(`.${historyStyles.filterFooter}`)).toBeNull();
             for (const control of [additionalDetails, showFiat, grouping, trigger]) {
                 expect(control).toHaveClass(historyStyles.toolbarControl);
             }
