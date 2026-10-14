@@ -127,11 +127,65 @@ const chainRegistry = registryLib.defaultRegistry();
 
 const HEX_RE = /^[0-9a-fA-F]+$/;
 const PSBT_MAGIC_HEX = '70736274ff';
+const PSBT_FILE_MAX_BYTES = 2 * 1024 * 1024;
 // Base64-encoded PSBT magic bytes (`psbt` + 0xff) start with `cHNid`.
 const BASE64_PSBT_PREFIX = 'cHNid';
 
 function hasPsbtMagic(hex) {
     return typeof hex === 'string' && hex.toLowerCase().startsWith(PSBT_MAGIC_HEX);
+}
+
+function readCompactSize(bytes, cursor) {
+    if (cursor.offset >= bytes.length) throw new Error('Missing compact size.');
+    const prefix = bytes[cursor.offset];
+    cursor.offset += 1;
+    if (prefix < 0xfd) return prefix;
+    const byteCount = prefix === 0xfd ? 2 : prefix === 0xfe ? 4 : 8;
+    if (cursor.offset + byteCount > bytes.length) throw new Error('Truncated compact size.');
+    let value = 0n;
+    for (let i = 0; i < byteCount; i += 1) {
+        value |= BigInt(bytes[cursor.offset + i]) << BigInt(i * 8);
+    }
+    cursor.offset += byteCount;
+    if (value > BigInt(bytes.length)) throw new Error('Compact size exceeds PSBT length.');
+    return Number(value);
+}
+
+function readPsbtMap(bytes, cursor, onKey) {
+    while (cursor.offset < bytes.length) {
+        const keyLength = readCompactSize(bytes, cursor);
+        if (keyLength === 0) return;
+        if (cursor.offset + keyLength > bytes.length) throw new Error('Truncated PSBT key.');
+        const keyType = bytes[cursor.offset];
+        cursor.offset += keyLength;
+        const valueLength = readCompactSize(bytes, cursor);
+        if (cursor.offset + valueLength > bytes.length) throw new Error('Truncated PSBT value.');
+        cursor.offset += valueLength;
+        onKey(keyType);
+    }
+    throw new Error('Unterminated PSBT map.');
+}
+
+// Final script fields mean an input is complete and must not enter a signer.
+// The SDK preview omits PSBT key-value metadata, so read only the map keys here.
+function finalizedPsbtInputCount(psbtHex, inputCount) {
+    if (!hasPsbtMagic(psbtHex) || !Number.isInteger(inputCount) || inputCount < 1) return 0;
+    try {
+        const bytes = Uint8Array.from(psbtHex.match(/../g).map((pair) => Number.parseInt(pair, 16)));
+        const cursor = { offset: 5 };
+        readPsbtMap(bytes, cursor, () => {});
+        let finalized = 0;
+        for (let i = 0; i < inputCount; i += 1) {
+            let inputFinalized = false;
+            readPsbtMap(bytes, cursor, (keyType) => {
+                if (keyType === 0x07 || keyType === 0x08) inputFinalized = true;
+            });
+            if (inputFinalized) finalized += 1;
+        }
+        return finalized;
+    } catch {
+        return 0;
+    }
 }
 
 /**
@@ -552,9 +606,12 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
             if (error) setError(null);
             return;
         }
-        // Unrecognized / unsupported: silently ignore so the scanner can
-        // keep running without flashing errors at every unrelated QR the
-        // camera spots.
+        const compact = text.replace(/\s+/g, '');
+        if (compact.toLowerCase().startsWith(PSBT_MAGIC_HEX)
+            || compact.startsWith(BASE64_PSBT_PREFIX)) {
+            setError(psbtInputError(text));
+        }
+        // Unrelated QR content remains silent so the scanner can keep running.
     }, [error, urDecoder]);
 
     // Reset XCW collector whenever the scanner re-opens so a partial
@@ -573,8 +630,13 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
     // converted to hex before being routed through the same paste pipeline.
     const drop = useDropZone({
         accept: ['.psbt', 'application/octet-stream', 'text/plain'],
+        maxBytes: PSBT_FILE_MAX_BYTES,
         readAs: 'arrayBuffer',
-        onError: setError,
+        onError: (message) => {
+            setError(message.startsWith('File is too large')
+                ? 'This transaction file is too large. Choose a .psbt file smaller than 2 MB.'
+                : 'Could not read that transaction file. Choose a .psbt file in binary, hex, or base64 form.');
+        },
         disabled: busy,
         onFile: ({ content }) => {
             const hex = normalizePsbtFile(content);
@@ -711,6 +773,11 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
         [addressOptions, addressId],
     );
 
+    const ownAddressSet = useMemo(
+        () => new Set(addressOptions.map((a) => a.address)),
+        [addressOptions],
+    );
+
     // §30.4 / Cluster E FOLLOWUP 1: HW source detection. When the chosen
     // signing address is paired to a Trezor / Ledger, the password input
     // is suppressed in favor of <HwSignBlock> and the submit branches to
@@ -743,6 +810,29 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
         return n;
     }, [decomposed, selectedAddress]);
 
+    const walletOwnedInputCount = useMemo(() => {
+        if (!decomposed) return 0;
+        return decomposed.inputs.filter((input) => ownAddressSet.has(input.address)).length;
+    }, [decomposed, ownAddressSet]);
+
+    const finalizedInputCount = useMemo(
+        () => finalizedPsbtInputCount(psbtHex, decomposed?.inputs?.length || 0),
+        [psbtHex, decomposed],
+    );
+
+    const importEligibilityError = useMemo(() => {
+        if (!decomposed) return null;
+        if (finalizedInputCount > 0) {
+            return finalizedInputCount === decomposed.inputs.length
+                ? 'This transaction is already finalized and cannot be signed again.'
+                : 'This transaction contains finalized inputs and cannot be signed on this screen.';
+        }
+        if (walletOwnedInputCount === 0) {
+            return 'This transaction has no inputs this wallet can sign. Check the selected chain or import a different transaction.';
+        }
+        return null;
+    }, [decomposed, finalizedInputCount, walletOwnedInputCount]);
+
     const totalIn = useMemo(() => {
         if (!decomposed) return null;
         return sumExactSats(decomposed.inputs.map((input) => input.value));
@@ -753,16 +843,6 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
     }, [decomposed]);
     const fee = exactNetworkFeeSats(decomposed);
     const chainDescriptor = chainRegistry.get(chainId);
-
-    // Own addresses on the selected chain, used to mark outputs that pay back
-    // to this wallet (change) vs external recipients. Same signal the
-    // extension's PsbtIntentSummary uses (getAddressesByChain). Without this
-    // the air-gapped surface showed only aggregate totals, so a user could not
-    // verify WHO gets paid (F2).
-    const ownAddressSet = useMemo(
-        () => new Set(addressOptions.map((a) => a.address)),
-        [addressOptions],
-    );
 
     // §5.6 slice 3: software signing goes through the shared confirm
     // page in its PSBT variant (§5.5). Hardware keeps the legacy inline flow -
@@ -828,6 +908,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
         if (!addressId) { setError('Pick a signing address.'); return; }
         if (!psbtHex) { setError('Paste a valid transaction (hex or base64).'); return; }
         if (!decomposed) { setError('Transaction could not be parsed for this chain.'); return; }
+        if (importEligibilityError) return;
         if (ownedInputCount === 0) {
             setError(
                 `The chosen address signs none of this transaction's inputs. Pick a different address or transaction.`,
@@ -1184,6 +1265,8 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
         );
     }
 
+    const visibleError = error || inputError || parseError || importEligibilityError;
+
     const formBody = (
         <FormPage
             label="Sign transaction"
@@ -1197,6 +1280,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                         busy
                         || !psbtHex
                         || !decomposed
+                        || Boolean(importEligibilityError)
                         || ownedInputCount === 0
                         || !addressId
                         // On the confirm-page path the password is typed there, so
@@ -1313,22 +1397,19 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                         ) : null}
                     </div>
                 ) : null}
-                {pasted && !psbtHex ? (
+                {visibleError ? (
                     <StatusMessage
                         variant="error"
-                        recovery={{ label: 'Clear', onAction: () => { setPasted(''); if (error) setError(null); } }}
+                        recovery={pasted && !psbtHex && !error
+                            ? { label: 'Clear', onAction: () => { setPasted(''); setError(null); } }
+                            : undefined}
                     >
-                        {inputError}
+                        {visibleError}
                     </StatusMessage>
                 ) : null}
                 {parsing ? (
                     <div style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)', marginTop: 4 }}>
                         Parsing transaction…
-                    </div>
-                ) : null}
-                {parseError ? (
-                    <div role="alert" style={{ color: 'var(--xc-danger-fg)', fontSize: 'var(--xc-text-sm)', marginTop: 4 }}>
-                        {parseError}
                     </div>
                 ) : null}
             </div>
@@ -1353,9 +1434,6 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                         onStatusChange={onHwStatusChange}
                         signerInfo={hwSignerInfo}
                     />
-                    {error ? (
-                        <StatusMessage variant="error">{error}</StatusMessage>
-                    ) : null}
                 </div>
             ) : signerReady ? (
                 // Withdraw the "ready to sign" claim while panic mode
@@ -1372,7 +1450,6 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                     value={password}
                     onChange={(e) => { setPassword(e.target.value); if (error) setError(null); }}
                     autoComplete="current-password"
-                    error={error || undefined}
                 />
             )}
         </FormPage>
