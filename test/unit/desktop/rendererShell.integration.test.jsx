@@ -216,6 +216,9 @@ describe('desktop renderer shell', () => {
         expect(await screen.findByText('Could not unlock the wallet. Close and reopen the app, then try again.')).toBeInTheDocument();
         expect(screen.queryByText('IPC channel unavailable')).toBeNull();
         expect(screen.getByRole('heading', { name: 'Unlock wallet' })).toBeInTheDocument();
+        // The failed attempt clears the typed password; typing again re-enables submit.
+        expect(screen.getByLabelText('Password')).toBeEnabled();
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } });
         expect(screen.getByRole('button', { name: 'Unlock Wallet' })).toBeEnabled();
         expect(bridge.sendMessage).toHaveBeenCalledWith({
             type: 'wallet.unlock',
