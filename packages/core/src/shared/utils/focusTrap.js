@@ -112,6 +112,9 @@ function inertTargetsOutside(root) {
     return targets;
 }
 
+/** Frames a disabled or inert opener is waited on before focus is handed back. */
+const RESTORE_RETRY_FRAMES = 10;
+
 const FOCUSABLE_SELECTOR = [
     'a[href]', 'button:not([disabled])', 'textarea:not([disabled])',
     'input:not([disabled]):not([type="hidden"])', 'select:not([disabled])',
@@ -234,11 +237,24 @@ export function useFocusTrap(containerRef, {
             backgroundTargets.forEach(unlockInert);
             unlockBodyScroll();
             const prev = previouslyFocused.current;
-            const now = document.activeElement;
-            const unclaimed = !now || now === document.body || !now.isConnected || container.contains(now);
-            if (unclaimed && prev && prev.isConnected && typeof prev.focus === 'function') {
+            // A caller often disables its opener while the dialog is pending
+            // (a Delete button marked busy until the confirm settles), and the
+            // browser refuses focus to a disabled or inert control, so the
+            // hand-back fell to the page body. Such an opener is re-enabled in
+            // an update just after the one that closes the dialog, so a
+            // blocked opener is retried for a few frames.
+            const restore = (attempt) => {
+                const now = document.activeElement;
+                const unclaimed = !now || now === document.body || !now.isConnected || container.contains(now);
+                if (!unclaimed || !prev || !prev.isConnected || typeof prev.focus !== 'function') return;
+                const blocked = prev.disabled || prev.closest?.('[inert]');
+                if (blocked && attempt < RESTORE_RETRY_FRAMES && typeof requestAnimationFrame === 'function') {
+                    requestAnimationFrame(() => restore(attempt + 1));
+                    return;
+                }
                 try { prev.focus(); } catch { /* noop */ }
-            }
+            };
+            restore(0);
         };
     }, [active, containerRef, initialFocusRef, restoreFocusRef, trap]);
 }

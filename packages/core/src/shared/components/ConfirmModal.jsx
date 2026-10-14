@@ -12,7 +12,7 @@ import { useCallback, useEffect, useId, useRef } from 'react';
 import { Button, StatusMessage } from '@xchain-wallet/core/ui';
 import { OverlaySurface } from './OverlaySurface.jsx';
 import { useBackHandler } from '../../ui/backStack.js';
-import { useFocusTrap, useInertBackground } from '../utils/focusTrap.js';
+import { useFocusTrap } from '../utils/focusTrap.js';
 import { t } from '../../i18n/index.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 
@@ -79,7 +79,9 @@ export function ConfirmModal({
     const titleId = useId();
     const messageId = useId();
     useFocusTrap(panelRef, { active: true });
-    useInertBackground(rootRef, { active: true });
+    // The trap also inerts the background outside the modal root. A second
+    // inert lock here outlived the trap on close, so the browser refused the
+    // focus hand-back to the opener.
     // The system Back gesture closes this before it leaves the screen.
     useBackHandler(cancel);
     useEffect(() => () => {
