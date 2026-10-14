@@ -167,7 +167,6 @@ export const en = {
     'multisig.share.payload': 'Share payload',
     'multisig.share.payloadHint': 'The QR code and text contain the same public cosigner fields.',
     'multisig.share.qrAlt': 'QR code for multisig cosigner share payload',
-    'multisig.share.payloadAriaLabel': 'Cosigner share payload',
     'multisig.share.copyPayload': 'Copy cosigner share payload',
     'multisig.share.xpub': 'xpub',
     'multisig.share.account': 'Account {path}',
@@ -201,7 +200,6 @@ export const en = {
     'stakeNew.backToStaking': 'Back to staking',
     'stakeNew.title': 'New stake',
     'stakeNew.chooseNetwork': 'Choose the network to stake on.',
-    'stakeNew.prompt': 'What would you like to stake?',
     'stakeNew.bitcoinOnly':
         'Staking is available on Bitcoin only at launch. Use Receive on a Bitcoin network to generate an address first.',
     'stakeNew.validatorTitle': 'Validator staking',
@@ -259,6 +257,7 @@ export const en = {
     // --- home -----------------------------------------------------
     'home.receive': 'Receive',
     'home.title': 'Home',
+    'home.demoSendBlocked': "Demo wallets can't send. Create a real wallet to send.",
     'home.offline.cached':
         'You are offline. Showing cached balances and their last synced time. Network actions will be available when your connection returns.',
     'home.offline.empty': 'You are offline. Connect to load balances and use network actions.',
@@ -295,8 +294,6 @@ export const en = {
     'execute.review.title': 'Review contract call',
     'execute.loadingAddresses': 'Loading addresses…',
     'execute.success': 'Method call broadcast.',
-    'execute.executeOn':
-        'Call on {network}',
     'execute.review.summary.deposit':
         'Deposit {quantity} {tick}, then call {method}{args} on contract #{contract}.',
     'execute.review.summary.call': 'Call {method}{args} on contract #{contract}.',
@@ -422,14 +419,6 @@ export const en = {
         'Enter your 12-word FreeWallet recovery phrase. XChain Platform can detect BIP39 or the legacy Counterwallet/FreeWallet format automatically.',
     'importWallet.freeWallet.subtitle':
         'Enter your 12-word FreeWallet recovery phrase.',
-    'importWallet.backup.addFullSubtitle':
-        'Restore an encrypted backup as a new wallet. Your existing wallets stay in place.',
-    'importWallet.backup.replaceFullSubtitle':
-        'Choose a `.xchain-wallet` backup. Then enter its file, wallet, and device passwords.',
-    'importWallet.backup.addSubtitle':
-        'Restore as a new wallet. Your existing wallets stay in place.',
-    'importWallet.backup.replaceSubtitle':
-        'Choose a backup file, then enter the three passwords below.',
     'importWallet.phrase.fullSubtitle':
         'Enter a BIP39 recovery phrase with 12, 15, 18, 21, or 24 words, or a 12-word Counterwallet recovery phrase. XChain Platform detects the format.',
     'importWallet.phrase.subtitle':

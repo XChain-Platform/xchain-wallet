@@ -1159,11 +1159,11 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             {isDemoActive && demoSendNoticeOpen ? (
                 <StatusMessage
                     recovery={{
-                        label: 'Exit demo & wipe',
+                        label: t('walletDetails.exitDemo'),
                         onAction: () => { setDemoExitError(null); setDemoExitConfirmOpen(true); },
                     }}
                 >
-                    Demo wallets cannot send. Create a real wallet to send.
+                    {t('home.demoSendBlocked')}
                 </StatusMessage>
             ) : null}
             {demoExitConfirmOpen ? (
