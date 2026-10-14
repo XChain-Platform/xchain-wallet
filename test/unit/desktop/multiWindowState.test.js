@@ -129,14 +129,14 @@ describe('desktop window bounds memory', () => {
         )).toEqual({ x: 0, y: 100, width: 900, height: 700 });
     });
 
-    it('shrinks an oversized saved window without moving its in-area origin', () => {
+    it('shrinks and clamps an oversized saved window to its origin display', () => {
         expect(restoreWindowBounds(
             { x: 2100, y: 100, width: 2500, height: 1400 },
             [
                 { workArea: { x: 0, y: 0, width: 1920, height: 1080 } },
                 { workArea: { x: 1920, y: 0, width: 1280, height: 1024 } },
             ],
-        )).toEqual({ x: 2100, y: 100, width: 1280, height: 1024 });
+        )).toEqual({ x: 1920, y: 0, width: 1280, height: 1024 });
     });
 
     it('cascades an additional window without changing its remembered size', () => {
@@ -150,5 +150,16 @@ describe('desktop window bounds memory', () => {
     it('rejects malformed and undersized rectangles', () => {
         expect(normalizeWindowBounds({ x: 0, y: 0, width: 100, height: 100 })).toBeNull();
         expect(normalizeWindowBounds({ width: '900', height: 700 })).toBeNull();
+    });
+
+    it('accepts the compact 360 by 600 desktop layout floor', () => {
+        expect(normalizeWindowBounds({ x: 0, y: 0, width: 360, height: 600 })).toEqual({
+            x: 0,
+            y: 0,
+            width: 360,
+            height: 600,
+        });
+        expect(normalizeWindowBounds({ width: 359, height: 600 })).toBeNull();
+        expect(normalizeWindowBounds({ width: 360, height: 599 })).toBeNull();
     });
 });

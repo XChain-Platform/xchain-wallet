@@ -12,7 +12,7 @@ import { promises as fs, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 export const DEFAULT_WINDOW_BOUNDS = Object.freeze({ width: 1024, height: 768 });
-export const MIN_WINDOW_BOUNDS = Object.freeze({ width: 640, height: 600 });
+export const MIN_WINDOW_BOUNDS = Object.freeze({ width: 360, height: 600 });
 const MIN_WIDTH = MIN_WINDOW_BOUNDS.width;
 const MIN_HEIGHT = MIN_WINDOW_BOUNDS.height;
 const MAX_DIMENSION = 16_384;
@@ -57,8 +57,8 @@ export function normalizeWindowBounds(value) {
 }
 
 /**
- * Keep an origin that belongs to any current work area, fitting only the size
- * to that display. Recover other partially visible bounds onto one display.
+ * Keep saved bounds wholly inside the work area containing their origin.
+ * Recover other partially visible bounds onto one display.
  *
  * @param {unknown} value
  * @param {Array<{ workArea?: { x?: number, y?: number, width?: number, height?: number } }>} displays
@@ -76,10 +76,13 @@ export function restoreWindowBounds(value, displays = []) {
         ? null
         : areas.find((area) => containsPoint(bounds.x, bounds.y, area));
     if (containingArea) {
+        const width = Math.min(bounds.width, containingArea.width);
+        const height = Math.min(bounds.height, containingArea.height);
         return {
-            ...bounds,
-            width: Math.min(bounds.width, containingArea.width),
-            height: Math.min(bounds.height, containingArea.height),
+            x: clamp(bounds.x, containingArea.x, containingArea.x + containingArea.width - width),
+            y: clamp(bounds.y, containingArea.y, containingArea.y + containingArea.height - height),
+            width,
+            height,
         };
     }
 

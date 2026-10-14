@@ -36,7 +36,10 @@ const electron = vi.hoisted(() => {
         constructor(options) {
             browserWindowOptions.push(options);
             this.options = options;
-            this.webContents = { send: vi.fn() };
+            this.webContents = {
+                send: vi.fn(),
+                setVisualZoomLevelLimits: vi.fn(async () => {}),
+            };
             this.loadFile = vi.fn(() => state.loadFileError
                 ? Promise.reject(state.loadFileError)
                 : undefined);
@@ -428,7 +431,7 @@ describe('desktop main entry point', () => {
 
         expect(electron.browserWindowOptions[0]).toMatchObject({
             ...expected,
-            minWidth: 640,
+            minWidth: 360,
             minHeight: 600,
         });
     });
@@ -465,7 +468,7 @@ describe('desktop main entry point', () => {
         expect(electron.browserWindowOptions[0]).toMatchObject(savedBounds);
     });
 
-    it('keeps an origin inside either display instead of clamping to the larger overlap', async () => {
+    it('clamps saved bounds inside the display containing their origin', async () => {
         const userDataDir = mkdtempSync(join(tmpdir(), 'xchain-main-entry-'));
         tempDirs.push(userDataDir);
         const savedBounds = { x: 1800, y: 200, width: 900, height: 700 };
@@ -480,7 +483,10 @@ describe('desktop main entry point', () => {
         await import('../../../packages/desktop/main/index.js');
         await vi.waitFor(() => expect(electron.browserWindowOptions).toHaveLength(1));
 
-        expect(electron.browserWindowOptions[0]).toMatchObject(savedBounds);
+        expect(electron.browserWindowOptions[0]).toMatchObject({
+            ...savedBounds,
+            x: 1020,
+        });
     });
 
     it('hides on macOS close, permits an explicit quit, and reveals hidden windows', async () => {
@@ -600,6 +606,15 @@ describe('desktop main entry point', () => {
             nodeIntegration: false,
             webSecurity: true,
         });
+    });
+
+    it('starts at 100 percent zoom and allows bounded visual zoom', async () => {
+        const { createWindow } = await import('../../../packages/desktop/main/index.js');
+
+        const win = createWindow();
+
+        expect(win.options.webPreferences.zoomFactor).toBe(1);
+        expect(win.webContents.setVisualZoomLevelLimits).toHaveBeenCalledExactlyOnceWith(0.5, 3);
     });
 
     it('contains a renderer load rejection and reveals a recoverable window', async () => {
@@ -818,6 +833,22 @@ describe('desktop application menu', () => {
             .map((accelerator) => accelerator.toLowerCase());
         expect(new Set(accelerators).size).toBe(accelerators.length);
         expect(accelerators).toEqual(['cmdorctrl+shift+n']);
+    });
+
+    it('provides native zoom shortcuts including reset to 100 percent', async () => {
+        const { installApplicationMenu } = await import('../../../packages/desktop/main/index.js');
+
+        installApplicationMenu({ isMac: false });
+        const template = electron.Menu.buildFromTemplate.mock.calls.at(-1)[0];
+
+        expect(submenu(template, '&View').map((item) => item.role).filter(Boolean)).toEqual([
+            'reload',
+            'forceReload',
+            'resetZoom',
+            'zoomIn',
+            'zoomOut',
+            'togglefullscreen',
+        ]);
     });
 });
 
