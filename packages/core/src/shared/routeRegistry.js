@@ -101,7 +101,6 @@ const GROUPED_ROUTES = {
         ['markets', 'MarketsList'],
         ['market', 'MarketView'],
         ['markets-picker', 'ReceivePicker'],
-        ['market-activity', 'MarketActivity'],
         ['swap', 'SwapForm'],
         ['create-order', 'CreateOrderForm'],
         ['my-orders', 'MyOrdersView'],
@@ -115,6 +114,9 @@ const GROUPED_ROUTES = {
         ['bet-create', 'CreateBetFeedForm'],
         ['my-bets', 'MyBets'],
         ['bet-oracle-console', 'OracleConsole'],
+    ],
+    'market-activity': [
+        ['market-activity', 'MarketActivity'],
     ],
     'dispensers-list': [
         ['dispensers-list', 'DispensersList'],

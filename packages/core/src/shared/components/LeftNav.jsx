@@ -18,7 +18,7 @@ import styles from './LeftNav.module.css';
 /**
  * §24.2 / G053: full-layout left navigation. Renders a fixed-width
  * sidebar listing primary surfaces (Home, History, Send, Receive,
- * Scan, DEX, Dispensers, Contracts, Messaging) plus a contacts row,
+ * Scan, DEX, Marketplace, Dispensers, Contracts, Messaging) plus a contacts row,
  * a wallet switcher, Settings, and Lock. Active row gets
  * `aria-current="page"`.
  *
@@ -103,7 +103,10 @@ export function LeftNav({
         // not exist, and a visibly disabled exchange tab asks an app reviewer
         // the same question a working one does.
         ...(hasDexSurface
-            ? [{ id: 'markets', label: 'DEX', Icon: Icon.MarketIcon }]
+            ? [
+                { id: 'markets', label: 'DEX', Icon: Icon.MarketIcon },
+                { id: 'market-activity', label: 'Marketplace', Icon: Icon.DollarIcon },
+            ]
             : []),
         { id: 'dispensers-list', label: 'Dispensers', Icon: Icon.DollarIcon },
         // Gate Contracts on a VM address, matching Home and the command

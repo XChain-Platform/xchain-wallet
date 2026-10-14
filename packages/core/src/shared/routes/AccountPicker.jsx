@@ -35,8 +35,9 @@ function runRouteAction(action, ...args) {
  * @param {() => void} props.onAddAccount
  * @param {(account: any) => void} [props.onRenameAccount]
  * @param {() => void} props.onBack
+ * @param {string} [props.backLabel]
  */
-export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccount, onRenameAccount, onBack }) {
+export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccount, onRenameAccount, onBack, backLabel }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
 
@@ -66,7 +67,13 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
         return () => { cancelled = true; };
     }, [walletId, messaging, reload]);
 
-    const header = <PageHeader onBack={() => runRouteAction(onBack)} title={t('accountPicker.title')} />;
+    const header = (
+        <PageHeader
+            onBack={() => runRouteAction(onBack)}
+            backLabel={backLabel}
+            title={t('accountPicker.title')}
+        />
+    );
     const activeAccount = accounts?.find((account) => account.id === activeAccountId) || null;
     const footer = (
         <div className={pickerStyles.footerActions}>
