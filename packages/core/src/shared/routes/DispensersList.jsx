@@ -21,10 +21,12 @@ import { dispenserRateLabel } from '../utils/dispenserPricing.js';
 import {
     CHAIN_TIME_REFRESH_MS, chainClockFromTipRead, dispenserCancelTimestamp, dispenserCloseEta,
 } from '../utils/dispenserCloseWindow.js';
+import { startVisibleInterval } from '../utils/visibleInterval.js';
 import styles from './ActionsMenu.module.css';
 import local from './DispensersList.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const DISPENSER_REFRESH_MS = 20000;
 
 /**
  * "My dispensers": §40.7.1 / §40.7.2 owner-facing list view.
@@ -82,6 +84,17 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
         /** @type {Record<string, null | { chainTime: number, chainTimeReadAtMs: number }>} */ ({}),
     );
 
+    // Lifecycle changes land independently of this route. Refreshing on the
+    // standard wallet cadence lets an open row become closing or terminal as
+    // soon as the explorer indexes the owner transaction.
+    useEffect(() => {
+        if (!addressesByChain || flowsLib.isDemoWallet(walletId)) return undefined;
+        return startVisibleInterval(
+            () => setDispensersReload((value) => value + 1),
+            DISPENSER_REFRESH_MS,
+        );
+    }, [addressesByChain, walletId]);
+
     useEffect(() => {
         let cancelled = false;
         setAddressesByChain(null);
@@ -128,9 +141,17 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
         const chains = chainsWithAddresses;
         if (chains.length === 0) return;
 
-        const initial = {};
-        for (const cid of chains) initial[cid] = { loading: true, rows: [], error: null };
-        setDispensersByChain(initial);
+        setDispensersByChain((previous) => {
+            const initial = {};
+            for (const cid of chains) {
+                initial[cid] = {
+                    loading: true,
+                    rows: previous[cid]?.rows || [],
+                    error: null,
+                };
+            }
+            return initial;
+        });
 
         let cancelled = false;
 

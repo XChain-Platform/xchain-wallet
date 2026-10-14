@@ -85,11 +85,12 @@ function recordingMessaging({
     chainId = CHAIN,
     buildActionPsbtRequest,
     walletBalances,
+    getDispenserByActionIndex,
 } = {}) {
     const calls = [];
     const log = (method, value) => (args) => { calls.push({ method, args }); return Promise.resolve(value); };
     const target = {
-        getDispenserByActionIndex: () => Promise.resolve(dispenser),
+        getDispenserByActionIndex: getDispenserByActionIndex || (() => Promise.resolve(dispenser)),
         getAddressesByChain: () => Promise.resolve({ [chainId]: [owner] }),
         getActiveAddresses: () => Promise.resolve({}),
         getDispenses: () => Promise.resolve({ data: [] }),
@@ -206,19 +207,19 @@ describe('dispenser owner actions sign through the confirm page', () => {
     it('shows the exact refill asset and amount that the build receives, then Back keeps the value', async () => {
         const { utils, calls } = await mount();
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Refill' })));
-        await step(() => fireEvent.change(utils.getByLabelText(/^Refill amount/), { target: { value: '12.50' } }));
+        await step(() => fireEvent.change(utils.getByLabelText(/^Refill amount/), { target: { value: '37.50' } }));
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Refill dispenser' })));
 
         const review = utils.getByTestId('refill-review-summary');
         expect(review).toHaveTextContent('Dispenser#2868');
-        expect(review).toHaveTextContent('Add to escrow12.50 XCHAIN');
-        expect(calls.find((c) => c.method === 'composeForConfirm').args.actionData.params.GIVE_ESCROW).toBe('12.50');
+        expect(review).toHaveTextContent('Add to escrow37.50 XCHAIN');
+        expect(calls.find((c) => c.method === 'composeForConfirm').args.actionData.params.GIVE_ESCROW).toBe('37.50');
 
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Back to previous screen' })));
-        expect(utils.getByLabelText(/^Refill amount/)).toHaveValue('12.50');
+        expect(utils.getByLabelText(/^Refill amount/)).toHaveValue('37.50');
     });
 
-    it('rejects zero, excess precision, and amounts above the refill balance before review', async () => {
+    it('rejects zero, excess precision, less than one fill, and amounts above balance before review', async () => {
         const walletBalances = {
             [CHAIN]: [{
                 address: OWNER,
@@ -227,6 +228,7 @@ describe('dispenser owner actions sign through the confirm page', () => {
         };
         const { utils, calls } = await mount({
             walletBalances,
+            dispenser: { ...DISPENSER, give_amount: '2' },
         });
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Refill' })));
         await domAct(async () => { await vi.advanceTimersByTimeAsync(400); });
@@ -238,11 +240,28 @@ describe('dispenser owner actions sign through the confirm page', () => {
         await step(() => fireEvent.change(utils.getByLabelText(/^Refill amount/), { target: { value: '1.1' } }));
         expect(utils.getByText('Amount can have at most 0 decimal places.')).toBeInTheDocument();
 
+        await step(() => fireEvent.change(utils.getByLabelText(/^Refill amount/), { target: { value: '1' } }));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Refill dispenser' })));
+        expect(utils.getByText('Refill amount must be at least one fill (2 XCHAIN).')).toBeInTheDocument();
+
         await step(() => fireEvent.change(utils.getByLabelText(/^Refill amount/), { target: { value: '6' } }));
         await domAct(async () => { await vi.advanceTimersByTimeAsync(400); });
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Refill dispenser' })));
         expect(utils.getByText(/This address holds only 5 XCHAIN/)).toBeInTheDocument();
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
+    });
+
+    it('rechecks live state and refuses a second close when the dispenser starts closing', async () => {
+        const getDispenserByActionIndex = vi.fn()
+            .mockResolvedValueOnce(DISPENSER)
+            .mockResolvedValueOnce({ ...DISPENSER, current_status: 'cancelling' });
+        const { utils, calls } = await mount({ getDispenserByActionIndex });
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Close' })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Close dispenser' })));
+
+        expect(utils.getByText('This dispenser is cancelling and cannot accept another close.')).toBeInTheDocument();
+        expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
+        expect(signCalls(calls)).toHaveLength(0);
     });
 
     it('keeps watcher mode on its unsigned build, with no signature to pre-flight', async () => {
