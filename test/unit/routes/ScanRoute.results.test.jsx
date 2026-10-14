@@ -59,9 +59,19 @@ const ROUTING_CASES = [
         outcome: { kind: 'send', address: DOGE, amount: '12', chainId: 'dogecoin-mainnet' },
     },
     {
-        name: 'plain address',
+        name: 'plain Bitcoin address',
         input: BTC,
         outcome: { kind: 'send', address: BTC, chainId: 'bitcoin-mainnet' },
+    },
+    {
+        name: 'plain Litecoin address',
+        input: LTC,
+        outcome: { kind: 'send', address: LTC, chainId: 'litecoin-mainnet' },
+    },
+    {
+        name: 'plain Dogecoin address',
+        input: DOGE,
+        outcome: { kind: 'send', address: DOGE, chainId: 'dogecoin-mainnet' },
     },
     {
         name: 'uppercase bech32 address',

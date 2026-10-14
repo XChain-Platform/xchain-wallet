@@ -741,8 +741,26 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         if (detected.type === 'bip21') {
             e.preventDefault();
             const parts = detected.parts;
-            const requestChainId = uriLib.safeChainIdParam(parts.params?.chain);
+            const chainParam = parts.params?.chain;
+            const requestChainId = uriLib.safeChainIdParam(chainParam);
             const requestDescriptor = requestChainId ? chainRegistry.get(requestChainId) : null;
+            const requestError = parts.required.length > 0
+                ? 'This payment request requires a feature this wallet does not support.'
+                : (chainParam !== undefined && (
+                    !requestChainId
+                    || !requestDescriptor
+                    || String(requestDescriptor.uriScheme || '').toLowerCase() !== detected.scheme
+                    || !(addressesByChain?.[requestChainId]?.length > 0)
+                )
+                    ? 'This payment request names a network this wallet cannot use.'
+                    : null);
+            if (requestError) {
+                setPastedRecipient(null);
+                setPasteHint(null);
+                setToError(requestError);
+                setPasteWarning(null);
+                return;
+            }
             const tickParam = parts.params?.tick;
             const nextTick = typeof tickParam === 'string' && tickParam.length > 0
                 ? neutralizeControlText(tickParam).toUpperCase()
@@ -848,7 +866,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 if (!res.ok) setPasteWarning(res.reason || 'The clipboard changed after you pasted. Check the address before sending.');
             })
             .catch(() => { /* silent */ });
-    }, [chainId, perRecipientToken, tick, cancelMax]);
+    }, [addressesByChain, chainId, perRecipientToken, tick, cancelMax]);
 
     // §21.4 test-send protection. Session-scoped acknowledgement set;
     // marking an address tested suppresses the gate for the rest of
