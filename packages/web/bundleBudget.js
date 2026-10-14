@@ -8,13 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Notices moved into Screen and the shared connection verdict put the entry at
-// 900,360 bytes of JavaScript against a 900,000 ceiling; 905,000 leaves room
-// for in-flight fixes until a startup trim brings it back down.
-export const WEB_INITIAL_JS_SIZE_LIMIT = 905_000;
-// The kit controls, OverlaySurface and control-scale tokens load with the shell,
-// so the merged 21b and 22 entry measured 116,557 bytes of CSS.
-export const WEB_INITIAL_CSS_SIZE_LIMIT = 120_000;
+// The startup trim (first-paint modules off the core barrels, the palette,
+// help and variant badge and the header chain filter loaded on demand)
+// measured 765,361 bytes of JavaScript and 92,488 bytes of CSS, so both
+// ceilings are back at their long-standing values.
+export const WEB_INITIAL_JS_SIZE_LIMIT = 900_000;
+export const WEB_INITIAL_CSS_SIZE_LIMIT = 100_000;
 
 function sourceBytes(source) {
     return typeof source === 'string' ? Buffer.byteLength(source) : source.byteLength;

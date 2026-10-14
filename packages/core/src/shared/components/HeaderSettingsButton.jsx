@@ -8,11 +8,10 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, Icon } from '@xchain-wallet/core/ui';
 import { ConfirmModal } from './ConfirmModal.jsx';
-import { NetworkFilter } from './NetworkFilter.jsx';
 import { OverlaySurface } from './OverlaySurface.jsx';
 import { useAnchoredPopover } from '../hooks/useViewportClamp.js';
 import { useConfirmModal } from '../hooks/useConfirmModal.js';
@@ -25,6 +24,12 @@ import {
 import styles from './HeaderSettingsButton.module.css';
 import menuStyles from './AppHeader.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
+
+// The chain filter renders only inside the open popover, so it loads with the
+// header menu rather than in the startup bundle. The component starts the
+// fetch when it mounts, so the chunk is ready before the popover opens.
+const loadNetworkFilter = () => import('./NetworkFilter.jsx');
+const NetworkFilter = lazy(() => loadNetworkFilter().then((module) => ({ default: module.NetworkFilter })));
 
 /**
  * Header gear-icon → settings popover. Four sections:
@@ -100,6 +105,7 @@ export function HeaderSettingsButton({
     // Flex wrapping can move the gear independently of the header slot, so
     // the open panel derives its viewport coordinates from the gear itself.
     const popoverPlacement = useAnchoredPopover(open, triggerRef);
+    useEffect(() => { loadNetworkFilter().catch(() => {}); }, []);
     const popoverRef = popoverPlacement.ref;
     // The popover is portaled to the body, so Tab from its trigger walked the
     // page behind it (and closed an owning menu) and its controls were out of
@@ -280,14 +286,16 @@ export function HeaderSettingsButton({
                     ) : null}
 
                     {showNetwork ? (
-                        <Section title="Chain filter">
-                            <NetworkFilter
-                                chainRegistry={chainRegistry}
-                                coinFamilies={coinFamilies}
-                                value={networkFilter || 'all'}
-                                onChange={(next) => { onNetworkFilterChange(next); /* keep popover open */ }}
-                            />
-                        </Section>
+                        <Suspense fallback={null}>
+                            <Section title="Chain filter">
+                                <NetworkFilter
+                                    chainRegistry={chainRegistry}
+                                    coinFamilies={coinFamilies}
+                                    value={networkFilter || 'all'}
+                                    onChange={(next) => { onNetworkFilterChange(next); /* keep popover open */ }}
+                                />
+                            </Section>
+                        </Suspense>
                     ) : null}
 
                     {onOpenSettings ? (

@@ -109,6 +109,52 @@ describe('form drafts across auto-lock', () => {
     });
 
     it.each([
+        { kind: 'send', label: /^To$/, value: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4', notice: /Nothing was sent\./ },
+        { kind: 'issue-token', label: /^Ticker$/, value: 'LOCKDRAFT', notice: /Nothing was submitted\./ },
+        { kind: 'dispenser', label: /^Give amount/, value: '12.5', notice: /Nothing was submitted\./ },
+    ])('leaves no $kind draft after Discard and leave', async ({ kind, label, value, notice }) => {
+        const messaging = createMessaging();
+        const first = mountForm(kind, messaging);
+        fireEvent.change(await screen.findByLabelText(label), { target: { value } });
+
+        const storageKey = `xc:formdraft:${kind}:${WALLET_ID}`;
+        await waitFor(() => expect(localStorage.getItem(storageKey)).not.toBeNull());
+
+        fireEvent.click(screen.getAllByRole('button', { name: /^Back/ })[0]);
+        fireEvent.click(await screen.findByRole('button', { name: 'Discard and leave' }));
+
+        // The confirm re-renders the form before the host navigates away;
+        // that render must not write the discarded values back.
+        await waitFor(() => expect(screen.queryByRole('button', { name: 'Discard and leave' })).toBeNull());
+        await new Promise((resolve) => { setTimeout(resolve, 50); });
+        expect(localStorage.getItem(storageKey)).toBeNull();
+
+        first.unmount();
+        mountForm(kind, messaging);
+        expect(await screen.findByLabelText(label)).toBeInTheDocument();
+        expect(screen.queryByText(notice)).toBeNull();
+        // A fresh form may autosave its own defaults; the discarded value
+        // must not come back.
+        expect(localStorage.getItem(storageKey) || '').not.toContain(value);
+    });
+
+    it('keeps an unrestored Send draft when the form is left clean', async () => {
+        const storageKey = `xc:formdraft:send:${WALLET_ID}`;
+        const stored = JSON.stringify({
+            savedAt: Date.now(),
+            values: { chainId: CHAIN_ID, toAddress: '', tick: 'BTC', amount: '0.5', memo: '' },
+        });
+        localStorage.setItem(storageKey, stored);
+
+        mountForm('send', createMessaging());
+        expect(await screen.findByText(/Nothing was sent\./)).toBeInTheDocument();
+        fireEvent.click(screen.getAllByRole('button', { name: /^Back/ })[0]);
+
+        expect(screen.queryByRole('button', { name: 'Discard and leave' })).toBeNull();
+        expect(localStorage.getItem(storageKey)).toBe(stored);
+    });
+
+    it.each([
         {
             kind: 'send',
             label: /^To$/,

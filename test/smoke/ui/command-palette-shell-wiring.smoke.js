@@ -65,8 +65,16 @@ const shells = {
     desktop: 'packages/desktop/renderer/App.jsx',
 };
 
-for (const [label, path] of Object.entries(shells)) {
-    const src = read(path);
+// The web shell keeps the palette and its catalogue out of the startup bundle:
+// App mounts CommandPaletteHost on first open, and the host assembles the
+// commands and renders <CommandPalette>. Read both as the web shell's source.
+const WEB_PALETTE_HOST = 'packages/web/src/CommandPaletteHost.jsx';
+const shellSource = (label) => (label === 'web'
+    ? `${read(shells.web)}\n${read(WEB_PALETTE_HOST)}`
+    : read(shells[label]));
+
+for (const label of Object.keys(shells)) {
+    const src = shellSource(label);
     assert.ok(
         /import\s*\{\s*CommandPalette\s*\}\s*from\s*'@xchain-wallet\/core\/shared\/commandPalette\/CommandPalette\.jsx'/.test(src),
         `${label} App imports CommandPalette`,
@@ -91,18 +99,31 @@ for (const [label, path] of Object.entries(shells)) {
     // Command list assembled from the shared catalogue.
     assert.ok(/buildCommands\(/.test(src), `${label} App builds its command list via buildCommands`);
     // Palette actually mounted with open/close wired to the hook.
-    assert.ok(
-        /<CommandPalette\b[\s\S]{0,240}?open=\{palette\.open\}[\s\S]{0,240}?onClose=\{palette\.closePalette\}[\s\S]{0,240}?commands=\{paletteCommands\}/.test(src),
-        `${label} App mounts <CommandPalette> wired to the hook state`,
-    );
+    if (label === 'web') {
+        assert.ok(
+            /<CommandPaletteHost\b[\s\S]{0,240}?open=\{palette\.open\}[\s\S]{0,240}?onClose=\{palette\.closePalette\}/.test(src),
+            'web App mounts <CommandPaletteHost> wired to the hook state',
+        );
+        assert.ok(
+            /<CommandPalette\b[\s\S]{0,120}?open=\{open\}[\s\S]{0,120}?onClose=\{onClose\}[\s\S]{0,120}?commands=\{commands\}/.test(src),
+            'web CommandPaletteHost mounts <CommandPalette> with the commands it assembled',
+        );
+    } else {
+        assert.ok(
+            /<CommandPalette\b[\s\S]{0,240}?open=\{palette\.open\}[\s\S]{0,240}?onClose=\{palette\.closePalette\}[\s\S]{0,240}?commands=\{paletteCommands\}/.test(src),
+            `${label} App mounts <CommandPalette> wired to the hook state`,
+        );
+    }
     // §33.3 free-form parsing wired: parseQuery built from parseFreeformCommands
     // with a composeSend that prefills + navigates to Send, and passed in.
     assert.ok(/parseFreeformCommands\(/.test(src),
         `${label} App builds free-form intents via parseFreeformCommands`);
     assert.ok(/composeSend:\s*\(\{\s*amount,\s*tick\s*\}\)\s*=>/.test(src),
         `${label} App supplies a composeSend handler for the "send N TICK" intent`);
-    assert.ok(/parseQuery=\{paletteParseQuery\}/.test(src),
-        `${label} App passes parseQuery into <CommandPalette>`);
+    assert.ok(label === 'web'
+        ? /parseCtx=\{paletteParseCtx\}/.test(src) && /parseQuery=\{parseQuery\}/.test(src)
+        : /parseQuery=\{paletteParseQuery\}/.test(src),
+    `${label} App passes parseQuery into <CommandPalette>`);
 
     // §34 keyboard shortcuts: dispatcher installed (gated on unlocked + not
     // palette-open + not help-open) and the ShortcutHelp modal mounted.
@@ -133,7 +154,7 @@ for (const [label, path] of Object.entries(shells)) {
 // Tokens: every shell opens TokenDetail with the row ref (desktop gained the
 // 'token-detail' route + Home onSelectToken in ).
 for (const label of ['web', 'extension popup', 'desktop']) {
-    const src = read(shells[label]);
+    const src = shellSource(label);
     assert.ok(/balancesToCommands\(/.test(src), `${label} App folds token balances into the palette`);
     assert.ok(/openToken:\s*\(tok\)\s*=>\s*\{\s*setTokenDetailRef\(tok\);\s*palette\.navigate\('token-detail'\)/.test(src),
         `${label} App's openToken sets the full token ref and opens token-detail`);
@@ -152,7 +173,7 @@ for (const label of ['web', 'extension popup', 'desktop']) {
 // Sites + settings deep-links + help topics: web + desktop (the popup has no
 // Settings route, so it only gets the openHelp-backed help topic).
 for (const label of ['web', 'desktop']) {
-    const src = read(shells[label]);
+    const src = shellSource(label);
     assert.ok(/sitesToCommands\(/.test(src), `${label} App folds connected sites into the palette`);
     assert.ok(/settingsSectionsToCommands\(/.test(src), `${label} App folds settings sections into the palette`);
     assert.ok(/setSettingsInitialSection\(/.test(src), `${label} App deep-links Settings via settingsInitialSection`);

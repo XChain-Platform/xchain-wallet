@@ -2,7 +2,9 @@
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-1);
-    margin-top: var(--xc-space-4);
+    /* No outer margin: the form around the field spaces it with --xc-form-gap,
+       the same as every Input. */
+    margin: 0;
 }
 
 .header {
@@ -130,6 +132,19 @@
 .sliderTick:last-child { transform: translateX(-100%); }
 
 .sliderTick:disabled { cursor: not-allowed; }
+
+/* The tier label stays compact; on a touch screen a transparent layer
+   gives it a 44px target, centred on the control (the Button .sm pattern). */
+@media (pointer: coarse), (hover: none) {
+    .sliderTick::before {
+        content: '';
+        position: absolute;
+        inset-block-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
+        inset-inline-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
+        width: max(100%, var(--xc-control-hit-min, 24px));
+        height: max(100%, var(--xc-control-hit-min, 24px));
+    }
+}
 
 .sliderTickActive {
     color: var(--xc-text);
