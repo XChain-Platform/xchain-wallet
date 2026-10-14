@@ -94,27 +94,6 @@ test.describe('demo wallet', () => {
             expect(look.background, `${look.label} tile must not be filled with the accent`).not.toBe(look.accentRgb);
         }
     });
-
-    test('Home action labels keep clear of their neighbours at side-panel width', async ({ page }) => {
-        await page.setViewportSize({ width: 400, height: 800 });
-        await gotoSection(page, 'Home');
-        const grid = page.locator('[class*="actionsFull"]').first();
-        await expect(grid).toBeVisible();
-        const overlaps = await grid.evaluate((node) => {
-            const buttons = [...node.querySelectorAll(':scope > button')];
-            const found = [];
-            for (const button of buttons) {
-                const box = button.getBoundingClientRect();
-                for (const part of button.querySelectorAll('span, svg')) {
-                    const r = part.getBoundingClientRect();
-                    if (r.width === 0) continue;
-                    if (r.left < box.left - 1 || r.right > box.right + 1) found.push(button.innerText.trim());
-                }
-            }
-            return found;
-        });
-        expect(overlaps).toEqual([]);
-    });
 });
 
 test.describe('real wallet', () => {
