@@ -687,7 +687,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                                             </span>
                                         ) : null}
                                         {content ? (
-                                            <CopyButton value={content.text} label="Copy" ariaLabel="Copy message" />
+                                            <CopyButton value={content.text} label="Copy" ariaLabel="Copy message" appearance="outlined" />
                                         ) : null}
                                     </div>
                                 </li>

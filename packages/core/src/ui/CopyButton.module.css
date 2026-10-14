@@ -22,6 +22,19 @@
     border-color: var(--xc-accent-primary-hover);
 }
 
+/* Outlined: a quiet per-row action, so a thread of messages is not a column
+   of filled buttons. */
+.outlined {
+    color: var(--xc-accent-text);
+    background: transparent;
+    border-color: var(--xc-border-strong);
+}
+
+.outlined:hover {
+    background: var(--xc-bg-muted);
+    border-color: var(--xc-border-strong);
+}
+
 .btn:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: 2px;
