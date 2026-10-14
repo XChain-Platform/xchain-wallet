@@ -120,10 +120,11 @@ async function checkPrivateKeyScrubbing(page, label) {
     expect(keyIsCleared, `${label}: the WIF remains in the field after leaving its import lane`)
         .toBe(true);
     await page.getByRole('button', { name: 'Back to wallet setup' }).click();
-    // Let the setup screen finish loading so the next navigation does not
-    // abort one still in flight.
     await expect(page.getByRole('button', { name: 'Try in demo mode' })).toBeVisible();
-    await page.waitForLoadState('load');
+    // Leave the app entirely so the demo entry starts from a blank page, as in
+    // every other spec; a second load of the same URL straight from the setup
+    // screen is aborted intermittently.
+    await page.goto('about:blank');
 }
 
 async function setWatcherMode(page, label) {
