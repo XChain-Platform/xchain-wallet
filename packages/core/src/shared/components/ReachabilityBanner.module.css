@@ -12,19 +12,9 @@
     border: 1px solid;
     font-size: var(--xc-text-sm);
     margin-block: var(--xc-space-2);
-    margin-inline: var(--xc-space-3);
-}
-
-@media (min-width: 640px) {
-    .banner {
-        margin-inline: var(--xc-space-4);
-    }
-}
-
-@media (min-width: 900px) {
-    .banner {
-        margin-inline: var(--xc-space-6);
-    }
+    /* The layout tier sets the page gutter, so the notice lines up with the
+       route content at every width without breakpoints of its own. */
+    margin-inline: var(--xc-page-gutter);
 }
 
 .degraded {

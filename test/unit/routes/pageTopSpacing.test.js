@@ -47,9 +47,9 @@ describe('route page-top ownership', () => {
     it('uses the responsive gutter for reachability notices and releases the landscape scrollbar gutter', () => {
         const banner = read('packages/core/src/shared/components/ReachabilityBanner.module.css');
         const screen = read('packages/core/src/ui/Screen.module.css');
-        expect(rule(banner, '.banner')).toMatch(/margin-inline:\s*var\(--xc-space-3\)/);
-        expect(banner).toMatch(/@media \(min-width: 640px\)[\s\S]*?margin-inline:\s*var\(--xc-space-4\)/);
-        expect(banner).toMatch(/@media \(min-width: 900px\)[\s\S]*?margin-inline:\s*var\(--xc-space-6\)/);
+        // The layout tier owns the gutter value, so the notice reads the token.
+        expect(rule(banner, '.banner')).toMatch(/margin-inline:\s*var\(--xc-page-gutter\)/);
+        expect(banner).not.toMatch(/@media \([^)]*width/);
         expect(screen).toMatch(/@media \(orientation: landscape\) and \(max-height: 480px\)[\s\S]*?\.body\s*\{[^}]*scrollbar-gutter:\s*auto/);
     });
 });
