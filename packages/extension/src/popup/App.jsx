@@ -2802,7 +2802,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                             isWatcherMode={isWatcherMode}
                             activeWallet={activeWalletId ? {
                                 id: activeWalletId,
-                                name: walletList.find((wallet) => wallet.id === activeWalletId)?.name,
+                                name: activeWallet?.name,
                             } : null}
                             activeNetwork={settings?.activeNetwork}
                             onOpenNetworkSettings={() => openSettingsSection('network-endpoints')}
