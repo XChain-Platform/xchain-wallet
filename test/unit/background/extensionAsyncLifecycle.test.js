@@ -16,6 +16,7 @@ import {
     WIPE_STORAGE_MESSAGE_TYPE,
     attachWipeStorageListener,
 } from '../../../packages/extension/src/background/wipeExtensionStorage.js';
+import { createRestartStringSetStorage } from '../../../packages/extension/src/background/restartStateStorage.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
@@ -101,5 +102,30 @@ describe('extension background async lifecycle', () => {
         expect(source).toMatch(/applyLayoutMode\(mode\);\s*\}\)\(\)\.catch\(/);
         expect(source).toContain('void sdkResolved.catch(() => {});');
         expect(source).toMatch(/if \(import\.meta\.env\?\.PROD\)[\s\S]*?throw err;/);
+    });
+
+    it('stores only valid restart markers', async () => {
+        const values = new Map();
+        const area = {
+            get: vi.fn(async (key) => ({ [key]: values.get(key) })),
+            set: vi.fn(async (items) => {
+                for (const [key, value] of Object.entries(items)) values.set(key, value);
+            }),
+        };
+        const store = createRestartStringSetStorage('watcher-state', area);
+
+        await store.save(['one', '', null, 'two']);
+
+        await expect(store.load()).resolves.toEqual(['one', 'two']);
+    });
+
+    it('wires durable watcher state and a stable extension payer identity', () => {
+        const source = readFileSync(join(root, 'packages/extension/src/background.js'), 'utf8');
+
+        expect(source).toContain('loadFired: () => priceAlertFiredStore.load()');
+        expect(source).toContain('saveFired: (ids) => priceAlertFiredStore.save(ids)');
+        expect(source).toContain('instanceId: EXTENSION_AUTOPAY_INSTANCE_ID');
+        expect(source).toContain('loadNotified: () => coinpayAutopayNotifiedStore.load()');
+        expect(source).toContain('saveNotified: (keys) => coinpayAutopayNotifiedStore.save(keys)');
     });
 });

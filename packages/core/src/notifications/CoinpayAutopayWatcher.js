@@ -68,6 +68,7 @@ import { randomUUID } from '../util/uuid.js';
 import { taggedLogger } from './taggedLogger.js';
 
 const DEFAULT_INTERVAL_MS = 60 * 1000;
+const NOTIFIED_CAP = 500;
 
 // Lease TTL: 3 unrenewed cycles (spec: a shut-down payer must never
 // block payment for long; with the 60s default this is a 3-minute
@@ -123,6 +124,9 @@ export class CoinpayAutopayWatcher {
      * @param {() => number} [deps.now]
      * @param {{ debug: Function, warn: Function, error: Function }} [deps.logger]
      * @param {Function} [deps.coinpayAction]  injectable for tests
+     * @param {string} [deps.instanceId] stable shell identity when one process is the only payer
+     * @param {() => Promise<string[] | Set<string>>} [deps.loadNotified]
+     * @param {(keys: string[]) => (void | Promise<void>)} [deps.saveNotified]
      */
     constructor({
         vault,
@@ -137,6 +141,9 @@ export class CoinpayAutopayWatcher {
         now,
         logger,
         coinpayAction,
+        instanceId,
+        loadNotified,
+        saveNotified,
     } = {}) {
         if (!vault) throw new Error('CoinpayAutopayWatcher: vault is required');
         if (!sdkRegistry) throw new Error('CoinpayAutopayWatcher: sdkRegistry is required');
@@ -161,14 +168,18 @@ export class CoinpayAutopayWatcher {
         this._log = taggedLogger(logger, 'coinpay');
         this._coinpayAction = coinpayAction || defaultCoinpayAction;
 
-        this._instanceId = randomUUID();
+        this._instanceId = typeof instanceId === 'string' && instanceId ? instanceId : randomUUID();
+        this._loadNotified = typeof loadNotified === 'function' ? loadNotified : null;
+        this._saveNotified = typeof saveNotified === 'function' ? saveNotified : null;
         this._timer = null;
         this._ticking = false;
         this._unsubs = [];
         /** @type {Set<string>} matches this instance attempted (broadcast reached or unknown) */
         this._attempted = new Set();
-        /** @type {Set<string>} notification dedupe keys (`${matchIndex}:${reason}`) */
+        /** @type {Set<string>} notification dedupe keys (`${chainId}:${matchIndex}:${reason}`) */
         this._notified = new Set();
+        this._notifiedLoaded = false;
+        this._notifiedDirty = false;
         /** @type {Map<string, { reservationId: string, chainId: string }>} matchIndex -> hold */
         this._holds = new Map();
         /** @type {{ payer: boolean, armed: number, unsignable: string[] } | null} */
@@ -249,6 +260,8 @@ export class CoinpayAutopayWatcher {
     }
 
     async _cycle() {
+        await this._restoreNotified();
+        await this._restoreHolds();
         let consents;
         try {
             consents = (await listAutopayOrders({ vault: this._vault }))
@@ -298,6 +311,7 @@ export class CoinpayAutopayWatcher {
         }
 
         await this._releaseTerminalHolds(pendingTxs);
+        await this._persistNotified();
     }
 
     /**
@@ -380,6 +394,12 @@ export class CoinpayAutopayWatcher {
         if (status !== 'pending_coinpay') {
             this._terminalMatches = this._terminalMatches || new Set();
             this._terminalMatches.add(matchIndex);
+            for (const key of this._notified) {
+                if (key.includes(`:${matchIndex}:`)) {
+                    this._notified.delete(key);
+                    this._notifiedDirty = true;
+                }
+            }
             return;
         }
 
@@ -613,6 +633,26 @@ export class CoinpayAutopayWatcher {
         }
     }
 
+    async _restoreHolds() {
+        if (!this._ledger || typeof this._ledger.all !== 'function') return;
+        let entries;
+        try {
+            entries = await this._ledger.all();
+        } catch (e) {
+            this._log.warn('CoinpayAutopayWatcher: hold restore failed', e);
+            return;
+        }
+        for (const entry of entries || []) {
+            if (!entry || typeof entry.id !== 'string' || typeof entry.chainId !== 'string') continue;
+            const prefix = `autopay:${entry.chainId}:`;
+            if (!entry.id.startsWith(prefix)) continue;
+            const matchIndex = entry.id.slice(prefix.length);
+            if (matchIndex) {
+                this._holds.set(matchIndex, { reservationId: entry.id, chainId: entry.chainId });
+            }
+        }
+    }
+
     async _releaseHold(matchIndex) {
         const hold = this._holds.get(matchIndex);
         if (!hold) return;
@@ -653,7 +693,8 @@ export class CoinpayAutopayWatcher {
     }
 
     async _notifyOnce(matchIndex, reason, payload) {
-        const key = `${matchIndex}:${reason}`;
+        const chainId = typeof payload?.data?.chainId === 'string' ? payload.data.chainId : '';
+        const key = `${chainId}:${matchIndex}:${reason}`;
         if (this._notified.has(key)) return;
         let settings;
         try {
@@ -663,11 +704,46 @@ export class CoinpayAutopayWatcher {
             return;
         }
         if (settings?.notifications?.incomingReceipts !== true) return;
-        this._notified.add(key);
         try {
-            await this._notify(payload);
+            const delivered = await this._notify(payload);
+            if (delivered === false) {
+                this._notified.add(key);
+                return;
+            }
         } catch (e) {
             this._log.error('CoinpayAutopayWatcher: notify adapter threw', e);
+            this._notified.add(key);
+            return;
+        }
+        this._notified.add(key);
+        this._notifiedDirty = true;
+        await this._persistNotified();
+    }
+
+    async _restoreNotified() {
+        if (this._notifiedLoaded) return;
+        this._notifiedLoaded = true;
+        if (!this._loadNotified) return;
+        try {
+            const stored = await this._loadNotified();
+            for (const key of stored instanceof Set ? stored : (Array.isArray(stored) ? stored : [])) {
+                if (typeof key === 'string' && key) this._notified.add(key);
+            }
+        } catch (e) {
+            this._log.warn('CoinpayAutopayWatcher: loadNotified failed', e);
+        }
+    }
+
+    async _persistNotified() {
+        if (!this._notifiedDirty || !this._saveNotified) return;
+        while (this._notified.size > NOTIFIED_CAP) {
+            this._notified.delete(this._notified.values().next().value);
+        }
+        try {
+            await this._saveNotified(Array.from(this._notified));
+            this._notifiedDirty = false;
+        } catch (e) {
+            this._log.warn('CoinpayAutopayWatcher: saveNotified failed', e);
         }
     }
 }
