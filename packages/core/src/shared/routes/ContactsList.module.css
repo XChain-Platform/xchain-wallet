@@ -8,6 +8,18 @@
  * license (without AGPL source-disclosure terms) is available -
  * contact legal@dankest.llc. */
 
+/* Search, network picker and sort share one row and wrap on narrow phones
+   instead of clipping the network name. */
+.toolbar {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--xc-space-2);
+    width: 100%;
+    margin-bottom: var(--xc-space-2);
+    flex-wrap: wrap;
+}
+
 /* Search and network picker share the space left beside the sort control. */
 .search {
     flex: 1 1 0;
