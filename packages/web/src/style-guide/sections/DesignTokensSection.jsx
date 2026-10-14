@@ -36,6 +36,21 @@ export const TOKEN_GROUPS = [
         ],
     },
     {
+        title: 'Control states',
+        tokens: [
+            color('--xc-control-bg', '#FFFFFF', '#0B0F17', 'Kit control fill'),
+            color('--xc-control-bg-hover', '#F5F6F8', '#121824', 'Kit control hover fill'),
+            color('--xc-control-border', '#818B9B', '#5F6D83', 'Kit control border'),
+            color('--xc-control-border-hover', '#727D8E', '#718096', 'Kit control hover border'),
+            color('--xc-control-selected', '#1A7BAC', '#1A7BAC', 'Selected chip, tab and row fill'),
+            color('--xc-control-selected-text', '#FFFFFF', '#FFFFFF', 'Text on a selected control'),
+            color('--xc-control-focus-ring', 'rgba(26, 123, 172, 0.80)', 'rgba(74, 168, 216, 0.75)', 'Kit control focus ring'),
+            color('--xc-control-disabled-bg', '#F5F6F8', '#121824', 'Disabled control fill'),
+            color('--xc-control-disabled-border', '#727D8E', '#718096', 'Disabled control border'),
+            color('--xc-control-disabled-text', '#5F7086', '#94A3B8', 'Disabled control text'),
+        ],
+    },
+    {
         title: 'Status colors',
         tokens: [
             color('--xc-danger', '#DC2626', '#DC2626', 'Danger fill and border'),
