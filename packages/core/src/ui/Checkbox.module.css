@@ -11,6 +11,15 @@
     cursor: pointer;
 }
 
+/* Callers pass row classes for spacing, and several older ones still carry
+   display: flex. The element-qualified rule keeps the box and its input in
+   one grid cell whatever order the modules load in. */
+label.root {
+    display: grid;
+    grid-template-columns: var(--xc-control-icon-md, var(--xc-icon-md)) minmax(0, 1fr);
+    column-gap: var(--xc-space-2);
+}
+
 /* The transparent native input sits in the box's grid cell, on top of the
    painted box, so a pointer on the box reaches the real control (pointer
    automation and voice control target it) while the box draws the state. */

@@ -30,8 +30,10 @@ async function measureGate(form) {
         const terms = element.querySelector('[aria-label="License terms"]');
         const checkbox = element.querySelector('input[type="checkbox"]');
         const acknowledgement = checkbox.closest('label');
+        // FormPage owns the brand and title in its header; the gate (terms plus
+        // acknowledgement) is the page body below it.
         const gate = terms.parentElement;
-        const hero = gate.firstElementChild;
+        const hero = element.querySelector('header');
         const button = element.querySelector('button');
         const rect = (node) => {
             const box = node.getBoundingClientRect();
@@ -52,6 +54,7 @@ async function measureGate(form) {
             acknowledgement: rect(acknowledgement),
             button: rect(button),
             gap: Number.parseFloat(getComputedStyle(gate).rowGap),
+            formGap: Number.parseFloat(getComputedStyle(element).rowGap),
             heroMarginBottom: Number.parseFloat(getComputedStyle(hero).marginBottom),
         };
     });
@@ -59,7 +62,8 @@ async function measureGate(form) {
 
 async function expectScrollGate(terms, acknowledgement) {
     const overflow = await terms.evaluate(
-        (element) => element.scrollHeight > element.clientHeight + 1,
+        // Same tolerance the gate uses before it treats the terms as fitting.
+        (element) => element.scrollHeight > element.clientHeight + 4,
     );
     if (!overflow) return;
 
@@ -104,7 +108,7 @@ for (const viewport of VIEWPORTS) {
         expect(bottomGap).toBeLessThanOrEqual(24);
 
         expect(layout.terms.top - layout.hero.bottom)
-            .toBeCloseTo(layout.gap + layout.heroMarginBottom, 0);
+            .toBeCloseTo(layout.formGap + layout.heroMarginBottom, 0);
         expect(layout.acknowledgement.top - layout.terms.bottom)
             .toBeCloseTo(layout.gap, 0);
         expect(layout.terms.height).toBeGreaterThan(0);
