@@ -61,16 +61,22 @@
     .tabsRow {
         flex-direction: column;
         gap: var(--xc-space-2);
-        container-type: inline-size;
     }
 
     /* The tab row has the whole width here. The five labels take a little
        under 12.25rem at any text size, so each tab's side padding gives
        way, down to 1px, when the 12px default would push Activity behind a
        sideways scroll: a 320px phone, or 130 and 150 percent text. Rows
-       with room keep the 12px padding unchanged. */
-    .tabsRow [role='tab'] {
-        padding-inline: clamp(calc(var(--xc-space-1) / 4), calc((100cqw - 12.25rem) / 10), var(--xc-space-3));
+       with room keep the 12px padding unchanged. A WebView without
+       container queries keeps the 12px padding and the scrolling row. */
+    @supports (container-type: inline-size) and (width: 1cqw) {
+        .tabsRow {
+            container-type: inline-size;
+        }
+
+        .tabsRow [role='tab'] {
+            padding-inline: clamp(calc(var(--xc-space-1) / 4), calc((100cqw - 12.25rem) / 10), var(--xc-space-3));
+        }
     }
 
     .tabsRow > [role='tablist'] {
