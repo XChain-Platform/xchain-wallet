@@ -116,7 +116,18 @@ describe('transaction detail field sources', () => {
 
         expect(field('Direction')).toHaveTextContent(direction);
         expect(field('Amount')).toHaveTextContent(amount);
-        expect(field('Counterparty')).toHaveTextContent(counterparty);
+        // A long address keeps both ends on screen and the whole value in
+        // its title; a short value such as "Self" reads in full.
+        const counterpartyCell = field('Counterparty');
+        if (counterparty.length > 14) {
+            expect(counterpartyCell.querySelector(`[title="${counterparty}"]`)).toBeTruthy();
+            expect(counterpartyCell).toHaveTextContent(`${counterparty.slice(0, 6)}…${counterparty.slice(-6)}`);
+            // The copy button follows the value and says only "Copy".
+            const copy = within(counterpartyCell).getByRole('button', { name: 'Copy counterparty address' });
+            expect(copy).toHaveTextContent(/^Copy$/);
+        } else {
+            expect(counterpartyCell).toHaveTextContent(counterparty);
+        }
         expect(field('Network fee')).toHaveTextContent(/0\.000[123] BTC/);
         expect(field('Confirmations')).toHaveTextContent('11');
         expect(field('Block')).toHaveTextContent('100');

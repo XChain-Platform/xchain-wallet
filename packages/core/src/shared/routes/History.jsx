@@ -86,7 +86,7 @@ import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useResponsivePlaceholder } from '../../ui/Input.jsx';
-import { truncateAddress } from '../../ui/AddressText.jsx';
+import { AddressText, truncateAddress } from '../../ui/AddressText.jsx';
 import { findContactByName, withEntriesAdded } from '../utils/contactMerge.js';
 import { copyText } from '../clipboard.js';
 import { shareOrCopy, ShareOutcome } from '../share.js';
@@ -3209,16 +3209,27 @@ function basicDetailRows(entry, chainTip, nativeAmount, nativeFiatValue, balance
  * table for fields a user typically needs to paste somewhere else
  * (action_index, tx_hash, source / destination addresses).
  */
+/**
+ * A Details value with its copy button after it. A long identifier (an
+ * address, a transaction ID) keeps both ends on one line and copies in
+ * full; the button says "Copy" and names what it copies to assistive tech.
+ * The button used to sit first with its whole name as text, which wrapped
+ * to two lines on a phone and pushed every value out of line.
+ */
 function CopyableValue({ display, fullValue, ariaLabel }) {
+    const full = String(fullValue ?? '');
+    const identifier = typeof display === 'string' && display === full && full.length > 14 && !/\s/.test(full);
     return (
         <span className={styles.copyableValue}>
-            <HistoryCopyButton value={String(fullValue ?? '')} label={ariaLabel} />
-            <span className={styles.copyableText}>{display}</span>
+            <span className={styles.copyableText}>
+                {identifier ? <AddressText address={full} size="sm" /> : display}
+            </span>
+            <HistoryCopyButton value={full} label={ariaLabel} visibleLabel={t('history.copy.short')} />
         </span>
     );
 }
 
-function HistoryCopyButton({ value, label = t('history.copy.clipboard') }) {
+function HistoryCopyButton({ value, label = t('history.copy.clipboard'), visibleLabel = label }) {
     const [copied, setCopied] = useState(false);
     const onCopied = () => {
         setCopied(true);
@@ -3232,7 +3243,7 @@ function HistoryCopyButton({ value, label = t('history.copy.clipboard') }) {
         >
             <CopyButton
                 value={value}
-                label={label}
+                label={visibleLabel}
                 ariaLabel={label}
                 onCopied={onCopied}
             />

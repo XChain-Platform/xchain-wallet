@@ -847,6 +847,7 @@ export const en = {
     'history.contact.saveAs': 'Save {address} as',
     'history.contact.save': 'Save',
     'history.copy.clipboard': 'Copy to clipboard',
+    'history.copy.short': 'Copy',
     'history.copy.copied': 'Copied',
     'history.copy.copiedTitle': 'Copied!',
     'history.copy.actionNumber': 'Copy action number',

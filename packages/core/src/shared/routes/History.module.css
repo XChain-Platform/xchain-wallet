@@ -612,10 +612,11 @@
 
 /* Inline value + copy icon used in the details table for fields the
    user typically wants to paste (action_index / tx_hash / addresses). */
+/* The value first, its copy button right after it. */
 .copyableValue {
     display: flex;
-    align-items: flex-start;
-    gap: var(--xc-space-1);
+    align-items: center;
+    gap: var(--xc-space-2);
     max-width: 100%;
 }
 
@@ -624,7 +625,7 @@
     word-break: break-word;
     white-space: normal;
     min-width: 0;
-    flex: 1 1 auto;
+    flex: 0 1 auto;
 }
 
 /* Explorer button row: equal-width columns that span the full row.
