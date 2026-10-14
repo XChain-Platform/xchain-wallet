@@ -209,6 +209,8 @@ describe('MnemonicGrid narrow layout', () => {
         // The word-count choice is the kit RadioGroup, whose option text column shrinks and wraps.
         expect(css('packages/core/src/ui/RadioGroup.module.css')).toMatch(/\.option\s*\{[^}]*minmax\(0, 1fr\)/s);
         expect(createCss).toMatch(/\.wordCountRow\s*\{[^}]*min-width:\s*0;[^}]*width:\s*100%;/s);
+        // A full-width rendered legend erases the box's top border; floated, it sits inside the box.
+        expect(createCss).toMatch(/\.wordCountRow\s*>\s*legend\s*\{[^}]*float:\s*left;/s);
         expect(createCss).toMatch(/\.confirmRow\s*>\s*span\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
         expect(createCss).toMatch(/\.advancedToggle\s*>\s*span\s*\{[^}]*min-width:\s*0;[^}]*overflow-wrap:\s*anywhere;/s);
         expect(createCss).toMatch(/@media \(max-height:\s*520px\)/);
