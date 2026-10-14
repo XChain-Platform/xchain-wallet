@@ -18,7 +18,8 @@ import { useTickBalance } from '../hooks/useTickBalance.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { divideDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import { compareDecimalStrings, divideDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import { addressValidationError } from '../utils/addressValidation.js';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
@@ -56,7 +57,7 @@ const PROTOCOL_COIN_TICKER = {
 const NATIVE_TICKER_BY_COIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 
 const isPlainPositive = (value) => /^\d+(\.\d+)?$/.test(String(value).trim())
-    && Number(String(value).trim()) > 0;
+    && compareDecimalStrings(String(value).trim(), '0') === 1;
 
 /**
  * §42.8.3 Cross-chain SWAP authoring surface.
@@ -272,6 +273,9 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                 noun: 'Give amount',
             });
             if (precisionError) return precisionError;
+            if (giveBalance !== null && compareDecimalStrings(giveAmount, giveBalance) === 1) {
+                return `Give amount is above your available ${giveTick.trim().toUpperCase()} balance.`;
+            }
         }
         if (!getOwnership && getAmount) {
             const precisionError = tokenAmountPrecisionError(getAmount, {
@@ -281,9 +285,13 @@ export function CrossChainSwapForm({ walletId, onBack }) {
             });
             if (precisionError) return precisionError;
         }
-        if (getAddress.includes('|') || getAddress.includes(';')) return 'Receive address is invalid.';
+        if (getAddress.trim()) {
+            const addressError = addressValidationError(getAddress, getDescriptor);
+            if (addressError) return addressError;
+        }
         if (memo.includes('|') || memo.includes(';')) return 'Memo cannot contain "|" or ";".';
-        if (expMode === 'custom' && expInput.trim()) {
+        if (expMode === 'custom') {
+            if (!expInput.trim()) return 'Pick an expiration date and time, or switch to the default window.';
             const ms = Date.parse(expInput.trim());
             if (!Number.isFinite(ms)) return 'Pick a valid expiration date and time.';
             if (Math.floor(ms / 1000) <= Math.floor(Date.now() / 1000)) return 'Expiration must be in the future.';
@@ -291,7 +299,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         return null;
     }, [giveCoinTicker, getCoinTicker, giveTick, getTick, giveOwnership, giveAmount,
         getOwnership, getAmount, giveTokenInfo?.divisibility, getTokenInfo?.divisibility,
-        getAddress, memo, expMode, expInput]);
+        giveBalance, getAddress, getDescriptor, memo, expMode, expInput]);
 
     const rate = !giveOwnership && !getOwnership
         ? divideDecimalStrings(getAmount, giveAmount, 8)
@@ -436,7 +444,6 @@ export function CrossChainSwapForm({ walletId, onBack }) {
             setFormError('Pick a source address first.');
             return;
         }
-        if (validationError) return;
         if (!giveTick || (!giveOwnership && !giveAmount) || !getTick || (!getOwnership && !getAmount)) {
             setFormError('Enter the give and get tickers and amounts, or select ownership, before reviewing.');
             return;
@@ -445,6 +452,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
             setFormError('Enter a receive address on the get chain.');
             return;
         }
+        if (validationError) return;
         setFormError(null);
         if (singleEncode) { void openConfirmScreen(); return; }
         setStage('review');
@@ -606,11 +614,11 @@ export function CrossChainSwapForm({ walletId, onBack }) {
     // from here, keeping the form stage completely read-only.
     if (stage === 'review' || stage === 'submitting') {
         const giveSide = giveOwnership
-            ? `ownership of ${giveTick}`
-            : `${giveAmount} ${giveTick}`;
+            ? `ownership of ${swapParams.GIVE_TICK}`
+            : `${swapParams.GIVE_AMOUNT} ${swapParams.GIVE_TICK}`;
         const getSide = getOwnership
-            ? `ownership of ${getTick}`
-            : `${getAmount} ${getTick}`;
+            ? `ownership of ${swapParams.GET_TICK}`
+            : `${swapParams.GET_AMOUNT} ${swapParams.GET_TICK}`;
         return wrap(
             <FormPage
                 label="Review cross-chain swap"
@@ -680,7 +688,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                     ) : null}
                     <DetailRow
                         label="Receive at"
-                        value={<AddressText address={getAddress} />}
+                        value={<AddressText address={swapParams.GET_ADDRESS} />}
                     />
                     <DetailRow
                         label="Expiration"
@@ -689,8 +697,8 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                     {giveOwnership || getOwnership ? (
                         <DetailRow label="Ownership" value={[giveOwnership ? 'give' : null, getOwnership ? 'get' : null].filter(Boolean).join(' + ')} />
                     ) : null}
-                    {memo ? (
-                        <DetailRow label="Memo" value={memo} />
+                    {swapParams.MEMO ? (
+                        <DetailRow label="Memo" value={swapParams.MEMO} />
                     ) : null}
                     <DetailRow label="Network fee" value={feeText} />
                     <DetailRow

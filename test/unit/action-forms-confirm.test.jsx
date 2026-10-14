@@ -112,8 +112,8 @@ function recordingMessaging(overrides = {}) {
                 balances: {
                     native: { tick: 'BTC', quantity: '100000', divisibility: 8 },
                     tokens: [
-                        { tick: 'XCHAIN', quantity: '1000', divisibility: 8 },
-                        { tick: 'JDOG', quantity: '500', divisibility: 8 },
+                        { tick: 'XCHAIN', quantity: '100000000000', divisibility: 8 },
+                        { tick: 'JDOG', quantity: '50000000000', divisibility: 8 },
                     ],
                 },
             }],

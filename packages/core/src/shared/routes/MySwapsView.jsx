@@ -85,6 +85,9 @@ const CLOSED_LABELS = Object.freeze({
 
 const STATE_READ_CONCURRENCY = 6;
 
+const isPositiveActionIndex = (value) => /^[0-9]+$/.test(String(value).trim())
+    && /[1-9]/.test(String(value));
+
 function swapStateOf(detail) {
     const state = detail?.state || detail?.data?.state;
     if (!state || typeof state !== 'object') return null;
@@ -456,10 +459,32 @@ function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messag
     }, [expInput, allowListIdx, blockListIdx]);
 
     const editHasChange = Object.keys(editParams).length > 0;
+    const actionIndexError = isPositiveActionIndex(row.action_index)
+        ? null
+        : 'This swap has an invalid action ID and cannot be changed.';
+    const editValidationError = useMemo(() => {
+        if (isCancel) return null;
+        if (expInput.trim()) {
+            const ms = Date.parse(expInput.trim());
+            if (!Number.isFinite(ms)) return 'Expiration must be a valid date and time.';
+            if (Math.floor(ms / 1000) <= Math.floor(Date.now() / 1000)) {
+                return 'Expiration must be a future date and time.';
+            }
+        }
+        if (allowListIdx && allowListIdx !== '0' && !isPositiveActionIndex(allowListIdx)) {
+            return 'Allow-list ID must be a positive whole number.';
+        }
+        if (blockListIdx && blockListIdx !== '0' && !isPositiveActionIndex(blockListIdx)) {
+            return 'Block-list ID must be a positive whole number.';
+        }
+        return null;
+    }, [isCancel, expInput, allowListIdx, blockListIdx]);
+    const validationError = actionIndexError || editValidationError;
 
     async function submit(event) {
         event.preventDefault();
         if (submitting || lane.composing) return;
+        if (validationError) { setError(validationError); return; }
         if (type === 'edit') {
             if (!editHasChange) { setError('Change at least one field (expiration, allow-list, or block-list).'); return; }
             if (editParams.EXPIRATION && Number(editParams.EXPIRATION) <= Math.floor(Date.now() / 1000)) {
@@ -579,13 +604,15 @@ function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messag
         <FormPage
             label={isCancel ? 'Cancel swap' : 'Edit swap'}
             onSubmit={submit}
-            status={error ? <StatusMessage variant="error" className={F.error}>{error}</StatusMessage> : null}
+            status={validationError || error ? (
+                <StatusMessage variant="error" className={F.error}>{validationError || error}</StatusMessage>
+            ) : null}
             actions={(
                 <Button
                     type="submit"
                     variant={isCancel ? 'danger' : 'primary'}
                     loading={submitting || lane.composing}
-                    disabled={submitting || lane.composing || (type === 'edit' && !editHasChange)}
+                    disabled={submitting || lane.composing || !!validationError || (type === 'edit' && !editHasChange)}
                 >
                     {lane.isWatcherMode ? 'Create unsigned transaction' : (isCancel ? 'Cancel swap' : 'Edit swap')}
                 </Button>

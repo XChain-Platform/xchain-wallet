@@ -17,7 +17,8 @@ import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hook
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
-import { divideDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import { compareDecimalStrings, divideDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import { addressValidationError } from '../utils/addressValidation.js';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
@@ -58,7 +59,10 @@ const PROTOCOL_COIN_TICKER = {
 };
 
 const isPlainPositive = (value) => /^\d+(\.\d+)?$/.test(String(value).trim())
-    && Number(String(value).trim()) > 0;
+    && compareDecimalStrings(String(value).trim(), '0') === 1;
+
+const isPositiveActionIndex = (value) => /^[0-9]+$/.test(String(value).trim())
+    && /[1-9]/.test(String(value));
 
 function withFormattedExpiration(confirmAction) {
     const decoded = confirmAction?.composed?.decoded;
@@ -243,7 +247,8 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     });
 
     const expError = useMemo(() => {
-        if (expMode !== 'custom' || !expInput.trim()) return null;
+        if (expMode !== 'custom') return null;
+        if (!expInput.trim()) return 'Pick an expiration date and time, or switch to the default window.';
         const ms = Date.parse(expInput.trim());
         if (!Number.isFinite(ms)) return 'Pick a valid expiration date and time.';
         if (Math.floor(ms / 1000) <= Math.floor(Date.now() / 1000)) return 'Expiration must be in the future.';
@@ -276,6 +281,9 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 noun: 'Give amount',
             });
             if (precisionError) return precisionError;
+            if (giveBalance !== null && compareDecimalStrings(giveAmount, giveBalance) === 1) {
+                return `Give amount is above your available ${giveTick.trim().toUpperCase()} balance.`;
+            }
         }
         if (!getOwnership && getAmount) {
             const precisionError = tokenAmountPrecisionError(getAmount, {
@@ -285,11 +293,17 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
             });
             if (precisionError) return precisionError;
         }
-        if (getAddress.includes('|') || getAddress.includes(';')) return 'Receive address is invalid.';
+        if (getAddress.trim()) {
+            const addressError = addressValidationError(getAddress, descriptor);
+            if (addressError) return addressError;
+        }
+        if (allowListIdx && !isPositiveActionIndex(allowListIdx)) return 'Allow-list ID must be a positive whole number.';
+        if (blockListIdx && !isPositiveActionIndex(blockListIdx)) return 'Block-list ID must be a positive whole number.';
         if (memo.includes('|') || memo.includes(';')) return 'Memo cannot contain "|" or ";".';
         return null;
     }, [giveTick, getTick, coinTicker, giveOwnership, giveAmount, getOwnership, getAmount,
-        giveTokenInfo?.divisibility, getTokenInfo?.divisibility, getAddress, memo]);
+        giveTokenInfo?.divisibility, getTokenInfo?.divisibility, giveBalance, getAddress,
+        descriptor, allowListIdx, blockListIdx, memo]);
 
     const rate = !giveOwnership && !getOwnership
         ? divideDecimalStrings(getAmount, giveAmount, 8)
@@ -435,13 +449,13 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
             setFormError('Pick a source address first.');
             return;
         }
-        if (validationError || expError) return;
         if (!giveTick || !getTick
             || (!giveOwnership && !giveAmount)
             || (!getOwnership && !getAmount)) {
             setFormError('Enter the give and get tickers and amounts before reviewing.');
             return;
         }
+        if (validationError || expError) return;
         setFormError(null);
         if (singleEncode) {
             if (submitPendingRef.current) return;
@@ -596,11 +610,11 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     // --- Review / submitting screen -------------------------------------
     if (stage === 'review' || stage === 'submitting') {
         const giveSide = giveOwnership
-            ? `ownership of ${giveTick.trim().toUpperCase()}`
-            : `${giveAmount} ${giveTick.trim().toUpperCase()}`;
+            ? `ownership of ${swapParams.GIVE_TICK.toUpperCase()}`
+            : `${swapParams.GIVE_AMOUNT} ${swapParams.GIVE_TICK.toUpperCase()}`;
         const getSide = getOwnership
-            ? `ownership of ${getTick.trim().toUpperCase()}`
-            : `${getAmount} ${getTick.trim().toUpperCase()}`;
+            ? `ownership of ${swapParams.GET_TICK.toUpperCase()}`
+            : `${swapParams.GET_AMOUNT} ${swapParams.GET_TICK.toUpperCase()}`;
         const feeLabel = feeEstimate
             ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
             : 'Estimate unavailable';
@@ -666,13 +680,13 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                     />
                     <DetailRow
                         label="Receive at"
-                        value={getAddress.trim()
-                            ? <AddressText address={getAddress.trim()} />
+                        value={swapParams.GET_ADDRESS
+                            ? <AddressText address={swapParams.GET_ADDRESS} />
                             : 'Source address (default)'}
                     />
-                    <DetailRow label="Allow list" value={allowListIdx ? `#${allowListIdx}` : 'None'} />
-                    <DetailRow label="Block list" value={blockListIdx ? `#${blockListIdx}` : 'None'} />
-                    {memo.trim() ? <DetailRow label="Memo" value={memo.trim()} /> : null}
+                    <DetailRow label="Allow list" value={swapParams.ALLOW_LIST ? `#${swapParams.ALLOW_LIST}` : 'None'} />
+                    <DetailRow label="Block list" value={swapParams.BLOCK_LIST ? `#${swapParams.BLOCK_LIST}` : 'None'} />
+                    {swapParams.MEMO ? <DetailRow label="Memo" value={swapParams.MEMO} /> : null}
                     <DetailRow label="Network fee" value={feeLabel} />
                     <DetailRow
                         label="Protocol fee"

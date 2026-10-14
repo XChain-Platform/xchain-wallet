@@ -48,7 +48,17 @@ function messaging(composeForConfirm, { walletMode = 'full', buildActionPsbtRequ
     const base = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [BTC]: [ADDRESS] }),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
-        getWalletBalances: vi.fn().mockResolvedValue({}),
+        getWalletBalances: vi.fn().mockResolvedValue({
+            [BTC]: [{
+                address: ADDRESS.address,
+                balances: {
+                    tokens: [
+                        { tick: 'ALPHA', quantity: '100.0', divisibility: 8 },
+                        { tick: 'BETA', quantity: '100.0', divisibility: 8 },
+                    ],
+                },
+            }],
+        }),
         getSettings: vi.fn().mockResolvedValue({ walletMode }),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
