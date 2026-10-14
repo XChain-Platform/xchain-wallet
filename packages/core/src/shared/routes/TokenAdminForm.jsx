@@ -16,6 +16,7 @@ import {
     flows as flowsLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
@@ -157,6 +158,7 @@ function newOwnerAddressError(address, descriptor) {
  */
 export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initialTick, initialFromAddress, initialPicker }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -1059,6 +1061,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label={`Review ${MODE_LABEL_LOWER[mode]}`}
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
@@ -1300,6 +1303,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label={MODE_LABEL[mode]}
             onSubmit={handleReview}
             status={formError || eligibilityError ? (

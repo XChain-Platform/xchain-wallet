@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
@@ -141,6 +142,7 @@ function abiArgumentError(param, value, descriptor) {
  */
 export function ExecuteContractForm({ walletId, chainId, contractActionIndex, initialMethod, initialParamsText, onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -761,6 +763,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label={t('execute.review.title')}
                 onSubmit={handleSubmit}
                 noValidate
@@ -948,6 +951,7 @@ export function ExecuteContractForm({ walletId, chainId, contractActionIndex, in
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label={t('execute.callContract')}
             onSubmit={handleReview}
             noValidate

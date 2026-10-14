@@ -16,6 +16,7 @@ import {
     flows as flowsLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
 import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.js';
@@ -86,6 +87,7 @@ function resumeBlockFor(height, duration) {
  */
 export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick, initialFromAddress }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const variant = screenVariantFor(shell);
     const isTick = mode === 'tick';
 
@@ -541,6 +543,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label={`Review ${titleNoun.toLowerCase()}`}
                 onSubmit={handleSubmit}
                 status={(isWatcherMode || isHwSource) && submitError ? (
@@ -692,6 +695,7 @@ export function SleepForm({ walletId, onBack, mode, initialChainId, initialTick,
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label={titleNoun}
             onSubmit={handleReview}
             status={formError ? (

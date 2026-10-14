@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressText, Button, Checkbox, FeeSelector, FormPage, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -120,6 +121,7 @@ const PROTOCOL_COIN_TICKER = {
  */
 export function AttachContentForm({ walletId, chainId, tick, issuerAddress = null, onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -957,6 +959,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     if (stage === 'review-tis' && fileMeta && fromAddress) {
         return wrapForm(
             <FormPage
+                demoGuard={demoGuard}
                 label="Upload token info"
                 onSubmit={handleSignTis}
                 status={hw && submitError ? (
@@ -1028,6 +1031,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     if (stage === 'review-desc' && fromAddress) {
         return wrapForm(
             <FormPage
+                demoGuard={demoGuard}
                 label="Update token description"
                 onSubmit={handleSignDescribe}
                 status={hw && submitError ? (
@@ -1095,6 +1099,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     if (stage === 'review-file' && fileMeta && fromAddress) {
         return wrapForm(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review artwork upload"
                 onSubmit={handleSignFile}
                 status={hw && submitError ? (
@@ -1194,6 +1199,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     if (stage === 'review-link' && fromAddress) {
         return wrapForm(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review artwork link"
                 onSubmit={handleSignLink}
                 status={hw && submitError ? (
@@ -1262,6 +1268,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     // their prerequisites, e.g. addresses reloaded)
     return wrapForm(
         <FormPage
+            demoGuard={demoGuard}
             label="Attach artwork"
             onSubmit={handleReviewFile}
             status={formError ? (

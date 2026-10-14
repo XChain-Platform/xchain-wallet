@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressText, Button, ChainBadge, FeeSelector, FormPage, InfoTip, Input, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -71,6 +72,7 @@ const PROTOCOL_COIN_TICKER = {
  */
 export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = null, onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
 
@@ -596,6 +598,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
     if (stage === 'review-list' && fromAddress) {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review official token list"
                 onSubmit={handleSignList}
                 status={hw && submitError ? (
@@ -665,6 +668,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
     if (stage === 'review-link' && fromAddress) {
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review official token link"
                 onSubmit={handleSignLink}
                 status={hw && submitError ? (
@@ -739,6 +743,7 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
     const hasRoster = Array.isArray(currentRoster?.members) && currentRoster.members.length > 0;
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Official token list"
             onSubmit={handleReviewList}
             status={formError ? (
