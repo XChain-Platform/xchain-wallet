@@ -387,7 +387,7 @@ describe('HeaderSettingsButton section gating', () => {
 
         fireEvent.click(gear());
         const select = screen.getByLabelText('Active network in header');
-        expect(Array.from(select.options, (option) => option.value)).toEqual(['mainnet', 'testnet']);
+        expect(Array.from(select.options, (option) => option.value)).toEqual(['mainnet']);
         fireEvent.change(select, { target: { value: 'testnet' } });
 
         expect(onActiveNetworkChange).not.toHaveBeenCalled();
