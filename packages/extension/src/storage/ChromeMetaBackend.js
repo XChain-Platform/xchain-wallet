@@ -21,6 +21,8 @@
 // doesn't wipe the bootstrap meta and vice versa. A future piece may
 // extend this to carry UI-preference defaults that should survive lock.
 
+import { persistWithQuotaRecovery } from '@xchain-wallet/core/storage/Vault.js';
+
 export const DEFAULT_META_KEY = 'xchain-wallet:vault-meta';
 
 /**
@@ -67,7 +69,9 @@ export class ChromeMetaBackend {
      * @param {unknown} obj
      */
     async save(obj) {
-        await this._storage.set({ [this._key]: JSON.stringify(obj) });
+        await persistWithQuotaRecovery(() => (
+            this._storage.set({ [this._key]: JSON.stringify(obj) })
+        ));
     }
 
     async clear() {
