@@ -55,7 +55,7 @@ export function useFormLeaveGuard({ dirty, submitting = false, signedUnbroadcast
         } else {
             request = {
                 title: 'Discard changes?',
-                message: 'Leave this form and discard your unsaved changes?',
+                message: 'Your unsaved changes will be lost.',
                 confirmLabel: 'Discard and leave',
                 danger: true,
             };

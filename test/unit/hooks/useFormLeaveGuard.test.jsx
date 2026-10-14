@@ -38,6 +38,8 @@ describe('useFormLeaveGuard in-app navigation', () => {
 
         act(() => { pending = result.current.guardedOnBack(); });
         expect(result.current.confirmation.props.title).toBe('Discard changes?');
+        expect(result.current.confirmation.props.message).toBe('Your unsaved changes will be lost.');
+        expect(result.current.confirmation.props.message).not.toMatch(/discard/i);
         expect(result.current.confirmation.props.confirmLabel).toBe('Discard and leave');
         act(() => result.current.confirmation.props.onCancel());
         await pending;
