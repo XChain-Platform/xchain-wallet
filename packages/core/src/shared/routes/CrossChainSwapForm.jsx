@@ -556,7 +556,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>
             {!networkAvailable ? (
                 <StatusMessage variant="warning">Swapping needs a network connection.</StatusMessage>
             ) : null}

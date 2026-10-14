@@ -401,7 +401,7 @@ export function CoinpayForm({
         />
     );
     const wrap = (children, template = 'list') => (
-        <Screen variant={variant} header={header}>
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>
             {template === 'list' ? <ListPage>{children}</ListPage> : children}
         </Screen>
     );

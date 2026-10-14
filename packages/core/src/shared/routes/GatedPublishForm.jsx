@@ -368,7 +368,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>{children}</Screen>
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>{children}</Screen>
     );
 
     if (loadError) {

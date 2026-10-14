@@ -695,7 +695,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             <ListPage>{children}</ListPage>
         </Screen>
     );
-    const wrapForm = (form) => <Screen variant={variant} header={header}>{form}</Screen>;
+    const wrapForm = (form) => <Screen variant={variant} header={header} restoreScroll={!stage.startsWith('review-')}>{form}</Screen>;
 
     if (isWatcherMode) {
         return wrap(

@@ -381,7 +381,7 @@ export function DelegationActionForm({ mode, walletId, chainId: initialChainId, 
             <ListPage>{children}</ListPage>
         </Screen>
     );
-    const wrapForm = (form) => <Screen variant={variant} header={header}>{form}</Screen>;
+    const wrapForm = (form) => <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>{form}</Screen>;
 
     if (loadError) {
         return wrap(

@@ -6,9 +6,38 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { Profiler } from 'react';
+import { readFileSync } from 'node:fs';
 
 import { Screen, ScrollRestoration } from '../../../packages/core/src/ui/Screen.jsx';
 import styles from '../../../packages/core/src/ui/Screen.module.css';
+
+const REVIEW_SCROLL_FORMS = [
+    ['AddressPreferencesForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
+    ['AdvancedActionsForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
+    ['AttachContentForm', "restoreScroll={!stage.startsWith('review-')}"],
+    ['BatchComposerForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
+    ['BroadcastForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
+    ['CallbackForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
+    ['CoinpayForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
+    ['ComposeMessage', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
+    ['ContractFundsForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
+    ['ContractStakeForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
+    ['ControllerBindForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
+    ['CreateOrderForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
+    ['CreatePollForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
+    ['CrossChainOrderForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
+    ['CrossChainSwapForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
+    ['DelegateVoteForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
+    ['DelegationActionForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
+    ['DestroyForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
+    ['DispenserForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
+    ['DividendForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
+    ['GatedPublishForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
+    ['IssueTokenForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
+    ['LinkForm', 'restoreScroll={!isReviewOrSubmitting}'],
+    ['ListCreateForm', "restoreScroll={!(stage === 'review' || stage === 'submitting')}"],
+    ['ListForkForm', "restoreScroll={stage !== 'review-1' && stage !== 'review-2'}"],
+];
 
 describe('<Screen>', () => {
     it('renders the full variant with a named section body and optional landmarks', () => {
@@ -95,5 +124,36 @@ describe('<ScrollRestoration>', () => {
             </ScrollRestoration>,
         );
         expect(screen.getByRole('main').scrollTop).toBe(48);
+    });
+
+    it.each(REVIEW_SCROLL_FORMS)('%s opens its review at the top', (formName, wiring) => {
+        const routeSource = readFileSync(
+            `packages/core/src/shared/routes/${formName}.jsx`,
+            'utf8',
+        );
+        expect(routeSource).toContain(wiring);
+
+        const view = render(
+            <ScrollRestoration routeKey={formName}>
+                <Screen restoreScroll>Form</Screen>
+            </ScrollRestoration>,
+        );
+        const body = screen.getByRole('main');
+        body.scrollTop = 325;
+
+        view.rerender(
+            <ScrollRestoration routeKey={formName}>
+                <Screen restoreScroll={false}>Review</Screen>
+            </ScrollRestoration>,
+        );
+
+        expect(body.scrollTop).toBe(0);
+
+        view.rerender(
+            <ScrollRestoration routeKey={formName}>
+                <Screen restoreScroll>Form again</Screen>
+            </ScrollRestoration>,
+        );
+        expect(body.scrollTop).toBe(325);
     });
 });

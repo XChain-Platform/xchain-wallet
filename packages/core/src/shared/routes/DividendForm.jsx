@@ -814,7 +814,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>
             {children}
         </Screen>
     );

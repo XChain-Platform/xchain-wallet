@@ -499,7 +499,7 @@ export function LinkForm({ walletId, onBack }) {
             <ListPage>{children}</ListPage>
         </Screen>
     );
-    const wrapForm = (form) => <Screen variant={variant} header={header}>{form}</Screen>;
+    const wrapForm = (form) => <Screen variant={variant} header={header} restoreScroll={!isReviewOrSubmitting}>{form}</Screen>;
 
     if (loadError) {
         return wrap(

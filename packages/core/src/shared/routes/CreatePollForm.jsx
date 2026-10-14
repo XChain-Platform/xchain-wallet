@@ -557,7 +557,7 @@ function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, on
             title={stage === 'review' || stage === 'submitting' ? 'Review poll' : 'Create poll'}
         />
     );
-    const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
+    const wrap = (children) => <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>{children}</Screen>;
 
     if (loadError) {
         return wrap(
