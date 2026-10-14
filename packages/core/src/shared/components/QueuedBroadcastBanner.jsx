@@ -64,6 +64,18 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
     const queueWalletRef = useRef(walletId);
     const normalizedQueueRef = useRef({ source: null, shown: /** @type {any[]} */ ([]) });
     currentInputRef.current = { messaging, walletId };
+    if (queueWalletRef.current !== walletId) {
+        queueWalletRef.current = walletId;
+        refreshRequestRef.current += 1;
+        normalizedQueueRef.current = { source: null, shown: [] };
+        actionRef.current = null;
+        // React retries this render before commit, so queued sends never cross
+        // the wallet boundary while the replacement list is in flight.
+        setQueue([]);
+        setBusyId(null);
+        setBusyKind(null);
+        setError(null);
+    }
 
     useEffect(() => {
         mountedRef.current = true;
@@ -109,12 +121,6 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
     }, [messaging, walletId]);
 
     useEffect(() => {
-        if (queueWalletRef.current !== walletId) {
-            queueWalletRef.current = walletId;
-            normalizedQueueRef.current = { source: null, shown: [] };
-            setQueue([]);
-            setError(null);
-        }
         void refresh();
         if (intervalMs > 0) {
             const id = setInterval(() => { void refresh(); }, intervalMs);

@@ -184,6 +184,20 @@ describe('QueuedBroadcastBanner actions and announcements', () => {
         expect(screen.queryByText('Old wallet send')).toBeNull();
     });
 
+    it('hides the previous wallet queue while the next wallet list is pending', async () => {
+        let resolveSecond;
+        listImpl = ({ walletId }) => walletId === 'w1'
+            ? Promise.resolve([entry('old', 'Old wallet send')])
+            : new Promise((resolve) => { resolveSecond = resolve; });
+        const view = render(<QueuedBroadcastBanner walletId="w1" intervalMs={0} />);
+        expect(await screen.findByText('Old wallet send')).toBeTruthy();
+
+        view.rerender(<QueuedBroadcastBanner walletId="w2" intervalMs={0} />);
+
+        expect(screen.queryByText('Old wallet send')).toBeNull();
+        await act(async () => { resolveSecond([]); });
+    });
+
     it('does not refresh or toast after a broadcast finishes following unmount', async () => {
         let finish;
         let listCalls = 0;

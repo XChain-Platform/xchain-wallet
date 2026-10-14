@@ -54,6 +54,42 @@ afterEach(() => {
 });
 
 describe('address management async guards', () => {
+    it('clears old addresses immediately and ignores their late response after a wallet switch', async () => {
+        const nextAddresses = deferred();
+        const oldLate = deferred();
+        const messaging = addressMessaging({
+            getAddressesByChain: vi.fn((walletId) => {
+                if (walletId === 'wallet-1') return Promise.resolve({
+                    [CHAIN]: [{ id: 'old-address', address: FIRST, source: 'hd', role: 'receive' }],
+                });
+                return nextAddresses.promise;
+            }),
+            getWalletBalances: vi.fn((walletId) => (
+                walletId === 'wallet-1' ? oldLate.promise : Promise.resolve({})
+            )),
+        });
+        const tree = (walletId) => (
+            <MessagingProvider shell="web" messaging={messaging}>
+                <ToastHost>
+                    <AddressList walletId={walletId} accountId={ACCOUNT.id} onBack={() => {}} />
+                </ToastHost>
+            </MessagingProvider>
+        );
+        const view = render(tree('wallet-1'));
+        expect(await screen.findByText(FIRST)).toBeInTheDocument();
+
+        view.rerender(tree('wallet-2'));
+
+        expect(screen.queryByText(FIRST)).toBeNull();
+        expect(screen.getByRole('status', { name: 'Loading addresses' })).toBeInTheDocument();
+        await act(async () => oldLate.resolve({
+            [CHAIN]: [{ address: FIRST, balances: { native: { tick: 'BTC', quantity: '1' } } }],
+        }));
+        expect(screen.queryByText(FIRST)).toBeNull();
+        await act(async () => nextAddresses.resolve({}));
+        expect(await screen.findByText('No addresses yet')).toBeInTheDocument();
+    });
+
     it('keeps a completed label save attached to its original address', async () => {
         const save = deferred();
         const messaging = addressMessaging({ setAddressLabel: vi.fn(() => save.promise) });

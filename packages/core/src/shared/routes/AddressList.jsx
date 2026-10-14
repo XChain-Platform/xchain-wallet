@@ -381,6 +381,29 @@ export function AddressList({
     // on P2PKH. Two screens in one app disagreeing about a migrating user's
     // address format is the defect; the answer is the same resolver.
     const [walletFormat, setWalletFormat] = useState(undefined);
+    const addressScopeRef = useRef({ walletId, accountId, messaging });
+    if (addressScopeRef.current.walletId !== walletId
+        || addressScopeRef.current.accountId !== accountId
+        || addressScopeRef.current.messaging !== messaging) {
+        addressScopeRef.current = { walletId, accountId, messaging };
+        // React retries this render with an empty scope, so no address,
+        // balance, selection, or wallet format from another wallet commits.
+        setAddressesByChain(null);
+        setBalancesByChain(null);
+        setActiveByChain({});
+        setMultisigs([]);
+        setLoadError(null);
+        setSelected(null);
+        setChainPrefs(null);
+        setChainPrefsError(null);
+        setWalletFormat(undefined);
+        setShowWifForm(false);
+        setWifInput('');
+        setWifPassword('');
+        setWifNotice(null);
+        setShowAdvancedGenerate(false);
+        setAdvancedError(null);
+    }
     useEffect(() => {
         let live = true;
         if (typeof messaging.listWallets !== 'function') return undefined;

@@ -10,6 +10,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
+import { useEffect } from 'react';
 import { useAccountList } from '../../../packages/core/src/shared/hooks/useAccountList.js';
 
 const mocked = vi.hoisted(() => ({
@@ -131,6 +132,32 @@ describe('useAccountList wallet changes', () => {
 
         expect(result.current).toEqual([]);
         expect(mocked.messaging.listAccounts).toHaveBeenLastCalledWith('wallet-b');
+        await act(() => next.resolve([{ id: 'new', index: 1 }]));
+        expect(result.current).toEqual([{ id: 'new', index: 1 }]);
+    });
+
+    it('never commits the previous wallet account during a switch', async () => {
+        const next = deferred();
+        mocked.messaging.listAccounts
+            .mockResolvedValueOnce([{ id: 'old', index: 1 }])
+            .mockReturnValueOnce(next.promise);
+        const commits = [];
+        const { result, rerender } = renderHook(
+            ({ walletId }) => {
+                const accounts = useAccountList(walletId);
+                useEffect(() => {
+                    commits.push({ walletId, ids: accounts.map((account) => account.id) });
+                }, [walletId, accounts]);
+                return accounts;
+            },
+            { initialProps: { walletId: 'wallet-a' } },
+        );
+        await waitFor(() => expect(result.current).toEqual([{ id: 'old', index: 1 }]));
+
+        const switchStart = commits.length;
+        rerender({ walletId: 'wallet-b' });
+
+        expect(commits.slice(switchStart)).not.toContainEqual({ walletId: 'wallet-b', ids: ['old'] });
         await act(() => next.resolve([{ id: 'new', index: 1 }]));
         expect(result.current).toEqual([{ id: 'new', index: 1 }]);
     });
