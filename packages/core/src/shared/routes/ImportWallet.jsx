@@ -13,7 +13,7 @@ import { useProtectedScreen } from '../utils/screenGuard.js';
 import {
     Screen,
     Button,
-    ChainBadge,
+    ChainPicker,
     FormPage,
     Input,
     Textarea,
@@ -230,6 +230,10 @@ export function ImportWallet({
     const wifChains = useSupportedChains().filter(
         (descriptor) => Number.isInteger(descriptor.wifVersionByte),
     );
+    // ChainPicker resolves ids through a registry; the supported list is the only one this lane needs.
+    const wifChainRegistry = {
+        get: (id) => wifChains.find((descriptor) => descriptor.id === id),
+    };
 
     useEffect(() => {
         headingRef.current?.focus();
@@ -1241,26 +1245,17 @@ export function ImportWallet({
                         spellCheck={false}
                         disabled={busy}
                     />
-                    <fieldset className={styles.chainField} disabled={busy}>
-                        <legend>{t('importWallet.wif.chain')}</legend>
-                        <div className={styles.chainChoices} role="radiogroup">
-                            {wifChains.map((descriptor) => (
-                                <button
-                                    key={descriptor.id}
-                                    type="button"
-                                    role="radio"
-                                    aria-checked={wifChainId === descriptor.id}
-                                    className={`${styles.chainChoice} ${wifChainId === descriptor.id ? styles.chainChoiceActive : ''}`.trim()}
-                                    onClick={() => {
-                                        setWifChainId(descriptor.id);
-                                        if (error) setError(null);
-                                    }}
-                                >
-                                    <ChainBadge descriptor={descriptor} size="sm" />
-                                </button>
-                            ))}
-                        </div>
-                    </fieldset>
+                    <ChainPicker
+                        label={t('importWallet.wif.chain')}
+                        value={wifChainId}
+                        onChange={(chainId) => {
+                            setWifChainId(chainId);
+                            if (error) setError(null);
+                        }}
+                        chainIds={wifChains.map((descriptor) => descriptor.id)}
+                        chainRegistry={wifChainRegistry}
+                        disabled={busy}
+                    />
                     <Input
                         label={t('renameWallet.name')}
                         value={name}
