@@ -24,6 +24,8 @@
 }
 
 .entry {
+    composes: card from '../../ui/Card.module.css';
+    min-height: var(--xc-tap-min);
     display: flex;
     flex-direction: row;
     align-items: center;
@@ -31,11 +33,6 @@
     width: 100%;
     min-width: 0;
     box-sizing: border-box;
-    padding: var(--xc-space-3) var(--xc-space-4);
-    background: var(--xc-surface-raised);
-    /* 1px keeps the card boundary as a crisp hairline. */
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     text-align: start;
     cursor: pointer;
     color: var(--xc-text);

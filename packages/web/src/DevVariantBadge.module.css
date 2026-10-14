@@ -75,7 +75,7 @@
 .clear {
     appearance: none;
     background: transparent;
-    border: 1px dashed rgba(255, 255, 255, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.3);
     border-radius: 6px;
     color: #CBD5E1;
     font-family: inherit;

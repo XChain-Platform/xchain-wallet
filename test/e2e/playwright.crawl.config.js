@@ -50,6 +50,22 @@ const VENUES = [
     },
     { name: 'iphone-17-pro', use: { ...devices['iPhone 15 Pro'], viewport: { width: 402, height: 874 } } },
     { name: 'iphone-se-375', use: { ...devices['iPhone SE'] } },
+    // The narrowest supported width, where rows of two or more buttons are
+    // tightest; the crawl's control-row overflow finding is aimed here.
+    {
+        name: 'narrow-360',
+        use: {
+            browserName: 'chromium',
+            viewport: { width: 360, height: 800 },
+            deviceScaleFactor: 2,
+            isMobile: true,
+            hasTouch: true,
+            permissions: ['clipboard-read', 'clipboard-write'],
+            launchOptions: {
+                args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'],
+            },
+        },
+    },
 ];
 const WANTED = (process.env.CRAWL_VENUES || 'android-lg-k51').split(',').map((v) => v.trim()).filter(Boolean);
 const projects = WANTED.includes('all') ? VENUES : VENUES.filter((v) => WANTED.includes(v.name));

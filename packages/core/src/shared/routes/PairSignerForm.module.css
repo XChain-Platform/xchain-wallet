@@ -21,14 +21,12 @@
 }
 
 .vendorCard {
+    composes: card from '../../ui/Card.module.css';
+    min-height: var(--xc-tap-min);
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     gap: var(--xc-space-1);
-    padding: var(--xc-space-3) var(--xc-space-4);
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     text-align: start;
     cursor: pointer;
     color: var(--xc-text);
@@ -79,14 +77,11 @@
 }
 
 .detailsList {
+    composes: card from '../../ui/Card.module.css';
     display: grid;
     grid-template-columns: auto 1fr;
     gap: var(--xc-space-1) var(--xc-space-3);
     margin: 0 0 var(--xc-space-4);
-    padding: var(--xc-space-3);
-    background: var(--xc-bg-muted);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
 }
 
 .detailsLabel {
@@ -191,13 +186,10 @@
 }
 
 .pairedRow {
+    composes: card from '../../ui/Card.module.css';
     align-items: center;
-    background: var(--xc-bg-muted);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     display: flex;
     gap: var(--xc-space-2);
-    padding: var(--xc-space-2) var(--xc-space-3);
 }
 
 .pairedIdentity {

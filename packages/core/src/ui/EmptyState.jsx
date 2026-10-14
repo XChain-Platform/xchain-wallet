@@ -30,7 +30,7 @@ import styles from './EmptyState.module.css';
  * @param {string} [props.secondaryActionLabel]           optional outline action shown after the primary action
  * @param {() => void} [props.onSecondaryAction]
  * @param {import('react').ReactNode | null} [props.secondaryActionIcon]
- * @param {boolean} [props.plain]                        no outline or fill: the screen's whole content, not a list's placeholder
+ * @param {boolean} [props.plain]                        accepted for older callers; every empty state is now unboxed
  * @param {'h2' | 'h3' | 'p'} [props.titleAs]             default h2; h3 under a SectionHeader
  * @param {string} [props.role]                           default 'status'
  * @param {string} [props.className]
@@ -45,7 +45,9 @@ export function EmptyState({
     secondaryActionLabel,
     onSecondaryAction,
     secondaryActionIcon,
-    plain = false,
+    // Every empty state is unboxed now; the prop is taken off so it never
+    // reaches the DOM through rest.
+    plain: _plain,
     titleAs: Title = 'h2',
     role = 'status',
     className,
@@ -56,7 +58,7 @@ export function EmptyState({
 
     return (
         <div
-            className={[styles.wrap, plain && styles.plain, className].filter(Boolean).join(' ')}
+            className={[styles.wrap, className].filter(Boolean).join(' ')}
             role={role}
             {...rest}
         >

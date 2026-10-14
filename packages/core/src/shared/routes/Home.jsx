@@ -49,6 +49,7 @@ import { explorerReadFailure, rateLimitedMessage } from '../../sdk/explorerError
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import { startVisibleInterval } from '../utils/visibleInterval.js';
 import styles from './Home.module.css';
+import cardStyles from '../../ui/Card.module.css';
 import { useBackHandler, useNativeBackRoot } from '../../ui/backStack.js';
 import {
     hasAvailableChain,
@@ -1707,11 +1708,8 @@ function SignerHomeBody({ onSignPsbt, onSignMessage, onVerifySignature, onOpenSe
             <div
                 role="status"
                 aria-live="polite"
+                className={cardStyles.card}
                 style={{
-                    padding: 'var(--xc-space-3) var(--xc-space-4)',
-                    background: 'var(--xc-surface-raised)',
-                    border: '1px dashed var(--xc-border)',
-                    borderRadius: 'var(--xc-radius-md)',
                     color: 'var(--xc-text-muted)',
                     fontSize: 'var(--xc-text-sm)',
                     marginBottom: 'var(--xc-space-3)',

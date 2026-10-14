@@ -53,6 +53,7 @@ import { safeHttpUrl } from '../utils/externalUrl.js';
 import { readActiveAccount } from '../utils/activeAccountMemory.js';
 import { sumTickOnChain } from '../utils/walletBalanceShape.js';
 import styles from './TokenDetail.module.css';
+import cardStyles from '../../ui/Card.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 const HOLDERS_PAGE_SIZE = 25;
@@ -2300,12 +2301,9 @@ function GatedGroupCard({
             {accessError ? (
                 <p
                     role="alert"
+                    className={cardStyles.card}
                     style={{
                         marginTop: 'var(--xc-space-2)',
-                        padding: 'var(--xc-space-3)',
-                        background: 'var(--xc-bg-muted)',
-                        border: '1px dashed var(--xc-border)',
-                        borderRadius: 'var(--xc-radius-sm)',
                         fontSize: 'var(--xc-text-sm)',
                         color: 'var(--xc-text)',
                         lineHeight: 1.5,

@@ -1,4 +1,5 @@
 .row {
+    composes: card from '../../ui/Card.module.css';
     width: 100%;
     min-width: 0;
     min-height: var(--xc-control-h-lg);
@@ -15,10 +16,6 @@
     align-items: center;
     column-gap: var(--xc-space-2);
     row-gap: var(--xc-space-1);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-surface-raised);
     color: var(--xc-text);
     font: inherit;
     text-align: start;

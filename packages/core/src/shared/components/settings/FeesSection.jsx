@@ -59,10 +59,10 @@ const CHAIN_BLOCK = {
     display: 'flex',
     flexDirection: 'column',
     gap: 'var(--xc-space-1)',
-    padding: 'var(--xc-space-2) var(--xc-space-3)',
-    background: 'var(--xc-surface-raised)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-md)',
+    padding: 'var(--xc-card-pad)',
+    background: 'var(--xc-card-bg)',
+    border: 'var(--xc-card-border)',
+    borderRadius: 'var(--xc-card-radius)',
 };
 const CHAIN_HEADER = {
     fontWeight: 600,

@@ -142,11 +142,8 @@
 }
 
 .backupPointerCard {
+    composes: card from '../../ui/Card.module.css';
     margin-bottom: var(--xc-space-2);
-    padding: var(--xc-space-2);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-surface-raised);
     word-break: break-all;
 }
 
