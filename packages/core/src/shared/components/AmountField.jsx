@@ -144,9 +144,11 @@ export function AmountField({
                     onChange={handleChange}
                     autoComplete="off"
                     placeholder="0.00"
+                    // Paste sits one action lane in from Max, so two lanes
+                    // already clear both; a 320px field keeps 120px for digits.
                     style={{
                         paddingInlineEnd: onMax
-                            ? 'calc((var(--amount-action-width) * 2) + var(--xc-space-2))'
+                            ? 'calc(var(--amount-action-width) * 2)'
                             : 'calc(var(--amount-action-width) + var(--xc-space-2))',
                     }}
                 />
