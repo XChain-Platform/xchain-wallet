@@ -156,8 +156,9 @@ assert.ok(
     'ABI lane renders a method Select wired to selectAbiMethod',
 );
 assert.ok(
-    /abiActive && abiIncomplete/.test(formSrc),
-    'Preview is gated on all declared params being filled (positional wire format)',
+    /abiArgumentErrors\.find\(Boolean\)/.test(formSrc)
+        && /disabled=\{actionConfirm\.composing\}/.test(formSrc),
+    'Preview stays available so declared-param validation can show plain copy before compose',
 );
 assert.ok(
     /Enter method manually/.test(formSrc) && /Use declared methods/.test(formSrc),

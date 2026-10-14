@@ -27,6 +27,7 @@ import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/re
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ContractStakeForm } from '../../../packages/core/src/shared/routes/ContractStakeForm.jsx';
+import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
 const CHAIN = 'bitcoin-regtest';
 const CONTRACT_INDEX = '2048';
@@ -99,7 +100,10 @@ function mountForm(props = {}, messagingExtra = {}) {
     );
 }
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    __clearTokenInfoCache();
+});
 
 describe('ContractStakeForm seeds from the position that opened it', () => {
     it('seeds token, signing pubkey and From from a non-XCHAIN position', async () => {
@@ -197,6 +201,86 @@ describe('ContractStakeForm stake amount validation', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Stake' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent('Amount exceeds the 5 XCHAIN available.');
+    });
+
+    it('shows blank and zero amount errors before compose', async () => {
+        mountForm({ initialMode: 'stake', initialSigningPubkey: 'a'.repeat(64) });
+        const submit = await screen.findByRole('button', { name: 'Stake' });
+        fireEvent.click(submit);
+        expect(await screen.findByRole('alert')).toHaveTextContent('Amount must be a positive decimal.');
+
+        fireEvent.change(screen.getByLabelText('Amount (XCHAIN)'), { target: { value: '0' } });
+        fireEvent.click(submit);
+        expect(await screen.findByRole('alert')).toHaveTextContent('Amount must be a positive decimal.');
+    });
+
+    it('rejects amount beyond the token precision before compose', async () => {
+        const getTokenInfo = vi.fn().mockResolvedValue({ divisibility: 2 });
+        mountForm({
+            initialMode: 'stake',
+            initialSigningPubkey: 'a'.repeat(64),
+        }, { getTokenInfo });
+        await screen.findByLabelText('Amount (XCHAIN)');
+        await waitFor(() => expect(getTokenInfo).toHaveBeenCalled());
+        fireEvent.change(screen.getByLabelText('Amount (XCHAIN)'), { target: { value: '1.234' } });
+
+        expect(await screen.findByText('Amount can have at most 2 decimal places.'))
+            .toBeInTheDocument();
+    });
+
+    it('rejects a malformed contract ID before compose', async () => {
+        mountForm({
+            contractActionIndex: '0',
+            initialMode: 'stake',
+            initialSigningPubkey: 'a'.repeat(64),
+        });
+        fireEvent.click(await screen.findByRole('button', { name: 'Stake' }));
+
+        expect(await screen.findByRole('alert'))
+            .toHaveTextContent('Contract ID must be a positive whole number.');
+    });
+
+    it('turns an indexer metadata failure into plain copy', async () => {
+        const failure = new Error('Explorer returned HTTP 502 for /RBTC/api/contract/2048');
+        failure.name = 'SDKExplorerError';
+        mountForm({}, {
+            getContractByActionIndex: vi.fn().mockRejectedValue(failure),
+        });
+
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent("Couldn't load contract metadata.");
+        expect(alert).not.toHaveTextContent('/RBTC/api/contract/2048');
+    });
+
+    it('keeps the exact stake values when Back returns from review', async () => {
+        const signingPubkey = 'a'.repeat(64);
+        mountForm({
+            initialMode: 'stake',
+            initialSigningPubkey: signingPubkey,
+        }, {
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+            getWalletBalances: vi.fn().mockResolvedValue({
+                [CHAIN]: [{
+                    address: ACTIVE_ADDRESS,
+                    balances: {
+                        native: { tick: 'BTC', quantity: '1', divisibility: 8 },
+                        tokens: [{ tick: 'XCHAIN', quantity: '5', divisibility: 8 }],
+                    },
+                }],
+            }),
+        });
+        fireEvent.change(await screen.findByLabelText('Amount (XCHAIN)'), {
+            target: { value: '2.50000000' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+
+        expect(await screen.findByRole('form', { name: 'Stake review' })).toBeInTheDocument();
+        expect(screen.getByText('2.50000000 XCHAIN')).toBeInTheDocument();
+        expect(screen.getByText('10 blocks')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Back to edit' }));
+
+        expect(await screen.findByLabelText('Amount (XCHAIN)')).toHaveValue('2.50000000');
+        expect(screen.getByLabelText('Signing public key')).toHaveValue(signingPubkey);
     });
 });
 
