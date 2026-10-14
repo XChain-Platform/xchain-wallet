@@ -151,7 +151,8 @@ async function configurePolicy(page) {
     await perAction.getByLabel('Max amount').fill('0.25');
 
     const rolling = page.getByRole('group', { name: 'Rolling limit' });
-    await rolling.getByRole('checkbox', { name: 'Enforce a rolling limit' }).check();
+    // The kit Switch exposes the switch role.
+    await rolling.getByRole('switch', { name: 'Enforce a rolling limit' }).check();
     await rolling.getByLabel('Window length (hours)').fill('12');
     await rolling.getByLabel('Max actions per window').fill('4');
 

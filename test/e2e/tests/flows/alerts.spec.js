@@ -107,7 +107,10 @@ for (const viewport of VIEWPORTS) {
         });
 
         await test.step('render and dismiss the alerts route list', async () => {
+            // The condensed header opens its action menu; the full wallet Menu
+            // page is its "More wallet actions" row.
             await page.getByRole('button', { name: 'Open menu' }).click();
+            await page.getByRole('menuitem', { name: 'More wallet actions' }).click();
             await expect(page.getByRole('heading', { level: 1, name: 'Menu' })).toBeVisible();
             await page.getByRole('main').getByRole('button', { name: 'Alerts', exact: true }).click();
 
