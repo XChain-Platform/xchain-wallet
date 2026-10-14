@@ -86,8 +86,8 @@ for (const appPath of [
 
 // CopyButton owns the native plugin / browser split and reports failures inline.
 assert.ok(/<CopyButton[\s\S]*?value=\{txid\}[\s\S]*?ariaLabel=\{t\('common\.copyTransactionId'\)\}[\s\S]*?\/>/.test(send)
-        && /onCopied=\{\(\) => showToast\(\{ message: 'Transaction ID copied to clipboard\.' \}\)\}/.test(send),
-    'Done stage copy-txid uses CopyButton and retains successful-copy feedback');
+        && !/onCopied=\{\(\) => showToast\(\{ message: 'Transaction ID copied to clipboard\.' \}\)\}/.test(send),
+    'Done stage copy-txid uses the shared one-shot CopyButton announcement');
 
 // --- 7. CSS additions ----------------------------------------------------
 

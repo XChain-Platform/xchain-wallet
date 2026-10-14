@@ -2348,7 +2348,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             // failure) surfaces in the form's existing error banner; the modal
             // has already unmounted (terminal phase leaves CONFIRM_MODAL_PHASES).
             console.error('Send (confirm) failed:', err); // eslint-disable-line no-console
-            setFormError(submitFailureMessage(err, { verb: 'send' }));
+            setSubmitError(submitFailureMessage(err, { verb: 'send' }));
             haptic.error();
         } finally {
             confirmLaunchRef.current = false;
@@ -2451,10 +2451,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             }
             setStage('review');
             haptic.error();
-            if (!isHwSource) {
-                passwordRef.current?.focus();
-                passwordRef.current?.select();
-            }
         } finally {
             submitInFlightRef.current = false;
         }
@@ -2800,7 +2796,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                                     value={txid}
                                     label={t('send.success.copy')}
                                     ariaLabel={t('common.copyTransactionId')}
-                                    onCopied={() => showToast({ message: 'Transaction ID copied to clipboard.' })}
                                 />
                             </div>
                             {explorerUrl ? (
@@ -3194,8 +3189,13 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             id="send-form"
             label={t('send.title')}
             onSubmit={handleReview}
-            onChangeCapture={() => { if (formError) setFormError(null); }}
-            status={sendFormErrors.length > 0 ? (
+            onChangeCapture={() => {
+                if (formError) setFormError(null);
+                if (submitError) setSubmitError(null);
+            }}
+            status={submitError ? (
+                <StatusMessage variant="error">{submitError}</StatusMessage>
+            ) : sendFormErrors.length > 0 ? (
                 <FormErrorSummary
                     errors={sendFormErrors}
                     focusKey={validationAttempt}

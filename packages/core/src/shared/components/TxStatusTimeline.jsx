@@ -233,37 +233,42 @@ export function TxStatusTimeline({
         : stages.findIndex((stage) => !stage.done);
 
     return (
-        <ol className={styles.timeline} aria-label="Transaction status">
-            {stages.map((s, i) => {
-                const current = i === currentStageIndex;
-                const stateLabel = s.done
-                    ? 'Complete'
-                    : current
-                        ? (pendingState === 'failed' ? 'Current stage: Failed' : 'Current stage')
-                        : 'Not started';
-                return (
-                    <li
-                        key={s.key}
-                        className={`${styles.row} ${s.done ? styles.rowDone : styles.rowPending}`
-                            + (s.warn ? ` ${styles.rowWarn}` : '')}
-                        aria-current={current ? 'step' : undefined}
-                    >
-                        <span className={styles.dot} aria-hidden="true">
-                            {s.warn ? '!' : (s.done ? '●' : '○')}
-                        </span>
-                        {i < stages.length - 1 ? (
-                            <span className={`${styles.spine} ${s.done ? styles.spineDone : ''}`} aria-hidden="true" />
-                        ) : null}
-                        <div className={styles.body}>
-                            <div className={styles.heading}>
-                                <div className={styles.label}>{s.label}</div>
-                                <span className={styles.state}>{stateLabel}</span>
+        <>
+            <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+                {confirmed ? 'Transaction confirmed.' : ''}
+            </span>
+            <ol className={styles.timeline} aria-label="Transaction status">
+                {stages.map((s, i) => {
+                    const current = i === currentStageIndex;
+                    const stateLabel = s.done
+                        ? 'Complete'
+                        : current
+                            ? (pendingState === 'failed' ? 'Current stage: Failed' : 'Current stage')
+                            : 'Not started';
+                    return (
+                        <li
+                            key={s.key}
+                            className={`${styles.row} ${s.done ? styles.rowDone : styles.rowPending}`
+                                + (s.warn ? ` ${styles.rowWarn}` : '')}
+                            aria-current={current ? 'step' : undefined}
+                        >
+                            <span className={styles.dot} aria-hidden="true">
+                                {s.warn ? '!' : (s.done ? '●' : '○')}
+                            </span>
+                            {i < stages.length - 1 ? (
+                                <span className={`${styles.spine} ${s.done ? styles.spineDone : ''}`} aria-hidden="true" />
+                            ) : null}
+                            <div className={styles.body}>
+                                <div className={styles.heading}>
+                                    <div className={styles.label}>{s.label}</div>
+                                    <span className={styles.state}>{stateLabel}</span>
+                                </div>
+                                <div className={styles.sub}>{s.sub}</div>
                             </div>
-                            <div className={styles.sub}>{s.sub}</div>
-                        </div>
-                    </li>
-                );
-            })}
-        </ol>
+                        </li>
+                    );
+                })}
+            </ol>
+        </>
     );
 }

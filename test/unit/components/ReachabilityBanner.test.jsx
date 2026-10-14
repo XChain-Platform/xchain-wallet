@@ -21,6 +21,7 @@ const useReachability = vi.hoisted(() => vi.fn());
 vi.mock('../../../packages/core/src/shared/hooks/useReachability.js', () => ({ useReachability }));
 
 import { ReachabilityBanner } from '../../../packages/core/src/shared/components/ReachabilityBanner.jsx';
+import { TxStatusTimeline } from '../../../packages/core/src/shared/components/TxStatusTimeline.jsx';
 
 const chain = (over = {}) => ({
     chainId: 'litecoin-testnet',
@@ -65,10 +66,28 @@ describe('ReachabilityBanner delayed-data copy', () => {
         expect(screen.getByRole('status')).toHaveTextContent('Wallet is offline');
     });
 
+    it('announces only the reachability state when poll details rerender', () => {
+        const view = mount({ lastChecked: 100 });
+        const announcement = screen.getByRole('status');
+        expect(announcement).toHaveTextContent('Some wallet information is unavailable');
+        expect(announcement).not.toHaveTextContent('Last checked');
+
+        useReachability.mockReturnValue({
+            loading: false,
+            overall: 'degraded',
+            perChain: [],
+            refresh: () => {},
+            lastChecked: 200,
+        });
+        view.rerender(<ReachabilityBanner />);
+        expect(screen.getByRole('status')).toBe(announcement);
+        expect(screen.getByRole('status')).toHaveTextContent('Some wallet information is unavailable');
+    });
+
     it('names the last confirmed block and its age for a stale explorer', () => {
         const tipBlock = 4876327;
         mount({ perChain: [chain({ freshness: { explorer: { stale: true, tipBlock, tipAgeSeconds: 215254, replicaHalted: false } } })] });
-        const text = screen.getByRole('status').textContent;
+        const text = document.body.textContent;
         expect(text).toMatch(/balances and history are behind/);
         expect(text).toContain(`last confirmed block ${tipBlock.toLocaleString()} was 2 days ago`);
         expect(text).toMatch(/catching up/);
@@ -76,14 +95,14 @@ describe('ReachabilityBanner delayed-data copy', () => {
 
     it('says indexing is paused when the replica is halted', () => {
         mount({ perChain: [chain({ freshness: { explorer: { stale: true, tipBlock: 10, tipAgeSeconds: 90, replicaHalted: true } } })] });
-        const text = screen.getByRole('status').textContent;
+        const text = document.body.textContent;
         expect(text).toMatch(/paused/);
         expect(text).toMatch(/2 minutes ago/);
     });
 
     it('still explains itself without tip fields', () => {
         mount({ perChain: [chain({ freshness: { explorer: { stale: true, tipBlock: null, tipAgeSeconds: null, replicaHalted: null } } })] });
-        const text = screen.getByRole('status').textContent;
+        const text = document.body.textContent;
         expect(text).toMatch(/balances and history are behind\./);
     });
 
@@ -94,8 +113,27 @@ describe('ReachabilityBanner delayed-data copy', () => {
 
     it('keeps the unreachable-service copy for a chain whose explorer is down rather than behind', () => {
         mount({ perChain: [chain({ services: { encoder: 'reachable', hub: 'reachable', explorer: 'unreachable' } })] });
-        const text = screen.getByRole('status').textContent;
+        const text = document.body.textContent;
         expect(text).toMatch(/may be out of date/);
         expect(text).not.toMatch(/behind/);
+    });
+});
+
+describe('transaction confirmation announcement', () => {
+    it('announces the confirmation transition once and ignores later timeline rerenders', () => {
+        const pending = { txHash: 'abc', blockIndex: 0, timestamp: 0 };
+        const confirmed = { txHash: 'abc', blockIndex: 100, timestamp: 0 };
+        const view = render(<TxStatusTimeline entry={pending} chainTip={99} />);
+        const announcement = screen.getByRole('status');
+        expect(announcement).toHaveAttribute('aria-live', 'polite');
+        expect(announcement).toHaveTextContent('');
+
+        view.rerender(<TxStatusTimeline entry={confirmed} chainTip={100} />);
+        expect(screen.getByRole('status')).toBe(announcement);
+        expect(announcement).toHaveTextContent('Transaction confirmed.');
+
+        view.rerender(<TxStatusTimeline entry={confirmed} chainTip={101} />);
+        expect(screen.getByRole('status')).toBe(announcement);
+        expect(announcement).toHaveTextContent('Transaction confirmed.');
     });
 });
