@@ -13,6 +13,7 @@ import React from 'react';
 import { markBackupVerified } from '../../../packages/core/src/flows/backupReminder.js';
 import { BackupReminderCard } from '../../../packages/core/src/shared/components/BackupReminderCard.jsx';
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 
 const NOW = Date.parse('2026-10-13T12:00:00.000Z');
 function mount(props = {}) {
@@ -62,6 +63,15 @@ describe('BackupReminderCard', () => {
         expect(card).toHaveTextContent(/save your recovery phrase or export an encrypted backup/i);
         expect(screen.getByRole('button', { name: 'Back up now' })).toBeEnabled();
         expect(screen.getByRole('button', { name: 'Remind me tomorrow' })).toBeEnabled();
+    });
+
+    it('uses the shared small control size for both actions', async () => {
+        mount();
+
+        const backup = await screen.findByRole('button', { name: 'Back up now' });
+        const remind = screen.getByRole('button', { name: 'Remind me tomorrow' });
+        expect(backup).toHaveClass(buttonStyles.btn, buttonStyles.sm);
+        expect(remind).toHaveClass(buttonStyles.btn, buttonStyles.sm);
     });
 
     it('runs the backup action and snoozes the gentle reminder for 24 hours', async () => {

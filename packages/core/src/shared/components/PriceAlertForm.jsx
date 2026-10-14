@@ -171,7 +171,7 @@ export function PriceAlertForm({
                     onClick={submit}
                     disabled={!valid || busy}
                     aria-describedby={disabledReason ? disabledReasonId : undefined}
-                    size="sm"
+                    size="md"
                     variant="primary"
                 >
                     {busy ? 'Saving…' : editing ? 'Save changes' : 'Add alert'}
@@ -180,7 +180,7 @@ export function PriceAlertForm({
                     <Button
                         type="button"
                         onClick={onCancel}
-                        size="sm"
+                        size="md"
                         variant="secondary"
                     >
                         Cancel

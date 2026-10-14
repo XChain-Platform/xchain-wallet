@@ -7,10 +7,25 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { PriceAlertForm } from '../../../packages/core/src/shared/components/PriceAlertForm.jsx';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
+import inputStyles from '../../../packages/core/src/ui/Input.module.css';
 
 afterEach(() => cleanup());
 
 describe('PriceAlertForm', () => {
+    it('uses the shared medium control size across the alert row', () => {
+        render(<PriceAlertForm onCreate={vi.fn()} />);
+
+        const coin = screen.getByRole('combobox', { name: 'Coin' });
+        const direction = screen.getByRole('combobox', { name: 'Direction' });
+        const target = screen.getByRole('textbox', { name: 'Target price' });
+        const action = screen.getByRole('button', { name: 'Add alert' });
+        expect(coin.parentElement.parentElement).toHaveClass(inputStyles.md);
+        expect(direction.parentElement.parentElement).toHaveClass(inputStyles.md);
+        expect(target.parentElement.parentElement).toHaveClass(inputStyles.md);
+        expect(action).toHaveClass(buttonStyles.md);
+    });
+
     it('explains why an empty target keeps the primary action disabled', () => {
         render(<PriceAlertForm lockedChainId="bitcoin-mainnet" onCreate={vi.fn()} />);
         const action = screen.getByRole('button', { name: 'Add alert' });

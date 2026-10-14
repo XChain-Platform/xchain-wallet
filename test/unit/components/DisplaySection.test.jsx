@@ -12,6 +12,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DisplaySection } from '../../../packages/core/src/shared/components/settings/DisplaySection.jsx';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
+import inputStyles from '../../../packages/core/src/ui/Input.module.css';
 
 afterEach(() => cleanup());
 
@@ -49,6 +51,17 @@ function setup(overrides = {}, messagingOverrides = {}) {
 }
 
 describe('DisplaySection', () => {
+    it('uses the shared medium control size across the watched-token row', async () => {
+        setup();
+
+        const chain = await screen.findByRole('combobox', { name: 'Token chain' });
+        const ticker = screen.getByRole('textbox', { name: 'Token ticker' });
+        const action = screen.getByRole('button', { name: 'Watch token' });
+        expect(chain.parentElement.parentElement).toHaveClass(inputStyles.md);
+        expect(ticker.parentElement.parentElement).toHaveClass(inputStyles.md);
+        expect(action).toHaveClass(buttonStyles.md);
+    });
+
     it('persists every balance display control through settings updates', async () => {
         const messaging = setup();
         const hide = await screen.findByRole('switch', { name: 'Hide small balances' });

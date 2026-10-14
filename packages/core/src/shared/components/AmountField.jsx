@@ -166,9 +166,10 @@ export function AmountField({
             </div>
             <div className={styles.amountFooter}>
                 {fiatRate && toggleAmountInputMode ? (
-                    <button
-                        type="button"
-                        className={styles.amountUnitSwap}
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={<Icon.SwapIcon />}
                         onClick={() => {
                             setInputError('');
                             toggleAmountInputMode();
@@ -178,9 +179,8 @@ export function AmountField({
                             ? `Switch input to ${tickUpper || 'coin'}`
                             : `Switch input to ${fiatCcy}`}
                     >
-                        <Icon.SwapIcon />
-                        <span>{derivedText}</span>
-                    </button>
+                        {derivedText}
+                    </Button>
                 ) : (
                     <span />
                 )}

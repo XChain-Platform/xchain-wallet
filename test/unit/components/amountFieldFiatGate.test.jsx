@@ -19,6 +19,7 @@ import { afterEach, beforeAll, describe, it, expect, vi } from 'vitest';
 import { fireEvent, render } from '@testing-library/react';
 import React from 'react';
 import { AmountField } from '../../../packages/core/src/shared/components/AmountField.jsx';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 import {
     registerLocale,
     setLocale,
@@ -52,6 +53,15 @@ describe('AmountField fiat gate', () => {
         const u = mount({ fiatRate: RATE });
         expect(u.getByRole('button', { name: /switch input to usd/i })).toBeTruthy();
         expect(u.container.textContent).toMatch(/≈\s*\$134,000\.00 USD/);
+    });
+
+    it('uses the shared small control size for the fiat toggle and Paste', () => {
+        const u = mount({ fiatRate: RATE });
+        const toggle = u.getByRole('button', { name: /switch input to usd/i });
+        const paste = u.getByRole('button', { name: 'Paste from clipboard' });
+
+        expect(toggle).toHaveClass(buttonStyles.btn, buttonStyles.sm);
+        expect(paste).toHaveClass(buttonStyles.btn, buttonStyles.sm);
     });
 
     it('formats the preview in the selected fiat currency', () => {

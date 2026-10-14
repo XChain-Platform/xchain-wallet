@@ -416,7 +416,7 @@ export function DisplaySection() {
                     autoComplete="off"
                     style={{ minWidth: 120 }}
                 />
-                <Button type="submit" size="sm" variant="secondary" icon={null} disabled={watching}>
+                <Button type="submit" size="md" variant="secondary" icon={null} disabled={watching}>
                     {watching ? 'Checking…' : 'Watch token'}
                 </Button>
             </form>
