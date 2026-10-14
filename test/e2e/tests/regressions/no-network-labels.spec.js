@@ -185,7 +185,7 @@ test('a regtest demo wallet keeps network state and demo status out of the shell
                 if (subpage === 'Keyboard' && await row.count() === 0) return;
                 await row.scrollIntoViewIfNeeded();
                 await row.click();
-                await expect(page.getByRole('heading', { name: subpage, exact: true })).toBeVisible();
+                await expect(page.getByRole('heading', { level: 1, name: subpage, exact: true })).toBeVisible();
                 await expectCleanShell(page, label);
                 await page.getByRole('button', { name: 'Back to settings' }).click();
             });

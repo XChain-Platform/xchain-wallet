@@ -33,6 +33,9 @@ const ROUTES = [
 ];
 
 async function openPaletteRoute(page, route) {
+    // Shortcuts are ignored while a text field has focus (a rename form
+    // focuses its name field), so start from the page.
+    await page.evaluate(() => document.activeElement?.blur());
     await page.keyboard.press('ControlOrMeta+k');
     const palette = page.getByRole('dialog', { name: 'Command palette' });
     await expect(palette).toBeVisible();

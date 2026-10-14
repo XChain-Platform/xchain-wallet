@@ -202,9 +202,19 @@ async function clickDestination(scope, name) {
 export async function gotoSection(page, name) {
     const bar = nav(page);
     if (await bar.count() > 0) {
-        if (await clickDestination(bar, name)) return;
+        // Landscape phones can show the rail and the bottom bar together, so
+        // try every nav on screen before opening the More sheet.
+        const navs = [
+            page.getByRole('navigation', { name: 'Primary navigation' }),
+            page.getByRole('navigation', { name: 'Bottom navigation' }),
+        ];
+        for (const candidate of navs) {
+            if (await candidate.count() === 0) continue;
+            if (await clickDestination(candidate.first(), name)) return;
+        }
 
-        await bar.getByRole('button', { name: 'More', exact: true }).click();
+        const more = page.getByRole('button', { name: 'More', exact: true });
+        await more.first().click();
         const sheet = page.getByRole('dialog', { name: 'More', exact: true });
         await sheet.waitFor({ state: 'visible', timeout: 15_000 });
         if (await clickDestination(sheet, name)) return;
