@@ -286,7 +286,10 @@ export function TokenPicker({
             next = next.filter((r) => {
                 const tick = String(r.tick || '').toLowerCase();
                 const name = String(r.displayName || '').toLowerCase();
-                return tick.includes(tokenQueryTrim) || name.includes(tokenQueryTrim);
+                const assetId = `${r.chainId || ''}:${r.tick || ''}`.toLowerCase();
+                return tick.includes(tokenQueryTrim)
+                    || name.includes(tokenQueryTrim)
+                    || assetId.includes(tokenQueryTrim);
             });
         }
         // A bridged copy is stored origin-rooted ('BTC.PEPECASH') and must not
@@ -301,7 +304,13 @@ export function TokenPicker({
             if (!origin) return r;
             return { ...r, displayName: `${label} (from ${origin})` };
         });
-        return sortByChainThenAsset(next);
+        const sorted = sortByChainThenAsset(next);
+        return isReceive
+            ? [
+                ...sorted.filter(hasSpendableBalance),
+                ...sorted.filter((row) => !hasSpendableBalance(row)),
+            ]
+            : sorted;
     }, [allRows, isReceive, networkFilter, kindFilter, tokenQueryTrim]);
 
     const hiddenSet = useMemo(() => new Set(hiddenTokens), [hiddenTokens]);
@@ -604,6 +613,8 @@ export function TokenPicker({
                             hiddenKeys={hiddenSet}
                             pinnedKeys={pinnedSet}
                             onTogglePin={handleTogglePin}
+                            hideSmallBalances={settings?.privacy?.hideSmallBalances === true}
+                            smallBalanceThreshold={settings?.smallBalanceThreshold || 'dust'}
                             allowRemoteImages={allowRemoteImages}
                             getRowTabIndex={(row) => (
                                 `${row.chainId}:${row.tick}` === optionTabStop ? 0 : -1
