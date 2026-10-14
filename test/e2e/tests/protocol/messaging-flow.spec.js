@@ -80,7 +80,7 @@ async function expectSameLineHeights(label, controls) {
 }
 
 for (const viewport of VIEWPORTS) {
-    test(`messaging reaches an exact review at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    test(`messaging compose stops at the demo note at ${viewport.width}x${viewport.height}`, async ({ page }) => {
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
         await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
 
@@ -145,35 +145,12 @@ for (const viewport of VIEWPORTS) {
             await expectSameLineHeights('compose fee row', [feeAmount, feeRate]);
             await expectNoHorizontalOverflow(page, `${viewport.name} compose`);
 
+            // A demo wallet cannot broadcast, so compose stops at the demo note;
+            // the review screen is covered by the regtest messaging specs.
             await main.evaluate((element) => { element.scrollTop = element.scrollHeight; });
-            const send = main.getByRole('button', { name: 'Send message' });
-            await expect(send).toBeEnabled();
-            await send.click();
-        });
-
-        await test.step('review opens at the top with the exact message fee', async () => {
-            const main = page.getByRole('main');
-            const review = main.getByRole('form', { name: 'Review message' });
-            await expectHeading(page, 'Review message');
-            await expect(review).toBeVisible();
-            await settleLayout(page);
-            expect(
-                await main.evaluate((element) => element.scrollTop),
-                `${viewport.name} review retained the compose screen scroll position`,
-            ).toBeLessThanOrEqual(1);
-
-            // The address is middle-truncated on screen; its accessible name is the full value.
-            await expect(review.getByText('To', { exact: true })
-                .locator('xpath=following-sibling::dd[1]')
-                .getByLabel(RECIPIENT, { exact: true })).toBeVisible();
-            await expect(review.getByText('Encryption', { exact: true })
-                .locator('xpath=following-sibling::dd[1]')).toHaveText('ECIES');
-            await expect(review.getByText('Network fee', { exact: true })
-                .locator('xpath=following-sibling::dd[1]'))
-                .toHaveText(`${NORMAL_FEE} DOGE (${NORMAL_RATE})`);
-            await expect(review.getByText('Message', { exact: true })
-                .locator('xpath=following-sibling::dd[1]')).toHaveText(MESSAGE);
-            await expectNoHorizontalOverflow(page, `${viewport.name} review`);
+            await expect(main.getByRole('button', { name: 'Send message' })).toBeDisabled();
+            await expect(main.getByText(/Demo wallets can.t move funds/)).toBeVisible();
+            await expectNoHorizontalOverflow(page, `${viewport.name} compose demo note`);
         });
     });
 }

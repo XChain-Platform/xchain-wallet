@@ -15,7 +15,8 @@
 // have to act on: nothing here unlocks, signs or submits.
 
 import { useEffect, useState } from 'react';
-import { uri as coreUri } from '@xchain-wallet/core';
+import { normalizeBip21Amount, parseBip21Uri } from '../../core/src/uri/bip21.js';
+import { hardenUriIntentText, parseXchainUri } from '../../core/src/uri/xchainUri.js';
 
 const COIN_SCHEMES = Object.freeze({
     bitcoin: { coin: 'bitcoin', tick: 'BTC' },
@@ -62,10 +63,10 @@ export function deepLinkRoute(raw, chainRegistry) {
 
     if (coinScheme) {
         try {
-            const parts = coreUri.parseBip21Uri(normalized);
+            const parts = parseBip21Uri(normalized);
             if (parts.required?.length > 0) return invalidRoute();
             const memo = parts.message ?? parts.label;
-            const hardened = coreUri.hardenUriIntentText({ kind: 'send', memo });
+            const hardened = hardenUriIntentText({ kind: 'send', memo });
             const chainId = chainRegistry?.chainIdFor?.(coinScheme.coin, 'mainnet') || undefined;
             if (!chainId) return invalidRoute();
             return {
@@ -89,7 +90,7 @@ export function deepLinkRoute(raw, chainRegistry) {
     if (!isXchainLink) return null;
     let intent;
     try {
-        intent = coreUri.hardenUriIntentText(coreUri.parseXchainUri(normalized, { chainRegistry }));
+        intent = hardenUriIntentText(parseXchainUri(normalized, { chainRegistry }));
     } catch {
         return invalidRoute();
     }
@@ -100,7 +101,7 @@ export function deepLinkRoute(raw, chainRegistry) {
     if (intent?.kind === 'send') {
         let amount = intent.amount;
         try {
-            amount = coreUri.normalizeBip21Amount(amount);
+            amount = normalizeBip21Amount(amount);
         } catch {
             return invalidRoute();
         }

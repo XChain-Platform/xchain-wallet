@@ -55,7 +55,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
 import { useSettings } from './useSettings.js';
 import { useOnlineStatus } from './useOnlineStatus.js';
-import { registry as registryLib, flows as flowsLib } from '../../index.js';
+import { defaultRegistry } from '../../registry/index.js';
+import { filterChainIdsByActiveNetwork } from '../../flows/effectiveNetwork.js';
 
 const DEFAULT_INTERVAL_MS = 30_000;
 // How long to wait before re-probing after a single failed round-trip,
@@ -75,7 +76,7 @@ const CHAIN_ID_KEY_SEP = '\u0000';
 // the window the operator objected to: the banner appearing "immediately on
 // wallet load" is what makes a healthy wallet look broken to a new user.
 const DEFAULT_STARTUP_GRACE_MS = 8000;
-const chainRegistry = registryLib.defaultRegistry();
+const chainRegistry = defaultRegistry();
 
 function isDocumentHidden() {
     return typeof document !== 'undefined' && document.visibilityState === 'hidden';
@@ -179,7 +180,7 @@ export function useReachability(opts = {}) {
         // point probing testnet endpoints when the user only sees
         // mainnet. The filter helper tolerates an undefined settings
         // record (returns []).
-        return flowsLib.filterChainIdsByActiveNetwork(raw, settings, chainRegistry).join(CHAIN_ID_KEY_SEP);
+        return filterChainIdsByActiveNetwork(raw, settings, chainRegistry).join(CHAIN_ID_KEY_SEP);
     }, [opts.chainIds, settings?.fees, settings?.activeNetwork, settings]);
 
     const chainIds = useMemo(

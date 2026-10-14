@@ -52,6 +52,18 @@
     object-fit: cover;
 }
 
+/* Lettered stand-in for a chain with no bundled icon. */
+.chainOverlayLetter {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--xc-font-sans);
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    line-height: 1;
+    color: var(--xc-text);
+}
+
 @media (max-width: 400px) {
     .mark {
         width: 32px;
@@ -66,6 +78,10 @@
 
 @media (forced-colors: active) {
     .iconLetter {
+        color: CanvasText;
+    }
+
+    .chainOverlayLetter {
         color: CanvasText;
     }
 }

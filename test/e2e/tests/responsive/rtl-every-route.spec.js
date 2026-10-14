@@ -55,7 +55,7 @@ async function enablePseudoRtl(page) {
     await gotoSection(page, 'Settings');
     await page.getByRole('main').getByRole('button', { name: /^Developer mode/ }).click();
 
-    const developerMode = page.getByRole('switch', { name: 'Developer Mode', exact: true });
+    const developerMode = page.getByRole('switch', { name: 'Turn on developer mode', exact: true });
     if (!(await developerMode.isChecked())) {
         await developerMode.click();
         await expect(developerMode).toBeChecked();
