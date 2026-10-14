@@ -199,6 +199,39 @@ describe('TokenDetail price history', () => {
         expect(screen.queryByText(/official token in the/i)).toBeNull();
     });
 
+    it('shows an empty supply history beside the page sections, not inside a card', async () => {
+        const messaging = {
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            getTokenInfo: vi.fn().mockResolvedValue({ creator: 'bcrt1qx', projects: [] }),
+            getAddressesByChain: vi.fn().mockResolvedValue({ [MAINNET_CHAIN]: [] }),
+            getHoldersForToken: vi.fn().mockResolvedValue({ data: [] }),
+            listGatedContent: vi.fn().mockResolvedValue([]),
+            getSupplyHistory: vi.fn().mockResolvedValue([]),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <TokenDetail
+                    walletId="w1"
+                    chainId={MAINNET_CHAIN}
+                    tick="NOSUPPLY"
+                    kind="token"
+                    quantity="100"
+                    onBack={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        const title = await screen.findByText('No supply history yet');
+        const hero = screen.getByRole('region', { name: 'NOSUPPLY balance' });
+        const actions = screen.getByRole('group', { name: 'Quick actions' });
+        // The empty state is a sibling of the hero and the actions: one
+        // message in the page stack, with no card drawn around it.
+        expect(actions.previousElementSibling.contains(title)).toBe(true);
+        expect(actions.previousElementSibling.parentElement).toBe(hero.parentElement);
+        expect(actions.previousElementSibling.querySelector('section, [class*="infoCard"]')).toBeNull();
+        expect(actions.previousElementSibling.className).not.toMatch(/infoCard/);
+    });
+
     it('reserves price-history and price-alert space until native prices settle', async () => {
         let finishPrices;
         const messaging = {

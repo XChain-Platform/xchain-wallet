@@ -618,25 +618,29 @@ function TokenDetailContent({
                     </div>
                 ) : null}
 
+                {/* The empty state stands alone at full width rather than
+                    inside the chart card, so it never reads as a box in a box. */}
                 {!isNative && supplyHistory.available ? (
-                    <div className={`${styles.infoCard} ${styles.supplyCard}`}>
-                        <RouteErrorBoundary
-                            variant="compact"
-                            resetKey={`${chainId}:${tick}:supply`}
-                        >
-                            {supplyHistory.loading ? (
-                                <Skeleton height={94} ariaLabel="Loading supply history" />
-                            ) : supplyHistory.points.length >= 2 ? (
-                                <SupplyChart points={supplyHistory.points} divisibility={resolvedDivisibility} tick={tick} />
-                            ) : (
-                                <EmptyState
-                                    title="No supply history yet"
-                                    body="Indexed issuance and destruction activity builds this history."
-                                    titleAs="p"
-                                />
-                            )}
-                        </RouteErrorBoundary>
-                    </div>
+                    supplyHistory.loading || supplyHistory.points.length >= 2 ? (
+                        <div className={`${styles.infoCard} ${styles.supplyCard}`}>
+                            <RouteErrorBoundary
+                                variant="compact"
+                                resetKey={`${chainId}:${tick}:supply`}
+                            >
+                                {supplyHistory.loading ? (
+                                    <Skeleton height={94} ariaLabel="Loading supply history" />
+                                ) : (
+                                    <SupplyChart points={supplyHistory.points} divisibility={resolvedDivisibility} tick={tick} />
+                                )}
+                            </RouteErrorBoundary>
+                        </div>
+                    ) : (
+                        <EmptyState
+                            title="No supply history yet"
+                            body="Indexed issuance and destruction activity builds this history."
+                            titleAs="p"
+                        />
+                    )
                 ) : null}
 
                 {isNative && fiatSupported ? (
