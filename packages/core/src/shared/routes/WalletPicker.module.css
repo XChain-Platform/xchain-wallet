@@ -111,8 +111,8 @@
     inset-inline-end: 8px;
     transform: translateY(-50%);
     z-index: 1;
-    width: 32px;
-    height: 32px;
+    width: var(--xc-button-height);
+    height: var(--xc-button-height);
     display: inline-flex;
     align-items: center;
     justify-content: center;

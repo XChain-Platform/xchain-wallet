@@ -94,6 +94,18 @@ describe('WalletPicker row layout', () => {
         expect(onShowDetails).toHaveBeenCalledWith(wallet.id);
     });
 
+    it('sizes the wallet-details control from the kit icon-button size', () => {
+        const css = readFileSync(
+            join(process.cwd(), 'packages/core/src/shared/routes/WalletPicker.module.css'),
+            'utf8',
+        );
+        const menuButtonRule = /\.rowMenuBtn\s*\{([^}]*)\}/.exec(css)?.[1] || '';
+
+        expect(menuButtonRule).toMatch(/width:\s*var\(--xc-button-height\)/);
+        expect(menuButtonRule).toMatch(/height:\s*var\(--xc-button-height\)/);
+        expect(menuButtonRule).not.toMatch(/(?:width|height):\s*32px/);
+    });
+
     it('labels imported-key wallets accurately', async () => {
         const wallet = {
             id: 'wallet-1',
