@@ -393,15 +393,16 @@ export function Onboarding({ onCreate, onImport, onImportFromFreeWallet, onPairP
                         />
                     )}
                     actions={(
-                        <Button
-                            variant="primary"
-                            block
-                            onClick={handleAcceptLicense}
-                            disabled={!licenseAck || !scrolledToEnd}
-                            icon={<Icon.CheckIcon />}
-                        >
-                            Accept and continue
-                        </Button>
+                        <div className={styles.licenseActions}>
+                            <Button
+                                variant="primary"
+                                onClick={handleAcceptLicense}
+                                disabled={!licenseAck || !scrolledToEnd}
+                                icon={<Icon.CheckIcon />}
+                            >
+                                Accept and continue
+                            </Button>
+                        </div>
                     )}
                     stackedActions
                 >
