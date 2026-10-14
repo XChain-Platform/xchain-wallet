@@ -70,9 +70,13 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useConfirmAction, isConfirmOpenPhase } from '../hooks/useConfirmAction.js';
 import {
     exactNetworkFeeSats,
-    formatExactSats,
+    exactSats,
     sumExactSats,
 } from '../../flows/psbtNetworkFee.js';
+import {
+    formatNativeBaseUnits,
+    tickerForDescriptor,
+} from '../../registry/coinTicker.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { PsbtConfirmScreen } from '../components/PsbtConfirmScreen.jsx';
 import { HwSignBlock } from '../components/HwSignBlock.jsx';
@@ -221,6 +225,62 @@ export function psbtInputError(raw) {
         return 'Transaction base64 is incomplete or malformed.';
     }
     return 'Paste a PSBT as hex or base64, or import a .psbt file.';
+}
+
+/**
+ * Refuse parser output whose values cannot support an exact signing review.
+ *
+ * @param {unknown} decomposed
+ * @returns {string | null}
+ */
+export function psbtReviewError(decomposed) {
+    if (!decomposed || typeof decomposed !== 'object'
+        || !Array.isArray(decomposed.inputs) || !Array.isArray(decomposed.outputs)) {
+        return 'The wallet could not read this transaction\'s inputs and outputs.';
+    }
+    if (decomposed.inputs.length === 0) return 'This transaction has no inputs.';
+    if (decomposed.outputs.length === 0) return 'This transaction has no outputs.';
+
+    for (let i = 0; i < decomposed.inputs.length; i += 1) {
+        const input = decomposed.inputs[i];
+        const amount = exactSats(input?.value);
+        if (amount === null) return `Input ${i + 1} has an invalid amount.`;
+        if (amount === 0n) return `Input ${i + 1} amount must be greater than zero.`;
+        if (input?.address !== null && input?.address !== undefined
+            && (typeof input.address !== 'string' || !input.address.trim())) {
+            return `Input ${i + 1} has an invalid address.`;
+        }
+    }
+    for (let i = 0; i < decomposed.outputs.length; i += 1) {
+        const output = decomposed.outputs[i];
+        const amount = exactSats(output?.value);
+        if (amount === null) return `Output ${i + 1} has an invalid amount.`;
+        if (output?.address !== null && output?.address !== undefined
+            && (typeof output.address !== 'string' || !output.address.trim())) {
+            return `Output ${i + 1} has an invalid address.`;
+        }
+        if (amount === 0n && output?.address) {
+            return `Output ${i + 1} amount must be greater than zero.`;
+        }
+    }
+
+    const totalIn = sumExactSats(decomposed.inputs.map((input) => input.value));
+    const totalOut = sumExactSats(decomposed.outputs.map((output) => output.value));
+    if (totalIn !== null && totalOut !== null && totalOut > totalIn) {
+        return 'This transaction spends more than its inputs contain.';
+    }
+    if (exactNetworkFeeSats(decomposed) === null) {
+        return 'The wallet could not verify this transaction\'s network fee.';
+    }
+    return null;
+}
+
+function nativeAmountLabel(value, descriptor) {
+    const amount = exactSats(value);
+    if (amount === null || !descriptor) return null;
+    const display = formatNativeBaseUnits(amount, descriptor);
+    const ticker = tickerForDescriptor(descriptor);
+    return display === null || !ticker ? null : `${display} ${ticker}`;
 }
 
 /**
@@ -608,7 +668,15 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
         messaging.parsePsbtRequest({ chainId, psbtHex })
             .then((res) => {
                 if (cancelled) return;
-                setDecomposed(res?.decomposed || null);
+                const reviewError = psbtReviewError(res?.decomposed);
+                if (reviewError) {
+                    setDecomposed(null);
+                    setParsedAction(null);
+                    setParsedActionReason(null);
+                    setParseError(reviewError);
+                    return;
+                }
+                setDecomposed(res.decomposed);
                 // The action carried inside, when it decodes.
                 // Additive on the host side, so an older shell simply reports
                 // no action and the confirm page renders its loud
@@ -684,6 +752,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
         return sumExactSats(decomposed.outputs.map((output) => output.value));
     }, [decomposed]);
     const fee = exactNetworkFeeSats(decomposed);
+    const chainDescriptor = chainRegistry.get(chainId);
 
     // Own addresses on the selected chain, used to mark outputs that pay back
     // to this wallet (change) vs external recipients. Same signal the
@@ -1027,13 +1096,13 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
             </div>
             <div>
                 <strong>Total in:</strong>{' '}
-                {totalIn != null ? `${formatExactSats(totalIn)} sats` : 'unavailable'}
+                {totalIn != null ? nativeAmountLabel(totalIn, chainDescriptor) : 'unavailable'}
                 {' · '}
                 <strong>Total out:</strong>{' '}
-                {totalOut != null ? `${formatExactSats(totalOut)} sats` : 'unavailable'}
+                {totalOut != null ? nativeAmountLabel(totalOut, chainDescriptor) : 'unavailable'}
                 {' · '}
                 <strong>Network fee:</strong>{' '}
-                {fee != null ? `${formatExactSats(fee)} sats` : 'unavailable'}
+                {fee != null ? nativeAmountLabel(fee, chainDescriptor) : 'unavailable'}
             </div>
             <div>
                 <strong>Inputs this address signs:</strong> {ownedInputCount} of {decomposed.inputs.length}
@@ -1041,7 +1110,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 4 }}>
                 <strong>What this transaction spends:</strong>
                 {decomposed.inputs.map((input, i) => {
-                    const amount = formatExactSats(input.value);
+                    const amount = nativeAmountLabel(input.value, chainDescriptor);
                     const isUnknown = !input.address || amount === null;
                     return (
                         <div
@@ -1060,7 +1129,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                                 </span>
                             )}
                             <span style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }}>
-                                {amount !== null ? `${amount} sats` : 'amount unknown'}
+                                {amount !== null ? amount : 'amount unknown'}
                             </span>
                         </div>
                     );
@@ -1070,7 +1139,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                 <strong>Where the coins go:</strong>
                 {decomposed.outputs.map((o, i) => {
                     const own = !!o.address && ownAddressSet.has(o.address);
-                    const amount = formatExactSats(o.value);
+                    const amount = nativeAmountLabel(o.value, chainDescriptor);
                     return (
                         <div
                             key={`${o.address || 'data'}-${i}`}
@@ -1094,7 +1163,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                                 </span>
                             )}
                             <span style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }}>
-                                {amount !== null ? `${amount} sats` : 'amount unknown'}
+                                {amount !== null ? amount : 'amount unknown'}
                             </span>
                         </div>
                     );
@@ -1329,6 +1398,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                 spendsOwnInputs={ownedInputCount > 0}
                 developerMode={developerMode}
                 chainLabel={chainRegistry.get(chainId)?.displayName || chainId}
+                chainDescriptor={chainDescriptor}
                 signerReady={signerReady}
                 password={password}
                 onPasswordChange={setPassword}

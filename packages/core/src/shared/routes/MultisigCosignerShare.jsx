@@ -60,6 +60,11 @@ export function MultisigCosignerShare({ walletId, addresses, networkKind }) {
         setInfo(null);
         setError(null);
         if (!addressId) return undefined;
+        const requestedAddress = addresses.find((address) => address.id === addressId);
+        if (!requestedAddress) {
+            setError('Select an address from this wallet.');
+            return undefined;
+        }
         // A shell without the route keeps the manual path rather than crashing.
         if (typeof messaging.getMultisigCosignerInfo !== 'function') {
             setError('Sharing cosigner keys is not available in this shell.');
@@ -68,13 +73,19 @@ export function MultisigCosignerShare({ walletId, addresses, networkKind }) {
         let cancelled = false;
         messaging.getMultisigCosignerInfo({ walletId, addressId })
             .then((r) => {
-                if (!cancelled) setInfo({ walletId, addressId, value: r });
+                if (cancelled) return;
+                if ((r?.addressId && r.addressId !== addressId)
+                    || (r?.address && r.address !== requestedAddress.address)) {
+                    setError('The wallet returned cosigner keys for a different address. Select the address again.');
+                    return;
+                }
+                setInfo({ walletId, addressId, value: r });
             })
             .catch((err) => {
                 if (!cancelled) setError(userFacingMessage(err, 'Could not read this wallet\'s cosigner keys.'));
             });
         return () => { cancelled = true; };
-    }, [walletId, addressId, messaging]);
+    }, [walletId, addressId, addresses, messaging]);
 
     return (
         <FormPage as="div" sectioned label={t('multisig.share.title')}>
@@ -149,7 +160,7 @@ function buildSharePayload({ info, address, networkKind }) {
         type: 'xchain-multisig-cosigner',
         version: 1,
         network: networkKind || null,
-        address: info.address || address?.address || null,
+        address: address?.address || null,
         xpub: xpubForNetwork(info.xpub, networkKind) || null,
         pubkey: info.pubkey || null,
         fingerprint: info.fingerprint || null,

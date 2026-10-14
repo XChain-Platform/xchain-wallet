@@ -172,17 +172,17 @@ describe('§5.5 PsbtSignForm routes through the PSBT confirm variant', () => {
         const { utils, calls } = await drive(parsed, { openConfirm: false });
 
         expect(utils.getAllByTestId('psbt-sign-input').map((row) => row.textContent)).toEqual([
-            `Input${OWN}150,000 sats`,
-            'Unknown input(unknown source script)50,000 sats',
+            `Input${OWN}0.0015 BTC`,
+            'Unknown input(unknown source script)0.0005 BTC',
         ]);
         expect(utils.getAllByTestId('psbt-sign-output').map((row) => row.textContent)).toEqual([
-            `Recipient${recipientA}120,000 sats`,
-            `Recipient${recipientB}20,000 sats`,
-            `Change (back to you)${OWN}55,000 sats`,
+            `Recipient${recipientA}0.0012 BTC`,
+            `Recipient${recipientB}0.0002 BTC`,
+            `Change (back to you)${OWN}0.00055 BTC`,
         ]);
-        expect(utils.container.textContent).toContain('Total in: 200,000 sats');
-        expect(utils.container.textContent).toContain('Total out: 195,000 sats');
-        expect(utils.container.textContent).toContain('Network fee: 5,000 sats');
+        expect(utils.container.textContent).toContain('Total in: 0.002 BTC');
+        expect(utils.container.textContent).toContain('Total out: 0.00195 BTC');
+        expect(utils.container.textContent).toContain('Network fee: 0.00005 BTC');
 
         await domAct(async () => {
             fireEvent.click(findButton(utils, /Sign transaction/i));
@@ -190,13 +190,13 @@ describe('§5.5 PsbtSignForm routes through the PSBT confirm variant', () => {
         });
 
         expect(utils.getAllByTestId('psbt-input').map((row) => row.textContent)).toEqual([
-            `Signs with your key${OWN}150,000 sats`,
-            'Unknown input(unknown source script)50,000 sats',
+            `Signs with your key${OWN}0.0015 BTC`,
+            'Unknown input(unknown source script)0.0005 BTC',
         ]);
         expect(utils.getAllByTestId('psbt-output').map((row) => row.textContent)).toEqual([
-            `Recipient${recipientA}120,000 sats`,
-            `Recipient${recipientB}20,000 sats`,
-            `Change (back to you)${OWN}55,000 sats`,
+            `Recipient${recipientA}0.0012 BTC`,
+            `Recipient${recipientB}0.0002 BTC`,
+            `Change (back to you)${OWN}0.00055 BTC`,
         ]);
         expect(calls.some((call) => call.method === 'signPsbtUserInitiated')).toBe(false);
     });
@@ -212,6 +212,24 @@ describe('§5.5 PsbtSignForm routes through the PSBT confirm variant', () => {
         expect(utils.getByTestId('psbt-intent-panel')).toBeTruthy();
         expect(utils.container.textContent).toContain('Signs with your key');
         // Nothing signed yet: opening the page is not authorizing.
+        expect(calls.some((c) => c.method === 'signPsbtUserInitiated')).toBe(false);
+    });
+
+    it('Reject returns to the form with the transaction and selections intact', async () => {
+        const { utils, calls } = await drive({
+            decomposed: DECOMPOSED,
+            action: null,
+            actionDecodeReason: 'NO_OP_RETURN',
+        });
+
+        await domAct(async () => {
+            fireEvent.click(utils.getByTestId('confirm-reject'));
+            await drainMicrotasks();
+        });
+
+        expect(utils.queryByTestId('confirm-modal')).toBeNull();
+        expect(utils.getByLabelText(/Unsigned transaction/i).value).toBe(PSBT_HEX);
+        expect(utils.getByLabelText('Signing address').value).toBe(HD_ADDRESS.id);
         expect(calls.some((c) => c.method === 'signPsbtUserInitiated')).toBe(false);
     });
 
