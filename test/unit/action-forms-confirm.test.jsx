@@ -126,6 +126,11 @@ function recordingMessaging(overrides = {}) {
         }),
         // AdvancedActionsForm's action picker is populated from the host.
         listActions: () => Promise.resolve(['BROADCAST', 'SEND']),
+        validateAction: () => Promise.resolve({ valid: true, errors: [] }),
+        getAddressBalances: () => Promise.resolve({
+            native: { tick: 'BTC', quantity: '100000000000', divisibility: 8 },
+            tokens: [{ tick: 'JDOG', quantity: '100000000000', divisibility: 8 }],
+        }),
         // PollDetail renders its ballot editor from a loaded, OPEN poll.
         governancePoll: () => Promise.resolve({
             poll_index: 7, tick: 'JDOG', poll_status: 'open',
