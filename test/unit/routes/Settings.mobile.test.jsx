@@ -276,28 +276,32 @@ describe('Settings at a 320px viewport', () => {
         expect(await screen.findByRole('button', { name: 'Remove custom chain fork-regtest' })).toBeVisible();
     });
 
-    it('places contacts actions after full-width row copy at 360px', async () => {
+    it('keeps equal contact actions together in a wrapping row at 360px', async () => {
         Object.defineProperty(window, 'innerWidth', { configurable: true, value: 360 });
         const messaging = buildMessaging();
         messaging.listContacts.mockResolvedValue([{ id: 'contact-1' }]);
         renderSettings(null, { messaging });
 
         await screen.findByText('1 contact stored');
-        const exportCopy = screen.getByText('Export', { selector: 'span' }).parentElement;
-        const exportRow = exportCopy.parentElement;
-        const importCopy = screen.getByText('Import', { selector: 'span' }).parentElement;
-        const importRow = importCopy.parentElement;
+        const copy = screen.getByText('Export and import', { selector: 'span' }).parentElement;
+        const row = copy.parentElement;
+        const buttons = [
+            screen.getByRole('button', { name: 'Export…' }),
+            screen.getByRole('button', { name: 'Export CSV…' }),
+            screen.getByRole('button', { name: 'Import…' }),
+        ];
+        const actions = buttons[0].parentElement;
 
         expect(window.innerWidth).toBe(360);
-        for (const [copy, row] of [[exportCopy, exportRow], [importCopy, importRow]]) {
-            expect(row.style.flexWrap).toBe('wrap');
-            expect(copy.style.flex).toBe('1 1 280px');
-            expect(copy.style.minWidth).toBe('min(100%, 280px)');
-            expect(row.firstElementChild).toBe(copy);
+        expect(row.style.flexWrap).toBe('wrap');
+        expect(copy.style.flex).toBe('1 1 280px');
+        expect(copy.style.minWidth).toBe('min(100%, 280px)');
+        expect(row.firstElementChild).toBe(copy);
+        expect(actions.style.flexWrap).toBe('wrap');
+        for (const button of buttons) {
+            expect(button.parentElement).toBe(actions);
+            expect(button.style.width).toBe('9.5rem');
         }
-        expect(exportRow.children[1]).toBe(screen.getByRole('button', { name: 'Export…' }));
-        expect(exportRow.children[2]).toBe(screen.getByRole('button', { name: 'Export CSV…' }));
-        expect(importRow.lastElementChild).toBe(screen.getByRole('button', { name: 'Import…' }));
     });
 
     it('stacks wide controls and clamps actions at the narrow breakpoint', () => {
