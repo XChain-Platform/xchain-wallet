@@ -138,6 +138,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
     const [savePermanent, setSavePermanent] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [busy, setBusy] = useState(false);
+    const [expired, setExpired] = useState(false);
     useBackHandler(onReject, busy);
     const [signInChoice, setSignInChoice] = useState(0);
     const [walletMode, setWalletMode] = useState(/** @type {string | null} */ (null));
@@ -744,6 +745,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
     const modeApprovalBlocked = walletMode === null || signingUnavailable;
 
     async function handleApprove() {
+        if (expired) return;
         if (busy || password.length === 0 || !walletId || approvalBlocked) return;
         if (modeApprovalBlocked) return;
         setBusy(true);
@@ -759,14 +761,23 @@ export function SignApproval({ id, kind, payload, onReject }) {
             setPassword('');
             window.close();
         } catch (err) {
-            setError(
-                err?.name === 'InvalidPasswordError'
-                    ? 'Incorrect password.'
-                    : err?.message || 'Approval failed.',
-            );
+            if (err?.name === 'ApprovalInterruptedError') {
+                setExpired(true);
+                setWalletId(null);
+                setPassword('');
+                setError(err.message);
+            } else {
+                setError(
+                    err?.name === 'InvalidPasswordError'
+                        ? 'Incorrect password.'
+                        : userFacingMessage(err, 'Approval failed.'),
+                );
+            }
             setBusy(false);
-            inputRef.current?.focus();
-            inputRef.current?.select();
+            if (err?.name !== 'ApprovalInterruptedError') {
+                inputRef.current?.focus();
+                inputRef.current?.select();
+            }
         }
     }
 

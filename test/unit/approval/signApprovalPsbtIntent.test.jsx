@@ -52,6 +52,9 @@ vi.stubGlobal('React', React);
 const { SignApproval } = await import(
     '../../../packages/extension/src/approval/kinds/SignApproval.jsx'
 );
+const { ConnectApproval } = await import(
+    '../../../packages/extension/src/approval/kinds/ConnectApproval.jsx'
+);
 const { Router } = await import('../../../packages/extension/src/approval/Router.jsx');
 const messaging = await import('../../../packages/extension/src/approval/messaging.js');
 
@@ -434,6 +437,62 @@ describe('SignApproval signPsbt intent', () => {
 });
 
 describe('SignApproval untrusted text', () => {
+    it('permanently disables Connect when the request expires', async () => {
+        messaging.resolveApproval.mockRejectedValueOnce(Object.assign(
+            new Error('This approval was interrupted. Return to the site and try again.'),
+            { name: 'ApprovalInterruptedError' },
+        ));
+        render(
+            <ConnectApproval
+                id="expired-connect"
+                payload={{
+                    origin: 'https://dapp.test',
+                    requestedChains: ['bitcoin-regtest'],
+                }}
+                onReject={() => {}}
+            />,
+        );
+
+        const connect = screen.getByRole('button', { name: 'Connect' });
+        fireEvent.click(connect);
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'This connection request has expired.',
+        );
+        expect(connect).toBeDisabled();
+        fireEvent.click(connect);
+        expect(messaging.resolveApproval).toHaveBeenCalledTimes(1);
+    });
+
+    it('clears the password and permanently disables approval when the request expires', async () => {
+        messaging.resolveApproval.mockRejectedValueOnce(Object.assign(
+            new Error('This approval was interrupted. Return to the site and try again.'),
+            { name: 'ApprovalInterruptedError' },
+        ));
+        render(
+            <SignApproval
+                id="expired-sign"
+                kind="signMessage"
+                payload={{ origin: 'https://dapp.test', payload: { message: 'hello' } }}
+                onReject={() => {}}
+            />,
+        );
+
+        const password = await screen.findByLabelText('Password');
+        fireEvent.change(password, { target: { value: 'secret' } });
+        const approve = screen.getByRole('button', { name: 'Approve' });
+        await waitFor(() => expect(approve).not.toBeDisabled());
+        fireEvent.click(approve);
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'This approval was interrupted. Return to the site and try again.',
+        );
+        expect(password).toHaveValue('');
+        expect(approve).toBeDisabled();
+        fireEvent.click(approve);
+        expect(messaging.resolveApproval).toHaveBeenCalledTimes(1);
+    });
+
     it('neutralizes controls in a message while warning that the original is signed', async () => {
         render(
             <SignApproval
