@@ -61,6 +61,7 @@ async function fieldMetrics(input, actionNames) {
                     clientWidth: button.clientWidth,
                     scrollWidth: button.scrollWidth,
                     lineCount: lineTops.size,
+                    centreOffset: Math.abs((box.top - inputBox.top) - (inputBox.bottom - box.bottom)),
                     inside: box.left >= inputBox.left - 1
                         && box.right <= inputBox.right + 1
                         && box.top >= inputBox.top - 1
@@ -86,10 +87,20 @@ async function expectTrailingActionsFit(input, label, actionNames) {
             action.lineCount,
             `${label}: ${action.text} wraps onto multiple lines\n${diagnostic}`,
         ).toBe(1);
+        // The actions sit inset inside the field border, so they are a little
+        // shorter than the control and centred on it.
         expect(
             action.height,
-            `${label}: ${action.text} does not match the field control height\n${diagnostic}`,
-        ).toBe(metrics.controlHeight);
+            `${label}: ${action.text} is taller than the field control\n${diagnostic}`,
+        ).toBeLessThanOrEqual(metrics.controlHeight);
+        expect(
+            action.height,
+            `${label}: ${action.text} is too short to read as a control\n${diagnostic}`,
+        ).toBeGreaterThanOrEqual(24);
+        expect(
+            action.centreOffset,
+            `${label}: ${action.text} is not centred in the field\n${diagnostic}`,
+        ).toBeLessThanOrEqual(2);
         expect(
             action.scrollWidth,
             `${label}: ${action.text} is horizontally clipped\n${diagnostic}`,

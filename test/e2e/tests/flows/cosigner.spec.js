@@ -4,15 +4,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {
-    dismissIntroCarousel,
     expect,
     test,
-    unlockedShell,
+    createWallet,
 } from '../../fixtures/wallet.js';
 import {
     describeOffenders,
     documentOverflow,
-    enterDemoWallet,
     overflowingElements,
 } from '../../fixtures/responsive.js';
 
@@ -180,7 +178,9 @@ async function expectReviewAtTop(page, label) {
 async function walkCoSignerScreens(page, viewport) {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await installCoSignerDerivationStub(page);
-    await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
+    // Demo wallets hide create and multisig commands, so this walk
+        // uses a real dev wallet.
+        await createWallet(page);
 
     await openAgentAccounts(page);
     await expectScreen(page, 'Agent accounts', `${viewport.name} account list`);

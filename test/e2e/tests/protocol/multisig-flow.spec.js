@@ -9,15 +9,13 @@
 // contact legal@dankest.llc.
 
 import {
-    dismissIntroCarousel,
     expect,
     test,
-    unlockedShell,
+    createWallet,
 } from '../../fixtures/wallet.js';
 import {
     describeOffenders,
     documentOverflow,
-    enterDemoWallet,
     overflowingElements,
 } from '../../fixtures/responsive.js';
 
@@ -166,7 +164,9 @@ async function createSigningSession(page) {
 test.describe('multisig flow', () => {
     test('creates a 2-of-3 setup and opens cosigner and signing views responsively', async ({ page }) => {
         await page.setViewportSize({ width: VIEWPORTS[0].width, height: VIEWPORTS[0].height });
-        await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
+        // Demo wallets hide create and multisig commands, so this walk
+        // uses a real dev wallet.
+        await createWallet(page);
         await openCommand(page, 'Create multisig');
 
         const createForm = page.getByRole('form', { name: 'Create multisig' });

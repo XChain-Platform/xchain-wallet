@@ -377,7 +377,7 @@ describe('ReachabilityBanner', () => {
         );
 
         await waitFor(() => expect(screen.getByText('Some balances may be out of date')).toBeTruthy());
-        screen.getByText('Details').click();
+        act(() => { screen.getByText('Details').click(); });
         const affected = screen.getByRole('list', { name: 'Affected coins' });
         expect(affected).toHaveTextContent('Bitcoin');
         expect(affected).toHaveTextContent('Litecoin');

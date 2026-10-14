@@ -4,15 +4,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {
-    dismissIntroCarousel,
     expect,
     test,
-    unlockedShell,
+    createWallet,
 } from '../../fixtures/wallet.js';
 import {
     describeOffenders,
     documentOverflow,
-    enterDemoWallet,
     overflowingElements,
 } from '../../fixtures/responsive.js';
 
@@ -176,7 +174,9 @@ for (const viewport of VIEWPORTS) {
     test(`airdrop and batch reviews render at ${viewport.width}x${viewport.height}`, async ({ page }) => {
         test.slow();
         await page.setViewportSize(viewport);
-        await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
+        // Demo wallets hide create and multisig commands, so this walk
+        // uses a real dev wallet.
+        await createWallet(page);
 
         await test.step('airdrop compose and review', async () => {
             const main = await fillAirdrop(page);

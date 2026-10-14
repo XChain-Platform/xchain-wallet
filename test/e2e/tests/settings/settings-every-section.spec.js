@@ -84,7 +84,7 @@ test.describe('Settings: every section', () => {
 
             const back = page.getByRole('button', { name: 'Back to settings', exact: true });
             await expect(back, `${title} has no back-to-settings control`).toBeVisible();
-            await expect(page.getByRole('heading', { name: title, exact: true }),
+            await expect(page.getByRole('heading', { level: 1, name: title, exact: true }),
                 `${title} has no matching page heading`).toBeVisible();
             await expectNoHorizontalOverflow(page, title);
 
