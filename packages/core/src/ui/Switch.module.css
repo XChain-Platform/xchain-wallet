@@ -1,4 +1,7 @@
 .root {
+    /* The pointer target never drops below the WCAG 2.5.8 floor; a later
+       min-height or height here may raise it. */
+    min-block-size: var(--xc-tap-min);
     --xc-switch-hit-size: 44px;
     --xc-switch-track-width: var(--xc-control-h-md);
     --xc-switch-track-height: calc(var(--xc-control-h-sm) - var(--xc-space-2));
@@ -53,6 +56,8 @@
     width: var(--xc-switch-track-width);
     height: var(--xc-switch-track-height);
     margin: 0;
+    /* Opacity 0 also hides the global focus ring on the input; the track
+       draws the visible ring below. */
     opacity: 0;
     cursor: inherit;
 }
@@ -98,10 +103,6 @@
 .root:hover .input:not(:disabled):checked + .track {
     border-color: var(--xc-accent-primary-hover);
     background: var(--xc-accent-primary-hover);
-}
-
-.input:focus-visible {
-    outline: none !important;
 }
 
 .input:focus-visible + .track {
