@@ -183,8 +183,16 @@ export function IssueTokenForm({ walletId, onBack }) {
     // A stored draft waits for an explicit Restore. A fresh form starts
     // saving immediately so an auto-lock unmount cannot erase typed values.
     const [draftPending, setDraftPending] = useState(() => !draft.hasDraft());
+    // A confirmed "Discard and leave" drops the saved draft and stops the
+    // autosave, so no render between the confirm and the unmount can write
+    // the discarded values back.
+    const draftDiscardedRef = useRef(false);
+    const discardDraft = useCallback(() => {
+        draftDiscardedRef.current = true;
+        draft.clear();
+    }, [draft]);
     useEffect(() => {
-        if (stage !== 'form' || !draftPending) return;
+        if (stage !== 'form' || !draftPending || draftDiscardedRef.current) return;
         draft.save({
             chainId, fromAddressId, ticker, supply, initialMint, maxMint, divisible,
             description, lockSupply, transferTo, transferSupplyTo, payFeeInNativeCoin,
@@ -226,6 +234,7 @@ export function IssueTokenForm({ walletId, onBack }) {
         submitting: stage === 'submitting',
         signedUnbroadcast: stage === 'done' && result?.queued === true && result?.unsaved === true,
         onLeave: onBack,
+        onDiscard: discardDraft,
     });
 
     // The active map and the settings read are best-effort: a host without
