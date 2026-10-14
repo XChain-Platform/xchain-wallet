@@ -231,7 +231,6 @@ export function App() {
     return (
         <MessagingProvider shell={shell} messaging={messaging}>
             <ToastHost>
-                <ReachabilityBanner />
                 <RouteErrorBoundary>
                     <AppInner canOpenInTab={canOpenInTab} titleEnabled={shell === 'web'} />
                 </RouteErrorBoundary>
@@ -2811,8 +2810,9 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                     notices={(
                         <>
                             <NetworkBanner activeNetwork={settings?.activeNetwork} />
-                            {/* In the layout, not the route body, so the banner
-                                cannot consume route height. */}
+                            <ReachabilityBanner />
+                            {/* Banners stay inside the layout so route content
+                                yields without expanding the document. */}
                             {activeWalletId ? <DemoBanner activeWalletId={activeWalletId} onExited={refresh} /> : null}
                         </>
                     )}
