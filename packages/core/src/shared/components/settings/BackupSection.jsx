@@ -661,7 +661,7 @@ function UnlockPrompt({ label, hint, busy, error, onCancel, onSubmit }) {
                 <Input
                     type="password"
                     revealable
-                    placeholder="Wallet password"
+                    label="Wallet password"
                     value={pw}
                     onChange={(e) => setPw(e.target.value)}
                     autoFocus
@@ -889,7 +889,8 @@ function DryRunForm({ busy, error, onCancel, onSubmit }) {
                     <Input
                         type="password"
                         revealable
-                        placeholder="BIP39 passphrase (optional)"
+                        label="BIP39 passphrase"
+                        optional
                         value={passphrase}
                         onChange={(e) => setPassphrase(e.target.value)}
                         autoComplete="off"
@@ -1052,7 +1053,7 @@ function PasswordPrompt({ label, hint, busy, operationTime, error, onCancel, onS
                 <Input
                     type="password"
                     revealable
-                    placeholder="Confirm password"
+                    label="Confirm backup password"
                     value={pw2}
                     onChange={(e) => setPw2(e.target.value)}
                     autoComplete="new-password"
