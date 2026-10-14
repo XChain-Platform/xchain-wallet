@@ -2741,6 +2741,8 @@ function AppInner() {
                 hasVmAddress,
                 hasGovernanceAddress,
                 isSignerMode,
+                isWatcherMode,
+                isDemoWallet: isDemoWallet(activeWalletId),
             };
             // entity handlers: tokens open TokenDetail with the full
             // ref the row already carries (desktop parity); sites land
@@ -2770,6 +2772,8 @@ function AppInner() {
             // resolves the chain from the first available when unset). A
             // txid/date-shaped query offers "search history".
             const paletteParseQuery = (q) => parseFreeformCommands(q, {
+                isSignerMode,
+                isDemoWallet: isDemoWallet(activeWalletId),
                 composeSend: ({ amount, tick }) => {
                     setSendPrefill({ amount, tick });
                     setSendBackTo('home');
