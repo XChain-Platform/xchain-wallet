@@ -274,7 +274,7 @@
 
 .action > button {
     gap: var(--xc-space-3);
-    padding-inline: calc(var(--xc-space-1) - var(--xc-control-border, 1px));
+    padding-inline: calc(var(--xc-space-1) - 1px);
 }
 
 .itemActive {
