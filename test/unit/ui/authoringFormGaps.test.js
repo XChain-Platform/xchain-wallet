@@ -37,3 +37,19 @@ describe('authoring form rows add no margin to the form gap', () => {
         expect(source.slice(wrapper, upload)).not.toMatch(/margin/i);
     });
 });
+
+// Poll options, bet outcomes and the per-outcome notes are stacks of ordinary
+// fields, but their group spaced them 8px apart while the form around them
+// uses its 16px gap. Each group now uses the form gap token.
+describe('repeated-field groups use the form gap', () => {
+    it.each([
+        ['packages/core/src/shared/routes/CreatePollForm.jsx', 1],
+        ['packages/core/src/shared/routes/CreateBetFeedForm.jsx', 2],
+    ])('%s stacks its field groups on --xc-form-gap', (file, groups) => {
+        const source = read(file);
+        const columns = [...source.matchAll(/style=\{\{ display: 'flex', flexDirection: 'column', gap: '([^']+)' \}\}/g)]
+            .map((m) => m[1]);
+        expect(columns).toHaveLength(groups);
+        for (const gap of columns) expect(gap).toBe('var(--xc-form-gap)');
+    });
+});
