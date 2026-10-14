@@ -633,7 +633,7 @@ export function waitForActivationHeight(venue, height, { timeoutMs = 3_600_000 *
  */
 export async function switchToTestnet(page, password) {
     await openSettings(page);
-    await page.getByLabel('Active network').selectOption('testnet');
+    await page.getByLabel('Active network', { exact: true }).selectOption('testnet');
     await unlockAfterReload(page, password);
 }
 
