@@ -45,7 +45,7 @@ async function openCreateToken(page) {
     await palette.getByRole('combobox').fill('Create a token');
     await palette.getByRole('option', { name: /^Create a token\b/ }).click();
     await expect(palette).toBeHidden();
-    await expect(page.getByText('Choose a template.', { exact: true })).toBeVisible();
+    await expect(page.getByText('Step 1 of 4: Template', { exact: true })).toBeVisible();
 }
 
 async function cardMetrics(page) {

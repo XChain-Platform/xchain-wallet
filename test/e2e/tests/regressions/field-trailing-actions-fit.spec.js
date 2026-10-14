@@ -52,7 +52,8 @@ async function fieldMetrics(input, actionNames) {
                 range.selectNodeContents(button);
                 const lineTops = new Set([...range.getClientRects()]
                     .filter((rect) => rect.width > 0 && rect.height > 0)
-                    .map((rect) => Math.round(rect.top * 10) / 10));
+                    // An icon and its label can sit a sub-pixel apart on one line.
+                    .map((rect) => Math.round(rect.top)));
                 return {
                     name,
                     text: (button.textContent || '').trim(),

@@ -87,10 +87,11 @@ async function expectSameLineHeights(controls, label) {
 
     expect(boxes.every(Boolean), `${label}: every control has a layout box`).toBe(true);
     const tops = boxes.map((box) => box.y);
-    expect(
-        Math.max(...tops) - Math.min(...tops),
-        `${label}: controls do not share one line`,
-    ).toBeLessThanOrEqual(2);
+    // On phones the filter keeps room for its label and wraps below the
+    // search field; stacked controls then share the same left edge instead.
+    const sameLine = Math.max(...tops) - Math.min(...tops) <= 2;
+    const stacked = Math.max(...boxes.map((box) => box.x)) - Math.min(...boxes.map((box) => box.x)) <= 2;
+    expect(sameLine || stacked, `${label}: controls neither share a line nor stack on one edge`).toBe(true);
 
     const heights = boxes.map((box) => box.height);
     expect(

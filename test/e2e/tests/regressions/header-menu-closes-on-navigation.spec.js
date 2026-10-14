@@ -63,10 +63,10 @@ for (const scenario of CASES) {
 
             if (scenario.destination === 'wallets') {
                 await activate(settingsPanel.getByRole('button', { name: /Demo Wallet/ }), scenario.hasTouch);
-                await expect(page.getByRole('main').getByRole('heading', { name: 'Wallets' })).toBeVisible();
+                await expect(page.getByRole('heading', { name: 'Wallets', level: 1 })).toBeVisible();
             } else {
                 await activate(settingsPanel.getByRole('button', { name: 'All settings' }), scenario.hasTouch);
-                await expect(page.getByRole('main').getByRole('heading', { name: 'Settings' })).toBeVisible();
+                await expect(page.getByRole('heading', { name: 'Settings', level: 1 })).toBeVisible();
             }
 
             await expect(menu).toBeHidden();

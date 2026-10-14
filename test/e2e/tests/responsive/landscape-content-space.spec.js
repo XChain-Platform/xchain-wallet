@@ -115,8 +115,9 @@ for (const viewport of VIEWPORTS) {
                     await gotoSection(page, route);
                     const content = page.getByRole('main');
                     await expect(content).toBeVisible();
+                    // Routes with a page header carry their title there, above main.
                     await expect(
-                        content.getByRole('heading', { level: 1, name: route, exact: true }),
+                        page.getByRole('heading', { level: 1, name: route, exact: true }).first(),
                     ).toBeAttached();
                     await settle(page);
 

@@ -88,7 +88,7 @@ test.describe('Settings: change wallet password', () => {
             await change.click();
 
             await page.getByLabel('Current wallet password').fill(OLD_PASSWORD);
-            await page.getByLabel('New wallet password').fill(NEW_PASSWORD);
+            await page.getByLabel('New wallet password', { exact: true }).fill(NEW_PASSWORD);
             await page.getByLabel('Confirm new wallet password').fill(NEW_PASSWORD);
             await page.getByRole('main')
                 .getByRole('button', { name: 'Change password', exact: true })

@@ -97,8 +97,9 @@ async function expectNoHorizontalOverflow(page, label) {
 
 async function expectBackAtStartWithMirroredChevrons(page, label) {
     // The pseudo locale wraps translated labels, so identify the shared
-    // PageHeader control by its direct directional icon instead of English.
-    const back = page.locator('button:has(> svg[data-xc-directional]):visible').first();
+    // PageHeader control by its directional icon (the kit Button wraps it in
+    // an icon span) instead of English.
+    const back = page.locator('button:has(svg[data-xc-directional]):visible').first();
     await expect(back, `${label}: the route has no visible back control`).toBeVisible();
 
     const geometry = await back.evaluate((button) => {

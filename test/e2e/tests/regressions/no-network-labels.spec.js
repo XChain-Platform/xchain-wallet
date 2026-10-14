@@ -179,6 +179,10 @@ test('a regtest demo wallet keeps network state and demo status out of the shell
                 const row = page.getByRole('main').getByRole('button', {
                     name: new RegExp(`^${escapeRegExp(subpage)}\\b`),
                 });
+                // Phone layouts leave Keyboard out of Settings; wait for the
+                // list to render before deciding the row is absent.
+                await expect(page.getByRole('main').getByRole('button', { name: /^Display\b/ })).toBeVisible();
+                if (subpage === 'Keyboard' && await row.count() === 0) return;
                 await row.scrollIntoViewIfNeeded();
                 await row.click();
                 await expect(page.getByRole('heading', { name: subpage, exact: true })).toBeVisible();

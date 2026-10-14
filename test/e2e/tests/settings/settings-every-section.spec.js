@@ -13,10 +13,11 @@ import { createWallet, expect, openSettings, test, unlockedShell } from '../../f
 const PASSWORD = 'settings-sections-password';
 const VIEWPORT = { width: 412, height: 869 };
 
+// Phone layouts leave Keyboard out of Settings: shortcut bindings need a
+// hardware keyboard, and this walk runs at a phone width.
 const SUBPAGES = [
     'This wallet',
     'Display',
-    'Keyboard',
     'Privacy',
     'Safety',
     'Wallet mode',

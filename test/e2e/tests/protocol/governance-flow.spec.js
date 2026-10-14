@@ -222,7 +222,7 @@ for (const viewport of VIEWPORTS) {
 
         await expectReviewAtTop(page, 'Review poll');
         const pollReview = page.getByRole('form', { name: 'Review poll' });
-        await expect(pollReview.getByText(`${DEPOSIT} (GAS)`, { exact: true })).toBeVisible();
+        await expect(pollReview.getByText(`${DEPOSIT} XCHAIN`, { exact: true })).toBeVisible();
         await expect(pollReview.getByText(NORMAL_FEE, { exact: true })).toBeVisible();
         await expect(pollReview.getByText('XCP', { exact: true })).toBeVisible();
         await expectScreen(page, `${viewport.name} poll review`, 'Review poll');

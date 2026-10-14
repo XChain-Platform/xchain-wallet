@@ -166,16 +166,26 @@ function navDestination(scope, name) {
     };
 }
 
+// A destination can sit in the DOM of a collapsed nav without being shown
+// (the phone bar keeps its More sheet rows mounted off screen); only one that
+// is visible inside the viewport is a click target, otherwise the caller
+// falls through to More.
+async function onScreen(locator) {
+    if (!(await locator.isVisible())) return false;
+    const box = await locator.boundingBox();
+    const viewport = locator.page().viewportSize();
+    if (!box || !viewport) return Boolean(box);
+    return box.x + box.width > 0 && box.y + box.height > 0
+        && box.x < viewport.width && box.y < viewport.height;
+}
+
 async function clickDestination(scope, name) {
     const { exact, prefixed } = navDestination(scope, name);
-    // A destination can sit in the DOM of a collapsed nav without being shown
-    // (the phone bar keeps overflow rows for its More sheet); only a visible
-    // one is a click target, otherwise the caller falls through to More.
-    if (await exact.count() > 0 && await exact.first().isVisible()) {
+    if (await exact.count() > 0 && await onScreen(exact.first())) {
         await exact.first().click();
         return true;
     }
-    if (await prefixed.count() > 0 && await prefixed.first().isVisible()) {
+    if (await prefixed.count() > 0 && await onScreen(prefixed.first())) {
         await prefixed.first().click();
         return true;
     }
