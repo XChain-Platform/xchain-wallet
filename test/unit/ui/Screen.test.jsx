@@ -3,8 +3,8 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { act, render, screen } from '@testing-library/react';
 import { Profiler } from 'react';
 import { readFileSync } from 'node:fs';
 
@@ -39,6 +39,17 @@ const REVIEW_SCROLL_FORMS = [
     ['ListForkForm', "restoreScroll={stage !== 'review-1' && stage !== 'review-2'}"],
 ];
 
+const originalVisualViewport = Object.getOwnPropertyDescriptor(window, 'visualViewport');
+
+afterEach(() => {
+    vi.restoreAllMocks();
+    if (originalVisualViewport) {
+        Object.defineProperty(window, 'visualViewport', originalVisualViewport);
+    } else {
+        delete window.visualViewport;
+    }
+});
+
 describe('<Screen>', () => {
     it('renders the full variant with a named section body and optional landmarks', () => {
         const { container } = render(
@@ -70,6 +81,50 @@ describe('<Screen>', () => {
         expect(main).toHaveAttribute('tabindex', '-1');
         expect(screen.queryByRole('banner')).not.toBeInTheDocument();
         expect(screen.queryByRole('contentinfo')).not.toBeInTheDocument();
+    });
+
+    it('fits above a resized visual viewport and reveals the focused field', () => {
+        let resize;
+        const visualViewport = {
+            height: 400,
+            offsetTop: 0,
+            addEventListener: vi.fn((type, listener) => {
+                if (type === 'resize') resize = listener;
+            }),
+            removeEventListener: vi.fn(),
+        };
+        Object.defineProperty(window, 'visualViewport', {
+            configurable: true,
+            value: visualViewport,
+        });
+        vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+            callback();
+            return 1;
+        });
+
+        const view = render(
+            <Screen footer={<button type="button">Continue</button>}>
+                <label htmlFor="phone-field">Amount</label>
+                <input id="phone-field" />
+            </Screen>,
+        );
+        const root = view.container.firstChild;
+        const main = screen.getByRole('main');
+        const field = screen.getByLabelText('Amount');
+        vi.spyOn(root, 'getBoundingClientRect').mockReturnValue({ top: 50, bottom: 650 });
+        vi.spyOn(main, 'getBoundingClientRect').mockReturnValue({ top: 100, bottom: 600 });
+        vi.spyOn(field, 'getBoundingClientRect').mockReturnValue({ top: 500, bottom: 540 });
+        field.focus();
+
+        act(() => resize());
+
+        expect(root.style.getPropertyValue('--xc-screen-visible-height')).toBe('350px');
+        expect(main.scrollTop).toBe(152);
+        expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument();
+
+        visualViewport.height = 700;
+        act(() => resize());
+        expect(root.style.getPropertyValue('--xc-screen-visible-height')).toBe('');
     });
 });
 

@@ -16,6 +16,7 @@
        is the viewport MINUS the top safe-area inset that body pads by, so a
        Screen that owns the whole window ends where the screen ends. */
     height: var(--xc-screen-h, var(--xc-viewport-h, 100vh));
+    max-height: var(--xc-screen-visible-height, none);
     overflow: hidden;
 }
 
