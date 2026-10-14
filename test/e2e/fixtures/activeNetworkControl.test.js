@@ -3,12 +3,11 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import assert from 'node:assert/strict';
-import test from 'node:test';
+import { expect, it } from 'vitest';
 
 import { activeNetworkControl } from './regtest.js';
 
-test('targets the settings network control by role and exact accessible name', () => {
+it('targets the settings network control by role and exact accessible name', () => {
     const control = {};
     let query;
     const page = {
@@ -18,8 +17,8 @@ test('targets the settings network control by role and exact accessible name', (
         },
     };
 
-    assert.equal(activeNetworkControl(page), control);
-    assert.deepEqual(query, [
+    expect(activeNetworkControl(page)).toBe(control);
+    expect(query).toEqual([
         'combobox',
         { name: 'Active network', exact: true },
     ]);
