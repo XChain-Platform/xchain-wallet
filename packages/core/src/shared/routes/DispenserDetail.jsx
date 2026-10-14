@@ -1925,7 +1925,6 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             {/* Stats hero: what's dispensed at what rate, how it's paid,
                 where it lives, how it's doing. Block height / action index
                 are secondary (action index lives in the More menu). */}
-            <SectionHeader title="Dispenser details" />
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>Dispensing</dt>
                 <dd className={styles.detailsValue}>

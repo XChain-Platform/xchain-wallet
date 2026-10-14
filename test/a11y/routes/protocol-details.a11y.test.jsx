@@ -96,7 +96,7 @@ describe('protocol detail route accessibility', () => {
             host,
         );
 
-        await screen.findByRole('heading', { name: 'Dispenser details' });
+        await screen.findByRole('heading', { name: 'Actions' });
         await expectNoSeriousAxeViolations(container);
     });
 
@@ -123,7 +123,7 @@ describe('protocol detail route accessibility', () => {
             host,
         );
 
-        await screen.findByRole('heading', { name: 'Position details' });
+        await screen.findByRole('heading', { name: 'Actions' });
         await expectNoSeriousAxeViolations(container);
     });
 
