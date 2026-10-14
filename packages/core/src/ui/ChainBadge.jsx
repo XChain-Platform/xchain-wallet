@@ -26,7 +26,14 @@ export function ChainBadge({ descriptor, size = 'sm', showName = false }) {
     const style = { '--chain-color': descriptor.color };
     const className = `${styles.badge} ${styles[size]}`;
     return (
-        <span className={className} style={style} aria-label={descriptor.displayName}>
+        // An icon-only badge is an image named for its chain; with the name shown,
+        // the visible text names it.
+        <span
+            className={className}
+            style={style}
+            role={showName ? undefined : 'img'}
+            aria-label={showName ? undefined : descriptor.displayName}
+        >
             {iconUrl ? (
                 <img
                     src={iconUrl}

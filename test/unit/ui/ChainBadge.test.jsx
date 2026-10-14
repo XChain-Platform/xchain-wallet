@@ -20,6 +20,7 @@ describe('<ChainBadge>', () => {
         const d = reg.get('bitcoin-mainnet');
         const { container } = render(<ChainBadge descriptor={d} />);
         expect(screen.getByLabelText('Bitcoin')).toBe(container.firstChild);
+        expect(screen.getByRole('img', { name: 'Bitcoin' })).toBe(container.firstChild);
         expect(screen.queryByText('Bitcoin')).toBeNull();
     });
 
