@@ -29,6 +29,7 @@ import { clearRemovedWalletStorage } from '../../utils/wipeWalletStorage.js';
 import { retireBiometricAfterPasswordChange } from '../../../flows/biometricUnlock.js';
 import { Status } from './_settingsPrimitives.jsx';
 import styles from './ThisWalletSection.module.css';
+import { t } from '../../../i18n/index.js';
 
 const PUBLIC_EXTENDED_KEY_RE = /^(?:xpub|tpub)[1-9A-HJ-NP-Za-km-z]+$/;
 
@@ -88,15 +89,15 @@ export function ThisWalletSection({
         return (
             <Status
                 text={removeError
-                    ? `Wallet removed, but the app could not finish switching wallets: ${removeError}`
-                    : 'Wallet removed.'}
+                    ? t('settings.thisWallet.walletRemovedButTheApp', { removeError })
+                    : t('settings.thisWallet.walletRemoved')}
                 tone={removeError ? 'error' : undefined}
             />
         );
     }
 
     if (!activeWallet) {
-        return <Status text="No active wallet." />;
+        return <Status text={t('settings.thisWallet.noActiveWallet')} />;
     }
 
     const onConfirmRemove = async () => {
@@ -175,32 +176,32 @@ export function ThisWalletSection({
     return (
         <div className={styles.stack}>
             <Row
-                label="Wallet"
+                label={t('settings.thisWallet.wallet')}
                 hint={activeWallet.name}
-                actionLabel={onOpenWalletPicker ? 'Switch / rename…' : null}
+                actionLabel={onOpenWalletPicker ? t('settings.thisWallet.switchRename') : null}
                 onClick={onOpenWalletPicker}
                 disabled={removing}
             />
             {/* Offer the upgrade only to the older 12-word format; a standard wallet has nothing to upgrade. */}
             {activeWallet.format === 'counterwallet-legacy' ? (
                 <Row
-                    label="Upgrade recovery phrase"
-                    hint="This wallet uses an older 12-word recovery phrase format. Open your wallets, choose this wallet's details, and pick Upgrade recovery phrase."
-                    actionLabel={onOpenWalletPicker ? 'Open wallets…' : null}
+                    label={t('settings.thisWallet.upgradeRecoveryPhrase')}
+                    hint={t('settings.thisWallet.thisWalletUsesAnOlder')}
+                    actionLabel={onOpenWalletPicker ? t('settings.thisWallet.openWallets') : null}
                     onClick={onOpenWalletPicker}
                     disabled={removing}
                 />
             ) : null}
             {activeWallet.format === 'wif-only' ? (
                 <Row
-                    label="Extended public keys"
-                    hint="Not available for a private-key-only wallet."
+                    label={t('settings.thisWallet.extendedPublicKeys')}
+                    hint={t('settings.thisWallet.notAvailableForAPrivate')}
                 />
             ) : exportStage === 'idle' ? (
                 <Row
-                    label="Extended public keys"
-                    hint="Export account-level public keys for a watch-only wallet."
-                    actionLabel="Export…"
+                    label={t('settings.thisWallet.extendedPublicKeys')}
+                    hint={t('settings.thisWallet.exportAccountLevelPublicKeys')}
+                    actionLabel={t('settings.backup.export')}
                     onClick={() => { setExportStage('password'); setExportError(null); }}
                 />
             ) : (
@@ -228,7 +229,7 @@ export function ThisWalletSection({
             ) : (
                 <section className={styles.row}>
                     <SectionHeader
-                        title="Remove wallet"
+                        title={t('settings.thisWallet.removeWallet')}
                         description="Deletes the wallet and all linked records (accounts, addresses, signers, pending txs). The encrypted seed is destroyed; back up first if you need recovery."
                         trailing={(
                             <Button
@@ -237,7 +238,7 @@ export function ThisWalletSection({
                                 icon={null}
                                 onClick={() => { setConfirmingRemove(true); setRemoveError(null); }}
                             >
-                                Remove…
+                                {t('settings.thisWallet.remove')}
                             </Button>
                         )}
                     />
@@ -343,9 +344,9 @@ function ChangePasswordRow({ walletId, disabled }) {
     if (!open) {
         return (
             <Row
-                label="Wallet password"
-                hint="Change the password that protects this wallet's private keys."
-                actionLabel="Change…"
+                label={t('settings.backup.walletPassword')}
+                hint={t('settings.thisWallet.changeThePasswordThatProtects')}
+                actionLabel={t('settings.thisWallet.change')}
                 onClick={() => setOpen(true)}
                 disabled={disabled}
             />
@@ -360,49 +361,49 @@ function ChangePasswordRow({ walletId, disabled }) {
     return (
         <form onSubmit={submit} onKeyDown={submitOnlyFromLastField} aria-busy={busy}>
             <FormSection
-                title="Change wallet password"
+                title={t('settings.thisWallet.changeWalletPassword')}
                 description={`Use at least ${MIN_WALLET_PASSWORD_LENGTH} characters. A unique, longer password is stronger. Keep it safe because it cannot be recovered.`}
                 className={styles.panel}
             >
                 <Input
                     type="password"
-                    label="Current wallet password"
+                    label={t('settings.thisWallet.currentWalletPassword')}
                     value={currentPassword}
                     onChange={update(setCurrentPassword)}
-                    aria-label="Current wallet password"
+                    aria-label={t('settings.thisWallet.currentWalletPassword')}
                     autoComplete="current-password"
                     autoFocus
                     disabled={busy}
                 />
                 <Input
                     type="password"
-                    label="New wallet password"
+                    label={t('settings.thisWallet.newWalletPassword')}
                     value={newPassword}
                     onChange={update(setNewPassword)}
-                    aria-label="New wallet password"
+                    aria-label={t('settings.thisWallet.newWalletPassword')}
                     autoComplete="new-password"
                     disabled={busy}
                 />
                 <Input
                     type="password"
-                    label="Confirm new wallet password"
+                    label={t('settings.thisWallet.confirmNewWalletPassword')}
                     value={confirmation}
                     onChange={update(setConfirmation)}
-                    aria-label="Confirm new wallet password"
+                    aria-label={t('settings.thisWallet.confirmNewWalletPassword')}
                     autoComplete="new-password"
                     disabled={busy}
                 />
                 {(confirmation && confirmation !== newPassword)
                     || error === 'Passwords do not match.' ? (
-                    <Status text="Passwords do not match." tone="error" />
+                    <Status text={t('settings.thisWallet.passwordsDoNotMatch')} tone="error" />
                 ) : null}
                 {error && error !== 'Passwords do not match.' ? <Status text={error} tone="error" /> : null}
                 <div className={styles.actions}>
                     <Button type="button" variant="ghost" size="sm" icon={null} onClick={close} disabled={busy}>
-                        Cancel
+                        {t('common.cancel')}
                     </Button>
                     <Button type="submit" size="sm" icon={null} disabled={busy}>
-                        {busy ? 'Changing password…' : 'Change password'}
+                        {busy ? t('settings.thisWallet.changingPassword') : t('settings.thisWallet.changePassword')}
                     </Button>
                 </div>
             </FormSection>
@@ -423,7 +424,7 @@ function PublicKeyExport({
 }) {
     return (
         <FormSection
-            title={`Extended public keys${accountName ? ` for ${accountName}` : ''}`}
+            title={(accountName ? t('settings.thisWallet.extendedPublicKeysFor', { name: accountName }) : t('settings.thisWallet.extendedPublicKeys'))}
             description="An extended public key does not contain private keys and cannot spend funds. Anyone with it can derive and monitor every address below that account path, including future addresses. Share it only with a watch-only wallet you trust."
             className={styles.panel}
         >
@@ -431,10 +432,10 @@ function PublicKeyExport({
                 <form onSubmit={onSubmit} className={styles.form}>
                     <Input
                         type="password"
-                        label="Confirm wallet password"
+                        label={t('settings.thisWallet.confirmWalletPassword')}
                         value={password}
                         onChange={(event) => onPasswordChange(event.target.value)}
-                        placeholder="Wallet password"
+                        placeholder={t('settings.backup.walletPassword')}
                         autoComplete="current-password"
                         autoFocus
                         disabled={busy}
@@ -442,10 +443,10 @@ function PublicKeyExport({
                     {error ? <Status text={error} tone="error" /> : null}
                     <div className={styles.actions}>
                         <Button type="button" variant="ghost" size="sm" icon={null} onClick={onClose} disabled={busy}>
-                            Cancel
+                            {t('common.cancel')}
                         </Button>
                         <Button type="submit" size="sm" icon={null} disabled={busy}>
-                            {busy ? 'Exporting…' : 'Show public keys'}
+                            {busy ? t('settings.backup.exporting') : t('settings.thisWallet.showPublicKeys')}
                         </Button>
                     </div>
                 </form>
@@ -464,18 +465,18 @@ function PublicKeyExport({
                                 <KeyQR
                                     value={entry.xpub}
                                     size={180}
-                                    alt={`QR code for ${entry.chainId} extended public key`}
+                                    alt={t('settings.thisWallet.qrCodeForExtendedPublic', { chainId: entry.chainId })}
                                 />
                                 <CopyButton
                                     value={entry.xpub}
-                                    label="Copy extended public key"
+                                    label={t('settings.thisWallet.copyExtendedPublicKey')}
                                     sensitive
                                 />
                             </div>
                         </FormSection>
                     ))}
                     <div className={styles.actions}>
-                        <Button type="button" variant="ghost" size="sm" icon={null} onClick={onClose}>Done</Button>
+                        <Button type="button" variant="ghost" size="sm" icon={null} onClick={onClose}>{t('common.done')}</Button>
                     </div>
                 </>
             )}
@@ -512,13 +513,11 @@ function RemoveConfirm({ walletName, busy, error, onCancel, onConfirm }) {
     const matches = typed === walletName;
     return (
         <FormSection
-            title={`Remove ${walletName}?`}
+            title={t('settings.thisWallet.remove2', { walletName })}
             description={(
                 <>
-                    Its accounts, addresses, signers, and pending transactions will be deleted.
-                    Make sure you have a backup before continuing. The encrypted seed is destroyed and
-                    cannot be recovered. This cannot be undone. Type the wallet name{' '}
-                    <strong className={styles.confirmName}>{walletName}</strong> to confirm.
+                    {t('settings.thisWallet.itsAccountsAddressesSignersAnd')}{' '}
+                    <strong className={styles.confirmName}>{walletName}</strong> {t('settings.thisWallet.toConfirm')}
                 </>
             )}
             className={`${styles.panel} ${styles.dangerPanel}`}
@@ -535,14 +534,14 @@ function RemoveConfirm({ walletName, busy, error, onCancel, onConfirm }) {
                     if (event.key === 'Enter' && matches && !busy) onConfirm();
                 }}
                 placeholder={walletName}
-                aria-label="Confirm wallet name"
+                aria-label={t('settings.thisWallet.confirmWalletName')}
                 autoFocus
                 disabled={busy}
             />
             {error ? <Status text={error} tone="error" /> : null}
             <div className={styles.actions}>
                 <Button type="button" variant="ghost" size="sm" icon={null} onClick={onCancel} disabled={busy}>
-                    Cancel
+                    {t('common.cancel')}
                 </Button>
                 <Button
                     type="button"
@@ -552,7 +551,7 @@ function RemoveConfirm({ walletName, busy, error, onCancel, onConfirm }) {
                     onClick={onConfirm}
                     disabled={!matches || busy}
                 >
-                    {busy ? 'Removing…' : 'Remove wallet'}
+                    {busy ? t('settings.thisWallet.removing') : t('settings.thisWallet.removeWallet')}
                 </Button>
             </div>
         </FormSection>

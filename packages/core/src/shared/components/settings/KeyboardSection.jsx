@@ -35,6 +35,7 @@ import {
     resolveBindings,
 } from '../../keyboard/shortcuts.js';
 import { ROW, ROW_LABEL, STACK, Status, settingsLoadErrorText } from './_settingsPrimitives.jsx';
+import { t } from '../../../i18n/index.js';
 
 const GROUP_HEADER = {
     fontSize: 'var(--xc-text-sm)',
@@ -179,14 +180,13 @@ export function KeyboardSection() {
             .catch((err) => setStatus({ kind: 'error', text: err?.message || 'Failed to reset shortcuts.' }));
     };
 
-    if (loading) return <p style={ROW_LABEL}>Loading…</p>;
+    if (loading) return <p style={ROW_LABEL}>{t('common.loading')}</p>;
     if (error) return <p role="alert" style={ROW_LABEL}>{settingsLoadErrorText(error)}</p>;
 
     return (
         <div style={STACK}>
             <p style={INTRO}>
-                Select Rebind, then press the new key combination. Screen-specific
-                shortcuts are fixed and only work on their screen.
+                {t('settings.keyboard.selectRebindThenPressThe')}
             </p>
             {status ? <Status text={status.text} tone={status.kind === 'error' ? 'error' : 'muted'} /> : null}
             {SHORTCUT_GROUPS.map((group) => (
@@ -208,12 +208,12 @@ export function KeyboardSection() {
                                 <span style={ACTIONS}>
                                     {s.overridden ? (
                                         <Button size="sm" variant="ghost" onClick={() => resetOne(s.id)}>
-                                            Reset
+                                            {t('settings.keyboard.reset')}
                                         </Button>
                                     ) : null}
                                     <kbd style={capturing ? CAPTURING : KBD} aria-live={capturing ? 'polite' : undefined}>
                                         {capturing
-                                            ? (leaderLead ? `${leaderLead.toUpperCase()} then …` : 'Press keys…')
+                                            ? (leaderLead ? t('settings.keyboard.then', { value: leaderLead.toUpperCase() }) : t('settings.keyboard.pressKeys'))
                                             : [s.binding, s.altBinding]
                                                 .filter(Boolean)
                                                 .map((binding) => formatBinding(binding, mac))
@@ -230,7 +230,7 @@ export function KeyboardSection() {
                                                     setCapturingId(capturing ? null : s.id);
                                                 }}
                                             >
-                                                {capturing ? 'Cancel' : 'Rebind'}
+                                                {capturing ? t('common.cancel') : t('settings.keyboard.rebind')}
                                             </Button>
                                         </>
                                     ) : null}
@@ -241,16 +241,16 @@ export function KeyboardSection() {
                 </section>
             ))}
             <section>
-                <h3 style={GROUP_HEADER}>Defaults</h3>
+                <h3 style={GROUP_HEADER}>{t('settings.display.defaults')}</h3>
                 <div style={ROW}>
-                    <span style={ROW_LABEL}>Restore every custom shortcut to its built-in binding.</span>
+                    <span style={ROW_LABEL}>{t('settings.keyboard.restoreEveryCustomShortcutTo')}</span>
                     <Button
                         size="sm"
                         variant="secondary"
                         onClick={resetAll}
                         disabled={Object.keys(overrides).length === 0}
                     >
-                        Reset all shortcuts
+                        {t('settings.keyboard.resetAllShortcuts')}
                     </Button>
                 </div>
             </section>

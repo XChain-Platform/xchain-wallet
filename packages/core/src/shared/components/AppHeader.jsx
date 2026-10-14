@@ -23,6 +23,7 @@ import { HeaderActionMenu } from './HeaderActionMenu.jsx';
 import { WatchOnlyBadge } from './WatchOnlyBadge.jsx';
 import { WalletIdentity } from './WalletIdentity.jsx';
 import styles from './AppHeader.module.css';
+import { t } from '../../i18n/index.js';
 
 /**
  * @param {object} props
@@ -96,7 +97,7 @@ export function AppHeader({
         <div
             className={styles.bar}
             role="region"
-            aria-label="App header"
+            aria-label={t('shell.header.appHeader')}
         >
             <div className={styles.left}>
                 <img
@@ -114,8 +115,8 @@ export function AppHeader({
                         icon={<Icon.LockIcon />}
                         onClick={onLock}
                         disabled={locking}
-                        aria-label="Lock wallet"
-                        title="Lock wallet"
+                        aria-label={t('shell.header.lockWallet')}
+                        title={t('shell.header.lockWallet')}
                         data-header-control
                     />
                 ) : null}

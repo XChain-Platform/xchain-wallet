@@ -49,6 +49,7 @@ import {
     redactDiagnosticText,
     sanitizeDiagnosticValue,
 } from '../../../flows/diagnosticDump.js';
+import { t } from '../../../i18n/index.js';
 
 const ROW_VALUE_MUTED = { color: 'var(--xc-text-muted)', fontStyle: 'italic' };
 const PARAGRAPHS = {
@@ -121,7 +122,7 @@ export function AboutSection() {
             if (!ok) {
                 throw new Error('Copy is not available here. Select the diagnostics preview and copy it manually.');
             }
-            setStatus(`Copied (${text.length.toLocaleString()} bytes). Paste into your bug report.`);
+            setStatus(t('settings.about.copiedBytes', { bytes: text.length }));
             copyResetRef.current = setTimeout(() => setStatus(null), 1500);
             haptic.tap();
         } catch (err) {
@@ -172,23 +173,23 @@ export function AboutSection() {
     return (
         <div style={STACK}>
             <p style={{ ...PARAGRAPH, color: 'var(--xc-text-muted)', lineHeight: 1.5 }}>
-                A self-custodial wallet for the XChain Platform. Current chain support:
-                {' '}Bitcoin, Litecoin, and Dogecoin.
+                {t('settings.about.aSelfCustodialWalletFor')}
+                {' '}{t('settings.about.bitcoinLitecoinAndDogecoin')}
             </p>
-            <Row label="Version">
+            <Row label={t('settings.about.version')}>
                 <span style={ROW_VALUE}>{WALLET_VERSION}</span>
             </Row>
-            <Row label="Build identifier">
+            <Row label={t('settings.about.buildIdentifier')}>
                 <span style={diagnosticMeta?.buildHash ? ROW_VALUE : ROW_VALUE_MUTED}>
-                    {diagnosticMeta?.buildHash || 'not available'}
+                    {diagnosticMeta?.buildHash || t('settings.about.notAvailable')}
                 </span>
             </Row>
-            <Row label="Platform">
+            <Row label={t('settings.about.platform')}>
                 <span style={ROW_VALUE}>
-                    {diagnosticMeta?.platform || (shell === 'popup' ? 'extension' : shell)}
+                    {diagnosticMeta?.platform || (shell === 'popup' ? t('settings.about.extension') : shell)}
                 </span>
             </Row>
-            <Row label="Update channel">
+            <Row label={t('settings.about.updateChannel')}>
                 <span style={ROW_VALUE}>{UPDATE_CHANNEL}</span>
             </Row>
             {/* §6 / D4: only a directly-installed build has to look
@@ -198,7 +199,7 @@ export function AboutSection() {
                 this row does not exist rather than existing greyed out. */}
             {updateLane ? (
                 <ToggleRow
-                    label="Check for new versions"
+                    label={t('settings.about.checkForNewVersions')}
                     hint={
                         'Checks our download site once a day and alerts you to new versions.'
                         + ' It does not download or install them or send wallet data.'
@@ -210,7 +211,7 @@ export function AboutSection() {
                     }}
                 />
             ) : null}
-            <Row label="License">
+            <Row label={t('settings.about.license')}>
                 <div style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                     <DocLink path={LICENSE_FILE} label={LICENSE_NAME} />
                     {/* Cluster J FOLLOWUP 5: surface the full LICENSE.md
@@ -223,7 +224,7 @@ export function AboutSection() {
                         aria-expanded={licenseOpen}
                         aria-controls="full-license-text"
                     >
-                        {licenseOpen ? 'Hide full text' : 'Show full text'}
+                        {licenseOpen ? t('settings.about.hideFullText') : t('settings.about.showFullText')}
                     </Button>
                 </div>
             </Row>
@@ -258,32 +259,32 @@ export function AboutSection() {
                     }}
                 />
             ) : null}
-            <Row label="Notice">
+            <Row label={t('settings.about.notice')}>
                 <DocLink path={NOTICE_FILE} label={NOTICE_FILE} />
             </Row>
-            <Row label="Reproducible build">
-                <DocLink path={REPRODUCIBLE_BUILD_DOC} label="Verification procedure" />
+            <Row label={t('settings.about.reproducibleBuild')}>
+                <DocLink path={REPRODUCIBLE_BUILD_DOC} label={t('settings.about.verificationProcedure')} />
             </Row>
-            <Row label="Verify a release">
+            <Row label={t('settings.about.verifyARelease')}>
                 {/* Cluster T FOLLOWUP 2: end-user verification recipe (key import ->
                     manifest download -> GPG verify -> artifact hash check). */}
-                <DocLink path={VERIFY_RELEASE_DOC} label="Verification recipe" />
+                <DocLink path={VERIFY_RELEASE_DOC} label={t('settings.about.verificationRecipe')} />
             </Row>
-            <Row label="Release signatures">
+            <Row label={t('settings.about.releaseSignatures')}>
                 {RELEASE_SIGNATURES_PUBLISHED ? (
-                    <DocLink path={RELEASE_SIGNATURES_DOC} label="GPG fingerprint" />
+                    <DocLink path={RELEASE_SIGNATURES_DOC} label={t('settings.about.gpgFingerprint')} />
                 ) : (
-                    <span style={ROW_VALUE_MUTED}>not yet published</span>
+                    <span style={ROW_VALUE_MUTED}>{t('settings.about.notYetPublished')}</span>
                 )}
             </Row>
-            <Row label="Disclosure policy">
+            <Row label={t('settings.about.disclosurePolicy')}>
                 {SECURITY_PUBLISHED ? (
                     <DocLink path={SECURITY_FILE} label={SECURITY_FILE} />
                 ) : (
-                    <span style={ROW_VALUE_MUTED}>not yet published</span>
+                    <span style={ROW_VALUE_MUTED}>{t('settings.about.notYetPublished')}</span>
                 )}
             </Row>
-            <Row label="Diagnostics">
+            <Row label={t('settings.about.diagnostics')}>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--xc-space-2)', alignItems: 'center' }}>
                     <Button
                         size="sm"
@@ -294,7 +295,7 @@ export function AboutSection() {
                         aria-expanded={previewOpen}
                         aria-controls="diagnostic-dump-preview"
                     >
-                        {previewOpen ? 'Hide preview' : 'Show preview'}
+                        {previewOpen ? t('settings.about.hidePreview') : t('settings.about.showPreview')}
                     </Button>
                     <Button
                         size="sm"
@@ -303,17 +304,17 @@ export function AboutSection() {
                         loading={busy}
                         disabled={busy}
                     >
-                        {status ? 'Copied' : 'Copy diagnostics'}
+                        {status ? t('settings.about.copied') : t('settings.about.copyDiagnostics')}
                     </Button>
                 </div>
             </Row>
-            <Row label="Feedback">
+            <Row label={t('settings.about.feedback')}>
                 <Button
                     size="sm"
                     variant="secondary"
                     onClick={handleReportProblem}
                 >
-                    Report a problem
+                    {t('settings.about.reportAProblem')}
                 </Button>
             </Row>
             {previewOpen && preview !== null ? (
@@ -343,7 +344,7 @@ export function AboutSection() {
             {error ? (
                 <StatusMessage
                     variant="error"
-                    recovery={retryRef.current ? { label: 'Try again', onAction: retryRef.current } : undefined}
+                    recovery={retryRef.current ? { label: t('common.tryAgain'), onAction: retryRef.current } : undefined}
                 >
                     {error}
                 </StatusMessage>

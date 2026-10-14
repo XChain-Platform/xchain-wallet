@@ -72,6 +72,7 @@ import { blurNumberInputOnWheel } from '../../utils/formInput.js';
 import { useProtectedScreen } from '../../utils/screenGuard.js';
 import { ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
 import styles from './BackupSection.module.css';
+import { t } from '../../../i18n/index.js';
 
 /** How often the Backup panel asks the background whether a batched publish came due. */
 const AUTO_SYNC_POLL_MS = 15_000;
@@ -431,9 +432,7 @@ export function BackupSection({ activeWallet }) {
         return (
             <div style={STACK}>
                 <div style={ROW_HINT} data-testid="publish-labels-encrypted-note">
-                    Your labels and contacts are encrypted with a key from this wallet's
-                    seed before publishing. The file on the blockchain is unreadable
-                    without your seed.
+                    {t('settings.backup.yourLabelsAndContactsAre')}
                 </div>
                 <ActionConfirmScreen
                     confirmAction={actionConfirm.confirmAction}
@@ -461,8 +460,8 @@ export function BackupSection({ activeWallet }) {
                 />
             ) : pendingPassword !== null ? (
                 <PasswordPrompt
-                    label="Backup password"
-                    hint={`Choose a password of at least ${flowsLib.MIN_BACKUP_PASSWORD_LENGTH} characters to encrypt this file separately from your wallet password before the browser saves it to its configured download location, usually the Downloads folder.`}
+                    label={t('settings.backup.backupPassword')}
+                    hint={t('settings.backup.chooseAPasswordOfAt', { MIN_BACKUP_PASSWORD_LENGTH: flowsLib.MIN_BACKUP_PASSWORD_LENGTH })}
                     busy={exporting}
                     operationTime={exportTime}
                     onCancel={cancelExport}
@@ -471,10 +470,10 @@ export function BackupSection({ activeWallet }) {
                 />
             ) : (
                 <BackupRow
-                    label="Export encrypted backup"
+                    label={t('settings.backup.exportEncryptedBackup')}
                     /* Spec §19.4 */
-                    hint="Save the wallet, addresses, labels, contacts, settings, and pending transactions in an encrypted .xchain-wallet file that requires its separate backup password."
-                    actionLabel="Export…"
+                    hint={t('settings.backup.saveTheWalletAddressesLabels')}
+                    actionLabel={t('settings.backup.export')}
                     disabled={!activeWallet}
                     onClick={() => { setPendingPassword(''); setExportError(null); setExportResult(null); }}
                 />
@@ -482,8 +481,8 @@ export function BackupSection({ activeWallet }) {
 
             {revealStage === 'password' ? (
                 <UnlockPrompt
-                    label="Reveal recovery phrase"
-                    hint={`Enter your wallet password. ${RECOVERY_PHRASE_WARNING} Make sure no one is looking over your shoulder.`}
+                    label={t('settings.backup.revealRecoveryPhrase')}
+                    hint={t('settings.backup.enterYourWalletPasswordMake', { RECOVERY_PHRASE_WARNING })}
                     busy={revealing}
                     onCancel={handleHideMnemonic}
                     onSubmit={(pw) => onReveal(pw)}
@@ -502,9 +501,9 @@ export function BackupSection({ activeWallet }) {
                 />
             ) : (
                 <BackupRow
-                    label="Back up recovery phrase"
-                    hint="Use the wallet password to reveal the words for copying to paper or another device."
-                    actionLabel="Show…"
+                    label={t('settings.backup.backUpRecoveryPhrase')}
+                    hint={t('settings.backup.useTheWalletPasswordTo')}
+                    actionLabel={t('settings.backup.show')}
                     disabled={!activeWallet}
                     onClick={() => { setRevealStage('password'); setRevealError(null); }}
                 />
@@ -523,10 +522,10 @@ export function BackupSection({ activeWallet }) {
                 />
             ) : (
                 <BackupRow
-                    label="Test backup (dry-run restore)"
+                    label={t('settings.backup.testBackupDryRunRestore')}
                     /* Spec §19.6 */
-                    hint="Check a recovery phrase against this wallet's existing addresses without saving it and erase it from memory afterward."
-                    actionLabel="Test…"
+                    hint={t('settings.backup.checkARecoveryPhraseAgainst')}
+                    actionLabel={t('settings.backup.test')}
                     disabled={!activeWallet}
                     onClick={() => { setDryRunStage('form'); setDryRunError(null); }}
                 />
@@ -560,9 +559,9 @@ export function BackupSection({ activeWallet }) {
                 />
             ) : (
                 <BackupRow
-                    label="Publish labels on-chain"
-                    hint="Encrypt this wallet's labels + contacts and store a copy on the blockchain, so restoring from your seed can recover them."
-                    actionLabel="Publish now…"
+                    label={t('settings.backup.publishLabelsOnChain')}
+                    hint={t('settings.backup.encryptThisWalletSLabels')}
+                    actionLabel={t('settings.backup.publishNow')}
                     disabled={!activeWallet}
                     onClick={() => { setPublishStage('form'); setPublishError(null); }}
                 />
@@ -582,9 +581,9 @@ export function BackupSection({ activeWallet }) {
                 />
             ) : (
                 <BackupRow
-                    label="Check chain for backed-up contacts"
-                    hint="Looks for labels and contacts you published earlier on the selected chain and merges anything found into this wallet, without erasing what's already here."
-                    actionLabel="Check…"
+                    label={t('settings.backup.checkChainForBackedUp')}
+                    hint={t('settings.backup.looksForLabelsAndContacts')}
+                    actionLabel={t('settings.backup.check')}
                     disabled={!activeWallet}
                     onClick={() => { setRestoreStage('form'); setRestoreError(null); }}
                 />
@@ -606,23 +605,22 @@ export function BackupSection({ activeWallet }) {
  * @param {() => void} props.onDismiss
  */
 function LabelSyncDueNotice({ changeCount, disabled, onPublish, onDismiss }) {
-    const what = changeCount === 1 ? '1 label change' : `${changeCount} label changes`;
     return (
         <FormSection
-            title="Labels changed since the last publish"
-            description={`${what} have not been saved to the blockchain yet. Publishing needs your wallet password, so the wallet asks once instead of after every rename.`}
+            title={t('settings.backup.labelsChangedSinceTheLast')}
+            description={t('settings.backup.labelChangeNotice', { count: changeCount })}
             className={styles.formSection}
         >
             <div className={styles.actions}>
                 <Button variant="ghost" size="sm" onClick={onDismiss}>
-                    Not now
+                    {t('settings.backup.notNow')}
                 </Button>
                 <Button
                     size="sm"
                     onClick={onPublish}
                     disabled={disabled}
                 >
-                    Publish…
+                    {t('settings.backup.publish')}
                 </Button>
             </div>
         </FormSection>
@@ -655,22 +653,22 @@ function UnlockPrompt({ label, hint, busy, error, onCancel, onSubmit }) {
         <FormSection title={label} description={hint} className={styles.formSection}>
             <Input
                 type="password"
-                placeholder="Wallet password"
+                placeholder={t('settings.backup.walletPassword')}
                 value={pw}
                 onChange={(e) => setPw(e.target.value)}
                 autoFocus
                 autoComplete="current-password"
-                aria-label="Wallet password"
+                aria-label={t('settings.backup.walletPassword')}
             />
             {error ? <Status text={error} tone="error" /> : null}
             <div className={styles.actions}>
-                <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>Cancel</Button>
+                <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>{t('common.cancel')}</Button>
                 <Button
                     size="sm"
                     onClick={() => onSubmit(pw)}
                     disabled={busy || pw.length === 0}
                 >
-                    {busy ? 'Revealing…' : 'Reveal'}
+                    {busy ? t('settings.backup.revealing') : t('settings.backup.reveal')}
                 </Button>
             </div>
         </FormSection>
@@ -709,11 +707,11 @@ function RevealedMnemonic({
 }) {
     return (
         <FormSection
-            title="Your recovery phrase"
+            title={t('settings.backup.yourRecoveryPhrase')}
             description={`${RECOVERY_PHRASE_WARNING} Write it on paper or store it in a password manager.`}
             className={`${styles.formSection} ${styles.recoverySheet}`}
         >
-            <div className={styles.sheetMeta} data-xc-recovery-sheet>Wallet: {walletName}</div>
+            <div className={styles.sheetMeta} data-xc-recovery-sheet>{t('settings.backup.wallet')} {walletName}</div>
             {/* The words and the passphrase refuse a copy: the only way out of
                 this sheet is paper or the print path. */}
             <Button
@@ -722,7 +720,7 @@ function RevealedMnemonic({
                 icon={null}
                 onCopy={blockSecretCopy}
                 onClick={onToggle}
-                aria-label={hidden ? 'Reveal recovery phrase' : 'Hide recovery phrase'}
+                aria-label={hidden ? t('settings.backup.revealRecoveryPhrase') : t('settings.backup.hideRecoveryPhrase')}
                 className={styles.secret}
                 style={{
                     background: 'var(--xc-bg)',
@@ -747,14 +745,14 @@ function RevealedMnemonic({
             </Button>
             {passphraseEnabled && typeof passphrase === 'string' ? (
                 <>
-                    <SectionHeader as="h3" title="Passphrase (25th word)" />
+                    <SectionHeader as="h3" title={t('settings.backup.passphrase25thWord')} />
                     <Button
                         variant="ghost"
                         block
                         icon={null}
                         onCopy={blockSecretCopy}
                         onClick={onToggle}
-                        aria-label={hidden ? 'Reveal passphrase' : 'Hide passphrase'}
+                        aria-label={hidden ? t('settings.backup.revealPassphrase') : t('settings.backup.hidePassphrase')}
                         className={styles.secret}
                         style={{
                             background: 'var(--xc-bg)',
@@ -780,8 +778,7 @@ function RevealedMnemonic({
                 </>
             ) : passphraseEnabled ? (
                 <div style={ROW_HINT}>
-                    This wallet uses a 25th-word passphrase, but it has not been
-                    stored on this device yet.
+                    {t('settings.backup.thisWalletUsesA25th')}
                 </div>
             ) : null}
             <div className={styles.screenOnly} style={{
@@ -789,16 +786,16 @@ function RevealedMnemonic({
                 fontSize: 'var(--xc-text-xs)',
                 textAlign: 'center',
             }}>
-                {hidden ? 'Tap to reveal.' : 'Tap to hide again.'}
+                {hidden ? t('settings.backup.tapToReveal') : t('settings.backup.tapToHideAgain')}
             </div>
             <div className={`${styles.screenOnly} ${styles.actions}`}>
                 {!hidden ? (
                     <Button variant="ghost" size="sm" onClick={onPrint}>
-                        Print recovery sheet
+                        {t('settings.backup.printRecoverySheet')}
                     </Button>
                 ) : null}
                 <Button variant="ghost" size="sm" onClick={onDone}>
-                    Done
+                    {t('common.done')}
                 </Button>
             </div>
         </FormSection>
@@ -823,35 +820,35 @@ function DryRunForm({ busy, error, onCancel, onSubmit }) {
 
     return (
         <FormSection
-            title="Test backup"
+            title={t('settings.backup.testBackup')}
             description={`Enter the recovery phrase from your paper backup (or password manager). The wallet rebuilds the first ${gapLimitValid ? gapLimitNumber : 'selected'} addresses on every active chain from it and lists any that don't match. Nothing is saved.`}
             className={styles.formSection}
         >
             <Textarea
                 value={mn}
                 onChange={(e) => setMn(e.target.value)}
-                placeholder="Recovery phrase, words separated by spaces"
+                placeholder={t('settings.backup.recoveryPhraseWordsSeparatedBy')}
                 rows={3}
                 autoComplete="off"
                 autoCapitalize="off"
                 autoCorrect="off"
                 spellCheck={false}
-                aria-label="Recovery phrase to test"
+                aria-label={t('settings.backup.recoveryPhraseToTest')}
                 className={styles.mnemonicInput}
             />
             <div className={styles.fieldRow}>
                 <Select
-                    label="Format:"
+                    label={t('settings.backup.format')}
                         value={format}
                         onChange={(e) => setFormat(/** @type {any} */ (e.target.value))}
-                        aria-label="Phrase format"
+                        aria-label={t('settings.backup.phraseFormat')}
                 >
                         {/* Native options are the required children of the style guide Select. */}
-                        <option value="bip39">Standard (BIP39)</option>
-                        <option value="counterwallet-legacy">Counterwallet legacy</option>
+                        <option value="bip39">{t('settings.backup.standardBip39')}</option>
+                        <option value="counterwallet-legacy">{t('settings.backup.counterwalletLegacy')}</option>
                 </Select>
                 <Input
-                        label="Addresses to check:"
+                        label={t('settings.backup.addressesToCheck')}
                         type="number"
                         inputMode="numeric"
                         enterKeyHint="go"
@@ -862,26 +859,26 @@ function DryRunForm({ busy, error, onCancel, onSubmit }) {
                         value={gapLimit}
                         onChange={(e) => setGapLimit(e.target.value)}
                         onWheel={blurNumberInputOnWheel}
-                        aria-label="Addresses to check"
+                        aria-label={t('settings.backup.addressesToCheck2')}
                         className={styles.gapLimitInput}
                     />
             </div>
             {format === 'bip39' ? (
                 <Input
                     type="password"
-                    placeholder="BIP39 passphrase (optional)"
+                    placeholder={t('settings.backup.bip39PassphraseOptional')}
                     value={passphrase}
                     onChange={(e) => setPassphrase(e.target.value)}
                     autoComplete="off"
-                    aria-label="BIP39 passphrase"
+                    aria-label={t('settings.backup.bip39Passphrase')}
                 />
             ) : null}
             {!gapLimitValid ? (
-                <Status text="Addresses to check must be a whole number from 1 to 100." tone="error" />
+                <Status text={t('settings.backup.addressesToCheckMustBe')} tone="error" />
             ) : null}
             {error ? <Status text={error} tone="error" /> : null}
             <div className={styles.actions}>
-                <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>Cancel</Button>
+                <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>{t('common.cancel')}</Button>
                 <Button
                     size="sm"
                     onClick={() => onSubmit({
@@ -892,7 +889,7 @@ function DryRunForm({ busy, error, onCancel, onSubmit }) {
                     })}
                     disabled={!canSubmit}
                 >
-                    {busy ? 'Testing…' : 'Run test'}
+                    {busy ? t('settings.backup.testing') : t('settings.backup.runTest')}
                 </Button>
             </div>
         </FormSection>
@@ -919,13 +916,13 @@ function DryRunReport({ result, onDone }) {
                 </div>
             ) : (
                 <EmptyState
-                    title="No chain comparisons"
-                    body="Chain comparison results appear here after the test completes."
+                    title={t('settings.backup.noChainComparisons')}
+                    body={t('settings.backup.chainComparisonResultsAppearHere')}
                     titleAs="h3"
                 />
             )}
             <div className={styles.actions}>
-                <Button variant="ghost" size="sm" onClick={onDone}>Done</Button>
+                <Button variant="ghost" size="sm" onClick={onDone}>{t('common.done')}</Button>
             </div>
         </FormSection>
     );
@@ -977,7 +974,7 @@ function DryRunChainReport({ chain }) {
                         ? <span style={{ color: 'var(--xc-danger-fg)' }}> · {chain.divergentCount} ✗</span>
                         : null}
                     {chain.missingCount > 0
-                        ? <span style={{ color: 'var(--xc-text-muted)' }}> · {chain.missingCount} new</span>
+                        ? <span style={{ color: 'var(--xc-text-muted)' }}> · {chain.missingCount} {t('settings.backup.new')}</span>
                         : null}
                 </span>
             </div>
@@ -992,7 +989,7 @@ function DryRunChainReport({ chain }) {
                 </ul>
             ) : null}
             <DiagnosticDetails
-                summary="Technical details"
+                summary={t('settings.backup.technicalDetails')}
                 items={differences.map((difference) => difference.detail)}
             />
         </div>
@@ -1007,57 +1004,57 @@ function PasswordPrompt({ label, hint, busy, operationTime, error, onCancel, onS
     const canSubmit = passwordStrongEnough && pw2.length > 0 && pw1 === pw2 && !busy;
     return (
         <FormSection
-            title="Export encrypted backup"
+            title={t('settings.backup.exportEncryptedBackup')}
             description={hint}
             className={styles.formSection}
         >
             <Input
                 label={label}
                 type="password"
-                placeholder="Backup password"
+                placeholder={t('settings.backup.backupPassword')}
                 value={pw1}
                 onChange={(e) => setPw1(e.target.value)}
                 autoFocus
                 autoComplete="new-password"
-                aria-label="Backup password"
+                aria-label={t('settings.backup.backupPassword')}
                 disabled={busy}
             />
             <Input
                 type="password"
-                placeholder="Confirm password"
+                placeholder={t('settings.backup.confirmPassword')}
                 value={pw2}
                 onChange={(e) => setPw2(e.target.value)}
                 autoComplete="new-password"
-                aria-label="Confirm backup password"
+                aria-label={t('settings.backup.confirmBackupPassword')}
                 disabled={busy}
             />
             {pw1.length > 0 && !passwordStrongEnough ? (
                 <Status
-                    text={`Backup password must be at least ${flowsLib.MIN_BACKUP_PASSWORD_LENGTH} characters.`}
+                    text={t('settings.backup.backupPasswordMustBeAt', { MIN_BACKUP_PASSWORD_LENGTH: flowsLib.MIN_BACKUP_PASSWORD_LENGTH })}
                     tone="error"
                 />
             ) : null}
             {mismatch ? (
-                <Status text="Backup passwords do not match." tone="error" />
+                <Status text={t('settings.backup.backupPasswordsDoNotMatch')} tone="error" />
             ) : null}
             {error ? <Status text={error} tone="error" /> : null}
             {operationTime?.showElapsed ? (
-                <Status text={`Encrypting for ${operationTime.elapsedSeconds} seconds…`} />
+                <Status text={t('settings.backup.encryptingForSeconds', { elapsedSeconds: operationTime.elapsedSeconds })} />
             ) : null}
             {operationTime?.timedOut ? (
                 <Status
-                    text="Encryption is taking longer than expected. Cancel and try again. If it repeats, close other memory-heavy apps before retrying."
+                    text={t('settings.backup.encryptionIsTakingLongerThan')}
                     tone="error"
                 />
             ) : null}
             <div className={styles.actions}>
-                <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
+                <Button variant="ghost" size="sm" onClick={onCancel}>{t('common.cancel')}</Button>
                 <Button
                     size="sm"
                     onClick={() => onSubmit(pw1)}
                     disabled={!canSubmit}
                 >
-                    {busy ? 'Exporting…' : 'Export'}
+                    {busy ? t('settings.backup.exporting') : t('settings.backup.export2')}
                 </Button>
             </div>
         </FormSection>
@@ -1091,34 +1088,34 @@ function BackupExportResult({ result, onDone }) {
     };
 
     return (
-        <FormSection title="Backup file saved" className={styles.formSection}>
+        <FormSection title={t('settings.backup.backupFileSaved')} className={styles.formSection}>
             <Status text={result.fileName} />
             <div style={ROW_HINT}>
-                Your browser sent this file to its configured download location, usually the Downloads folder. Move it somewhere safe and recoverable. The password is not in the file and cannot be recovered.
+                {t('settings.backup.yourBrowserSentThisFile')}
             </div>
             <SectionHeader
                 as="h3"
-                title="Optional backup pointer QR"
+                title={t('settings.backup.optionalBackupPointerQr')}
                 description="After uploading the encrypted file to an HTTPS address you control, enter that address to make a QR for another device. The QR contains only the address and wallet name. It does not contain the backup file or password."
             />
             <Input
                 type="url"
-                placeholder="https://example.com/my-backup.xchain-wallet"
+                placeholder={t('settings.backup.httpsExampleComMyBackup')}
                 value={location}
                 onChange={(e) => { setLocation(e.target.value); setPointer(''); setPointerError(null); }}
-                aria-label="Backup file HTTPS address"
+                aria-label={t('settings.backup.backupFileHttpsAddress')}
                 autoComplete="off"
             />
             {pointerError ? <Status text={pointerError} tone="error" /> : null}
             {pointer ? (
                 <div style={{ display: 'grid', justifyItems: 'center', gap: 'var(--xc-space-2)' }}>
-                    <KeyQR value={pointer} alt="Backup pointer QR" />
+                    <KeyQR value={pointer} alt={t('settings.backup.backupPointerQr')} />
                     <code style={{ overflowWrap: 'anywhere', color: 'var(--xc-text-muted)' }}>{pointer}</code>
                 </div>
             ) : null}
             <div className={styles.actions}>
-                <Button variant="ghost" size="sm" onClick={createPointer}>Create pointer QR</Button>
-                <Button variant="ghost" size="sm" onClick={onDone}>Done</Button>
+                <Button variant="ghost" size="sm" onClick={createPointer}>{t('settings.backup.createPointerQr')}</Button>
+                <Button variant="ghost" size="sm" onClick={onDone}>{t('common.done')}</Button>
             </div>
         </FormSection>
     );
@@ -1207,25 +1204,25 @@ function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, 
 
     return (
         <FormSection
-            title="Publish labels on-chain"
+            title={t('settings.backup.publishLabelsOnChain')}
             description="The labels + contacts are encrypted under a key derived from this wallet's seed and stored on the blockchain. Only someone who already has your seed can decrypt them. The transaction pays a network fee."
             className={styles.formSection}
         >
             {chains === null ? (
-                <div style={ROW_HINT}>Loading chains…</div>
+                <div style={ROW_HINT}>{t('settings.backup.loadingChains')}</div>
             ) : chains.length === 0 ? (
                 <EmptyState
-                    title="No chains with addresses"
-                    body={chainsError || 'No chains have addresses on this wallet. Generate one first.'}
+                    title={t('settings.backup.noChainsWithAddresses')}
+                    body={chainsError || t('settings.backup.noChainsHaveAddressesOn')}
                     titleAs="h3"
                     role={chainsError ? 'alert' : 'status'}
                 />
             ) : (
                 <Select
-                    label="Chain"
+                    label={t('settings.backup.chain')}
                     value={chainId}
                     onChange={(e) => setChainId(e.target.value)}
-                    aria-label="Publish chain"
+                    aria-label={t('settings.backup.publishChain')}
                 >
                     {/* Native options are the required children of the style guide Select. */}
                     {chains.map((cid) => (
@@ -1235,22 +1232,22 @@ function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, 
             )}
             <Input
                 type="password"
-                placeholder="Wallet password"
+                placeholder={t('settings.backup.walletPassword')}
                 value={password}
                 onChange={(e) => onPasswordChange(e.target.value)}
                 autoFocus
                 autoComplete="current-password"
-                aria-label="Wallet password"
+                aria-label={t('settings.backup.walletPassword')}
             />
             {error ? <Status text={error} tone="error" /> : null}
             <div className={styles.actions}>
-                <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>Cancel</Button>
+                <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>{t('common.cancel')}</Button>
                 <Button
                     size="sm"
                     onClick={() => onSubmit({ chainId, password })}
                     disabled={!canSubmit}
                 >
-                    {busy ? 'Publishing…' : loadingChains ? 'Loading chains…' : 'Publish'}
+                    {busy ? t('settings.backup.publishing') : loadingChains ? t('settings.backup.loadingChains') : t('settings.backup.publish2')}
                 </Button>
             </div>
         </FormSection>
@@ -1269,36 +1266,36 @@ function PublishLabelsReport({ result, onDone }) {
     if (!txid) {
         return (
             <div data-testid="publish-labels-queued">
-                <FormSection title="Labels signed, not broadcast yet" className={styles.formSection}>
+                <FormSection title={t('settings.backup.labelsSignedNotBroadcastYet')} className={styles.formSection}>
                     <div style={ROW_HINT}>
                         {result?.queued
-                            ? 'The label transaction is waiting in the queued-transactions banner and will be sent from there.'
-                            : 'No transaction ID came back, so the labels may not be on-chain yet. Check the queued-transactions banner before publishing again.'}
+                            ? t('settings.backup.theLabelTransactionIsWaiting')
+                            : t('settings.backup.noTransactionIdCameBack')}
                     </div>
                     <div className={styles.actions}>
-                        <Button variant="ghost" size="sm" onClick={onDone}>Done</Button>
+                        <Button variant="ghost" size="sm" onClick={onDone}>{t('common.done')}</Button>
                     </div>
                 </FormSection>
             </div>
         );
     }
     return (
-        <FormSection title="✓ Labels published" className={styles.formSection}>
+        <FormSection title={t('settings.backup.labelsPublished')} className={styles.formSection}>
             <dl style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px var(--xc-space-3)', margin: 0 }}>
-                <dt style={ROW_HINT}>Transaction ID</dt>
+                <dt style={ROW_HINT}>{t('settings.backup.transactionId')}</dt>
                 <dd style={{ margin: 0, fontFamily: 'var(--xc-font-mono)', fontSize: 'var(--xc-text-xs)', wordBreak: 'break-all' }}>{txid}</dd>
-                <dt style={ROW_HINT}>Chain</dt>
+                <dt style={ROW_HINT}>{t('settings.backup.chain')}</dt>
                 <dd style={{ margin: 0, fontSize: 'var(--xc-text-sm)' }}>
                     {chainDisplayName(result?.chainId) || '-'}
                 </dd>
-                <dt style={ROW_HINT}>Encrypted size</dt>
-                <dd style={{ margin: 0, fontSize: 'var(--xc-text-sm)' }}>{result?.sizeBytes ?? 0} bytes</dd>
-                <dt style={ROW_HINT}>Discovery name</dt>
+                <dt style={ROW_HINT}>{t('settings.backup.encryptedSize')}</dt>
+                <dd style={{ margin: 0, fontSize: 'var(--xc-text-sm)' }}>{result?.sizeBytes ?? 0} {t('settings.backup.bytes')}</dd>
+                <dt style={ROW_HINT}>{t('settings.backup.discoveryName')}</dt>
                 <dd style={{ margin: 0, fontFamily: 'var(--xc-font-mono)', fontSize: 'var(--xc-text-xs)', wordBreak: 'break-all' }}>{result?.discoveryName || '-'}</dd>
             </dl>
             <div className={styles.actions}>
-                <CopyButton value={txid} label="Copy txid" />
-                <Button variant="ghost" size="sm" onClick={onDone}>Done</Button>
+                <CopyButton value={txid} label={t('settings.backup.copyTxid')} />
+                <Button variant="ghost" size="sm" onClick={onDone}>{t('common.done')}</Button>
             </div>
         </FormSection>
     );
@@ -1344,25 +1341,25 @@ function RestoreLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
 
     return (
         <FormSection
-            title="Check chain for backed-up contacts"
+            title={t('settings.backup.checkChainForBackedUp')}
             description="Decrypts the labels + contacts FILE this wallet's seed published on the chain below, if any, and merges anything found into this wallet. Nothing already here is removed."
             className={styles.formSection}
         >
             {chains === null ? (
-                <div style={ROW_HINT}>Loading chains…</div>
+                <div style={ROW_HINT}>{t('settings.backup.loadingChains')}</div>
             ) : chains.length === 0 ? (
                 <EmptyState
-                    title="No chains with addresses"
-                    body={chainsError || 'No chains have addresses on this wallet. Generate one first.'}
+                    title={t('settings.backup.noChainsWithAddresses')}
+                    body={chainsError || t('settings.backup.noChainsHaveAddressesOn')}
                     titleAs="h3"
                     role={chainsError ? 'alert' : 'status'}
                 />
             ) : (
                 <Select
-                    label="Chain"
+                    label={t('settings.backup.chain')}
                     value={chainId}
                     onChange={(e) => setChainId(e.target.value)}
-                    aria-label="Restore chain"
+                    aria-label={t('settings.backup.restoreChain')}
                 >
                     {/* Native options are the required children of the style guide Select. */}
                     {chains.map((cid) => (
@@ -1372,22 +1369,22 @@ function RestoreLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
             )}
             <Input
                 type="password"
-                placeholder="Wallet password"
+                placeholder={t('settings.backup.walletPassword')}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoFocus
                 autoComplete="current-password"
-                aria-label="Wallet password"
+                aria-label={t('settings.backup.walletPassword')}
             />
             {error ? <Status text={error} tone="error" /> : null}
             <div className={styles.actions}>
-                <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>Cancel</Button>
+                <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>{t('common.cancel')}</Button>
                 <Button
                     size="sm"
                     onClick={() => onSubmit({ chainId, password })}
                     disabled={!canSubmit}
                 >
-                    {busy ? 'Checking…' : 'Check'}
+                    {busy ? t('settings.backup.checking') : t('settings.backup.check2')}
                 </Button>
             </div>
         </FormSection>
@@ -1414,7 +1411,7 @@ function restoreLabelsMessage(result) {
     if (result.restored === true) {
         const contacts = Number(result.contactsAdded || 0) + Number(result.contactsUpdated || 0);
         const labels = Number(result.addressesUpdated || 0);
-        return `Restored ${contacts} contact${contacts === 1 ? '' : 's'} and ${labels} label${labels === 1 ? '' : 's'}.`;
+        return t('settings.backup.restoredSummary', { contacts, labels });
     }
     const firstError = Array.isArray(result.errors) && result.errors.length > 0 ? result.errors[0] : null;
     if (firstError) return firstError.message;
@@ -1432,7 +1429,7 @@ function RestoreLabelsReport({ result, onDone }) {
     return (
         <FormSection title={restoreLabelsMessage(result)} className={styles.formSection}>
             <div className={styles.actions}>
-                <Button variant="ghost" size="sm" onClick={onDone}>Done</Button>
+                <Button variant="ghost" size="sm" onClick={onDone}>{t('common.done')}</Button>
             </div>
         </FormSection>
     );

@@ -43,6 +43,7 @@ import { DemoExitConfirm } from '../components/DemoExitConfirm.jsx';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { useBackHandler } from '../../ui/backStack.js';
 import styles from './Locked.module.css';
+import { t } from '../../i18n/index.js';
 
 const BIOMETRIC_PASSWORD_FALLBACK = 'Biometric unlock is unavailable. Use your wallet password.';
 
@@ -510,7 +511,7 @@ export function Locked({ onUnlocked }) {
                     overflowWrap: 'anywhere',
                 }}
             >
-                {inCaptureStep ? 'Save wallet passphrase' : (activeWalletName || 'Unlock wallet')}
+                {inCaptureStep ? t('locked.saveWalletPassphrase') : (activeWalletName || t('locked.unlockWallet'))}
             </h1>
         </div>
     );
@@ -524,23 +525,23 @@ export function Locked({ onUnlocked }) {
             <span>
                 {/* The device scope and network guidance distinguish this
                     local counter from a network-level restriction. */}
-                Too many incorrect passwords on this device. Wait{' '}
+                {t('locked.tooManyIncorrectPasswordsOn')}{' '}
                 <span className={styles.lockoutCountdown}>
                     {formatCountdown(remainingMs)}
                 </span>
-                {' '}before trying again. Changing networks will not skip the wait.
+                {' '}{t('locked.beforeTryingAgainChangingNetworks')}
             </span>
         </div>
     ) : null;
 
     const form = (
         <FormPage
-            label="Unlock wallet"
+            label={t('locked.unlockWallet')}
             className={styles.unlockForm}
             onSubmit={handleSubmit}
             status={busy && !inCaptureStep && showUnlockingNote ? (
                 <p className={styles.unlockingNote} aria-live="polite">
-                    Unlocking your wallet securely. This may take a moment.
+                    {t('locked.unlockingYourWalletSecurelyThis')}
                 </p>
             ) : null}
             actions={(
@@ -552,7 +553,7 @@ export function Locked({ onUnlocked }) {
                         loading={busy}
                         disabled={password.length === 0 || isLockedOut}
                     >
-                        {isLockedOut ? `Locked (${formatCountdown(remainingMs)})` : 'Unlock Wallet'}
+                        {isLockedOut ? t('locked.locked', { formatCountdownValue: formatCountdown(remainingMs) }) : t('locked.unlockWallet2')}
                     </Button>
                     {biometricAvailable ? (
                         <Button
@@ -562,20 +563,20 @@ export function Locked({ onUnlocked }) {
                             onClick={handleBiometric}
                             disabled={busy || isLockedOut}
                         >
-                            Use biometrics
+                            {t('locked.useBiometrics')}
                         </Button>
                     ) : null}
                     {demoWalletId ? (
                         <div className={styles.demoExitBlock}>
                             <p className={styles.demoExitNote}>
-                                This is a demo wallet. Its password is randomly generated and not recoverable. Starting over deletes every wallet saved in this app on this device and returns you to onboarding.
+                                {t('locked.thisIsADemoWallet')}
                             </p>
                             <Button
                                 type="button"
                                 variant="danger"
                                 onClick={() => { setDemoWipeError(null); setDemoConfirmOpen(true); }}
                             >
-                                Exit demo &amp; wipe
+                                {t('locked.exitDemoWipe')}
                             </Button>
                             {demoWipeError && !demoConfirmOpen ? (
                                 <StatusMessage variant="error" className={styles.demoExitError}>{demoWipeError}</StatusMessage>
@@ -604,7 +605,7 @@ export function Locked({ onUnlocked }) {
                                 hidden={forgotOpen}
                                 style={{ alignSelf: 'center' }}
                             >
-                                Forgot password?
+                                {t('locked.forgotPassword')}
                             </Button>
                             {forgotOpen ? (
                                 <div
@@ -613,40 +614,40 @@ export function Locked({ onUnlocked }) {
                                     className={styles.wipeConfirm}
                                     role="alertdialog"
                                     aria-modal="false"
-                                    aria-label="Restore wallet access"
+                                    aria-label={t('locked.restoreWalletAccess')}
                                 >
                                     {!restoreLane ? (
                                         <>
                                             <p className={styles.wipeNote}>
-                                                <strong>Your password cannot be recovered or reset.</strong>{' '}
-                                                You can restore the wallet and choose a new password using its recovery phrase or an encrypted backup file.
+                                                <strong>{t('locked.yourPasswordCannotBeRecovered')}</strong>{' '}
+                                                {t('locked.youCanRestoreTheWallet')}
                                             </p>
                                             <Button
                                                 type="button"
                                                 variant="secondary"
                                                 onClick={() => setRestoreLane('mnemonic')}
                                             >
-                                                Use recovery phrase
+                                                {t('locked.useRecoveryPhrase')}
                                             </Button>
                                             <Button
                                                 type="button"
                                                 variant="secondary"
                                                 onClick={() => setRestoreLane('backup')}
                                             >
-                                                Use backup file
+                                                {t('locked.useBackupFile')}
                                             </Button>
                                         </>
                                     ) : (
                                         <>
                                             <p className={styles.wipeWarning}>
-                                                <strong>This permanently deletes every wallet saved in this app on this device, including its recovery information, accounts, addresses, and queued transactions.</strong>
+                                                <strong>{t('locked.thisPermanentlyDeletesEveryWallet')}</strong>
                                             </p>
                                             <p className={styles.wipeNote}>
-                                                Funds on the blockchain are unaffected. Continue only if you have the {restoreLane === 'backup' ? 'encrypted backup file' : 'recovery phrase'} for every wallet you need. After erasing this vault, the app opens the {restoreLane === 'backup' ? 'backup-file restore' : 'recovery-phrase restore'} form.
+                                                {t('locked.fundsOnTheBlockchainAre')} {restoreLane === 'backup' ? t('locked.encryptedBackupFile') : t('locked.recoveryPhrase')} {t('locked.forEveryWalletYouNeed')} {restoreLane === 'backup' ? t('locked.backupFileRestore') : t('locked.recoveryPhraseRestore')} {t('locked.form')}
                                             </p>
                                             <Input
                                                 type="text"
-                                                label="Type WIPE to confirm"
+                                                label={t('locked.typeWipeToConfirm')}
                                                 value={wipeConfirmText}
                                                 onChange={(e) => setWipeConfirmText(e.target.value)}
                                                 autoComplete="off"
@@ -660,7 +661,7 @@ export function Locked({ onUnlocked }) {
                                                 loading={wipeBusy}
                                                 disabled={wipeBusy || wipeConfirmText.trim().toUpperCase() !== 'WIPE'}
                                             >
-                                                Erase vault and restore
+                                                {t('locked.eraseVaultAndRestore')}
                                             </Button>
                                         </>
                                     )}
@@ -671,7 +672,7 @@ export function Locked({ onUnlocked }) {
                                         disabled={wipeBusy}
                                         autoFocus
                                     >
-                                        Cancel
+                                        {t('common.cancel')}
                                     </Button>
                                     {wipeError ? (
                                         <StatusMessage variant="error" className={styles.wipeError}>{wipeError}</StatusMessage>
@@ -691,7 +692,7 @@ export function Locked({ onUnlocked }) {
                 value="xchain-wallet"
                 autoComplete="username"
                 readOnly
-                aria-label="Wallet username"
+                aria-label={t('locked.walletUsername')}
                 hidden
             />
             <div className={styles.passwordField}>
@@ -700,7 +701,7 @@ export function Locked({ onUnlocked }) {
                     className={styles.passwordInput}
                     type={passwordVisible ? 'text' : 'password'}
                     name="password"
-                    label="Password"
+                    label={t('common.password')}
                     value={password}
                     onChange={(e) => {
                         setPassword(e.target.value);
@@ -714,9 +715,9 @@ export function Locked({ onUnlocked }) {
                     type="button"
                     className={styles.passwordToggle}
                     onClick={() => setPasswordVisible((visible) => !visible)}
-                    aria-label={passwordVisible ? 'Hide password' : 'Show password'}
+                    aria-label={passwordVisible ? t('locked.hidePassword') : t('locked.showPassword')}
                     aria-pressed={passwordVisible}
-                    title={passwordVisible ? 'Hide password' : 'Show password'}
+                    title={passwordVisible ? t('locked.hidePassword') : t('locked.showPassword')}
                 >
                     {passwordVisible ? <Icon.EyeOffIcon /> : <Icon.EyeIcon />}
                 </button>
@@ -728,7 +729,7 @@ export function Locked({ onUnlocked }) {
     // abandons the rest of the queue: the next unlock offers them again.
     const captureForm = captureWallet ? (
         <FormPage
-            label="Save wallet passphrase"
+            label={t('locked.saveWalletPassphrase')}
             onSubmit={handleCapture}
             actions={(
                 <>
@@ -738,7 +739,7 @@ export function Locked({ onUnlocked }) {
                         onClick={handleCaptureSkip}
                         disabled={busy}
                     >
-                        Not now
+                        {t('settings.backup.notNow')}
                     </Button>
                     <Button
                         type="submit"
@@ -746,21 +747,21 @@ export function Locked({ onUnlocked }) {
                         loading={busy}
                         disabled={captureValue.length === 0}
                     >
-                        Continue
+                        {t('locked.continue')}
                     </Button>
                 </>
             )}
         >
             {hero}
             <p className={styles.captureCopy}>
-                <strong>{captureWallet.name} uses a passphrase.</strong>{' '}
-                Enter it once to finish setting up this device. It will be stored on this device, protected by your wallet password, so you are not asked again.
+                <strong>{captureWallet.name} {t('locked.usesAPassphrase')}</strong>{' '}
+                {t('locked.enterItOnceToFinish')}
             </p>
             <Input
                 id="locked-capture-passphrase"
                 ref={captureRef}
                 type="password"
-                label="Passphrase"
+                label={t('locked.passphrase')}
                 value={captureValue}
                 onChange={(e) => {
                     setCaptureValue(e.target.value);
@@ -793,17 +794,17 @@ export function Locked({ onUnlocked }) {
  */
 function formatCountdown(ms) {
     const totalSec = Math.max(0, Math.ceil(ms / 1000));
-    if (totalSec < 60) return `${totalSec} ${totalSec === 1 ? 'second' : 'seconds'}`;
+    if (totalSec < 60) return t('locked.countdown.seconds', { count: totalSec });
     const mins = Math.floor(totalSec / 60);
     const secs = totalSec % 60;
     if (mins < 60) {
-        const minuteText = `${mins} ${mins === 1 ? 'minute' : 'minutes'}`;
+        const minuteText = t('locked.countdown.minutes', { count: mins });
         if (secs === 0) return minuteText;
-        return `${minuteText} ${secs} ${secs === 1 ? 'second' : 'seconds'}`;
+        return t('locked.countdown.pair', { first: minuteText, second: t('locked.countdown.seconds', { count: secs }) });
     }
     const hours = Math.floor(mins / 60);
     const remMins = mins % 60;
-    const hourText = `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
+    const hourText = t('locked.countdown.hours', { count: hours });
     if (remMins === 0) return hourText;
-    return `${hourText} ${remMins} ${remMins === 1 ? 'minute' : 'minutes'}`;
+    return t('locked.countdown.pair', { first: hourText, second: t('locked.countdown.minutes', { count: remMins }) });
 }

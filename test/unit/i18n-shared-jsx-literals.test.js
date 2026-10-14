@@ -40,6 +40,33 @@ const localizedComponents = [
     'ConfirmModal.jsx',
     'settings/NetworkSection.jsx',
     'settings/UndoSendRow.jsx',
+    'settings/AboutSection.jsx',
+    'settings/AdsSection.jsx',
+    'settings/AppearanceSection.jsx',
+    'settings/BackupSection.jsx',
+    'settings/BiometricRow.jsx',
+    'settings/ConnectedSitesSection.jsx',
+    'settings/ContactsSection.jsx',
+    'settings/DeveloperModeSection.jsx',
+    'settings/DisplaySection.jsx',
+    'settings/DuressPassphraseRow.jsx',
+    'settings/FeesSection.jsx',
+    'settings/KeyboardSection.jsx',
+    'settings/LanguageRegionSection.jsx',
+    'settings/NetworkEndpointsSection.jsx',
+    'settings/NotificationsSection.jsx',
+    'settings/PanicModeRow.jsx',
+    'settings/PrivacySection.jsx',
+    'settings/SafetySection.jsx',
+    'settings/ThisWalletSection.jsx',
+    'settings/WalletModeSection.jsx',
+    'AppHeader.jsx',
+    'BalanceList.jsx',
+    'HeaderSettingsButton.jsx',
+    'HomeFilterBar.jsx',
+    'HomeTabs.jsx',
+    'TxStatusTimeline.jsx',
+    'UndoSendToast.jsx',
 ];
 
 // Every E-K route is migrated, so each one is scanned even if it stops calling t().
@@ -47,6 +74,11 @@ const ROUTE_E_TO_K = /\/routes\/[E-K][^/]*\.jsx$/;
 
 const localizedRoutes = [
     'AccountPicker.jsx',
+    'CreateWallet.jsx',
+    'Locked.jsx',
+    'Onboarding.jsx',
+    'Receive.jsx',
+    'Settings.jsx',
     'ActionDetail.jsx',
     'ActionsMenu.jsx',
     'AlertsRoute.jsx',
@@ -70,8 +102,6 @@ const localizedRoutes = [
 // as screens. Their t() keys are still checked against the dictionary; their
 // remaining literals stay outside the literal guard until the screen migrates.
 const PLURAL_ONLY_FILES = [
-    '/components/BalanceList.jsx',
-    '/components/TxStatusTimeline.jsx',
     '/routes/AddressList.jsx',
     '/routes/ManageToken.jsx',
 ];

@@ -55,6 +55,7 @@ import { wipeWalletStorage } from '../utils/wipeWalletStorage.js';
 import { writeLastView } from '../utils/lastViewMemory.js';
 import actionStyles from './ActionsMenu.module.css';
 import settingsStyles from './Settings.module.css';
+import { t } from '../../i18n/index.js';
 
 const row = (title, terms = '', target = title) => ({ title, terms, target });
 
@@ -568,7 +569,7 @@ export function Settings({
                 <PageHeader
                     onBack={closeSubpage}
                     backDisabled={section.id === 'this-wallet' && walletManagementBusy}
-                    backLabel="Back to settings"
+                    backLabel={t('settings.page.backToSettings')}
                     title={section.title}
                     trailing={section.id === 'backup' && onOpenBackupInTab ? (
                         <Button
@@ -576,8 +577,8 @@ export function Settings({
                             size="sm"
                             icon={<Icon.ExternalLinkIcon />}
                             onClick={onOpenBackupInTab}
-                            aria-label="Open in tab"
-                            title="Open in tab"
+                            aria-label={t('settings.page.openInTab')}
+                            title={t('settings.page.openInTab')}
                         />
                     ) : null}
                 />
@@ -606,7 +607,7 @@ export function Settings({
 
     // ─── List view ────────────────────────────────────────────────
 
-    const header = <PageHeader onBack={onBack} title="Settings" />;
+    const header = <PageHeader onBack={onBack} title={t('settings.page.settings')} />;
 
     return (
         <Screen variant={variant} header={header} scrollKey="list">
@@ -622,14 +623,14 @@ export function Settings({
                             spellCheck={false}
                             value={query}
                             onChange={(e) => setQuery(e.target.value)}
-                            placeholder="Search settings…"
-                            aria-label="Search settings"
+                            placeholder={t('settings.page.searchSettings')}
+                            aria-label={t('settings.page.searchSettings2')}
                         />
                     </div>
                 )}
             >
                 {filtered.length === 0 ? (
-                    <EmptyState title="No matching settings" body={`No settings match "${query}".`} />
+                    <EmptyState title={t('settings.page.noMatchingSettings')} body={t('settings.page.noSettingsMatch', { query })} />
                 ) : null}
                 {filtered.map((section) => {
                     const matchedRow = findMatchingSearchRow(section.id, query);
@@ -921,7 +922,7 @@ function UpdateCheckPanel() {
     return (
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-3)' }}>
             <Button variant="ghost" size="sm" onClick={check} disabled={state === 'checking'}>
-                Check for updates
+                {t('settings.page.checkForUpdates')}
             </Button>
             <span role="status" aria-live="polite" style={{ fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)' }}>
                 {message || ''}
@@ -954,7 +955,7 @@ function ComingSoon() {
             fontSize: 'var(--xc-text-sm)',
             fontStyle: 'italic',
         }}>
-            Coming soon
+            {t('settings.page.comingSoon')}
         </div>
     );
 }
@@ -1031,7 +1032,7 @@ function endpointsSummary(settings) {
     const eps = settings.sdkEndpoints || {};
     const customCount = Object.values(eps).filter((e) => e?.custom).length;
     if (customCount === 0) return 'All defaults';
-    return `${customCount} chain${customCount === 1 ? '' : 's'} custom`;
+    return t('settings.page.customChains', { count: customCount });
 }
 
 function adsSummary(settings) {
@@ -1040,7 +1041,7 @@ function adsSummary(settings) {
     const total = Object.values(settings.ads.perChain || {})
         .reduce((s, c) => s + (Number(c?.lifetimeDonatedSats) || 0), 0);
     if (total === 0) return 'On · 0 donated';
-    return `On · ${total.toLocaleString()} sats donated`;
+    return t('settings.page.donatedOn', { sats: total });
 }
 
 function developerSummary(settings) {
@@ -1051,5 +1052,5 @@ function developerSummary(settings) {
 function connectedSitesSummary(siteCount) {
     if (siteCount === null) return '-';
     if (siteCount === 0) return 'None';
-    return `${siteCount} site${siteCount === 1 ? '' : 's'}`;
+    return t('settings.page.siteCount', { count: siteCount });
 }

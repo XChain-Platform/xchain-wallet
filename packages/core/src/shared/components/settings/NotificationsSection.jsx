@@ -47,6 +47,7 @@ import {
     pickedSoundForFamily,
 } from '../../../notifications/notificationSounds.js';
 import { ROW, ROW_HINT, STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
+import { t } from '../../../i18n/index.js';
 
 /**
  * Browser/OS notification-permission affordance. The extension requests and
@@ -147,7 +148,7 @@ function PermissionRow({ permission, setPermission }) {
         if (extensionSupported) {
             action = (
                 <Button type="button" size="sm" icon={null} onClick={revoke} disabled={requesting} aria-busy={requesting}>
-                    {requesting ? 'Revoking…' : 'Revoke permission'}
+                    {requesting ? t('settings.notifications.revoking') : t('settings.notifications.revokePermission')}
                 </Button>
             );
         }
@@ -156,7 +157,7 @@ function PermissionRow({ permission, setPermission }) {
     } else if (permission !== 'checking') {
         action = (
             <Button type="button" size="sm" icon={null} onClick={request} disabled={requesting} aria-busy={requesting}>
-                {requesting ? 'Requesting…' : (extensionSupported ? 'Allow notifications' : 'Request permission')}
+                {requesting ? t('settings.notifications.requesting') : (extensionSupported ? t('settings.notifications.allowNotifications') : t('settings.notifications.requestPermission'))}
             </Button>
         );
     }
@@ -164,7 +165,7 @@ function PermissionRow({ permission, setPermission }) {
     return (
         <div style={ROW}>
             <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Desktop notifications</span>
+                <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>{t('settings.notifications.desktopNotifications')}</span>
                 <span style={ROW_HINT}>{requestError || hint}</span>
             </div>
             {action}
@@ -253,9 +254,9 @@ export function NotificationsSection({ walletId } = {}) {
     const [pendingKey, setPendingKey] = useState(/** @type {string | null} */ (null));
     const [toggleError, setToggleError] = useState(/** @type {{ key: string, message: string } | null} */ (null));
 
-    if (loading) return <Status text="Loading…" />;
+    if (loading) return <Status text={t('common.loading')} />;
     if (error) return <SettingsLoadError error={error} />;
-    if (!settings) return <Status text="Settings unavailable." tone="error" />;
+    if (!settings) return <Status text={t('common.settingsUnavailable')} tone="error" />;
 
     const permissionBlocksDelivery = permission !== 'unsupported' && permission !== 'granted';
 
@@ -370,7 +371,7 @@ function SoundsBlock({ settings, update }) {
         <div style={STACK}>
             <div style={ROW}>
                 <Switch
-                    label="Notification sounds"
+                    label={t('settings.notifications.notificationSounds')}
                     description="Play a sound with each in-app notification while the wallet is open. Off by default; quiet hours and the toggles above still apply."
                     checked={enabled}
                     onChange={(event) => onToggle(event.target.checked)}
@@ -389,7 +390,7 @@ function SoundsBlock({ settings, update }) {
                                     <span>{family.label}</span>
                                     <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)' }}>
                                         <Select
-                                            aria-label={`${family.label} sound`}
+                                            aria-label={t('settings.notifications.sound', { label: family.label })}
                                             value={picked}
                                             onChange={(e) => onPick(family.key, e.target.value)}
                                         >
@@ -397,7 +398,7 @@ function SoundsBlock({ settings, update }) {
                                             {SOUND_PALETTE.map((s) => (
                                                 <option key={s.id} value={s.id}>{s.label}</option>
                                             ))}
-                                            <option value={SOUND_NONE}>No sound</option>
+                                            <option value={SOUND_NONE}>{t('settings.notifications.noSound')}</option>
                                         </Select>
                                         {canPreview ? (
                                             <Button
@@ -405,11 +406,11 @@ function SoundsBlock({ settings, update }) {
                                                 size="sm"
                                                 variant="ghost"
                                                 icon={null}
-                                                aria-label={`Preview ${family.label} sound`}
+                                                aria-label={t('settings.notifications.previewSound', { label: family.label })}
                                                 disabled={picked === SOUND_NONE}
                                                 onClick={() => onPreview(picked)}
                                             >
-                                                Preview
+                                                {t('common.preview')}
                                             </Button>
                                         ) : null}
                                     </span>
@@ -421,7 +422,7 @@ function SoundsBlock({ settings, update }) {
                         );
                     })}
                     <span style={ROW_HINT}>
-                        Sounds never arrive on their own: each one rides the notification it belongs to.
+                        {t('settings.notifications.soundsNeverArriveOnTheir')}
                     </span>
                 </div>
             ) : null}
@@ -465,7 +466,7 @@ function QuietHoursRow({ settings, update }) {
         <div style={STACK}>
             <div style={ROW}>
                 <Switch
-                    label="Quiet hours"
+                    label={t('settings.notifications.quietHours')}
                     description="Pause all notifications, including price alerts, during a daily time window."
                     checked={qh.enabled === true}
                     onChange={(event) => onToggle(event.target.checked)}
@@ -479,21 +480,21 @@ function QuietHoursRow({ settings, update }) {
                     <div style={ALERT_ROW}>
                         <Input
                             id="quiet-hours-start"
-                            label="From"
+                            label={t('settings.notifications.from')}
                             type="time"
                             value={qh.start}
                             onChange={(e) => onTimeChange('start', e.target.value)}
                         />
                         <Input
                             id="quiet-hours-end"
-                            label="To"
+                            label={t('settings.notifications.to')}
                             type="time"
                             value={qh.end}
                             onChange={(e) => onTimeChange('end', e.target.value)}
                         />
                     </div>
                     <span style={ROW_HINT}>
-                        {qh.start} to {qh.end} your device's local time, every day.
+                        {qh.start} {t('settings.notifications.to2')} {qh.end} {t('settings.notifications.yourDeviceSLocalTime')}
                     </span>
                     <NotificationSaveError
                         message={saveError === 'start' || saveError === 'end' ? 'Could not save quiet hours. Try again.' : null}
@@ -556,9 +557,9 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
         return (
             <div style={MANAGER}>
                 <EmptyState
-                    title={!walletId ? 'No wallet selected' : 'Price alerts unavailable'}
+                    title={!walletId ? t('settings.notifications.noWalletSelected') : t('settings.notifications.priceAlertsUnavailable')}
                     titleAs="p"
-                    body={!walletId ? 'Choose a wallet to manage price alerts.' : 'Price alerts are not supported in this app.'}
+                    body={!walletId ? t('settings.notifications.chooseAWalletToManage') : t('settings.notifications.priceAlertsAreNotSupported')}
                 />
             </div>
         );
@@ -568,38 +569,37 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
         <div style={MANAGER}>
             {priceDataOff ? (
                 <span style={ROW_HINT}>
-                    Price alerts need <strong>Native coin price data</strong>, which is off. Turn it on in
-                    Settings → Privacy. Until then, alerts won’t fire.
+                    {t('settings.notifications.priceAlertsNeed')} <strong>{t('settings.notifications.nativeCoinPriceData')}</strong>{t('settings.notifications.whichIsOffTurnIt')}
                 </span>
             ) : !enabled ? (
-                <span style={ROW_HINT}>Turn on Price alerts above to start receiving these.</span>
+                <span style={ROW_HINT}>{t('settings.notifications.turnOnPriceAlertsAbove')}</span>
             ) : null}
 
             {hasOriginalCurrencyAlert ? (
                 <span style={ROW_HINT}>
-                    Saved price alerts keep the currency they were created in. Delete and recreate an alert to use the current display currency.
+                    {t('settings.notifications.savedPriceAlertsKeepThe')}
                 </span>
             ) : null}
 
             {loading ? (
-                <span role="status" style={ROW_HINT}>Loading price alerts…</span>
+                <span role="status" style={ROW_HINT}>{t('settings.notifications.loadingPriceAlerts')}</span>
             ) : error ? (
                 <span role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger)' }}>
-                    Could not load price alerts.{' '}
-                    <Button type="button" size="sm" variant="ghost" icon={null} onClick={reload}>Try again</Button>
+                    {t('settings.notifications.couldNotLoadPriceAlerts')}{' '}
+                    <Button type="button" size="sm" variant="ghost" icon={null} onClick={reload}>{t('common.tryAgain')}</Button>
                 </span>
             ) : alerts.length === 0 ? (
-                <EmptyState title="No price alerts yet" titleAs="p" body="Add one below." />
+                <EmptyState title={t('settings.notifications.noPriceAlertsYet')} titleAs="p" body={t('settings.notifications.addOneBelow')} />
             ) : (
                 alerts.map((a) => (
                     <div key={a.id} style={ALERT_ROW}>
                         <span>
                             {coinLabelForChain(a.chainId)}{' '}
-                            {a.direction === 'above' ? 'rises above' : 'falls below'}{' '}
+                            {a.direction === 'above' ? t('settings.notifications.risesAbove') : t('settings.notifications.fallsBelow')}{' '}
                             {formatThreshold(a.targetFiat, a.fiatCurrency)}
                             {a.status === 'triggered' ? (
                                 <span style={ROW_HINT}>
-                                    {' · triggered'}
+                                    {t('settings.notifications.triggered')}
                                     {a.triggeredAt ? (
                                         <RelativeTime timestamp={a.triggeredAt}>
                                             {(when) => ` ${when}`}
@@ -618,7 +618,7 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
                                     disabled={busyId !== null}
                                     onClick={() => runAlertAction(a.id, () => rearm(a.id), setBusyId, setActionError)}
                                 >
-                                    Re-arm
+                                    {t('settings.notifications.reArm')}
                                 </Button>
                             ) : null}
                             <Button
@@ -627,10 +627,10 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
                                 variant="ghost"
                                 icon={null}
                                 disabled={busyId !== null}
-                                aria-label={`Edit ${coinLabelForChain(a.chainId)} price alert`}
+                                aria-label={t('settings.notifications.editPriceAlert', { coinLabelForChainValue: coinLabelForChain(a.chainId) })}
                                 onClick={() => { setEditingId(a.id); setActionError(null); }}
                             >
-                                Edit
+                                {t('common.edit')}
                             </Button>
                             <Button
                                 type="button"
@@ -638,13 +638,13 @@ function PriceAlertsManager({ walletId, settings, enabled }) {
                                 variant="danger"
                                 icon={null}
                                 disabled={busyId !== null}
-                                aria-label={`Delete ${coinLabelForChain(a.chainId)} price alert`}
+                                aria-label={t('settings.notifications.deletePriceAlert', { coinLabelForChainValue: coinLabelForChain(a.chainId) })}
                                 onClick={() => runAlertAction(a.id, async () => {
                                     await removeAlert(a.id);
                                     if (editingId === a.id) setEditingId(null);
                                 }, setBusyId, setActionError)}
                             >
-                                Delete
+                                {t('settings.notifications.delete')}
                             </Button>
                         </span>
                     </div>
