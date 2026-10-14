@@ -651,7 +651,10 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                             type="button"
                             variant="ghost"
                             size="sm"
-                            onClick={() => setStage('form')}
+                            onClick={(event) => {
+                                event.preventDefault();
+                                setStage('form');
+                            }}
                             disabled={stage === 'submitting'}
                         >
                             Edit order

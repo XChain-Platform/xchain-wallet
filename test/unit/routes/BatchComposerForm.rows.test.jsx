@@ -88,4 +88,17 @@ describe('BatchComposerForm rows', () => {
         expect(screen.getByText('BROADCAST|0|1|hello')).toBeInTheDocument();
         expect(screen.getAllByText('Network fee')).toHaveLength(1);
     });
+
+    it('returns from review without resubmitting and preserves the batch rows', async () => {
+        mount();
+        const action = await screen.findByRole('combobox', { name: 'Action' });
+        fireEvent.change(action, { target: { value: 'SEND' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+
+        expect(await screen.findByText('SEND|0|PEPE|1|alice')).toBeInTheDocument();
+        expect(fireEvent.click(screen.getByRole('button', { name: 'Back' }))).toBe(false);
+        expect(await screen.findByRole('combobox', { name: 'Action' })).toHaveValue('SEND');
+        expect(screen.getByRole('button', { name: 'Review' })).toBeInTheDocument();
+        expect(screen.queryByText('SEND|0|PEPE|1|alice')).toBeNull();
+    });
 });

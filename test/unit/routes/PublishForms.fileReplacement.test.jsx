@@ -209,4 +209,41 @@ describe('publish forms replace file state safely', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent('Could not load reusable packs');
         expect(document.body.textContent).not.toContain('No reusable packs');
     });
+
+    it('returns from gated publish review without resubmitting and preserves the form', async () => {
+        mount(<GatedPublishForm walletId="w" chainId={CHAIN} tick="GATE" issuerAddress={SOURCE.address} onBack={() => {}} />);
+        const input = await screen.findByLabelText('File to publish');
+        fireEvent.change(input, {
+            target: { files: [new File(['draft'], 'members.txt', { type: 'text/plain' })] },
+        });
+        await act(async () => readers[0].succeed(5));
+        fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), {
+            target: { value: 'Member draft' },
+        });
+        fireEvent.click(screen.getByRole('checkbox', { name: /published on-chain forever/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+
+        expect(fireEvent.click(await screen.findByRole('button', { name: 'Back' }))).toBe(false);
+        expect(await screen.findByRole('textbox', { name: 'Title' })).toHaveValue('Member draft');
+        expect(screen.getByText(/members\.txt/)).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+    });
+
+    it('returns from artwork review without resubmitting and preserves the form', async () => {
+        mount(<AttachContentForm walletId="w" chainId={CHAIN} tick="ART" issuerAddress={SOURCE.address} onBack={() => {}} />);
+        const input = await screen.findByLabelText('Choose file to attach');
+        fireEvent.change(input, {
+            target: { files: [new File(['art'], 'cover.txt', { type: 'text/plain' })] },
+        });
+        await act(async () => readers[0].succeed(3));
+        fireEvent.change(screen.getByLabelText('Title (optional)'), {
+            target: { value: 'Cover art' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Review upload' }));
+
+        expect(fireEvent.click(await screen.findByRole('button', { name: 'Back' }))).toBe(false);
+        expect(await screen.findByLabelText('Title (optional)')).toHaveValue('Cover art');
+        expect(screen.getByText('cover.txt')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+    });
 });

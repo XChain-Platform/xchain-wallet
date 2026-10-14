@@ -994,7 +994,15 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 ) : null}
                 actions={(
                     <>
-                        <Button variant="ghost" type="button" onClick={() => setStage('compose')} disabled={submitting}>
+                        <Button
+                            variant="ghost"
+                            type="button"
+                            onClick={(event) => {
+                                event.preventDefault();
+                                setStage('compose');
+                            }}
+                            disabled={submitting}
+                        >
                             Back
                         </Button>
                         <Button
