@@ -59,6 +59,7 @@ import { readActiveAccount, writeActiveAccount } from '@xchain-wallet/core/share
 import { readActiveWallet, writeActiveWallet } from '@xchain-wallet/core/shared/utils/activeWalletMemory.js';
 import { takePostDemoIntent } from '@xchain-wallet/core/shared/utils/demoGraduation.js';
 import { historyScopeForAsset } from '@xchain-wallet/core/shared/utils/historyEntryScope.js';
+import { defaultDexAssetForNetwork, syncDexAssetToNetwork } from '@xchain-wallet/core/shared/chainSelection.js';
 import { lockImmediately } from '@xchain-wallet/core/shared/utils/lockAction.js';
 import { useMessagingUnread } from '@xchain-wallet/core/shared/hooks/useMessagingUnread.js';
 import { CoinpayObligationsProvider, useSharedCoinpayObligations } from '@xchain-wallet/core/shared/hooks/useCoinpayObligations.js';
@@ -508,12 +509,13 @@ function AppInner() {
         /** @type {{ chainId: string, tick1: string, tick2: string } | null} */ (null),
     );
     const [marketsAsset, setMarketsAsset] = useState(
-        /** @type {{ chainId: string, tick: string, displayName?: string, kind?: string } | null} */ ({
-            chainId: 'bitcoin-mainnet',
-            tick: 'BTC',
-            kind: 'native',
-        }),
+        /** @type {{ chainId: string, tick: string, displayName?: string, kind?: string } | null} */ (
+            () => defaultDexAssetForNetwork(settings?.activeNetwork)
+        ),
     );
+    useEffect(() => {
+        setMarketsAsset((current) => syncDexAssetToNetwork(current, settings?.activeNetwork));
+    }, [settings?.activeNetwork]);
     // §24.6 / Cluster Y FOLLOWUP 4: when the renderer is launched
     // with an `xc-init-route` search-string entry (set by main on
     // detach-window IPC), parse it once at mount, route the new
@@ -2658,7 +2660,7 @@ function AppInner() {
                     onReceive={activeWalletId ? () => { setReceivePrefill(null); setUnlockedView('receive'); } : undefined}
                     onSwap={activeWalletId ? () => setUnlockedView('swap') : undefined}
                     onExchange={activeWalletId ? () => {
-                        setMarketsAsset({ chainId: 'bitcoin-mainnet', tick: 'BTC', kind: 'native' });
+                        setMarketsAsset(defaultDexAssetForNetwork(settings?.activeNetwork));
                         setUnlockedView('markets');
                     } : undefined}
                     onCreateToken={activeWalletId ? () => setUnlockedView('wizard') : undefined}
