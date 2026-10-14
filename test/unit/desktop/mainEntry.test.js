@@ -499,6 +499,32 @@ describe('desktop main entry point', () => {
         expect(electron.browserWindowOptions[0]).toMatchObject(savedBounds);
     });
 
+    it.each([
+        {
+            label: 'off every connected display',
+            savedBounds: { x: 4000, y: 3000, width: 900, height: 700 },
+            expected: { width: 900, height: 700 },
+        },
+        {
+            label: 'too small to be usable',
+            savedBounds: { x: 80, y: 60, width: 100, height: 100 },
+            expected: { width: 1024, height: 768 },
+        },
+    ])('drops an unusable saved position when it is $label', async ({ savedBounds, expected }) => {
+        const userDataDir = mkdtempSync(join(tmpdir(), 'xchain-main-entry-'));
+        tempDirs.push(userDataDir);
+        writeFileSync(join(userDataDir, 'window-bounds.json'), JSON.stringify(savedBounds));
+        electron.state.userDataDir = userDataDir;
+        electron.app.whenReady.mockResolvedValueOnce();
+
+        await import('../../../packages/desktop/main/index.js');
+        await vi.waitFor(() => expect(electron.browserWindowOptions).toHaveLength(1));
+
+        expect(electron.browserWindowOptions[0]).toMatchObject(expected);
+        expect(electron.browserWindowOptions[0]).not.toHaveProperty('x');
+        expect(electron.browserWindowOptions[0]).not.toHaveProperty('y');
+    });
+
     it('restores the saved position on one ultrawide display', async () => {
         const userDataDir = mkdtempSync(join(tmpdir(), 'xchain-main-entry-'));
         tempDirs.push(userDataDir);
@@ -768,9 +794,14 @@ describe('desktop window bounds on close and quit', () => {
         return { win, handler, onDisk };
     }
 
-    it('writes the latest bounds before the close handler returns', async () => {
-        const { handler, onDisk } = await bootWithSavedBounds();
+    it.each([
+        ['normal', null],
+        ['minimized', 'isMinimized'],
+        ['maximized', 'isMaximized'],
+    ])('writes normal bounds before a %s window close returns', async (_state, stateMethod) => {
+        const { win, handler, onDisk } = await bootWithSavedBounds();
         electron.state.normalBounds = MOVED;
+        if (stateMethod) win[stateMethod] = vi.fn(() => true);
 
         handler('close')({ preventDefault: vi.fn() });
 

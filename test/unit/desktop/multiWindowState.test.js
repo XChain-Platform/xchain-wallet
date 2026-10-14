@@ -139,6 +139,13 @@ describe('desktop window bounds memory', () => {
         )).toEqual({ x: 2100, y: 100, width: 1280, height: 1024 });
     });
 
+    it('drops an edge origin that leaves less than a usable window area visible', () => {
+        expect(restoreWindowBounds(
+            { x: 1919, y: 1079, width: 900, height: 700 },
+            [{ workArea: { x: 0, y: 0, width: 1920, height: 1080 } }],
+        )).toEqual({ width: 900, height: 700 });
+    });
+
     it('cascades an additional window without changing its remembered size', () => {
         const bounds = { x: 100, y: 80, width: 900, height: 700 };
         expect(cascadeWindowBounds(

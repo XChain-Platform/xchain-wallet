@@ -75,7 +75,7 @@ export function restoreWindowBounds(value, displays = []) {
     const containingArea = bounds.x === undefined || bounds.y === undefined
         ? null
         : areas.find((area) => containsPoint(bounds.x, bounds.y, area));
-    if (containingArea) {
+    if (containingArea && hasUsefulOverlap(bounds, containingArea)) {
         return {
             ...bounds,
             width: Math.min(bounds.width, containingArea.width),
