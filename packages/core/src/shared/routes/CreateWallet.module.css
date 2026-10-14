@@ -81,6 +81,14 @@
     gap: var(--xc-space-2);
 }
 
+/* The kit legend is full width, so as a rendered legend it sat in the top
+   border and erased all of it but the two corners. Floated, it is an
+   ordinary first item inside the box and the hairline stays whole. */
+.wordCountRow > legend {
+    float: left;
+    margin-block-end: 0;
+}
+
 .advancedRow {
     margin: var(--xc-space-3) 0 0;
     display: flex;

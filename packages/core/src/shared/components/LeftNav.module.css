@@ -274,7 +274,7 @@
 
 .action > button {
     gap: var(--xc-space-3);
-    padding-inline: calc(var(--xc-space-1) - var(--xc-control-border, 1px));
+    padding-inline: calc(var(--xc-space-1) - 1px);
 }
 
 .itemActive {
@@ -362,12 +362,10 @@
 }
 
 .layout[data-xc-tier='rail'] {
-    --xc-page-gutter: var(--xc-space-4);
     --xc-page-top: var(--xc-space-4);
 }
 
 .layout[data-xc-tier='full'] {
-    --xc-page-gutter: var(--xc-space-6);
     --xc-page-top: var(--xc-space-4);
 }
 
