@@ -266,17 +266,19 @@ export const HomeTabs = memo(function HomeTabs({ chainRegistry, balances, active
         refreshKey: balancesFetchedAt,
     });
     const allRows = useMemo(
-        () => withoutTestNetworkFiat(
-            priceTokenRows(priceNativeRows(displayRows, nativeRates), tokenRates),
-        ),
-        [displayRows, nativeRates, tokenRates],
+        () => {
+            const pricedRows = priceTokenRows(priceNativeRows(displayRows, nativeRates), tokenRates);
+            return isDemo ? pricedRows : withoutTestNetworkFiat(pricedRows);
+        },
+        [displayRows, nativeRates, tokenRates, isDemo],
     );
     const nativeChainIds = useMemo(
         () => allRows
-            .filter((row) => row.kind === 'native' && isMainnetChainId(row.chainId))
+            .filter((row) => row.kind === 'native'
+                && (isDemo || isMainnetChainId(row.chainId)))
             .map((row) => row.chainId)
             .sort(),
-        [allRows],
+        [allRows, isDemo],
     );
     const nativeChainKey = nativeChainIds.join(',');
     const [nativePriceMap, setNativePriceMap] = useState(/** @type {Record<string, any>} */ ({}));

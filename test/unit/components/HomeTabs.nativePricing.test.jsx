@@ -135,6 +135,55 @@ describe('Home native rows on a real wallet', () => {
     });
 });
 
+describe('Home test-network fiat', () => {
+    const regtestBalances = {
+        'bitcoin-regtest': [{
+            address: 'bitcoin-regtest-addr',
+            balances: {
+                native: { tick: 'BTC', quantity: '100000000', divisibility: 8, fiatRate: 70000 },
+                tokens: [
+                    { tick: 'EXAMPLE', quantity: '200000000', divisibility: 8, fiatRate: 0.5 },
+                ],
+            },
+        }],
+    };
+
+    it('keeps fixture fiat in the demo hero, rows, and chart', async () => {
+        markDemoWallet('demo-wallet-1');
+        const messaging = {
+            getSettings: vi.fn(async () => ({})),
+            getNativePricesRequest: vi.fn(async () => ({ prices: {} })),
+        };
+        mount({ balances: regtestBalances, walletId: 'demo-wallet-1', messaging });
+
+        expect(within(hero()).getByText('$70,001.00')).toBeInTheDocument();
+        expect(document.querySelector('[data-balance-key="bitcoin-regtest:BTC"]')).toHaveTextContent('$70,000.00');
+        const chart = await screen.findByRole('img', { name: /Portfolio performance chart/ });
+        expect(chart).toHaveAccessibleName(expect.stringMatching(/End \$70,001\.00 USD\./));
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+        expect(document.querySelector('[data-balance-key="bitcoin-regtest:EXAMPLE"]')).toHaveTextContent('$1.00');
+        expect(messaging.getNativePricesRequest).not.toHaveBeenCalled();
+    });
+
+    it('strips fixture fiat and the chart from a real test-network wallet', () => {
+        const messaging = {
+            getSettings: vi.fn(async () => ({})),
+            getNativePricesRequest: vi.fn(async () => ({ prices: {} })),
+        };
+        mount({ balances: regtestBalances, walletId: 'real-wallet-1', messaging });
+
+        expect(within(hero()).getByText('Test coins have no value')).toBeInTheDocument();
+        expect(document.querySelector('[data-balance-key="bitcoin-regtest:BTC"]')).not.toHaveTextContent('$');
+        expect(screen.queryByRole('region', { name: 'Portfolio performance' })).toBeNull();
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+        expect(document.querySelector('[data-balance-key="bitcoin-regtest:EXAMPLE"]')).not.toHaveTextContent('$');
+        expect(screen.getByRole('region', { name: 'Unpriced tokens' })).toBeInTheDocument();
+        expect(messaging.getNativePricesRequest).not.toHaveBeenCalled();
+    });
+});
+
 describe('Home token rows on a real wallet', () => {
     it('prices only the DEX-traded token, skips spam-looking dust, and keeps the count aligned', async () => {
         const calls = [];
