@@ -8,11 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The Locked screen hides its "Forgot password?" button while the restore
-// panel is open, with the hidden attribute. `.btn { display: inline-flex }`
-// is an author rule, so it beat the browser's own `[hidden] { display: none }`
-// and the button stayed on screen above the panel it had opened. jsdom applies
-// no stylesheet, so this pins the rule itself.
+// The Locked screen hides "Forgot password?" with the hidden attribute while
+// its panel is open; the button's inline-flex display must not outrank that.
+// jsdom applies no stylesheet, so this pins the rule itself.
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';

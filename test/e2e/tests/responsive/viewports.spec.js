@@ -164,9 +164,8 @@ test.describe('responsive: one interface at every width', () => {
         }
 
         // The link hides itself with the hidden attribute while its panel is
-        // open. The shared button's display rule used to outrank that
-        // attribute, so the link stayed on screen above the panel; jsdom
-        // applies no stylesheet, so only a real browser can show it.
+        // open, which works only while no author display rule outranks the
+        // attribute. jsdom applies no stylesheet, so only a browser shows it.
         await test.step('Forgot password leaves the screen while its panel is open', async () => {
             const forgot = page.getByRole('button', { name: 'Forgot password?' });
             await forgot.click();
