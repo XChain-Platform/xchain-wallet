@@ -28,6 +28,7 @@ import { Fragment, lazy, useCallback, useEffect, useMemo, useRef, useState } fro
 import { RouteErrorBoundary } from '@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx';
 import { ShellRouteOutlet } from '@xchain-wallet/core/shared/components/ShellRouteOutlet.jsx';
 import { i18n, registry as registryLib } from '@xchain-wallet/core';
+import { isDemoWallet } from '@xchain-wallet/core/flows';
 import { deepLinkRoute } from '../../../desktop/renderer/deepLinkRoute.js';
 import { withResolvedIssuer } from '@xchain-wallet/core/shared/utils/tokenDetailIssuer.js';
 
@@ -868,6 +869,8 @@ function AppInner({ canOpenInTab, titleEnabled }) {
             hasVmAddress,
             hasGovernanceAddress,
             isSignerMode,
+            isWatcherMode,
+            isDemoWallet: isDemoWallet(activeWalletId),
         }),
         // Token rows open TokenDetail with the full ref the row
         // carries.: settings-section and settings-backed help commands
@@ -890,6 +893,8 @@ function AppInner({ canOpenInTab, titleEnabled }) {
     // the chain from the first available when the prefill carries none). A
     // txid/date-shaped query offers "search history".
     const paletteParseQuery = (q) => parseFreeformCommands(q, {
+        isSignerMode,
+        isDemoWallet: isDemoWallet(activeWalletId),
         composeSend: ({ amount, tick }) => {
             setSendPrefill({ amount, tick });
             setSendBackTo('home');

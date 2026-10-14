@@ -2910,6 +2910,8 @@ function AppInner() {
                 // no longer exists.
                 hasDexSurface: DEX_SURFACE_ENABLED,
                 isSignerMode,
+                isWatcherMode,
+                isDemoWallet: isDemoWallet(activeWalletId),
             };
             // entity handlers: tokens open TokenDetail with the full
             // ref the row already carries; sites land on the Connected Sites
@@ -2939,6 +2941,8 @@ function AppInner() {
             // carries no chainId, so amount + tick alone is enough. A
             // txid/date-shaped query offers "search history".
             const paletteParseQuery = (q) => parseFreeformCommands(q, {
+                isSignerMode,
+                isDemoWallet: isDemoWallet(activeWalletId),
                 composeSend: ({ amount, tick }) => {
                     setSendPrefill({ amount, tick });
                     setSendBackTo('home');
