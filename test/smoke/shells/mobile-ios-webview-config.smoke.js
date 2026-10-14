@@ -61,16 +61,17 @@ const bodyRule = tokens.match(/body\s*\{[^}]*\}/)?.[0] ?? '';
 assert.match(bodyRule, /-webkit-text-size-adjust:\s*100%/);
 assert.match(bodyRule, /(?:^|\s)text-size-adjust:\s*100%/);
 
-// The plist and config cover the light launch frame. Both theme paths update
-// SystemBars after startup so dark and light palettes keep contrasting icons.
-assert.equal(config.plugins?.SystemBars?.style, 'LIGHT');
+// The plist and config start from the system default so launch icons contrast
+// with either splash appearance. Both theme paths update SystemBars after
+// startup so dark and light palettes keep contrasting icons.
+assert.equal(config.plugins?.SystemBars?.style, 'DEFAULT');
 assert.match(
     infoPlist,
     /<key>UIViewControllerBasedStatusBarAppearance<\/key>\s*<true\/>/,
 );
 assert.match(
     infoPlist,
-    /<key>UIStatusBarStyle<\/key>\s*<string>UIStatusBarStyleDarkContent<\/string>/,
+    /<key>UIStatusBarStyle<\/key>\s*<string>UIStatusBarStyleDefault<\/string>/,
 );
 for (const source of [startupTheme, liveTheme]) {
     assert.match(source, /style:\s*dark \? 'DARK' : 'LIGHT'/);
