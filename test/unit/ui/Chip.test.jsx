@@ -40,7 +40,9 @@ describe('<Chip>', () => {
 
         expect(css).toMatch(/height:\s*var\(--xc-control-h-sm\)/);
         expect(css).toMatch(/border-radius:\s*var\(--xc-radius-pill\)/);
-        expect(css).toMatch(/\.toggle:focus-visible\s*{[^}]*outline:\s*2px solid var\(--xc-focus-ring\)/s);
+        expect(css).toMatch(/\.toggle:focus-visible\s*{[^}]*outline:\s*2px solid var\(--xc-control-focus-ring\)/s);
+        expect(css).toMatch(/\.pressed[^}]*background:\s*var\(--xc-control-selected\)/s);
+        expect(css).toMatch(/\.toggle:disabled\s*{[^}]*border-color:\s*var\(--xc-control-disabled-border\)/s);
         expect(css).not.toMatch(/color-mix\(|:has\(/);
     });
 });

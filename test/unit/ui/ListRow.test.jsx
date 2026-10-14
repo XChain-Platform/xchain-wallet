@@ -56,12 +56,13 @@ describe('<ListRow>', () => {
         expect(screen.queryByRole('link')).toBeNull();
     });
 
-    it('uses the shared large control height and existing interaction tokens', () => {
+    it('uses the shared large control height and semantic interaction tokens', () => {
         const css = readFileSync('packages/core/src/ui/ListRow.module.css', 'utf8');
 
         expect(css).toMatch(/min-height:\s*var\(--xc-control-h-lg,\s*24px\)/);
-        expect(css).toMatch(/\.interactive:hover:not\(:disabled\)\s*\{[^}]*var\(--xc-bg-muted\)/s);
-        expect(css).toMatch(/\.interactive:focus-visible\s*\{[^}]*var\(--xc-focus-ring\)/s);
+        expect(css).toMatch(/\.interactive:hover:not\(:disabled\)\s*\{[^}]*var\(--xc-control-bg-hover\)/s);
+        expect(css).toMatch(/\.interactive:focus-visible\s*\{[^}]*var\(--xc-control-focus-ring\)/s);
+        expect(css).toMatch(/\.interactive:disabled\s*\{[^}]*var\(--xc-control-disabled-bg\)/s);
         expect(css).not.toContain('var(--xc-page-gutter)');
     });
 });
