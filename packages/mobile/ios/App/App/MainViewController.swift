@@ -52,7 +52,9 @@ class MainViewController: CAPBridgeViewController {
             action: #selector(handleEdgeBack(_:))
         )
         edgeBack.edges = .left
-        edgeBack.cancelsTouchesInView = false
+        // A committed edge Back owns its touch sequence, so the WebView cannot
+        // also activate or drag the sheet that the shared handler dismisses.
+        edgeBack.cancelsTouchesInView = true
         view.addGestureRecognizer(edgeBack)
     }
 

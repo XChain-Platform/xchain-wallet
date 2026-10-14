@@ -12,8 +12,8 @@
        rendered outside the frame but its 56px slot still steals layout
        space inside the frame. */
     position: absolute;
-    inset-inline-start: 0;
-    inset-inline-end: 0;
+    inset-inline-start: calc(0px - env(safe-area-inset-left, 0px));
+    inset-inline-end: calc(0px - env(safe-area-inset-right, 0px));
     bottom: 0;
     min-height: 3.5rem;
     display: flex;
@@ -21,7 +21,9 @@
     background: var(--xc-surface-raised);
     border-top: 1px solid var(--xc-border);
     z-index: var(--xc-z-sticky);
-    /* Respect iOS safe-area insets so the bar floats above the home indicator. */
+    /* Fill the cutout gutters while keeping tabs and the home indicator clear. */
+    padding-inline-start: env(safe-area-inset-left, 0px);
+    padding-inline-end: env(safe-area-inset-right, 0px);
     padding-bottom: env(safe-area-inset-bottom, 0);
     box-sizing: content-box;
 }
