@@ -59,7 +59,8 @@ function cutFigures(page, longFigures = null) {
             }
         }
         if (document.documentElement.scrollWidth > document.documentElement.clientWidth) cut.push('the page scrolls sideways');
-        return { rows: rows.length, cut };
+        const shown = rows.map((row) => row.querySelector('span[aria-label] > [title]')?.firstChild?.textContent);
+        return { rows: rows.length, cut, shown };
     }, longFigures);
 }
 
@@ -80,6 +81,7 @@ test('balances keep every digit at 100, 130 and 150 percent text', async ({ page
             // Home redraws on a timer, so the long figures are written and
             // measured in one step and replaced by the next redraw.
             const long = await cutFigures(page, LONG_FIGURES);
+            expect(long.shown.slice(0, LONG_FIGURES.length), `${where}: the long figures were written`).toEqual(LONG_FIGURES);
             expect(long.cut, `${where}: long balances`).toEqual([]);
         }
     }
