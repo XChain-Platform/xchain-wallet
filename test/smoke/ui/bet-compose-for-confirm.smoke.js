@@ -40,6 +40,8 @@ assert.match(hostSrc, /sdk\.betting\[builder\]\(req\?\.params\)/,
     'the route runs the real sdk.betting builder on the caller-supplied input');
 assert.match(hostSrc, /betParams: params/,
     'the built wire params ride back so the confirm page decodes what was composed');
+assert.match(hostSrc, /host\.register\('action\.bet\.psbt'/,
+    'the watcher BET route is registered');
 
 {
     const routeIdx = hostSrc.indexOf("host.register('action.bet.composeForConfirm'");
@@ -72,6 +74,10 @@ for (const [shell, ...p] of [
         `${shell}: composeBetForConfirm is exported`);
     assert.match(src, /sendMessage\('action\.bet\.composeForConfirm', opts\)/,
         `${shell}: routed to the BET compose route`);
+    assert.match(src, /export function buildBetActionPsbtRequest\(opts\)/,
+        `${shell}: buildBetActionPsbtRequest is exported`);
+    assert.match(src, /sendMessage\('action\.bet\.psbt', opts\)/,
+        `${shell}: watcher BET builds use the unsigned route`);
     for (const fn of ['createMarketAction', 'placeBetAction', 'resolveMarketAction', 'cancelMarketAction']) {
         assert.ok(src.includes(`export function ${fn}(opts)`), `${shell}: ${fn} is exported`);
         assert.ok(src.includes(`export function ${fn}Hw(opts)`), `${shell}: ${fn}Hw is exported`);
@@ -232,7 +238,8 @@ for (const [shell, ...p] of [
 ]) {
     const src = read(...p);
     for (const c of ['BetFeedsList', 'BetFeedDetail', 'CreateBetFeedForm', 'MyBets', 'OracleConsole', 'OracleRecord']) {
-        assert.ok(src.includes(`import { ${c} }`), `${shell}: imports ${c}`);
+        // Startup code split: a route may load lazily on first open.
+        assert.ok(src.includes(`import { ${c} }`) || new RegExp(`const\\s+${c}\\s*=\\s*lazyRoute\\(\\s*\\(\\)\\s*=>\\s*import\\([^)]*${c}\\.jsx`).test(src), `${shell}: imports ${c}`);
         assert.ok(src.includes(`<${c}`), `${shell}: renders ${c}`);
     }
     for (const view of ['bet-markets', 'bet-market-detail', 'bet-create', 'my-bets', 'bet-oracle-console', 'bet-oracle-record']) {

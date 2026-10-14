@@ -375,10 +375,16 @@ async function submitWizardName(page, tick) {
     await field.fill(tick);
     const held = await field.inputValue();
     await main.getByLabel('Supply', { exact: true }).fill(String(SUPPLY));
-    await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+    await main.getByRole('button', { name: 'Review token', exact: true }).click();
 
     const grammar = page.getByRole('alert')
         .filter({ hasText: /Token name (?:cannot|can only use|is required)/ });
+    const continueButton = main.getByRole('button', {
+        name: 'Continue to confirmation',
+        exact: true,
+    });
+    await grammar.or(continueButton).first().waitFor({ state: 'visible', timeout: 30_000 });
+    if (await continueButton.isVisible().catch(() => false)) await continueButton.click();
     const confirm = page.getByTestId('confirm-modal');
     // Raced rather than waited on in sequence: a refused submit never composes
     // and an accepted one never shows a grammar error, so whichever appears IS

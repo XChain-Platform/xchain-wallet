@@ -30,50 +30,16 @@
 // now really does break that chain's traffic: URLs are validated before
 // they are allowed to persist.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { registry as registryLib, sdk as sdkLib } from '@xchain-wallet/core';
+import { Button, EmptyState, FormSection, Input } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { useMessaging } from '../../useMessaging.js';
-import { INPUT, ROW_HINT, STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
+import { userFacingMessage } from '../../utils/userFacingMessage.js';
+import { ROW_HINT, STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
+import styles from './NetworkEndpointsSection.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
-
-const CHAIN_BLOCK = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 'var(--xc-space-2)',
-    padding: 'var(--xc-space-3) var(--xc-space-3)',
-    background: 'var(--xc-surface-raised)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-md)',
-};
-const HEADER_ROW = {
-    display: 'flex',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 'var(--xc-space-2)',
-};
-const FIELD_LABEL = {
-    fontSize: 'var(--xc-text-xs)',
-    color: 'var(--xc-text-muted)',
-    marginBottom: 2,
-};
-const ACTION_BTN = {
-    background: 'transparent',
-    border: '1px solid var(--xc-border)',
-    color: 'var(--xc-text)',
-    borderRadius: 'var(--xc-radius-sm)',
-    padding: 'var(--xc-space-1) var(--xc-space-2)',
-    fontSize: 'var(--xc-text-xs)',
-    cursor: 'pointer',
-};
-const ACTION_PRIMARY = {
-    ...ACTION_BTN,
-    background: 'var(--xc-accent-primary)',
-    borderColor: 'var(--xc-accent-primary)',
-    color: 'var(--xc-bg)',
-};
 
 export function NetworkEndpointsSection() {
     const { settings, loading, error, update } = useSettings();
@@ -90,7 +56,7 @@ export function NetworkEndpointsSection() {
         });
 
     if (descriptors.length === 0) {
-        return <Status text="No chains registered." />;
+        return <EmptyState title="No chains registered" titleAs="p" body="Registered chains and their endpoints appear here." />;
     }
 
     return (
@@ -101,14 +67,7 @@ export function NetworkEndpointsSection() {
                     key={d.id}
                     descriptor={d}
                     override={settings.sdkEndpoints[d.id]}
-                    onSave={async (next) => {
-                        try {
-                            await update({ sdkEndpoints: { [d.id]: next } });
-                        } catch (err) {
-                            // eslint-disable-next-line no-console
-                            console.error(`sdkEndpoints.${d.id} update failed:`, err);
-                        }
-                    }}
+                    onSave={(next) => update({ sdkEndpoints: { [d.id]: next } })}
                 />
             ))}
         </div>
@@ -126,59 +85,78 @@ function ChainRegistryRefreshRow() {
         && typeof messaging?.refreshChainRegistry === 'function';
     const [status, setStatus] = useState(/** @type {any} */ (null));
     const [refreshing, setRefreshing] = useState(false);
+    const [manualResult, setManualResult] = useState(false);
+    const requestRef = useRef(0);
     useEffect(() => {
         if (!wired) return;
+        const request = ++requestRef.current;
+        setRefreshing(false);
+        setManualResult(false);
         messaging.getChainRegistryStatus()
-            .then((s) => setStatus(s))
-            .catch(() => setStatus(null));
+            .then((s) => { if (request === requestRef.current) setStatus(s); })
+            .catch(() => { if (request === requestRef.current) setStatus(null); });
+        return () => { requestRef.current += 1; };
     }, [wired, messaging]);
     if (!wired) return null;
 
     const onRefresh = async () => {
+        const request = ++requestRef.current;
         try {
             setRefreshing(true);
             const next = await messaging.refreshChainRegistry();
+            if (request !== requestRef.current) return;
             setStatus(next);
+            setManualResult(true);
+        } catch (err) {
+            if (request !== requestRef.current) return;
+            setStatus({
+                ok: false,
+                error: userFacingMessage(err, 'Could not refresh the chain registry. Try again.'),
+            });
+            setManualResult(true);
         } finally {
-            setRefreshing(false);
+            if (request === requestRef.current) setRefreshing(false);
         }
     };
 
     return (
-        <div style={CHAIN_BLOCK}>
-            <div style={HEADER_ROW}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>
-                        Chain registry refresh
-                    </span>
-                    {/* "Descriptor" is the ChainDescriptor type name, and this
-                        panel is an ordinary Settings section, not a
-                        developer-gated one, so the count says "networks". It
-                        stays qualified as "in the registry" on purpose:
-                        descriptorCount is what the hub published registry-wide,
-                        while the chain list below is filtered through
-                        filterChainsForUser (regtest hidden unless developer
-                        mode), so a bare count would name a bigger number than
-                        the list under it. */}
-                    <span style={ROW_HINT}>
-                        {status?.ok
-                            ? `Last refreshed ${formatRelative(status.lastRefreshedAt)} · ${status.descriptorCount} network${status.descriptorCount === 1 ? '' : 's'} in the registry`
-                            : status?.error
-                                ? `Last attempt failed: ${status.error}`
-                                : 'No refresh yet; the networks bundled with this wallet are active.'}
-                    </span>
-                </div>
-                <button
+        <FormSection
+            headingLevel="h3"
+            title="Chain registry refresh"
+            description={registryStatusText(status, manualResult)}
+            className={styles.endpointCard}
+        >
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <Button
                     type="button"
                     onClick={onRefresh}
                     disabled={refreshing}
-                    style={ACTION_BTN}
+                    size="sm"
+                    variant="secondary"
                 >
                     {refreshing ? 'Refreshing…' : 'Refresh now'}
-                </button>
+                </Button>
             </div>
-        </div>
+        </FormSection>
     );
+}
+
+function registryStatusText(status, manualResult) {
+    if (status?.ok) {
+        const networks = `${status.descriptorCount} network${status.descriptorCount === 1 ? '' : 's'}`;
+        return manualResult
+            ? `Refresh complete: ${networks} available from the registry.`
+            : `Last refreshed ${formatRelative(status.lastRefreshedAt)} · ${networks} in the registry`;
+    }
+    if (!status?.error) {
+        return 'No refresh yet; the networks bundled with this wallet are active.';
+    }
+    const raw = userFacingMessage(status.error, 'The registry could not be refreshed.');
+    const unreachable = /fetch|network|timed? out|timeout|unreachable|econn|enotfound|connection/i.test(raw);
+    const reason = unreachable
+        ? 'The registry host could not be reached.'
+        : `The registry could not be refreshed: ${raw}`;
+    return `Refresh failed. ${reason} The networks bundled with this wallet remain active.`;
 }
 
 function formatRelative(iso) {
@@ -199,7 +177,9 @@ function formatRelative(iso) {
 // A URL the wallet can actually talk to: absolute, http(s), with a host.
 // Anything else would be handed straight to the SDK now that overrides
 // are live, so it is refused at the edit surface instead.
-function endpointError(value) {
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+function endpointError(value, descriptor) {
     let parsed;
     try {
         parsed = new URL(value);
@@ -210,7 +190,23 @@ function endpointError(value) {
         return 'Only http:// and https:// URLs are supported.';
     }
     if (!parsed.hostname) return 'That URL has no host.';
+    const allowsHttp = descriptor?.networkKind === 'regtest' || LOOPBACK_HOSTS.has(parsed.hostname);
+    if (parsed.protocol === 'http:' && !allowsHttp) {
+        return 'Use https:// for remote hosts. http:// is allowed only for regtest and local hosts.';
+    }
     return null;
+}
+
+function canonicalEndpoint(value) {
+    const trimmed = value.trim();
+    try {
+        const parsed = new URL(trimmed);
+        parsed.pathname = parsed.pathname.replace(/\/+$/, '');
+        const path = parsed.pathname === '/' ? '' : parsed.pathname;
+        return `${parsed.origin}${path}${parsed.search}${parsed.hash}`;
+    } catch {
+        return trimmed;
+    }
 }
 
 function ChainEndpointBlock({ descriptor, override, onSave }) {
@@ -235,6 +231,7 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
     });
     const [draft, setDraft] = useState(seeded);
     const [editing, setEditing] = useState(false);
+    const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState(/** @type {string|null} */ (null));
 
     useEffect(() => {
@@ -243,7 +240,14 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
         setEditing(false);
         setSaveError(null);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [override?.explorerUrl, override?.encoderUrl, override?.hubUrl]);
+    }, [
+        override?.explorerUrl,
+        override?.encoderUrl,
+        override?.hubUrl,
+        defaults.explorerUrl,
+        defaults.encoderUrl,
+        defaults.hubUrl,
+    ]);
 
     const isCustom = Boolean(override?.custom);
     const networkSuffix = descriptor.networkKind !== 'mainnet'
@@ -257,13 +261,13 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
         || draft.hubUrl !== persisted.hubUrl
     );
 
-    const onCommit = () => {
+    const onCommit = async () => {
         // An emptied field means "use the default for this one", not
         // "send requests to nowhere".
         const next = {
-            explorerUrl: draft.explorerUrl.trim() || defaults.explorerUrl,
-            encoderUrl: draft.encoderUrl.trim() || defaults.encoderUrl,
-            hubUrl: draft.hubUrl.trim() || defaults.hubUrl,
+            explorerUrl: canonicalEndpoint(draft.explorerUrl) || defaults.explorerUrl,
+            encoderUrl: canonicalEndpoint(draft.encoderUrl) || defaults.encoderUrl,
+            hubUrl: canonicalEndpoint(draft.hubUrl) || defaults.hubUrl,
         };
         const bad = [
             ['Explorer URL', next.explorerUrl],
@@ -271,7 +275,7 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
             ['Hub URL', next.hubUrl],
         ]
             .map(([label, value]) => {
-                const err = endpointError(value);
+                const err = endpointError(value, descriptor);
                 return err ? `${label}: ${err}` : null;
             })
             .filter(Boolean);
@@ -286,31 +290,46 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
         );
         setSaveError(null);
         setDraft(next);
-        onSave({ ...next, custom: !matchesDefault });
-        setEditing(false);
+        setSaving(true);
+        try {
+            await onSave({ ...next, custom: !matchesDefault });
+            setEditing(false);
+        } catch (err) {
+            setDraft(persisted);
+            setEditing(false);
+            setSaveError(userFacingMessage(err, 'Could not save these endpoints. Try again.'));
+        } finally {
+            setSaving(false);
+        }
     };
-    const onReset = () => {
+    const onReset = async () => {
         setDraft(defaults);
         setSaveError(null);
-        onSave({
-            explorerUrl: defaults.explorerUrl,
-            encoderUrl: defaults.encoderUrl,
-            hubUrl: defaults.hubUrl,
-            custom: false,
-        });
-        setEditing(false);
+        setSaving(true);
+        try {
+            await onSave({
+                explorerUrl: defaults.explorerUrl,
+                encoderUrl: defaults.encoderUrl,
+                hubUrl: defaults.hubUrl,
+                custom: false,
+            });
+            setEditing(false);
+        } catch (err) {
+            setDraft(persisted);
+            setEditing(false);
+            setSaveError(userFacingMessage(err, 'Could not reset these endpoints. Try again.'));
+        } finally {
+            setSaving(false);
+        }
     };
 
     return (
-        <div style={CHAIN_BLOCK}>
-            <div style={HEADER_ROW}>
-                <span style={{ fontWeight: 600, color: 'var(--xc-text)', fontSize: 'var(--xc-text-sm)' }}>
-                    {descriptor.displayName}{networkSuffix}
-                </span>
-                <span style={ROW_HINT}>
-                    {isCustom ? 'Custom' : 'Default'}
-                </span>
-            </div>
+        <FormSection
+            headingLevel="h3"
+            title={`${descriptor.displayName}${networkSuffix}`}
+            description={isCustom ? 'Custom' : 'Default'}
+            className={styles.endpointCard}
+        >
             <UrlField
                 label="Explorer URL"
                 value={draft.explorerUrl}
@@ -330,7 +349,7 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
                 onChange={(v) => { setDraft((d) => ({ ...d, hubUrl: v })); setEditing(true); }}
             />
             {saveError ? (
-                <div role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger, #c33)' }}>
+                <div role="alert" style={{ ...ROW_HINT, color: 'var(--xc-danger-fg, #c33)' }}>
                     {saveError}
                 </div>
             ) : null}
@@ -340,32 +359,41 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
                     addresses right away.
                 </div>
             ) : null}
-            <div style={{ display: 'flex', flexDirection: 'row', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
+            {isCustom || dirty ? (
+                <div style={ROW_HINT}>
+                    URL format is checked here, but the host is not contacted until the wallet uses it.
+                    If it is unreachable, this chain&apos;s balances, history and transactions may be unavailable.
+                </div>
+            ) : null}
+            <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
                 {isCustom || dirty ? (
-                    <button type="button" onClick={onReset} style={ACTION_BTN}>Reset to default</button>
+                    <Button type="button" onClick={onReset} size="sm" variant="secondary" disabled={saving}>
+                        Reset to default
+                    </Button>
                 ) : null}
                 {dirty || editing ? (
-                    <button type="button" onClick={onCommit} style={ACTION_PRIMARY} disabled={!dirty}>
-                        Save
-                    </button>
+                    <Button type="button" onClick={onCommit} size="sm" variant="primary" disabled={!dirty || saving}>
+                        {saving ? 'Saving…' : 'Save'}
+                    </Button>
                 ) : null}
             </div>
-        </div>
+        </FormSection>
     );
 }
 
 function UrlField({ label, value, placeholder, onChange }) {
     return (
-        <div>
-            <div style={FIELD_LABEL}>{label}</div>
-            <input
-                type="url"
-                value={value}
-                placeholder={placeholder}
-                onChange={(e) => onChange(e.target.value)}
-                aria-label={label}
-                style={{ ...INPUT, width: '100%' }}
-            />
-        </div>
+        <Input
+            type="url"
+            label={label}
+            enterKeyHint="done"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            value={value}
+            placeholder={placeholder}
+            onChange={(e) => onChange(e.target.value)}
+            aria-label={label}
+        />
     );
 }

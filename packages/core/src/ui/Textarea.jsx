@@ -8,8 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { forwardRef, useId } from 'react';
+import { forwardRef, useEffect, useId, useState } from 'react';
 import styles from './Input.module.css';
+import { resolveFieldRequirement } from './fieldRequirement.js';
 
 /**
  * Controlled `<textarea>` that shares Input's field/label/control styling, so a
@@ -22,40 +23,94 @@ import styles from './Input.module.css';
  * @property {string} [hint]
  * @property {string} [error]
  * @property {string} [id]
+ * @property {boolean} [optional]   appends the standard "(optional)" suffix and exposes the field as optional to assistive technology.
  * @property {'md' | 'lg'} [size]   field size, matching Input.
  */
 export const Textarea = forwardRef(function Textarea(
-    { label, hint, error, id, size = 'md', style, ...rest },
+    {
+        label,
+        hint,
+        error,
+        id,
+        optional = false,
+        size = 'md',
+        style,
+        value,
+        defaultValue,
+        maxLength,
+        className,
+        onChange,
+        required = false,
+        'aria-invalid': externalInvalid,
+        'aria-describedby': externalDescribedBy,
+        'aria-required': externalRequired,
+        ...rest
+    },
     ref,
 ) {
     const autoId = useId();
     const textareaId = id || autoId;
-    const hintId = hint ? `${textareaId}-hint` : undefined;
-    const errorId = error ? `${textareaId}-error` : undefined;
-    const describedBy = [hintId, errorId].filter(Boolean).join(' ') || undefined;
-    const textareaClass = `${styles.input} ${error ? styles.invalid : ''}`.trim();
+    const requirement = resolveFieldRequirement({
+        label,
+        optional,
+        required,
+        ariaRequired: externalRequired,
+    });
+    const [dismissedError, setDismissedError] = useState(null);
+    const visibleError = error && error !== dismissedError ? error : null;
+    const hintId = hint && !visibleError ? `${textareaId}-hint` : undefined;
+    const errorId = visibleError ? `${textareaId}-error` : undefined;
+    const counterId = maxLength != null ? `${textareaId}-counter` : undefined;
+    const initialValue = value ?? defaultValue ?? '';
+    const [uncontrolledLength, setUncontrolledLength] = useState(() => String(initialValue).length);
+    const characterCount = value === undefined ? uncontrolledLength : String(value ?? '').length;
+    const describedBy = [externalDescribedBy, hintId, errorId, counterId]
+        .filter(Boolean).join(' ') || undefined;
+    const textareaClass = [styles.input, visibleError ? styles.invalid : '', className]
+        .filter(Boolean).join(' ');
+
+    useEffect(() => {
+        if (!error) setDismissedError(null);
+    }, [error]);
+
+    const handleChange = (event) => {
+        setUncontrolledLength(event.currentTarget.value.length);
+        if (error) setDismissedError(error);
+        onChange?.(event);
+    };
 
     return (
         <div className={`${styles.field} ${styles[size] || ''}`.trim()}>
             {label ? (
                 <label htmlFor={textareaId} className={styles.label}>
-                    {label}
+                    {requirement.label}
                 </label>
             ) : null}
             <textarea
                 ref={ref}
                 id={textareaId}
                 className={textareaClass}
-                aria-invalid={error ? 'true' : undefined}
+                aria-invalid={visibleError ? 'true' : externalInvalid}
                 aria-describedby={describedBy}
+                aria-required={requirement.ariaRequired}
+                required={required}
                 style={{ resize: 'vertical', ...style }}
+                value={value}
+                defaultValue={defaultValue}
+                maxLength={maxLength}
+                onChange={handleChange}
                 {...rest}
             />
-            {hint && !error ? (
+            {hint && !visibleError ? (
                 <div id={hintId} className={styles.hint}>{hint}</div>
             ) : null}
-            {error ? (
-                <div id={errorId} className={styles.error} role="alert">{error}</div>
+            {visibleError ? (
+                <div id={errorId} className={styles.error} role="alert">{visibleError}</div>
+            ) : null}
+            {maxLength != null ? (
+                <div id={counterId} className={styles.counter} aria-live="polite">
+                    {characterCount} / {maxLength}
+                </div>
             ) : null}
         </div>
     );

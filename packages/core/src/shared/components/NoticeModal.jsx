@@ -8,9 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { Button } from '@xchain-wallet/core/ui';
-import styles from './NoticeModal.module.css';
+import { OverlaySurface } from './OverlaySurface.jsx';
+import { useBackHandler } from '../../ui/backStack.js';
+import { useFocusTrap, useInertBackground } from '../utils/focusTrap.js';
 
 /**
  * Small centered status modal for quick "it happened" confirmations
@@ -25,6 +27,13 @@ import styles from './NoticeModal.module.css';
  * @param {() => void} props.onClose
  */
 export function NoticeModal({ title, message, confirmLabel = 'OK', onClose }) {
+    const rootRef = useRef(null);
+    const panelRef = useRef(null);
+    const titleId = useId();
+    const messageId = useId();
+    useFocusTrap(panelRef, { active: true });
+    useInertBackground(rootRef, { active: true });
+    useBackHandler(onClose);
     useEffect(() => {
         const onKey = (e) => { if (e.key === 'Escape') onClose(); };
         window.addEventListener('keydown', onKey);
@@ -32,21 +41,23 @@ export function NoticeModal({ title, message, confirmLabel = 'OK', onClose }) {
     }, [onClose]);
 
     return (
-        <div
-            className={styles.overlay}
-            role="dialog"
-            aria-modal="true"
-            aria-label={title}
-            onClick={onClose}
+        <OverlaySurface
+            rootRef={rootRef}
+            surfaceRef={panelRef}
+            title={title}
+            titleId={titleId}
+            titleAs="p"
+            aria-labelledby={titleId}
+            aria-describedby={message ? messageId : undefined}
+            onBackdrop={onClose}
             tabIndex={-1}
-        >
-            <div className={styles.panel} onClick={(e) => e.stopPropagation()} role="presentation" tabIndex={-1}>
-                <p className={styles.title}>{title}</p>
-                {message ? <p className={styles.message}>{message}</p> : null}
-                <Button variant="primary" block onClick={onClose} autoFocus>
+            footer={(
+                <Button variant="primary" block onClick={onClose}>
                     {confirmLabel}
                 </Button>
-            </div>
-        </div>
+            )}
+        >
+            {message ? <p id={messageId}>{message}</p> : null}
+        </OverlaySurface>
     );
 }

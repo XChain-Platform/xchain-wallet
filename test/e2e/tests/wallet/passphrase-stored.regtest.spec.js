@@ -78,7 +78,8 @@ import {
     createWallet,
     expect,
     test,
-    acknowledgeDonationConsent,
+    acknowledgeDonationNotice,
+    acknowledgeImportNotice,
     dismissIntroCarousel,
     gotoSection,
     lockButton,
@@ -266,7 +267,7 @@ async function revealRecoveryPhrase(page, password) {
 
     await page.getByLabel('Wallet password', { exact: true }).fill(password);
     await page.getByRole('button', { name: 'Reveal', exact: true }).click();
-    await expect(page.getByText('Your seed phrase'),
+    await expect(page.getByText('Your recovery phrase'),
         'the wallet password did not open the reveal, so nothing below can be read back')
         .toBeVisible({ timeout: kdfStepTimeout() });
 }
@@ -281,7 +282,7 @@ async function revealRecoveryPhrase(page, password) {
  * loosened enough to pass would stop proving anything.
  */
 function revealBlock(page) {
-    return page.getByRole('button', { name: /^(Reveal|Hide) seed phrase$/ }).locator('..');
+    return page.getByRole('button', { name: /^(Reveal|Hide) recovery phrase$/ }).locator('..');
 }
 
 /** The blurred value button the reveal renders for the stored 25th word. */
@@ -315,6 +316,9 @@ async function restoreOntoFreshDevice(page, {
         .fill(walletPassword);
     await page.getByLabel('Password for this device', { exact: true }).fill(devicePassword);
     await page.getByRole('button', { name: 'Restore', exact: true }).click();
+    // Every caller goes on to wait for the shell, which sits behind the
+    // donation notice a restore now ends on.
+    await acknowledgeImportNotice(page);
 }
 
 /**
@@ -756,7 +760,7 @@ test.describe('the BIP39 passphrase is stored at setup (§15.6)', () => {
                     + 'the capture step at its word can never read back the secret it kept')
                     .toBeVisible();
 
-                const seed = page.getByRole('button', { name: /^(Reveal|Hide) seed phrase$/ });
+                const seed = page.getByRole('button', { name: /^(Reveal|Hide) recovery phrase$/ });
                 const pass = revealedPassphraseButton(page);
                 await expect(pass, 'the reveal names a passphrase row but renders no value in it')
                     .toBeVisible();
@@ -776,7 +780,7 @@ test.describe('the BIP39 passphrase is stored at setup (§15.6)', () => {
 
             await test.step('it sits UNDER the words, behind the same blur, toggled by the same tap',
                 async () => {
-                    const seed = page.getByRole('button', { name: /^(Reveal|Hide) seed phrase$/ });
+                    const seed = page.getByRole('button', { name: /^(Reveal|Hide) recovery phrase$/ });
                     const pass = revealedPassphraseButton(page);
 
                     const seedBox = await seed.boundingBox();
@@ -868,7 +872,7 @@ async function importMnemonic(page, { words, passphrase, name }) {
     await dismissIntroCarousel(page);
     await page.getByRole('button', { name: 'Import wallet' }).click();
 
-    await page.getByLabel('Recovery phrase').fill(words.join(' '));
+    await page.getByLabel('Recovery phrase', { exact: true }).fill(words.join(' '));
     await page.getByLabel('Wallet name').fill(name);
     await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
     await page.getByLabel(/^Confirm( password)?$/).fill(PASSWORD);
@@ -878,7 +882,7 @@ async function importMnemonic(page, { words, passphrase, name }) {
     }
     await page.getByRole('button', { name: 'Import', exact: true }).click();
 
-    await acknowledgeDonationConsent(page, 'decline');
+    await acknowledgeDonationNotice(page, 'off');
     await expect(unlockedShell(page), 'the import never reached an unlocked wallet')
         .toBeVisible({ timeout: kdfStepTimeout() });
 }

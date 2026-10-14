@@ -22,8 +22,8 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { IssueTokenForm } from '../../../packages/core/src/shared/routes/IssueTokenForm.jsx';
 
-const OWNER = 'bc1qownerownerownerownerownerownerowner';
-const HOLDER = 'bc1qholderholderholderholderholderholde';
+const OWNER = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
+const HOLDER = 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq';
 
 const ADDRESSES = {
     'bitcoin-mainnet': [
@@ -141,6 +141,6 @@ describe('IssueTokenForm ownership transfer versus supply transfer', () => {
     it('says on the form itself that ownership and the minted tokens move separately', async () => {
         mountForm();
         await screen.findByLabelText('Ticker');
-        expect(screen.getByText(/the minted tokens stay with the issuing address/i)).toBeTruthy();
+        expect(screen.getByText(/Transferring ownership doesn't move the minted tokens/i)).toBeTruthy();
     });
 });

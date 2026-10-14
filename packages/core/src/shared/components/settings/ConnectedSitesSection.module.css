@@ -1,0 +1,15 @@
+.controlRow {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--xc-space-2);
+}
+
+.controlRow > * {
+    margin-bottom: 0;
+}
+
+.blockRow > :first-child {
+    flex: 1 1 12rem;
+}

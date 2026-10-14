@@ -68,6 +68,18 @@ function mount(element, messaging) {
 afterEach(() => cleanup());
 
 describe('ObligationsView: the Payments-due card shows the debt in coins', () => {
+    it('shows a scan failure instead of claiming there are no payments due', async () => {
+        const messaging = makeMessaging([]);
+        messaging.getCoinpayObligationsForAddress.mockRejectedValue(new Error('Explorer unavailable'));
+        mount(
+            React.createElement(ObligationsView, { walletId: WALLET_ID, onPay: vi.fn(), onBack: vi.fn() }),
+            messaging,
+        );
+
+        await screen.findByText('Explorer unavailable');
+        expect(screen.queryByText('No payments due')).toBeNull();
+    });
+
     it('[REGRESSION] renders "10 DOGE" for coin_amount "10", not 0.0000001', async () => {
         mount(
             React.createElement(ObligationsView, { walletId: WALLET_ID, onPay: vi.fn(), onBack: vi.fn() }),
@@ -110,8 +122,9 @@ describe('CoinpayForm: confirm and review stages show the debt in coins', () => 
         expect(screen.queryByText(/1000000000/)).toBeNull();
 
         fireEvent.click(review);
-        await screen.findByText(/Pay 10 DOGE to complete matched order #648/);
-        expect(screen.getAllByText(/\b10 DOGE\b/).length).toBeGreaterThanOrEqual(2);
+        await screen.findByText('Review payment');
+        expect(screen.getByText('648')).toBeInTheDocument();
+        expect(screen.getAllByText(/\b10 DOGE\b/).length).toBeGreaterThanOrEqual(1);
         expect(screen.queryByText(/1000000000/)).toBeNull();
         expect(screen.queryByText(/base units/)).toBeNull();
     });
@@ -119,8 +132,9 @@ describe('CoinpayForm: confirm and review stages show the debt in coins', () => 
     it('[REGRESSION] "10.5" reads as 10.5 DOGE on review, not 1050000000 DOGE', async () => {
         const review = await mountPrefilled('10.5');
         fireEvent.click(review);
-        await screen.findByText(/Pay 10\.5 DOGE to complete matched order #648/);
-        expect(screen.getAllByText(/\b10\.5 DOGE\b/).length).toBeGreaterThanOrEqual(2);
+        await screen.findByText('Review payment');
+        expect(screen.getByText('648')).toBeInTheDocument();
+        expect(screen.getAllByText(/\b10\.5 DOGE\b/).length).toBeGreaterThanOrEqual(1);
         expect(screen.queryByText(/1050000000/)).toBeNull();
     });
 

@@ -14,7 +14,7 @@
 //   - origin / appName / lastUsedAt
 //   - expandable permissions summary (chains, accounts, sign-message,
 //     per-action signAction map)
-//   - Disconnect button that deletes the record
+//   - Disconnect button that confirms revocation, then deletes the record
 //   - Block button that adds the origin to the blocklist (§12 / G009)
 //     and evicts the record so any in-flight session stops signing.
 //
@@ -22,15 +22,21 @@
 // origins with Unblock buttons, plus an inline form to manually
 // block an origin without it being connected first.
 //
-// Per-action permission *editing* (toggling a single ACTION's
-// allow/ask/deny) needs a write handler that's narrower than full
-// record replacement; that lands in a follow-up step.
-
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+    Button,
+    EmptyState,
+    FormErrorSummary,
+    FormPage,
+    FormSection,
+    Input,
+} from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
 import { useSettings } from '../../hooks/useSettings.js';
+import { useConfirmModal } from '../../hooks/useConfirmModal.js';
+import { ConfirmModal } from '../ConfirmModal.jsx';
 import { useToast } from '../ToastHost.jsx';
-import { ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
+import { ROW_HINT, Status } from './_settingsPrimitives.jsx';
 import { actionDisplayLabel } from '../../utils/actionDisplayLabel.js';
 import {
     SIGN_THROTTLE_BURST_MIN,
@@ -42,44 +48,32 @@ import {
     SIGN_THROTTLE_DEFAULT_BURST,
     SIGN_THROTTLE_DEFAULT_WINDOW_MS,
 } from '../../../flows/signThrottle.js';
-
-const ACTION_BTN = {
-    background: 'transparent',
-    border: '1px solid var(--xc-border)',
-    color: 'var(--xc-text)',
-    borderRadius: 'var(--xc-radius-sm)',
-    padding: 'var(--xc-space-1) var(--xc-space-2)',
-    fontSize: 'var(--xc-text-xs)',
-    cursor: 'pointer',
-};
-
-const SITE_BLOCK = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 'var(--xc-space-2)',
-    padding: 'var(--xc-space-3)',
-    background: 'var(--xc-surface-raised)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-md)',
-};
+import local from './ConnectedSitesSection.module.css';
+import { blurNumberInputOnWheel } from '../../utils/formInput.js';
 
 export function ConnectedSitesSection() {
     const { messaging } = useMessaging();
     const { showToast } = useToast();
+    const confirmDialog = useConfirmModal();
     const [sites, setSites] = useState(/** @type {any[] | null} */ (null));
     const [blocked, setBlocked] = useState(/** @type {string[]} */ ([]));
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [expanded, setExpanded] = useState(/** @type {Set<string>} */ (new Set()));
     const [manualBlock, setManualBlock] = useState('');
+    const [pendingAction, setPendingAction] = useState(/** @type {string | null} */ (null));
+    const loadSequence = useRef(0);
+    const loadedFrom = useRef(null);
 
     const blocklistWired = typeof messaging?.listBlockedOrigins === 'function'
         && typeof messaging?.blockOrigin === 'function'
         && typeof messaging?.unblockOrigin === 'function';
 
-    const reload = async () => {
+    const reload = useCallback(async () => {
+        const sequence = ++loadSequence.current;
         if (typeof messaging?.listConnectedSites !== 'function') {
-            setError('Connected-sites is not wired in this shell yet.');
+            loadedFrom.current = messaging;
+            setError('Connected sites are unavailable in this app.');
             setLoading(false);
             return;
         }
@@ -89,24 +83,41 @@ export function ConnectedSitesSection() {
                 messaging.listConnectedSites(),
                 blocklistWired ? messaging.listBlockedOrigins() : Promise.resolve([]),
             ]);
+            if (sequence !== loadSequence.current) return;
+            loadedFrom.current = messaging;
             setSites(Array.isArray(siteList) ? siteList : []);
             setBlocked(Array.isArray(blockedList) ? blockedList : []);
             setError(null);
         } catch (err) {
+            if (sequence !== loadSequence.current) return;
+            loadedFrom.current = messaging;
             setError(err instanceof Error ? err.message : String(err));
         } finally {
-            setLoading(false);
+            if (sequence === loadSequence.current) setLoading(false);
         }
-    };
+    }, [blocklistWired, messaging]);
 
-    useEffect(() => { reload(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+    useEffect(() => {
+        reload();
+        return () => { loadSequence.current += 1; };
+    }, [reload]);
 
     const onDisconnect = async (id) => {
+        if (pendingAction) return;
         // §37.2 / Cluster D FOLLOWUP 1: snapshot the full ConnectedSite
         // record before tearing it down so the Undo toast can re-create
         // it with the same permissions / lastUsedAt / appName instead
         // of forcing the dApp to re-prompt.
         const snapshot = sites ? sites.find((s) => s.id === id) : null;
+        if (!snapshot) return;
+        const confirmed = await confirmDialog.confirm({
+            title: `Disconnect ${snapshot.appName || snapshot.origin}?`,
+            message: `${snapshot.origin} will lose access to the accounts you shared and will no longer be able to ask for signatures. You can reconnect the site later.`,
+            confirmLabel: 'Disconnect site',
+            danger: true,
+        });
+        if (!confirmed) return;
+        setPendingAction(`disconnect:${id}`);
         try {
             await messaging.deleteConnectedSite({ id });
             await reload();
@@ -126,97 +137,129 @@ export function ConnectedSitesSection() {
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setPendingAction(null);
         }
     };
 
-    const onBlock = async (origin) => {
+    const onBlock = async (origin, pendingKey = `block:${origin}`) => {
+        if (pendingAction) return false;
+        const confirmed = await confirmDialog.confirm({
+            title: `Block ${origin}?`,
+            message: 'This disconnects the site and prevents it from connecting or asking you to sign until you unblock it.',
+            confirmLabel: 'Block site',
+            danger: true,
+        });
+        if (!confirmed) return false;
+        setPendingAction(pendingKey);
         try {
             await messaging.blockOrigin({ origin });
             await reload();
+            return true;
         } catch (err) {
             setError(err instanceof Error ? err.message : String(err));
+            return false;
+        } finally {
+            setPendingAction(null);
         }
     };
 
     const onUnblock = async (origin) => {
+        if (pendingAction) return;
+        setPendingAction(`unblock:${origin}`);
         try {
             await messaging.unblockOrigin({ origin });
             await reload();
         } catch (err) {
             setError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setPendingAction(null);
         }
     };
 
     const onManualBlockSubmit = async (e) => {
         e.preventDefault();
         const trimmed = manualBlock.trim();
-        if (!trimmed) return;
-        try {
-            await messaging.blockOrigin({ origin: trimmed });
+        if (!trimmed || pendingAction) return;
+        const blockedOrigin = await onBlock(trimmed, 'block:manual');
+        if (blockedOrigin) {
             setManualBlock('');
-            await reload();
-        } catch (err) {
-            setError(err instanceof Error ? err.message : String(err));
         }
     };
 
-    if (loading) return <Status text="Loading…" />;
+    if (loading || loadedFrom.current !== messaging) return <Status text="Loading…" />;
     if (error) return <Status text={`Connected sites unavailable: ${error}`} tone="error" />;
 
     return (
-        <div style={STACK}>
-            {(!sites || sites.length === 0) ? (
-                <Status text="No sites connected yet. When a website asks to connect to this wallet and you allow it, it appears here." />
-            ) : (
-                sites.map((site) => {
-                    const isOpen = expanded.has(site.id);
-                    return (
-                        <div key={site.id} style={SITE_BLOCK}>
-                            <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--xc-space-2)' }}>
-                                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                                    <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>
-                                        {site.appName || site.origin}
-                                    </span>
-                                    <span style={ROW_HINT}>{site.origin}</span>
-                                    <span style={ROW_HINT}>
-                                        Last used {formatLastUsed(site.lastUsedAt)} · connected {formatLastUsed(site.connectedAt)}
-                                    </span>
-                                </div>
-                                <div style={{ display: 'flex', gap: 'var(--xc-space-1)' }}>
-                                    <button
+        <FormPage as="div" sectioned fullWidth label="Connected sites and dApp permissions">
+            <FormSection
+                title="Connected sites"
+                description="Review dApp connections and control each site's permissions."
+            >
+                {(!sites || sites.length === 0) ? (
+                    <EmptyState
+                        title="No sites connected yet"
+                        body="When a website asks to connect to this wallet and you allow it, it appears here."
+                        titleAs="p"
+                    />
+                ) : (
+                    sites.map((site) => {
+                        const isOpen = expanded.has(site.id);
+                        return (
+                            <FormSection
+                                key={site.id}
+                                headingLevel="h3"
+                                title={site.appName || site.origin}
+                                description={(
+                                    <>
+                                        <span style={{ display: 'block' }}>{site.origin}</span>
+                                        <span style={ROW_HINT}>
+                                            Last used {formatLastUsed(site.lastUsedAt)} · connected {formatLastUsed(site.connectedAt)}
+                                        </span>
+                                    </>
+                                )}
+                            >
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--xc-space-1)' }}>
+                                    <Button
                                         type="button"
+                                        aria-expanded={isOpen}
                                         onClick={() => setExpanded((prev) => {
                                             const next = new Set(prev);
                                             if (next.has(site.id)) next.delete(site.id); else next.add(site.id);
                                             return next;
                                         })}
-                                        style={ACTION_BTN}
+                                        size="sm"
+                                        variant="secondary"
                                     >
                                         {isOpen ? 'Hide' : 'Permissions'}
-                                    </button>
-                                    <button
-                                        type="button"
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        variant="danger"
                                         onClick={() => onDisconnect(site.id)}
-                                        style={ACTION_BTN}
+                                        loading={pendingAction === `disconnect:${site.id}`}
+                                        disabled={pendingAction !== null}
                                     >
                                         Disconnect
-                                    </button>
+                                    </Button>
                                     {blocklistWired ? (
-                                        <button
-                                            type="button"
+                                        <Button
+                                            size="sm"
+                                            variant="danger"
                                             onClick={() => onBlock(site.origin)}
-                                            style={{ ...ACTION_BTN, color: 'var(--xc-error, #c33)', borderColor: 'var(--xc-error, #c33)' }}
+                                            loading={pendingAction === `block:${site.origin}`}
+                                            disabled={pendingAction !== null}
                                         >
                                             Block
-                                        </button>
+                                        </Button>
                                     ) : null}
                                 </div>
-                            </div>
-                            {isOpen ? <PermissionsSummary permissions={site.permissions} /> : null}
-                        </div>
-                    );
-                })
-            )}
+                                {isOpen ? <PermissionsSummary permissions={site.permissions} /> : null}
+                            </FormSection>
+                        );
+                    })
+                )}
+            </FormSection>
             {blocklistWired ? (
                 <BlockedOriginsPanel
                     blocked={blocked}
@@ -224,39 +267,62 @@ export function ConnectedSitesSection() {
                     setManualBlock={setManualBlock}
                     onSubmit={onManualBlockSubmit}
                     onUnblock={onUnblock}
+                    pendingAction={pendingAction}
                 />
             ) : null}
             {blocklistWired
                 && typeof messaging?.listBlocklistAuditLog === 'function' ? (
-                    <BlocklistAuditPanel />
+                    <BlocklistAuditPanel confirm={confirmDialog.confirm} />
                 ) : null}
             <SignThrottlePanel />
-        </div>
+            {confirmDialog.request ? (
+                <ConfirmModal
+                    {...confirmDialog.request}
+                    onConfirm={confirmDialog.onConfirm}
+                    onCancel={confirmDialog.onCancel}
+                />
+            ) : null}
+        </FormPage>
     );
 }
 
 // Cluster S FOLLOWUP 4: Blocklist audit-log panel.
 // Reads the persisted ring-buffer via messaging.listBlocklistAuditLog,
-// renders newest-first, and exposes a Clear log button.
-function BlocklistAuditPanel() {
+// renders newest-first, and exposes a clear-history button.
+function BlocklistAuditPanel({ confirm }) {
     const { messaging } = useMessaging();
     const [entries, setEntries] = useState(/** @type {any[] | null} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [clearing, setClearing] = useState(false);
+    const reloadRequestRef = useRef(0);
 
-    const reload = async () => {
+    const reload = useCallback(async () => {
+        const request = ++reloadRequestRef.current;
         try {
             const list = await messaging.listBlocklistAuditLog();
+            if (request !== reloadRequestRef.current) return;
             setEntries(Array.isArray(list) ? list : []);
             setError(null);
         } catch (err) {
+            if (request !== reloadRequestRef.current) return;
             setError(err instanceof Error ? err.message : String(err));
         }
-    };
+    }, [messaging]);
 
-    useEffect(() => { reload(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+    useEffect(() => {
+        reload();
+        return () => { reloadRequestRef.current += 1; };
+    }, [reload]);
 
     const onClear = async () => {
+        if (clearing) return;
+        const confirmed = await confirm({
+            title: 'Clear site block history?',
+            message: 'This permanently deletes the record of sites you blocked or unblocked.',
+            confirmLabel: 'Clear history',
+            danger: true,
+        });
+        if (!confirmed) return;
         setClearing(true);
         try {
             await messaging.clearBlocklistAuditLog();
@@ -270,26 +336,30 @@ function BlocklistAuditPanel() {
 
     if (entries === null) return null;
     return (
-        <div style={SITE_BLOCK}>
-            <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--xc-space-2)' }}>
-                <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Blocklist audit log</span>
-                <button
+        <FormSection
+            headingLevel="h3"
+            title="Site block history"
+            description="Shows the 50 most recent changes, with the newest last. Use this history to spot a site that was blocked or unblocked unexpectedly."
+        >
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <Button
                     type="button"
                     onClick={onClear}
                     disabled={clearing || entries.length === 0}
-                    style={ACTION_BTN}
+                    size="sm"
+                    variant="danger"
                 >
-                    {clearing ? 'Clearing…' : 'Clear log'}
-                </button>
+                    {clearing ? 'Clearing…' : 'Clear history'}
+                </Button>
             </div>
-            <span style={ROW_HINT}>
-                Recent blocklist mutations (most recent last). Capped at 50
-                entries; older ones fall off automatically. Use this to spot
-                an unexpected change to the blocklist before it costs you.
-            </span>
             {entries.length === 0 ? (
-                <span style={ROW_HINT}>No mutations yet.</span>
+                <EmptyState
+                    title="No site block history"
+                    body="Sites you block or unblock appear here."
+                    titleAs="p"
+                />
             ) : (
+                // The style guide has no compact audit-list primitive, so this remains a semantic list.
                 <ul
                     style={{
                         margin: 0,
@@ -298,8 +368,6 @@ function BlocklistAuditPanel() {
                         display: 'flex',
                         flexDirection: 'column',
                         gap: 'var(--xc-space-1)',
-                        maxHeight: '12rem',
-                        overflowY: 'auto',
                     }}
                 >
                     {[...entries].reverse().map((entry, idx) => (
@@ -314,18 +382,19 @@ function BlocklistAuditPanel() {
                                 fontSize: 'var(--xc-text-xs)',
                             }}
                         >
+                            {/* Native list items preserve audit-log list semantics because the kit has no list primitive. */}
                             <span style={{ color: 'var(--xc-text-muted)', minWidth: '6.5rem' }}>
                                 {formatLastUsed(new Date(entry.at).toISOString())}
                             </span>
-                            <span style={{ color: entry.action === 'add' ? 'var(--xc-error, #c33)' : 'var(--xc-text)' }}>
-                                {entry.action === 'add' ? 'block' : 'unblock'}
+                            <span style={{ color: entry.action === 'add' ? 'var(--xc-danger-fg)' : 'var(--xc-text)' }}>
+                                {entry.action === 'add' ? 'blocked' : 'unblocked'}
                             </span>
                             <span style={{ color: 'var(--xc-text)', flex: 1, wordBreak: 'break-all', textAlign: 'right' }}>
                                 {entry.entry}
                                 {Array.isArray(entry.evictedSiteIds) && entry.evictedSiteIds.length > 0 ? (
                                     <span style={{ color: 'var(--xc-text-muted)', marginLeft: 4 }}>
-                                        (+{entry.evictedSiteIds.length} site
-                                        {entry.evictedSiteIds.length === 1 ? '' : 's'} evicted)
+                                        ({entry.evictedSiteIds.length} site connection
+                                        {entry.evictedSiteIds.length === 1 ? '' : 's'} removed)
                                     </span>
                                 ) : null}
                             </span>
@@ -334,18 +403,19 @@ function BlocklistAuditPanel() {
                 </ul>
             )}
             {error ? <Status text={error} tone="error" /> : null}
-        </div>
+        </FormSection>
     );
 }
 
 // Cluster S FOLLOWUP 1: Sign-request throttle limits panel.
 // Reads / edits `settings.signThrottle.{burst, windowMs}`. Empty values
-// fall back to defaults at the throttle layer (createSignThrottle), so
-// the user can clear an input to "unset" it without typing the default.
+// write the documented defaults because the settings patcher deep-merges
+// nested objects and cannot remove an existing nested key.
 function SignThrottlePanel() {
     const { settings, update } = useSettings();
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    const [validationAttempt, setValidationAttempt] = useState(0);
 
     const currentBurst = settings?.signThrottle?.burst;
     const currentWindowMs = settings?.signThrottle?.windowMs;
@@ -354,55 +424,51 @@ function SignThrottlePanel() {
         typeof currentBurst === 'number' ? String(currentBurst) : '',
     );
     const [windowSecondsInput, setWindowSecondsInput] = useState(
-        typeof currentWindowMs === 'number' ? String(Math.round(currentWindowMs / 1000)) : '',
+        typeof currentWindowMs === 'number' ? formatWindowSeconds(currentWindowMs) : '',
     );
 
     useEffect(() => {
         setBurstInput(typeof currentBurst === 'number' ? String(currentBurst) : '');
         setWindowSecondsInput(
-            typeof currentWindowMs === 'number' ? String(Math.round(currentWindowMs / 1000)) : '',
+            typeof currentWindowMs === 'number' ? formatWindowSeconds(currentWindowMs) : '',
         );
     }, [currentBurst, currentWindowMs]);
 
     const onApply = async (e) => {
         e.preventDefault();
+        setValidationAttempt((attempt) => attempt + 1);
+        if (submitting) return;
         setError(null);
-        const next = {};
+        const patch = {};
         if (burstInput.trim() === '') {
-            next.burst = undefined;
+            patch.burst = SIGN_THROTTLE_DEFAULT_BURST;
         } else {
-            const burstN = Math.floor(Number(burstInput));
-            if (!Number.isFinite(burstN)
+            const burstN = Number(burstInput);
+            if (!/^\d+$/.test(burstInput.trim())
+                || !Number.isFinite(burstN)
                 || burstN < SIGN_THROTTLE_BURST_MIN
                 || burstN > SIGN_THROTTLE_BURST_MAX) {
                 setError(`Burst must be an integer between ${SIGN_THROTTLE_BURST_MIN} and ${SIGN_THROTTLE_BURST_MAX}.`);
                 return;
             }
-            next.burst = burstN;
+            patch.burst = burstN;
         }
         if (windowSecondsInput.trim() === '') {
-            next.windowMs = undefined;
+            patch.windowMs = SIGN_THROTTLE_DEFAULT_WINDOW_MS;
         } else {
-            const seconds = Math.floor(Number(windowSecondsInput));
-            const ms = seconds * 1000;
-            if (!Number.isFinite(ms)
+            const ms = parseWindowSeconds(windowSecondsInput);
+            if (ms === null
                 || ms < SIGN_THROTTLE_WINDOW_MS_MIN
                 || ms > SIGN_THROTTLE_WINDOW_MS_MAX) {
                 const minS = SIGN_THROTTLE_WINDOW_MS_MIN / 1000;
                 const maxS = SIGN_THROTTLE_WINDOW_MS_MAX / 1000;
-                setError(`Window must be an integer number of seconds between ${minS} and ${maxS}.`);
+                setError(`Window must be between ${minS} and ${maxS} seconds with at most three decimal places.`);
                 return;
             }
-            next.windowMs = ms;
+            patch.windowMs = ms;
         }
         try {
             setSubmitting(true);
-            // Strip undefined keys so the patch doesn't overwrite a
-            // sibling field with an explicit undefined.
-            /** @type {Record<string, number>} */
-            const patch = {};
-            if (next.burst !== undefined) patch.burst = next.burst;
-            if (next.windowMs !== undefined) patch.windowMs = next.windowMs;
             await update({ signThrottle: patch });
         } catch (err) {
             setError(err instanceof Error ? err.message : String(err));
@@ -413,143 +479,156 @@ function SignThrottlePanel() {
 
     const effectiveBurst = typeof currentBurst === 'number' ? currentBurst : SIGN_THROTTLE_DEFAULT_BURST;
     const effectiveWindowSec = typeof currentWindowMs === 'number'
-        ? Math.round(currentWindowMs / 1000)
+        ? formatWindowSeconds(currentWindowMs)
         : SIGN_THROTTLE_DEFAULT_WINDOW_MS / 1000;
 
-    const FIELD = {
-        background: 'var(--xc-surface)',
-        border: '1px solid var(--xc-border)',
-        color: 'var(--xc-text)',
-        borderRadius: 'var(--xc-radius-sm)',
-        padding: 'var(--xc-space-1) var(--xc-space-2)',
-        fontSize: 'var(--xc-text-sm)',
-        width: '5rem',
-    };
+    const throttleErrorTarget = /^Burst /i.test(error || '')
+        ? { id: 'sign-throttle-burst', label: 'Burst' }
+        : /^Window /i.test(error || '')
+            ? { id: 'sign-throttle-window', label: 'Window' }
+            : undefined;
+    const throttleErrors = error ? [{ ...throttleErrorTarget, message: error }] : [];
     return (
-        <div style={SITE_BLOCK}>
-            <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Sign-request throttle</span>
-            <span style={ROW_HINT}>
-                Limits how many signing requests a single site can make in a
-                short window; anything over the limit is rejected until the
-                window resets. Lower numbers harden against abuse; higher
-                numbers help during heavy normal use. Defaults:{' '}
-                {SIGN_THROTTLE_DEFAULT_BURST} per{' '}
-                {SIGN_THROTTLE_DEFAULT_WINDOW_MS / 1000} s.
-            </span>
-            <span style={ROW_HINT}>
+        <FormSection
+            headingLevel="h3"
+            title="Sign-request throttle"
+            description={`Limits how many signing requests a single site can make in a short window; anything over the limit is rejected until the window resets. Lower numbers harden against abuse; higher numbers help during heavy normal use. Defaults: ${SIGN_THROTTLE_DEFAULT_BURST} per ${SIGN_THROTTLE_DEFAULT_WINDOW_MS / 1000} s.`}
+        >
+            <p style={ROW_HINT}>
                 Currently in effect: <strong>{effectiveBurst}</strong> per{' '}
                 <strong>{effectiveWindowSec} s</strong>.
-            </span>
+            </p>
             <form
+                aria-label="Sign-request throttle controls"
                 onSubmit={onApply}
-                style={{
-                    display: 'flex',
-                    flexDirection: 'row',
-                    flexWrap: 'wrap',
-                    alignItems: 'center',
-                    gap: 'var(--xc-space-2)',
-                }}
+                className={local.controlRow}
             >
-                <label style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 'var(--xc-text-xs)' }}>
-                    <span style={{ color: 'var(--xc-text-muted)' }}>Burst</span>
-                    <input
-                        type="number"
-                        min={SIGN_THROTTLE_BURST_MIN}
-                        max={SIGN_THROTTLE_BURST_MAX}
-                        step={1}
-                        value={burstInput}
-                        onChange={(e) => setBurstInput(e.target.value)}
-                        placeholder={String(SIGN_THROTTLE_DEFAULT_BURST)}
-                        aria-label="Sign-throttle burst (max requests per window)"
-                        style={FIELD}
-                    />
-                </label>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 'var(--xc-text-xs)' }}>
-                    <span style={{ color: 'var(--xc-text-muted)' }}>Window (seconds)</span>
-                    <input
-                        type="number"
-                        min={SIGN_THROTTLE_WINDOW_MS_MIN / 1000}
-                        max={SIGN_THROTTLE_WINDOW_MS_MAX / 1000}
-                        step={1}
-                        value={windowSecondsInput}
-                        onChange={(e) => setWindowSecondsInput(e.target.value)}
-                        placeholder={String(SIGN_THROTTLE_DEFAULT_WINDOW_MS / 1000)}
-                        aria-label="Sign-throttle window in seconds"
-                        style={FIELD}
-                    />
-                </label>
-                <button
+                <Input
+                    id="sign-throttle-burst"
+                    size="md"
+                    label="Burst"
+                    type="number"
+                    inputMode="numeric"
+                    enterKeyHint="next"
+                    autoComplete="off"
+                    min={SIGN_THROTTLE_BURST_MIN}
+                    max={SIGN_THROTTLE_BURST_MAX}
+                    step={1}
+                    value={burstInput}
+                    onChange={(e) => {
+                        setBurstInput(e.target.value);
+                        if (error) setError(null);
+                    }}
+                    onWheel={blurNumberInputOnWheel}
+                    placeholder={String(SIGN_THROTTLE_DEFAULT_BURST)}
+                    aria-label="Sign-throttle burst (max requests per window)"
+                    style={{ width: '5rem' }}
+                />
+                <Input
+                    id="sign-throttle-window"
+                    size="md"
+                    label="Window (seconds)"
+                    type="number"
+                    inputMode="decimal"
+                    enterKeyHint="go"
+                    autoComplete="off"
+                    min={SIGN_THROTTLE_WINDOW_MS_MIN / 1000}
+                    max={SIGN_THROTTLE_WINDOW_MS_MAX / 1000}
+                    step={0.001}
+                    value={windowSecondsInput}
+                    onChange={(e) => {
+                        setWindowSecondsInput(e.target.value);
+                        if (error) setError(null);
+                    }}
+                    onWheel={blurNumberInputOnWheel}
+                    placeholder={String(SIGN_THROTTLE_DEFAULT_WINDOW_MS / 1000)}
+                    aria-label="Sign-throttle window in seconds"
+                    style={{ width: '5rem' }}
+                />
+                <Button
                     type="submit"
                     disabled={submitting}
-                    style={{ ...ACTION_BTN, padding: 'var(--xc-space-2)' }}
+                    size="md"
+                    variant="primary"
                 >
                     {submitting ? 'Applying…' : 'Apply'}
-                </button>
+                </Button>
             </form>
-            {error ? (
-                <Status text={error} tone="error" />
-            ) : null}
-        </div>
+            <FormErrorSummary errors={throttleErrors} focusKey={validationAttempt} />
+        </FormSection>
     );
 }
 
-function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, onUnblock }) {
+function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, onUnblock, pendingAction }) {
     return (
-        <div style={{ ...SITE_BLOCK, borderColor: 'var(--xc-border)' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-2)' }}>
-                <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Blocked origins</span>
-                <span style={ROW_HINT}>
-                    Blocked sites cannot connect or ask you to sign anything
-                    until you remove them from this list. Wildcards like{' '}
+        <FormSection
+            headingLevel="h3"
+            title="Blocked sites"
+            description={(
+                <>
+                    Blocked sites cannot connect or ask you to sign until you
+                    unblock them. To block every subdomain, use a pattern like{' '}
                     <code style={{ fontFamily: 'var(--xc-font-mono, monospace)' }}>*.example.com</code>{' '}
-                    block every subdomain (the bare apex is separate; add{' '}
+                    and add{' '}
                     <code style={{ fontFamily: 'var(--xc-font-mono, monospace)' }}>example.com</code>{' '}
-                    too if you want to cover it).
-                </span>
+                    separately to block the main site too.
+                </>
+            )}
+        >
                 {blocked.length === 0 ? (
-                    <span style={ROW_HINT}>No origins blocked.</span>
+                    <EmptyState
+                        title="No blocked sites"
+                        body="Sites you block appear here."
+                        titleAs="p"
+                    />
                 ) : (
+                    // The style guide has no compact origin-list primitive, so this remains a semantic list.
                     <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)' }}>
                         {blocked.map((origin) => (
                             <li
                                 key={origin}
                                 style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--xc-space-2)' }}
                             >
+                                {/* Native list items preserve blocked-origin list semantics because the kit has no list primitive. */}
                                 <span style={{ color: 'var(--xc-text)', wordBreak: 'break-all' }}>{origin}</span>
-                                <button type="button" onClick={() => onUnblock(origin)} style={ACTION_BTN}>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="secondary"
+                                    onClick={() => onUnblock(origin)}
+                                    loading={pendingAction === `unblock:${origin}`}
+                                    disabled={pendingAction !== null}
+                                >
                                     Unblock
-                                </button>
+                                </Button>
                             </li>
                         ))}
                     </ul>
                 )}
-                <form onSubmit={onSubmit} style={{ display: 'flex', flexDirection: 'row', gap: 'var(--xc-space-2)' }}>
-                    <input
+                <form onSubmit={onSubmit} className={`${local.controlRow} ${local.blockRow}`}>
+                    <Input
                         type="text"
+                        size="md"
+                        enterKeyHint="go"
+                        autoCapitalize="off"
+                        autoCorrect="off"
+                        spellCheck={false}
                         value={manualBlock}
                         onChange={(e) => setManualBlock(e.target.value)}
                         placeholder="https://example.com or *.example.com"
                         aria-label="Origin or wildcard to block"
-                        style={{
-                            flex: 1,
-                            background: 'var(--xc-surface)',
-                            border: '1px solid var(--xc-border)',
-                            color: 'var(--xc-text)',
-                            borderRadius: 'var(--xc-radius-sm)',
-                            padding: 'var(--xc-space-1) var(--xc-space-2)',
-                            fontSize: 'var(--xc-text-sm)',
-                        }}
                     />
-                    <button
+                    <Button
                         type="submit"
-                        disabled={!manualBlock.trim()}
-                        style={{ ...ACTION_BTN, color: 'var(--xc-error, #c33)', borderColor: 'var(--xc-error, #c33)' }}
+                        size="md"
+                        variant="danger"
+                        loading={pendingAction === 'block:manual'}
+                        disabled={!manualBlock.trim() || pendingAction !== null}
                     >
                         Block
-                    </button>
+                    </Button>
                 </form>
-            </div>
-        </div>
+        </FormSection>
     );
 }
 
@@ -562,20 +641,25 @@ function PermissionsSummary({ permissions }) {
     const actions = permissions.canSignAction || {};
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)', fontSize: 'var(--xc-text-xs)' }}>
-            <PermRow label="Chains" text={chains.length === 0 ? 'none' : chains.join(', ')} />
-            <PermRow label="Accounts" text={accounts.length === 0 ? 'none' : accounts.join(', ')} />
-            <PermRow label="Sign messages" text={permissions.canSignMessage ? 'allow' : 'deny'} />
+            <PermRow label="Chains" text={chains.length === 0 ? 'None' : chains.join(', ')} />
+            <PermRow label="Accounts" text={accounts.length === 0 ? 'None' : accounts.join(', ')} />
+            <PermRow
+                label="Sign messages"
+                text={permissions.canSignMessage ? 'Always allow' : 'Ask every time'}
+            />
             {Object.keys(actions).length === 0 ? (
-                <PermRow label="Sign actions" text="none granted" />
+                <PermRow label="Sign actions" text="Ask every time" />
             ) : (
                 <div>
                     <div style={{ color: 'var(--xc-text-muted)' }}>Sign actions</div>
+                    {/* The style guide has no compact permission-list primitive, so this remains a semantic list. */}
                     <ul style={{ margin: 0, paddingLeft: 'var(--xc-space-3)', listStyle: 'disc' }}>
                         {Object.entries(actions).map(([action, perm]) => (
                             <li key={action} style={{ color: 'var(--xc-text)' }}>
+                                {/* Native list items preserve permission-list semantics because the kit has no list primitive. */}
                                 {actionDisplayLabel(action)}
                                 {': '}
-                                <span style={{ color: permColor(perm) }}>{perm}</span>
+                                <span style={{ color: permColor(perm) }}>{permissionLabel(perm)}</span>
                             </li>
                         ))}
                     </ul>
@@ -595,9 +679,27 @@ function PermRow({ label, text }) {
 }
 
 function permColor(perm) {
-    if (perm === 'allow') return 'var(--xc-success, #2a8)';
-    if (perm === 'deny') return 'var(--xc-error, #c33)';
+    if (perm === 'always') return 'var(--xc-success, #2a8)';
+    if (perm === 'never') return 'var(--xc-danger-fg)';
     return 'var(--xc-text-muted)';
+}
+
+function permissionLabel(perm) {
+    if (perm === 'always') return 'Always allow';
+    if (perm === 'never') return 'Never allow';
+    return 'Ask every time';
+}
+
+function formatWindowSeconds(windowMs) {
+    return String(windowMs / 1000);
+}
+
+function parseWindowSeconds(value) {
+    const match = /^(\d+)(?:\.(\d{1,3}))?$/.exec(value.trim());
+    if (!match) return null;
+    const wholeMs = Number(match[1]) * 1000;
+    const fractionalMs = Number((match[2] || '').padEnd(3, '0'));
+    return wholeMs + fractionalMs;
 }
 
 function formatLastUsed(iso) {

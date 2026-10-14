@@ -91,11 +91,12 @@ function plistValue(text, key) {
 // own id. It is allow-listed BY NAME rather than by loosening the check to a
 // prefix: `io.xchain.wallet.ios.anything` would then pass, and the whole point
 // of this assertion is that exactly one shipping id exists and it never moves.
-// A UI test bundle is never uploaded, so it cannot collide with D1.
-const UITEST_BUNDLE_ID = 'io.xchain.wallet.ios.uitests';
+// A UI test bundle is never uploaded, so it cannot collide with D1. The same
+// holds for the AppTests unit-test bundle (native Argon2id golden vectors).
+const TEST_BUNDLE_IDS = new Set(['io.xchain.wallet.ios.uitests', 'io.xchain.wallet.ios.tests']);
 const bundleIds = [...pbxproj.matchAll(/PRODUCT_BUNDLE_IDENTIFIER = ([^;]+);/g)]
     .map((m) => m[1].trim())
-    .filter((id) => id !== UITEST_BUNDLE_ID);
+    .filter((id) => !TEST_BUNDLE_IDS.has(id));
 assert.ok(bundleIds.length >= 2, 'expected a bundle id in both the Debug and Release configurations');
 for (const id of bundleIds) {
     assert.equal(id, 'io.xchain.wallet.ios', 'D1: immutable after the first App Store upload');
@@ -145,18 +146,55 @@ assert.ok(!infoPlist.includes('NSAllowsArbitraryLoads'), 'arbitrary loads must n
 
 // --- 7. Usage strings, scheme, export compliance ----------------------
 
-for (const key of ['NSCameraUsageDescription', 'NSFaceIDUsageDescription']) {
+const expectedUsageDescriptions = [
+    'NSCameraUsageDescription',
+    'NSFaceIDUsageDescription',
+    'NSLocalNetworkUsageDescription',
+    'NSPhotoLibraryUsageDescription',
+];
+const usageDescriptions = [...infoPlist.matchAll(/<key>(NS\w*UsageDescription)<\/key>/g)]
+    .map((match) => match[1]).sort();
+assert.deepEqual(
+    usageDescriptions,
+    expectedUsageDescriptions,
+    'the app declares exactly the usage descriptions required by its shipped capabilities',
+);
+for (const key of expectedUsageDescriptions) {
     const text = plistValue(infoPlist, key);
     assert.equal(typeof text, 'string', `${key} is missing; iOS kills the app on first use without it`);
     assert.ok(text.length > 20, `${key} is shown verbatim in the OS prompt and must say what it is for`);
+    assert.equal(text, text.trim(), `${key} must not contain hidden leading or trailing whitespace`);
+    assert.ok(
+        !/[<$>&]|\$\(/.test(text),
+        `${key} must be plain literal text, not markup, an entity, or a build-setting placeholder`,
+    );
 }
 assert.ok(
-    plistValue(infoPlist, 'NSFaceIDUsageDescription').includes('approval'),
+    /scan QR codes/i.test(plistValue(infoPlist, 'NSCameraUsageDescription')),
+    'the camera string must say that the camera scans QR codes',
+);
+assert.ok(
+    /Face ID.*unlock/i.test(plistValue(infoPlist, 'NSFaceIDUsageDescription'))
+        && /does not approve/i.test(plistValue(infoPlist, 'NSFaceIDUsageDescription')),
     'the Face ID string must not imply biometrics approve a transaction; it gates unlock only',
+);
+assert.match(
+    plistValue(infoPlist, 'NSPhotoLibraryUsageDescription'),
+    /photo library.*(?:attachment|import)/i,
+    'the photo library string must explain that the wallet chooses images for attachments or imports',
+);
+assert.match(
+    plistValue(infoPlist, 'NSLocalNetworkUsageDescription'),
+    /(?:node|service).*local network/i,
+    'the local network string must explain that the wallet connects to local nodes or services',
 );
 
 const schemes = plistValue(infoPlist, 'CFBundleURLSchemes');
-assert.deepEqual(schemes, ['xchain'], 'exactly one custom scheme, and it is inbound compatibility only');
+assert.deepEqual(
+    schemes,
+    ['xchain', 'bitcoin', 'litecoin', 'dogecoin'],
+    'the wallet accepts its app scheme and the three supported payment schemes',
+);
 
 assert.equal(
     plistValue(infoPlist, 'ITSAppUsesNonExemptEncryption'), false,
@@ -200,6 +238,24 @@ const mainVCSrc = readFileSync(join(ios, 'App', 'App', 'MainViewController.swift
 const disabledPluginsSrc = readFileSync(
     join(ios, 'App', 'App', 'DisabledCapacitorPlugins.swift'),
     'utf8',
+);
+
+// The native edge gesture must enter the SPA handler stack. WebKit history
+// bypasses route-local confirmation state and the signing-time back lock.
+assert.match(
+    mainVCSrc,
+    /UIScreenEdgePanGestureRecognizer[\s\S]*?edges = \.left[\s\S]*?addGestureRecognizer/,
+    'iOS Back must start at the left screen edge',
+);
+assert.match(
+    mainVCSrc,
+    /allowsBackForwardNavigationGestures = false/,
+    'WebKit history swipes must not bypass the shared back stack',
+);
+assert.match(
+    mainVCSrc,
+    /dispatchEvent\(new Event\('xchain:native-edge-back'\)\)/,
+    'a completed iOS edge swipe must dispatch to the shared back stack',
 );
 
 // Assert the CALLS, from inside capacitorDidLoad - not merely that functions
@@ -424,22 +480,21 @@ assert.match(
 
 // ---- Safe area: the app must not draw under the Dynamic Island ----------
 //
-// Measured on an iPhone 17 Pro Max simulator: the island sat on top of the
-// XChain logo. Two halves fix it, and BOTH are one-liners a template
-// regeneration or a stray `cap sync` could silently drop:
+// ONE mechanism owns the safe area, and it is the web one:
+// `viewport-fit=cover` plus the body insets in core/ui/tokens.css, sized
+// against --xc-viewport-h so the shell is exactly one screen tall.
 //
-//   1. `ios.contentInset: "always"` makes the WKWebView's scroll view adjust
-//      for the safe area. This is the half that actually moved the content -
-//      `env(safe-area-inset-top)` evaluates to ZERO inside this WebView even
-//      with viewport-fit=cover, proven by a literal-padding probe that DID
-//      move the app.
-//   2. `viewport-fit=cover` plus the body insets in core/ui/tokens.css, which
-//      is what serves the MOBILE WEB shell (Safari on a notched phone), where
-//      env() does return real values.
+// The native scroll view must NOT adjust for the safe area as well.
+// `ios.contentInset: "always"` did, on top of the CSS insets: measured on an
+// iPhone 17 Pro simulator (2026-10-12) the header sat 124pt down (62pt twice)
+// and the scroll view's added insets made the whole shell draggable, sliding
+// the header under the status bar and leaving a blank band under the tab
+// bar. "never" leaves the WebView full screen and env(safe-area-inset-*)
+// reports the real insets there (62pt top, 34pt bottom).
 assert.equal(
     capConfig.ios?.contentInset,
-    'always',
-    'capacitor.config.json sets ios.contentInset=always (else the WebView draws under the Dynamic Island)',
+    'never',
+    'capacitor.config.json sets ios.contentInset=never (the CSS insets own the safe area; "always" doubles them and makes the shell scroll)',
 );
 const webIndex = readFileSync(join(wsRoot, 'packages', 'web', 'index.html'), 'utf8');
 assert.match(
@@ -451,6 +506,21 @@ assert.match(
     readFileSync(join(wsRoot, 'packages', 'core', 'src', 'ui', 'tokens.css'), 'utf8'),
     /padding-top: env\(safe-area-inset-top/,
     'the shared stylesheet insets the top safe area',
+);
+// In an iPadOS 26 resizable window the close/minimise/resize controls sit
+// outside the plain safe area, so env(safe-area-inset-top) reads 0 there and
+// the header logo drew under them. The native shell tops the safe area up to
+// UIKit's corner-adapted value, which the body padding above then honours.
+const windowControls = readFileSync(join(ios, 'App', 'App', 'MainViewController.swift'), 'utf8');
+assert.match(
+    windowControls,
+    /override func viewDidLayoutSubviews\(\)[\s\S]*?clearWindowControls\(\)/,
+    'MainViewController re-checks the window-control inset on every layout pass',
+);
+assert.match(
+    windowControls,
+    /edgeInsets\(for: \.safeArea\(cornerAdaptation: \.vertical\)\)[\s\S]*?additionalSafeAreaInsets\.top = /,
+    'MainViewController raises the safe area to clear the iPadOS window controls',
 );
 
 // --- 12. The submission runbook agrees with the repo it describes -------
@@ -803,6 +873,11 @@ assert.ok(
     + 'tapped Universal Link is silently discarded.',
 );
 const linksSwift = readFileSync(linksSwiftPath, 'utf8');
+assert.match(
+    linksSwift,
+    /coinSchemes = Set\(\["bitcoin", "litecoin", "dogecoin"\]\)/,
+    'the iOS URL declarations and the native link inbox must accept the same payment schemes',
+);
 
 // The SPA looks the plugin up by jsName and REFUSES it unless takePendingLink is
 // callable (nativeDeepLinks.js `linksPlugin()`), so a rename on either side is
@@ -1075,7 +1150,7 @@ console.log(
     + ' that cap add seeds from capacitor.config.json; deployment target 16.0 in the project and Package.swift;'
     + ' universal device family; associated domains applinks:xchain.io only, entitlements wired into the build;'
     + ' default ATS asserted by absence; camera + Face ID usage strings present and honest about what biometrics'
-    + ' do; one custom scheme, xchain:, as inbound compatibility; export-compliance flag set; armv7 leftover'
+    + ' do; inbound xchain and payment schemes; export-compliance flag set; armv7 leftover'
     + ' removed; generated web copy and config git-ignored. S4: no literal version anywhere in the project,'
     + ' both keys read from the git-ignored Version.xcconfig via $(MARKETING_VERSION)/$(CURRENT_PROJECT_VERSION),'
     + ' and the rails §2 store integer is the same one Android gets.: CAPACITOR_DEBUG lives only in'

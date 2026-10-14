@@ -9,17 +9,28 @@
 // contact legal@dankest.llc.
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, CopyButton, EmptyState, FormPage, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
+import { tickerForDescriptor } from '../../registry/coinTicker.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
+import { RelativeTime } from '../components/RelativeTime.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
-import { readMsgRead, writeMsgRead, writeMsgUnread } from '../utils/msgReadMemory.js';
+import {
+    readMsgRead,
+    readMsgRequestDeclined,
+    writeMsgRead,
+    writeMsgRequestDeclined,
+    writeMsgUnread,
+} from '../utils/msgReadMemory.js';
+import { parseMessageContent } from '../utils/messageContent.js';
 import styles from './IssueTokenForm.module.css';
 import local from './MessagingInbox.module.css';
 
@@ -56,7 +67,7 @@ const chainRegistry = registryLib.defaultRegistry();
 export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, initialCounterparty }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
+    const scope = `${walletId}:${activeAccountId || 'default'}`;
     // Whether the session can sign without a per-action password. The shared
     // confirmation screen uses this to either show the unlocked note or ask
     // for the wallet password before sharing a key.
@@ -66,8 +77,10 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
         /** @type {Record<string, any[]> | null} */ (null),
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const [addressesReload, setAddressesReload] = useState(0);
     const [password, setPassword] = useState('');
     const [unlockError, setUnlockError] = useState(/** @type {string | null} */ (null));
+    const [inboxWarning, setInboxWarning] = useState(/** @type {string | null} */ (null));
     const [stage, setStage] = useState(
         /** @type {'pick' | 'password' | 'submitting' | 'inbox'} */ ('pick'),
     );
@@ -82,7 +95,13 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     // from localStorage. Drives the unread dot in the list. `unreadFrom` captures
     // the seen-set at the moment a thread is opened, so the thread can still show
     // where the unread run began even after we mark its messages seen.
-    const [readMap, setReadMap] = useState(/** @type {Record<string, string[]>} */ ({}));
+    const [readMap, setReadMap] = useState(
+        /** @type {Record<string, string[]>} */ (() => readMsgRead(walletId, activeAccountId)),
+    );
+    const readMapRef = useRef(readMap);
+    const [declinedRequestIds, setDeclinedRequestIds] = useState(
+        /** @type {string[]} */ (() => readMsgRequestDeclined(walletId, activeAccountId)),
+    );
     const [unreadFrom, setUnreadFrom] = useState(/** @type {Set<string> | null} */ (null));
     const firstUnreadRef = useRef(/** @type {HTMLLIElement | null} */ (null));
     // In-page conversation filters: free-text search (address or contact name)
@@ -93,41 +112,73 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     // onCompose, which opens the standard New-message form pre-filled with the
     // recipient + body and the encryption locked to the conversation's method;
     // the user reviews (and can adjust delivery network + fee) there.
-    const [draftText, setDraftText] = useState('');
+    const [draftsByCounterparty, setDraftsByCounterparty] = useState(
+        /** @type {Record<string, string>} */ ({}),
+    );
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const [stateScope, setStateScope] = useState(scope);
+    const scopeRef = useRef(scope);
+    const inboxRequestRef = useRef(0);
+    const autoOpenedRef = useRef(false);
 
-    // Reset the composer when switching conversations so a half-typed draft
-    // never leaks into a different thread.
+    // A mounted route can move to another account without remounting. Reset all
+    // account-owned state and invalidate any sweep still resolving for the old
+    // scope before the new address load can open its inbox.
     useEffect(() => {
-        setDraftText('');
-    }, [selectedCounterparty]);
+        if (scopeRef.current === scope) return;
+        scopeRef.current = scope;
+        inboxRequestRef.current += 1;
+        autoOpenedRef.current = false;
+        setAddressesByChain(null);
+        setLoadError(null);
+        setPassword('');
+        setUnlockError(null);
+        setInboxWarning(null);
+        setStage('pick');
+        setMessages([]);
+        setSelectedCounterparty(initialCounterparty || null);
+        setUnreadFrom(null);
+        setDraftsByCounterparty({});
+        const nextReadMap = readMsgRead(walletId, activeAccountId);
+        readMapRef.current = nextReadMap;
+        setReadMap(nextReadMap);
+        setDeclinedRequestIds(readMsgRequestDeclined(walletId, activeAccountId));
+        setStateScope(scope);
+    }, [scope, walletId, activeAccountId, initialCounterparty]);
+
+    // Hosts may retarget the open inbox to another thread while preserving the
+    // route instance. Draft selection remains keyed by the recipient below.
+    useEffect(() => {
+        setSelectedCounterparty(initialCounterparty || null);
+        setUnreadFrom(null);
+    }, [initialCounterparty]);
+
+    useEffect(() => () => { inboxRequestRef.current += 1; }, []);
 
     useEffect(() => {
         let cancelled = false;
+        setLoadError(null);
         messaging.getAddressesByChain(walletId, activeAccountId)
             .then((byChain) => {
                 if (cancelled) return;
-                setAddressesByChain(byChain);
-                if (!byChain || Object.keys(byChain).length === 0) {
-                    setLoadError('No addresses yet. Use Receive to generate one before reading messages.');
-                }
+                setAddressesByChain(byChain || {});
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+                if (!cancelled) {
+                    setLoadError(userFacingMessage(
+                        err,
+                        'Failed to load messaging addresses. Try again.',
+                    ));
+                }
             });
         return () => { cancelled = true; };
-    }, [walletId, messaging, activeAccountId]);
+    }, [walletId, messaging, activeAccountId, addressesReload]);
 
     useEffect(() => {
         if (stage === 'password') {
             setTimeout(() => passwordRef.current?.focus(), 0);
         }
     }, [stage]);
-
-    // Load this account's read marks once the wallet/account scope is known.
-    useEffect(() => {
-        setReadMap(readMsgRead(walletId, activeAccountId));
-    }, [walletId, activeAccountId]);
 
     useEffect(() => {
         if (typeof messaging.listContacts !== 'function') return undefined;
@@ -192,35 +243,47 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     // string on the password path.
     async function fetchInbox(pw) {
         if (sweepAddrs.length === 0) return;
+        const requestId = ++inboxRequestRef.current;
         setStage('submitting');
         setUnlockError(null);
-
-        // Demo wallet: no on-chain history, fabricate a couple of threads.
-        if (flowsLib.isDemoWallet(walletId)) {
-            setMessages(flowsLib.synthesizeDemoMessages(sweepAddrs[0]?.address));
-            setStage('inbox');
-            setPassword('');
-            return;
-        }
+        setInboxWarning(null);
 
         try {
+            // Demo wallet: no on-chain history, fabricate a couple of threads.
+            if (flowsLib.isDemoWallet(walletId)) {
+                const demoMessages = flowsLib.synthesizeDemoMessages(sweepAddrs[0]?.address);
+                if (requestId !== inboxRequestRef.current) return;
+                setMessages(demoMessages);
+                setStage('inbox');
+                setPassword('');
+                return;
+            }
             const result = await messaging.getMessagingInboxSweep({
                 walletId,
                 addressIds: sweepAddrs.map((a) => a.id),
                 type: 'all',
                 ...(pw ? { password: pw } : {}),
             });
+            if (requestId !== inboxRequestRef.current) return;
             setMessages(Array.isArray(result?.messages) ? result.messages : []);
+            const failedAddresses = Array.isArray(result?.errors) ? result.errors.length : 0;
+            setInboxWarning(failedAddresses > 0
+                ? `Messages could not be loaded from ${failedAddresses} ${failedAddresses === 1 ? 'address' : 'addresses'} because the chain service did not answer. Try again.`
+                : null);
             setStage('inbox');
             setPassword('');
         } catch (err) {
+            if (requestId !== inboxRequestRef.current) return;
             const name = err?.name;
             if (name === 'WrongPasswordError' || name === 'InvalidPasswordError') {
                 setUnlockError('Incorrect password.');
             } else if (name === 'NoKeyForAddressError') {
                 setUnlockError('This account has no decryption key in the wallet.');
             } else {
-                setUnlockError(err?.message || 'Failed to load messages.');
+                setUnlockError(submitFailureMessage(err, {
+                    verb: 'load messages',
+                    fallback: 'Failed to load messages. Check your connection and try again.',
+                }));
             }
             setStage('password');
             setTimeout(() => { passwordRef.current?.focus(); passwordRef.current?.select(); }, 0);
@@ -230,7 +293,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     function handleUnlock(event) {
         event.preventDefault();
         if (stage === 'submitting' || password.length === 0) return;
-        fetchInbox(password);
+        void fetchInbox(password);
     }
 
     // Skip the standalone intro screen: open the inbox as soon as the
@@ -239,19 +302,18 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     // prompt. We probe signer readiness directly (async) and only then decide,
     // so an already-unlocked session never flashes the password screen while
     // the readiness check is still in flight.
-    const autoOpenedRef = useRef(false);
     useEffect(() => {
         if (autoOpenedRef.current) return undefined;
         if (stage !== 'pick') return undefined;
         if (!addressesByChain || sweepAddrs.length === 0) return undefined;
         autoOpenedRef.current = true;
-        if (flowsLib.isDemoWallet(walletId)) { fetchInbox(null); return undefined; }
+        if (flowsLib.isDemoWallet(walletId)) { void fetchInbox(null); return undefined; }
         if (typeof messaging.signerReady !== 'function') { setStage('password'); return undefined; }
         let cancelled = false;
         messaging.signerReady({ walletId })
             .then((r) => {
                 if (cancelled) return;
-                if (r?.ready) fetchInbox(null);
+                if (r?.ready) void fetchInbox(null);
                 else setStage('password');
             })
             .catch(() => { if (!cancelled) setStage('password'); });
@@ -272,16 +334,31 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     // (format-1, sharing our key back) originates from that same address.
     const handshakeRequesters = useMemo(() => {
         const seen = new Set();
+        const declined = new Set(declinedRequestIds);
+        const accepted = new Set(messages
+            .filter((m) => m.format === 1 && ownerSet.has(m.from) && m.to && !ownerSet.has(m.to))
+            .map((m) => m.to));
         const out = [];
         for (const m of messages) {
             if (m.format !== 0 || !ownerSet.has(m.to)) continue;
             const who = m.from;
-            if (!who || ownerSet.has(who) || seen.has(who)) continue;
+            if (!who || ownerSet.has(who) || seen.has(who) || accepted.has(who)) continue;
+            const id = requestId(m);
+            if (declined.has(id)) continue;
             seen.add(who);
-            out.push({ from: who, ownerAddress: m.to });
+            out.push({ id, from: who, ownerAddress: m.to });
         }
         return out;
-    }, [messages, ownerSet]);
+    }, [messages, ownerSet, declinedRequestIds]);
+
+    function handleRequestDeclined(id) {
+        if (stateScope !== scope) return;
+        setDeclinedRequestIds((prev) => {
+            const next = (prev.includes(id) ? prev : [...prev, id]).slice(-500);
+            writeMsgRequestDeclined(walletId, activeAccountId, next);
+            return next;
+        });
+    }
     const conversations = useMemo(
         () => buildConversations(conversableMessages, ownerSet),
         [conversableMessages, ownerSet],
@@ -311,10 +388,10 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     // badge with a premature 0 before the inbox has loaded. Uses the same unread
     // map as the list rows, so the badge can't disagree with the dots.
     useEffect(() => {
-        if (stage !== 'inbox') return;
+        if (stage !== 'inbox' || stateScope !== scope) return;
         const unread = Object.values(unreadByCp).filter(Boolean).length;
         writeMsgUnread(walletId, activeAccountId, unread);
-    }, [unreadByCp, stage, walletId, activeAccountId]);
+    }, [unreadByCp, stage, walletId, activeAccountId, stateScope, scope]);
     // Apply the toolbar's search + network filters. Search matches the
     // counterparty address or its contact name; the network filter keeps a
     // conversation when any of its messages live on the selected coin.
@@ -384,7 +461,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     // only when the conversation or the unread boundary changes, so a new
     // message arriving mid-read doesn't yank the view.
     useEffect(() => {
-        if (firstUnreadRef.current) {
+        if (typeof firstUnreadRef.current?.scrollIntoView === 'function') {
             firstUnreadRef.current.scrollIntoView({ block: 'start' });
         }
     }, [selectedCounterparty, firstUnreadMsg]);
@@ -393,19 +470,21 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     // where unread began), record every currently-shown incoming txid as seen so
     // the list dot clears, and persist. The seen-set is replaced rather than
     // merged, which prunes txids no longer in the inbox and keeps storage bounded
-    // to the thread's size. The persist runs inside a functional state update so
-    // a rapid second open can't overwrite this one with a stale snapshot.
+    // to the thread's size. The ref advances before React schedules the render,
+    // so another open merges from the latest snapshot while storage writes stay
+    // outside React's replayable state updater.
     function openConversation(c) {
+        if (stateScope !== scope) return;
         const cp = c.counterparty;
-        const prior = new Set(readMap[cp] || []);
+        const current = readMapRef.current;
+        const prior = new Set(current[cp] || []);
         const hasUnread = c.incomingTxids.some((txid) => !prior.has(txid));
         setUnreadFrom(hasUnread ? prior : null);
         if (hasUnread) {
-            setReadMap((prev) => {
-                const next = { ...prev, [cp]: c.incomingTxids.slice() };
-                writeMsgRead(walletId, activeAccountId, next);
-                return next;
-            });
+            const next = { ...current, [cp]: c.incomingTxids.slice() };
+            readMapRef.current = next;
+            setReadMap(next);
+            writeMsgRead(walletId, activeAccountId, next);
         }
         setSelectedCounterparty(cp);
     }
@@ -416,39 +495,63 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
             title="Messaging"
             titleIcon={<Icon.MessageIcon />}
             trailing={onCompose ? (
-                <button
+                <Button
                     type="button"
-                    className={local.addBtn}
+                    variant="ghost"
+                    size="sm"
+                    icon={null}
                     onClick={() => onCompose()}
                     aria-label="New conversation"
                     title="New conversation"
                 >
                     <Icon.PlusIcon />
-                </button>
+                </Button>
             ) : undefined}
         />
     );
 
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            {children}
         </Screen>
     );
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+        return wrap(
+            <ListPage>
+                <StatusMessage
+                    variant="error"
+                    className={styles.error}
+                    recovery={{
+                        label: 'Try again',
+                        onAction: () => {
+                            setLoadError(null);
+                            setAddressesByChain(null);
+                            setAddressesReload((value) => value + 1);
+                        },
+                    }}
+                >
+                    {loadError}
+                </StatusMessage>
+            </ListPage>,
+        );
     }
 
     if (!addressesByChain) {
-        return wrap(<p className={styles.hint}>Loading wallet…</p>);
+        return wrap(
+            <ListPage>
+                <div role="status" aria-label="Loading messages">
+                    <Skeleton.List rows={5} />
+                </div>
+            </ListPage>,
+        );
     }
 
     if (sweepAddrs.length === 0) {
         return wrap(
-            <p className={styles.hint}>
-                This account has no addresses that can receive messages yet. Use
-                Receive to generate one first.
-            </p>,
+            <ListPage>
+                <EmptyState title="No messaging addresses" body="Messaging requires an address that can receive messages." />
+            </ListPage>,
         );
     }
 
@@ -456,33 +559,36 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     // effect above advances it to the inbox (or the password prompt) the
     // moment addresses load, so this is just the brief transitional state.
     if (stage === 'pick') {
-        return wrap(<p className={styles.hint}>Opening inbox…</p>);
+        return wrap(
+            <ListPage>
+                <div role="status" aria-label="Loading messages">
+                    <Skeleton.List rows={5} />
+                </div>
+            </ListPage>,
+        );
     }
 
-    if (stage === 'password' || stage === 'submitting') {
+    if (stage === 'submitting') {
         return wrap(
-            <form onSubmit={handleUnlock} noValidate>
-                <p style={{ margin: '0 0 0.5rem' }}>
-                    Enter your wallet password to decrypt this account's messages.
-                </p>
-                <Input
-                    ref={passwordRef}
-                    type="password"
-                    label="Password"
-                    value={password}
-                    onChange={(e) => {
-                        setPassword(e.target.value);
-                        if (unlockError) setUnlockError(null);
-                    }}
-                    autoComplete="current-password"
-                    aria-invalid={unlockError ? true : undefined}
-                />
-                {unlockError ? (
-                    <p role="alert" className={styles.error} style={{ marginTop: '0.25rem' }}>
+            <ListPage>
+                <div role="status" aria-label="Loading messages">
+                    <Skeleton.List rows={5} />
+                </div>
+            </ListPage>,
+        );
+    }
+
+    if (stage === 'password') {
+        return wrap(
+            <FormPage
+                label="Unlock messaging inbox"
+                onSubmit={handleUnlock}
+                status={unlockError ? (
+                    <StatusMessage id="messaging-unlock-error" variant="error" className={styles.error}>
                         {unlockError}
-                    </p>
+                    </StatusMessage>
                 ) : null}
-                <div className={styles.actions}>
+                actions={(
                     <Button
                         type="submit"
                         variant="primary"
@@ -491,8 +597,23 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                     >
                         Unlock inbox
                     </Button>
-                </div>
-            </form>,
+                )}
+            >
+                <Input
+                    ref={passwordRef}
+                    type="password"
+                    label="Password"
+                    hint="Decrypts this account's messages."
+                    value={password}
+                    onChange={(e) => {
+                        setPassword(e.target.value);
+                        if (unlockError) setUnlockError(null);
+                    }}
+                    autoComplete="current-password"
+                    aria-invalid={unlockError ? true : undefined}
+                    aria-describedby={unlockError ? 'messaging-unlock-error' : undefined}
+                />
+            </FormPage>,
         );
     }
 
@@ -508,7 +629,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
         const replyRecord = replyContext ? recordByAddress[replyContext.fromAddress] : null;
         const threadBody = (
             thread.length === 0 ? (
-                <p className={styles.hint}>No messages in this conversation.</p>
+                <EmptyState title="No messages yet" body="Messages in this conversation appear here." />
             ) : (
                 <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                     {threadItems.map((item) => {
@@ -522,6 +643,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                         const m = item.m;
                         const isOutgoing = ownerSet.has(m.from);
                         const isFirstUnread = m === firstUnreadMsg;
+                        const content = m.text !== null ? parseMessageContent(m.text) : null;
                         return (
                             <Fragment key={item.key}>
                                 {isFirstUnread ? (
@@ -541,26 +663,32 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                                     }}
                                 >
                                     <div
+                                        className={local.messageBubble}
                                         style={{
                                             maxWidth: '75%',
-                                            padding: '0.4rem 0.7rem',
                                             borderRadius: '1.1rem',
                                             whiteSpace: 'pre-wrap',
+                                            overflowWrap: 'anywhere',
                                             wordBreak: 'break-word',
                                             background: isOutgoing
                                                 ? 'var(--xc-accent-primary)'
                                                 : 'var(--xc-bg-muted)',
-                                            color: isOutgoing ? '#FFFFFF' : 'var(--xc-text)',
+                                            color: isOutgoing ? 'var(--xc-on-accent)' : 'var(--xc-text)',
                                         }}
                                     >
-                                        {m.text !== null ? m.text : encryptedPlaceholder()}
+                                        {content ? <MessageContent content={content} /> : encryptedPlaceholder()}
                                     </div>
-                                    {m.timestamp ? (
-                                        <span style={{ fontSize: '0.65rem', color: 'var(--xc-text-muted)', margin: '2px 0.3rem 0' }}>
-                                            {formatTime(m.timestamp)}
-                                            {m.method ? ` · ${methodLabel(m.method)}` : ''}
-                                        </span>
-                                    ) : null}
+                                    <div className={local.messageMeta}>
+                                        {m.timestamp ? (
+                                            <span>
+                                                <RelativeTime timestamp={m.timestamp} />
+                                                {m.method ? ` · ${methodLabel(m.method)}` : ''}
+                                            </span>
+                                        ) : null}
+                                        {content ? (
+                                            <CopyButton value={content.text} label="Copy" ariaLabel="Copy message" />
+                                        ) : null}
+                                    </div>
                                 </li>
                             </Fragment>
                         );
@@ -574,12 +702,18 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
         // form is where the user reviews and can adjust delivery network + fee.
         const composer = replyRecord && onCompose ? (
             <ThreadComposer
-                value={draftText}
-                onChange={setDraftText}
+                value={draftsByCounterparty[selectedCounterparty] || ''}
+                onChange={(value) => setDraftsByCounterparty((prev) => ({
+                    ...prev,
+                    [selectedCounterparty]: value,
+                }))}
                 onSubmit={() => {
-                    const t = draftText.trim();
+                    const t = (draftsByCounterparty[selectedCounterparty] || '').trim();
                     if (!t) return;
-                    setDraftText('');
+                    setDraftsByCounterparty((prev) => ({
+                        ...prev,
+                        [selectedCounterparty]: '',
+                    }));
                     onCompose({
                         toAddress: selectedCounterparty,
                         message: t,
@@ -603,35 +737,41 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                 )}
                 footer={composer}
             >
-                {isFull ? <div className={styles.card}>{threadBody}</div> : threadBody}
+                <ListPage>{threadBody}</ListPage>
             </Screen>
         );
     }
 
     return wrap(
-        <>
-            <div className={local.toolbar}>
-                <input
-                    type="text"
-                    className={local.search}
-                    placeholder="Search"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    aria-label="Search conversations"
-                />
-                <NetworkFilterDropdown value={network} onChange={setNetwork} />
-            </div>
-
+        <ListPage
+            toolbar={(
+                <div className={local.toolbar}>
+                    <Input
+                        type="search"
+                        size="md"
+                        enterKeyHint="search"
+                        autoCapitalize="off"
+                        placeholder="Search"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        autoComplete="off"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        aria-label="Search conversations"
+                    />
+                    <NetworkFilterDropdown size="md" value={network} onChange={setNetwork} />
+                </div>
+            )}
+        >
+            {inboxWarning ? (
+                <StatusMessage variant="warning">{inboxWarning}</StatusMessage>
+            ) : null}
             {handshakeRequesters.length > 0 ? (
-                <div className={local.requestCard} role="region" aria-label="Encrypted-session requests">
-                    <p className={local.requestIntro}>
-                        🔑 {handshakeRequesters.length} encrypted-session request
-                        {handshakeRequesters.length === 1 ? '' : 's'}. Share your key so they can send
-                        you encrypted (ECDH) messages, or just start a message.
-                    </p>
+                <section aria-label="Encrypted-session requests" className={local.requestSection}>
+                    <SectionHeader
+                        title="Encrypted-session requests"
+                        description={`🔑 ${handshakeRequesters.length} encrypted-session request${handshakeRequesters.length === 1 ? '' : 's'}. Share your key so they can send you encrypted (ECDH) messages, or just start a message.`}
+                    />
                     <ul className={local.requestList}>
                         {handshakeRequesters.map((r) => {
                             const record = recordByAddress[r.ownerAddress];
@@ -646,6 +786,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                                     walletId={walletId}
                                     variant={variant}
                                     contactName={contactsByAddress[r.from]}
+                                    onDecline={() => handleRequestDeclined(r.id)}
                                     onMessage={onCompose ? () => onCompose({
                                         chainId: record.chainId,
                                         fromAddressId: record.id,
@@ -655,26 +796,33 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                             );
                         })}
                     </ul>
-                </div>
+                </section>
             ) : null}
 
             {conversations.length === 0 ? (
-                <p className={styles.hint}>No messages for this account yet.</p>
+                <EmptyState
+                    title="No messages yet"
+                    body="Messages sent to or from this account's addresses show up here."
+                    actionLabel={onCompose ? 'New message' : undefined}
+                    onAction={onCompose ? () => onCompose() : undefined}
+                />
             ) : visibleConversations.length === 0 ? (
-                <p className={styles.hint}>No conversations match the current filter.</p>
+                <EmptyState title="No matching conversations" body="Try a different search or network filter." />
             ) : (
-                <div className={local.convCard}>
-                    <ul className={local.convList} aria-label="Conversations">
-                        {visibleConversations.map((c) => {
-                            const isUnread = Boolean(unreadByCp[c.counterparty]);
-                            return (
-                                <li key={c.counterparty}>
-                                    <button
-                                        type="button"
-                                        className={local.convItem}
-                                        onClick={() => openConversation(c)}
-                                    >
-                                        <div className={local.convTop}>
+                <ul className={local.convList} aria-label="Conversations">
+                    {visibleConversations.map((c) => {
+                        const isUnread = Boolean(unreadByCp[c.counterparty]);
+                        return (
+                            <li key={c.counterparty}>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    block
+                                    icon={null}
+                                    className={local.convItem}
+                                    onClick={() => openConversation(c)}
+                                >
+                                        <span className={local.convTop}>
                                             <span className={local.convNameWrap}>
                                                 {isUnread ? (
                                                     <span
@@ -701,23 +849,63 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                                                 </span>
                                             </span>
                                             <span className={local.convTime}>
-                                                {c.lastTimestamp ? formatRelative(c.lastTimestamp) : ''}
+                                                {c.lastTimestamp ? <RelativeTime timestamp={c.lastTimestamp} /> : ''}
                                             </span>
-                                        </div>
-                                        <div className={isUnread
+                                        </span>
+                                        <span className={isUnread
                                             ? `${local.convPreview} ${local.convPreviewUnread}`
                                             : local.convPreview}
                                         >
                                             {previewFor(c.lastText)}
-                                        </div>
-                                    </button>
-                                </li>
-                            );
-                        })}
-                    </ul>
-                </div>
+                                        </span>
+                                </Button>
+                            </li>
+                        );
+                    })}
+                </ul>
             )}
-        </>,
+        </ListPage>,
+    );
+}
+
+/**
+ * Message text keeps line breaks, turns only HTTP(S) URLs into links, and
+ * exposes validated attachment envelopes as downloads.
+ *
+ * @param {{ content: { text: string, attachment: { name: string, type: string, dataUrl: string, size: number } | null } }} props
+ */
+function MessageContent({ content }) {
+    const parts = content.text.split(/(https?:\/\/[^\s<>"']+)/gi);
+    return (
+        <>
+            {content.text ? (
+                <span>
+                    {parts.map((part, index) => /^https?:\/\//i.test(part) ? (
+                        <a
+                            key={`${index}-${part}`}
+                            href={part}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={local.messageLink}
+                        >
+                            {part} <span aria-hidden="true">↗</span>
+                        </a>
+                    ) : <Fragment key={`${index}-${part}`}>{part}</Fragment>)}
+                </span>
+            ) : null}
+            {content.attachment ? (
+                <a
+                    href={content.attachment.dataUrl}
+                    download={content.attachment.name}
+                    className={local.attachmentLink}
+                >
+                    <Icon.DownloadIcon />
+                    <span>
+                        {content.attachment.name} ({content.attachment.size.toLocaleString()} bytes)
+                    </span>
+                </a>
+            ) : null}
+        </>
     );
 }
 
@@ -734,24 +922,37 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
  * @param {() => void} props.onSubmit
  */
 function ThreadComposer({ value, onChange, onSubmit }) {
+    const [attempted, setAttempted] = useState(false);
+    const emptyError = attempted && !value.trim() ? 'Write a message before continuing.' : undefined;
+
     function handleSubmit(event) {
         event.preventDefault();
+        if (!value.trim()) {
+            setAttempted(true);
+            return;
+        }
+        setAttempted(false);
         onSubmit();
     }
     return (
         <form className={local.composer} onSubmit={handleSubmit}>
-            <input
+            <Input
                 type="text"
+                enterKeyHint="go"
                 className={local.composerInput}
                 placeholder="Message"
                 value={value}
-                onChange={(e) => onChange(e.target.value)}
+                onChange={(e) => {
+                    setAttempted(false);
+                    onChange(e.target.value);
+                }}
                 autoComplete="off"
                 aria-label="Message"
+                error={emptyError}
             />
-            <button type="submit" className={local.composerSend} aria-label="Send message">
+            <Button type="submit" variant="primary" size="sm" icon={null} aria-label="Send message">
                 <Icon.SendIcon />
-            </button>
+            </Button>
         </form>
     );
 }
@@ -768,16 +969,27 @@ function ThreadComposer({ value, onChange, onSubmit }) {
  * session signer isn't already unlocked.
  *
  * @param {object} props
- * @param {{ from: string, ownerAddress: string }} props.request
+ * @param {{ id: string, from: string, ownerAddress: string }} props.request
  * @param {any} props.record                 owner address record (incl. chainId)
  * @param {boolean} props.signerReady
  * @param {any} props.messaging
  * @param {string} props.walletId
  * @param {'small'|'full'} props.variant
  * @param {string} [props.contactName]
+ * @param {() => void} props.onDecline
  * @param {(() => void) | null} [props.onMessage]
  */
-function SessionRequestRow({ request, record, signerReady, messaging, walletId, variant, contactName, onMessage }) {
+function SessionRequestRow({
+    request,
+    record,
+    signerReady,
+    messaging,
+    walletId,
+    variant,
+    contactName,
+    onDecline,
+    onMessage,
+}) {
     const [stage, setStage] = useState(/** @type {'idle' | 'sending' | 'sent'} */ ('idle'));
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [watcherResult, setWatcherResult] = useState(/** @type {any | null} */ (null));
@@ -820,7 +1032,13 @@ function SessionRequestRow({ request, record, signerReady, messaging, walletId, 
             if (name === 'WrongPasswordError' || name === 'InvalidPasswordError') {
                 setError('Incorrect password.');
             } else {
-                setError(err?.message || 'Could not share your key.');
+                const descriptor = chainRegistry.get(record.chainId);
+                setError(submitFailureMessage(err, {
+                    chainId: record.chainId,
+                    coinTicker: tickerForDescriptor(descriptor),
+                    verb: 'share your key',
+                    fallback: 'Could not share your key. Check your connection and try again.',
+                }));
             }
             setStage('idle');
         }
@@ -868,12 +1086,17 @@ function SessionRequestRow({ request, record, signerReady, messaging, walletId, 
                 </p>
             ) : (
                 <div className={local.requestActions}>
+                    <Button variant="ghost" onClick={onDecline} disabled={stage === 'sending'}>
+                        Decline
+                    </Button>
+                    {onMessage ? (
+                        <Button variant="ghost" onClick={onMessage} disabled={stage === 'sending'}>
+                            Message
+                        </Button>
+                    ) : null}
                     <Button variant="primary" onClick={handleShare} loading={stage === 'sending'}>
                         Share my key
                     </Button>
-                    {onMessage ? (
-                        <Button variant="ghost" onClick={onMessage}>Message</Button>
-                    ) : null}
                 </div>
             )}
             {error ? (
@@ -881,6 +1104,11 @@ function SessionRequestRow({ request, record, signerReady, messaging, walletId, 
             ) : null}
         </li>
     );
+}
+
+function requestId(message) {
+    if (typeof message?.txid === 'string' && message.txid) return message.txid;
+    return [message?.chainId || message?.chain || '', message?.from || '', message?.to || '', message?.timestamp || ''].join(':');
 }
 
 // The conversation key for a message: whichever endpoint is not ours.
@@ -970,19 +1198,6 @@ function encryptedPlaceholder() {
     return '🔒 Encrypted with a shared key this wallet does not have, so it can\'t be read here.';
 }
 
-// Time-of-day label shown under each message bubble. The date itself lives in
-// the day separator (iMessage-style), so only the time repeats per message.
-function formatTime(unixSeconds) {
-    try {
-        return new Date(unixSeconds * 1000).toLocaleTimeString(undefined, {
-            hour: '2-digit',
-            minute: '2-digit',
-        });
-    } catch {
-        return '-';
-    }
-}
-
 // Local calendar-day key (Y-M-D) used to detect when a thread crosses midnight
 // and a new day separator is due.
 function dayKey(unixSeconds) {
@@ -1030,32 +1245,15 @@ function buildThreadItems(thread) {
     return items;
 }
 
-// Relative "X ago" label for a conversation's last activity, e.g. "a few
-// seconds ago" / "1 day ago". Accepts unix seconds or ms. Mirrors the wording
-// History uses for its timeline rows.
-function formatRelative(ts) {
-    if (!ts) return '';
-    const ms = ts < 1e12 ? ts * 1000 : ts;
-    const diffSec = Math.floor((Date.now() - ms) / 1000);
-    if (diffSec < 45) return 'a few seconds ago';
-    const min = Math.floor(diffSec / 60);
-    if (min < 1) return 'less than a minute ago';
-    if (min < 60) return `${min} minute${min === 1 ? '' : 's'} ago`;
-    const hr = Math.floor(diffSec / 3600);
-    if (hr < 24) return `${hr} hour${hr === 1 ? '' : 's'} ago`;
-    const day = Math.floor(diffSec / 86400);
-    if (day < 30) return `${day} day${day === 1 ? '' : 's'} ago`;
-    const month = Math.floor(day / 30);
-    if (month < 12) return `${month} month${month === 1 ? '' : 's'} ago`;
-    const year = Math.floor(day / 365);
-    return `${year} year${year === 1 ? '' : 's'} ago`;
-}
-
 // One-line preview of a conversation's most recent message for the list row.
 // Decrypted text shows verbatim (CSS ellipsis trims it). ECIES + ECDH decrypt
 // from the wallet's keys, so a missing body is a shared-key (AES) message or
 // one not for us; show a short lock label rather than the long thread notice.
 function previewFor(text) {
-    if (typeof text === 'string' && text.trim()) return text;
+    if (typeof text === 'string' && text.trim()) {
+        const content = parseMessageContent(text);
+        if (content.text.trim()) return content.text;
+        if (content.attachment) return `Attachment: ${content.attachment.name}`;
+    }
     return '🔒 Encrypted message';
 }

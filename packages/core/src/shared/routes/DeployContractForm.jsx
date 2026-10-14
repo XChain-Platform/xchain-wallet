@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { normalizeConstructorParams } from '../../flows/deployChunked.js';
 import { indexerWaitMessage } from '../../flows/deployLegWait.js';
@@ -41,7 +41,9 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
+import contractStyles from './ContractScreens.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { isValidAddressForChain } from '../utils/addressValidation.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -154,7 +156,6 @@ export function DeployContractForm({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const supportedChains = useSupportedChains(chainRegistry);
     const deployChains = useMemo(
@@ -192,6 +193,14 @@ export function DeployContractForm({ walletId, onBack }) {
         /** @type {{ ok: boolean, msg: string, warnings: object[], errors: object[] } | null} */ (null),
     );
     const codeRef = useRef(/** @type {HTMLTextAreaElement | null} */ (null));
+    const latestCodeRef = useRef(code);
+    latestCodeRef.current = code;
+    const validationRequestRef = useRef(0);
+    const sizeRequestRef = useRef(0);
+    const gasRequestRef = useRef(0);
+    const [validationBusy, setValidationBusy] = useState(false);
+    const [sizeBusy, setSizeBusy] = useState(false);
+    const [gasBusy, setGasBusy] = useState(false);
     const [sizeInfo, setSizeInfo] = useState(
         /** @type {{ bytes: number, withinLimit: boolean } | null} */ (null),
     );
@@ -234,8 +243,10 @@ export function DeployContractForm({ walletId, onBack }) {
     );
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
+    const [toolBusy, setToolBusy] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const submitInFlightRef = useRef(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -460,7 +471,8 @@ export function DeployContractForm({ walletId, onBack }) {
     const metaAbsent = metaRead?.status === 'absent';
 
     async function handleUseTemplate(templateName) {
-        if (!chainId) return;
+        if (!chainId || toolBusy) return;
+        setToolBusy(`template:${templateName}`);
         setFormError(null);
         try {
             const { code: src } = await messaging.scaffoldContract({ chainId, name: templateName });
@@ -469,14 +481,20 @@ export function DeployContractForm({ walletId, onBack }) {
             setSizeInfo(null);
         } catch (e) {
             setFormError(e?.message || `Could not load the "${templateName}" template.`);
+        } finally {
+            setToolBusy(null);
         }
     }
 
     async function handleValidate() {
-        if (!chainId) return;
+        if (!chainId || toolBusy) return;
+        const source = code;
+        const request = ++validationRequestRef.current;
         setFormError(null);
+        setValidationBusy(true);
         try {
-            const res = await messaging.validateContractCode({ chainId, code });
+            const res = await messaging.validateContractCode({ chainId, code: source });
+            if (validationRequestRef.current !== request || latestCodeRef.current !== source) return;
             const warnings = normalizeValidationDiagnostics(res?.warnings);
             if (res?.valid) {
                 setValidation({ ok: true, msg: 'Syntax OK.', warnings, errors: [] });
@@ -492,12 +510,15 @@ export function DeployContractForm({ walletId, onBack }) {
                 });
             }
         } catch (e) {
+            if (validationRequestRef.current !== request || latestCodeRef.current !== source) return;
             setValidation({
                 ok: false,
                 msg: 'Validation failed.',
                 warnings: [],
                 errors: normalizeValidationDiagnostics(e),
             });
+        } finally {
+            if (validationRequestRef.current === request) setValidationBusy(false);
         }
     }
 
@@ -536,13 +557,13 @@ export function DeployContractForm({ walletId, onBack }) {
                     return (
                         <li key={`${entry.message}-${index}`} className={styles.validationItem}>
                             {entry.line ? (
-                                <button
+                                <Button
                                     type="button"
                                     className={styles.validationLink}
                                     onClick={() => moveToCodeLine(entry.line)}
                                 >
                                     {content}
-                                </button>
+                                </Button>
                             ) : (
                                 <div className={styles.validationText}>{content}</div>
                             )}
@@ -554,26 +575,56 @@ export function DeployContractForm({ walletId, onBack }) {
     }
 
     async function handleCheckSize() {
-        if (!chainId) return;
+        if (!chainId || toolBusy) return;
+        const source = code;
+        const request = ++sizeRequestRef.current;
+        setFormError(null);
+        setSizeBusy(true);
         try {
-            const res = await messaging.checkContractCodeSize({ chainId, code });
+            const res = await messaging.checkContractCodeSize({ chainId, code: source });
+            if (sizeRequestRef.current !== request || latestCodeRef.current !== source) return;
             setSizeInfo(res);
         } catch (e) {
+            if (sizeRequestRef.current !== request || latestCodeRef.current !== source) return;
             setFormError(e?.message || 'Size check failed.');
+        } finally {
+            if (sizeRequestRef.current === request) setSizeBusy(false);
         }
     }
 
     async function handleSuggestGas() {
-        if (!chainId) return;
+        if (!chainId || toolBusy) return;
+        const source = code;
+        const request = ++gasRequestRef.current;
+        setFormError(null);
+        setGasBusy(true);
         try {
             // sdk.contracts.suggestGasLimit returns { suggested, rationale };
             // pull the scalar out (rendering the object crashed the form).
-            const { suggested, rationale } = await messaging.suggestContractGasLimit({ chainId, code });
+            const { suggested, rationale } = await messaging.suggestContractGasLimit({ chainId, code: source });
+            if (gasRequestRef.current !== request || latestCodeRef.current !== source) return;
             setSuggestedGas(suggested);
             setSuggestedRationale(rationale || null);
             if (!gasLimit) setGasLimit(String(suggested));
         } catch (e) {
+            if (gasRequestRef.current !== request || latestCodeRef.current !== source) return;
             setFormError(e?.message || 'Gas suggestion failed.');
+        } finally {
+            if (gasRequestRef.current === request) setGasBusy(false);
+        }
+    }
+
+    async function handleDiscardPending(id) {
+        if (toolBusy) return;
+        setToolBusy(`discard:${id}`);
+        try {
+            await messaging.clearPendingDeploy({ id });
+            setResumable((rows) => rows.filter((x) => x.id !== id));
+            if (resumeId === id) setResumeId(null);
+        } catch (e) {
+            setFormError(e?.message || 'Could not discard the pending publish.');
+        } finally {
+            setToolBusy(null);
         }
     }
 
@@ -588,8 +639,8 @@ export function DeployContractForm({ walletId, onBack }) {
             return;
         }
         const gas = String(gasLimit).trim() || (suggestedGas ? String(suggestedGas) : '');
-        if (!gas || Number.isNaN(Number(gas)) || Number(gas) <= 0) {
-            setFormError('Gas limit must be a positive number. Tap "Suggest gas" for a heuristic estimate.');
+        if (!/^\d+$/.test(gas) || !/[1-9]/.test(gas)) {
+            setFormError('Gas limit must be a positive whole number. Tap "Suggest gas" for a heuristic estimate.');
             return;
         }
         if (validation?.ok === false) {
@@ -610,6 +661,28 @@ export function DeployContractForm({ walletId, onBack }) {
             }
         } else if (slashDestination.trim() !== '') {
             setFormError('Slash destination requires a cooldown duration (otherwise the contract is not stakeable).');
+            return;
+        }
+        const slashTo = slashDestination.trim();
+        if (slashTo && slashTo !== 'BURN' && !isValidAddressForChain(
+            slashTo,
+            descriptor.coin,
+            descriptor.networkKind,
+        )) {
+            setFormError(`Slash destination must be BURN or a valid address for ${descriptor.displayName || 'this network'}.`);
+            return;
+        }
+        const constructorParts = String(constructorParams).split('|').map((part) => part.trim());
+        if (constructorParams.trim() && constructorParts.some((part) => part === '')) {
+            setFormError('Constructor arguments cannot be blank between "|" separators.');
+            return;
+        }
+        if (constructorParts.some((part) => part.includes(';'))) {
+            setFormError('Constructor arguments cannot contain ";".');
+            return;
+        }
+        if (cooldownBlocks.trim() !== '' && constructorParts.filter(Boolean).length > 1) {
+            setFormError('A stake-enabled contract accepts one constructor argument. Pack multiple values into one argument or remove the staking settings.');
             return;
         }
         setFormError(null);
@@ -701,9 +774,10 @@ export function DeployContractForm({ walletId, onBack }) {
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
+        if (stage === 'submitting' || submitInFlightRef.current) return;
         if (!isWatcherMode && !isHwSource && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && isHwSource && hwStatus !== 'available') return;
+        submitInFlightRef.current = true;
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -805,6 +879,8 @@ export function DeployContractForm({ walletId, onBack }) {
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
             }
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 
@@ -841,29 +917,34 @@ export function DeployContractForm({ walletId, onBack }) {
         setStage('form');
     }
 
-        const header = (
+    const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={stage === 'review'
+                ? () => { setSubmitError(null); setStage('form'); }
+                : onBack}
+            backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
                     ? 'Review publish'
-                    : `Publish contract${descriptor ? ` on ${descriptor.displayName}` : ''}`}
+                    : 'Publish contract'}
         />
     );
+    // The review always opens at its top instead of inheriting how far the
+    // form was scrolled; the form keeps its own position for Back.
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>
             {children}
         </Screen>
     );
 
     if (loadError) {
         return wrap(
-            <>
+            <ListPage>
                 <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
-            </>,
+            </ListPage>,
         );
     }
     if (!addressesByChain) {
-        return wrap(<p>Loading addresses…</p>);
+        return wrap(<ListPage><p>Loading addresses…</p></ListPage>);
     }
 
     if (stage === 'done' && result) {
@@ -871,18 +952,20 @@ export function DeployContractForm({ walletId, onBack }) {
         // A queued result is SIGNED and not broadcast. The confirm
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
-        if (result?.queued) return wrap(<QueuedResultPanel onDone={onBack} unsaved={result.unsaved} />);
+        if (result?.queued) return wrap(<ListPage><QueuedResultPanel onDone={onBack} unsaved={result.unsaved} /></ListPage>);
         if (result?.psbtHex && !txid) {
             return wrap(
-                <WatcherResultPanel
-                    result={result}
-                    onBuildAnother={handleBuildAnother}
-                    onDone={onBack}
-                />,
+                <ListPage>
+                    <WatcherResultPanel
+                        result={result}
+                        onBuildAnother={handleBuildAnother}
+                        onDone={onBack}
+                    />
+                </ListPage>,
             );
         }
         return wrap(
-            <>
+            <ListPage>
                 <p className={styles.summary}>
                     Contract published. The transaction was broadcast; the network will record it shortly.
                 </p>
@@ -901,22 +984,47 @@ export function DeployContractForm({ walletId, onBack }) {
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>
                 </div>
-            </>,
+            </ListPage>,
         );
     }
 
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
+            <FormPage
+                label="Review contract publication"
+                onSubmit={handleSubmit}
+                status={(isWatcherMode || isHwSource) && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={stage === 'submitting'}
+                        disabled={stage === 'submitting' || (
+                            isWatcherMode
+                                ? false
+                                : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)
+                        )}
+                    >
+                        {isWatcherMode
+                            ? 'Create unsigned transaction'
+                            : isHwSource
+                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                : 'Publish'}
+                    </Button>
+                )}
+            >
                 <p className={styles.summary}>
-                    Publish contract {metaName ? `"${metaName}"` : ''} to{' '}
-                    {descriptor?.displayName || chainId}, gas limit {actionParams.GAS_LIMIT}.
+                    Publish contract {metaName ? `"${metaName}"` : ''} with gas limit {actionParams.GAS_LIMIT}.
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -947,7 +1055,15 @@ export function DeployContractForm({ walletId, onBack }) {
                     {actionParams.CONSTRUCTOR_PARAMS ? (
                         <>
                             <dt className={styles.detailsLabel}>Constructor</dt>
-                            <dd className={styles.detailsValue}>{actionParams.CONSTRUCTOR_PARAMS}</dd>
+                            <dd className={styles.detailsValue}>
+                                {Array.isArray(actionParams.CONSTRUCTOR_PARAMS) ? (
+                                    <ol style={{ margin: 0, paddingLeft: '1.25rem' }}>
+                                        {actionParams.CONSTRUCTOR_PARAMS.map((value, index) => (
+                                            <li key={index} className={contractStyles.monospaceValue}>{value}</li>
+                                        ))}
+                                    </ol>
+                                ) : actionParams.CONSTRUCTOR_PARAMS}
+                            </dd>
                         </>
                     ) : null}
                     {actionParams.COOLDOWN_BLOCKS ? (
@@ -1008,9 +1124,6 @@ export function DeployContractForm({ walletId, onBack }) {
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 )}
-                {(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
-                ) : null}
                 {/* A chunked run lives entirely in `submitting`, which renders THIS
                     screen - so the explanation has to be here. It used to sit in the
                     form-stage JSX, i.e. on a screen the user has already left by the
@@ -1032,25 +1145,7 @@ export function DeployContractForm({ walletId, onBack }) {
                         {indexerWaitMessage(indexerWait)}
                     </p>
                 ) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={
-                            isWatcherMode
-                                ? false
-                                : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)
-                        }
-                    >
-                        {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : (descriptor ? `Publish on ${descriptor.displayName}` : 'Publish')}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -1061,7 +1156,7 @@ export function DeployContractForm({ walletId, onBack }) {
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
@@ -1094,13 +1189,24 @@ export function DeployContractForm({ walletId, onBack }) {
     }
 
     return wrap(
-        <form onSubmit={handleReview} noValidate>
-            <NetworkField
-                value={chainId}
-                onChange={setChainId}
-                chainIds={deployChainsWithAddresses.length ? deployChainsWithAddresses : (chainId ? [chainId] : [])}
-                chainRegistry={chainRegistry}
-            />
+        <FormPage
+            label="Publish contract"
+            onSubmit={handleReview}
+            status={formError ? (
+                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={actionConfirm.composing}
+                    disabled={actionConfirm.composing}
+                >
+                    {singleEncode ? 'Publish' : 'Preview'}
+                </Button>
+            )}
+        >
+            <ChainPicker label="Network" value={chainId} onChange={setChainId} chainIds={deployChainsWithAddresses.length ? deployChainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
 
             {fromAddress ? (
                 <AddressField
@@ -1203,12 +1309,10 @@ export function DeployContractForm({ walletId, onBack }) {
                                     </Button>
                                     <Button
                                         type="button"
-                                        variant="ghost"
-                                        onClick={async () => {
-                                            await messaging.clearPendingDeploy({ id: r.id });
-                                            setResumable((rows) => rows.filter((x) => x.id !== r.id));
-                                            if (resumeId === r.id) setResumeId(null);
-                                        }}
+                                        variant="danger"
+                                        onClick={() => handleDiscardPending(r.id)}
+                                        loading={toolBusy === `discard:${r.id}`}
+                                        disabled={toolBusy !== null}
                                     >
                                         Discard
                                     </Button>
@@ -1230,6 +1334,8 @@ export function DeployContractForm({ walletId, onBack }) {
                                 type="button"
                                 variant="ghost"
                                 onClick={() => handleUseTemplate(t)}
+                                loading={toolBusy === `template:${t}`}
+                                disabled={toolBusy !== null}
                             >
                                 {t}
                             </Button>
@@ -1241,39 +1347,58 @@ export function DeployContractForm({ walletId, onBack }) {
                 </div>
             ) : null}
 
-            <label className={styles.pickerLabel}>
-                Code source
-                <textarea
-                    ref={codeRef}
-                    value={code}
-                    onChange={(e) => {
-                        setCode(e.target.value);
-                        setValidation(null);
-                        setSizeInfo(null);
-                    }}
-                    rows={isFull ? 20 : 10}
-                    spellCheck={false}
-                    autoCapitalize="none"
-                    autoCorrect="off"
-                    autoComplete="off"
-                    placeholder="// JavaScript contract source…"
-                    style={{
-                        width: '100%',
-                        fontFamily: 'monospace',
-                        fontSize: '0.85rem',
-                        padding: '0.5rem',
-                    }}
-                />
-            </label>
+            <Textarea
+                label="Code source"
+                ref={codeRef}
+                value={code}
+                onChange={(e) => {
+                    setCode(e.target.value);
+                    setValidation(null);
+                    setSizeInfo(null);
+                    validationRequestRef.current += 1;
+                    sizeRequestRef.current += 1;
+                    gasRequestRef.current += 1;
+                    setValidationBusy(false);
+                    setSizeBusy(false);
+                    setGasBusy(false);
+                    setFormError(null);
+                }}
+                rows={10}
+                spellCheck={false}
+                autoCapitalize="off"
+                autoCorrect="off"
+                autoComplete="off"
+                wrap="off"
+                placeholder="// JavaScript contract source…"
+                className={contractStyles.codeSource}
+            />
 
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
-                <Button type="button" variant="ghost" onClick={handleValidate} disabled={!code.trim()}>
+            <div className={contractStyles.toolActions}>
+                <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={handleValidate}
+                    loading={validationBusy}
+                    disabled={!code.trim() || validationBusy || toolBusy !== null}
+                >
                     Validate code
                 </Button>
-                <Button type="button" variant="ghost" onClick={handleCheckSize} disabled={!code.trim()}>
+                <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={handleCheckSize}
+                    loading={sizeBusy}
+                    disabled={!code.trim() || sizeBusy || toolBusy !== null}
+                >
                     Estimate size
                 </Button>
-                <Button type="button" variant="ghost" onClick={handleSuggestGas} disabled={!code.trim()}>
+                <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={handleSuggestGas}
+                    loading={gasBusy}
+                    disabled={!code.trim() || gasBusy || toolBusy !== null}
+                >
                     Suggest gas
                 </Button>
             </div>
@@ -1337,24 +1462,25 @@ export function DeployContractForm({ walletId, onBack }) {
 
             <Input
                 label="Gas limit"
-                hint="Upper bound of VM gas publishing and subsequent calls may consume."
+                hint="Maximum computation allowed when deploying or calling the contract."
                 inputMode="numeric"
                 value={gasLimit}
-                onChange={(e) => setGasLimit(e.target.value)}
+                onChange={(e) => { setGasLimit(e.target.value); setFormError(null); }}
                 autoComplete="off"
             />
 
             <Input
                 label="Constructor params (optional)"
-                hint="Pipe-delimited values passed to the contract's constructor."
+                hint="Values passed to the contract when it is created. Separate them with |."
                 value={constructorParams}
-                onChange={(e) => setConstructorParams(e.target.value)}
+                onChange={(e) => { setConstructorParams(e.target.value); setFormError(null); }}
+                className={contractStyles.monospaceInput}
                 autoComplete="off"
             />
 
             <Input
                 label="Cooldown blocks (optional)"
-                hint="Set to enable contract-staking. Blocks between an unstake and token release (1–100000). Leave blank for a non-stakeable contract."
+                hint="Enables contract staking and sets the blocks between unstaking and token release (1–100000). Leave blank to disable staking."
                 inputMode="numeric"
                 value={cooldownBlocks}
                 onChange={(e) => setCooldownBlocks(e.target.value)}
@@ -1363,11 +1489,12 @@ export function DeployContractForm({ walletId, onBack }) {
 
             <Input
                 label="Slash destination (optional)"
-                hint='Where slashed tokens go. Enter an address or "BURN" to route to the chain burn address. Defaults to BURN when cooldown is set. Locked when published and cannot change later.'
+                hint="Address that receives slashed tokens. Enter BURN or leave blank to destroy them. Cannot change after deployment."
                 value={slashDestination}
                 onChange={(e) => setSlashDestination(e.target.value)}
+                className={contractStyles.monospaceInput}
                 autoComplete="off"
-                autoCapitalize="none"
+                autoCapitalize="off"
                 autoCorrect="off"
                 spellCheck={false}
             />
@@ -1385,20 +1512,6 @@ export function DeployContractForm({ walletId, onBack }) {
 
             <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} unverified />
 
-            {formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
-            ) : null}
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    block
-                    loading={actionConfirm.composing}
-                    disabled={!fromAddress || !code.trim() || actionConfirm.composing}
-                >
-                    {singleEncode ? 'Publish' : 'Preview'}
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }

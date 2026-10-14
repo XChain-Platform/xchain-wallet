@@ -62,6 +62,6 @@ magick fg-bg.png \( white-raw.png -trim +repage -resize x250 \) \
   -gravity center -geometry +0-30 -composite \
   -font /System/Library/Fonts/HelveticaNeue.ttc -pointsize 30 \
   -fill 'rgba(255,255,255,0.92)' -gravity center \
-  -annotate +0+150 'Self-custody wallet for Bitcoin, Litecoin and Dogecoin' \
+  -annotate +0+150 'XChain Platform wallet • Supports BTC, LTC and DOGE' \
   -alpha off feature-graphic-1024x500.png
 ```

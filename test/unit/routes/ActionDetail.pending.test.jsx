@@ -18,10 +18,13 @@
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ActionDetail } from '../../../packages/core/src/shared/routes/ActionDetail.jsx';
 import { DetailCard } from '../../../packages/core/src/shared/routes/History.jsx';
+
+const detailStyles = readFileSync('packages/core/src/shared/routes/History.module.css', 'utf8');
 
 const CHAIN = 'litecoin-regtest';
 const OURS = 'mtkx2FQ7QhPPZmVyLKVWMkfmYmvQRUXCmi';
@@ -155,6 +158,33 @@ describe('ActionDetail on a pending entry', () => {
         const panel = await screen.findByRole('region', { name: 'Pending transaction' });
         expect(within(panel).getByText('Pending, not yet validated by the service.')).toBeTruthy();
     });
+
+    it('uses plain labels, translated action codes, copy controls, and explorer links', () => {
+        renderDetail(confirmedEntry());
+        fireEvent.click(screen.getByText('Details'));
+        const details = screen.getByRole('tabpanel');
+
+        expect(within(details).getByRole('rowheader', { name: 'Action' })
+            .closest('tr').querySelector('td').textContent).toBe('Send');
+        expect(within(details).getByRole('rowheader', { name: 'Transaction ID' })).toBeTruthy();
+        expect(within(details).getByRole('rowheader', { name: 'From' })).toBeTruthy();
+        expect(within(details).getByRole('rowheader', { name: 'To' })).toBeTruthy();
+        expect(within(details).queryByRole('rowheader', { name: 'tx_hash' })).toBeNull();
+        expect(within(details).queryByRole('rowheader', { name: 'block_index' })).toBeNull();
+        expect(screen.getByText('Confirmed')).toBeTruthy();
+
+        expect(screen.getByRole('button', { name: 'Copy transaction ID' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Copy from address' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Copy to address' })).toBeTruthy();
+        expect(screen.getByRole('link', { name: 'XChain' }).getAttribute('href'))
+            .toMatch(/\/RLTC\/action\/1255$/);
+    });
+
+    it('wraps long identifiers instead of truncating them', () => {
+        expect(detailStyles).toMatch(/\.detailsTable td\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
+        expect(detailStyles).toMatch(/\.copyableText\s*\{[^}]*white-space:\s*normal;/s);
+        expect(detailStyles).not.toMatch(/\.copyableText\s*\{[^}]*text-overflow:\s*ellipsis;/s);
+    });
 });
 
 describe('DetailCard suppresses the LINK section on a pending entry', () => {
@@ -201,7 +231,7 @@ describe('DetailCard suppresses the LINK section on a pending entry', () => {
         };
         const { view } = renderCard(confirmedEntry({ action: 'DISPENSER', raw }));
         fireEvent.click(screen.getByText('Details'));
-        const label = screen.getByRole('rowheader', { name: 'get_amount' });
+        const label = screen.getByRole('rowheader', { name: 'Get amount' });
         expect(label.closest('tr').querySelector('td').textContent)
             .toBe('0 (protocol placeholder; price set by oracle)');
 
@@ -215,7 +245,7 @@ describe('DetailCard suppresses the LINK section on a pending entry', () => {
         const { view } = renderCard(confirmedEntry({ action: 'ORDER', raw }));
         fireEvent.click(screen.getByText('Details'));
 
-        for (const key of ['allow_list', 'block_list']) {
+        for (const key of ['Allow list', 'Block list']) {
             const label = screen.getByRole('rowheader', { name: key });
             expect(label.closest('tr').querySelector('td').textContent).toBe('none');
         }

@@ -155,7 +155,7 @@ async function driveCreate({ steps = [], pricingSteps = [] } = {}) {
         await drainMicrotasks();
     });
     await domAct(async () => {
-        const approve = Array.from(utils.container.querySelectorAll('button'))
+        const approve = utils.getAllByRole('button')
             .find((b) => /approve/i.test(b.textContent || '') && !b.disabled);
         if (!approve) throw new Error('no enabled Approve button on the confirm page');
         fireEvent.click(approve);
@@ -223,7 +223,7 @@ describe('DispenserForm Mode B pricing', () => {
                 (utils) => fireEvent.click(utils.getByRole('button', { name: /Advanced options/ })),
                 (utils) => {
                     setValue(utils, 'Priced in fiat (optional)', 'USD');
-                    setValue(utils, /^Oracle address/, 'bc1qoracleoracleoracleoracleoracleoracle');
+                    setValue(utils, /^Oracle address/, '1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2');
                 },
                 (utils) => { triggerWasHidden = utils.queryByLabelText(/^Trigger price/) === null; },
             ],

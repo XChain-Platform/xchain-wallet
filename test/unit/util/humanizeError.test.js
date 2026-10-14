@@ -97,6 +97,14 @@ describe('humanizeError', () => {
         expect(out.details).to.equal('Request failed with status code 500');
     });
 
+    it.each(['E_CONN_RESET', 'INSUFFICIENT_FUNDS', 'SDKEncoderError'])
+        ('keeps internal identifiers in diagnostic details only: %s', (raw) => {
+            const out = humanizeError(new Error(raw), 'send');
+            expect(out.message).to.equal("Couldn't send. Something went wrong. Try again.");
+            expect(out.message).not.toContain(raw);
+            expect(out.details).to.equal(raw);
+        });
+
     it.each([
         'insufficient EGGS balance: have 5, need 10',
         'Error: address tb1qxyz is not on allow-list #42',

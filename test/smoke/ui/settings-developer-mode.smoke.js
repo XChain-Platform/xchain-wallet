@@ -40,12 +40,14 @@ assert.match(src, /label="Learn Mode"/, 'Learn Mode toggle present');
 assert.match(src, /onToggle\('developerMode'/, 'developerMode field wired');
 assert.match(src, /onToggle\('learnMode'/, 'learnMode field wired');
 
-// Only Raw PSBT remains as a placeholder ToggleRow at v0.215.0:
+// No placeholder ToggleRow remains. The Raw PSBT inspector row was a permanently
+// disabled "Coming soon" promise; spec §48.4 describes a "View raw PSBT" button on
+// the sign screens, not a Settings toggle, so Settings no longer lists it.
 //  - Custom chain registry row → replaced by RegtestNetworksRow (G149, v0.214.0)
 //  - Auto-approve localhost → wired ToggleRow (G151, v0.213.0)
 //  - Logs and diagnostics console → replaced by LogConsoleRow (G150, v0.215.0)
-assert.ok(src.includes('label="Raw PSBT inspector"'),
-    'Raw PSBT inspector deferred row still present');
+assert.ok(!src.includes('Raw PSBT inspector') && !/Coming soon/.test(src),
+    'no Raw PSBT inspector placeholder row (no code delivers it)');
 assert.ok(src.includes('label="Auto-approve localhost dApps"'),
     'Auto-approve localhost dApps row present (active, gated on Developer Mode)');
 assert.ok(/RegtestNetworksRow/.test(src),

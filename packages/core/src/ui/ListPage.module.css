@@ -1,0 +1,55 @@
+/* List template. Screen owns the page gutter at every layout tier. */
+
+.page {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-section-gap);
+    width: 100%;
+    /* A max-width: 48rem or margin-inline: auto constraint would fight the
+       tier gutter that Screen applies to the content box. */
+    min-width: 0;
+}
+
+/* Children stretch to the full width; min-width 0 lets long content
+   (addresses, ids) shrink and wrap instead of widening the page. */
+.page > * {
+    min-width: 0;
+}
+
+/* A heading and its content form one section, so their local gap is tighter
+   than the gap that separates independent page children. */
+.page > [data-xc-section-header] + * {
+    margin-block-start: calc(var(--xc-section-header-gap) - var(--xc-section-gap));
+}
+
+.intro {
+    margin: 0;
+    max-width: var(--xc-prose-max-width);
+    font-size: var(--xc-text-sm);
+    line-height: 1.45;
+    color: var(--xc-text-muted);
+}
+
+/* First control (usually search) takes the spare room; the rest keep
+   their natural width and wrap below it when the row runs out. A leading
+   button keeps its own width, so a lone "New" action is not stretched. */
+.toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--xc-space-2);
+}
+
+.toolbar > * {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.toolbar > div {
+    margin-bottom: 0;
+}
+
+.toolbar > :first-child:not(button) {
+    flex: 1 1 12rem;
+}

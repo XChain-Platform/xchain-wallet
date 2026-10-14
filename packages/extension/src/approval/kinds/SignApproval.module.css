@@ -4,10 +4,6 @@
     margin-bottom: var(--xc-space-2);
 }
 
-.form {
-    margin: 0;
-}
-
 .detailsList {
     margin: var(--xc-space-2) 0 0;
     padding: 0;
@@ -76,10 +72,6 @@
    ports / paths are scannable; appName below as a plain label. */
 .source {
     margin: 0 0 var(--xc-space-2) 0;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-surface-raised);
 }
 
 .sourceLabel {

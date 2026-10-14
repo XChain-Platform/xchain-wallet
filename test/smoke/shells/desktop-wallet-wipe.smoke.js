@@ -231,8 +231,8 @@ assert.ok(
     'preload invokes the xchain:wipe-storage channel',
 );
 assert.ok(
-    /wipeStorage\(\)\s*\{\s*return ipcRenderer\.invoke\(WIPE_STORAGE_CHANNEL\);/.test(preload),
-    'wipeStorage takes no arguments: main decides what "wipe" means, not the renderer',
+    /wipeStorage\(\)\s*\{\s*assertNoArguments\('xchainWalletBridge\.wipeStorage', arguments\);\s*return ipcRenderer\.invoke\(WIPE_STORAGE_CHANNEL\);/.test(preload),
+    'wipeStorage rejects arguments before invoking the fixed channel',
 );
 
 const mainIndex = readFileSync(join(desktop, 'main', 'index.js'), 'utf8');

@@ -12,6 +12,17 @@
 .text {
     flex: 1;
     min-width: 0;
+    max-width: var(--xc-prose-max-width);
+    margin-inline-end: auto;
+    overflow-wrap: anywhere;
+}
+
+.icon {
+    flex: 0 0 auto;
+    align-self: flex-start;
+    font-size: var(--xc-icon-sm);
+    font-weight: 700;
+    line-height: 1.4;
 }
 
 .details {
@@ -60,10 +71,17 @@
    Add addresses page that produced danger-red text on a danger-red
    background: a blank red bar where the message should be. Two classes
    outrank one, so the banner's colours are the banner's own. */
-.row.status {
-    background: var(--xc-bg-muted);
-    color: var(--xc-text);
-    border: 1px solid var(--xc-border);
+.row.status,
+.row.info {
+    background: var(--xc-info-bg);
+    color: var(--xc-info-text);
+    border: 1px solid var(--xc-info);
+}
+
+.row.warning {
+    background: var(--xc-warning-bg);
+    color: var(--xc-warning-text);
+    border: 1px solid var(--xc-warning);
 }
 
 .row.error {
@@ -74,7 +92,7 @@
 }
 
 .row.success {
-    background: var(--xc-success-bg, var(--xc-bg-muted));
-    color: var(--xc-text);
+    background: var(--xc-success-bg, rgba(20, 111, 52, 0.10));
+    color: var(--xc-success);
     border: 1px solid var(--xc-success, var(--xc-border));
 }

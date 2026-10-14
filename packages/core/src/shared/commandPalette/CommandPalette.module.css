@@ -4,19 +4,26 @@
 .overlay {
     position: absolute;
     inset: 0;
-    z-index: 60; /* above the QR scanner overlay (z-index: 50) */
+    box-sizing: border-box;
+    max-height: var(--xc-viewport-h, 100vh);
+    z-index: var(--xc-z-overlay);
     background: rgba(0, 0, 0, 0.45);
     display: flex;
     align-items: flex-start;
     justify-content: center;
-    padding-top: 12vh;
+    /* The capped gap leaves room for results when the fitted viewport contracts. */
+    padding-top: min(12vh, var(--xc-space-8));
     padding-inline: var(--xc-space-4);
 }
 
 .panel {
+    box-sizing: border-box;
     width: 100%;
+    min-width: 0;
+    min-height: 0;
     max-width: 560px;
-    max-height: 70vh;
+    max-height: min(70vh, 100%);
+    min-height: 0;
     display: flex;
     flex-direction: column;
     background: var(--xc-surface-raised, var(--xc-surface));
@@ -24,6 +31,50 @@
     border-radius: var(--xc-radius-lg);
     box-shadow: var(--xc-shadow-md);
     overflow: hidden;
+}
+
+.header {
+    position: relative;
+    display: grid;
+    grid-template-columns: var(--xc-control-h-md) minmax(0, 1fr) var(--xc-control-h-md);
+    align-items: center;
+    gap: var(--xc-space-2);
+    flex: 0 0 auto;
+    min-height: var(--xc-control-h-md);
+    padding: var(--xc-space-2) var(--xc-space-4);
+    border-bottom: 1px solid var(--xc-border);
+}
+
+.title {
+    grid-column: 2;
+    min-width: 0;
+    margin: 0;
+    color: var(--xc-text);
+    font-size: var(--xc-text-md);
+    font-weight: 700;
+    line-height: 1.25;
+    text-align: center;
+    overflow-wrap: anywhere;
+}
+
+.close {
+    grid-column: 3;
+    display: inline-flex;
+    width: var(--xc-control-h-md);
+    height: var(--xc-control-h-md);
+}
+
+.handle {
+    position: absolute;
+    top: var(--xc-space-2);
+    /* Equal logical insets plus auto margins centre the handle in either direction. */
+    inset-inline: 0;
+    display: none;
+    width: 2.25rem;
+    height: 4px;
+    margin-inline: auto;
+    border-radius: var(--xc-radius-xs);
+    background: var(--xc-border);
 }
 
 .searchRow {
@@ -35,12 +86,11 @@
 }
 
 .searchIcon {
+    --xc-icon-size: var(--xc-icon-md);
     display: inline-flex;
     color: var(--xc-text-muted);
     flex: 0 0 auto;
 }
-
-.searchIcon svg { width: 18px; height: 18px; }
 
 .input {
     flex: 1 1 auto;
@@ -51,9 +101,8 @@
     font-size: var(--xc-text-md);
     font-family: var(--xc-font-sans);
     min-width: 0;
-    /* slice 2: the search field's own box was 19px tall, under the
-       24px pointer-target floor. It is the palette's only text entry and
-       the first thing a touch user reaches for. */
+    /* The palette's only text entry meets the pointer-target floor because
+       it is the first control a touch user reaches for. */
     min-height: var(--xc-tap-min);
 }
 
@@ -75,6 +124,8 @@
     padding: var(--xc-space-2) 0;
     overflow-y: auto;
     flex: 1 1 auto;
+    min-height: 0;
+    overscroll-behavior: contain;
 }
 
 .groupHead {
@@ -98,18 +149,17 @@
 
 .rowActive {
     background: var(--xc-accent-primary);
-    color: var(--xc-text-inverted);
+    color: var(--xc-on-accent);
 }
 
 .rowIcon {
+    --xc-icon-size: var(--xc-icon-md);
     display: inline-flex;
     flex: 0 0 auto;
     color: var(--xc-text-muted);
 }
 
-.rowActive .rowIcon { color: var(--xc-text-inverted); }
-
-.rowIcon svg { width: 18px; height: 18px; }
+.rowActive .rowIcon { color: var(--xc-on-accent); }
 
 .rowText {
     display: flex;
@@ -133,11 +183,67 @@
     text-overflow: ellipsis;
 }
 
-.rowActive .rowSubtitle { color: var(--xc-text-inverted); opacity: 0.85; }
+/* Full-strength text: fading it 15% dropped the subtitle under 4.5:1 on the accent. */
+.rowActive .rowSubtitle { color: var(--xc-on-accent); }
 
 .empty {
     padding: var(--xc-space-5) var(--xc-space-4);
     text-align: center;
     color: var(--xc-text-muted);
     font-size: var(--xc-text-sm);
+}
+
+/* Compact containers present the palette as a thumb-reachable bottom sheet.
+   The viewport fallback covers the extension popup, which has no shared
+   layout wrapper to publish data-xc-tier. */
+:global([data-xc-tier='compact']) .overlay {
+    align-items: flex-end;
+    padding: 0;
+}
+
+:global([data-xc-tier='compact']) .panel {
+    max-width: none;
+    max-height: min(85%, var(--xc-viewport-h, 100vh));
+    border-radius: var(--xc-radius-lg) var(--xc-radius-lg) 0 0;
+    border-bottom: 0;
+    padding-bottom: calc(var(--xc-space-3) + env(safe-area-inset-bottom, 0px));
+}
+
+:global([data-xc-tier='compact']) .escHint {
+    display: none;
+}
+
+:global([data-xc-tier='compact']) .handle {
+    display: block;
+}
+
+:global([data-xc-tier='compact']) .header {
+    padding-top: var(--xc-space-4);
+}
+
+@media not all and (min-width: 640px) {
+    .overlay {
+        align-items: flex-end;
+        padding: 0;
+    }
+
+    .panel {
+        max-width: none;
+        max-height: min(85%, var(--xc-viewport-h, 100vh));
+        border-radius: var(--xc-radius-lg) var(--xc-radius-lg) 0 0;
+        border-bottom: 0;
+        padding-bottom: calc(var(--xc-space-3) + env(safe-area-inset-bottom, 0px));
+    }
+
+    .escHint {
+        display: none;
+    }
+
+    .handle {
+        display: block;
+    }
+
+    .header {
+        padding-top: var(--xc-space-4);
+    }
 }

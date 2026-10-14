@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, FeeSelector, Input, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import {
@@ -49,12 +49,14 @@ const SECTION_STYLE = {
 export function OperatorPublisherMode({ walletId, chainId, address, feed, messaging, variant }) {
     const [open, setOpen] = useState(false);
     const [feedActionIndex, setFeedActionIndex] = useState('');
+    const feedActionIndexSeed = feed?.action_index ?? feed?.ACTION_INDEX ?? '';
+    const feedSeedKey = JSON.stringify([walletId, chainId, address, feedActionIndexSeed]);
+    const seededFeedRef = useRef(null);
     useEffect(() => {
-        if (!feedActionIndex && feed) {
-            const idx = feed.action_index || feed.ACTION_INDEX;
-            if (idx) setFeedActionIndex(String(idx));
-        }
-    }, [feed, feedActionIndex]);
+        if (feedSeedKey === seededFeedRef.current) return;
+        seededFeedRef.current = feedSeedKey;
+        setFeedActionIndex(String(feedActionIndexSeed));
+    }, [feedActionIndexSeed, feedSeedKey]);
 
     const fromAddress = usePublisherAddress({ messaging, walletId, chainId, address });
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
@@ -213,15 +215,21 @@ function PublisherForm({ open, onToggle, feed, feedActionIndex, onFeedActionInde
         <section style={SECTION_STYLE}>
             <h3 style={{ fontSize: '0.95rem', margin: '0 0 0.25rem' }}>
                 Publisher mode
-                <button type="button" onClick={onToggle} style={{ marginInlineStart: '0.5rem', fontSize: '0.85rem' }}>
-                    {open ? 'Hide' : 'Show'}
+                <button
+                    type="button"
+                    onClick={onToggle}
+                    aria-expanded={open}
+                    style={{ marginInlineStart: '0.5rem', fontSize: '0.85rem' }}
+                >
+                    {open ? 'Leave publisher mode' : 'Enter publisher mode'}
                 </button>
             </h3>
-            {!open ? (
-                <p className={dashStyles.entryDescription}>
-                    Rapid-entry quick-compose for publishing feed values. Pre-fills your most recent feed reference number, so you can enter successive values without re-typing it.
-                </p>
-            ) : (
+            <p className={dashStyles.entryDescription}>
+                Publisher mode creates an on-chain update of the selected feed reference with the value you enter. You review each update before it is signed and sent. {open
+                    ? 'Choose Leave publisher mode to close the form and return to the dashboard.'
+                    : 'Choose Enter publisher mode to open the form.'}
+            </p>
+            {open ? (
                 <form onSubmit={submission.submit} noValidate>
                     <PublisherFields
                         feed={feed}
@@ -233,7 +241,7 @@ function PublisherForm({ open, onToggle, feed, feedActionIndex, onFeedActionInde
                     />
                     <PublisherControls coinTicker={coinTicker} fee={fee} submission={submission} lastTxid={lastTxid} />
                 </form>
-            )}
+            ) : null}
         </section>
     );
 }
@@ -248,8 +256,9 @@ function PublisherFields({ feed, feedActionIndex, onFeedActionIndex, fromAddress
                     : 'No feed found for this address. Enter its reference number, or create a feed first.'}
                 value={feedActionIndex}
                 onChange={(event) => onFeedActionIndex(event.target.value)}
+                inputMode="numeric"
                 autoComplete="off"
-                autoCapitalize="none"
+                autoCapitalize="off"
                 spellCheck={false}
             />
             <Input
@@ -257,6 +266,7 @@ function PublisherFields({ feed, feedActionIndex, onFeedActionIndex, fromAddress
                 hint="The feed value to publish. The previous value clears on success; the next value is one keystroke away."
                 value={value}
                 onChange={(event) => onValue(event.target.value)}
+                inputMode="decimal"
                 autoComplete="off"
             />
             {!fromAddress ? <p className={dashStyles.entryDescription}>Loading source address…</p> : null}

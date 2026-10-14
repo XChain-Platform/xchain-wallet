@@ -1,9 +1,32 @@
+.container {
+    margin: 0 0 var(--xc-space-3);
+}
+
+.revealAction {
+    display: flex;
+    justify-content: center;
+    margin: 0 0 var(--xc-space-2);
+}
+
+.concealedMessage {
+    margin: 0;
+    padding: var(--xc-space-4);
+    color: var(--xc-text-muted);
+    text-align: center;
+    background: var(--xc-bg-muted);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-sm);
+}
+
 .gridPopup {
     list-style: none;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
     padding: var(--xc-space-3);
-    margin: 0 0 var(--xc-space-3);
+    margin: 0;
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--xc-space-1);
     background: var(--xc-bg-muted);
     border: 1px solid var(--xc-border);
@@ -12,10 +35,13 @@
 
 .gridFull {
     list-style: none;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
     padding: var(--xc-space-4);
     margin: 0;
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--xc-space-2);
     background: var(--xc-bg-muted);
     border: 1px solid var(--xc-border);
@@ -24,7 +50,7 @@
 
 @media (min-width: 480px) {
     .gridFull {
-        grid-template-columns: repeat(4, 1fr);
+        grid-template-columns: repeat(4, minmax(0, 1fr));
     }
 }
 
@@ -32,17 +58,22 @@
     display: flex;
     align-items: baseline;
     gap: var(--xc-space-2);
+    direction: ltr;
+    unicode-bidi: isolate;
     padding: var(--xc-space-1) var(--xc-space-2);
     background: var(--xc-surface);
     border-radius: var(--xc-radius-sm);
-    user-select: all;
+    user-select: none;
+    min-width: 0;
 }
 
 .index {
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
+    font-weight: 600;
     font-variant-numeric: tabular-nums;
-    min-width: 16px;
+    flex: 0 0 2ch;
+    min-width: 2ch;
     text-align: end;
     user-select: none;
 }
@@ -52,4 +83,19 @@
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
     font-weight: 500;
+    white-space: nowrap;
+    word-break: keep-all;
+}
+
+@media not all and (min-width: 360px) {
+    .gridPopup,
+    .gridFull {
+        padding: var(--xc-space-2);
+        gap: var(--xc-space-1);
+    }
+
+    .cell {
+        gap: var(--xc-space-1);
+        padding: var(--xc-space-1);
+    }
 }

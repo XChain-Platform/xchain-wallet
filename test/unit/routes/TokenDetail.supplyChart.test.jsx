@@ -8,11 +8,10 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// TokenDetail draws a supply-over-time chart from getSupplyHistory and
-// offers "Sell on DEX", which reuses the Markets hop, only to a holder.
+// TokenDetail draws a supply-over-time chart from getSupplyHistory.
 
 import { describe, it, expect, vi, afterEach, beforeAll, afterAll } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, cleanup, act } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { TokenDetail } from '../../../packages/core/src/shared/routes/TokenDetail.jsx';
@@ -37,6 +36,7 @@ const CHAIN = 'bitcoin-regtest';
 
 function renderDetail({ history, quantity = '100', onBuy = vi.fn(), withHistory = true } = {}) {
     const messaging = {
+        getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
         getTokenInfo: vi.fn().mockResolvedValue({ creator: 'bcrt1qx' }),
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [] }),
         getHoldersForToken: vi.fn().mockResolvedValue({ data: [] }),
@@ -61,6 +61,14 @@ describe('TokenDetail supply chart', () => {
         expect(messaging.getSupplyHistory).toHaveBeenCalledWith({ chainId: CHAIN, tick: 'SUPPLYPROBE' });
     });
 
+    it('labels decimal supply history as whole-token units', async () => {
+        renderDetail({ history: [{ height: 1, supply: '1.25' }, { height: 2, supply: '2.5' }] });
+
+        expect(await screen.findByRole('img', {
+            name: 'Supply of SUPPLYPROBE over time, latest 2.5',
+        })).toBeTruthy();
+    });
+
     it('hides the chart for fewer than two points or a missing lookup', async () => {
         const first = renderDetail({ history: [{ height: 1, supply: 10 }] });
         await waitFor(() => expect(first.messaging.getSupplyHistory).toHaveBeenCalled());
@@ -69,17 +77,96 @@ describe('TokenDetail supply chart', () => {
         renderDetail({ withHistory: false });
         expect(screen.queryByText('Supply over time')).toBeNull();
     });
-});
 
-describe('TokenDetail "Sell on DEX" action', () => {
-    it('opens Markets for a holder', () => {
-        const { onBuy } = renderDetail({ history: [] });
-        fireEvent.click(screen.getByRole('button', { name: 'Sell on DEX' }));
-        expect(onBuy).toHaveBeenCalledTimes(1);
+    it('removes the previous token chart while the next token history loads', async () => {
+        let resolveNext;
+        const nextHistory = new Promise((resolve) => { resolveNext = resolve; });
+        const getSupplyHistory = vi.fn(({ tick }) => tick === 'OLD'
+            ? Promise.resolve([{ height: 1, supply: 10 }, { height: 2, supply: 20 }])
+            : nextHistory);
+        const messaging = {
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            getTokenInfo: vi.fn().mockResolvedValue({ creator: 'bcrt1qx' }),
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [] }),
+            getHoldersForToken: vi.fn().mockResolvedValue({ data: [] }),
+            listGatedContent: vi.fn().mockResolvedValue([]),
+            getSupplyHistory,
+        };
+        const tree = (tick) => (
+            <MessagingProvider shell="web" messaging={messaging}>
+                <TokenDetail
+                    walletId="w1"
+                    chainId={CHAIN}
+                    tick={tick}
+                    kind="token"
+                    quantity="1"
+                    onBack={() => {}}
+                />
+            </MessagingProvider>
+        );
+        const view = render(tree('OLD'));
+        expect(await screen.findByRole('img', { name: /Supply of OLD over time/ })).toBeTruthy();
+
+        view.rerender(tree('NEW'));
+        expect(screen.queryByRole('img', { name: /Supply of OLD over time/ })).toBeNull();
+        expect(screen.queryByRole('img', { name: /Supply of NEW over time/ })).toBeNull();
+
+        await act(async () => {
+            resolveNext([{ height: 3, supply: 30 }, { height: 4, supply: 40 }]);
+        });
+        expect(await screen.findByRole('img', { name: /Supply of NEW over time/ })).toBeTruthy();
     });
 
-    it('is absent with a zero balance', () => {
-        renderDetail({ history: [], quantity: '0' });
+    it('contains synchronous supply and native-price bridge failures', async () => {
+        const supplyFailure = vi.fn(() => { throw new Error('supply bridge unavailable'); });
+        const tokenMessaging = {
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            getTokenInfo: vi.fn().mockResolvedValue({ creator: 'bcrt1qx' }),
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [] }),
+            getHoldersForToken: vi.fn().mockResolvedValue({ data: [] }),
+            listGatedContent: vi.fn().mockResolvedValue([]),
+            getSupplyHistory: supplyFailure,
+        };
+        render(
+            <MessagingProvider shell="web" messaging={tokenMessaging}>
+                <TokenDetail walletId="w1" chainId={CHAIN} tick="THROW" kind="token" quantity="1" onBack={() => {}} />
+            </MessagingProvider>,
+        );
+        await waitFor(() => expect(supplyFailure).toHaveBeenCalled());
+        expect(screen.queryByText('Supply over time')).toBeNull();
+
+        cleanup();
+        const getNativePricesRequest = vi.fn(() => { throw new Error('price bridge unavailable'); });
+        const nativeMessaging = {
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            getNativePricesRequest,
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [] }),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={nativeMessaging}>
+                <TokenDetail walletId="w1" chainId="bitcoin-mainnet" tick="BTC" kind="native" quantity="1" onBack={() => {}} />
+            </MessagingProvider>,
+        );
+        await waitFor(() => expect(getNativePricesRequest).toHaveBeenCalled());
+        expect(screen.getByText('No market data available for this network.')).toBeTruthy();
+    });
+});
+
+describe('TokenDetail Trade action', () => {
+    it('opens trading regardless of whether the current balance is zero', () => {
+        const { onBuy } = renderDetail({ history: [] });
+        fireEvent.click(screen.getByRole('button', { name: 'Trade' }));
+        expect(onBuy).toHaveBeenCalledTimes(1);
+
+        cleanup();
+        const zero = renderDetail({ history: [], quantity: '0' });
+        fireEvent.click(screen.getByRole('button', { name: 'Trade' }));
+        expect(zero.onBuy).toHaveBeenCalledTimes(1);
         expect(screen.queryByRole('button', { name: 'Sell on DEX' })).toBeNull();
+    });
+
+    it('is absent when the shell has no trading surface', () => {
+        renderDetail({ history: [], onBuy: null });
+        expect(screen.queryByRole('button', { name: 'Trade' })).toBeNull();
     });
 });

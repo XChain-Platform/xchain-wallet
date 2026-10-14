@@ -85,6 +85,10 @@ export const FEE_STRATEGY_NAMES = /** @type {const} */ ([
  * @property {string[]} supportedActions
  * @property {string} uriScheme                   e.g. 'bitcoin' for BIP21
  * @property {number} wifVersionByte              leading byte for WIF-encoded private keys on this network
+ * @property {string} [nativeTicker]              display ticker override for a custom chain
+ * @property {number} [nativeDecimals]            decimal places in one native coin unit; defaults to 8
+ * @property {number|string} [smallBalanceBaseUnits] display-only small-balance threshold in native base units
+ * @property {Array<{ id: string, label: string, url: string, iconImg?: string }>} [transactionExplorers] HTTPS transaction URL templates containing `{txid}`
  * @property {EndpointConfig} explorer
  * @property {EndpointConfig} encoder
  * @property {EndpointConfig} hub
@@ -118,6 +122,15 @@ const isEndpoint = (v, allowInsecure = false) =>
     isString(v.defaultUrl) &&
     isSecureEndpointUrl(v.defaultUrl, allowInsecure) &&
     isNonNegativeInteger(v.defaultPort);
+
+const isTransactionExplorer = (v) =>
+    isPlainObject(v) &&
+    isNonEmptyString(v.id) &&
+    isNonEmptyString(v.label) &&
+    isNonEmptyString(v.url) &&
+    v.url.includes('{txid}') &&
+    isSecureEndpointUrl(v.url, false) &&
+    (v.iconImg === undefined || isString(v.iconImg));
 
 const isFeeStrategy = (v) => {
     if (!isPlainObject(v)) return false;
@@ -350,6 +363,14 @@ export function validateChainDescriptor(record) {
             'platformListOwners',
             isArray(r.platformListOwners) && r.platformListOwners.every(isNonEmptyString),
             'must be an array of non-empty strings',
+        );
+    }
+    if (r.transactionExplorers !== undefined) {
+        check(
+            errors,
+            'transactionExplorers',
+            isArray(r.transactionExplorers) && r.transactionExplorers.every(isTransactionExplorer),
+            'must be an array of { id, label, https url containing {txid}, iconImg? } entries',
         );
     }
 

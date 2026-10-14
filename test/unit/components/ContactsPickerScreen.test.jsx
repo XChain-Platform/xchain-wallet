@@ -10,10 +10,24 @@
 
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { userEvent } from '../../helpers/userEvent.js';
 
 vi.mock('@xchain-wallet/core/ui', () => ({
     Screen: ({ header, children }) => <div>{header}<main>{children}</main></div>,
-    PageHeader: ({ title }) => <header><h1>{title}</h1></header>,
+    PageHeader: ({ title, onBack }) => (
+        <header>
+            <button type="button" onClick={onBack} aria-label="Back">Back</button>
+            <h1>{title}</h1>
+        </header>
+    ),
+    ListPage: ({ toolbar, children }) => <section data-testid="list-page">{toolbar}{children}</section>,
+    EmptyState: ({ title, body, role, titleAs: Title = 'h2' }) => (
+        <div data-testid="empty-state" role={role}><Title>{title}</Title>{body ? <p>{body}</p> : null}</div>
+    ),
+    ListRow: ({ title, subtitle, onClick, ...props }) => (
+        <button type="button" onClick={onClick} {...props}>{title}{subtitle}</button>
+    ),
+    Input: ({ size, ...props }) => <input data-size={size} {...props} />,
     Icon: { UsersIcon: () => <span /> },
 }));
 
@@ -69,8 +83,11 @@ describe('ContactsPickerScreen empty and listing states', () => {
     ])('shows the empty state for %s', (_label, emptyContacts) => {
         mount({ contacts: emptyContacts });
 
-        expect(screen.getByText('You have no contacts yet')).toBeInTheDocument();
-        expect(screen.queryByRole('textbox', { name: 'Search contacts' })).toBeNull();
+        expect(screen.getByText('No contacts yet')).toBeInTheDocument();
+        expect(screen.getByText('Saved contacts with addresses appear here.')).toBeInTheDocument();
+        expect(screen.getByTestId('list-page')).toContainElement(screen.getByTestId('empty-state'));
+        expect(screen.getByTestId('empty-state')).not.toHaveAttribute('role');
+        expect(screen.queryByRole('searchbox', { name: 'Search contacts' })).toBeNull();
     });
 
     it('lists every saved address in case-insensitive contact-name order', () => {
@@ -90,6 +107,20 @@ describe('ContactsPickerScreen empty and listing states', () => {
             'bobD-bob',
         ]);
     });
+
+    it('uses distinct row keys when a contact repeats an address', () => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        mount({
+            contacts: [{
+                id: 'alice',
+                name: 'Alice',
+                entries: [bitcoinEntry, { ...bitcoinEntry, label: 'Spending' }],
+            }],
+        });
+
+        expect(screen.getAllByRole('listitem')).toHaveLength(2);
+        expect(consoleError.mock.calls.flat().join(' ')).not.toContain('same key');
+    });
 });
 
 describe('ContactsPickerScreen filters', () => {
@@ -100,7 +131,9 @@ describe('ContactsPickerScreen filters', () => {
     ])('filters case-insensitively by %s', (_field, query, expectedAddress) => {
         mount();
 
-        fireEvent.change(screen.getByRole('textbox', { name: 'Search contacts' }), {
+        const search = screen.getByRole('searchbox', { name: 'Search contacts' });
+        expect(search).toHaveAttribute('data-size', 'md');
+        fireEvent.change(search, {
             target: { value: query },
         });
         const rows = screen.getAllByRole('listitem');
@@ -110,11 +143,13 @@ describe('ContactsPickerScreen filters', () => {
 
     it('shows feedback when search matches no addresses', () => {
         mount();
-        fireEvent.change(screen.getByRole('textbox', { name: 'Search contacts' }), {
+        fireEvent.change(screen.getByRole('searchbox', { name: 'Search contacts' }), {
             target: { value: 'not saved' },
         });
 
-        expect(screen.getByText('No addresses match your filters.')).toBeInTheDocument();
+        expect(screen.getByText('No matching addresses')).toBeInTheDocument();
+        expect(screen.getByText('Try a different search or network filter.')).toBeInTheDocument();
+        expect(screen.getByTestId('list-page')).toContainElement(screen.getByTestId('empty-state'));
         expect(screen.queryAllByRole('listitem')).toHaveLength(0);
     });
 
@@ -130,14 +165,25 @@ describe('ContactsPickerScreen filters', () => {
 });
 
 describe('ContactsPickerScreen selection and header', () => {
-    it('passes the exact selected entry to onPick once', () => {
+    it('passes the exact selected entry to onPick through native keyboard activation', async () => {
         const { props } = mount();
-        const row = screen.getByText('bc1-alice').closest('button');
+        const user = userEvent.setup();
+        const row = screen.getByRole('button', { name: /Alice.*bc1-alice/ });
 
-        fireEvent.click(row);
+        row.focus();
+        await user.keyboard('{Enter}');
         expect(props.onPick).toHaveBeenCalledOnce();
         expect(props.onPick.mock.calls[0]).toHaveLength(1);
         expect(props.onPick.mock.calls[0][0]).toBe(bitcoinEntry);
+    });
+
+    it('cancels without selecting an entry when Back is pressed', () => {
+        const { props } = mount();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+
+        expect(props.onBack).toHaveBeenCalledOnce();
+        expect(props.onPick).not.toHaveBeenCalled();
     });
 
     it('shows the Contacts header title', () => {

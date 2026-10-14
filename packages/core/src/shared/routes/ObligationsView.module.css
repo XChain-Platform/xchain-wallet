@@ -3,44 +3,11 @@
    DispensersList. Chip colors follow FeeSelector's color-mix pattern
    so they track the theme's danger/warning tokens. */
 
-.wrapFull {
-    display: flex;
-    flex-direction: column;
-    max-width: 560px;
-    margin: var(--xc-space-6) auto 0;
-    padding: var(--xc-space-4);
-    width: 100%;
-    box-sizing: border-box;
-}
-
-.wrapPopup {
-    display: flex;
-    flex-direction: column;
-}
-
 .hint {
     margin: 0 0 var(--xc-space-3);
     font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
     line-height: 1.45;
-}
-
-.empty {
-    padding: var(--xc-space-5) var(--xc-space-4);
-    text-align: center;
-    border: 1px dashed var(--xc-border);
-    border-radius: var(--xc-radius-md);
-}
-
-.emptyTitle {
-    margin: 0 0 var(--xc-space-2);
-    font-weight: 600;
-}
-
-.sectionLabel {
-    margin: var(--xc-space-5) 0 var(--xc-space-1);
-    font-weight: 600;
-    font-size: var(--xc-text-sm);
 }
 
 .list {
@@ -60,6 +27,7 @@
     align-items: center;
     gap: var(--xc-space-3);
     padding: var(--xc-space-3) var(--xc-space-4);
+    min-width: 0;
 }
 
 .row + .row {
@@ -80,33 +48,42 @@
 
 .rowTitle {
     font-weight: 600;
+    overflow-wrap: anywhere;
 }
 
 .rowDetail {
     margin-top: var(--xc-space-1);
     font-size: var(--xc-text-sm);
+    overflow-wrap: anywhere;
 }
 
 .rowMeta {
+    /* Half-grid spacing keeps metadata attached to its detail line. */
     margin-top: 2px;
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
+    overflow-wrap: anywhere;
 }
 
 .rowActions {
     flex: 0 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-2);
+    justify-content: flex-end;
 }
 
 .atRiskNote {
     margin-top: var(--xc-space-2);
     font-size: var(--xc-text-xs);
-    color: var(--xc-danger);
+    color: var(--xc-danger-fg);
 }
 
 .chip {
     display: inline-block;
-    padding: 1px 8px;
-    border-radius: 999px;
+    /* The one-pixel block inset preserves the compact status-chip height. */
+    padding: 1px var(--xc-space-2);
+    border-radius: var(--xc-radius-pill);
     font-size: var(--xc-text-xs);
     font-weight: 600;
     white-space: nowrap;
@@ -124,7 +101,7 @@
 
 .chipExpired {
     background: color-mix(in srgb, var(--xc-danger) 14%, transparent);
-    color: var(--xc-danger);
+    color: var(--xc-danger-fg);
 }
 
 /* Popup shells (extension) are narrow: stack the action button under
@@ -136,7 +113,10 @@
     }
 
     .rowActions {
-        display: flex;
-        justify-content: flex-end;
+        width: 100%;
+    }
+
+    .rowActions > * {
+        flex: 1 1 auto;
     }
 }

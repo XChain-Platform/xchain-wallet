@@ -260,6 +260,24 @@ describe('injectIntegrityImportMap', () => {
         expect(injectIntegrityImportMap(noScriptSrc, files).admitted).toBe(false);
     });
 
+    it('keeps every directive intact when the policy quotes are written as &#39; (as Vite emits them)', () => {
+        // The entity ends in a semicolon; splitting the raw attribute on "; "
+        // once turned the Trezor origin into a directive name, which the
+        // browser rejected as a parse error and dropped from script-src.
+        const escaped = '<html><head><meta http-equiv="Content-Security-Policy" content="'
+            + "default-src &#39;self&#39;; script-src &#39;self&#39; https://connect.trezor.io; object-src &#39;none&#39;"
+            + '"><script type="module" src="/assets/app.js"></script></head></html>';
+        const { html, admitted } = injectIntegrityImportMap(escaped, files);
+        const body = html.match(/<script type="importmap">(.*?)<\/script>/)[1];
+        const policy = html.match(/content="([^"]*)"/)[1];
+        expect(admitted).toBe(true);
+        expect(policy.split('; ')).toEqual([
+            "default-src 'self'",
+            `script-src 'self' https://connect.trezor.io '${sha384(body)}'`,
+            "object-src 'none'",
+        ]);
+    });
+
     it('reports the map not admitted when the page has nowhere to insert it', () => {
         const { mapped, admitted } = injectIntegrityImportMap('<p>no head, no script</p>', files);
         expect(mapped).toBe(0);

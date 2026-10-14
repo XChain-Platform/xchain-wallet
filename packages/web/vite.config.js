@@ -25,6 +25,7 @@
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
+import { colorMixFallback } from './cssFallbacks.js';
 import react from '@vitejs/plugin-react';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { metaContentSecurityPolicyFor } from './src/csp.js';
@@ -38,6 +39,11 @@ import { SURFACE_MODULES, hiddenSurfacesFor } from './src/surfaces/registry.js';
 // `fullnode.regtest.json` literal beside it) out of a `store` bundle. Inert in
 // every other profile; fails the build shut if a marker survives.
 import { regtestSidecarPlugin } from './regtestSidecar.js';
+import {
+    WEB_INITIAL_CSS_SIZE_LIMIT,
+    WEB_INITIAL_JS_SIZE_LIMIT,
+    initialBundleSizes,
+} from './bundleBudget.js';
 
 const BUILD_PROFILE = resolveBuildProfile();
 const HIDDEN_SURFACES = hiddenSurfacesFor(BUILD_PROFILE);
@@ -113,6 +119,23 @@ const httpsEnabled = process.env.VITE_HTTPS === '1' || process.env.HTTPS === '1'
 // Extra Host header to allow when demoing the dev server over a LAN, since
 // Vite otherwise rejects any Host it doesn't recognize.
 const devAllowedHost = process.env.VITE_DEV_ALLOWED_HOST || null;
+
+const initialBundleSizePlugin = {
+    name: 'xchain-web-initial-bundle-size',
+    generateBundle(_options, bundle) {
+        const { jsBytes, cssBytes } = initialBundleSizes(bundle);
+        if (jsBytes > WEB_INITIAL_JS_SIZE_LIMIT) {
+            this.error(
+                `web initial JavaScript is ${jsBytes} bytes; limit is ${WEB_INITIAL_JS_SIZE_LIMIT}`,
+            );
+        }
+        if (cssBytes > WEB_INITIAL_CSS_SIZE_LIMIT) {
+            this.error(
+                `web initial CSS is ${cssBytes} bytes; limit is ${WEB_INITIAL_CSS_SIZE_LIMIT}`,
+            );
+        }
+    },
+};
 
 // Dev-only convenience: rewrite a bare `/style-guide` to `/style-guide/`
 // so Vite picks up the multi-page entry at packages/web/style-guide/
@@ -345,6 +368,13 @@ export default defineConfig({
     optimizeDeps: process.env.VITE_XCHAIN_REAL_SDK === '1'
         ? { include: ['xchain-sdk', 'xchain-sdk/src/wallet.js'] }
         : { include: ['xchain-sdk/src/wallet.js'], exclude: ['xchain-sdk'] },
+    // Old-but-capable WebViews (below the soft floor in
+    // src/platform/webviewFloor.js) drop any declaration that uses
+    // `color-mix()`; this appends an `@supports not (...)` copy of each
+    // such rule with the mixes flattened, which only those engines read.
+    css: {
+        postcss: { plugins: [colorMixFallback()] },
+    },
     build: {
         outDir: 'dist',
         emptyOutDir: true,
@@ -363,6 +393,23 @@ export default defineConfig({
         // false. The web shell is the outlier, and the mobile shells inherited
         // the outlier by bundling its output rather than by deciding anything.
         sourcemap: BUILD_PROFILE !== 'store',
+        rollupOptions: {
+            treeshake: {
+                // QR consumers are route-lazy, and the encoder performs no
+                // top-level work when UI barrels re-export those consumers.
+                moduleSideEffects(id) {
+                    return !id.replace(/\\/g, '/').includes('/node_modules/.pnpm/qrcode@');
+                },
+            },
+            output: {
+                manualChunks(id) {
+                    if (id.replace(/\\/g, '/').includes('/node_modules/.pnpm/qrcode@')) {
+                        return 'qrcode';
+                    }
+                    return undefined;
+                },
+            },
+        },
         // (prod half of G163): Rollup's commonjs pass defaults to
         // /node_modules/ only, and the `link:`-resolved xchain-sdk lives
         // outside every node_modules dir, so without this include the
@@ -391,9 +438,15 @@ export default defineConfig({
         port: 4173,
         host: '0.0.0.0',
         allowedHosts: devAllowedHost ? ['localhost', '127.0.0.1', devAllowedHost] : ['localhost', '127.0.0.1'],
+        // frame-ancestors is ignored in a meta policy, so the production-like
+        // server supplies that directive as a response header. Keep this
+        // separate from the HTML policy: SRI adds the generated import-map
+        // hash to the meta policy after Vite has emitted the page.
+        headers: { 'Content-Security-Policy': "frame-ancestors 'none'" },
     },
     plugins: [
         polyfillShimResolver,
+        initialBundleSizePlugin,
         react(),
         ...(httpsEnabled ? [basicSsl()] : []),
         nodePolyfills({

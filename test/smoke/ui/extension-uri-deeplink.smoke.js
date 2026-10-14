@@ -55,14 +55,14 @@ assert.match(handler.uriTemplate, /popup\.html\?uri=%s/);
 assert.ok(typeof handler.name === 'string' && handler.name.length > 0,
     'protocol_handlers[0].name is non-empty');
 
-// --- 2. popup imports core uri + sendPrefill state -----------------
+// --- 2. popup imports shared router + sendPrefill state ------------
 
 const popup = readFileSync(
     join(wsRoot, 'packages', 'extension', 'src', 'popup', 'App.jsx'),
     'utf8',
 );
-assert.ok(/import\s*\{\s*uri as coreUri\s*\}\s*from\s*'@xchain-wallet\/core'/.test(popup),
-    'popup imports the core uri namespace as coreUri');
+assert.ok(/import\s*\{\s*deepLinkRoute\s*\}\s*from\s*'\.\.\/\.\.\/\.\.\/desktop\/renderer\/deepLinkRoute\.js'/.test(popup),
+    'popup imports the shared external-link router');
 assert.ok(/const \[sendPrefill, setSendPrefill\] = useState/.test(popup),
     'popup declares sendPrefill state slot');
 
@@ -72,22 +72,22 @@ assert.ok(
     /new URLSearchParams\(window\.location\.search\)[\s\S]*?\.get\('uri'\)/.test(popup),
     'popup reads ?uri= from location.search',
 );
-assert.ok(/coreUri\.parseXchainUri\(raw,\s*\{\s*chainRegistry:\s*APP_CHAIN_REGISTRY\s*\}\)/.test(popup),
-    'popup runs the raw URI through coreUri.parseXchainUri WITH the chain registry (coin-code URIs need it to resolve chainId)');
+assert.ok(/deepLinkRoute\(raw,\s*APP_CHAIN_REGISTRY\)/.test(popup),
+    'popup runs the raw URI through the shared router with the chain registry');
 
 // --- 4. Send/receive/execute routing --------------------------------
 
 assert.ok(
-    /intent\.kind === 'send'[\s\S]*?setSendPrefill\([\s\S]*?setUnlockedView\('send'\)/.test(popup),
-    'popup routes kind:send → setSendPrefill + setUnlockedView(send)',
+    /route\.view === 'send'\) setSendPrefill\(route\.sendPrefill\)/.test(popup),
+    'popup applies the shared Send prefill',
 );
 assert.ok(
-    /intent\.kind === 'receive'[\s\S]*?setUnlockedView\('receive'\)/.test(popup),
-    'popup routes kind:receive → setUnlockedView(receive)',
+    /setUnlockedView\(route\.view\)/.test(popup),
+    'popup routes to the shared mapper view',
 );
 assert.ok(
-    /intent\.kind === 'execute' && intent\.contractActionIndex && intent\.chainId[\s\S]*?setContractRef\([\s\S]*?setExecutePrefill\([\s\S]*?setUnlockedView\('contract-execute'\)/.test(popup),
-    'popup routes kind:execute (guarded on contract index + chainId) → setContractRef + setExecutePrefill + contract-execute view',
+    /route\.view === 'contract-execute'[\s\S]*?setContractRef\(route\.contractRef\)[\s\S]*?setExecutePrefill\(route\.executePrefill\)/.test(popup),
+    'popup applies the shared contract reference and prefill',
 );
 assert.ok(/const \[executePrefill, setExecutePrefill\] = useState/.test(popup),
     'popup declares an executePrefill state slot');
@@ -118,5 +118,5 @@ assert.ok(
 );
 
 console.log(
-    "OK: extension-uri-deeplink smoke (Cluster L FOLLOWUP 2: extension manifest declares protocol_handlers for web+xchain → popup.html?uri=%s; popup App.jsx imports core uri ns, declares sendPrefill state, parses ?uri= once on mount, routes send/receive, strips param via history.replaceState; Send renders with prefill={sendPrefill}, onBack clears it)",
+    "OK: extension-uri-deeplink smoke (extension claims web+xchain, popup routes it through the shared external-link mapper, strips the parameter, and passes Send/execute prefills to their forms)",
 );

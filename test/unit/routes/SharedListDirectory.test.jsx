@@ -13,6 +13,14 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { SharedListDirectory } from '../../../packages/core/src/shared/routes/SharedListDirectory.jsx';
 
+vi.mock('@xchain-wallet/core/ui', async (importOriginal) => {
+    const actual = await importOriginal();
+    return {
+        ...actual,
+        ChainBadge: ({ descriptor }) => <span role="img" aria-label={descriptor.displayName} />,
+    };
+});
+
 const CHAIN = 'bitcoin-mainnet';
 const ENTRIES = [
     {
@@ -50,7 +58,7 @@ const ENTRIES = [
     },
 ];
 
-function mount({ mode = 'browse', filterType, onSelect = vi.fn(), response } = {}) {
+function mount({ mode = 'browse', filterType, onSelect = vi.fn(), onOpenList, response } = {}) {
     const messaging = {
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
         getSharedLists: vi.fn().mockResolvedValue(response ?? {
@@ -66,6 +74,7 @@ function mount({ mode = 'browse', filterType, onSelect = vi.fn(), response } = {
                 mode={mode}
                 filterType={filterType}
                 onSelect={onSelect}
+                onOpenList={onOpenList}
                 onBack={() => {}}
             />
         </MessagingProvider>,
@@ -80,8 +89,8 @@ describe('SharedListDirectory', () => {
         mount();
 
         expect(await screen.findByText('Maintained by XChain Platform')).toBeTruthy();
-        expect(screen.getByRole('listitem', { name: /Token list 12 on BTC/ })).toBeTruthy();
-        expect(screen.getByRole('listitem', { name: /Address list 8 on LTC/ })).toBeTruthy();
+        expect(screen.getByRole('listitem', { name: 'Token list 12' })).toBeTruthy();
+        expect(screen.getByRole('listitem', { name: 'Address list 8' })).toBeTruthy();
         expect(screen.getByText('bc1qor...7890')).toBeTruthy();
         expect(screen.getByText('not yet mirrored here')).toBeTruthy();
     });
@@ -91,9 +100,9 @@ describe('SharedListDirectory', () => {
 
         const rows = await screen.findAllByRole('listitem');
         expect(rows.map((row) => row.getAttribute('aria-label'))).toEqual([
-            'Address list 8 on LTC',
-            'Token list 12 on BTC',
-            'Token list 4 on DOGE',
+            'Address list 8',
+            'Token list 12',
+            'Token list 4',
         ]);
     });
 
@@ -101,8 +110,8 @@ describe('SharedListDirectory', () => {
         const onSelect = vi.fn();
         const state = mount({ mode: 'pick', filterType: 'address', onSelect });
 
-        const row = await screen.findByRole('listitem', { name: /Address list 8 on LTC/ });
-        expect(screen.queryByRole('listitem', { name: /Token list 12 on BTC/ })).toBeNull();
+        const row = await screen.findByRole('listitem', { name: 'Address list 8' });
+        expect(screen.queryByRole('listitem', { name: 'Token list 12' })).toBeNull();
         fireEvent.click(within(row).getByRole('button', { name: 'Choose list' }));
 
         expect(state.messaging.getSharedLists).toHaveBeenCalledWith({ chainId: CHAIN });
@@ -117,8 +126,8 @@ describe('SharedListDirectory', () => {
     it('does not offer an unmirrored list in pick mode', async () => {
         mount({ mode: 'pick', filterType: 'token' });
 
-        expect(await screen.findByRole('listitem', { name: /Token list 12 on BTC/ })).toBeTruthy();
-        expect(screen.queryByRole('listitem', { name: /Token list 4 on DOGE/ })).toBeNull();
+        expect(await screen.findByRole('listitem', { name: 'Token list 12' })).toBeTruthy();
+        expect(screen.queryByRole('listitem', { name: 'Token list 4' })).toBeNull();
         expect(screen.getAllByRole('button', { name: 'Choose list' })).toHaveLength(1);
     });
 
@@ -130,7 +139,100 @@ describe('SharedListDirectory', () => {
             },
         });
 
-        expect(await screen.findByText('Shared lists unavailable from Litecoin.')).toBeTruthy();
-        expect(screen.getByText('Shared lists unavailable from Dogecoin.')).toBeTruthy();
+        expect(await screen.findByRole('img', { name: 'Litecoin' })).toBeTruthy();
+        expect(screen.getByRole('img', { name: 'Dogecoin' })).toBeTruthy();
+        expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
+    });
+
+    it('does not expose an unknown network kind through fallback text', async () => {
+        mount({
+            response: {
+                lists: [{ ...ENTRIES[0], home_chain: 'unknown-regtest-chain' }],
+                unavailable: ['unknown-testnet-chain'],
+            },
+        });
+
+        await screen.findByRole('listitem');
+        expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
+    });
+
+    it('searches every entry and distinguishes no matches from an empty directory', async () => {
+        mount({
+            response: {
+                lists: [
+                    ...ENTRIES,
+                    { ...ENTRIES[0], home_list_index: 99, bindTarget: 1099, name: 'Treasury assets' },
+                ],
+                unavailable: [],
+            },
+        });
+
+        await screen.findByRole('listitem', { name: 'Token list 99' });
+        fireEvent.change(screen.getByRole('searchbox', { name: 'Search shared lists' }), {
+            target: { value: 'treasury' },
+        });
+
+        expect(screen.getAllByRole('listitem')).toHaveLength(1);
+        expect(screen.getByText('Treasury assets')).toBeTruthy();
+
+        fireEvent.change(screen.getByRole('searchbox', { name: 'Search shared lists' }), {
+            target: { value: 'missing' },
+        });
+        expect(screen.getByText('No matching shared lists')).toBeTruthy();
+        expect(screen.queryByText('No shared lists are available.')).toBeNull();
+    });
+
+    it('pages long directories and opens a list on its home chain', async () => {
+        const onOpenList = vi.fn();
+        const lists = Array.from({ length: 23 }, (_, index) => ({
+            ...ENTRIES[0],
+            home_list_index: index + 1,
+            bindTarget: 1000 + index,
+        }));
+        mount({ response: { lists, unavailable: [] }, onOpenList });
+
+        expect(await screen.findAllByRole('listitem')).toHaveLength(20);
+        fireEvent.change(screen.getByRole('searchbox', { name: 'Search shared lists' }), {
+            target: { value: '1022' },
+        });
+        expect(screen.getAllByRole('listitem')).toHaveLength(1);
+        expect(screen.getByRole('listitem', { name: 'Token list 23' })).toBeTruthy();
+
+        fireEvent.change(screen.getByRole('searchbox', { name: 'Search shared lists' }), {
+            target: { value: '' },
+        });
+        expect(screen.getAllByRole('listitem')).toHaveLength(20);
+        fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
+        expect(screen.getAllByRole('listitem')).toHaveLength(23);
+
+        const row = screen.getByRole('listitem', { name: 'Token list 23' });
+        fireEvent.click(within(row).getByRole('button', { name: 'Open list' }));
+        expect(onOpenList).toHaveBeenCalledWith('bitcoin-mainnet', '23');
+    });
+
+    it('shows the request failure instead of an empty directory', async () => {
+        const messaging = {
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            getSharedLists: vi.fn()
+                .mockRejectedValueOnce(new Error('Directory unavailable'))
+                .mockResolvedValueOnce({ lists: [], unavailable: [] }),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <SharedListDirectory
+                    walletId="wallet-1"
+                    chainId={CHAIN}
+                    mode="browse"
+                    onBack={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        expect(await screen.findByText('Directory unavailable')).toBeTruthy();
+        expect(screen.queryByText('No shared lists are available.')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+
+        expect(await screen.findByText('No shared lists yet')).toBeTruthy();
+        expect(messaging.getSharedLists).toHaveBeenCalledTimes(2);
     });
 });

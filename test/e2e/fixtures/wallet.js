@@ -11,11 +11,10 @@
 // Shared E2E fixture: the one place that knows how to get from a cold
 // browser to an unlocked Home.
 //
-// Every spec used to inline its own copy of that walk. When onboarding
-// grew three new screens (license gate, recovery-phrase verification,
-// ADS consent), all 15 specs broke at once and each would have needed
-// the same edit. Onboarding is the wallet's most-changed surface, so
-// the walk belongs behind one seam.
+// Onboarding is the wallet's most-changed surface, so the walk lives
+// behind this one seam rather than inside each spec: a new onboarding
+// screen (license gate, recovery-phrase verification, ADS notice) is
+// one edit here, not one per spec.
 //
 // LICENSE GATE: bypassed by seeding the same localStorage keys the app
 // reads (Onboarding.jsx), because the gate is NOT what most specs are
@@ -138,7 +137,7 @@ export async function openSettings(page) {
         await palette.getByRole('combobox').fill('settings');
         await palette.getByRole('option', { name: /^Settings/ }).first().click();
     }
-    await expect(page.getByRole('button', { name: /^Developer Mode/ }))
+    await expect(page.getByRole('button', { name: /^Developer mode/ }))
         .toBeVisible({ timeout: 15_000 });
 }
 
@@ -167,13 +166,53 @@ function navDestination(scope, name) {
     };
 }
 
+// A destination can sit in the DOM of a collapsed nav without being shown
+// (the phone bar keeps its More sheet rows mounted off screen); only one that
+// is visible inside the viewport is a click target, otherwise the caller
+// falls through to More.
+async function onScreen(locator) {
+    if (!(await locator.isVisible())) return false;
+    const box = await locator.boundingBox({ timeout: 2_000 }).catch(() => null);
+    if (!box) return false;
+    const viewport = locator.page().viewportSize();
+    if (!box || !viewport) return Boolean(box);
+    return box.x + box.width > 0 && box.y + box.height > 0
+        && box.x < viewport.width && box.y < viewport.height;
+}
+
+// The landscape icon rail and the open More sheet both scroll inside a short
+// viewport (or under enlarged text spacing), so a row can be scrolled out of
+// view; bring it back before the on-screen check. The closed phone bar's
+// off-screen sheet rows are neither, so they still fall through to More.
+// A resize can unmount the row between the count and these calls, so each
+// is bounded and a vanished row simply counts as not on screen.
+async function revealInScroller(locator) {
+    if (await locator.count() === 0) return;
+    try {
+        const scrolls = await locator.first().evaluate((el) => {
+            const navEl = el.closest('nav');
+            if (navEl && navEl.getAttribute('aria-label') === 'Primary navigation') return true;
+            const sheet = el.closest('[role="dialog"]');
+            return Boolean(sheet && sheet.getAttribute('aria-labelledby')
+                && document.getElementById(sheet.getAttribute('aria-labelledby'))?.textContent?.trim() === 'More');
+        }, undefined, { timeout: 2_000 });
+        if (scrolls && await locator.first().isVisible()) {
+            await locator.first().scrollIntoViewIfNeeded({ timeout: 2_000 });
+        }
+    } catch {
+        // Gone mid-resize: the caller's on-screen check decides.
+    }
+}
+
 async function clickDestination(scope, name) {
     const { exact, prefixed } = navDestination(scope, name);
-    if (await exact.count() > 0) {
+    await revealInScroller(exact);
+    await revealInScroller(prefixed);
+    if (await exact.count() > 0 && await onScreen(exact.first())) {
         await exact.first().click();
         return true;
     }
-    if (await prefixed.count() > 0) {
+    if (await prefixed.count() > 0 && await onScreen(prefixed.first())) {
         await prefixed.first().click();
         return true;
     }
@@ -190,12 +229,36 @@ async function clickDestination(scope, name) {
 export async function gotoSection(page, name) {
     const bar = nav(page);
     if (await bar.count() > 0) {
-        if (await clickDestination(bar, name)) return;
-
-        await bar.getByRole('button', { name: 'More', exact: true }).click();
-        const sheet = page.getByRole('dialog', { name: 'More navigation' });
-        await sheet.waitFor({ state: 'visible', timeout: 15_000 });
-        if (await clickDestination(sheet, name)) return;
+        // Landscape phones can show the rail and the bottom bar together, so
+        // try every nav on screen before opening the More sheet. Right after
+        // a resize the shell can still be swapping the bottom bar for the
+        // rail, so a More button that vanishes means "look again", not
+        // "wait for it forever".
+        const navs = [
+            page.getByRole('navigation', { name: 'Primary navigation' }),
+            page.getByRole('navigation', { name: 'Bottom navigation' }),
+        ];
+        const more = page.getByRole('button', { name: 'More', exact: true });
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+            for (const candidate of navs) {
+                if (await candidate.count() === 0) continue;
+                if (await clickDestination(candidate.first(), name)) return;
+            }
+            if (await more.count() === 0) {
+                await page.waitForTimeout(500);
+                continue;
+            }
+            try {
+                await more.first().click({ timeout: 10_000 });
+            } catch {
+                await page.waitForTimeout(500);
+                continue;
+            }
+            const sheet = page.getByRole('dialog', { name: 'More', exact: true });
+            await sheet.waitFor({ state: 'visible', timeout: 15_000 });
+            if (await clickDestination(sheet, name)) return;
+            break;
+        }
         throw new Error(`no nav destination named "${name}" in the nav or the More sheet`);
     }
 
@@ -221,14 +284,33 @@ export function lockButton(page) {
     return page.getByRole('button', { name: 'Lock', exact: true });
 }
 
-/** Reads the 12/24 recovery words off the mnemonic display stage, in order. */
+/**
+ * Reveals the recovery phrase on the mnemonic display stage.
+ *
+ * The phrase is concealed until the user asks for it (MnemonicGrid, §19.2):
+ * the stage opens on a "Reveal recovery phrase" button and no word list at
+ * all. Asserting that before the click keeps the concealment covered by
+ * every spec that walks onboarding, not only by the unit test.
+ */
+export async function revealRecoveryPhrase(page) {
+    const list = page.getByRole('list', { name: 'Recovery phrase' });
+    const reveal = page.getByRole('button', { name: 'Reveal recovery phrase' });
+    await expect(reveal, 'the mnemonic stage should open with the phrase concealed').toBeVisible();
+    await expect(list).toHaveCount(0);
+    await reveal.click();
+    await expect(list).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Hide recovery phrase' })).toBeVisible();
+    return list;
+}
+
+/** Reveals, then reads the 12/24 recovery words off the mnemonic display stage, in order. */
 export async function readRecoveryPhrase(page) {
-    const items = await page
-        .getByRole('list', { name: 'Recovery phrase' })
-        .getByRole('listitem')
-        .allInnerTexts();
-    // Each item renders as "<position>\n<word>"; the word is the last token.
-    return items.map((text) => text.trim().split(/\s+/).pop());
+    const list = await revealRecoveryPhrase(page);
+    const items = await list.getByRole('listitem').allInnerTexts();
+    // Each item renders as "<position>. <word>"; the word is the last token.
+    const words = items.map((text) => text.trim().split(/\s+/).pop());
+    expect([12, 24], `read ${words.length} recovery words`).toContain(words.length);
+    return words;
 }
 
 /**
@@ -260,10 +342,10 @@ export async function completeRecoveryPhraseChallenge(page, words) {
 /**
  * Cold browser -> unlocked Home, via the real create-wallet flow.
  *
- * ADS consent is DECLINED by default: an enabled donation adds an extra
- * output to outgoing transactions, which would perturb the amounts and
- * fees the send specs assert on. Pass `ads: 'enable'` to cover the
- * opt-in path.
+ * ADS is turned OFF by default, in Settings, right after the onboarding
+ * notice: an enabled donation adds an extra output to outgoing
+ * transactions, which would perturb the amounts and fees the send specs
+ * assert on. Pass `ads: 'on'` to leave the wallet's default in place.
  *
  * Pass `navigate: false` when the page is ALREADY on the wallet, which is
  * the case for the MV3 extension venue: its popup is opened at
@@ -288,7 +370,7 @@ export async function completeRecoveryPhraseChallenge(page, words) {
  */
 export async function createWallet(page, options = {}) {
     const {
-        password = DEFAULT_PASSWORD, name, ads = 'decline', navigate = true,
+        password = DEFAULT_PASSWORD, name, ads = 'off', navigate = true,
         bip39Passphrase = null,
     } = options;
 
@@ -337,7 +419,7 @@ export async function createWallet(page, options = {}) {
     await completeRecoveryPhraseChallenge(page, words);
     await page.getByRole('button', { name: 'Create wallet' }).click();
 
-    await acknowledgeDonationConsent(page, ads);
+    await acknowledgeDonationNotice(page, ads);
 
     // Argon2id runs on the CI runner's CPU; this is the slow step.
     await expect(unlockedShell(page)).toBeVisible({ timeout: KDF_STEP_MS });
@@ -377,9 +459,14 @@ export async function dismissIntroCarousel(page) {
 }
 
 /**
- * Answers the ADS donation-consent screen shown at the end of onboarding.
+ * Acknowledges the Automatic Donation System notice shown at the end of
+ * onboarding, then (by default) turns donations off in Settings.
  *
- * Tolerant by design, like dismissIntroCarousel: the consent step lives in
+ * The notice informs; it does not ask (spec §36.1). It has one Continue
+ * button and no decline, so `ads: 'off'` takes the walk a user would: Settings
+ * -> Automatic Donation System -> the switch. `ads: 'on'` only continues.
+ *
+ * Tolerant by design, like dismissIntroCarousel: the notice lives in
  * the shared CreateWallet route the web shell uses, and the extension popup
  * has its OWN onboarding implementation that does not include it. Waiting
  * unconditionally would hang every extension spec on a screen that is never
@@ -390,28 +477,67 @@ export async function dismissIntroCarousel(page) {
  * budget here is a bet on the KDF finishing inside it, not on a render. The
  * bare `10_000` this replaced lost that bet on roughly a quarter of CI runs:
  * the helper returned false, `createWallet` then waited its full KDF budget
- * for a shell still sitting behind an unanswered consent screen, and the run
+ * for a shell still sitting behind an unanswered notice screen, and the run
  * reported a 180s timeout on `unlockedShell` - a signature that reads as a
  * slow KDF and is nothing of the kind. Nine of nine failing and flaky tests
  * in run 30930194072 died on this screen. Same defect as the bare 90_000
  * that BASE_KDF_STEP_TIMEOUT_MS was extracted from, one function away.
  *
- * So race the two outcomes instead: either the consent screen arrives, or
+ * So race the two outcomes instead: either the notice arrives, or
  * this shell has none and the wallet itself does. Whichever lands first ends
  * the wait, which keeps the extension venue fast without pinning any number
  * to the derivation.
  */
-export async function acknowledgeDonationConsent(page, choice = 'decline') {
-    const button =
-        choice === 'enable'
-            ? page.getByRole('button', { name: /Enable and continue/i })
-            : page.getByRole('button', { name: /Decline/i });
-    await button.or(unlockedShell(page)).first()
+export async function acknowledgeDonationNotice(page, ads = 'off') {
+    const notice = page.getByRole('heading', { name: 'Automatic Donation System', exact: true });
+    await notice.or(unlockedShell(page)).first()
         .waitFor({ state: 'visible', timeout: KDF_STEP_MS });
-    // The shell won the race, so there is no consent step here to answer.
-    if (!(await button.isVisible())) return false;
-    await button.click();
+    // The shell won the race, so there is no notice here to acknowledge.
+    if (!(await notice.isVisible())) return false;
+    await page.getByRole('button', { name: 'Continue', exact: true }).click();
+    if (ads === 'off') await turnOffDonations(page);
     return true;
+}
+
+/**
+ * Answers the notice that now ends every IMPORT: a recovery phrase, the
+ * FreeWallet migration, and a backup or backup-pointer restore, in both
+ * 'fresh' and 'add' modes (ImportWallet.jsx hands over to onImported only
+ * from the notice's Continue button).
+ *
+ * Call it right after the Import or Restore click and before waiting for the
+ * unlocked shell: the shell is not coming until Continue is pressed, so a
+ * spec that waits for it first sits out its whole KDF budget on a screen that
+ * needed one click. Defaults to `ads: 'on'` (just Continue), unlike the
+ * create path, because an import spec that does not care about donations
+ * should not pay for the Settings walk that switching them off costs.
+ * Tolerant in the same way as acknowledgeDonationNotice, so the extension
+ * venue, which has no notice, is a no-op.
+ */
+export async function acknowledgeImportNotice(page, ads = 'on') {
+    return acknowledgeDonationNotice(page, ads);
+}
+
+/**
+ * Turns the Automatic Donation System off the only way the wallet offers:
+ * Settings -> Automatic Donation System. Ends back on Home.
+ */
+export async function turnOffDonations(page) {
+    await expect(unlockedShell(page)).toBeVisible({ timeout: KDF_STEP_MS });
+    await openSettings(page);
+    await page.getByRole('button', { name: /^Automatic donation system/ }).click();
+    const toggle = page.getByRole('switch', { name: 'Automatic Donation System', exact: true });
+    await expect(toggle).toBeVisible();
+    if (await toggle.isChecked()) {
+        // Click, not check(): the input is controlled by PERSISTED settings,
+        // so `checked` flips only once the vault write resolves.
+        await toggle.click();
+        await expect(toggle).not.toBeChecked();
+    }
+    await page.getByRole('button', { name: 'Back to settings', exact: true }).click();
+    if (await nav(page).count() > 0) await gotoSection(page, 'Home');
+    else await page.getByRole('button', { name: 'Back', exact: true }).click();
+    await expect(unlockedShell(page)).toBeVisible();
 }
 
 /** The locked screen's submit button. Disabled until a password is typed. */
@@ -427,7 +553,7 @@ export async function lockWallet(page) {
 
 /** Unlocks from the locked screen. */
 export async function unlockWallet(page, password = DEFAULT_PASSWORD) {
-    await page.getByLabel('Password').fill(password);
+    await page.getByLabel('Password', { exact: true }).fill(password);
     await unlockButton(page).click();
     // Argon2id again: unlocking derives the master key. Same budget.
     await expect(lockButton(page)).toBeVisible({ timeout: KDF_STEP_MS });

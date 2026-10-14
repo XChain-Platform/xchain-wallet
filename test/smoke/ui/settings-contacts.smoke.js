@@ -25,20 +25,22 @@ const src = readFileSync(sectionPath, 'utf8');
 assert.match(src, /messaging\.listContacts\(\)/, 'lists contacts via messaging');
 assert.match(src, /messaging\.saveContact\(\{\s*record\s*\}\)/, 'imports via saveContact({ record })');
 
-// Export uses Blob + JSON.stringify
+// Export supports the lossless JSON path and spreadsheet CSV.
 assert.match(src, /JSON\.stringify\(/, 'serializes to JSON');
+assert.match(src, /contactsToCsv\(/, 'serializes to CSV');
 assert.match(src, /new Blob\(/, 'wraps in Blob for download');
 assert.match(src, /\.json/, 'download filename has .json');
 
-// Import path: file input + JSON.parse + Array check
+// Import path: file input accepts both formats and keeps JSON compatibility.
 assert.match(src, /type="file"/, 'file input present');
-assert.match(src, /accept="application\/json,\.json"/, 'restricts to JSON files');
+assert.match(src, /accept="application\/json,text\/csv,\.json,\.csv"/, 'restricts to JSON and CSV files');
 assert.match(src, /JSON\.parse\(/, 'parses imported text');
+assert.match(src, /contactsFromCsv\(/, 'parses CSV imports');
 assert.match(src, /Array\.isArray\(parsed\)/, 'rejects non-arrays');
 
 // Counts + status + error rendering
 assert.match(src, /contact\$\{count === 1 \? '' : 's'\}/, 'pluralises contact count');
-assert.match(src, /setImportResult\(\{ imported, failures \}\)/, 'stores the imported count');
+assert.match(src, /setImportResult\(\{ imported, failures, duplicates \}\)/, 'stores import and duplicate counts');
 assert.match(src, /Imported \$\{importResult\.imported\}/, 'reports imported count');
 
 // Settings.jsx wiring

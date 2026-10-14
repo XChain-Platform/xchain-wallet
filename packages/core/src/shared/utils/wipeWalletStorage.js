@@ -11,12 +11,57 @@
 import { clearLockoutState } from '../../flows/lockoutTracking.js';
 import { clearDuressPassphrase } from '../../flows/duressPassphrase.js';
 import { clearPanicModeState } from '../../flows/panicMode.js';
+import { clearBackupReminderState } from '../../flows/backupReminder.js';
+import { clearBalanceCache } from './balanceCache.js';
 
 /** Key a renderer-hosted broadcast queue persists under; core owns it so the wipe and the store agree. */
 export const BROADCAST_QUEUE_STORAGE_KEY = 'xchain.broadcastQueue';
 
 /** Prefix of the queue's pruned-wallet ledger, one key per walletId; the wipe sweeps the whole range. */
 export const BROADCAST_QUEUE_PRUNED_PREFIX = 'xchain.broadcastQueue.pruned.';
+
+/** Renderer records that belong to the erased vault rather than to the app installation. */
+const WALLET_LOCAL_STORAGE_KEYS = Object.freeze([
+    'xchain-wallet:biometric',
+    'xc:activeWallet',
+    'xc:backupVerifiedAt',
+    'xc:backupReminderFundedAt',
+    'xc:backupReminderDismissedUntil',
+    'xc:demoWalletId',
+    'xc:demoWalletCreatedAt',
+    'xc:demoWalletTtlMs',
+    'xc:demoWalletPassword',
+    'xc:envelopeCommits',
+    'xchain.governancePolls.seen',
+    'xchain.deadlines.seen',
+    'xchain.dispenserEscrow.seen',
+]);
+
+/** Renderer key families scoped to a wallet or one of its accounts. */
+const WALLET_LOCAL_STORAGE_PREFIXES = Object.freeze([
+    'xc:activeAccount:',
+    'xc:lastView:',
+    'xc:msgRead:',
+    'xc:msgUnread:',
+    'xc:msgRequestDeclined:',
+    'xc:formdraft:',
+    'xc:chainFilter:',
+    'xc:contacts:sort:',
+    'xc:historyGroupingMode:',
+    'xc:alertCenter:',
+    'xc:balanceCache:',
+    'xc:balances:sort:',
+    'xc:historyCache:v1:',
+    'xc:homeFilters:',
+]);
+
+/** Key families whose wallet id is the final colon-delimited component. */
+const WALLET_SUFFIX_STORAGE_PREFIXES = Object.freeze([
+    'xc:chainFilter:',
+    'xc:contacts:sort:',
+    'xc:formdraft:',
+    'xc:historyGroupingMode:',
+]);
 
 /**
  * Nuke every store that answers "a wallet already exists on this
@@ -53,6 +98,10 @@ export const BROADCAST_QUEUE_PRUNED_PREFIX = 'xchain.broadcastQueue.pruned.';
  *     injected stores): the signing freeze and the configured duress password.
  *     Both belong to the erased wallet, so a successful wipe removes them and
  *     a failed shell wipe keeps them guarding the wallet that survived.
+ *   - localStorage wallet-scoped UI records: biometric enrollment, active
+ *     wallet/account ids, backup state, demo credentials, pending envelope
+ *     recovery, route memory, messaging state, drafts and list preferences.
+ *     These records must not outlive the wallet ids or secrets they describe.
  *
  * Shell-side stores (desktop, extension, native mobile): the Electron
  * shell keeps its vault blob, kdfParams meta, cached session key, unlock
@@ -88,11 +137,87 @@ export async function wipeWalletStorage() {
     try {
         globalThis.localStorage?.removeItem(BROADCAST_QUEUE_STORAGE_KEY);
     } catch { /* ignore */ }
+    removeLocalStorageKeys(WALLET_LOCAL_STORAGE_KEYS);
     sweepLocalStoragePrefix(BROADCAST_QUEUE_PRUNED_PREFIX);
+    for (const prefix of WALLET_LOCAL_STORAGE_PREFIXES) sweepLocalStoragePrefix(prefix);
     // The guards belong to this wallet. A failed wipe leaves the vault they still guard.
     clearLockoutState();
     clearPanicModeState();
     clearDuressPassphrase();
+    clearBackupReminderState();
+}
+
+/**
+ * Remove device-local records owned by one wallet while preserving every
+ * other wallet and installation-wide preference.
+ *
+ * @param {string} walletId
+ */
+export function clearRemovedWalletStorage(walletId) {
+    if (typeof walletId !== 'string' || walletId.length === 0) return;
+    clearBalanceCache(walletId);
+    clearBackupReminderState(walletId);
+    try {
+        const store = globalThis.localStorage;
+        if (!store) return;
+        const encodedId = encodeURIComponent(walletId);
+        const exactKeys = new Set([
+            `xc:activeAccount:${walletId}`,
+            `xc:alertCenter:${walletId}`,
+            `xc:balances:sort:${walletId}`,
+            `xc:contacts:sort:${walletId}`,
+            `xc:historyGroupingMode:${walletId}`,
+            `xc:homeFilters:${walletId}`,
+            `xc:lastView:${walletId}`,
+        ]);
+        const walletPrefixes = [
+            `xc:balanceCache:${encodedId}:`,
+            `xc:historyCache:v1:${encodedId}:`,
+            `xc:msgRead:${walletId}:`,
+            `xc:msgUnread:${walletId}:`,
+            `xc:msgRequestDeclined:${walletId}:`,
+        ];
+        const suffix = `:${walletId}`;
+        const keys = [];
+        for (let i = 0; i < store.length; i++) {
+            const key = store.key(i);
+            if (!key) continue;
+            if (exactKeys.has(key)
+                || walletPrefixes.some((prefix) => key.startsWith(prefix))
+                || (key.endsWith(suffix)
+                    && WALLET_SUFFIX_STORAGE_PREFIXES.some((prefix) => key.startsWith(prefix)))) {
+                keys.push(key);
+            }
+        }
+        for (const key of keys) store.removeItem(key);
+        if (activeWalletId(store.getItem('xc:activeWallet')) === walletId) {
+            store.removeItem('xc:activeWallet');
+        }
+    } catch { /* best-effort cleanup */ }
+}
+
+function activeWalletId(raw) {
+    if (!raw) return null;
+    try {
+        const parsed = JSON.parse(raw);
+        return typeof parsed === 'string' ? parsed : parsed?.id || null;
+    } catch {
+        return raw;
+    }
+}
+
+/**
+ * Remove a fixed set of localStorage keys without making wipe success depend
+ * on a renderer preference store being available.
+ *
+ * @param {readonly string[]} keys
+ */
+function removeLocalStorageKeys(keys) {
+    try {
+        const store = globalThis.localStorage;
+        if (!store) return;
+        for (const key of keys) store.removeItem(key);
+    } catch { /* ignore */ }
 }
 
 /**

@@ -21,21 +21,42 @@
 // from the registry rather than the wallet, since verification has no
 // dependency on what the wallet knows.
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
     Screen,
     Button,
     Input,
+    Textarea,
     ChainPicker,
-    Icon,
+    FormPage,
     PageHeader,
+    StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSupportedChains } from '../hooks/useSupportedChains.js';
-import styles from './IssueTokenForm.module.css';
+import { t } from '../../i18n/index.js';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+/**
+ * Remove paste formatting from a base64 signature and reject malformed input.
+ *
+ * @param {string} value
+ * @returns {string | null}
+ */
+export function normalizeSignatureInput(value) {
+    if (typeof value !== 'string') return null;
+    const compact = value.replace(/\s+/g, '');
+    if (!compact || compact.length % 4 === 1 || !/^[A-Za-z0-9+/]*={0,2}$/.test(compact)) {
+        return null;
+    }
+    try {
+        return atob(compact).length > 0 ? compact : null;
+    } catch {
+        return null;
+    }
+}
 
 /**
  * @param {object} props
@@ -44,142 +65,85 @@ const chainRegistry = registryLib.defaultRegistry();
 export function VerifySignatureForm({ onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     // Live registry read: a synced descriptor batch reaches this picker without
     // a restart (the boot sync usually lands after first mount).
     const supportedChains = useSupportedChains(chainRegistry);
-    const chains = useMemo(() => supportedChains.map((c) => ({
-        id: c.id,
-        label: c.displayName || c.id,
-    })), [supportedChains]);
-    const [chainId, setChainId] = useState(chains[0]?.id || null);
+    const chainIds = useMemo(() => supportedChains.map((c) => c.id), [supportedChains]);
+    const [chainId, setChainId] = useState(chainIds[0] || null);
     const [address, setAddress] = useState('');
     const [message, setMessage] = useState('');
     const [signature, setSignature] = useState('');
     const [busy, setBusy] = useState(false);
-    const [result, setResult] = useState(/** @type {null | 'valid' | 'invalid'} */ (null));
+    const [result, setResult] = useState(/** @type {null | 'valid' | 'invalid' | 'malformed'} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    const requestGenerationRef = useRef(0);
+    const requestPendingRef = useRef(false);
+
+    function clearSettledFeedback() {
+        requestGenerationRef.current += 1;
+        setResult(null);
+        setError(null);
+    }
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (busy) return;
+        if (requestPendingRef.current) return;
         setError(null);
         setResult(null);
         if (!chainId) { setError('Pick a chain.'); return; }
         if (address.trim().length === 0) { setError('Enter an address.'); return; }
         if (message.length === 0) { setError('Enter the original message.'); return; }
         if (signature.trim().length === 0) { setError('Enter the signature.'); return; }
+        const normalizedSignature = normalizeSignatureInput(signature);
+        if (!normalizedSignature) { setResult('malformed'); return; }
         if (typeof messaging.verifyMessageRequest !== 'function') {
-            setError('messaging.verifyMessageRequest is not available in this shell.');
+            setError('Signature verification is not available in this app.');
             return;
         }
+        const requestGeneration = requestGenerationRef.current + 1;
+        requestGenerationRef.current = requestGeneration;
+        requestPendingRef.current = true;
         setBusy(true);
         try {
             const r = await messaging.verifyMessageRequest({
                 chainId,
                 address: address.trim(),
                 message,
-                signature: signature.trim(),
+                signature: normalizedSignature,
             });
-            setResult(r?.valid ? 'valid' : 'invalid');
-        } catch (err) {
-            setError(err?.message || 'Verification failed.');
+            if (requestGenerationRef.current === requestGeneration) {
+                setResult(r?.valid ? 'valid' : 'invalid');
+            }
+        } catch {
+            if (requestGenerationRef.current === requestGeneration) {
+                setError('Could not verify this signature. Check the chain, address, message, and signature.');
+            }
         } finally {
+            requestPendingRef.current = false;
             setBusy(false);
         }
     }
 
     const header = (
-        <PageHeader onBack={onBack} backDisabled={busy} title="Verify signature" />
+        <PageHeader onBack={onBack} backDisabled={busy} title={t('verifySignature.title')} />
     );
 
-    const formBody = (
-        <form onSubmit={handleSubmit} noValidate>
-            <div style={{ marginBottom: 'var(--xc-space-3)' }}>
-                <ChainPicker
-                    chains={chains}
-                    selectedChainId={chainId}
-                    onChange={setChainId}
-                    label="Chain"
-                />
-            </div>
-            <Input
-                label="Address"
-                value={address}
-                onChange={(e) => { setAddress(e.target.value); setResult(null); if (error) setError(null); }}
-                autoComplete="off"
-                placeholder="The address that produced the signature"
-            />
-            <div style={{ marginBottom: 'var(--xc-space-3)' }}>
-                <label
-                    htmlFor="verify-message"
-                    style={{
-                        display: 'block',
-                        color: 'var(--xc-text-muted)',
-                        fontSize: 'var(--xc-text-sm)',
-                        marginBottom: 4,
-                    }}
-                >
-                    Message
-                </label>
-                <textarea
-                    id="verify-message"
-                    value={message}
-                    onChange={(e) => { setMessage(e.target.value); setResult(null); if (error) setError(null); }}
-                    placeholder="The exact text that was signed"
-                    rows={5}
-                    aria-label="Message"
-                    style={{
-                        width: '100%',
-                        background: 'var(--xc-bg)',
-                        color: 'var(--xc-text)',
-                        border: '1px solid var(--xc-border)',
-                        borderRadius: 'var(--xc-radius-sm)',
-                        padding: 'var(--xc-space-2)',
-                        fontSize: 'var(--xc-text-sm)',
-                        fontFamily: 'inherit',
-                        resize: 'vertical',
-                    }}
-                />
-            </div>
-            <div style={{ marginBottom: 'var(--xc-space-3)' }}>
-                <label
-                    htmlFor="verify-signature"
-                    style={{
-                        display: 'block',
-                        color: 'var(--xc-text-muted)',
-                        fontSize: 'var(--xc-text-sm)',
-                        marginBottom: 4,
-                    }}
-                >
-                    Signature
-                </label>
-                <textarea
-                    id="verify-signature"
-                    value={signature}
-                    onChange={(e) => { setSignature(e.target.value); setResult(null); if (error) setError(null); }}
-                    placeholder="Base64 signature blob"
-                    rows={3}
-                    aria-label="Signature"
-                    style={{
-                        width: '100%',
-                        background: 'var(--xc-bg)',
-                        color: 'var(--xc-text)',
-                        border: '1px solid var(--xc-border)',
-                        borderRadius: 'var(--xc-radius-sm)',
-                        padding: 'var(--xc-space-2)',
-                        fontSize: 'var(--xc-text-xs)',
-                        fontFamily: 'var(--xc-font-mono)',
-                        resize: 'vertical',
-                    }}
-                />
-            </div>
+    const disabledReason = address.trim().length === 0
+        ? 'Enter the signer address to continue.'
+        : message.length === 0
+            ? 'Enter the original message to continue.'
+            : signature.trim().length === 0
+                ? 'Enter the signature to continue.'
+                : null;
+
+    // Shown just above the Verify button by FormPage's status slot.
+    const status = (error || result) ? (
+        <>
             {error ? (
                 <div role="alert" style={{
-                    color: 'var(--xc-danger)',
+                    color: 'var(--xc-danger-fg)',
                     fontSize: 'var(--xc-text-xs)',
-                    marginBottom: 'var(--xc-space-2)',
                 }}>
                     {error}
                 </div>
@@ -190,34 +154,88 @@ export function VerifySignatureForm({ onBack }) {
                     aria-live="polite"
                     style={{
                         padding: 'var(--xc-space-3)',
-                        marginBottom: 'var(--xc-space-3)',
                         borderRadius: 'var(--xc-radius-md)',
-                        background: result === 'valid' ? 'var(--xc-surface)' : 'var(--xc-surface)',
+                        background: 'var(--xc-surface)',
                         border: `1px solid ${result === 'valid' ? 'var(--xc-accent-primary)' : 'var(--xc-danger)'}`,
                         color: result === 'valid' ? 'var(--xc-text)' : 'var(--xc-danger)',
                         fontWeight: 600,
                     }}
                 >
-                    {result === 'valid'
-                        ? '✓ Signature is valid for this address.'
-                        : '✗ Signature does NOT match this address.'}
+                    {result === 'valid' ? t('verifySignature.valid') : null}
+                    {result === 'invalid' ? t('verifySignature.invalid') : null}
+                    {result === 'malformed' ? t('verifySignature.malformed') : null}
                 </div>
             ) : null}
-            <Button
-                type="submit"
-                variant="primary"
-                block
-                loading={busy}
-                disabled={busy || message.length === 0 || signature.trim().length === 0 || address.trim().length === 0}
-            >
-                Verify signature
-            </Button>
-        </form>
+        </>
+    ) : disabledReason ? (
+        <StatusMessage id="verify-signature-disabled-reason">
+            {disabledReason}
+        </StatusMessage>
+    ) : null;
+
+    const fields = (
+        <>
+            <div style={{ marginBottom: 'var(--xc-space-3)' }}>
+                <ChainPicker
+                    chainIds={chainIds}
+                    chainRegistry={chainRegistry}
+                    value={chainId || ''}
+                    onChange={(nextChainId) => {
+                        setChainId(nextChainId);
+                        clearSettledFeedback();
+                    }}
+                    label={t('send.fields.chain')}
+                />
+            </div>
+            <Input
+                label={t('verifySignature.address')}
+                value={address}
+                onChange={(e) => { setAddress(e.target.value); clearSettledFeedback(); }}
+                autoComplete="off"
+                placeholder={t('verifySignature.addressPlaceholder')}
+            />
+            <Textarea
+                id="verify-message"
+                label={t('verifySignature.message')}
+                value={message}
+                onChange={(e) => { setMessage(e.target.value); clearSettledFeedback(); }}
+                placeholder={t('verifySignature.messagePlaceholder')}
+                rows={5}
+                aria-label={t('verifySignature.message')}
+            />
+            <Textarea
+                id="verify-signature"
+                label={t('verifySignature.signature')}
+                value={signature}
+                onChange={(e) => { setSignature(e.target.value); clearSettledFeedback(); }}
+                placeholder={t('verifySignature.signaturePlaceholder')}
+                rows={3}
+                aria-label={t('verifySignature.signature')}
+                style={{ fontFamily: 'var(--xc-font-mono)' }}
+            />
+        </>
     );
 
     return (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{formBody}</div> : formBody}
+            <FormPage
+                label={t('verifySignature.title')}
+                onSubmit={handleSubmit}
+                status={status}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={busy}
+                        disabled={Boolean(disabledReason)}
+                        aria-describedby={disabledReason ? 'verify-signature-disabled-reason' : undefined}
+                    >
+                        {busy ? t('verifySignature.verifying') : t('verifySignature.title')}
+                    </Button>
+                )}
+            >
+                {fields}
+            </FormPage>
         </Screen>
     );
 }

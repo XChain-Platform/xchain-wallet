@@ -35,14 +35,16 @@ for (const prop of ['label', 'aria', 'placement', 'className']) {
     assert.ok(new RegExp(`\\b${prop}\\b`).test(tipSrc), `InfoTip declares prop "${prop}"`);
 }
 
-// 2. Trigger is a real <button type="button"> with aria-label and
-//    aria-describedby that points at the bubble id when open.
+// 2. Trigger is a real <button type="button"> with aria-label and a
+//    persistent aria-describedby relationship to the bubble.
 assert.ok(/<button[\s\S]*?type="button"/.test(tipSrc),
     'InfoTip uses a real <button>');
-assert.ok(/aria-describedby=\{open \? id : undefined\}/.test(tipSrc),
-    'InfoTip wires aria-describedby to the bubble id when open');
+assert.ok(/aria-describedby=\{id\}/.test(tipSrc),
+    'InfoTip wires aria-describedby to the bubble id before focus');
 assert.ok(/aria-expanded=\{open\}/.test(tipSrc),
     'InfoTip surfaces aria-expanded on the trigger');
+assert.ok(/hidden=\{!open\}/.test(tipSrc),
+    'InfoTip keeps the described bubble mounted while hiding it visually');
 
 // 3. Bubble is annotated as role="tooltip".
 assert.ok(/role="tooltip"/.test(tipSrc),
@@ -60,11 +62,11 @@ assert.ok(/export \{ InfoTip \} from '\.\/InfoTip\.jsx'/.test(indexSrc),
 
 // 6. Five integration sites import + invoke <InfoTip ...>.
 const integrations = [
-    { src: sendSrc, file: 'Send.jsx', match: /aria="Replace-by-fee help"/ },
+    { src: sendSrc, file: 'Send.jsx', match: /aria=\{t\('send\.rbf\.helpLabel'\)\}/ },
     // Match any aria string: the point is that FeeSelector MOUNTS an InfoTip, not
     // what that tip's aria label happens to be worded as this month.
     { src: feeSelSrc, file: 'FeeSelector.jsx', match: /<InfoTip\s+aria="[^"]+"/ },
-    { src: createSrc, file: 'CreateWallet.jsx', match: /aria="BIP39 passphrase help"/ },
+    { src: createSrc, file: 'CreateWallet.jsx', match: /aria="(BIP39 )?[Pp]assphrase help"/ },
     { src: dpSrc, file: 'DerivationPathCrossCheck.jsx', match: /aria="Derivation path help"/ },
     { src: adsSrc, file: 'AdsSection.jsx', match: /aria="Trigger threshold help"/ },
 ];

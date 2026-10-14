@@ -8,9 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect } from 'react';
-import { Icon } from '@xchain-wallet/core/ui';
+import { useEffect, useRef } from 'react';
+import { Button, Icon } from '@xchain-wallet/core/ui';
 import styles from './AlertsOverlay.module.css';
+import { alertSeverityPresentation } from './alertSeverity.js';
+import { useBackHandler } from '../../ui/backStack.js';
+import { useFocusTrap } from '../utils/focusTrap.js';
+import { t } from '../../i18n/index.js';
 
 /**
  * Full-overlay alerts panel. Surfaces wallet-level notifications that
@@ -30,6 +34,11 @@ import styles from './AlertsOverlay.module.css';
  * @param {() => void} props.onClose
  */
 export function AlertsOverlay({ alerts, onClose }) {
+    // The system Back gesture closes this before it leaves the screen.
+    useBackHandler(onClose);
+    // Tab stays inside the dialog and focus returns to whatever opened it.
+    const dialogRef = useRef(null);
+    useFocusTrap(dialogRef, { active: true });
     useEffect(() => {
         const onKey = (e) => { if (e.key === 'Escape') onClose(); };
         window.addEventListener('keydown', onKey);
@@ -38,52 +47,60 @@ export function AlertsOverlay({ alerts, onClose }) {
 
     return (
         <div
+            ref={dialogRef}
             className={styles.overlay}
             role="dialog"
             aria-modal="true"
-            aria-label="Wallet alerts"
+            aria-labelledby="xc-alerts-title"
+            aria-describedby="xc-alerts-body"
             onClick={onClose}
             tabIndex={-1}
         >
             <div className={styles.panel} onClick={(e) => e.stopPropagation()} role="presentation" tabIndex={-1}>
                 <header className={styles.header}>
-                    <span className={styles.title}>
-                        Alerts
+                    <span id="xc-alerts-title" className={styles.title}>
+                        {t('alerts.title')}
                         {alerts.length > 0 ? (
                             <span className={styles.count}>{alerts.length}</span>
                         ) : null}
                     </span>
-                    <button
-                        type="button"
-                        className={styles.close}
+                    <Button
+                        size="sm"
+                        variant="secondary"
+                        icon={<Icon.XIcon />}
                         onClick={onClose}
-                        aria-label="Close alerts"
-                    >
-                        <Icon.XIcon />
-                    </button>
+                        aria-label={t('alerts.close')}
+                    />
                 </header>
-                <div className={styles.body}>
+                <div id="xc-alerts-body" className={styles.body}>
                     {alerts.length === 0 ? (
-                        <p className={styles.empty}>No alerts. You&apos;re all caught up.</p>
+                        <p className={styles.empty}>{t('alerts.empty')}</p>
                     ) : (
+                        /* Safari needs an explicit list role because this class removes list styling. */
                         <ul className={styles.list} role="list">
-                            {alerts.map((a) => (
-                                <li key={a.id} className={`${styles.alert} ${styles[a.severity] || styles.info}`}>
-                                    <div className={styles.alertHead}>
-                                        <span className={styles.alertTitle}>{a.title}</span>
-                                    </div>
-                                    <div className={styles.alertMessage}>{a.message}</div>
-                                    {a.action ? (
-                                        <button
-                                            type="button"
-                                            className={styles.alertAction}
-                                            onClick={() => { a.action.onSelect(); onClose(); }}
-                                        >
-                                            {a.action.label}
-                                        </button>
-                                    ) : null}
-                                </li>
-                            ))}
+                            {alerts.map((a) => {
+                                const severity = alertSeverityPresentation(a.severity);
+                                return (
+                                    <li key={a.id} className={`${styles.alert} ${styles[severity.kind]}`}>
+                                        <div className={styles.alertHead}>
+                                            <span className={styles.severity}>{severity.label}</span>
+                                            <span className={styles.alertTitle}>{a.title}</span>
+                                        </div>
+                                        <div className={styles.alertMessage}>{a.message}</div>
+                                        {a.action ? (
+                                            <Button
+                                                variant="primary"
+                                                size="sm"
+                                                icon={null}
+                                                onClick={() => { a.action.onSelect(); onClose(); }}
+                                                style={{ alignSelf: 'flex-start' }}
+                                            >
+                                                {a.action.label}
+                                            </Button>
+                                        ) : null}
+                                    </li>
+                                );
+                            })}
                         </ul>
                     )}
                 </div>

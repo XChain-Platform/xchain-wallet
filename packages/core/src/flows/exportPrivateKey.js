@@ -31,7 +31,7 @@
 import {
     base64ToBytes,
     decrypt,
-    deriveMasterKey,
+    deriveMasterKeyAsync,
 } from '../crypto/index.js';
 import { unlockWalletRecord, WalletNotFoundError } from './unlockWallet.js';
 
@@ -66,6 +66,15 @@ export class ImportedKeyMissingError extends Error {
     }
 }
 
+export class AddressWalletMismatchError extends Error {
+    constructor(addressId, walletId) {
+        super(`exportPrivateKey: address "${addressId}" does not belong to wallet "${walletId}"`);
+        this.name = 'AddressWalletMismatchError';
+        this.addressId = addressId;
+        this.walletId = walletId;
+    }
+}
+
 export class WrongPasswordError extends Error {
     constructor() {
         super('exportPrivateKey: wrong password');
@@ -77,8 +86,8 @@ export class WrongPasswordError extends Error {
  * @typedef {Object} ExportPrivateKeyOpts
  * @property {import('../storage/Vault.js').Vault} vault
  * @property {string} walletId
- * @property {import('../signers/Signer.js').Signer} [signer]   pre-unlocked session signer (from the pool). When present the WIF is exported from it directly with no password; the pool owns its lifecycle so it is NOT locked here.
- * @property {string} [password]            required only when no pre-unlocked `signer` is supplied
+ * @property {import('../signers/Signer.js').Signer} [signer]   pre-unlocked session signer used only when no password is supplied; the pool owns its lifecycle so it is NOT locked here.
+ * @property {string} [password]            forces password verification when supplied
  * @property {string} [bip39Passphrase]     required iff wallet.passphraseEnabled and address is HD (password path)
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} [sdkRegistry]  only needed for HD addresses (password unlock path)
@@ -108,11 +117,12 @@ export async function exportPrivateKey({
     sdkRegistry,
     addressId,
 }) {
+    const hasPassword = typeof password === 'string' && password.length > 0;
     if (!vault) throw new Error('exportPrivateKey: vault is required');
     if (typeof walletId !== 'string' || walletId.length === 0) {
         throw new Error('exportPrivateKey: walletId is required');
     }
-    if (!providedSigner && (typeof password !== 'string' || password.length === 0)) {
+    if (!providedSigner && !hasPassword) {
         throw new Error('exportPrivateKey: either `signer` or `password` is required');
     }
     if (!chainRegistry) throw new Error('exportPrivateKey: chainRegistry is required');
@@ -132,6 +142,14 @@ export async function exportPrivateKey({
 
     const wallet = await vault.wallets.get(walletId);
     if (!wallet) throw new WalletNotFoundError(walletId);
+    let importedKeyEntry;
+    if (addressRecord.source === 'imported-wif') {
+        importedKeyEntry = wallet.importedKeys.find((entry) => entry.addressId === addressId);
+        if (!importedKeyEntry) throw new ImportedKeyMissingError(addressId);
+    }
+    if (!(await addressBelongsToWallet(vault, addressRecord, wallet))) {
+        throw new AddressWalletMismatchError(addressId, walletId);
+    }
 
     const chainId = chainRegistry.chainIdFor(
         addressRecord.chain,
@@ -143,18 +161,18 @@ export async function exportPrivateKey({
         );
     }
 
-    // Passwordless path: when the caller supplies a pre-unlocked session
-    // signer (the wallet is already open), export the WIF straight from it
-    // with no password. The unlocked SoftwareSigner already holds the seed
-    // (HD) and the decrypted imported WIFs, so no re-derivation/re-decrypt
-    // is needed. The "before you continue" warning in the shell UI is the
-    // gate; the password-every-time ceremony (§17.7.3) was retired by
-    // product decision. The pool owns the signer lifecycle, so we never
-    // lock it here.
-    if (providedSigner && typeof providedSigner.exportWifForPath === 'function') {
+    // Callers that send a password always take the decrypt path so password
+    // confirmation cannot be bypassed by an available session signer.
+    if (!hasPassword) {
+        if (providedSigner.id !== walletId) {
+            throw new Error('exportPrivateKey: signer does not belong to the requested wallet');
+        }
         if (addressRecord.source === 'imported-wif') {
+            if (typeof providedSigner.exportWifForAddressId !== 'function') {
+                throw new Error('exportPrivateKey: signer cannot export imported private keys');
+            }
             return {
-                wif: providedSigner.exportWifForAddressId(addressId),
+                wif: await providedSigner.exportWifForAddressId(addressId),
                 source: 'imported-wif',
                 derivationPath: null,
                 address: addressRecord.address,
@@ -166,8 +184,14 @@ export async function exportPrivateKey({
                 `exportPrivateKey: HD address "${addressId}" has no derivationPath`,
             );
         }
+        if (typeof providedSigner.exportWifForPath !== 'function') {
+            throw new Error('exportPrivateKey: signer cannot export derived private keys');
+        }
         return {
-            wif: providedSigner.exportWifForPath({ chainId, path: addressRecord.derivationPath }),
+            wif: await providedSigner.exportWifForPath({
+                chainId,
+                path: addressRecord.derivationPath,
+            }),
             source: 'hd',
             derivationPath: addressRecord.derivationPath,
             address: addressRecord.address,
@@ -176,10 +200,7 @@ export async function exportPrivateKey({
     }
 
     if (addressRecord.source === 'imported-wif') {
-        const entry = wallet.importedKeys.find((k) => k.addressId === addressId);
-        if (!entry) throw new ImportedKeyMissingError(addressId);
-
-        const masterKey = deriveMasterKey(password, wallet.kdfParams);
+        const masterKey = await deriveMasterKeyAsync(password, wallet.kdfParams);
         try {
             // Password probe. For seed-backed wallets we decrypt the
             // seed blob; for wif-only wallets (no seed) we probe the
@@ -192,20 +213,23 @@ export async function exportPrivateKey({
                 try {
                     wifBytes = await decrypt(
                         masterKey,
-                        base64ToBytes(entry.encryptedWif),
+                        base64ToBytes(importedKeyEntry.encryptedWif),
                     );
                 } catch {
                     throw new WrongPasswordError();
                 }
             } else {
+                let seedBytes;
                 try {
-                    await decrypt(masterKey, base64ToBytes(wallet.encryptedSeed));
+                    seedBytes = await decrypt(masterKey, base64ToBytes(wallet.encryptedSeed));
                 } catch {
                     throw new WrongPasswordError();
+                } finally {
+                    if (seedBytes) seedBytes.fill(0);
                 }
                 wifBytes = await decrypt(
                     masterKey,
-                    base64ToBytes(entry.encryptedWif),
+                    base64ToBytes(importedKeyEntry.encryptedWif),
                 );
             }
             try {
@@ -254,4 +278,14 @@ export async function exportPrivateKey({
     } finally {
         signer.lock();
     }
+}
+
+async function addressBelongsToWallet(vault, address, wallet) {
+    if (address.source === 'imported-wif') {
+        return wallet.importedKeys.some((entry) => entry.addressId === address.id)
+            && (address.signerId == null || address.signerId === wallet.id);
+    }
+    if (typeof address.accountId !== 'string' || address.accountId.length === 0) return false;
+    const account = await vault.accounts.get(address.accountId);
+    return account?.walletId === wallet.id;
 }

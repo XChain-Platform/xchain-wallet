@@ -51,10 +51,11 @@ describe('parseBinding', () => {
 });
 
 describe('formatBinding', () => {
-    it('renders platform-appropriate combo glyphs', () => {
+    it('renders platform-appropriate modifier names', () => {
         expect(formatBinding('mod+l', false)).toBe('Ctrl+L');
-        expect(formatBinding('mod+l', true)).toBe('⌘L');
+        expect(formatBinding('mod+l', true)).toBe('Cmd+L');
         expect(formatBinding('mod+,', false)).toBe('Ctrl+,');
+        expect(formatBinding('mod+,', true)).toBe('Cmd+,');
     });
     it('renders leaders and singles readably', () => {
         expect(formatBinding('g h')).toBe('G then H');

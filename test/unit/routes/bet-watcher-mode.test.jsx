@@ -6,29 +6,11 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// Watcher mode must say why the betting controls are gone.
-//
-// Found by driving the §10.5 gating leg (wallet E2E session 24). Flipping the
-// wallet to watcher mode correctly removes Resolve, Cancel and the place-bet
-// form - the security property holds, and the buttons are absent from the DOM
-// rather than merely disabled. Nothing then explains the absence: a market
-// still labelled "Taking bets" simply has no way to bet on it, and an oracle's
-// own console offers no way to finish a market it opened. Neither page
-// mentions watcher mode at all.
-//
-// Silence is the defect, not the hiding. Watcher is a first-class lane here
-// (34 forms render "Create unsigned transaction" for it), and betting's own
-// CreateBetFeedForm already refuses in plain words. The cost of not knowing is
-// real on the oracle side: an unresolved market refunds every bet at expiry
-// and earns the oracle nothing, so an oracle who cannot tell "restricted" from
-// "broken" loses the market by waiting.
-//
-// The negative half matters as much: a market nobody can act on any more must
-// NOT be annotated, or every terminal card grows a line blaming watcher mode
-// for a restriction that is not watcher mode's.
+// Watcher mode keeps BET mutations available as unsigned PSBT builds and never
+// renders a software-signing password field.
 
 import { describe, it, expect } from 'vitest';
-import { render, act as domAct } from '@testing-library/react';
+import { render, act as domAct, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { BetFeedDetail } from '../../../packages/core/src/shared/routes/BetFeedDetail.jsx';
@@ -71,7 +53,9 @@ function feed(status, extra = {}) {
 }
 
 function harness({ walletMode = 'full', feeds = [], detail = feed('open') } = {}) {
+    const calls = [];
     const target = {
+        calls,
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: [HD_ADDRESS] }),
         getActiveAddresses: () => Promise.resolve({}),
         getSettings: () => Promise.resolve({ walletMode }),
@@ -80,6 +64,12 @@ function harness({ walletMode = 'full', feeds = [], detail = feed('open') } = {}
         betFeed: () => Promise.resolve({ data: [detail] }),
         betFeeds: ({ chainId }) => Promise.resolve({ data: chainId === CHAIN ? feeds : [] }),
         bets: () => Promise.resolve({ data: [] }),
+        buildBetActionPsbtRequest: (args) => {
+            calls.push(args);
+            return Promise.resolve({
+                psbtHex: '70736274ff00', chainId: CHAIN, fromAddress: OWN, encoding: 'op_return',
+            });
+        },
     };
     return new Proxy(target, {
         get(t, prop) {
@@ -110,55 +100,85 @@ const detailRoute = React.createElement(BetFeedDetail, {
 const consoleRoute = React.createElement(OracleConsole, { walletId: 'w', onBack() {} });
 
 describe('BetFeedDetail in watcher mode', () => {
-    it('explains the missing stake form instead of leaving a "Taking bets" market blank', async () => {
-        const utils = await renderRoute(harness({ walletMode: 'watcher' }), detailRoute);
+    it('offers an unsigned stake build without a password field', async () => {
+        const messaging = harness({ walletMode: 'watcher' });
+        const utils = await renderRoute(messaging, detailRoute);
         const text = utils.container.textContent;
 
-        expect(text).not.toContain('Place a bet');
-        expect(text).toContain('watcher mode');
-        expect(text).toContain('cannot place a bet');
+        expect(text).toContain('Place a bet');
+        expect(text).toContain('Create unsigned transaction');
+        expect(utils.queryByLabelText('Password')).toBeNull();
+
+        fireEvent.click(utils.getByRole('group', { name: 'Outcome to back' }).querySelector('button'));
+        fireEvent.change(utils.getByLabelText('Stake (XCHAIN)'), { target: { value: '1' } });
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: 'Create unsigned transaction' }));
+            await drain();
+        });
+        expect(messaging.calls[0]).toMatchObject({
+            builder: 'placeBetParams',
+            params: { feedActionIndex: '1193', outcome: 0, amount: '1' },
+        });
+        expect(utils.getByLabelText('Unsigned transaction hex')).toBeTruthy();
+        expect(utils.queryByLabelText('Password')).toBeNull();
     });
 
-    it('still offers the form, and says nothing about watcher mode, in full mode', async () => {
+    it('still offers the signing form in full mode', async () => {
         const utils = await renderRoute(harness({ walletMode: 'full' }), detailRoute);
         const text = utils.container.textContent;
 
         expect(text).toContain('Place a bet');
-        expect(text).not.toContain('watcher mode');
+        expect(utils.getByLabelText('Password')).toBeTruthy();
     });
 
-    // The reason has to track the actual restriction. A closed market takes no
-    // bets from anyone, so watcher mode is not why the form is missing there.
-    it('does not blame watcher mode on a market that takes no bets at all', async () => {
+    it('does not offer a password on a closed market', async () => {
         const utils = await renderRoute(
             harness({ walletMode: 'watcher', detail: feed('closed') }),
             detailRoute,
         );
-        expect(utils.container.textContent).not.toContain('watcher mode');
+        expect(utils.queryByLabelText('Password')).toBeNull();
     });
 });
 
 describe('OracleConsole in watcher mode', () => {
     function cardFor(utils, index) {
         return Array.from(utils.container.querySelectorAll('div'))
-            .filter((d) => /card/i.test(String(d.className)) && /^#\d+/.test(d.textContent || ''))
+            .filter((d) => /card/i.test(String(d.className)) && /^Market number: #\d+/.test(d.textContent || ''))
             .find((d) => new RegExp(`#${index}`).test(d.textContent));
     }
 
-    it('hides Resolve and Cancel and says why', async () => {
+    it.each([
+        ['Resolve', 'resolveMarketParams', true],
+        ['Cancel and refund', 'cancelMarketParams', false],
+    ])('builds an unsigned %s action without a password field', async (action, builder, needsOutcome) => {
+        const messaging = harness({ walletMode: 'watcher', feeds: [feed('closed')] });
         const utils = await renderRoute(
-            harness({ walletMode: 'watcher', feeds: [feed('closed')] }),
+            messaging,
             consoleRoute,
         );
         const card = cardFor(utils, '1193');
 
-        expect(card.textContent).not.toContain('Resolve');
-        expect(card.textContent).not.toContain('Cancel and refund');
-        expect(card.textContent).toContain('watcher mode');
-        expect(card.textContent).toContain('cannot resolve or cancel');
-        // Hidden, not merely disabled: a disabled button is still a promise.
+        expect(card.textContent).toContain('Resolve');
+        expect(card.textContent).toContain('Cancel and refund');
         const labels = Array.from(card.querySelectorAll('button')).map((b) => b.textContent.trim());
-        expect(labels).not.toContain('Resolve');
+        expect(labels).toContain('Resolve');
+
+        fireEvent.click(Array.from(card.querySelectorAll('button')).find((b) => b.textContent.trim() === action));
+        if (needsOutcome) fireEvent.click(utils.getByRole('button', { name: 'Yes' }));
+        expect(utils.queryByLabelText('Password')).toBeNull();
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: 'Create unsigned transaction' }));
+            await drain();
+        });
+        expect(messaging.calls[0]).toMatchObject({
+            builder,
+            params: {
+                feedActionIndex: '1193',
+                ...(needsOutcome ? { outcome: 0 } : {}),
+            },
+        });
+        expect(utils.queryByLabelText('Password')).toBeNull();
+        expect(utils.getByLabelText('Unsigned transaction hex')).toBeTruthy();
     });
 
     it('offers both, and no explanation, in full mode', async () => {
@@ -170,17 +190,15 @@ describe('OracleConsole in watcher mode', () => {
 
         expect(card.textContent).toContain('Resolve');
         expect(card.textContent).toContain('Cancel and refund');
-        expect(card.textContent).not.toContain('watcher mode');
+        expect(card.textContent).not.toContain('Create unsigned transaction');
     });
 
-    // A cancelled or resolved market offers nothing to anybody. Annotating it
-    // would tell a watcher its mode cost it an action that no mode has.
-    it('stays quiet on a terminal market, where no wallet mode could act', async () => {
+    it('offers no password on a terminal market', async () => {
         const utils = await renderRoute(
             harness({ walletMode: 'watcher', feeds: [feed('cancelled')] }),
             consoleRoute,
         );
-        expect(cardFor(utils, '1193').textContent).not.toContain('watcher mode');
+        expect(utils.queryByLabelText('Password')).toBeNull();
     });
 });
 

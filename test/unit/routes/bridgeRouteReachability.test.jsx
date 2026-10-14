@@ -81,10 +81,10 @@ describe('P11: the bridge routes exist in every shell', () => {
         describe(label, () => {
             const code = codeOf(rel);
 
-            it('imports BridgeMoveForm from core', () => {
+            it('loads BridgeMoveForm from core', () => {
                 expect(
-                    /import \{ BridgeMoveForm \} from '@xchain-wallet\/core\/shared\/routes\/BridgeMoveForm\.jsx'/.test(code),
-                    'BridgeMoveForm is not imported',
+                    /(?:import \{ BridgeMoveForm \} from |import\()'@xchain-wallet\/core\/shared\/routes\/BridgeMoveForm\.jsx'/.test(code),
+                    'BridgeMoveForm is not loaded',
                 ).toBe(true);
             });
 

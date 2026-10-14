@@ -43,7 +43,7 @@ export function classifyObligation(expiration, nowSeconds = Math.floor(Date.now(
     const n = Number(expiration);
     // Same sanity window as coinpayExpiryText: reject non-finite,
     // non-positive, and millisecond-scale (or garbage) values.
-    if (!Number.isFinite(n) || n <= 0 || n > 1e13) {
+    if (!Number.isFinite(n) || n <= 0 || n >= 10_000_000_000) {
         return { state: 'open', secondsLeft: null };
     }
     const secondsLeft = Math.floor(n - nowSeconds);

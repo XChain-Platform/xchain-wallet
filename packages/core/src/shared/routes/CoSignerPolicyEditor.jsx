@@ -19,7 +19,7 @@
 // Reused by both CoSignerProvision (author) and CoSignerAccountDetail (edit),
 // so all policy-shape knowledge lives in one place.
 
-import { Input, Button, Select } from '@xchain-wallet/core/ui';
+import { Button, Checkbox, FormPage, FormSection, Input, Select, Switch } from '@xchain-wallet/core/ui';
 import { AmountField } from '../components/AmountField.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { BITCOIN_ACTIONS } from '../../registry/actions.js';
@@ -67,6 +67,10 @@ function parseActions(text) {
 
 function tickerPolicyKey(value) {
     return String(value || '').trim().toUpperCase();
+}
+
+function isNonNegativeDecimal(value) {
+    return /^\d+(?:\.\d+)?$/.test(value);
 }
 
 /**
@@ -148,6 +152,9 @@ export function buildPolicyDraft(draft) {
         if (!action && !cap) continue;
         if (!action) return { error: 'A per-action limit is missing its action name.' };
         if (!cap) return { error: `Per-action limit for ${actionMessageName(action)} is missing an amount.` };
+        if (!isNonNegativeDecimal(cap)) {
+            return { error: `Per-action limit for ${actionMessageName(action)} must be a non-negative number.` };
+        }
         // Refuse a limit on an action the agent may not sign, such as a typo like SENDD
         // (the co-signer matches caps by exact name, so that limit would never apply).
         if (!allowedActions.includes(action)) {
@@ -155,6 +162,9 @@ export function buildPolicyDraft(draft) {
         }
         maxPerAction = maxPerAction || Object.create(null);
         maxPerAction[action] = maxPerAction[action] || Object.create(null);
+        if (Object.hasOwn(maxPerAction[action], tick)) {
+            return { error: `Per-action limit for ${actionMessageName(action)} and ${tick} is listed more than once.` };
+        }
         maxPerAction[action][tick] = cap;
     }
 
@@ -169,7 +179,7 @@ export function buildPolicyDraft(draft) {
         const maxActions = String(draft.windowMaxActions || '').trim();
         if (maxActions) {
             const n = Number(maxActions);
-            if (!Number.isInteger(n) || n <= 0) return { error: 'Max actions per window must be a positive whole number.' };
+            if (!Number.isSafeInteger(n) || n <= 0) return { error: 'Max actions per window must be a positive whole number.' };
             maxPerWindow.maxActions = n;
         }
         let perTick = null;
@@ -178,10 +188,19 @@ export function buildPolicyDraft(draft) {
             const cap = String(row.cap || '').trim();
             if (!tick && !cap) continue;
             if (!tick || !cap) return { error: 'A rolling per-token limit row is incomplete.' };
+            if (!isNonNegativeDecimal(cap)) {
+                return { error: `Rolling limit for ${tick} must be a non-negative number.` };
+            }
             perTick = perTick || Object.create(null);
+            if (Object.hasOwn(perTick, tick)) {
+                return { error: `Rolling limit for ${tick} is listed more than once.` };
+            }
             perTick[tick] = cap;
         }
         if (perTick) maxPerWindow.perTick = perTick;
+        if (maxPerWindow.maxActions === undefined && !perTick) {
+            return { error: 'The rolling limit needs a max action count or at least one per-token limit.' };
+        }
     }
 
     // confirmAbove: { perTick: { TICK: amount } }.
@@ -192,7 +211,13 @@ export function buildPolicyDraft(draft) {
         const amount = String(row.amount || '').trim();
         if (!tick && !amount) continue;
         if (!tick || !amount) return { error: 'A confirmation-threshold row is incomplete.' };
+        if (!isNonNegativeDecimal(amount)) {
+            return { error: `Confirmation threshold for ${tick} must be a non-negative number.` };
+        }
         confirmPerTick = confirmPerTick || Object.create(null);
+        if (Object.hasOwn(confirmPerTick, tick)) {
+            return { error: `Confirmation threshold for ${tick} is listed more than once.` };
+        }
         confirmPerTick[tick] = amount;
     }
     if (confirmPerTick) confirmAbove = { perTick: confirmPerTick };
@@ -208,9 +233,10 @@ export function buildPolicyDraft(draft) {
     const allowedOutputs = [];
     for (const row of draft.allowedOutputs) {
         const address = String(row.address || '').trim();
-        if (!address) continue;
-        const out = { address };
         const mv = String(row.maxValue || '').trim();
+        if (!address && !mv) continue;
+        if (!address) return { error: 'An allowed-output max value is missing its address.' };
+        const out = { address };
         if (mv) {
             const n = Number(mv);
             if (!Number.isFinite(n) || n < 0) return { error: `Allowed-output max value for ${address} must be a non-negative number.` };
@@ -279,15 +305,13 @@ function previewActions(text) {
 
 const legendStyle = { fontWeight: 600, padding: '0 var(--xc-space-2)' };
 const helpStyle = { fontSize: '0.85em', color: 'var(--xc-text-muted)', margin: '0 0 var(--xc-space-2) 0' };
-const rowStyle = { display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'flex-end', marginBottom: 'var(--xc-space-2)' };
+const rowStyle = { display: 'flex', flexWrap: 'wrap', gap: 'var(--xc-space-2)', alignItems: 'flex-end', marginBottom: 'var(--xc-space-2)' };
 const pickerStyle = {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fill, minmax(10rem, 1fr))',
     gap: 'var(--xc-space-1) var(--xc-space-3)',
     marginBottom: 'var(--xc-space-2)',
 };
-const pickLabelStyle = { display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'center' };
-
 /**
  * Controlled policy editor.
  *
@@ -317,7 +341,8 @@ export function CoSignerPolicyEditor({ value, onChange }) {
     };
 
     return (
-        <div>
+        <FormPage as="div" sectioned label="Agent spending policy">
+            <FormSection title="Policy rules">
             <fieldset style={fieldsetStyle}>
                 <legend style={legendStyle}>Allowed actions</legend>
                 <p style={helpStyle}>
@@ -326,15 +351,13 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                 </p>
                 <div style={pickerStyle} role="group" aria-label="Actions">
                     {ACTION_CHOICES.map(({ key, label }) => (
-                        <label key={key} style={pickLabelStyle}>
-                            <input
-                                type="checkbox"
-                                value={key}
-                                checked={pickedKeys.includes(key)}
-                                onChange={(e) => toggleAction(key, e.target.checked)}
-                            />
-                            <span>{label}</span>
-                        </label>
+                        <Checkbox
+                            key={key}
+                            label={label}
+                            value={key}
+                            checked={pickedKeys.includes(key)}
+                            onChange={(e) => toggleAction(key, e.target.checked)}
+                        />
                     ))}
                 </div>
                 {actionPreview.length > 0 ? (
@@ -430,14 +453,11 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                     Cap total activity over a rolling time window (for example, at most
                     10 actions per 24 hours). Optional.
                 </p>
-                <label style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'center', marginBottom: 'var(--xc-space-2)' }}>
-                    <input
-                        type="checkbox"
-                        checked={draft.windowEnabled}
-                        onChange={(e) => set({ windowEnabled: e.target.checked })}
-                    />
-                    <span>Enforce a rolling limit</span>
-                </label>
+                <Switch
+                    label="Enforce a rolling limit"
+                    checked={draft.windowEnabled}
+                    onChange={(e) => set({ windowEnabled: e.target.checked })}
+                />
                 {draft.windowEnabled ? (
                     <>
                         <div style={rowStyle}>
@@ -468,6 +488,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                                     label="Max total per window"
                                     value={row.cap}
                                     onChange={(e) => patchRow('windowPerTick', i, { cap: e.target.value })}
+                                    inputMode="decimal"
                                     placeholder="1000"
                                 />
                                 <Button type="button" variant="ghost" onClick={() => removeRow('windowPerTick', i)}>Remove</Button>
@@ -499,6 +520,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                             label="Warn above"
                             value={row.amount}
                             onChange={(e) => patchRow('confirmAbove', i, { amount: e.target.value })}
+                            inputMode="decimal"
                             placeholder="500"
                         />
                         <Button type="button" variant="ghost" onClick={() => removeRow('confirmAbove', i)}>Remove</Button>
@@ -522,6 +544,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                             value={row.address}
                             onChange={(e) => patchRow('allowedDestinations', i, { address: e.target.value.trim() })}
                             placeholder="bc1q…"
+                            autoComplete="off"
                         />
                         <Button type="button" variant="ghost" onClick={() => removeRow('allowedDestinations', i)}>Remove</Button>
                     </div>
@@ -545,6 +568,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                             value={row.address}
                             onChange={(e) => patchRow('allowedOutputs', i, { address: e.target.value.trim() })}
                             placeholder="bc1q…"
+                            autoComplete="off"
                         />
                         <Input
                             label="Max value (optional)"
@@ -560,6 +584,7 @@ export function CoSignerPolicyEditor({ value, onChange }) {
                     + Add output
                 </Button>
             </fieldset>
-        </div>
+            </FormSection>
+        </FormPage>
     );
 }

@@ -14,6 +14,7 @@ import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withEnglishCopy } from '../_localized-source.js';
 
 import { flows } from '../../../packages/core/src/index.js';
 
@@ -28,7 +29,7 @@ const sharedRoutes = join(core, 'src', 'shared', 'routes');
 const formPath = join(sharedRoutes, 'ExecuteContractForm.jsx');
 assert.ok(existsSync(formPath), 'ExecuteContractForm.jsx exists');
 
-const formSrc = readFileSync(formPath, 'utf8');
+const formSrc = withEnglishCopy(readFileSync(formPath, 'utf8'));
 
 assert.ok(/export function ExecuteContractForm\b/.test(formSrc),
     'ExecuteContractForm is a named export');
@@ -57,11 +58,9 @@ assert.ok(/paramsText\.split\('\|'\)/.test(formSrc),
     'ExecuteContractForm splits pipe-delimited params into an array');
 assert.ok(/PARAMS\b/.test(formSrc), 'ExecuteContractForm composes a PARAMS field');
 
-// HW branch + wrong-password distinguished.
-// §20 Cluster X Step 20: ternary refactored into if/else cascade.
+// HW branch + wrong-password distinguished. Watcher mode wins before signing.
 assert.ok(
-    /isHwSource\s*\n?\s*\?\s*await messaging\.executeActionHw/.test(formSrc)
-        || /else if \(isHwSource\) \{[\s\S]+?messaging\.executeActionHw/.test(formSrc),
+    /else if \(isHwSource\) \{[\s\S]+?messaging\.executeActionHw/.test(formSrc),
     'ExecuteContractForm branches HW vs software signing',
 );
 assert.ok(/InvalidPasswordError/.test(formSrc),
@@ -157,8 +156,9 @@ assert.ok(
     'ABI lane renders a method Select wired to selectAbiMethod',
 );
 assert.ok(
-    /abiActive && abiIncomplete/.test(formSrc),
-    'Preview is gated on all declared params being filled (positional wire format)',
+    /abiArgumentErrors\.find\(Boolean\)/.test(formSrc)
+        && /disabled=\{actionConfirm\.composing\}/.test(formSrc),
+    'Preview stays available so declared-param validation can show plain copy before compose',
 );
 assert.ok(
     /Enter method manually/.test(formSrc) && /Use declared methods/.test(formSrc),

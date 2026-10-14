@@ -41,24 +41,38 @@ assert.deepEqual(
 
 assert.match(
     isEntryReplaceable({ blockIndex: 0, action: 'ISSUE', txHash: 'abc' }).reason,
-    /not RBF-replaceable/,
+    /aren't RBF-replaceable/,
 );
 
-const ok = isEntryReplaceable({ blockIndex: 0, action: 'SEND', txHash: 'abc' }, btc);
+const ok = isEntryReplaceable({ blockIndex: 0, action: 'SEND', txHash: 'abc', pending: { rbf: true } }, btc);
 assert.equal(ok.ok, true);
 
-// All replaceable kinds
-for (const action of ['SEND', 'SWEEP', 'DISPENSE', 'DIVIDEND', 'AIRDROP', 'EXECUTE', 'DEPOSIT', 'WITHDRAW']) {
+assert.deepEqual(
+    isEntryReplaceable({ blockIndex: 0, action: 'SEND', txHash: 'abc', pending: { rbf: false } }, btc),
+    { ok: false, reason: 'This transaction did not allow fee replacement.' },
+);
+assert.equal(
+    isEntryReplaceable({ blockIndex: 0, action: 'SEND', txHash: 'abc', pending: { rbf: null } }, btc).ok,
+    false,
+);
+assert.equal(
+    isEntryReplaceable({ blockIndex: 0, action: 'SEND', txHash: 'abc', pending: { rbf: true, failed: true } }, btc).ok,
+    false,
+);
+
+// Fee bump is offered only for sends; other action transactions may have
+// signing semantics that a rate-only replacement must not reinterpret.
+for (const action of ['SWEEP', 'DISPENSE', 'DIVIDEND', 'AIRDROP', 'EXECUTE', 'DEPOSIT', 'WITHDRAW']) {
     assert.equal(
-        isEntryReplaceable({ blockIndex: 0, action, txHash: 'abc' }, btc).ok,
-        true,
-        `${action} is replaceable`,
+        isEntryReplaceable({ blockIndex: 0, action, txHash: 'abc', pending: { rbf: true } }, btc).ok,
+        false,
+        `${action} is not offered replacement`,
     );
 }
 
 // Case-insensitive action
 assert.equal(
-    isEntryReplaceable({ blockIndex: 0, action: 'send', txHash: 'abc' }, btc).ok,
+    isEntryReplaceable({ blockIndex: 0, action: 'send', txHash: 'abc', pending: { rbf: true } }, btc).ok,
     true,
 );
 
@@ -66,14 +80,17 @@ assert.equal(
 // descriptor refuses rather than assuming the chain can replace.
 assert.deepEqual(
     isEntryReplaceable(
-        { blockIndex: 0, action: 'SEND', txHash: 'abc', chainId: 'dogecoin-mainnet' },
+        { blockIndex: 0, action: 'SEND', txHash: 'abc', chainId: 'dogecoin-mainnet', pending: { rbf: true } },
         { descriptor: registry.get('dogecoin-mainnet') },
     ),
-    { ok: false, reason: 'Fee bumping is not supported on Dogecoin.' },
+    { ok: false, reason: "Changing the network fee later isn't supported on Dogecoin." },
 );
 assert.equal(isEntryReplaceable({ blockIndex: 0, action: 'SEND', txHash: 'abc' }).ok, false);
 assert.equal(
-    isEntryReplaceable({ blockIndex: 0, action: 'SEND', txHash: 'abc' }, { descriptor: registry.get('litecoin-mainnet') }).ok,
+    isEntryReplaceable(
+        { blockIndex: 0, action: 'SEND', txHash: 'abc', pending: { rbf: true } },
+        { descriptor: registry.get('litecoin-mainnet') },
+    ).ok,
     true,
 );
 
@@ -151,6 +168,7 @@ const goodResult = await replaceFromHistoryEntry({
         action: 'SEND',
         txHash: 'orig123',
         chainId: 'bitcoin-mainnet',
+        pending: { rbf: true },
     },
     strategy: 'cancel',
     walletId: 'w1',

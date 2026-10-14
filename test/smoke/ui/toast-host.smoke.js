@@ -19,6 +19,7 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 const core = join(wsRoot, 'packages', 'core');
+const desktop = join(wsRoot, 'packages', 'desktop');
 const ext = join(wsRoot, 'packages', 'extension');
 const web = join(wsRoot, 'packages', 'web');
 const components = join(core, 'src', 'shared', 'components');
@@ -45,6 +46,8 @@ for (const field of ['showToast', 'dismissToast', 'clearToasts']) {
 assert.ok(/clearTimeout/.test(th), 'ToastHost clears its setTimeout timers');
 // Default 8s per §37.2.
 assert.ok(/8000/.test(th), 'ToastHost defaults durationMs to 8000 per §37.2');
+assert.ok(/role="status"[\s\S]*aria-live="polite"/.test(th),
+    'ToastHost exposes notifications through one polite status region');
 
 // --- 2. CSS includes the reduced-motion guard + viewport positioning -----
 
@@ -57,6 +60,12 @@ assert.ok(/position:\s*fixed/.test(thCssSrc),
     'ToastHost viewport is position: fixed');
 assert.ok(/pointer-events:\s*none/.test(thCssSrc),
     'ToastHost viewport sets pointer-events: none so it never traps clicks');
+// The card itself passes taps through as well (a toast floats over a phone
+// screen's bottom controls); only its buttons take them.
+assert.ok(/\.toast\s*\{[^}]*pointer-events:\s*none/.test(thCssSrc),
+    'a toast card passes taps through to the control beneath it');
+assert.ok(/\.controls\s*\{[^}]*pointer-events:\s*auto/.test(thCssSrc),
+    'the toast Undo / Dismiss buttons still take taps');
 
 // --- 3. ContactsList delete shows an Undo toast --------------------------
 
@@ -81,11 +90,12 @@ assert.ok(/useToast\b/.test(hist),
 assert.ok(/showToast\(/.test(hist),
     'History.clearAllFilters shows a toast');
 
-// --- 5. Both shells wrap their unlocked tree in <ToastHost> -------------
+// --- 5. Every shell wraps its unlocked tree in <ToastHost> ---------------
 
 for (const appPath of [
     join(web, 'src', 'App.jsx'),
     join(ext, 'src', 'popup', 'App.jsx'),
+    join(desktop, 'renderer', 'App.jsx'),
 ]) {
     const src = readFileSync(appPath, 'utf8');
     assert.ok(

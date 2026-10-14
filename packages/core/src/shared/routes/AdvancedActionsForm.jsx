@@ -12,7 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainPicker, FeeSelector, FormPage, Icon, Input, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -128,7 +128,6 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -362,6 +361,21 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
         setValues((prev) => ({ ...prev, [field]: rawValue }));
     }, []);
 
+    function handleActionChange(nextAction) {
+        setAction(nextAction);
+        setFormats(null);
+        setVersion('');
+        setFields([]);
+        setValues({});
+        setValidation(null);
+    }
+
+    function handleChainChange(nextChainId) {
+        handleActionChange('');
+        setActions(null);
+        setChainId(nextChainId);
+    }
+
     function handleReview(event) {
         event.preventDefault();
         if (!chainId || !fromAddress) {
@@ -392,7 +406,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
 
     // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     // The user-chosen `action` is passed straight into actionData.
-    const { isWatcherMode } = useWalletMode();
+    const { isWatcherMode, isSignerMode } = useWalletMode();
 
     // (§5.6 slice 2): the software path composes ONE PSBT
     // host-side and confirms it on the shared confirm page, hardware
@@ -541,18 +555,30 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
 
         const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={stage === 'review'
+                ? () => { setSubmitError(null); setStage('form'); }
+                : onBack}
+            backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
                     ? `Review ${action || 'action'}`
                     : 'Advanced action'}
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>
+            {children}
         </Screen>
     );
 
+    if (isSignerMode) {
+        return wrap(
+            <StatusMessage variant="status">
+                This wallet is in signer mode, so Advanced action is unavailable.
+                Use Sign transaction to sign an unsigned transaction from a watcher wallet,
+                or switch the mode under Settings, Wallet Mode.
+            </StatusMessage>,
+        );
+    }
     if (loadError) {
         return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
     }
@@ -602,13 +628,35 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
 
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
+            <FormPage
+                label="Review advanced action"
+                onSubmit={handleSubmit}
+                status={(isWatcherMode || isHwSource) && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={stage === 'submitting'}
+                        disabled={
+                            isWatcherMode
+                                ? false
+                                : isHwSource
+                                    ? hwStatus !== 'available'
+                                    : (!signerReady && password.length === 0)
+                        }
+                    >
+                        {isWatcherMode
+                            ? `Create unsigned transaction: ${action || 'action'}`
+                            : isHwSource
+                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: ${action || 'action'}`
+                                : `Sign: ${action || 'action'}`}
+                    </Button>
+                )}
+            >
                 <p className={styles.summary}>{decoded?.summary}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -658,30 +706,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 )}
-                {(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
-                ) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={
-                            isWatcherMode
-                                ? false
-                                : isHwSource
-                                    ? hwStatus !== 'available'
-                                    : (!signerReady && password.length === 0)
-                        }
-                    >
-                        {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : (descriptor ? `Sign on ${descriptor.displayName}` : 'Sign')}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -692,7 +717,6 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
@@ -729,8 +753,26 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
 
     // stage === 'compose'
     return wrap(
-        <form onSubmit={handleReview} noValidate>
-            <NetworkField value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
+        <FormPage
+            label="Compose advanced action"
+            onSubmit={handleReview}
+            status={formError ? (
+                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={actionConfirm.composing}
+                    disabled={actionConfirm.composing}
+                >
+                    {actionConfirm.composing
+                        ? 'Preparing review…'
+                        : singleEncode ? 'Sign action' : 'Preview'}
+                </Button>
+            )}
+        >
+            <ChainPicker label="Network" value={chainId} onChange={handleChainChange} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} hideNetworkKind />
 
             {fromAddress ? (
                 <AddressField
@@ -748,24 +790,22 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                 </StatusMessage>
             )}
 
-            <label className={styles.pickerLabel}>
-                Action
-                <select
-                    className={styles.picker}
-                    value={action}
-                    onChange={(e) => setAction(e.target.value)}
-                >
-                    <option value="">Pick an action</option>
-                    {(actions || []).map((a) => (
-                        <option key={a} value={a}>
-                            {actionDisplayLabel(a)} ({a})
-                            {ACTIONS_WITH_DEDICATED_FORMS.has(a)
-                                ? ' (dedicated form available)'
-                                : ''}
-                        </option>
-                    ))}
-                </select>
-            </label>
+            <Select
+                label="Action"
+                className={styles.picker}
+                value={action}
+                onChange={(e) => handleActionChange(e.target.value)}
+            >
+                <option value="">Pick an action</option>
+                {(actions || []).map((a) => (
+                    <option key={a} value={a}>
+                        {actionDisplayLabel(a)} ({a})
+                        {ACTIONS_WITH_DEDICATED_FORMS.has(a)
+                            ? ' (dedicated form available)'
+                            : ''}
+                    </option>
+                ))}
+            </Select>
 
             {action === 'SEND' || action === 'BATCH' ? (
                 <div role="alert" className={styles.warnings}>
@@ -787,21 +827,19 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
             ) : null}
 
             {action && formats && Object.keys(formats).length > 1 ? (
-                <label className={styles.pickerLabel}>
-                    Format version
-                    <select
-                        className={styles.picker}
-                        value={version}
-                        onChange={(e) => setVersion(e.target.value)}
-                    >
-                        <option value="">Auto-select (recommended)</option>
-                        {Object.keys(formats).map((v) => (
-                            <option key={v} value={v}>
-                                v{v}: {formats[v]}
-                            </option>
-                        ))}
-                    </select>
-                </label>
+                <Select
+                    label="Format version"
+                    className={styles.picker}
+                    value={version}
+                    onChange={(e) => setVersion(e.target.value)}
+                >
+                    <option value="">Auto-select (recommended)</option>
+                    {Object.keys(formats).map((v) => (
+                        <option key={v} value={v}>
+                            v{v}: {formats[v]}
+                        </option>
+                    ))}
+                </Select>
             ) : null}
 
             {action && fields.length === 0 ? (
@@ -816,19 +854,18 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                 const raw = values[base] ?? '';
                 if (isRest) {
                     return (
-                        <label key={fieldName} className={styles.pickerLabel}>
-                            {base} (one per line or comma-separated)
-                            <textarea
-                                className={styles.picker}
-                                value={raw}
-                                onChange={(e) => handleFieldChange(base, e.target.value)}
-                                rows={4}
-                                spellCheck={false}
-                                autoCapitalize="none"
-                                autoCorrect="off"
-                                aria-label={`${base}: list values, one per line or comma-separated`}
-                            />
-                        </label>
+                        <Textarea
+                            key={fieldName}
+                            label={`${base} (one per line or comma-separated)`}
+                            className={styles.picker}
+                            value={raw}
+                            onChange={(e) => handleFieldChange(base, e.target.value)}
+                            rows={4}
+                            spellCheck={false}
+                            autoCapitalize="off"
+                            autoCorrect="off"
+                            aria-label={`${base}: list values, one per line or comma-separated`}
+                        />
                     );
                 }
                 return (
@@ -873,24 +910,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                 mandatory={nativeFeeMandatory}
             />
 
-            {formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
-            ) : null}
-
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    block
-                    loading={actionConfirm.composing}
-                    disabled={actionConfirm.composing}
-                >
-                    {actionConfirm.composing
-                        ? 'Preparing review…'
-                        : singleEncode ? 'Sign action' : 'Preview'}
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }
 

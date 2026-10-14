@@ -97,7 +97,7 @@
 import { readFile } from 'node:fs/promises';
 
 import {
-    createWallet, dismissIntroCarousel, expect, gotoSection, lockWallet, test,
+    acknowledgeImportNotice, createWallet, dismissIntroCarousel, expect, gotoSection, lockWallet, test,
     unlockButton, unlockedShell, unlockWallet,
 } from '../../fixtures/wallet.js';
 import { kdfStepTimeout } from '../../timeout-budget.js';
@@ -212,6 +212,8 @@ async function restorePreSpecWallet(page) {
         .fill(PRE_SPEC_WALLET_PASSWORD);
     await page.getByLabel('Password for this device', { exact: true }).fill(PASSWORD);
     await page.getByRole('button', { name: 'Restore', exact: true }).click();
+    // A restore ends on the donation notice; the shell waits behind Continue.
+    await acknowledgeImportNotice(page);
 
     await expect(unlockedShell(page),
         'the pre-spec envelope never reached an unlocked wallet, so this file has no legacy '

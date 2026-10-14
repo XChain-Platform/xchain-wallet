@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, EmptyState, Icon, ListPage, ListRow, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import {
     isDemoWallet,
@@ -87,7 +87,6 @@ export function StakeDetail({
 }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
@@ -104,6 +103,9 @@ export function StakeDetail({
     const [height, setHeight] = useState(/** @type {number | null} */ (null));
 
     const [activeTab, setActiveTab] = useState(kind === 'validator' ? 'rewards' : 'positions');
+    useEffect(() => {
+        setActiveTab(kind === 'validator' ? 'rewards' : 'positions');
+    }, [kind, chainId, address, contractActionIndex]);
 
     // Quick-action "More" popover.
     const [moreOpen, setMoreOpen] = useState(false);
@@ -114,7 +116,11 @@ export function StakeDetail({
             if (moreWrapRef.current?.contains(e.target)) return;
             setMoreOpen(false);
         };
-        const onKey = (e) => { if (e.key === 'Escape') setMoreOpen(false); };
+        const onKey = (e) => {
+            if (e.key !== 'Escape') return;
+            setMoreOpen(false);
+            moreWrapRef.current?.querySelector('button')?.focus();
+        };
         window.addEventListener('mousedown', onDown);
         window.addEventListener('keydown', onKey);
         return () => {
@@ -128,6 +134,16 @@ export function StakeDetail({
         async function load() {
             setLoading(true);
             setLoadError(null);
+            setActiveTab(kind === 'validator' ? 'rewards' : 'positions');
+            setMoreOpen(false);
+            setStakes([]);
+            setDelegations([]);
+            setRewards([]);
+            setRewardClaims([]);
+            setContract(null);
+            setContractStakes([]);
+            setContractUnstakes([]);
+            setSlashEvents([]);
             try {
                 if (isDemoWallet(walletId)) {
                     if (kind === 'validator') {
@@ -199,6 +215,7 @@ export function StakeDetail({
 
     useEffect(() => {
         let cancelled = false;
+        setHeight(null);
         if (typeof messaging.getIndexerWatermark !== 'function') return undefined;
         messaging.getIndexerWatermark({ chainId })
             .then((result) => {
@@ -220,6 +237,7 @@ export function StakeDetail({
     );
     const primaryStake = latestEffectiveStakingRow(activeStakes, height);
     const primaryDelegation = latestEffectiveStakingRow(delegations, height);
+    const delegatedKey = primaryDelegation?.signing_pubkey || primaryDelegation?.SIGNING_PUBKEY || '';
     const totalValidatorStaked = useMemo(
         () => sumStakingAmounts(activeStakes),
         [activeStakes],
@@ -234,6 +252,7 @@ export function StakeDetail({
     );
     const contractTick = activeContractStakes[0]?.tick || pendingContractUnstakes[0]?.tick || '';
     const inCooldown = pendingContractUnstakes.length > 0;
+    const hasContractPosition = activeContractStakes.length > 0 || inCooldown;
 
     // Quick actions hand the position's token + signing pubkey to the caller
     // so a shell can seed ContractStakeForm from THIS position instead of
@@ -254,11 +273,11 @@ export function StakeDetail({
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            <ListPage>{children}</ListPage>
         </Screen>
     );
 
-    if (loading) return wrap(<p className={styles.hint}>Loading…</p>);
+    if (loading) return wrap(<StatusMessage variant="status">Loading staking position…</StatusMessage>);
     if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
 
     const tabs = kind === 'validator'
@@ -283,7 +302,9 @@ export function StakeDetail({
                         ? (primaryStake
                             ? `${fmt(totalValidatorStaked)} ${primaryStake.asset ?? 'XCHAIN'}`
                             : 'Nothing staked from this address')
-                        : `${compareDecimalStrings(totalContractStaked, '0') === 1 ? fmt(totalContractStaked) : '?'} ${contractTick || ''}`.trim()}
+                        : (hasContractPosition
+                            ? `${compareDecimalStrings(totalContractStaked, '0') === 1 ? fmt(totalContractStaked) : '0'} ${contractTick || ''}`.trim()
+                            : 'Nothing staked in this contract')}
                 </dd>
                 {kind === 'validator' && (primaryStake?.capability_label || primaryStake?.capability) ? (
                     <>
@@ -302,9 +323,9 @@ export function StakeDetail({
                 {kind === 'validator' ? (
                     <>
                         <dt className={styles.detailsLabel}>Delegated key</dt>
-                        <dd className={styles.detailsValue}>
-                            {primaryDelegation
-                                ? `${shortPubkey(primaryDelegation.signing_pubkey || primaryDelegation.SIGNING_PUBKEY)}${primaryDelegation.block_index ? ` (since block ${fmt(primaryDelegation.block_index)})` : ''}`
+                        <dd className={styles.detailsValue} style={ADDRESS_CELL_STYLE}>
+                            {delegatedKey
+                                ? <><code>{delegatedKey}</code>{primaryDelegation.block_index ? ` (since block ${fmt(primaryDelegation.block_index)})` : ''}</>
                                 : 'None'}
                         </dd>
                         <dt className={styles.detailsLabel}>Pending rewards</dt>
@@ -339,145 +360,152 @@ export function StakeDetail({
                             {primaryStake ? (primaryStake.status || 'active') : 'inactive'}
                         </span>
                     ) : (
-                        <span className={`${local.statusPill} ${inCooldown ? local.statusCooldown : local.statusActive}`}>
-                            {inCooldown ? 'cooldown' : 'active'}
+                        <span className={`${local.statusPill} ${inCooldown ? local.statusCooldown : hasContractPosition ? local.statusActive : ''}`}>
+                            {inCooldown ? 'cooldown' : hasContractPosition ? 'active' : 'inactive'}
                         </span>
                     )}
                 </dd>
             </dl>
 
+            <SectionHeader title="Actions" />
             {/* Quick actions: squared 4-up grid, disabled without handlers. */}
             {kind === 'validator' ? (
                 <div className={local.quickActions} role="group" aria-label="Stake actions">
-                    <button
-                        type="button"
-                        className={local.quickAction}
+                    <Button
+                        variant="secondary"
+                        block
+                        icon={<span className={local.quickActionIcon}><Icon.DollarIcon /></span>}
                         onClick={onClaimRewards}
                         disabled={!onClaimRewards || compareDecimalStrings(pending, '0') !== 1}
                         title={compareDecimalStrings(pending, '0') === 1 ? 'Claim pending rewards' : 'No pending rewards'}
                     >
-                        <span className={local.quickActionIcon} aria-hidden="true"><Icon.DollarIcon /></span>
-                        <span>Claim</span>
-                    </button>
-                    <button
-                        type="button"
-                        className={local.quickAction}
+                        Claim
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        block
+                        icon={<span className={local.quickActionIcon}><Icon.UnlockIcon /></span>}
                         onClick={onUnstake}
                         disabled={!onUnstake || !primaryStake}
                         title="Unstake"
                     >
-                        <span className={local.quickActionIcon} aria-hidden="true"><Icon.UnlockIcon /></span>
-                        <span>Unstake</span>
-                    </button>
-                    <button
-                        type="button"
-                        className={local.quickAction}
+                        Unstake
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        block
+                        icon={<span className={local.quickActionIcon}><Icon.KeyIcon /></span>}
                         onClick={onDelegate}
                         disabled={!onDelegate || !primaryStake}
                         title="Delegate a new signing key"
                     >
-                        <span className={local.quickActionIcon} aria-hidden="true"><Icon.KeyIcon /></span>
-                        <span>Delegate</span>
-                    </button>
+                        Delegate
+                    </Button>
                     <div className={local.quickActionMoreWrap} ref={moreWrapRef}>
-                        <button
-                            type="button"
-                            className={local.quickAction}
+                        <Button
+                            variant="secondary"
+                            block
+                            icon={<span className={local.quickActionIcon}><Icon.MoreIcon /></span>}
                             aria-haspopup="menu"
                             aria-expanded={moreOpen}
                             onClick={() => setMoreOpen((o) => !o)}
                         >
-                            <span className={local.quickActionIcon} aria-hidden="true"><Icon.MoreIcon /></span>
-                            <span>More</span>
-                        </button>
+                            More
+                        </Button>
                         {moreOpen ? (
                             <div className={local.quickActionMoreMenu} role="menu">
-                                <button
-                                    type="button"
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    block
+                                    icon={<Icon.UnlinkIcon />}
                                     role="menuitem"
-                                    className={local.quickActionMoreItem}
+                                    data-destructive="true"
                                     onClick={onRevokeDelegation ? () => { setMoreOpen(false); onRevokeDelegation(); } : undefined}
                                     disabled={!onRevokeDelegation || !primaryDelegation}
                                 >
-                                    <span aria-hidden="true"><Icon.UnlinkIcon /></span>
-                                    <span>Revoke delegation</span>
-                                </button>
-                                <button
-                                    type="button"
+                                    Revoke delegation
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    block
+                                    icon={<Icon.LineChartIcon />}
                                     role="menuitem"
-                                    className={local.quickActionMoreItem}
                                     onClick={onOpenOperatorDashboard ? () => { setMoreOpen(false); onOpenOperatorDashboard(); } : undefined}
                                     disabled={!onOpenOperatorDashboard || !primaryStake}
                                 >
-                                    <span aria-hidden="true"><Icon.LineChartIcon /></span>
-                                    <span>Operator view</span>
-                                </button>
+                                    Operator view
+                                </Button>
                             </div>
                         ) : null}
                     </div>
                 </div>
             ) : (
                 <div className={local.quickActions} role="group" aria-label="Stake actions">
-                    <button
-                        type="button"
-                        className={local.quickAction}
+                    <Button
+                        variant="secondary"
+                        block
+                        icon={<span className={local.quickActionIcon}><Icon.PlusIcon /></span>}
                         onClick={() => onStakeMore?.(contractPositionSeed)}
                         disabled={!onStakeMore}
                         title="Stake more into this contract"
                     >
-                        <span className={local.quickActionIcon} aria-hidden="true"><Icon.PlusIcon /></span>
-                        <span>Add stake</span>
-                    </button>
-                    <button
-                        type="button"
-                        className={local.quickAction}
+                        Add stake
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        block
+                        icon={<span className={local.quickActionIcon}><Icon.UnlockIcon /></span>}
                         onClick={() => onUnstake?.(contractPositionSeed)}
                         disabled={!onUnstake || activeContractStakes.length === 0}
                         title="Start unstaking (cooldown applies)"
                     >
-                        <span className={local.quickActionIcon} aria-hidden="true"><Icon.UnlockIcon /></span>
-                        <span>Unstake</span>
-                    </button>
-                    <button
-                        type="button"
-                        className={local.quickAction}
+                        Unstake
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        block
+                        icon={<span className={local.quickActionIcon}><Icon.KeyIcon /></span>}
                         onClick={() => onDelegate?.(contractPositionSeed)}
                         disabled={!onDelegate || activeContractStakes.length === 0}
                         title="Rotate the position's signing key"
                     >
-                        <span className={local.quickActionIcon} aria-hidden="true"><Icon.KeyIcon /></span>
-                        <span>Delegate</span>
-                    </button>
+                        Delegate
+                    </Button>
                     <div className={local.quickActionMoreWrap} ref={moreWrapRef}>
-                        <button
-                            type="button"
-                            className={local.quickAction}
+                        <Button
+                            variant="secondary"
+                            block
+                            icon={<span className={local.quickActionIcon}><Icon.MoreIcon /></span>}
                             aria-haspopup="menu"
                             aria-expanded={moreOpen}
                             onClick={() => setMoreOpen((o) => !o)}
                         >
-                            <span className={local.quickActionIcon} aria-hidden="true"><Icon.MoreIcon /></span>
-                            <span>More</span>
-                        </button>
+                            More
+                        </Button>
                         {moreOpen ? (
                             <div className={local.quickActionMoreMenu} role="menu">
-                                <button
-                                    type="button"
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    block
+                                    icon={<Icon.ContractIcon />}
                                     role="menuitem"
-                                    className={local.quickActionMoreItem}
                                     onClick={onOpenContract ? () => { setMoreOpen(false); onOpenContract(); } : undefined}
                                     disabled={!onOpenContract}
                                 >
-                                    <span aria-hidden="true"><Icon.ContractIcon /></span>
-                                    <span>View contract</span>
-                                </button>
+                                    View contract
+                                </Button>
                             </div>
                         ) : null}
                     </div>
                 </div>
             )}
 
+            <SectionHeader title="Position activity" />
             <div className={local.tabBar} role="tablist" aria-label="Stake detail view">
+                {/* Native buttons carry tab semantics because the kit has no tab primitive. */}
                 {tabs.map((t) => (
                     <button
                         key={t.id}
@@ -493,96 +521,104 @@ export function StakeDetail({
             </div>
 
             {activeTab === 'rewards' ? (
-                <ul className={local.eventList}>
-                    {rewards.length === 0 ? (
-                        <li><div className={local.eventEmpty}>No reward events yet.</div></li>
-                    ) : rewards.slice(0, 25).map((r, i) => (
+                rewards.length === 0 ? (
+                    <EmptyState title="No reward events yet" body="Reward events for this stake appear here." />
+                ) : (
+                    <ul className={local.eventList} aria-label="Reward events">
+                        {rewards.slice(0, 25).map((r, i) => (
                         <li key={`${String(r.action_index ?? i)}:${i}`}>
-                            <div className={local.eventRow}>
-                                <span className={local.eventAmount}>
-                                    {fmt(r.amount ?? r.reward ?? '0')} XCHAIN
-                                </span>
-                                <span className={local.eventMeta}>{r.status || ''}</span>
-                                <span className={local.eventWhen}>
-                                    {r.block_index ? `block ${fmt(r.block_index)}` : ''}
-                                </span>
-                            </div>
+                            <ListRow
+                                title={(
+                                    <span className={local.eventAmount}>
+                                    {fmt(r.amount ?? r.reward)} XCHAIN
+                                    </span>
+                                )}
+                                subtitle={<span className={local.eventMeta}>{detailText(r.status)}</span>}
+                                trailing={<span className={local.eventWhen}>
+                                    {r.block_index ? `block ${fmt(r.block_index)}` : '-'}
+                                </span>}
+                            />
                         </li>
-                    ))}
-                </ul>
+                        ))}
+                    </ul>
+                )
             ) : null}
 
             {activeTab === 'delegation' ? (
-                <ul className={local.eventList}>
-                    {delegations.length === 0 ? (
-                        <li><div className={local.eventEmpty}>No signing key delegated. Use Delegate to add one.</div></li>
-                    ) : delegations.slice(0, 25).map((d, i) => (
+                delegations.length === 0 ? (
+                    <EmptyState title="No delegated signing key" body="Signing-key delegations for this stake appear here." />
+                ) : (
+                    <ul className={local.eventList} aria-label="Signing-key delegations">
+                        {delegations.slice(0, 25).map((d, i) => (
                         <li key={`${String(d.delegation_id ?? i)}:${i}`}>
-                            <div className={local.eventRow}>
-                                <span className={local.eventAmount}>
-                                    {shortPubkey(d.signing_pubkey || d.SIGNING_PUBKEY)}
-                                </span>
-                                <span className={local.eventMeta}>{stakingRowState(d, height)}</span>
-                                <span className={local.eventWhen}>
+                            <ListRow
+                                title={(
+                                    <span className={local.eventAmount}>
+                                    <code>{d.signing_pubkey || d.SIGNING_PUBKEY || '(none)'}</code>
+                                    </span>
+                                )}
+                                subtitle={<span className={local.eventMeta}>{stakingRowState(d, height)}</span>}
+                                trailing={<span className={local.eventWhen}>
                                     {d.block_index ? `block ${fmt(d.block_index)}` : ''}
-                                </span>
-                            </div>
+                                </span>}
+                            />
                         </li>
-                    ))}
-                </ul>
+                        ))}
+                    </ul>
+                )
             ) : null}
 
             {activeTab === 'positions' ? (
-                <ul className={local.eventList}>
-                    {activeContractStakes.length === 0 && pendingContractUnstakes.length === 0 ? (
-                        <li><div className={local.eventEmpty}>No positions found for this contract.</div></li>
-                    ) : (
-                        <>
+                activeContractStakes.length === 0 && pendingContractUnstakes.length === 0 ? (
+                    <EmptyState title="No contract positions" body="Staking positions for this contract appear here." />
+                ) : (
+                    <ul className={local.eventList} aria-label="Contract positions">
                             {activeContractStakes.map((s, i) => (
                                 <li key={`s:${String(s.action_index ?? i)}:${i}`}>
-                                    <div className={local.eventRow}>
-                                        <span className={local.eventAmount}>{fmt(s.amount)} {s.tick}</span>
-                                        <span className={local.eventMeta}>
-                                            key {shortPubkey(s.signing_pubkey)}
-                                        </span>
-                                        <span className={local.eventWhen}>staked</span>
-                                    </div>
+                                    <ListRow
+                                        title={<span className={local.eventAmount}>{fmt(s.amount)} {detailText(s.tick)}</span>}
+                                        subtitle={<span className={local.eventMeta}>
+                                            key <code>{s.signing_pubkey || 'None'}</code>
+                                        </span>}
+                                        trailing={<span className={local.eventWhen}>staked</span>}
+                                    />
                                 </li>
                             ))}
                             {pendingContractUnstakes.map((u, i) => (
                                 <li key={`u:${String(u.action_index ?? i)}:${i}`}>
-                                    <div className={local.eventRow}>
-                                        <span className={local.eventAmount}>{fmt(u.amount)} {u.tick}</span>
-                                        <span className={local.eventMeta}>
-                                            releasing, slashable until block {fmt(u.cooldown_end_block ?? '?')}
-                                        </span>
-                                        <span className={local.eventWhen}>cooldown</span>
-                                    </div>
+                                    <ListRow
+                                        title={<span className={local.eventAmount}>{fmt(u.amount)} {detailText(u.tick)}</span>}
+                                        subtitle={<span className={local.eventMeta}>
+                                            releasing, slashable until block {fmt(u.cooldown_end_block)}
+                                        </span>}
+                                        trailing={<span className={local.eventWhen}>cooldown</span>}
+                                    />
                                 </li>
                             ))}
-                        </>
-                    )}
-                </ul>
+                    </ul>
+                )
             ) : null}
 
             {activeTab === 'slashes' ? (
-                <ul className={local.eventList}>
-                    {slashEvents.length === 0 ? (
-                        <li><div className={local.eventEmpty}>No slash events against this position.</div></li>
-                    ) : slashEvents.slice(0, 25).map((ev, i) => (
+                slashEvents.length === 0 ? (
+                    <EmptyState title="No slash events" body="Slash events against this position appear here." />
+                ) : (
+                    <ul className={local.eventList} aria-label="Slash events">
+                        {slashEvents.slice(0, 25).map((ev, i) => (
                         <li key={`sl:${i}`}>
-                            <div className={local.eventRow}>
-                                <span className={local.slashAmount}>-{fmt(ev.amount)} {ev.tick}</span>
-                                <span className={local.eventMeta}>
-                                    to {String(ev.destination_address || ev.destination || '?')}
-                                </span>
-                                <span className={local.eventWhen}>
-                                    {ev.block_index ? `block ${fmt(ev.block_index)}` : ''}
-                                </span>
-                            </div>
+                            <ListRow
+                                title={<span className={local.slashAmount}>{ev.amount == null || ev.amount === '' ? '-' : `-${fmt(ev.amount)}`} {detailText(ev.tick)}</span>}
+                                subtitle={<span className={local.eventMeta}>
+                                    to <AddressText address={detailText(ev.destination_address || ev.destination)} truncate={false} />
+                                </span>}
+                                trailing={<span className={local.eventWhen}>
+                                    {ev.block_index ? `block ${fmt(ev.block_index)}` : '-'}
+                                </span>}
+                            />
                         </li>
-                    ))}
-                </ul>
+                        ))}
+                    </ul>
+                )
             ) : null}
 
             {activeTab === 'details' ? (
@@ -629,8 +665,15 @@ export function StakeDetail({
 // Comma-grouped display number; non-numeric input passes through
 // unchanged (formatWithThousands only groups plain digit strings).
 function fmt(value) {
-    if (value == null || value === '') return '?';
+    if (value == null || value === '' || (typeof value === 'number' && !Number.isFinite(value))) return '-';
+    if (/^(?:undefined|null|nan)$/i.test(String(value).trim())) return '-';
     return formatWithThousands(String(value));
+}
+
+function detailText(value) {
+    if (value == null || value === '' || (typeof value === 'number' && !Number.isFinite(value))) return '-';
+    const text = String(value).trim();
+    return !text || /^(?:undefined|null|nan)$/i.test(text) ? '-' : text;
 }
 
 function extractRows(resp) {
@@ -660,9 +703,4 @@ function splitRewards(rows, claimRows) {
         lifetime: totals.accrued,
         hasRejectedClaim: totals.hasRejectedClaim,
     };
-}
-
-function shortPubkey(pk) {
-    if (!pk || typeof pk !== 'string') return '(none)';
-    return pk.length > 16 ? `${pk.slice(0, 8)}…${pk.slice(-4)}` : pk;
 }

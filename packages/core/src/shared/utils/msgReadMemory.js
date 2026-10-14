@@ -101,6 +101,7 @@ export function writeMsgRead(walletId, accountId, map) {
 // figure: real-time arrival is covered by the OS notification path instead.
 
 const UNREAD_NS = 'xc:msgUnread:';
+const REQUEST_DECLINED_NS = 'xc:msgRequestDeclined:';
 
 // Fires after every write so a mounted view in the same document refreshes
 // without polling. Listeners also watch the cross-tab `storage` event.
@@ -148,23 +149,60 @@ export function writeMsgUnread(walletId, accountId, count) {
     } catch { /* noop */ }
 }
 
+/**
+ * Read the MESSAGE handshake request ids this account has declined.
+ * The request transaction id keeps a later request from the same address visible.
+ *
+ * @param {string | null | undefined} walletId
+ * @param {string | null | undefined} accountId
+ * @returns {string[]}
+ */
+export function readMsgRequestDeclined(walletId, accountId) {
+    if (typeof walletId !== 'string' || !walletId) return [];
+    try {
+        if (typeof localStorage === 'undefined') return [];
+        const raw = localStorage.getItem(REQUEST_DECLINED_NS + scopeKey(walletId, accountId));
+        const parsed = raw == null ? [] : JSON.parse(raw);
+        return Array.isArray(parsed)
+            ? parsed.filter((value) => typeof value === 'string' && value)
+            : [];
+    } catch { return []; }
+}
+
+/**
+ * Persist the MESSAGE handshake request ids this account has declined.
+ *
+ * @param {string | null | undefined} walletId
+ * @param {string | null | undefined} accountId
+ * @param {string[]} ids
+ */
+export function writeMsgRequestDeclined(walletId, accountId, ids) {
+    if (typeof walletId !== 'string' || !walletId || !Array.isArray(ids)) return;
+    try {
+        if (typeof localStorage === 'undefined') return;
+        localStorage.setItem(
+            REQUEST_DECLINED_NS + scopeKey(walletId, accountId),
+            JSON.stringify([...new Set(ids.filter((value) => typeof value === 'string' && value))]),
+        );
+    } catch { /* noop */ }
+}
+
 // --- Wallet-removal sweep ---------------------------------------------------
 //
-// A wallet can hold many accounts, each with its own `xc:msgRead:` and
-// `xc:msgUnread:` entry (scopeKey embeds accountId), so removal has to sweep
-// every entry keyed under that walletId, not just the 'default' account. This
-// walks the store the same way clearAllChainFilters does: via
+// A wallet can hold many accounts, each with its own messaging-memory entries,
+// so removal has to sweep every entry keyed under that walletId, not just the
+// 'default' account. This walks the store the same way clearAllChainFilters
+// does: via
 // localStorage.length/.key(i), because Object.keys(localStorage) is known to
 // lie in the service-worker / extension-popup environments this wallet ships
 // in, which would silently leave orphaned keys behind in exactly those shells.
 
 /**
- * Remove every xc:msgRead: and xc:msgUnread: entry for a wallet, across all
- * of its accounts, and notify same-document listeners (the nav badge via
+ * Remove every messaging-memory entry for a wallet, across all of its accounts,
+ * and notify same-document listeners (the nav badge via
  * useMessagingUnread) so they refresh without a reload. Call this at every
- * wallet-removal entry point; a removed wallet's messaging read marks and
- * unread counts otherwise persist forever under an id nothing will ever look
- * up again.
+ * wallet-removal entry point; a removed wallet's read marks, unread counts,
+ * and declined requests otherwise persist under an id nothing will use again.
  *
  * @param {string | null | undefined} walletId
  * @returns {number}   how many keys were removed (best-effort count;
@@ -177,11 +215,14 @@ export function sweepMsgMemoryForWallet(walletId) {
         if (typeof localStorage === 'undefined') return 0;
         const readPrefix = NS + walletId + ':';
         const unreadPrefix = UNREAD_NS + walletId + ':';
+        const requestDeclinedPrefix = REQUEST_DECLINED_NS + walletId + ':';
         /** @type {string[]} */
         const toRemove = [];
         for (let i = 0; i < localStorage.length; i++) {
             const k = localStorage.key(i);
-            if (typeof k === 'string' && (k.startsWith(readPrefix) || k.startsWith(unreadPrefix))) {
+            if (typeof k === 'string' && (k.startsWith(readPrefix)
+                || k.startsWith(unreadPrefix)
+                || k.startsWith(requestDeclinedPrefix))) {
                 toRemove.push(k);
             }
         }

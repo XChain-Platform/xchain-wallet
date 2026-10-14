@@ -4,10 +4,10 @@
     flex-direction: column;
     gap: var(--xc-space-2);
 }
-
 .wifToggle {
     align-self: flex-start;
     background: transparent;
+    /* 1px keeps the toggle boundary as a crisp hairline. */
     border: 1px dashed var(--xc-border-strong);
     border-radius: var(--xc-radius-sm);
     padding: var(--xc-space-1) var(--xc-space-2);
@@ -34,51 +34,23 @@
 
 /* Plain form column: the import page renders fields directly on the
    screen background like every other form (no card chrome). */
-.wifForm {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-2);
-}
 
 /* The flex gap is the ONLY vertical rhythm here: ChainPicker and Input
    ship their own margin-bottom for margin-flow forms, which would stack
    with the gap and make the spacing uneven. Doubled class beats the
    field components' single-class specificity. */
-.wifForm.wifForm > * {
-    margin-bottom: 0;
-}
 
 .wifWarning {
     margin: 0;
     padding: var(--xc-space-2) var(--xc-space-3);
     border-radius: var(--xc-radius-sm);
     background: var(--xc-warning-bg, var(--xc-surface));
+    /* 1px keeps the warning boundary as a crisp hairline. */
     border: 1px solid var(--xc-warning, var(--xc-border));
     color: var(--xc-text);
     /* sm, not xs: this is a safety notice the user must actually read */
     font-size: var(--xc-text-sm);
     line-height: 1.5;
-}
-
-.wifField {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-1);
-    font-size: var(--xc-text-sm);
-}
-
-.wifLabel {
-    color: var(--xc-text-muted);
-    font-weight: 500;
-}
-
-.wifSelect {
-    padding: var(--xc-space-2);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-sm);
-    color: var(--xc-text);
-    font-size: var(--xc-text-sm);
 }
 
 .wifAck {
@@ -91,6 +63,7 @@
 }
 
 .wifAck input[type="checkbox"] {
+    /* 2px optically aligns the native checkbox with its first text line. */
     margin-top: 2px;
 }
 
@@ -98,16 +71,8 @@
     font-size: var(--xc-text-xs);
     color: var(--xc-on-danger);
     background: var(--xc-danger);
+    /* 1px keeps the error boundary as a crisp hairline. */
     border: 1px solid var(--xc-danger);
     padding: var(--xc-space-1) var(--xc-space-2);
     border-radius: var(--xc-radius-sm);
-}
-
-.wifActions {
-    display: flex;
-    flex-direction: column;
-}
-
-.wifActions button {
-    width: 100%;
 }

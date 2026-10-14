@@ -218,7 +218,7 @@ export function useProofVerification({ messaging, balances, enabled }) {
 export function useActionProofVerification({ messaging, items, enabled }) {
     const [verifyMap, setVerifyMap] = useState(/** @type {Record<string, any>} */ ({}));
     const list = Array.isArray(items) ? items : [];
-    const sig = list.map((i) => i.key).join('|');
+    const sig = list.map((i) => i.key).sort().join('|');
 
     useEffect(() => {
         if (!enabled || typeof messaging?.verifyAction !== 'function' || list.length === 0) {

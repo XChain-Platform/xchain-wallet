@@ -64,8 +64,11 @@ assert.ok(
     /\[\|;\]/.test(send),
     'shared Send.jsx rejects | and ; in memo (protocol constraint)',
 );
+// The amount gate is a strict decimal-string check (isPositiveDecimalAmount),
+// not Number(amt) <= 0, which accepted "1e3", "0x10" and "Infinity".
 assert.ok(
-    /Number\(amt\) <= 0/.test(send),
+    /if \(!isPositiveDecimalAmount\(amt\)\)/.test(send)
+        && /Amount must be a positive number\./.test(send),
     'shared Send.jsx validates positive amount',
 );
 assert.ok(

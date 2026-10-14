@@ -117,7 +117,7 @@ describe('the WebAuthn provider owns its own vocabulary', () => {
             delete globalThis.PublicKeyCredential;
             const missing = await describeBiometric();
             expect(missing.supported).toBe(false);
-            expect(missing.reason).toMatch(/browser does not support/i);
+            expect(missing.reason).toMatch(/browser doesn't support/i);
 
             // Now the API exists but the device has nothing enrolled for it,
             // which asks something entirely different of the user.

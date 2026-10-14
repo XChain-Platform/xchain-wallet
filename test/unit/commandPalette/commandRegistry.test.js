@@ -13,10 +13,14 @@ import {
     buildCommands,
     contactsToCommands,
     parseFreeformCommands,
+    settingsSectionsToCommands,
+    helpToCommands,
     COMMAND_CATEGORIES,
 } from '../../../packages/core/src/shared/commandPalette/commandRegistry.js';
 import { filterCommands } from '../../../packages/core/src/shared/commandPalette/fuzzyMatch.js';
 import { BITCOIN_ACTIONS } from '../../../packages/core/src/registry/actions.js';
+import { ROUTE_REGISTRY } from '../../../packages/core/src/shared/routeRegistry.js';
+import { SHORTCUTS } from '../../../packages/core/src/shared/keyboard/shortcuts.js';
 
 const findById = (list, id) => list.find((c) => c.id === id);
 
@@ -47,6 +51,73 @@ describe('buildCommands', () => {
         expect(navigate).toHaveBeenCalledWith('settings');
         findById(commands, 'create-token').run();
         expect(navigate).toHaveBeenCalledWith('wizard');
+    });
+
+    it('executes every command through a test router or its action handler', () => {
+        const visited = [];
+        const navigate = vi.fn((view) => {
+            if (!ROUTE_REGISTRY[view]) throw new Error(`Unknown palette route: ${view}`);
+            visited.push(view);
+        });
+        const actions = {
+            lock: vi.fn(),
+            refresh: vi.fn(),
+            scan: vi.fn(),
+            switchWallet: vi.fn(),
+            openHelp: vi.fn(),
+        };
+        const commands = buildCommands({
+            navigate,
+            ...actions,
+            hasBtcAddress: true,
+            hasVmAddress: true,
+            hasGovernanceAddress: true,
+            hasDexSurface: true,
+        });
+
+        for (const command of commands) command.run();
+
+        const actionRuns = Object.values(actions)
+            .reduce((total, handler) => total + handler.mock.calls.length, 0);
+        expect(visited.length + actionRuns).toBe(commands.length);
+        expect(new Set(visited).size).toBeGreaterThan(30);
+    });
+
+    it('keeps every displayed global shortcut on a routed destination or real handler', () => {
+        const handlerActions = new Set(['help', 'lock']);
+        for (const shortcut of SHORTCUTS.filter((entry) => entry.dispatch)) {
+            if (shortcut.action.startsWith('nav:')) {
+                expect(ROUTE_REGISTRY[shortcut.action.slice(4)], shortcut.id).toBeDefined();
+            } else {
+                expect(handlerActions.has(shortcut.action), shortcut.id).toBe(true);
+            }
+        }
+    });
+
+    it('routes Marketplace when the DEX surface is available', () => {
+        const navigate = vi.fn();
+        const commands = buildCommands({ navigate, hasDexSurface: true });
+        findById(commands, 'nav-marketplace').run();
+        expect(navigate).toHaveBeenCalledWith('market-activity');
+
+        expect(findById(buildCommands({ navigate, hasDexSurface: false }), 'nav-marketplace'))
+            .toBeUndefined();
+    });
+
+    it('ranks the direct destination first for common palette searches', () => {
+        const commands = [
+            ...buildCommands({ navigate() {} }),
+            ...settingsSectionsToCommands({ openSettings() {} }),
+            ...helpToCommands({ openSettings() {} }),
+        ];
+        for (const [query, expectedId] of [
+            ['send', 'nav-send'],
+            ['receive', 'nav-receive'],
+            ['settings', 'nav-settings'],
+            ['backup', 'settings-backup'],
+        ]) {
+            expect(filterCommands(commands, query)[0]?.id, query).toBe(expectedId);
+        }
     });
 
     it('gates BTC-only and governance surfaces behind the context flags', () => {
@@ -152,6 +223,12 @@ describe('buildCommands', () => {
         }
     });
 
+    it('uses sentence case for navigation menu items', () => {
+        const commands = buildCommands({ navigate() {} });
+        expect(findById(commands, 'nav-my-tokens').title).toBe('My tokens');
+        expect(findById(commands, 'nav-lists').title).toBe('My lists');
+    });
+
     it('omits verb commands whose handler the shell did not supply', () => {
         const bare = buildCommands({ navigate() {} });
         expect(findById(bare, 'wallet-lock')).toBeUndefined();
@@ -174,6 +251,55 @@ describe('buildCommands', () => {
         expect(refresh).toHaveBeenCalledOnce();
         expect(scan).toHaveBeenCalledOnce();
         expect(switchWallet).toHaveBeenCalledOnce();
+    });
+
+    it('hides private-key-only commands from watch-only wallets', () => {
+        const commands = buildCommands({
+            navigate() {},
+            hasBtcAddress: true,
+            isWatcherMode: true,
+        });
+        const ids = new Set(commands.map((command) => command.id));
+
+        expect(ids.has('sign-message')).toBe(false);
+        expect(ids.has('sign-psbt')).toBe(false);
+        expect(ids.has('nav-multisig-create')).toBe(true);
+        expect(ids.has('nav-multisig-sign')).toBe(true);
+        expect(ids.has('nav-send')).toBe(true);
+        expect(ids.has('create-issue')).toBe(true);
+        expect(ids.has('sign-verify')).toBe(true);
+    });
+
+    it('limits demo wallets to read-only destinations and wallet utilities', () => {
+        const commands = buildCommands({
+            navigate() {},
+            scan() {},
+            hasBtcAddress: true,
+            hasVmAddress: true,
+            hasGovernanceAddress: true,
+            isDemoWallet: true,
+        });
+        const ids = commands.map((command) => command.id);
+
+        expect(ids.some((id) => id.startsWith('create-'))).toBe(false);
+        expect(ids.some((id) => id.startsWith('trade-'))).toBe(false);
+        expect(ids).not.toEqual(expect.arrayContaining([
+            'nav-send',
+            'nav-receive',
+            'nav-actions',
+            'nav-multisig-create',
+            'nav-multisig-sign',
+            'sign-message',
+            'sign-psbt',
+            'wallet-scan',
+        ]));
+        expect(ids).toEqual(expect.arrayContaining([
+            'nav-home',
+            'nav-history',
+            'nav-markets',
+            'sign-verify',
+            'nav-settings',
+        ]));
     });
 });
 
@@ -210,6 +336,13 @@ describe('parseFreeformCommands (§33.3)', () => {
 
     it('yields nothing when the shell did not supply composeSend', () => {
         expect(parseFreeformCommands('send 5 doge', {})).toEqual([]);
+    });
+
+    it('does not offer Send intents in demo or signer wallets', () => {
+        const composeSend = vi.fn();
+        expect(parseFreeformCommands('send 5 doge', { composeSend, isDemoWallet: true })).toEqual([]);
+        expect(parseFreeformCommands('send 5 doge', { composeSend, isSignerMode: true })).toEqual([]);
+        expect(composeSend).not.toHaveBeenCalled();
     });
 
     it("'Suggested' is a declared category so it groups correctly", () => {

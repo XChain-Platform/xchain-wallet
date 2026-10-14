@@ -26,7 +26,8 @@ import { describe, it, expect } from 'vitest';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { resolveDocsRoot } from '../smoke/_docs-repo.js';
 
 // vitest anchors its root to the wallet repo, so cwd is the repo root (see
 // test/vitest/unit.config.js). import.meta.url is not a file: URL under the
@@ -62,6 +63,28 @@ function probe(env) {
 }
 
 describe('docs sibling guard @regression', { timeout: GIT_FIXTURE_TIMEOUT }, () => {
+    it('resolves docs beside the main checkout when running in a lane worktree', () => {
+        const repoRoot = resolve('/workspace/tmp/lanes/lane-name/xchain-wallet');
+        const adjacent = resolve(repoRoot, '..', 'xchain-documentation');
+        const commonDir = resolve('/workspace/xchain-wallet/.git');
+        const mainSibling = resolve(commonDir, '..', '..', 'xchain-documentation');
+
+        expect(resolveDocsRoot({
+            env: {},
+            repoRoot,
+            exists: (path) => path === mainSibling,
+            getGitCommonDir: () => commonDir,
+        })).toBe(mainSibling);
+
+        expect(resolveDocsRoot({
+            env: { XCHAIN_DOCS_ROOT: '/explicit/docs' },
+            repoRoot,
+            exists: () => true,
+            getGitCommonDir: () => commonDir,
+        })).toBe('/explicit/docs');
+        expect(adjacent).not.toBe(mainSibling);
+    });
+
     it('this repo declares the docs sibling, so its absence is a harness failure', () => {
         // If this ever stops being true the guard below correctly relaxes to a
         // skip, so assert the premise rather than let it rot silently.
@@ -330,7 +353,7 @@ describe('docs sibling guard @regression', { timeout: GIT_FIXTURE_TIMEOUT }, () 
         // running the real suite here would cost minutes; it fails loudly if
         // someone drops either half of the wiring.
         const runner = readFileSync(join(WS_ROOT, 'test', 'smoke', '_run-smokes.js'), 'utf8');
-        const announce = runner.indexOf('noteDocsTreeState()');
+        const announce = runner.indexOf('noteDocsTreeState({ root: docs.root })');
         const flag = runner.indexOf("process.env.XCHAIN_DOCS_TREE_NOTED = '1'");
         const spawn = runner.indexOf('spawnSync(process.execPath');
         expect(announce).toBeGreaterThan(-1);

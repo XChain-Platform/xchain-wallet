@@ -36,12 +36,13 @@ vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
     useMessaging: () => ({ messaging }),
 }));
 
-const { CoinpayObligationsProvider, useSharedCoinpayObligations } = await import(
+const { CoinpayObligationsProvider, useCoinpayObligations, useSharedCoinpayObligations } = await import(
     '../../../packages/core/src/shared/hooks/useCoinpayObligations.js');
 
 const CHAIN = 'litecoin-regtest';
 const ADDRS = ['mtkx2FQ7QhPPZmVyLKVWMkfmYmvQRUXCmi', 'mg8Jz5776UdyiYcBb9Z873NTozEiADRW5H'];
 const POLL_MS = 60_000;
+let testNow = new Date('2026-02-01T00:00:00Z').getTime();
 
 /** The per-address explorer read: one call per address per scan. */
 const reads = () => messaging.getCoinpayObligationsForAddress.mock.calls.length;
@@ -70,6 +71,8 @@ function Consumer({ label, walletId, accountId }) {
 
 beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] });
+    testNow += POLL_MS * 2;
+    vi.setSystemTime(testNow);
     messaging.getAddressesByChain.mockReset()
         .mockResolvedValue({ [CHAIN]: ADDRS.map((address) => ({ address })) });
     messaging.getCoinpayObligationsForAddress.mockReset()
@@ -122,5 +125,24 @@ describe('useSharedCoinpayObligations', () => {
         await waitFor(() => expect(screen.getByTestId('badge-count')).toHaveTextContent('0'));
         expect(reads()).toBe(ADDRS.length * 2);
         expect(screen.getByTestId('home-count')).toHaveTextContent('0');
+    });
+
+    it('shares one transport scan across independent mounts', async () => {
+        function DirectConsumer({ label }) {
+            const { obligations } = useCoinpayObligations('direct-wallet', 'a1', { pollMs: POLL_MS });
+            return <span data-testid={label}>{obligations.length}</span>;
+        }
+
+        render(
+            <>
+                <DirectConsumer label="first" />
+                <DirectConsumer label="second" />
+            </>,
+        );
+
+        await waitFor(() => expect(screen.getByTestId('first')).toHaveTextContent('2'));
+        expect(screen.getByTestId('second')).toHaveTextContent('2');
+        expect(messaging.getAddressesByChain).toHaveBeenCalledTimes(1);
+        expect(reads()).toBe(ADDRS.length);
     });
 });

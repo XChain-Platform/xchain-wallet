@@ -44,6 +44,8 @@ import {
     setBiometricProvider,
     BiometricUnsupportedError,
     BiometricNotRegisteredError,
+    BiometricCancelledError,
+    BIOMETRIC_CANCELLED_DETAIL,
 } from '@xchain-wallet/core/flows/biometricUnlock.js';
 import { crypto as coreCrypto } from '@xchain-wallet/core';
 import { callNativeVault, hasNativeVault, VaultStatus } from './nativeVault.js';
@@ -52,6 +54,10 @@ const { bytesToBase64, base64ToBytes } = coreCrypto;
 
 /** Cached enrollment flag: `isRegistered()` is synchronous by contract. */
 let enrolledCache = false;
+
+const RETRY_EXHAUSTED_DETAIL = 'biometric authentication failed repeatedly';
+const RETRY_EXHAUSTED_MESSAGE = 'Biometrics did not recognize you after several attempts.'
+    + ' Try again or unlock with your wallet password.';
 
 /**
  * Plain-language reasons, keyed on the stable `reasonCode` the native halves
@@ -156,8 +162,13 @@ export const nativeBiometricProvider = {
         if (!hasNativeVault()) return false;
         try {
             const reply = await callNativeVault('biometricStatus');
+            // Locked.jsx reads registration synchronously, then awaits this
+            // probe. Refreshing the cache here lets its post-probe check see
+            // an enrollment removed or invalidated while the app was away.
+            enrolledCache = Boolean(reply?.enrolled);
             return Boolean(reply?.available);
         } catch (_err) {
+            enrolledCache = false;
             return false;
         }
     },
@@ -185,10 +196,11 @@ export const nativeBiometricProvider = {
         }
         const secret = bytesToBase64(new TextEncoder().encode(password));
         const reply = await callNativeVault('biometricEnroll', { secret });
+        if (reply?.status !== VaultStatus.OK && reply?.detail === BIOMETRIC_CANCELLED_DETAIL) {
+            throw new BiometricCancelledError();
+        }
         if (reply?.status !== VaultStatus.OK) {
-            throw new BiometricUnsupportedError(
-                reply?.detail || `native enrollment refused (${reply?.status})`,
-            );
+            throw new BiometricUnsupportedError('native enrollment refused');
         }
         enrolledCache = true;
     },
@@ -213,27 +225,25 @@ export const nativeBiometricProvider = {
                 enrolledCache = false;
                 throw new BiometricNotRegisteredError();
             default:
-                throw new BiometricUnsupportedError(
-                    reply?.detail || `biometric unlock failed (${reply?.status})`,
-                );
+                if (reply?.detail === BIOMETRIC_CANCELLED_DETAIL) throw new BiometricCancelledError();
+                if (reply?.detail === RETRY_EXHAUSTED_DETAIL) {
+                    throw new Error(RETRY_EXHAUSTED_MESSAGE);
+                }
+                throw new BiometricUnsupportedError('biometric unlock failed');
         }
     },
 
-    /**
-     * Destroy the wrap. Synchronous by contract (the shared UI calls it
-     * without awaiting), so the native delete is fired and the local flag
-     * cleared immediately: the affordance must disappear now, not after a
-     * round trip.
-     */
-    clear() {
+    /** Destroy the wrap before dropping the cached enrollment flag. */
+    async clear() {
+        if (!hasNativeVault()) {
+            enrolledCache = false;
+            return;
+        }
+        const reply = await callNativeVault('biometricClear');
+        if (reply?.status !== VaultStatus.OK && reply?.status !== VaultStatus.ABSENT) {
+            throw new Error('biometricUnlock: native clear failed');
+        }
         enrolledCache = false;
-        if (!hasNativeVault()) return;
-        Promise.resolve(callNativeVault('biometricClear')).catch(() => {
-            // Best-effort by necessity, and safe: the Keystore key is what
-            // guards the wrap, and the paths that call clear() (disable,
-            // password change) either rotate the password the wrap holds or
-            // are followed by a wipe.
-        });
     },
 };
 

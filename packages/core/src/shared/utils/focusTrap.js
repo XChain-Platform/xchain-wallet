@@ -21,6 +21,97 @@
 
 import { useEffect, useRef } from 'react';
 
+/** @type {object[]} */
+const activeTraps = [];
+let bodyScrollLocks = 0;
+let priorBodyOverflow = '';
+const inertLocks = new WeakMap();
+const FOCUS_VISIBLE_FALLBACK_CLASS = 'xc-focus-visible-fallback';
+const MODAL_SELECTOR = '[role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]';
+
+function installFocusVisibleFallback() {
+    if (typeof document === 'undefined') return;
+    try {
+        if (globalThis.CSS?.supports?.('selector(:focus-visible)')) return;
+    } catch { /* use the fallback when selector detection is unavailable */ }
+
+    const root = document.documentElement;
+    const eventTarget = document.defaultView || document;
+    const useKeyboardModality = (event) => {
+        if (event.metaKey || event.altKey || event.ctrlKey) return;
+        root.classList.add(FOCUS_VISIBLE_FALLBACK_CLASS);
+    };
+    const usePointerModality = () => root.classList.remove(FOCUS_VISIBLE_FALLBACK_CLASS);
+
+    eventTarget.addEventListener('keydown', useKeyboardModality, true);
+    for (const type of ['pointerdown', 'mousedown', 'touchstart']) {
+        eventTarget.addEventListener(type, usePointerModality, true);
+    }
+}
+
+installFocusVisibleFallback();
+
+function lockBodyScroll() {
+    if (typeof document === 'undefined' || !document.body) return;
+    if (bodyScrollLocks === 0) {
+        priorBodyOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+    }
+    bodyScrollLocks += 1;
+}
+
+function unlockBodyScroll() {
+    if (typeof document === 'undefined' || !document.body || bodyScrollLocks === 0) return;
+    bodyScrollLocks -= 1;
+    if (bodyScrollLocks === 0) document.body.style.overflow = priorBodyOverflow;
+}
+
+function lockInert(element) {
+    const lock = inertLocks.get(element);
+    if (lock) {
+        lock.count += 1;
+        return;
+    }
+    inertLocks.set(element, { count: 1, hadInert: element.hasAttribute('inert') });
+    element.setAttribute('inert', '');
+}
+
+function unlockInert(element) {
+    const lock = inertLocks.get(element);
+    if (!lock) return;
+    lock.count -= 1;
+    if (lock.count > 0) return;
+    if (!lock.hadInert) element.removeAttribute('inert');
+    inertLocks.delete(element);
+}
+
+function modalRootFor(element) {
+    if (!element?.closest) return null;
+    return element.closest(MODAL_SELECTOR);
+}
+
+function inertTargetsOutside(root) {
+    const targets = [];
+    let branch = root;
+    while (branch?.parentElement) {
+        const parent = branch.parentElement;
+        const siblings = Array.from(parent.children);
+        const branchIndex = siblings.indexOf(branch);
+        for (let index = 0; index < siblings.length; index += 1) {
+            const element = siblings[index];
+            if (element === branch) continue;
+            // A later modal is the active layer and must stay outside the
+            // earlier modal's inert background.
+            const containsLaterModal = index > branchIndex
+                && (element.matches(MODAL_SELECTOR) || element.querySelector(MODAL_SELECTOR));
+            if (!containsLaterModal) targets.push(element);
+        }
+        if (parent === document.body) break;
+        branch = parent;
+    }
+    return targets;
+}
+
 const FOCUSABLE_SELECTOR = [
     'a[href]', 'button:not([disabled])', 'textarea:not([disabled])',
     'input:not([disabled]):not([type="hidden"])', 'select:not([disabled])',
@@ -36,21 +127,54 @@ function focusableWithin(container) {
     // hidden/inert checks are sufficient.
     return Array.from(container.querySelectorAll(FOCUSABLE_SELECTOR)).filter((el) => {
         if (el.hidden) return false;
+        // tabindex=-1 opts a control out of the Tab order, so the trap skips it too.
+        if (el.getAttribute('tabindex') === '-1') return false;
         if (el.closest('[inert]')) return false;
         if (el.getAttribute('aria-hidden') === 'true') return false;
         return true;
     });
 }
 
+// The element that held focus just before the current one took it. A dialog
+// whose own button carries autoFocus has already stolen focus by the time its
+// effect runs, so document.activeElement no longer names the control that
+// opened it; this does.
+let lastBlurred = null;
+if (typeof document !== 'undefined') {
+    document.addEventListener('focusout', (e) => { lastBlurred = e.target; }, true);
+}
+
+/**
+ * The control that opened a dialog, or null when it was opened with focus on
+ * the page itself (a shortcut key), where there is nothing to hand back to.
+ */
+function openerFor(container) {
+    const active = document.activeElement;
+    if (active && active !== document.body && !container.contains(active)) return active;
+    const blurred = lastBlurred;
+    if (active && container.contains(active) && blurred && blurred.isConnected
+        && blurred !== document.body && !container.contains(blurred)) return blurred;
+    return null;
+}
+
 /**
  * Trap Tab focus within `containerRef` while `active`. On activate, snapshots
- * the current focus and moves it to `initialFocusRef` (or the first focusable
- * descendant); on deactivate, restores focus to the snapshotted element.
+ * the opener and moves focus to `initialFocusRef` (or the first focusable
+ * descendant); on deactivate, returns focus to the opener unless something
+ * else has already claimed it (a dialog that navigates away).
+ *
+ * `trap: false` keeps the focus move and the restore but leaves Tab alone for
+ * a widget that owns Tab itself.
  *
  * @param {import('react').RefObject<HTMLElement>} containerRef
- * @param {{ active: boolean, initialFocusRef?: import('react').RefObject<HTMLElement> }} opts
+ * @param {{ active: boolean, initialFocusRef?: import('react').RefObject<HTMLElement>, restoreFocusRef?: import('react').RefObject<HTMLElement>, trap?: boolean }} opts
  */
-export function useFocusTrap(containerRef, { active, initialFocusRef } = {}) {
+export function useFocusTrap(containerRef, {
+    active,
+    initialFocusRef,
+    restoreFocusRef,
+    trap = true,
+} = {}) {
     const previouslyFocused = useRef(null);
 
     useEffect(() => {
@@ -58,29 +182,45 @@ export function useFocusTrap(containerRef, { active, initialFocusRef } = {}) {
         const container = containerRef.current;
         if (!container) return undefined;
 
-        previouslyFocused.current = document.activeElement;
+        const layer = {};
+        activeTraps.push(layer);
+        lockBodyScroll();
+        const modalRoot = modalRootFor(container);
+        const backgroundTargets = modalRoot ? inertTargetsOutside(modalRoot) : [];
+        backgroundTargets.forEach(lockInert);
+
+        previouslyFocused.current = restoreFocusRef?.current || openerFor(container);
 
         // Initial focus: the designated element (password / HW block) or the
         // first focusable descendant.
-        const initial = (initialFocusRef && initialFocusRef.current) || focusableWithin(container)[0];
-        if (initial && typeof initial.focus === 'function') {
+        const requestedInitial = initialFocusRef?.current;
+        const firstFocusable = focusableWithin(container)[0];
+        // A container ref keeps the dialog itself as the fallback only when
+        // the dialog has no meaningful control to receive focus.
+        const initial = requestedInitial === container
+            ? (firstFocusable || container)
+            : (requestedInitial || firstFocusable);
+        if (container.contains(document.activeElement)) {
+            // Already focused inside (an autoFocus control): leave it.
+        } else if (initial && typeof initial.focus === 'function') {
             // Defer to after paint so the element is actually focusable.
             requestAnimationFrame(() => { try { initial.focus(); } catch { /* noop */ } });
         }
 
         const onKeyDown = (e) => {
-            if (e.key !== 'Tab') return;
+            if (!trap || e.key !== 'Tab' || activeTraps[activeTraps.length - 1] !== layer) return;
             const focusables = focusableWithin(container);
             if (focusables.length === 0) { e.preventDefault(); return; }
             const first = focusables[0];
             const last = focusables[focusables.length - 1];
             const activeEl = document.activeElement;
+            const activeIndex = focusables.indexOf(activeEl);
             if (e.shiftKey) {
-                if (activeEl === first || !container.contains(activeEl)) {
+                if (activeIndex <= 0) {
                     e.preventDefault();
                     last.focus();
                 }
-            } else if (activeEl === last || !container.contains(activeEl)) {
+            } else if (activeIndex === -1 || activeEl === last) {
                 e.preventDefault();
                 first.focus();
             }
@@ -89,16 +229,22 @@ export function useFocusTrap(containerRef, { active, initialFocusRef } = {}) {
         container.addEventListener('keydown', onKeyDown);
         return () => {
             container.removeEventListener('keydown', onKeyDown);
+            const layerIndex = activeTraps.indexOf(layer);
+            if (layerIndex !== -1) activeTraps.splice(layerIndex, 1);
+            backgroundTargets.forEach(unlockInert);
+            unlockBodyScroll();
             const prev = previouslyFocused.current;
-            if (prev && typeof prev.focus === 'function') {
+            const now = document.activeElement;
+            const unclaimed = !now || now === document.body || !now.isConnected || container.contains(now);
+            if (unclaimed && prev && prev.isConnected && typeof prev.focus === 'function') {
                 try { prev.focus(); } catch { /* noop */ }
             }
         };
-    }, [active, containerRef, initialFocusRef]);
+    }, [active, containerRef, initialFocusRef, restoreFocusRef, trap]);
 }
 
 /**
- * Mark every sibling of `modalRootRef` as `inert` while `active`, so the
+ * Mark every branch outside `modalRootRef` as `inert` while `active`, so the
  * background is unreachable by pointer, focus, or AT. Restores prior inert
  * state on deactivate.
  *
@@ -108,13 +254,10 @@ export function useFocusTrap(containerRef, { active, initialFocusRef } = {}) {
 export function useInertBackground(modalRootRef, { active } = {}) {
     useEffect(() => {
         if (!active) return undefined;
-        const root = modalRootRef.current;
+        const root = modalRootFor(modalRootRef.current) || modalRootRef.current;
         if (!root || !root.parentElement) return undefined;
-        const siblings = Array.from(root.parentElement.children).filter((el) => el !== root);
-        const prior = siblings.map((el) => el.hasAttribute('inert'));
-        siblings.forEach((el) => el.setAttribute('inert', ''));
-        return () => {
-            siblings.forEach((el, i) => { if (!prior[i]) el.removeAttribute('inert'); });
-        };
+        const targets = inertTargetsOutside(root);
+        targets.forEach(lockInert);
+        return () => targets.forEach(unlockInert);
     }, [active, modalRootRef]);
 }

@@ -95,18 +95,18 @@ assert.equal(
 const graduationSrc = read('packages', 'core', 'src', 'shared', 'utils', 'demoGraduation.js');
 assert.match(
     graduationSrc,
-    /const remaining = await readVaultOccupancy\(messaging\);\s*\n\s*if \(remaining !== 'empty'\) return/,
-    'the wipe fires only on a confirmed-empty vault (unreadable never wipes)',
+    /if \(remaining === 'unknown'\) \{[\s\S]*throw new Error[\s\S]*if \(remaining === 'occupied'\) \{[\s\S]*return \{ wiped: false/,
+    'the wipe fires only on a confirmed-empty vault and an unreadable vault reports failure',
 );
 assert.match(
     graduationSrc,
-    /if \(intent\) setPostDemoIntent\(intent\);\s*\n\s*await wipe\(\);/,
-    'the resume lane is recorded only on the wiping branch',
+    /await wipe\(\);[\s\S]*if \(intent\) setPostDemoIntent\(intent\);/,
+    'the resume lane is recorded only after the wipe succeeds',
 );
 
 for (const [label, path] of [
     ['WalletDetails', ['packages', 'core', 'src', 'shared', 'routes', 'WalletDetails.jsx']],
-    ['DemoBanner', ['packages', 'core', 'src', 'shared', 'components', 'DemoBanner.jsx']],
+    ['useDemoAutoWipe', ['packages', 'core', 'src', 'shared', 'hooks', 'useDemoAutoWipe.js']],
     ['Onboarding', ['packages', 'core', 'src', 'shared', 'routes', 'Onboarding.jsx']],
 ]) {
     assert.match(
@@ -169,7 +169,9 @@ for (const [label, path] of shells) {
     );
     assert.match(
         src,
-        /useState\(\s*\n\s*\/\*\*[^\n]*\*\/\s*\n\s*\(\) => takePostDemoIntent\(\) \|\| 'welcome',\s*\n\s*\);/,
+        // The resumed lane comes first; a shell may fall back through its own
+        // handoff lane before 'welcome' (the extension's full-tab import).
+        /useState\(\s*\n\s*\/\*\*[^\n]*\*\/\s*\n\s*\(\) => takePostDemoIntent\(\)\s*\|\|[^;]*?'welcome'\)?,\s*\n\s*\);/,
         `${label} seeds onboardingStep from the resumed lane`,
     );
     const addLane = src.slice(src.indexOf("unlockedView === 'add-wallet'"));

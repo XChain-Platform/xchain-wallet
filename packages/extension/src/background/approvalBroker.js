@@ -55,8 +55,13 @@ import { sessionRandomUUID } from './uuid.js';
  * @property {() => string} [newId]                          randomUUID replacement for tests
  * @property {(path: string) => string} [getUrl]             chrome.runtime.getURL replacement
  * @property {BrokerWindowDeps} [windows]                    chrome.windows replacement
+ * @property {{ onRemoved?: { addListener(fn: (tabId: number) => void): void } }} [tabs] chrome.tabs replacement
+ * @property {{ setBadgeText?: (details: { text: string }) => Promise<void> | void }} [action] chrome.action replacement
  * @property {string} [approvalPath]                         default 'approval.html'
  * @property {{ width?: number, height?: number }} [windowSize]
+ * @property {number} [timeoutMs]
+ * @property {(fn: () => void, delay: number) => any} [setTimer]
+ * @property {(timer: any) => void} [clearTimer]
  */
 
 /**
@@ -66,7 +71,11 @@ import { sessionRandomUUID } from './uuid.js';
  * @property {unknown} payload
  * @property {{ promise: Promise<any>, resolve: (v: any) => void, reject: (err: any) => void }} deferred
  * @property {number | null} windowId
+ * @property {number | null} requesterTabId
+ * @property {any} timeout
  */
+
+export const APPROVAL_TIMEOUT_MS = 5 * 60 * 1000;
 
 export class ApprovalBroker {
     /** @param {BrokerRuntimeDeps} [deps] */
@@ -81,6 +90,13 @@ export class ApprovalBroker {
             /** @type {BrokerWindowDeps | undefined} */ (
                 globalThis.chrome?.windows
             );
+        this._tabs = deps.tabs ?? globalThis.chrome?.tabs;
+        this._action = deps.action ?? globalThis.chrome?.action;
+        this._timeoutMs = deps.timeoutMs ?? APPROVAL_TIMEOUT_MS;
+        // Wrapped, not stored bare: Chrome throws "Illegal invocation" when the
+        // global timer functions are called as methods of another object.
+        this._setTimer = deps.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
+        this._clearTimer = deps.clearTimer ?? ((id) => clearTimeout(id));
         this._approvalPath = deps.approvalPath ?? 'approval.html';
         this._windowSize = {
             width: deps.windowSize?.width ?? 400,
@@ -88,10 +104,16 @@ export class ApprovalBroker {
         };
         /** @type {Map<string, PendingEntry>} */
         this._pending = new Map();
+        this._badgeUpdate = Promise.resolve();
+        this._queueBadgeUpdate();
 
         if (this._windows?.onRemoved?.addListener) {
             this._onWindowRemoved = this._onWindowRemoved.bind(this);
             this._windows.onRemoved.addListener(this._onWindowRemoved);
+        }
+        if (this._tabs?.onRemoved?.addListener) {
+            this._onTabRemoved = this._onTabRemoved.bind(this);
+            this._tabs.onRemoved.addListener(this._onTabRemoved);
         }
     }
 
@@ -136,6 +158,8 @@ export class ApprovalBroker {
         const entry = this._pending.get(id);
         if (!entry) return false;
         this._pending.delete(id);
+        this._clearTimer(entry.timeout);
+        this._queueBadgeUpdate();
         entry.deferred.resolve(result);
         if (entry.windowId != null && this._windows?.remove) {
             try {
@@ -148,6 +172,56 @@ export class ApprovalBroker {
     /** Test helper: inspect the in-memory map. */
     _pendingSize() { return this._pending.size; }
 
+    /**
+     * Reject approvals whose request origin matches a background-owned rule.
+     * Revoking or blocking a site uses this to make already-open prompts
+     * unactionable before the management request completes.
+     *
+     * @param {(origin: unknown) => boolean} matches
+     * @returns {Promise<number>}
+     */
+    async cancelOriginsMatching(matches) {
+        if (typeof matches !== 'function') {
+            throw new TypeError('ApprovalBroker.cancelOriginsMatching: matches is required');
+        }
+        const entries = [...this._pending.values()].filter((entry) => (
+            matches(entry.payload?.origin)
+        ));
+        await this._cancelEntries(entries);
+        return entries.length;
+    }
+
+    /**
+     * Reject every parked approval and clear the toolbar badge.
+     * Lock and wipe call this so requests from an ended session cannot remain
+     * actionable or restore attention state after teardown.
+     */
+    async cancelAll() {
+        const entries = [...this._pending.values()];
+        await this._cancelEntries(entries);
+    }
+
+    async _cancelEntries(entries) {
+        const cancelled = [];
+        for (const entry of entries) {
+            if (this._pending.get(entry.id) !== entry) continue;
+            this._pending.delete(entry.id);
+            this._clearTimer(entry.timeout);
+            entry.deferred.resolve({ approved: false });
+            cancelled.push(entry);
+        }
+        if (cancelled.length === 0) return;
+        this._queueBadgeUpdate();
+
+        await Promise.all(cancelled.map(async (entry) => {
+            if (entry.windowId == null || !this._windows?.remove) return;
+            try {
+                await this._windows.remove(entry.windowId);
+            } catch (_err) { /* window may already be gone */ }
+        }));
+        await this._badgeUpdate;
+    }
+
     // -- Internals -------------------------------------------------------
 
     /**
@@ -157,12 +231,30 @@ export class ApprovalBroker {
     _request(kind, payload) {
         const id = this._newId();
         const deferred = makeDeferred();
+        const requesterTabId = Number.isInteger(payload?.requesterTabId)
+            ? payload.requesterTabId
+            : null;
+        const popupPayload = requesterTabId == null
+            ? payload
+            : omitRequesterTabId(payload);
         /** @type {PendingEntry} */
-        const entry = { id, kind, payload, deferred, windowId: null };
+        const entry = {
+            id,
+            kind,
+            payload: popupPayload,
+            deferred,
+            windowId: null,
+            requesterTabId,
+            timeout: null,
+        };
         this._pending.set(id, entry);
+        entry.timeout = this._setTimer(() => this._rejectPending(id), this._timeoutMs);
+        this._queueBadgeUpdate();
 
         if (!this._windows?.create) {
             this._pending.delete(id);
+            this._clearTimer(entry.timeout);
+            this._queueBadgeUpdate();
             deferred.reject(
                 new Error(
                     'ApprovalBroker: chrome.windows.create unavailable; inject windows for tests',
@@ -181,12 +273,22 @@ export class ApprovalBroker {
                 focused: true,
             }),
         )
-            .then((win) => {
+            .then(async (win) => {
                 const current = this._pending.get(id);
-                if (current) current.windowId = win?.id ?? null;
+                if (current) {
+                    current.windowId = win?.id ?? null;
+                } else if (win?.id != null && this._windows?.remove) {
+                    try {
+                        await this._windows.remove(win.id);
+                    } catch (_err) { /* window may already be gone */ }
+                }
             })
             .catch((err) => {
+                const current = this._pending.get(id);
+                if (!current) return;
                 this._pending.delete(id);
+                this._clearTimer(current.timeout);
+                this._queueBadgeUpdate();
                 deferred.reject(err);
             });
 
@@ -198,12 +300,51 @@ export class ApprovalBroker {
         for (const [id, entry] of this._pending) {
             if (entry.windowId === windowId) {
                 this._pending.delete(id);
+                this._clearTimer(entry.timeout);
+                this._queueBadgeUpdate();
                 // Convention: window-closed-without-decision = rejected.
                 entry.deferred.resolve({ approved: false });
                 break;
             }
         }
     }
+
+    /** @param {number} tabId */
+    _onTabRemoved(tabId) {
+        for (const [id, entry] of this._pending) {
+            if (entry.requesterTabId === tabId) this._rejectPending(id);
+        }
+    }
+
+    /** @param {string} id */
+    _rejectPending(id) {
+        const entry = this._pending.get(id);
+        if (!entry) return false;
+        this._pending.delete(id);
+        this._clearTimer(entry.timeout);
+        this._queueBadgeUpdate();
+        entry.deferred.resolve({ approved: false });
+        if (entry.windowId != null && this._windows?.remove) {
+            Promise.resolve(this._windows.remove(entry.windowId)).catch(() => {});
+        }
+        return true;
+    }
+
+    _queueBadgeUpdate() {
+        if (!this._action?.setBadgeText) return;
+        this._badgeUpdate = this._badgeUpdate
+            .catch(() => {})
+            .then(() => this._action.setBadgeText({
+                text: approvalBadgeText(this._pending.size),
+            }))
+            .catch(() => {});
+    }
+}
+
+/** @param {number} count */
+export function approvalBadgeText(count) {
+    if (!Number.isFinite(count) || count <= 0) return '';
+    return count > 99 ? '99+' : String(Math.floor(count));
 }
 
 function makeDeferred() {
@@ -213,4 +354,9 @@ function makeDeferred() {
     let reject = () => {};
     const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
     return { promise, resolve, reject };
+}
+
+function omitRequesterTabId(payload) {
+    const { requesterTabId: _requesterTabId, ...rest } = payload;
+    return rest;
 }

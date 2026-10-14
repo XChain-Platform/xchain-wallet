@@ -14,10 +14,12 @@
 // dispatcher actually binds. Rebinding itself lives in Settings → Keyboard;
 // the footer points there.
 
-import { useEffect, useMemo } from 'react';
-import { Icon } from '../../ui/index.js';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Button, Icon } from '../../ui/index.js';
 import { SHORTCUT_GROUPS, formatBinding, resolveBindings } from './shortcuts.js';
 import styles from './ShortcutHelp.module.css';
+import { useBackHandler } from '../../ui/backStack.js';
+import { useFocusTrap } from '../utils/focusTrap.js';
 
 function isMac() {
     if (typeof navigator === 'undefined') return false;
@@ -33,35 +35,61 @@ function isMac() {
  */
 export function ShortcutHelp({ open, onClose, overrides }) {
     const shortcuts = useMemo(() => resolveBindings(overrides), [overrides]);
+    const [extensionCommands, setExtensionCommands] = useState([]);
+    // The system Back gesture closes this before it leaves the screen.
+    useBackHandler(open ? onClose : undefined);
+    // Opened by a bare key, so focus starts on the page: move it into the
+    // dialog, keep Tab inside it, and hand it back to the opener on close.
+    const dialogRef = useRef(null);
+    useFocusTrap(dialogRef, { active: open });
     useEffect(() => {
         if (!open) return undefined;
         const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); onClose(); } };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
     }, [open, onClose]);
+    useEffect(() => {
+        if (!open || typeof chrome === 'undefined' || !chrome.commands?.getAll) return undefined;
+        let active = true;
+        chrome.commands.getAll((commands) => {
+            if (!active) return;
+            setExtensionCommands((Array.isArray(commands) ? commands : []).filter(
+                (command) => command?.name && command?.description,
+            ));
+        });
+        return () => { active = false; };
+    }, [open]);
 
     if (!open) return null;
     const mac = isMac();
 
     return (
         <div
+            ref={dialogRef}
             className={styles.overlay}
             role="dialog"
             aria-modal="true"
-            aria-label="Keyboard shortcuts"
+            aria-labelledby="xc-shortcut-help-title"
+            aria-describedby="xc-shortcut-help-body"
             onMouseDown={onClose}
         >
             <div className={styles.panel} role="presentation" onMouseDown={(e) => e.stopPropagation()}>
                 <header className={styles.header}>
-                    <span className={styles.title}>Keyboard shortcuts</span>
-                    <button type="button" className={styles.close} onClick={onClose} aria-label="Close">
-                        <Icon.XIcon />
-                    </button>
+                    <span id="xc-shortcut-help-title" className={styles.title}>Keyboard shortcuts</span>
+                    <span className={styles.close}>
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            icon={<Icon.XIcon />}
+                            onClick={onClose}
+                            aria-label="Close"
+                        />
+                    </span>
                 </header>
-                <div className={styles.body}>
+                <div id="xc-shortcut-help-body" className={styles.body} role="region" aria-label="Shortcut list" tabIndex={0}>
                     {SHORTCUT_GROUPS.map((group) => (
                         <section key={group} className={styles.group}>
-                            <h3 className={styles.groupTitle}>{group}</h3>
+                            <h2 className={styles.groupTitle}>{group}</h2>
                             <dl className={styles.list}>
                                 {shortcuts.filter((s) => s.group === group).map((s) => (
                                     <div key={s.id} className={styles.row}>
@@ -80,8 +108,26 @@ export function ShortcutHelp({ open, onClose, overrides }) {
                             </dl>
                         </section>
                     ))}
+                    {extensionCommands.length > 0 ? (
+                        <section className={styles.group}>
+                            <h2 className={styles.groupTitle}>Browser extension</h2>
+                            <dl className={styles.list}>
+                                {extensionCommands.map((command) => (
+                                    <div key={command.name} className={styles.row}>
+                                        <dt className={styles.label}>{command.description}</dt>
+                                        <dd className={styles.keys}>
+                                            <kbd className={styles.kbd}>{command.shortcut || 'Not set'}</kbd>
+                                        </dd>
+                                    </div>
+                                ))}
+                            </dl>
+                        </section>
+                    ) : null}
                     <p className={styles.footerNote}>
-                        Rebind shortcuts in Settings → Keyboard.
+                        Rebind wallet shortcuts in Settings → Keyboard.
+                        {extensionCommands.length > 0
+                            ? ' Manage browser extension shortcuts in your browser.'
+                            : null}
                     </p>
                 </div>
             </div>

@@ -17,10 +17,11 @@
 //
 // Behavior:
 //   - On settings load (cold start): if `settings.language` is a
-//     registered locale that differs from the current locale, call
-//     `setLocale(language)`.
+//     registered locale, apply it and align the document's lang and dir
+//     attributes even when that locale is already active.
 //   - On settings change (e.g. user edits LanguageRegionSection):
-//     same: keep the live locale in lockstep with the persisted value.
+//     keep the live locale and document metadata in lockstep with the
+//     persisted value.
 //
 // The Settings panel's own change handler also calls setLocale eagerly
 // for an instant UI flip; this component is the cold-start safety net
@@ -33,6 +34,7 @@ import {
     availableLocales,
     getLocale,
     setLocale,
+    syncDocumentLocale,
 } from '../i18n/index.js';
 
 export function LocaleSync() {
@@ -41,7 +43,10 @@ export function LocaleSync() {
     useEffect(() => {
         if (typeof language !== 'string' || language.length === 0) return;
         if (!availableLocales().includes(language)) return;
-        if (getLocale() === language) return;
+        if (getLocale() === language) {
+            syncDocumentLocale(language);
+            return;
+        }
         try { setLocale(language); } catch (_err) { /* never bubble */ }
     }, [language]);
     return null;

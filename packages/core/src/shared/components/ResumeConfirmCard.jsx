@@ -27,13 +27,22 @@ import { flows as flowsLib } from '@xchain-wallet/core';
  * @param {string} [props.className]
  */
 export function ResumeConfirmCard({ sessions, onResume, onDiscard, className }) {
-    const offerable = flowsLib.resumableSessions(sessions);
+    const seenIds = new Set();
+    const offerable = flowsLib.resumableSessions(sessions)
+        .map((session) => ({ session, info: flowsLib.describeResumeSession(session) }))
+        .filter(({ info }) => {
+            if (seenIds.has(info.id)) return false;
+            seenIds.add(info.id);
+            return true;
+        });
     if (offerable.length === 0) return null;
 
     return (
         <div role="group" aria-label="Unfinished transactions">
-            {offerable.map((session) => {
-                const info = flowsLib.describeResumeSession(session);
+            {offerable.map(({ session, info }) => {
+                const actionString = typeof session?.composed?.actionString === 'string'
+                    ? session.composed.actionString
+                    : '';
                 return (
                     <div key={info.id} className={className} data-testid="resume-confirm-card">
                         <button
@@ -43,6 +52,11 @@ export function ResumeConfirmCard({ sessions, onResume, onDiscard, className }) 
                         >
                             <span>Finish {info.label}</span>
                             <span>Not sent yet. Approve to sign and send it.</span>
+                            {actionString ? (
+                                <span data-testid={`resume-confirm-action-${info.id}`}>
+                                    Action to submit: <code>{actionString}</code>
+                                </span>
+                            ) : null}
                         </button>
                         <button
                             type="button"

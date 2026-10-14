@@ -41,6 +41,21 @@ describe('usePortfolioChartVisible initialization', () => {
         expect(result.current[0]).toBe(true);
     });
 
+    it('defaults to visible when accessing localStorage throws', () => {
+        const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+        Object.defineProperty(globalThis, 'localStorage', {
+            configurable: true,
+            get: () => { throw new Error('storage disabled'); },
+        });
+
+        try {
+            const { result } = renderHook(() => usePortfolioChartVisible());
+            expect(result.current[0]).toBe(true);
+        } finally {
+            Object.defineProperty(globalThis, 'localStorage', descriptor);
+        }
+    });
+
     it.each([['0', false], ['1', true]])('reads %s as %s', (stored, expected) => {
         window.localStorage.setItem(STORAGE_KEY, stored);
         const { result } = renderHook(() => usePortfolioChartVisible());

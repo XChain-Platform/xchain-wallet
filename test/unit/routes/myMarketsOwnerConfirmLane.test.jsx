@@ -31,7 +31,10 @@ const HD_ADDRESS = Object.freeze({
 });
 const HW_ADDRESS = Object.freeze({ ...HD_ADDRESS, id: 'addr-hw-0', source: 'ledger', signerId: 'signer-hw' });
 
-const COMPOSED = Object.freeze({ psbt: 'aa00', encoding: 'psbt', actionString: 'ACT', version: 1 });
+const COMPOSED = Object.freeze({
+    psbt: 'aa00', encoding: 'psbt', actionString: 'ACT', version: 1,
+    chainId: CHAIN, networkFeeSats: 1234,
+});
 const PASS = Object.freeze({ verdict: 'pass', findings: [] });
 const REFUSED = Object.freeze({
     verdict: 'fail',
@@ -56,6 +59,8 @@ const VIEWS = [
         action: 'ORDER',
         indexKey: 'ORDER_ACTION_INDEX',
         noun: 'order',
+        createProp: 'onCreateOrder',
+        createLabel: 'New order',
         software: { cancel: 'cancelOrder', edit: 'editOrder' },
         hardware: { cancel: 'cancelOrderHw', edit: 'editOrderHw' },
         feeds: (rows) => ({
@@ -74,6 +79,8 @@ const VIEWS = [
         action: 'SWAP',
         indexKey: 'SWAP_ACTION_INDEX',
         noun: 'swap',
+        createProp: 'onCreateSwap',
+        createLabel: 'New swap',
         software: { cancel: 'swapAction', edit: 'swapAction' },
         hardware: { cancel: 'swapActionHw', edit: 'swapActionHw' },
         feeds: (rows) => ({
@@ -107,6 +114,7 @@ async function mount(view, {
     settings = { walletMode: 'full' },
     preflight = PASS,
     chainId = CHAIN,
+    onCreate,
 } = {}) {
     const calls = [];
     const log = (method, value) => (args) => { calls.push({ method, args }); return Promise.resolve(value); };
@@ -117,7 +125,20 @@ async function mount(view, {
         getSignerStatus: () => Promise.resolve({ status: owner.source === 'hd' ? 'unlocked' : 'available' }),
         getListsForSource: () => Promise.resolve({ data: [{ action_index: '2701', type: '2', status: 'valid' }] }),
         getListByActionIndex: () => Promise.resolve({ list: [] }),
-        composeForConfirm: log('composeForConfirm', COMPOSED),
+        composeForConfirm: (args) => {
+            calls.push({ method: 'composeForConfirm', args });
+            const noun = args.actionData.action === 'ORDER' ? 'order' : 'swap';
+            const index = args.actionData.params.ORDER_ACTION_INDEX
+                || args.actionData.params.SWAP_ACTION_INDEX;
+            return Promise.resolve({
+                ...COMPOSED,
+                decoded: {
+                    summary: `Cancel ${noun} (#${index})`,
+                    details: [{ label: `${noun} action index`, value: index }],
+                    warnings: [],
+                },
+            });
+        },
         preflight: log('preflight', preflight),
         ...view.feeds(rows),
     };
@@ -130,7 +151,11 @@ async function mount(view, {
     let utils;
     await domAct(async () => {
         utils = render(React.createElement(MessagingProvider, { shell: 'web', messaging },
-            React.createElement(view.Component, { walletId: 'w', onBack() {} })));
+            React.createElement(view.Component, {
+                walletId: 'w',
+                onBack() {},
+                [view.createProp]: onCreate,
+            })));
         await drain();
     });
     return { utils, calls };
@@ -156,6 +181,15 @@ describe.each(VIEWS)('$name owner actions sign through the confirm page', (view)
     const signMethods = [...Object.values(view.software), ...Object.values(view.hardware)];
     const signCalls = (calls) => calls.filter((c) => signMethods.includes(c.method));
 
+    it('shows the create action in the page header', async () => {
+        const onCreate = vi.fn();
+        const { utils } = await mount(view, { onCreate });
+
+        await step(() => fireEvent.click(utils.getByRole('button', { name: view.createLabel })));
+
+        expect(onCreate).toHaveBeenCalledOnce();
+    });
+
     it('cancels only after the pre-flight, signing the composed bytes', async () => {
         const { utils, calls } = await mount(view);
         await openAction(utils, 'Cancel');
@@ -168,6 +202,8 @@ describe.each(VIEWS)('$name owner actions sign through the confirm page', (view)
         const from = utils.getByTestId('confirm-source').textContent;
         expect(from, 'the confirm page names the signer').toContain(OWN.slice(0, 6));
         expect(from).toContain(OWN.slice(-6));
+        expect(utils.getByLabelText(`Confirm Cancel ${view.noun} (#700)`)).toBeTruthy();
+        expect(utils.getByTestId('confirm-fee')).toHaveTextContent('Network fee: 0.00001234 DOGE');
 
         await approve(utils);
         const sign = calls.find((c) => c.method === view.software.cancel);

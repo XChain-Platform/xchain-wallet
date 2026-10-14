@@ -23,13 +23,22 @@
 // controls when it is absent. Direct callers still receive a typed error
 // instead of pretending success.
 //
-// Output shape: `{ replacementTxHash, broadcastedAt, feeIncrease }`.
+// Output shape: `{ replacementTxHash, broadcastedAt, originalFee,
+// replacementFee, feeIncrease }`.
 // matches what the eventual handler will return; UI written against
 // this contract today won't change when the engine ships.
 
+import { t } from '../i18n/index.js';
+
+const activeBroadcasts = new WeakMap();
+
+function normalizedHash(value) {
+    return String(value || '').trim().toLowerCase();
+}
+
 export class RbfNotSupportedError extends Error {
     constructor(reason) {
-        super(reason || 'RBF replacement is not supported by this build.');
+        super(reason || t('flows.rbf.unsupportedBuild'));
         this.name = 'RbfNotSupportedError';
     }
 }
@@ -59,12 +68,15 @@ export function isReplaceCallAvailable(messaging) {
  * @property {string} [restoreTxHash]         'restore' only: the spend being re-issued
  * @property {string} [feeRate]                explicit fee rate; when omitted, host picks a sensible bump
  * @property {string} [walletId]
+ * @property {boolean} [preview]                return the fee quote without signing or broadcasting
  */
 
 /**
  * @typedef {object} RbfResult
- * @property {string} replacementTxHash
- * @property {string} broadcastedAt           ISO timestamp
+ * @property {string} [replacementTxHash]
+ * @property {string} [broadcastedAt]         ISO timestamp
+ * @property {string} [originalFee]            original fee in native coin
+ * @property {string} [replacementFee]         replacement fee in native coin
  * @property {string} [feeIncrease]           coin-denominated decimal string
  */
 
@@ -73,16 +85,15 @@ export function isReplaceCallAvailable(messaging) {
  *
  * Replaceable when:
  *   - blockIndex === 0 (still in mempool)
- *   - action is a coin-moving kind (SEND / SWEEP / DISPENSE / DIVIDEND
- *     / AIRDROP / EXECUTE / DEPOSIT / WITHDRAW)
+ *   - action is SEND
  *   - txHash is present
  *   - the chain's descriptor declares `feeStrategy.rbfSupported: true`
  *     (Dogecoin declares false, and the same cap governs Send and
  *     Settings); a missing descriptor refuses, since nothing then says
  *     the transaction could signal replaceability
- *
- * Phase 4 adds support for additional action kinds; the kind list is
- * deliberately conservative for now.
+ *   - the pending record says the signed transaction enabled RBF; a missing
+ *     flag refuses because the wallet cannot prove the transaction signalled
+ *   - the local record is neither failed nor already replaced
  *
  * @param {{ action?: string, blockIndex?: number, txHash?: string, chainId?: string }} entry
  * @param {{ descriptor?: { displayName?: string, feeStrategy?: { rbfSupported?: boolean } } | null }} [opts]
@@ -91,31 +102,33 @@ export function isReplaceCallAvailable(messaging) {
  */
 export function isEntryReplaceable(entry, { descriptor } = {}) {
     if (!entry || typeof entry !== 'object') {
-        return { ok: false, reason: 'No entry to replace.' };
+        return { ok: false, reason: t('flows.rbf.noEntry') };
     }
     if (typeof entry.txHash !== 'string' || entry.txHash.length === 0) {
-        return { ok: false, reason: 'No transaction hash on this entry.' };
+        return { ok: false, reason: t('flows.rbf.noHash') };
     }
     if (Number(entry.blockIndex) !== 0) {
-        return { ok: false, reason: 'Already confirmed.' };
+        return { ok: false, reason: t('flows.rbf.alreadyConfirmed') };
     }
     // A blockless entry in shape only: the wallet proved the block itself
     // and keeps the entry so History can show it. Replacing it would bump
     // the fee on a transaction that is already mined.
     if (entry.pending?.chainConfirmed === true) {
-        return { ok: false, reason: 'Already confirmed.' };
+        return { ok: false, reason: t('flows.rbf.alreadyConfirmed') };
     }
     const action = String(entry.action || '').toUpperCase();
-    const REPLACEABLE_ACTIONS = new Set([
-        'SEND', 'SWEEP', 'DISPENSE', 'DIVIDEND', 'AIRDROP',
-        'EXECUTE', 'DEPOSIT', 'WITHDRAW',
-    ]);
-    if (!REPLACEABLE_ACTIONS.has(action)) {
-        return { ok: false, reason: `${action} actions are not RBF-replaceable.` };
+    if (action !== 'SEND') {
+        return { ok: false, reason: t('flows.rbf.actionUnsupported', { action }) };
     }
     if (descriptor?.feeStrategy?.rbfSupported !== true) {
         const chain = descriptor?.displayName || entry.chainId || 'this chain';
-        return { ok: false, reason: `Fee bumping is not supported on ${chain}.` };
+        return { ok: false, reason: t('send.rbf.unsupported', { chain }) };
+    }
+    if ((entry.pending?.rbf ?? entry.rbf) !== true) {
+        return { ok: false, reason: t('flows.rbf.notAllowed') };
+    }
+    if (entry.pending?.failed === true || entry.pending?.replaced === true) {
+        return { ok: false, reason: t('flows.rbf.notAllowed') };
     }
     return { ok: true };
 }
@@ -158,36 +171,63 @@ export async function sendRbfRequest({ messaging, request } = {}) {
         // hash as originalTxHash, which is the natural mistake here
         // (every other strategy takes the original), so it is rejected
         // rather than forwarded.
-        if (request.restoreTxHash === request.originalTxHash) {
+        if (normalizedHash(request.restoreTxHash) === normalizedHash(request.originalTxHash)) {
             throw new RbfInvalidEntryError(
                 'replaceTx: restoreTxHash must differ from originalTxHash; '
                 + 'originalTxHash is the cancel transaction being replaced.',
             );
         }
     }
-    return messaging.replaceTx(request);
+    if (request.preview === true) return messaging.replaceTx(request);
+
+    const lane = JSON.stringify([
+        request.walletId || '', request.chainId, normalizedHash(request.originalTxHash),
+    ]);
+    const fingerprint = JSON.stringify([
+        request.strategy, normalizedHash(request.restoreTxHash), request.feeRate ?? null,
+    ]);
+    let lanes = activeBroadcasts.get(messaging);
+    if (!lanes) {
+        lanes = new Map();
+        activeBroadcasts.set(messaging, lanes);
+    }
+    const active = lanes.get(lane);
+    // Share an identical request, but refuse a competing replacement for the same transaction.
+    if (active?.fingerprint === fingerprint) return active.promise;
+    if (active) throw new RbfInvalidEntryError('replaceTx: a replacement is already in progress');
+
+    const promise = Promise.resolve().then(() => messaging.replaceTx(request));
+    lanes.set(lane, { fingerprint, promise });
+    try {
+        return await promise;
+    } finally {
+        if (lanes.get(lane)?.promise === promise) lanes.delete(lane);
+        if (lanes.size === 0) activeBroadcasts.delete(messaging);
+    }
 }
 
 /**
  * Convenience wrapper: validate the entry, build the request, send it.
  *
- * @param {{ messaging: any, entry: any, strategy: 'speedup' | 'cancel', walletId?: string, feeRate?: string, descriptor?: object | null }} opts
+ * @param {{ messaging: any, entry: any, strategy: 'speedup' | 'cancel', walletId?: string, feeRate?: string, descriptor?: object | null, preview?: boolean }} opts
  *   `descriptor` is the registry descriptor of `entry.chainId`, as `isEntryReplaceable` takes it
  * @returns {Promise<RbfResult>}
  */
-export async function replaceFromHistoryEntry({ messaging, entry, strategy, walletId, feeRate, descriptor } = {}) {
+export async function replaceFromHistoryEntry({ messaging, entry, strategy, walletId, feeRate, descriptor, preview } = {}) {
+    const request = {
+        chainId: entry?.chainId,
+        originalTxHash: entry?.txHash,
+        strategy,
+        walletId,
+        feeRate,
+        ...(preview === true && { preview: true }),
+    };
+    // Report a missing host capability before entry eligibility because no
+    // replacement can run in this shell, even for an otherwise valid entry.
+    if (!isReplaceCallAvailable(messaging)) return sendRbfRequest({ messaging, request });
     const check = isEntryReplaceable(entry, { descriptor });
     if (!check.ok) throw new RbfInvalidEntryError(check.reason);
-    return sendRbfRequest({
-        messaging,
-        request: {
-            chainId: entry.chainId,
-            originalTxHash: entry.txHash,
-            strategy,
-            walletId,
-            feeRate,
-        },
-    });
+    return sendRbfRequest({ messaging, request });
 }
 
 // ── Cancel undo (§37.2 / Cluster D FOLLOWUP 3) ──────────────────────
@@ -240,7 +280,7 @@ export function cancelUndoSnapshot({ entry, result, walletId } = {}) {
     // A host that echoed the original hash back as the replacement did
     // not actually broadcast a replacement; there is nothing to undo and
     // a restore built from it would be a self-replacement.
-    if (cancelTxHash === originalTxHash) return null;
+    if (normalizedHash(cancelTxHash) === normalizedHash(originalTxHash)) return null;
     return { chainId, originalTxHash, cancelTxHash, walletId };
 }
 
@@ -253,9 +293,9 @@ export function cancelUndoSnapshot({ entry, result, walletId } = {}) {
  * @returns {{ ok: boolean, reason?: string }}
  */
 export function isCancelUndoable({ snapshot, cancelBlockIndex } = {}) {
-    if (!snapshot) return { ok: false, reason: 'Nothing to undo.' };
+    if (!snapshot) return { ok: false, reason: t('flows.rbf.nothingToUndo') };
     if (Number(cancelBlockIndex) > 0) {
-        return { ok: false, reason: 'The cancellation already confirmed.' };
+        return { ok: false, reason: t('flows.rbf.cancelConfirmed') };
     }
     return { ok: true };
 }

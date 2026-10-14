@@ -46,16 +46,30 @@ assert.match(cmp, /\$\{styles\[size\]/, 'applies the size class to the field wra
 
 // --- CSS: chrome matches Input at both sizes ---------------------------
 
-assert.match(css, /\.control\s*\{[^}]*min-height:\s*36px/s, 'md control is 36px like Input');
+assert.match(css, /\.field\s*\{[^}]*--token-field-control-height:\s*var\(--xc-control-h-md\)/s,
+    'TokenField defaults to the md control height token');
+assert.match(css, /\.control\s*\{[^}]*height:\s*var\(--token-field-control-height\)/s,
+    'control renders the selected height token');
 assert.match(css, /\.control\s*\{[^}]*border:\s*1px solid var\(--xc-border-strong\)/s, 'control borrows Input border chrome');
-assert.match(css, /\.lg \.control\s*\{[^}]*min-height:\s*48px/s, 'lg control is 48px');
-for (const cls of ['field', 'label', 'control', 'text', 'tick', 'chain', 'placeholder', 'caret']) {
+assert.match(css, /\.lg\s*\{[^}]*--token-field-control-height:\s*var\(--xc-control-h-lg\)/s,
+    'lg control uses the hero height token');
+assert.match(css, /\.control\s*\{[^}]*padding:\s*0 var\(--xc-control-pad-x\)/s,
+    'control uses shared horizontal padding');
+assert.match(css, /\.control\s*\{[^}]*font-size:\s*var\(--xc-control-font\)/s,
+    'control uses the shared font');
+assert.match(css, /\.control\s*\{[^}]*border-radius:\s*var\(--xc-control-radius\)/s,
+    'control uses the shared radius');
+// The chain badge left the field when chain badges became icon-only overlays,
+// so .chain is no longer a hook.
+for (const cls of ['field', 'label', 'control', 'text', 'tick', 'placeholder', 'caret']) {
     assert.match(css, new RegExp(`\\.${cls}\\b`), `CSS hook .${cls}`);
 }
 
-// --- Send adopts it (with a bare-input fallback when no picker) ---------
+// --- Send keeps asset selection icon-only -------------------------------
 
-assert.match(sendJs, /import \{ TokenField \} from '\.\.\/components\/TokenField\.jsx'/, 'Send imports TokenField');
-assert.match(sendJs, /<TokenField[\s\S]{0,160}onOpenPicker=\{\(\) => onChangeAsset\(/, 'Send wires TokenField to the asset picker');
+assert.doesNotMatch(sendJs, /import \{ TokenField \}/, 'Send does not import the text-bearing TokenField');
+assert.match(sendJs, /import \{ TickerIcon \}/, 'Send renders the shared token icon');
+assert.match(sendJs, /<SelectedTokenHero[\s\S]{0,500}onChangeAsset=\{onChangeAsset/, 'Send wires its icon-only hero to the asset picker');
+assert.match(sendJs, /<AssetIconPicker[\s\S]{0,300}onOpen=\{\(\) => setTokenPickerRecipientId/, 'recipient asset icons open the token picker');
 
 console.log('token-field smoke OK');

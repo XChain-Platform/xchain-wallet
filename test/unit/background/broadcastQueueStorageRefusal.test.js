@@ -16,7 +16,10 @@
 //   2. localStorage reports one by throwing, and the adapter lets it reject.
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { createBroadcastQueueStorage } from '../../../packages/extension/src/background/broadcastQueueStorage.js';
+import {
+    BROADCAST_QUEUE_STORAGE_VERSION,
+    createBroadcastQueueStorage,
+} from '../../../packages/extension/src/background/broadcastQueueStorage.js';
 import { BROADCAST_QUEUE_STORAGE_KEY } from '../../../packages/core/src/shared/utils/wipeWalletStorage.js';
 
 const REFUSAL = { message: 'QUOTA_BYTES quota exceeded' };
@@ -40,6 +43,31 @@ function stubChrome({ refuse }) {
         },
     };
     vi.stubGlobal('chrome', chrome);
+}
+
+function statefulChromeStorage({ value, refuseWrites = false }) {
+    const runtime = { lastError: undefined };
+    const faults = { refuseWrites };
+    const values = value === undefined
+        ? {}
+        : { [BROADCAST_QUEUE_STORAGE_KEY]: structuredClone(value) };
+    const set = vi.fn((items, cb) => {
+        if (faults.refuseWrites) runtime.lastError = REFUSAL;
+        else Object.assign(values, structuredClone(items));
+        cb();
+        runtime.lastError = undefined;
+    });
+    vi.stubGlobal('chrome', {
+        runtime,
+        storage: {
+            local: {
+                get: (key, cb) => cb({ [key]: structuredClone(values[key]) }),
+                set,
+                remove: (key, cb) => { delete values[key]; cb(); },
+            },
+        },
+    });
+    return { faults, set, values };
 }
 
 function stubLocalStorage({ refuse }) {
@@ -100,12 +128,13 @@ describe('a stored entry keeps every field the host writes', () => {
     function statefulLocalStorage() {
         vi.stubGlobal('chrome', undefined);
         const items = new Map();
+        const setItem = vi.fn((k, v) => { items.set(k, String(v)); });
         vi.stubGlobal('localStorage', {
             getItem: (k) => (items.has(k) ? items.get(k) : null),
-            setItem: (k, v) => { items.set(k, String(v)); },
+            setItem,
             removeItem: (k) => { items.delete(k); },
         });
-        return items;
+        return { items, setItem };
     }
 
     it('round-trips through a save and a fresh adapter load', async () => {
@@ -114,9 +143,58 @@ describe('a stored entry keeps every field the host writes', () => {
         expect(await createBroadcastQueueStorage().load()).toEqual({ w1: [ENTRY] });
     });
 
-    it('reads them from a top-level blob written before the journal existed', async () => {
-        const items = statefulLocalStorage();
-        items.set(BROADCAST_QUEUE_STORAGE_KEY, JSON.stringify({ w1: [ENTRY] }));
-        expect(await createBroadcastQueueStorage().load()).toEqual({ w1: [ENTRY] });
+    it.each([
+        ['direct queue map', { w1: [ENTRY] }, []],
+        ['unversioned journal envelope', {
+            queues: { w1: [ENTRY] },
+            settlements: [{ id: 's-1', pendingTxId: 'p-1', op: 'discard' }],
+        }, [{ id: 's-1', pendingTxId: 'p-1', op: 'discard' }]],
+    ])('migrates the %s fixture once and records its version', async (_label, fixture, settlements) => {
+        const { set, values } = statefulChromeStorage({ value: fixture });
+
+        const first = createBroadcastQueueStorage();
+        expect(await first.load()).toEqual({ w1: [ENTRY] });
+        expect(await first.loadSettlements()).toEqual(settlements);
+        expect(values[BROADCAST_QUEUE_STORAGE_KEY]).toEqual({
+            storageVersion: BROADCAST_QUEUE_STORAGE_VERSION,
+            queues: { w1: [ENTRY] },
+            settlements,
+        });
+        expect(set).toHaveBeenCalledTimes(1);
+
+        await createBroadcastQueueStorage().load();
+        expect(set).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps legacy data readable and intact when its migration write fails', async () => {
+        const legacy = { w1: [ENTRY] };
+        const { faults, set, values } = statefulChromeStorage({ value: legacy, refuseWrites: true });
+
+        const storage = createBroadcastQueueStorage();
+        await expect(storage.load()).resolves.toEqual({ w1: [ENTRY] });
+        expect(values[BROADCAST_QUEUE_STORAGE_KEY]).toEqual(legacy);
+        expect(set).toHaveBeenCalledOnce();
+
+        faults.refuseWrites = false;
+        await expect(storage.load()).resolves.toEqual({ w1: [ENTRY] });
+        expect(values[BROADCAST_QUEUE_STORAGE_KEY]).toEqual({
+            storageVersion: BROADCAST_QUEUE_STORAGE_VERSION,
+            queues: { w1: [ENTRY] },
+            settlements: [],
+        });
+    });
+
+    it('reads an unknown version without rewriting it', async () => {
+        const future = {
+            storageVersion: BROADCAST_QUEUE_STORAGE_VERSION + 1,
+            queues: { w1: [ENTRY] },
+            settlements: [],
+            futureField: true,
+        };
+        const { set, values } = statefulChromeStorage({ value: future });
+
+        await expect(createBroadcastQueueStorage().load()).resolves.toEqual({ w1: [ENTRY] });
+        expect(values[BROADCAST_QUEUE_STORAGE_KEY]).toEqual(future);
+        expect(set).not.toHaveBeenCalled();
     });
 });

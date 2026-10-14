@@ -27,11 +27,59 @@
 //     this address dispense at whatever price matures, so a publish is an
 //     action on third parties, not just on the publisher.
 //
-// The SDK validator enforces the field rules (FIAT allow-list, positive
-// 8-decimal VALUE, FEE in [0,1]); this flow guards only what it composes.
+// The SDK validator enforces the complete field set. This flow also guards
+// the consensus-critical numeric bounds before handing a publish to it.
 
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';
+
+const PRICE_VALUE_RE = /^[0-9]+(\.[0-9]{1,8})?$/;
+const PRICE_FEE_RE = /^[0-9]+(\.[0-9]{1,18})?$/;
+
+function significantIntegerDigits(value) {
+    const whole = String(value).split('.')[0].replace(/^0+/, '');
+    return whole || '0';
+}
+
+/**
+ * Validate the exact decimal string carried by a PRICE v1 value.
+ *
+ * The protocol stores VALUE as text. Keeping this check string-only avoids
+ * rounding a boundary value through a JavaScript Number before it is signed.
+ *
+ * @param {unknown} value
+ * @returns {string | null}
+ */
+export function oraclePriceValueError(value) {
+    if (typeof value !== 'string' || !PRICE_VALUE_RE.test(value)
+        || !/[1-9]/.test(value)) {
+        return 'Enter a positive price with at most 8 decimal places.';
+    }
+    if (significantIntegerDigits(value).length > 10) {
+        return 'Enter a price below 10,000,000,000 with at most 8 decimal places.';
+    }
+    return null;
+}
+
+/**
+ * Validate the exact fractional fee carried by a PRICE v1 publish.
+ *
+ * @param {unknown} value
+ * @returns {string | null}
+ */
+export function oraclePriceFeeError(value) {
+    if (value === undefined || value === '') return null;
+    if (typeof value !== 'string' || !PRICE_FEE_RE.test(value)) {
+        return 'The usage fee is a fraction between 0 and 1 (0.01 = 1%).';
+    }
+    const [whole, fraction = ''] = value.split('.');
+    const integer = significantIntegerDigits(whole);
+    if (integer.length > 1 || integer > '1'
+        || (integer === '1' && /[1-9]/.test(fraction))) {
+        return 'The usage fee is a fraction between 0 and 1 (0.01 = 1%).';
+    }
+    return null;
+}
 
 /**
  * @typedef {Object} OraclePriceActionOpts
@@ -77,6 +125,10 @@ export async function oraclePriceAction(opts) {
             throw new Error(`oraclePriceAction: params.${field} is required`);
         }
     }
+    const valueError = oraclePriceValueError(opts.params.VALUE);
+    if (valueError) throw new Error(`oraclePriceAction: params.VALUE: ${valueError}`);
+    const feeError = oraclePriceFeeError(opts.params.FEE);
+    if (feeError) throw new Error(`oraclePriceAction: params.FEE: ${feeError}`);
     const source = normalizeSource(opts.from, 'oraclePriceAction');
 
     const tick = String(opts.params.TICK).toUpperCase();

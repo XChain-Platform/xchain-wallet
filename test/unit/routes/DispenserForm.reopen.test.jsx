@@ -81,7 +81,12 @@ function recordingMessaging() {
         signerReady: () => Promise.resolve({ ready: true }),
         getSettings: () => Promise.resolve({ walletMode: 'full' }),
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
-        getWalletBalances: () => Promise.resolve({ [CHAIN]: [] }),
+        getWalletBalances: () => Promise.resolve({
+            [CHAIN]: [{
+                address: CREATOR.address,
+                balances: { tokens: [{ tick: 'ALM0NDJ0Y', quantity: '10000000000', divisibility: 8 }] },
+            }],
+        }),
         getListByActionIndex: () => Promise.resolve(null),
         generateDispenserAddress: (args) => {
             calls.push({ method: 'generateDispenserAddress', args });
@@ -133,7 +138,7 @@ async function createAsIs(utils, calls) {
         await drainMicrotasks();
     });
     await domAct(async () => {
-        const approve = Array.from(utils.container.querySelectorAll('button'))
+        const approve = utils.getAllByRole('button')
             .find((b) => /approve/i.test(b.textContent || '') && !b.disabled);
         if (!approve) throw new Error(`no enabled Approve button; page reads: ${utils.container.textContent}`);
         fireEvent.click(approve);
@@ -200,16 +205,16 @@ describe('DispenserForm opened again from a finished dispenser', () => {
             triggerPrice: undefined,
             fiatCode: 'USD',
             fiatAmount: '',
-            oracleAddress: 'bc1qoracleoracleoracleoracleoracleoracle',
+            oracleAddress: '1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2',
             expiration,
         });
         expect(utils.queryByLabelText(/^Trigger price/), 'oracle pricing hides the coin trigger').toBeNull();
-        expect(utils.getByLabelText(/^Oracle address/).value).toBe('bc1qoracleoracleoracleoracleoracleoracle');
+        expect(utils.getByLabelText(/^Oracle address/).value).toBe('1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2');
         expect(utils.getByRole('radio', { name: /Default window/ }).checked).toBe(true);
         const { compose } = await createAsIs(utils, calls);
         expect(compose.args.actionData.params).toMatchObject({
             GET_AMOUNT: '0',
-            ORACLE_ADDRESS: 'bc1qoracleoracleoracleoracleoracleoracle',
+            ORACLE_ADDRESS: '1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2',
             FIAT_CODE: 'USD',
         });
         expect(compose.args.actionData.params, 'the default window omits EXPIRATION').not.toHaveProperty('EXPIRATION');

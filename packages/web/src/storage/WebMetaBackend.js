@@ -25,7 +25,20 @@
 // The injectable `storage` parameter takes any `Storage`-shaped
 // key/value store so tests can run against an in-memory stand-in.
 
+import { storage as coreStorage } from '@xchain-wallet/core';
+import { persistWithQuotaRecovery } from '@xchain-wallet/core/storage/Vault.js';
+
+const { VaultCorruptError, VaultUnavailableError } = coreStorage;
+
 export const DEFAULT_META_KEY = 'xchain-wallet:vault-meta';
+
+function defaultStorage() {
+    try {
+        return /** @type {StorageLike | null} */ (globalThis.localStorage ?? null);
+    } catch (_err) {
+        return null;
+    }
+}
 
 /**
  * @typedef {Object} StorageLike
@@ -40,35 +53,51 @@ export class WebMetaBackend {
      */
     constructor(opts = {}) {
         this._key = opts.key ?? DEFAULT_META_KEY;
-        this._storage =
-            opts.storage ??
-            /** @type {StorageLike | undefined} */ (globalThis.localStorage);
-        if (!this._storage) {
-            throw new Error(
-                'WebMetaBackend: localStorage is not available; pass { storage } for non-browser contexts',
-            );
-        }
+        this._storage = opts.storage ?? defaultStorage();
     }
 
     /** @returns {Promise<unknown | null>} */
     async load() {
-        const raw = this._storage.getItem(this._key);
+        if (!this._storage) {
+            throw new VaultUnavailableError('web vault metadata storage is unavailable');
+        }
+        let raw;
+        try {
+            raw = this._storage.getItem(this._key);
+        } catch (_err) {
+            throw new VaultUnavailableError('web vault metadata could not be read');
+        }
         if (raw == null) return null;
         try {
             return JSON.parse(raw);
-        } catch (err) {
-            throw new Error(
-                `WebMetaBackend.load: invalid JSON at key "${this._key}": ${err?.message || err}`,
-            );
+        } catch (_err) {
+            // Malformed metadata cannot mean "no wallet": the IndexedDB
+            // ciphertext may still require these exact KDF parameters.
+            throw new VaultCorruptError('web vault metadata is not valid JSON');
         }
     }
 
     /** @param {unknown} obj */
     async save(obj) {
-        this._storage.setItem(this._key, JSON.stringify(obj));
+        try {
+            await persistWithQuotaRecovery(() => {
+                if (!this._storage) throw new Error('localStorage is not available');
+                this._storage.setItem(this._key, JSON.stringify(obj));
+            });
+        } catch (err) {
+            if (err?.name === 'StorageQuotaError') throw err;
+            throw new Error(`WebMetaBackend.save: metadata could not be persisted: ${err?.message || err}`);
+        }
     }
 
     async clear() {
-        this._storage.removeItem(this._key);
+        try {
+            if (!this._storage) throw new Error('localStorage is not available');
+            this._storage.removeItem(this._key);
+        } catch (err) {
+            throw new VaultUnavailableError(
+                `web vault metadata could not be cleared: ${err?.message || err}`,
+            );
+        }
     }
 }

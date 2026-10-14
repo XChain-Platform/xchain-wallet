@@ -16,7 +16,7 @@
 
 import { decryptWalletPassphrase, decryptWalletSeed } from '../crypto/walletBlob.js';
 import { decrypt } from '../crypto/aead.js';
-import { base64ToBytes, deriveMasterKey } from '../crypto/kdf.js';
+import { base64ToBytes, copyMasterKey, deriveMasterKeyAsync } from '../crypto/kdf.js';
 import {
     bip39MnemonicToSeed,
     isValidBip39Mnemonic,
@@ -113,12 +113,14 @@ export class SoftwareSigner extends Signer {
      * plaintext is not a valid mnemonic in the declared format.
      *
      * @param {Object} opts
-     * @param {string} opts.password
+     * @param {string} [opts.password]   required when masterKey is omitted
      * @param {string} [opts.bip39Passphrase]   required iff format='bip39', passphraseEnabled, and no passphrase is stored yet; ignored when one is
+     * @param {Uint8Array} [opts.masterKey]     already-derived key for this wallet's kdfParams, used instead of deriving from the password. Copied before use (here on the wif-only path, inside decryptWalletSeed on the seed path) and never zeroed here; the caller zeroes its own buffer. A wrong key fails exactly as a wrong password does.
      */
-    async unlock({ password, bip39Passphrase = '' }) {
-        if (typeof password !== 'string' || password.length === 0) {
-            throw new Error('SoftwareSigner.unlock: password is required');
+    async unlock({ password, bip39Passphrase = '', masterKey: suppliedMasterKey }) {
+        if (suppliedMasterKey === undefined
+            && (typeof password !== 'string' || password.length === 0)) {
+            throw new Error('SoftwareSigner.unlock: either password or masterKey is required');
         }
         const enc = this._walletEncryption;
         const format = enc.format ?? 'bip39';
@@ -155,7 +157,9 @@ export class SoftwareSigner extends Signer {
                     'SoftwareSigner.unlock: wif-only wallet has no importedKeys to validate against',
                 );
             }
-            const masterKey = deriveMasterKey(password, enc.kdfParams);
+            const masterKey = suppliedMasterKey === undefined
+                ? await deriveMasterKeyAsync(password, enc.kdfParams)
+                : copyMasterKey(suppliedMasterKey);
             let importedWifs;
             try {
                 importedWifs = await decryptImportedKeys(masterKey, imported);
@@ -178,11 +182,14 @@ export class SoftwareSigner extends Signer {
         }
 
         let sessionMasterKey = null;
+        // decryptWalletSeed copies a supplied key itself and hands back a
+        // separate session copy through retainMasterKey.
         const plaintext = await decryptWalletSeed({
             password,
             encryptedSeed: enc.encryptedSeed,
             kdfParams: enc.kdfParams,
             aad: enc.aad,
+            masterKey: suppliedMasterKey,
             retainMasterKey: (k) => { sessionMasterKey = k; },
         });
 
@@ -192,6 +199,7 @@ export class SoftwareSigner extends Signer {
         if (format === 'bip39') {
             if (!isValidBip39Mnemonic(mnemonic)) {
                 plaintext.fill(0);
+                if (sessionMasterKey) sessionMasterKey.fill(0);
                 throw new Error('SoftwareSigner.unlock: decrypted blob is not a valid BIP39 mnemonic');
             }
             // The stored passphrase is opened here and nowhere else: this is
@@ -230,6 +238,7 @@ export class SoftwareSigner extends Signer {
         } else if (format === 'counterwallet-legacy') {
             if (!isValidCounterwalletMnemonic(mnemonic)) {
                 plaintext.fill(0);
+                if (sessionMasterKey) sessionMasterKey.fill(0);
                 throw new Error(
                     'SoftwareSigner.unlock: decrypted blob is not a valid Counterwallet mnemonic',
                 );
@@ -237,6 +246,7 @@ export class SoftwareSigner extends Signer {
             seed = counterwalletMnemonicToSeedBytes(mnemonic);
         } else {
             plaintext.fill(0);
+            if (sessionMasterKey) sessionMasterKey.fill(0);
             throw new Error(`SoftwareSigner.unlock: unsupported wallet format "${format}"`);
         }
 
@@ -246,10 +256,17 @@ export class SoftwareSigner extends Signer {
         // them without a second KDF round.
         let importedWifs;
         const importedRecords = enc.importedKeys ?? [];
-        if (importedRecords.length > 0 && sessionMasterKey) {
-            importedWifs = await decryptImportedKeys(sessionMasterKey, importedRecords);
-        } else {
-            importedWifs = new Map();
+        try {
+            if (importedRecords.length > 0 && sessionMasterKey) {
+                importedWifs = await decryptImportedKeys(sessionMasterKey, importedRecords);
+            } else {
+                importedWifs = new Map();
+            }
+        } catch (e) {
+            plaintext.fill(0);
+            seed.fill(0);
+            if (sessionMasterKey) sessionMasterKey.fill(0);
+            throw e;
         }
 
         this._acceptUnlockedState({
@@ -894,17 +911,24 @@ function assertSessionRefShape(ref) {
 // Decrypt every entry in `importedKeys` into a Map<addressId,
 // Uint8Array> keyed by addressId. The plaintext bytes are the WIF's
 // UTF-8 encoding; we keep them as bytes (not strings) so lock() can
-// zero them. The caller controls the master key lifetime; we use it
-// for this one batch then zero it ourselves.
+// zero them. The unlocked signer retains the master key on success,
+// and the caller clears it together with the other secret material on failure.
 async function decryptImportedKeys(masterKey, importedRecords) {
     /** @type {Map<string, Uint8Array>} */
     const out = new Map();
-    for (const rec of importedRecords) {
-        if (!rec || typeof rec.encryptedWif !== 'string') continue;
-        const wifBytes = await decrypt(masterKey, base64ToBytes(rec.encryptedWif));
-        out.set(rec.addressId, wifBytes);
+    try {
+        for (const rec of importedRecords) {
+            if (!rec || typeof rec.encryptedWif !== 'string') continue;
+            const wifBytes = await decrypt(masterKey, base64ToBytes(rec.encryptedWif));
+            const previous = out.get(rec.addressId);
+            if (previous) previous.fill(0);
+            out.set(rec.addressId, wifBytes);
+        }
+        return out;
+    } catch (e) {
+        for (const wifBytes of out.values()) wifBytes.fill(0);
+        throw e;
     }
-    return out;
 }
 
 // All entries in a signingPaths array must identify the same key.

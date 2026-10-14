@@ -213,15 +213,15 @@ assert.throws(() => encodeBbqrPsbtFrames(tinyHex, { payloadBytes: 0 }),
 
 // 5. PsbtSignForm wires the decoder into normalizePsbtInput.
 const formSrc = read('packages/core/src/shared/routes/PsbtSignForm.jsx');
-assert.ok(/import \{ decodeBbqrPsbt \} from '\.\.\/\.\.\/uri\/bbqrPsbt\.js'/.test(formSrc),
-    'PsbtSignForm imports decodeBbqrPsbt');
+assert.ok(/import \{ decodeBbqrPsbt, parseBbqrFrame \} from '\.\.\/\.\.\/uri\/bbqrPsbt\.js'/.test(formSrc),
+    'PsbtSignForm imports the BBQr decoder and frame parser');
 assert.ok(/import \{ detectQrFrameFormat, describeUnsupportedFormat \} from '\.\.\/\.\.\/uri\/qrPsbtFormat\.js'/.test(formSrc),
     'PsbtSignForm imports the format detector');
 assert.ok(/frames\.every\(\(f\) => detectQrFrameFormat\(f\) === 'bbqr'\)/.test(formSrc),
     'normalizePsbtInput dispatches BBQr-only inputs to decodeBbqrPsbt');
-assert.ok(/unsupportedFormatHint/.test(formSrc),
-    'PsbtSignForm computes a format-specific hint for unsupported pastes');
-assert.ok(/hex, base64, or BBQr transaction/.test(formSrc),
-    'fallback error mentions BBQr alongside hex / base64');
+assert.ok(/const inputError = useMemo/.test(formSrc),
+    'PsbtSignForm computes a format-specific input error');
+assert.ok(/This BBQr transaction is incomplete or malformed/.test(formSrc),
+    'malformed BBQr input gets actionable copy');
 
 console.log('OK: BBQr PSBT decode + format detector + PsbtSignForm wiring smoke');

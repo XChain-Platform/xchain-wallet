@@ -1,36 +1,29 @@
 .wrap {
+    /* raw-color-ok: a fixed 10% accent tint, since Chrome 102 cannot mix colors in CSS. */
+    --header-accent-bg-subtle: rgba(26, 123, 172, 0.10);
+
     position: relative;
     flex: 0 0 auto;
-}
-
-.btn {
-    appearance: none;
-    background: transparent;
-    border: 1px solid var(--xc-border-strong);
-    border-radius: 8px;
-    width: 38px;
-    height: 38px;
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    color: var(--xc-text);
-    cursor: pointer;
-    position: relative;
+    gap: var(--xc-space-1);
 }
 
-.btn:hover {
-    background: var(--xc-bg-muted);
+.trigger {
+    display: inline-flex;
 }
 
-.btn:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
+.trigger > button {
+    width: var(--xc-control-h-md);
+    height: var(--xc-control-h-md);
+    border-radius: var(--xc-control-radius);
+    --xc-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
 }
 
-.btnActive {
-    color: var(--xc-accent-primary);
+.trigger > button[data-active='true'] {
+    color: var(--xc-accent-text);
     border-color: var(--xc-accent-primary);
-    background: color-mix(in srgb, var(--xc-accent-primary) 10%, transparent);
+    background: var(--header-accent-bg-subtle);
 }
 
 .dot {
@@ -41,7 +34,7 @@
     height: 8px;
     border-radius: 50%;
     background: var(--xc-accent-primary);
-    box-shadow: 0 0 0 1.5px var(--xc-surface);
+    box-shadow: var(--xc-shadow-surface-ring);
 }
 
 /* ───── Popover ───── */
@@ -50,13 +43,13 @@
     position: absolute;
     top: calc(100% + 6px);
     inset-inline-end: 0;
-    z-index: 50;
+    z-index: var(--xc-z-dropdown);
     width: 320px;
-    max-width: calc(100vw - 24px);
+    max-width: calc(100vw - (2 * var(--xc-space-3)));
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
-    border-radius: 12px;
-    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+    border-radius: var(--xc-radius-lg);
+    box-shadow: var(--xc-shadow-popover);
     padding: var(--xc-space-2);
     display: flex;
     flex-direction: column;
@@ -78,6 +71,18 @@
     color: var(--xc-text-muted);
 }
 
+.networkSelect {
+    width: 100%;
+    min-height: var(--xc-control-h-md);
+    padding: var(--xc-space-1) var(--xc-space-2);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-control-radius);
+    color: var(--xc-text);
+    background: var(--xc-bg);
+    font: inherit;
+    font-size: var(--xc-control-font);
+}
+
 .empty {
     font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
@@ -87,68 +92,9 @@
 
 /* ───── Account section ───── */
 
-.singleAccount {
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    background: var(--xc-bg-muted);
-    border-radius: 8px;
-    color: var(--xc-text);
-}
-
 .accountName {
     font-weight: 600;
     font-size: var(--xc-text-sm);
-}
-
-.walletList {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    border: 1px solid var(--xc-border);
-    border-radius: 8px;
-    overflow: hidden;
-}
-
-.walletRow {
-    appearance: none;
-    background: transparent;
-    border: none;
-    width: 100%;
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    cursor: pointer;
-    color: var(--xc-text);
-    text-align: start;
-    font-size: var(--xc-text-sm);
-}
-
-.walletRow + .walletRow {
-    border-top: 1px solid var(--xc-border);
-}
-
-.walletRow:hover {
-    background: var(--xc-bg-muted);
-}
-
-.walletRowActive {
-    background: color-mix(in srgb, var(--xc-accent-primary) 10%, transparent);
-    font-weight: 600;
-}
-
-.walletDot {
-    flex: 0 0 auto;
-    width: 18px;
-    height: 18px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--xc-accent-primary);
 }
 
 .walletName {
@@ -165,8 +111,9 @@
     appearance: none;
     background: transparent;
     border: 1px solid var(--xc-border);
-    border-radius: 8px;
+    border-radius: var(--xc-radius-md);
     width: 100%;
+    min-height: var(--xc-control-h-md);
     display: flex;
     align-items: center;
     gap: var(--xc-space-2);
@@ -204,4 +151,8 @@
     flex: 0 0 auto;
     color: var(--xc-text-muted);
     font-size: var(--xc-text-sm);
+}
+
+:global(html[dir='rtl']) .summaryChevron {
+    transform: scaleX(-1);
 }

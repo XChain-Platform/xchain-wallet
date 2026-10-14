@@ -63,7 +63,10 @@ beforeEach(() => {
         ],
     });
 });
-afterEach(() => { cleanup(); vi.useRealTimers(); });
+afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+});
 
 async function drainMicrotasks(rounds = 16) {
     for (let i = 0; i < rounds; i += 1) {
@@ -80,22 +83,36 @@ function recordingMessaging({
     preflight = PASS,
     lists = {},
     chainId = CHAIN,
+    buildActionPsbtRequest,
+    walletBalances,
+    getDispenserByActionIndex,
 } = {}) {
     const calls = [];
     const log = (method, value) => (args) => { calls.push({ method, args }); return Promise.resolve(value); };
     const target = {
-        getDispenserByActionIndex: () => Promise.resolve(dispenser),
+        getDispenserByActionIndex: getDispenserByActionIndex || (() => Promise.resolve(dispenser)),
         getAddressesByChain: () => Promise.resolve({ [chainId]: [owner] }),
         getActiveAddresses: () => Promise.resolve({}),
         getDispenses: () => Promise.resolve({ data: [] }),
         getDispenserLifecycle: () => Promise.resolve({ data: [] }),
-        getWalletBalances: () => Promise.resolve({}),
+        getWalletBalances: () => Promise.resolve(walletBalances || {
+            [chainId]: [{
+                address: owner.address,
+                balances: { tokens: [{ tick: 'XCHAIN', quantity: '10000000000', divisibility: 8 }] },
+            }],
+        }),
         getSettings: () => Promise.resolve(settings),
         signerReady: () => Promise.resolve({ ready: true }),
         getSignerStatus: () => Promise.resolve({ status: owner.source === 'hd' ? 'unlocked' : 'available' }),
         getListByActionIndex: ({ actionIndex }) => Promise.resolve(lists[actionIndex] ?? null),
         composeForConfirm: log('composeForConfirm', COMPOSED),
         preflight: log('preflight', preflight),
+        buildActionPsbtRequest: (args) => {
+            calls.push({ method: 'buildActionPsbtRequest', args });
+            return buildActionPsbtRequest
+                ? buildActionPsbtRequest(args)
+                : Promise.resolve({ psbtHex: 'bb00', encoding: 'psbt', fromAddress: owner.address });
+        },
     };
     const messaging = new Proxy(target, {
         get(t, prop) {
@@ -106,7 +123,7 @@ function recordingMessaging({
     return { messaging, calls };
 }
 
-async function mount(opts) {
+async function mount(opts = {}) {
     const { messaging, calls } = recordingMessaging(opts);
     const chainId = opts?.chainId || CHAIN;
     let utils;
@@ -115,7 +132,8 @@ async function mount(opts) {
             MessagingProvider,
             { shell: 'web', messaging },
             React.createElement(DispenserDetail, {
-                walletId: 'w', chainId, actionIndex: DISPENSER.action_index, onBack() {}, onCanceled() {},
+                walletId: 'w', chainId, actionIndex: DISPENSER.action_index,
+                onBack: opts.onBack || (() => {}), onCanceled() {},
             }),
         ));
         await drainMicrotasks();
@@ -186,6 +204,66 @@ describe('dispenser owner actions sign through the confirm page', () => {
         expect(sign.args.params.GIVE_ESCROW).toBe('50');
     });
 
+    it('shows the exact refill asset and amount that the build receives, then Back keeps the value', async () => {
+        const { utils, calls } = await mount();
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Refill' })));
+        await step(() => fireEvent.change(utils.getByLabelText(/^Refill amount/), { target: { value: '37.50' } }));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Refill dispenser' })));
+
+        const review = utils.getByTestId('refill-review-summary');
+        expect(review).toHaveTextContent('Dispenser#2868');
+        expect(review).toHaveTextContent('Add to escrow37.50 XCHAIN');
+        expect(calls.find((c) => c.method === 'composeForConfirm').args.actionData.params.GIVE_ESCROW).toBe('37.50');
+
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Back to previous screen' })));
+        expect(utils.getByLabelText(/^Refill amount/)).toHaveValue('37.50');
+    });
+
+    it('rejects zero, excess precision, less than one fill, and amounts above balance before review', async () => {
+        const walletBalances = {
+            [CHAIN]: [{
+                address: OWNER,
+                balances: { tokens: [{ tick: 'XCHAIN', quantity: '5', divisibility: 0 }] },
+            }],
+        };
+        const { utils, calls } = await mount({
+            walletBalances,
+            dispenser: { ...DISPENSER, give_amount: '2' },
+        });
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Refill' })));
+        await domAct(async () => { await vi.advanceTimersByTimeAsync(400); });
+
+        await step(() => fireEvent.change(utils.getByLabelText(/^Refill amount/), { target: { value: '0' } }));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Refill dispenser' })));
+        expect(utils.getByText('Refill amount must be a positive number.')).toBeInTheDocument();
+
+        await step(() => fireEvent.change(utils.getByLabelText(/^Refill amount/), { target: { value: '1.1' } }));
+        expect(utils.getByText('Amount can have at most 0 decimal places.')).toBeInTheDocument();
+
+        await step(() => fireEvent.change(utils.getByLabelText(/^Refill amount/), { target: { value: '1' } }));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Refill dispenser' })));
+        expect(utils.getByText('Refill amount must be at least one fill (2 XCHAIN).')).toBeInTheDocument();
+
+        await step(() => fireEvent.change(utils.getByLabelText(/^Refill amount/), { target: { value: '6' } }));
+        await domAct(async () => { await vi.advanceTimersByTimeAsync(400); });
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Refill dispenser' })));
+        expect(utils.getByText(/This address holds only 5 XCHAIN/)).toBeInTheDocument();
+        expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
+    });
+
+    it('rechecks live state and refuses a second close when the dispenser starts closing', async () => {
+        const getDispenserByActionIndex = vi.fn()
+            .mockResolvedValueOnce(DISPENSER)
+            .mockResolvedValueOnce({ ...DISPENSER, current_status: 'cancelling' });
+        const { utils, calls } = await mount({ getDispenserByActionIndex });
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Close' })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Close dispenser' })));
+
+        expect(utils.getByText('This dispenser is cancelling and cannot accept another close.')).toBeInTheDocument();
+        expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
+        expect(signCalls(calls)).toHaveLength(0);
+    });
+
     it('keeps watcher mode on its unsigned build, with no signature to pre-flight', async () => {
         const { utils, calls } = await mount({ settings: { walletMode: 'watcher' } });
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Close' })));
@@ -195,10 +273,69 @@ describe('dispenser owner actions sign through the confirm page', () => {
         expect(build.args.actionData.action).toBe('DISPENSER');
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
         expect(signCalls(calls)).toHaveLength(0);
+        expect(utils.getByLabelText('Unsigned transaction hex')).toHaveValue('bb00');
+    });
+
+    it('shows close build errors, clears them when the fee changes, and returns unsigned output to the list', async () => {
+        const onBack = vi.fn();
+        const failed = await mount({
+            settings: { walletMode: 'watcher' },
+            buildActionPsbtRequest: vi.fn().mockRejectedValue(new Error('Could not build close.')),
+        });
+        await step(() => fireEvent.click(failed.utils.getByRole('button', { name: 'Close' })));
+        await step(() => fireEvent.click(failed.utils.getByRole('button', { name: 'Create unsigned transaction' })));
+        // An unclassified build error reaches the user as the generic house line.
+        expect(failed.utils.getByText(/Something went wrong\. Try again\./)).toBeInTheDocument();
+        await step(() => fireEvent.change(failed.utils.getByLabelText('Network fee'), { target: { value: '2' } }));
+        expect(failed.utils.queryByText(/Something went wrong\. Try again\./)).toBeNull();
+        failed.utils.unmount();
+
+        let resolveBuild;
+        const success = await mount({
+            settings: { walletMode: 'watcher' },
+            onBack,
+            buildActionPsbtRequest: () => new Promise((resolve) => { resolveBuild = resolve; }),
+        });
+        await step(() => fireEvent.click(success.utils.getByRole('button', { name: 'Close' })));
+        expect(success.utils.getByTestId('close-escrow-destination')).toHaveTextContent('Remaining escrow: 100 XCHAIN.');
+        await domAct(async () => {
+            fireEvent.click(success.utils.getByRole('button', { name: 'Create unsigned transaction' }));
+            await Promise.resolve();
+        });
+        expect(success.utils.getByRole('button', { name: 'Create unsigned transaction' })).toBeDisabled();
+        await domAct(async () => {
+            resolveBuild({ psbtHex: 'bb00', encoding: 'psbt', fromAddress: OWNER });
+            await drainMicrotasks();
+        });
+        fireEvent.click(success.utils.getByRole('button', { name: 'Done' }));
+        expect(onBack).toHaveBeenCalledOnce();
     });
 });
 
 describe('dispenser edit checks the lists it is about to bind', () => {
+    it('shows the exact expiration and list IDs that the edit build receives', async () => {
+        const { utils, calls } = await mount();
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Edit' })));
+        await step(() => fireEvent.change(utils.getByLabelText('New expiration'), {
+            target: { value: '2099-01-02T03:04' },
+        }));
+        await step(() => fireEvent.change(utils.getByLabelText(/^Allow list/), { target: { value: '2701' } }));
+        await step(() => fireEvent.change(utils.getByLabelText(/^Block list/), { target: { value: '2702' } }));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Edit dispenser' })));
+
+        const expectedUnix = String(Math.floor(Date.parse('2099-01-02T03:04') / 1000));
+        const params = calls.find((c) => c.method === 'composeForConfirm').args.actionData.params;
+        expect(params).toMatchObject({
+            EXPIRATION: expectedUnix,
+            ALLOW_LIST: '2701',
+            BLOCK_LIST: '2702',
+        });
+        const review = utils.getByTestId('edit-review-summary');
+        expect(review).toHaveTextContent(`Unix ${expectedUnix}`);
+        expect(review).toHaveTextContent('Allow list#2701');
+        expect(review).toHaveTextContent('Block list#2702');
+    });
+
     it('offers removal on regtest and sends the zero sentinel', async () => {
         const dispenser = { ...DISPENSER, allow_list: '2701' };
         const { utils, calls } = await mount({ dispenser, chainId: 'bitcoin-regtest' });

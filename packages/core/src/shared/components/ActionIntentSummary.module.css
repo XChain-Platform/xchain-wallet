@@ -23,25 +23,35 @@
     margin: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-1);
     font-size: var(--xc-text-sm);
 }
 
 .row {
-    display: flex;
-    justify-content: space-between;
-    gap: var(--xc-space-3);
+    display: grid;
+    grid-template-columns: var(--xc-table-label-column) minmax(0, 1fr);
+    column-gap: 0;
+    padding: var(--xc-table-cell-padding-block) var(--xc-table-cell-padding-inline);
+}
+
+.row + .row {
+    border-top: var(--xc-table-row-divider);
 }
 
 .row dt {
     color: var(--xc-text-muted);
-    flex: 0 0 auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .row dd {
     margin: 0;
+    min-width: 0;
     text-align: end;
+    direction: ltr;
+    unicode-bidi: isolate;
     overflow-wrap: anywhere;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
 }
 
 .warnings {
@@ -53,6 +63,7 @@
     gap: var(--xc-space-1);
     background: var(--xc-warning-bg);
     color: var(--xc-warning-text);
+    /* The three-pixel emphasis stripe has no token equivalent. */
     border-inline-start: 3px solid var(--xc-warning);
     border-radius: var(--xc-radius-sm);
     font-size: var(--xc-text-sm);
@@ -62,26 +73,38 @@
 .deltas {
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-1);
-    padding: var(--xc-space-2);
+    padding: var(--xc-space-1);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-sm);
     font-size: var(--xc-text-sm);
 }
 
 .delta {
-    display: flex;
-    justify-content: space-between;
-    gap: var(--xc-space-3);
+    display: grid;
+    grid-template-columns: var(--xc-table-label-column) minmax(0, 1fr);
+    column-gap: 0;
+    padding: var(--xc-table-cell-padding-block) var(--xc-table-cell-padding-inline);
+}
+
+.delta + .delta {
+    border-top: var(--xc-table-row-divider);
 }
 
 .deltaTick {
     color: var(--xc-text-muted);
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .deltaValues {
     font-family: var(--xc-font-mono);
+    min-width: 0;
+    text-align: end;
+    direction: ltr;
+    unicode-bidi: isolate;
     overflow-wrap: anywhere;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
 }
 
 /* "could not be simulated" notes: never render as a confident number. */
@@ -89,4 +112,19 @@
     margin: 0;
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
+}
+
+/* Match the confirm page's phone breakpoint so padded 412px viewports stack
+   rows without relying on container-query support. */
+@media (max-width: 480px) {
+    .row,
+    .delta {
+        grid-template-columns: minmax(0, 1fr);
+        gap: var(--xc-space-1);
+    }
+
+    .row dd,
+    .deltaValues {
+        text-align: start;
+    }
 }

@@ -26,6 +26,7 @@ import {
     defaultRegistry,
     BUNDLED_DESCRIPTORS,
 } from '../../../packages/core/src/registry/index.js';
+import { validateChainDescriptor } from '../../../packages/core/src/registry/validate.js';
 
 // A hub-style Ed25519 identity: raw 32-byte hex pubkey, hex signature over
 // the utf8 payload (mirrors xchain-hub src/validators/identity.js).
@@ -110,6 +111,17 @@ describe('registry/remote verifyChainRegistry', () => {
         expect(verifyChainRegistry({}).ok).toBe(false);
         expect(verifyChainRegistry({ descriptors: [] }).ok).toBe(false);
     });
+
+    it('rejects unsupported schema versions and malformed timestamps', () => {
+        const wrongVersion = signedBody(identity, descriptors);
+        wrongVersion.schema_version = 2;
+        expect(verifyChainRegistry(wrongVersion, { pinnedPubkeyHex: identity.pubkeyHex }))
+            .toEqual({ ok: false, reason: 'unsupported registry schema version' });
+
+        const malformedDate = signedBody(identity, descriptors, 'not-a-date');
+        expect(verifyChainRegistry(malformedDate, { pinnedPubkeyHex: identity.pubkeyHex }))
+            .toEqual({ ok: false, reason: 'missing or malformed generatedAt' });
+    });
 });
 
 describe('registry/remote syncChainRegistryFromHub', () => {
@@ -170,6 +182,24 @@ describe('registry/remote syncChainRegistryFromHub', () => {
         expect(registry.has('broken-chain')).toBe(false);
     });
 
+    it('rejects duplicate descriptor ids without applying either copy', async () => {
+        const registry = new ChainRegistry();
+        const original = registry.get('bitcoin-mainnet').displayName;
+        const first = {
+            ...JSON.parse(JSON.stringify(BUNDLED_DESCRIPTORS[0])),
+            displayName: 'First duplicate',
+        };
+        const second = { ...first, displayName: 'Second duplicate' };
+        const r = await syncChainRegistryFromHub({
+            registry,
+            pinnedPubkeyHex: identity.pubkeyHex,
+            fetchImpl: fetchReturning(signedBody(identity, [first, second])),
+        });
+        expect(r.ok).toBe(false);
+        expect(r.reason).toMatch(/duplicate descriptor id/);
+        expect(registry.get('bitcoin-mainnet').displayName).toBe(original);
+    });
+
     it('HTTP errors and fetch failures fail soft', async () => {
         const registry = new ChainRegistry();
         expect((await syncChainRegistryFromHub({
@@ -178,6 +208,36 @@ describe('registry/remote syncChainRegistryFromHub', () => {
         expect((await syncChainRegistryFromHub({
             registry, fetchImpl: async () => { throw new Error('offline'); },
         })).ok).toBe(false);
+    });
+});
+
+describe('registry descriptor remote metadata', () => {
+    const base = BUNDLED_DESCRIPTORS.find((d) => d.id === 'bitcoin-mainnet');
+
+    it('accepts well-formed transaction explorer links', () => {
+        const descriptor = {
+            ...base,
+            transactionExplorers: [{
+                id: 'example',
+                label: 'Example',
+                url: 'https://explorer.example/tx/{txid}',
+                iconImg: 'https://explorer.example/favicon.ico',
+            }],
+        };
+        expect(validateChainDescriptor(descriptor).ok).toBe(true);
+    });
+
+    it('rejects malformed or unsafe transaction explorer links at install time', () => {
+        for (const transactionExplorers of [
+            'not-an-array',
+            [null],
+            [{ id: 'example', label: 'Example', url: 'https://explorer.example/tx/no-placeholder' }],
+            [{ id: 'example', label: 'Example', url: 'http://explorer.example/tx/{txid}' }],
+        ]) {
+            const result = validateChainDescriptor({ ...base, transactionExplorers });
+            expect(result.ok).toBe(false);
+            expect(result.errors.join(' ')).toMatch(/transactionExplorers/);
+        }
     });
 });
 

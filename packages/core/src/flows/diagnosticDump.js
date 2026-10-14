@@ -41,10 +41,16 @@
 
 import { sha256 } from '@noble/hashes/sha2';
 import { bytesToHex } from '@noble/hashes/utils';
+import { wordlist as englishWordlist } from '@scure/bip39/wordlists/english';
+import { COUNTERWALLET_WORDLIST } from '../crypto/counterwallet-wordlist.js';
 
 const RECENT_ERRORS_LIMIT = 50;
 const ERROR_MESSAGE_LIMIT = 500;
 const REDACTED_HASH_PREFIX_LEN = 8;
+const REDACTED = '[REDACTED]';
+const BIP39_WORDS = new Set(englishWordlist);
+const COUNTERWALLET_WORDS = new Set(COUNTERWALLET_WORDLIST);
+const MNEMONIC_LENGTHS = [24, 21, 18, 15, 12];
 
 /**
  * @typedef {Object} DiagnosticDumpEnv
@@ -71,7 +77,7 @@ const REDACTED_HASH_PREFIX_LEN = 8;
  * @typedef {Object} DiagnosticError
  * @property {string} at                 ISO timestamp
  * @property {string} kind               error class/name
- * @property {string} message            truncated to {@link ERROR_MESSAGE_LIMIT} chars
+ * @property {string} message            stable hash of the original free-form message
  * @property {string} [phase]            optional context like 'encoding', 'broadcasting'
  */
 
@@ -81,7 +87,7 @@ const REDACTED_HASH_PREFIX_LEN = 8;
  * @property {number} timestamp
  * @property {'log'|'info'|'warn'|'error'} level
  * @property {string} source
- * @property {string} message              expected to be pre-truncated by the caller (logConsole.snapshot defaults to 500 chars)
+ * @property {string} message              stable hash of the original free-form message
  */
 
 /**
@@ -196,14 +202,14 @@ export async function diagnosticDump(opts = {}) {
     }
 
     /** @type {DiagnosticDump} */
-    return {
+    const dump = {
         wallet: {
-            version: walletVersion,
-            platform: env.platform ?? null,
-            os: env.os ?? null,
-            browser: env.browser ?? null,
+            version: sanitizeTextValue(walletVersion),
+            platform: sanitizeTextValue(env.shell ?? env.platform),
+            os: sanitizeTextValue(env.os ?? (env.shell ? env.platform : null)),
+            browser: sanitizeTextValue(env.browser ?? env.userAgent),
         },
-        sdk: { version: sdkVersion },
+        sdk: { version: sanitizeTextValue(sdkVersion) },
         chains,
         endpoints,
         signers: signers.map(sanitizeSigner),
@@ -211,9 +217,10 @@ export async function diagnosticDump(opts = {}) {
         recent_errors: sanitizeErrors(recentErrors),
         recent_logs: sanitizeLogs(recentLogs),
         counts,
-        build: build ?? null,
+        build: sanitizeBuild(build),
         generatedAt: new Date().toISOString(),
     };
+    return sanitizeDiagnosticValue(dump);
 }
 
 /**
@@ -254,12 +261,40 @@ export function createErrorRingBuffer(opts = {}) {
     };
 }
 
+/**
+ * Register the global 'error' and 'unhandledrejection' listeners on a
+ * shell realm so crashes land in `buffer`. Safe on targets without
+ * `addEventListener`. Returns an uninstall function.
+ *
+ * @param {{ addEventListener?: Function, removeEventListener?: Function } | null | undefined} target
+ * @param {{ record: (err: unknown, phase?: string) => void }} buffer
+ * @returns {() => void}
+ */
+export function installShellErrorCapture(target, buffer) {
+    if (!target || typeof target.addEventListener !== 'function' || !buffer) {
+        return () => {};
+    }
+    const onError = (ev) => {
+        try { buffer.record(ev?.error ?? ev?.message ?? 'Error', 'error'); } catch { /* never throw from a crash hook */ }
+    };
+    const onRejection = (ev) => {
+        try { buffer.record(ev?.reason ?? 'unhandledrejection', 'unhandledrejection'); } catch { /* never throw from a crash hook */ }
+    };
+    target.addEventListener('error', onError);
+    target.addEventListener('unhandledrejection', onRejection);
+    return () => {
+        target.removeEventListener?.('error', onError);
+        target.removeEventListener?.('unhandledrejection', onRejection);
+    };
+}
+
 function sanitizeSigner(s) {
     if (!s || typeof s !== 'object') return null;
     /** @type {DiagnosticSignerSummary} */
-    const out = { kind: s.kind };
-    if (typeof s.model === 'string') out.model = s.model;
-    if (typeof s.firmware === 'string') out.firmware = s.firmware;
+    const out = { kind: sanitizeTextValue(s.kind ?? s.vendor) };
+    if (typeof s.model === 'string') out.model = redactDiagnosticText(s.model);
+    const firmware = s.firmware ?? s.firmwareVersion;
+    if (typeof firmware === 'string') out.firmware = redactDiagnosticText(firmware);
     return out;
 }
 
@@ -306,43 +341,201 @@ function sanitizeSettings(settings) {
             perChain: adsPerChain,
         },
         fees,
-        notifications: settings.notifications ?? null,
-        grace: settings.grace ?? null,
+        notifications: sanitizeNotifications(settings.notifications),
+        grace: sanitizeGrace(settings.grace),
     };
 }
 
-// Cluster Q FOLLOWUP 5: defensive bound + truncation on logConsole
-// snapshots that crossed a process boundary. The caller is expected
-// to have already truncated each `message` via
-// `logConsole.snapshot({ messageLimit })`, but a stale shell or a
-// custom messaging shim could feed in untrimmed entries. The flow
-// caps the array length and re-truncates each message so a single
-// runaway log line never bloats a pasted bug report.
+function sanitizeNotifications(notifications) {
+    if (!notifications || typeof notifications !== 'object') return null;
+    const out = {};
+    for (const key of [
+        'txConfirmations', 'incomingReceipts', 'dispenserFills', 'orderFills',
+        'priceAlerts', 'messages', 'governancePolls', 'deadlines',
+        'dispenserEscrow', 'incomingPending',
+    ]) {
+        if (typeof notifications[key] === 'boolean') out[key] = notifications[key];
+    }
+    return out;
+}
+
+function sanitizeGrace(grace) {
+    if (!grace || typeof grace !== 'object') return null;
+    return {
+        undoSendEnabled: grace.undoSendEnabled === true,
+        undoSendSeconds: Number.isFinite(grace.undoSendSeconds) ? grace.undoSendSeconds : null,
+        testSendThresholdSats: Number.isFinite(Number(grace.testSendThresholdSats))
+            ? Number(grace.testSendThresholdSats)
+            : null,
+    };
+}
+
+// Log and error messages are free-form inputs that can interpolate wallet
+// data. Stable hashes preserve repeated-failure correlation without placing
+// addresses, balances, keys, or recovery phrases in a pasted report.
 const RECENT_LOGS_LIMIT = 200;
 const LOG_MESSAGE_LIMIT = 500;
 function sanitizeLogs(arr) {
     if (!Array.isArray(arr)) return [];
-    return arr.slice(-RECENT_LOGS_LIMIT).map((e) => ({
+    const logs = arr.slice(-RECENT_LOGS_LIMIT).map((e) => ({
         id: Number.isFinite(e?.id) ? Number(e.id) : 0,
         timestamp: Number.isFinite(e?.timestamp) ? Number(e.timestamp) : 0,
         level: ['log', 'info', 'warn', 'error'].includes(e?.level) ? e.level : 'log',
-        source: typeof e?.source === 'string' ? e.source : 'console',
-        message: typeof e?.message === 'string'
-            ? e.message.slice(0, LOG_MESSAGE_LIMIT)
-            : '',
+        source: sanitizeLogSource(e?.source),
+        message: redactFreeFormText(
+            typeof e?.message === 'string' ? e.message.slice(0, LOG_MESSAGE_LIMIT) : e?.message,
+        ),
+    }));
+    return logs.map((entry) => ({
+        ...entry,
+        source: redactDiagnosticText(entry.source),
+        message: redactDiagnosticText(entry.message),
     }));
 }
 
 function sanitizeErrors(arr) {
     if (!Array.isArray(arr)) return [];
     return arr.slice(-RECENT_ERRORS_LIMIT).map((e) => ({
-        at: typeof e?.at === 'string' ? e.at : new Date().toISOString(),
-        kind: typeof e?.kind === 'string' ? e.kind : 'Error',
-        message: typeof e?.message === 'string'
-            ? e.message.slice(0, ERROR_MESSAGE_LIMIT)
-            : '',
-        ...(typeof e?.phase === 'string' ? { phase: e.phase } : {}),
+        at: sanitizeTimestamp(e?.at),
+        kind: sanitizeErrorKind(e?.kind),
+        message: redactFreeFormText(e?.message),
+        ...(sanitizeErrorPhase(e?.phase) ? { phase: sanitizeErrorPhase(e.phase) } : {}),
     }));
+}
+
+function sanitizeLogSource(value) {
+    if (['console', 'app', 'vault', 'encoder', 'storage'].includes(value)) return value;
+    if (typeof value === 'string' && value.startsWith('signer:')) return 'signer';
+    if (typeof value === 'string' && value.startsWith('bridge:')) return 'bridge';
+    return 'other';
+}
+
+function sanitizeTimestamp(value) {
+    const timestamp = typeof value === 'string' ? Date.parse(value) : NaN;
+    return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : new Date().toISOString();
+}
+
+function sanitizeErrorKind(value) {
+    const safeKinds = [
+        'Error',
+        'TypeError',
+        'RangeError',
+        'ReferenceError',
+        'SyntaxError',
+        'URIError',
+        'EvalError',
+        'AggregateError',
+        'DOMException',
+    ];
+    return safeKinds.includes(value) ? value : 'Error';
+}
+
+function sanitizeErrorPhase(value) {
+    const safePhases = ['error', 'unhandledrejection', 'encoding', 'broadcasting'];
+    return safePhases.includes(value) ? value : null;
+}
+
+function sanitizeBuild(build) {
+    if (!build || typeof build !== 'object') return null;
+    const out = {};
+    for (const key of ['buildId', 'buildDate', 'gitCommit', 'walletVersion', 'target']) {
+        if (typeof build[key] === 'string') out[key] = redactDiagnosticText(build[key]).slice(0, 200);
+    }
+    return out;
+}
+
+function sanitizeTextValue(value) {
+    return typeof value === 'string' ? redactDiagnosticText(value).slice(0, 500) : null;
+}
+
+/**
+ * Remove wallet identifiers and secret material from untrusted diagnostic text.
+ * This also protects the final UI copy boundary when an older host returns a
+ * diagnostic object that predates the structured field whitelist.
+ *
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function redactDiagnosticText(value) {
+    let text = String(value ?? '');
+    const secretLabel = '(?:password|passphrase|mnemonic|seed[_\\s-]*phrase|recovery[_\\s-]*phrase|private[_\\s-]*key|secret(?:[_\\s-]*key)?|wif)';
+    text = redactLabeledValues(text, secretLabel);
+    text = redactLabeledValues(text, 'balance');
+    text = text
+        .replace(/\b(?:xprv|tprv)[1-9A-HJ-NP-Za-km-z]{40,120}\b/g, REDACTED)
+        .replace(/\b[KL5c9][1-9A-HJ-NP-Za-km-z]{50,51}\b/g, REDACTED)
+        .replace(/\b(?:bc1|tb1|bcrt1|ltc1|tltc1|rltc1)[02-9ac-hj-np-z]{8,90}\b/gi, REDACTED)
+        .replace(/\b[123mnLMQDA9][1-9A-HJ-NP-Za-km-z]{25,34}\b/g, REDACTED)
+        .replace(/\b0x[0-9a-f]{40}\b/gi, REDACTED)
+        .replace(/(\b(?:txid|tx[_\s-]*hash|transaction[_\s-]*id)\b\s*["']?\s*[:=]\s*["']?)(?:0x)?[0-9a-f]{64}\b/gi, `$1${REDACTED}`)
+        .replace(/\b\d+(?:,\d{3})*(?:\.\d+)?\s*(?:BTC|TBTC|LTC|TLTC|DOGE|XCP|sats?|litoshis?|koinu)\b/gi, REDACTED);
+    return redactBip39Phrases(text);
+}
+
+function redactLabeledValues(text, labelSource) {
+    const pattern = new RegExp(
+        `(\\b${labelSource}\\b\\s*["']?\\s*[:=]\\s*)(?:(['"])(.*?)\\2|([^"',;\\n\\r}]+))`,
+        'gi',
+    );
+    return text.replace(pattern, (match, prefix, quote, quotedValue, plainValue) => {
+        if ((quotedValue ?? plainValue).trim() === REDACTED) return match;
+        return `${prefix}${quote || ''}${REDACTED}${quote || ''}`;
+    });
+}
+
+/**
+ * Sanitize every value before a diagnostic object crosses the copy boundary.
+ * Sensitive field names are removed even when a stale host sends an unknown
+ * report shape, while ordinary strings still receive content-based redaction.
+ *
+ * @param {unknown} value
+ * @param {string} [key]
+ * @returns {unknown}
+ */
+export function sanitizeDiagnosticValue(value, key = '') {
+    const normalizedKey = key.replace(/[_\s-]/g, '').toLowerCase();
+    if ([
+        'password', 'passphrase', 'mnemonic', 'seedphrase', 'recoveryphrase',
+        'privatekey', 'secret', 'secretkey', 'wif', 'xprv', 'xpriv', 'key',
+        'keys', 'balance', 'balances',
+    ].includes(normalizedKey)) return REDACTED;
+    if (typeof value === 'string') return redactDiagnosticText(value);
+    if (typeof value === 'bigint') return value.toString();
+    if (Array.isArray(value)) return value.map((item) => sanitizeDiagnosticValue(item));
+    if (value && typeof value === 'object') {
+        return Object.fromEntries(Object.entries(value).map(([childKey, childValue]) => [
+            childKey,
+            sanitizeDiagnosticValue(childValue, childKey),
+        ]));
+    }
+    return value;
+}
+
+function redactBip39Phrases(text) {
+    const words = [...text.matchAll(/\b[a-z]{3,12}\b/gi)];
+    const ranges = [];
+    for (let start = 0; start < words.length; start += 1) {
+        for (const length of MNEMONIC_LENGTHS) {
+            const end = start + length;
+            if (end > words.length) continue;
+            const slice = words.slice(start, end);
+            const contiguous = slice.every((word, index) => index === 0
+                || /^\s+$/.test(text.slice(slice[index - 1].index + slice[index - 1][0].length, word.index)));
+            const phraseWords = slice.map((word) => word[0].toLowerCase());
+            const isRecoveryPhrase = phraseWords.every((word) => BIP39_WORDS.has(word))
+                || (length === 12 && phraseWords.every((word) => COUNTERWALLET_WORDS.has(word)));
+            if (contiguous && isRecoveryPhrase) {
+                ranges.push([slice[0].index, slice[length - 1].index + slice[length - 1][0].length]);
+                start = end - 1;
+                break;
+            }
+        }
+    }
+    for (let index = ranges.length - 1; index >= 0; index -= 1) {
+        const [start, end] = ranges[index];
+        text = `${text.slice(0, start)}${REDACTED}${text.slice(end)}`;
+    }
+    return text;
 }
 
 async function safeCount(collection) {
@@ -363,6 +556,13 @@ function joinEndpoint(e) {
 function redactCustomUrl(url) {
     if (typeof url !== 'string' || url.length === 0) return '';
     const bytes = new TextEncoder().encode(url);
+    const hex = bytesToHex(sha256(bytes)).slice(0, REDACTED_HASH_PREFIX_LEN);
+    return `redacted:sha256:${hex}`;
+}
+
+function redactFreeFormText(value) {
+    if (typeof value !== 'string' || value.length === 0) return '';
+    const bytes = new TextEncoder().encode(value);
     const hex = bytesToHex(sha256(bytes)).slice(0, REDACTED_HASH_PREFIX_LEN);
     return `redacted:sha256:${hex}`;
 }

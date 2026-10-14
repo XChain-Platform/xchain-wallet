@@ -32,7 +32,9 @@ function renderFilled(importMnemonic) {
     fireEvent.change(screen.getByLabelText('Recovery phrase'), { target: { value: PHRASE } });
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: PASSWORD } });
     fireEvent.change(screen.getByLabelText(/^Confirm/), { target: { value: PASSWORD } });
-    fireEvent.click(screen.getByLabelText(/This wallet uses a BIP39 passphrase/));
+    fireEvent.click(screen.getByRole('switch', {
+        name: /This wallet uses a BIP39 passphrase/,
+    }));
 }
 
 describe('a ticked passphrase box with an empty field refuses to import', () => {
@@ -60,11 +62,41 @@ describe('a ticked passphrase box with an empty field refuses to import', () => 
     it('imports without a passphrase when the box is left unticked', async () => {
         const importMnemonic = vi.fn().mockResolvedValue({});
         renderFilled(importMnemonic);
-        fireEvent.click(screen.getByLabelText(/This wallet uses a BIP39 passphrase/));
+        fireEvent.click(screen.getByRole('switch', {
+            name: /This wallet uses a BIP39 passphrase/,
+        }));
 
         fireEvent.click(screen.getByRole('button', { name: 'Import' }));
 
         await waitFor(() => expect(importMnemonic).toHaveBeenCalled());
         expect(importMnemonic.mock.calls[0][0].bip39Passphrase).toBe('');
+    });
+});
+
+describe('background label restore feedback', () => {
+    it('shows the notice before restore settles and refreshes Home after a late apply', async () => {
+        let finishRestore;
+        const importMnemonic = vi.fn().mockResolvedValue({ labelSyncToken: 'w1:1' });
+        const labelSyncRestoreResult = vi.fn(() => new Promise((resolve) => {
+            finishRestore = resolve;
+        }));
+        const onImported = vi.fn();
+        render(
+            <MessagingProvider shell="web" messaging={{ importMnemonic, labelSyncRestoreResult }}>
+                <ImportWallet onBack={() => {}} onImported={onImported} mode="fresh" />
+            </MessagingProvider>,
+        );
+        fireEvent.change(screen.getByLabelText('Recovery phrase'), { target: { value: PHRASE } });
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: PASSWORD } });
+        fireEvent.change(screen.getByLabelText(/^Confirm/), { target: { value: PASSWORD } });
+        fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+
+        expect(await screen.findByText('Automatic Donation System')).toBeTruthy();
+        expect(onImported).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+        expect(onImported).toHaveBeenCalledTimes(1);
+
+        finishRestore({ restored: true, contactsAdded: 1 });
+        await waitFor(() => expect(onImported).toHaveBeenCalledTimes(2));
     });
 });

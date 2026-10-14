@@ -82,6 +82,7 @@
  * @property {(req: SignApprovalRequest) => Promise<SignApprovalResult>} coSign
  * @property {(req: SignApprovalRequest) => Promise<SignApprovalResult>} signIn
  * @property {(req: ParallelApprovalRequest) => Promise<SignApprovalResult>} [parallel]   optional §43.2 grouped modal for parallel(); one prompt captures the password for the whole batch. When absent the bridge falls back to a per-action signAction prompt.
+ * @property {(matches: (origin: unknown) => boolean) => Promise<number>} [cancelOriginsMatching] rejects and closes pending prompts selected by the background
  */
 
 /**

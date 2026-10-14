@@ -43,6 +43,10 @@ const homeSrc = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'Home.jsx'),
     'utf8',
 );
+const displayBalancesSrc = readFileSync(
+    join(wsRoot, 'packages', 'core', 'src', 'shared', 'utils', 'displayBalances.js'),
+    'utf8',
+);
 const historySrc = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'History.jsx'),
     'utf8',
@@ -148,16 +152,24 @@ assert.deepEqual(synthesizeDemoHistory('bitcoin-mainnet', null), []);
 assert.deepEqual(synthesizeDemoLinks(), []);
 
 // ─── 4. Home.jsx wiring ────────────────────────────────────────────────
+//
+// Home and the shells' command palettes read through loadDisplayBalances,
+// so the demo branch lives there once.
 
 assert.match(
     homeSrc,
-    /flowsLib\.isDemoWallet\(walletId\)[\s\S]+?messaging\.getAddressesByChain/,
-    'Home checks isDemoWallet then fetches address list',
+    /loadDisplayBalances\(messaging, walletId, accountId\)/,
+    'Home reads balances through loadDisplayBalances',
 );
 assert.match(
-    homeSrc,
-    /flowsLib\.synthesizeDemoBalances\(byChain\)/,
-    'Home synthesizes balances when demo',
+    displayBalancesSrc,
+    /isDemoWallet\(walletId\)[\s\S]+?messaging\.getAddressesByChain/,
+    'loadDisplayBalances checks isDemoWallet then fetches address list',
+);
+assert.match(
+    displayBalancesSrc,
+    /synthesizeDemoBalances\(byChain\)/,
+    'loadDisplayBalances synthesizes balances when demo',
 );
 
 // ─── 5. History.jsx wiring ─────────────────────────────────────────────

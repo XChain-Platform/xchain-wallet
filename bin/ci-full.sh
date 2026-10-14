@@ -196,7 +196,7 @@ run_tier "drift: wallet<->SDK preflight schema/code parity" \
 run_tier "drift: wallet<->hub chain-registry snapshot" \
   node bin/sync-chain-registry.mjs --check
 run_tier "drift: installed SDK matches lockfile pin" \
-  node tools/dev/sdk-installed-guard.mjs
+  pnpm run sdk:check
 
 # --- job: build ------------------------------------------------------------
 # The four gates after the build can only be checked against a real dist/, so
@@ -220,6 +220,13 @@ run_tier "build: SRI hashes match the built assets" \
 run_tier "coverage ratchet (test:unit:coverage)" pnpm test:unit:coverage
 
 # --- job: e2e --------------------------------------------------------------
+# These Vitest suites are part of the GitHub e2e job's global setup. Run them
+# as explicit tiers here so the fast gate grades them without running Playwright.
+run_tier "boundary suite (test:boundary)" pnpm test:boundary
+run_tier "chaos suite (test:chaos)" pnpm test:chaos
+run_tier "accessibility suite (test:a11y)" pnpm test:a11y
+export XCHAIN_CI_FULL_VITEST_TIERS=1
+
 # Browser binaries are not in the pnpm store, so the workflow fetches them and
 # so does this. The Playwright config spawns the Vite dev server itself, so
 # there is nothing to start; CI=1 makes it refuse to reuse a stray one.

@@ -9,11 +9,14 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { Button, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, ListPage, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useChainIdsWithAction } from '../hooks/useSupportedChains.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './IssueTokenForm.module.css';
+import local from './BetFeedsList.module.css';
+import rowStyles from './ActionsMenu.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -27,11 +30,11 @@ export function useBetChainIds() {
 // Feed lifecycle -> pill colour. The wallet shows the STORED status, never a
 // status recomputed from the clock, so what a user sees is what the chain thinks.
 function statusColor(status) {
-    if (status === 'resolved') return { bg: '#1b5e20', fg: '#fff' };
-    if (status === 'cancelled' || status === 'expired') return { bg: '#8e1c1c', fg: '#fff' };
-    if (status === 'resolved_void') return { bg: '#4a4a4a', fg: '#fff' };
-    if (status === 'closed') return { bg: '#8a6d00', fg: '#fff' };
-    return { bg: '#0d47a1', fg: '#fff' };
+    if (status === 'resolved') return { bg: 'color-mix(in srgb, var(--xc-success) 18%, transparent)', fg: 'var(--xc-success)' };
+    if (status === 'cancelled' || status === 'expired') return { bg: 'var(--xc-danger-bg)', fg: 'var(--xc-danger-text)' };
+    if (status === 'resolved_void') return { bg: 'var(--xc-bg-muted)', fg: 'var(--xc-text-muted)' };
+    if (status === 'closed') return { bg: 'var(--xc-warning-bg)', fg: 'var(--xc-warning-text)' };
+    return { bg: 'var(--xc-accent-primary)', fg: 'var(--xc-on-accent)' };
 }
 
 // Plain-language labels: users are not reading protocol enums (wallet audience rule).
@@ -92,9 +95,16 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
     const [openOnly, setOpenOnly] = useState(true);
     const [rows, setRows] = useState(/** @type {any[] | null} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    const [addressesReload, setAddressesReload] = useState(0);
+    const [feedsReload, setFeedsReload] = useState(0);
 
     useEffect(() => {
         let cancelled = false;
+        setChainId(null);
+        setNoChain(false);
+        setBetChains([]);
+        setRows(null);
+        setError(null);
         messaging.getAddressesByChain(walletId)
             .then((byChain) => {
                 if (cancelled) return;
@@ -103,18 +113,22 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
                 if (avail.length > 0) setChainId(avail[0]);
                 else setNoChain(true);
             })
-            .catch((err) => { if (!cancelled) setError(err?.message || 'Failed to load addresses.'); });
+            .catch((err) => {
+                if (!cancelled) setError(userFacingMessage(err, 'Could not load betting addresses. Try again.'));
+            });
         return () => { cancelled = true; };
-    }, [walletId, messaging, betChainIds]);
+    }, [walletId, messaging, betChainIds, addressesReload]);
 
     useEffect(() => {
         if (!chainId) return undefined;
         let cancelled = false;
+        let latestRequestId = 0;
 
         // `clear` separates the FIRST read of a chain/filter from the refreshes
         // that follow it: blanking the rows is what shows "Loading markets…",
         // and doing that every 30 seconds would flash the whole list.
         const load = (clear) => {
+            const requestId = ++latestRequestId;
             if (clear) { setRows(null); setError(null); }
             // Filter on the stored feed status rather than fetching everything and
             // deciding client-side, so paging stays meaningful on a busy chain.
@@ -122,13 +136,18 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
                 ? { chainId, query: 'open', type: 'status', opts: { limit: 50 } }
                 : { chainId, opts: { limit: 50 } };
             return messaging.betFeeds(req)
-                .then((resp) => { if (!cancelled) { setRows(extractRows(resp)); setError(null); } })
+                .then((resp) => {
+                    if (!cancelled && requestId === latestRequestId) {
+                        setRows(extractRows(resp));
+                        setError(null);
+                    }
+                })
                 .catch((err) => {
                     // A failed REFRESH keeps the markets already on screen: they
                     // are still the best thing known about the chain, and
                     // replacing them with an error would punish a momentary blip.
-                    if (cancelled) return;
-                    if (clear) setError(err?.message || 'Failed to load markets.');
+                    if (cancelled || requestId !== latestRequestId) return;
+                    if (clear) setError(userFacingMessage(err, 'Could not load betting markets. Try again.'));
                 });
         };
 
@@ -148,50 +167,100 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
         // last had the tab in front of them.
         const timer = setInterval(() => load(false), REFRESH_MS);
         return () => { cancelled = true; clearInterval(timer); };
-    }, [chainId, openOnly, messaging]);
+    }, [chainId, openOnly, messaging, feedsReload]);
 
     const header = <PageHeader onBack={onBack} title="Betting" />;
     const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
 
     if (noChain) {
         return wrap(
-            <>
-                <p className={styles.hint}>No address on a chain that supports betting. Use Receive to generate one first.</p>
-            </>,
+            <ListPage>
+                <EmptyState
+                    title="No betting address"
+                    body="Betting requires an address on a supported chain."
+                />
+            </ListPage>,
         );
     }
-    if (!chainId && !error) return wrap(<p>Loading…</p>);
+    if (!chainId && !error) {
+        return wrap(
+            <ListPage>
+                <div role="status" aria-label="Loading betting addresses" aria-busy="true">
+                    Loading betting addresses…
+                </div>
+            </ListPage>,
+        );
+    }
+    if (!chainId) {
+        return wrap(
+            <ListPage>
+                <StatusMessage
+                    variant="error"
+                    className={styles.error}
+                    recovery={{ label: 'Try again', onAction: () => setAddressesReload((value) => value + 1) }}
+                >
+                    {error}
+                </StatusMessage>
+            </ListPage>,
+        );
+    }
 
     return wrap(
-        <>
-            <NetworkField value={chainId} onChange={setChainId} chainIds={betChains.length ? betChains : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
-
-            <div className={styles.actions} style={{ gap: '0.5rem' }}>
-                <Button variant={openOnly ? 'primary' : 'ghost'} onClick={() => setOpenOnly(true)}>Taking bets</Button>
-                <Button variant={openOnly ? 'ghost' : 'primary'} onClick={() => setOpenOnly(false)}>All markets</Button>
-                {onCreate ? <Button variant="ghost" onClick={() => onCreate(chainId)}>Create market</Button> : null}
-            </div>
-
+        <ListPage
+            toolbar={(
+                <div className={local.toolbarRow}>
+                    <div className={local.toolbarNetwork}>
+                        <NetworkField
+                            value={chainId}
+                            onChange={setChainId}
+                            chainIds={betChains.length ? betChains : (chainId ? [chainId] : [])}
+                            chainRegistry={chainRegistry}
+                            size="md"
+                        />
+                    </div>
+                    <div className={`${styles.betActions} ${local.toolbarActions}`}>
+                        {/* A two-way filter: the colour shows the active side, and
+                            aria-pressed says the same to a screen reader. */}
+                        <Button size="md" variant={openOnly ? 'primary' : 'ghost'} aria-pressed={openOnly} onClick={() => setOpenOnly(true)}>Taking bets</Button>
+                        <Button size="md" variant={openOnly ? 'ghost' : 'primary'} aria-pressed={!openOnly} onClick={() => setOpenOnly(false)}>All markets</Button>
+                        {onCreate ? <Button size="md" variant="ghost" onClick={() => onCreate(chainId)}>Create market</Button> : null}
+                    </div>
+                </div>
+            )}
+        >
             {/* This screen is the whole family's entry point (the GovernancePolls
                 pattern), so the two personal views hang off it rather than each
                 needing its own slot in the actions menu. */}
             {onMyBets || onMyMarkets ? (
-                <div className={styles.actions} style={{ gap: '0.5rem' }}>
-                    {onMyBets ? <Button variant="ghost" onClick={onMyBets}>My bets</Button> : null}
-                    {onMyMarkets ? <Button variant="ghost" onClick={onMyMarkets}>My markets</Button> : null}
+                <div className={styles.betActions}>
+                    {onMyBets ? <Button size="md" variant="ghost" onClick={onMyBets}>My bets</Button> : null}
+                    {onMyMarkets ? <Button size="md" variant="ghost" onClick={onMyMarkets}>My markets</Button> : null}
                 </div>
             ) : null}
 
-            {error ? <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage> : null}
-            {chainId && !rows && !error ? <p>Loading markets…</p> : null}
+            {error ? (
+                <StatusMessage
+                    variant="error"
+                    className={styles.error}
+                    recovery={{ label: 'Try again', onAction: () => setFeedsReload((value) => value + 1) }}
+                >
+                    {error}
+                </StatusMessage>
+            ) : null}
+            {chainId && !rows && !error ? (
+                <div role="status" aria-label="Loading betting markets" aria-busy="true">
+                    Loading betting markets…
+                </div>
+            ) : null}
             {rows && rows.length === 0 ? (
-                <p className={styles.hint}>
-                    {openOnly ? 'No markets are taking bets on this chain right now.' : 'No markets on this chain yet.'}
-                </p>
+                <EmptyState
+                    title="No markets"
+                    body={openOnly ? 'No markets are taking bets on this chain right now.' : 'Markets created on this chain appear here.'}
+                />
             ) : null}
 
             {rows && rows.length > 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <ul className={local.marketList}>
                     {rows.map((m) => {
                         const id = m.action_index;
                         // The market LABEL is on-chain text written by whoever created the
@@ -199,26 +268,28 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onMyBets, onMyM
                         const label = m.label || '(untitled market)';
                         const outcomes = typeof m.outcomes === 'string' ? m.outcomes.split(',') : [];
                         return (
-                            <button
-                                key={String(id)}
-                                type="button"
-                                onClick={() => onOpenMarket(chainId, id)}
-                                className={styles.card}
-                                style={{ textAlign: 'left', cursor: 'pointer', width: '100%' }}
-                            >
-                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', alignItems: 'center' }}>
-                                    <strong>#{String(id)} · {m.tick || 'n/a'}</strong>
-                                    <StatusPill status={m.feed_status} />
-                                </div>
-                                <div className={styles.hint}>{String(label).slice(0, 100)}</div>
-                                {outcomes.length ? (
-                                    <div className={styles.hint}>{outcomes.slice(0, 4).join(' / ')}{outcomes.length > 4 ? ' …' : ''}</div>
-                                ) : null}
-                            </button>
+                            <li key={String(id)} className={local.marketItem}>
+                                <Button
+                                    type="button"
+                                    onClick={() => onOpenMarket(chainId, id)}
+                                    className={rowStyles.entry}
+                                >
+                                    <span className={rowStyles.entryText}>
+                                        <span className={local.marketHeader}>
+                                            <strong>#{String(id)} · {m.tick || 'n/a'}</strong>
+                                            <StatusPill status={m.feed_status} />
+                                        </span>
+                                        <span className={`${local.marketDetail} ${styles.betLongText}`}>{String(label).slice(0, 100)}</span>
+                                        {outcomes.length ? (
+                                            <span className={`${local.marketDetail} ${styles.betLongText}`}>{outcomes.slice(0, 4).join(' / ')}{outcomes.length > 4 ? ' …' : ''}</span>
+                                        ) : null}
+                                    </span>
+                                </Button>
+                            </li>
                         );
                     })}
-                </div>
+                </ul>
             ) : null}
-        </>,
+        </ListPage>,
     );
 }

@@ -68,10 +68,19 @@ assert.equal(
     'DispensersList.jsx only exports the component',
 );
 assert.ok(/export function DispenserDetail\b/.test(detailSrc), 'DispenserDetail is a named export');
-assert.equal(
-    (detailSrc.match(/^export\s+(function|const|class)\b/gm) || []).length,
-    1,
-    'DispenserDetail.jsx only exports the component',
+// formatUnixDate / formatLocalClock are exported pure helpers so the
+// timestamp-format unit test can reach them; the component is still the only
+// capitalised (React) export.
+const detailExports = [...detailSrc.matchAll(/^export\s+(?:function|const|class)\s+(\w+)/gm)].map((m) => m[1]);
+assert.deepEqual(
+    detailExports.filter((n) => /^[A-Z]/.test(n)),
+    ['DispenserDetail'],
+    'DispenserDetail.jsx exports exactly one component',
+);
+assert.deepEqual(
+    detailExports.filter((n) => !/^[A-Z]/.test(n)).sort(),
+    ['formatLocalClock', 'formatUnixDate'],
+    'DispenserDetail.jsx other exports are the two timestamp helpers',
 );
 
 // --- 2. DispensersList wiring + edge-case handling --------------------
@@ -93,11 +102,11 @@ assert.ok(
     'DispensersList sorts rows newest-block-first',
 );
 assert.ok(
-    /No addresses on any chain/.test(listSrc) || /No addresses/.test(listSrc),
+    /title="No supported address"/.test(listSrc),
     'DispensersList surfaces the no-addresses case',
 );
 assert.ok(
-    /No dispensers opened/.test(listSrc),
+    /title="No dispensers yet"/.test(listSrc),
     'DispensersList surfaces the empty per-chain case',
 );
 assert.ok(
@@ -148,7 +157,7 @@ assert.ok(
     'DispenserDetail signs cancel on the dispenserAction lane',
 );
 assert.ok(
-    /label="Close dispenser"\s+danger/.test(detailSrc),
+    /label="Close dispenser"[\s\S]{0,600}?variant="danger"/.test(detailSrc),
     'DispenserDetail close button uses the danger variant',
 );
 assert.ok(
@@ -272,6 +281,10 @@ for (const [shell, appPath] of [
     assert.ok(
         /setDispenserRef\(\{\s*chainId,\s*actionIndex,\s*origin:/.test(app),
         `${shell} threads chainId + actionIndex + origin through setDispenserRef`,
+    );
+    assert.ok(
+        /onCreateDispenser=\{\(\) => \{[\s\S]{0,160}?setFormReturnView\('dispensers-list'\);[\s\S]{0,160}?setUnlockedView\('dispenser'\);/.test(app),
+        `${shell} returns a dispenser launched from the list back to the list`,
     );
 }
 

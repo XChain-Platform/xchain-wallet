@@ -16,9 +16,17 @@ import { describe, it, expect } from 'vitest';
 import {
     userFacingMessage,
     isDeveloperMessage,
+    protocolRefusalReason,
 } from '../../../packages/core/src/shared/utils/userFacingMessage.js';
 
 const FALLBACK = 'Could not import that private key.';
+
+function protocolRefusal(reason) {
+    return Object.assign(new Error(`Encoder RPC error: ${reason}`), {
+        name: 'SDKEncoderError',
+        code: 'ENCODER_RPC_ERROR',
+    });
+}
 
 describe('userFacingMessage', () => {
     it('replaces a flow precondition string', () => {
@@ -76,9 +84,67 @@ describe('userFacingMessage', () => {
         expect(userFacingMessage(new Error('   importWif: boom'), FALLBACK)).toBe(FALLBACK);
     });
 
+    it.each([
+        'ERR_NETWORK',
+        'E_CONN_RESET',
+        'INSUFFICIENT_FUNDS',
+        'Request failed: ERR_NETWORK',
+        'SDKEncoderError: INSUFFICIENT_FUNDS',
+    ])('keeps raw error codes and internal names out of display copy: %s', (raw) => {
+        expect(userFacingMessage(raw, FALLBACK)).toBe(FALLBACK);
+    });
+
+    it.each([
+        'at submitAction (submitAction.js:42:7)',
+        'Could not submit\n    at submitAction (submitAction.js:42:7)',
+        'submitAction.js:42:7',
+    ])('keeps stack fragments out of display copy: %s', (raw) => {
+        expect(userFacingMessage(raw, FALLBACK)).toBe(FALLBACK);
+    });
+
+    it.each([
+        ['InvalidPasswordError', 'Incorrect password.'],
+        ['HardwareSigningRetryError', 'Your hardware wallet is locked. Unlock it, then select Approve again.'],
+        ['RbfPlanError', 'Already confirmed.'],
+    ])('keeps the copy an app-defined %s carries', (name, message) => {
+        expect(userFacingMessage(Object.assign(new Error(message), { name }), FALLBACK)).toBe(message);
+    });
+
+    it('hides platform storage exceptions, with or without their class', () => {
+        expect(userFacingMessage(new DOMException('Private storage payload detail', 'QuotaExceededError'), FALLBACK))
+            .toBe(FALLBACK);
+        expect(userFacingMessage({ name: 'QuotaExceededError', message: 'Private storage payload detail' }, FALLBACK))
+            .toBe(FALLBACK);
+    });
+
     it('isDeveloperMessage reports the same verdict for logging callers', () => {
         expect(isDeveloperMessage(new Error('importWif: boom'))).toBe(true);
         expect(isDeveloperMessage(new Error('That is not a valid private key.'))).toBe(false);
         expect(isDeveloperMessage(undefined)).toBe(true);
+    });
+
+    it('passes through the node reason from a typed protocol refusal', () => {
+        const reason = '  The market closed before this bet reached the node.  ';
+        const err = protocolRefusal(reason);
+        expect(protocolRefusalReason(err)).toBe(reason.trim());
+        expect(userFacingMessage(err, FALLBACK)).toBe(reason.trim());
+        expect(isDeveloperMessage(err)).toBe(false);
+    });
+
+    it('caps a protocol refusal reason', () => {
+        const reason = 'A'.repeat(700);
+        const shown = userFacingMessage(protocolRefusal(reason), FALLBACK);
+        expect(shown).toBe(reason.slice(0, 500));
+    });
+
+    it.each([
+        'Could not validate /RBTC/api/feequote',
+        '{"error":"private detail"}',
+        'Could not validate the action\n    at privateFunction (/private/source.js:1:2)',
+    ])('hides unsafe content inside a typed protocol refusal: %s', (reason) => {
+        const err = protocolRefusal(reason);
+        expect(protocolRefusalReason(err)).toBeNull();
+        expect(userFacingMessage(err, FALLBACK)).toBe(FALLBACK);
+        expect(isDeveloperMessage(err)).toBe(true);
     });
 });

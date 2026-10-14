@@ -63,8 +63,8 @@ assert.ok(/function sanitizeLogs\(arr\)/.test(dumpSrc),
 // that fed in malformed entries doesn't break the dump shape.
 assert.ok(/\['log', 'info', 'warn', 'error'\]\.includes\(e\?\.level\)/.test(dumpSrc),
     'sanitizeLogs validates the level field against the documented union');
-assert.ok(/typeof e\?\.source === 'string' \? e\.source : 'console'/.test(dumpSrc),
-    'sanitizeLogs coerces source to a string with a "console" fallback');
+assert.ok(/source: sanitizeLogSource\(e\?\.source\)/.test(dumpSrc),
+    'sanitizeLogs reduces free-form source values to safe categories');
 
 // 4. The DiagnosticDump typedef exposes the new slot.
 assert.ok(/@property \{DiagnosticLogEntry\[\]\} recent_logs/.test(dumpSrc),
@@ -84,5 +84,18 @@ assert.ok(/let recentLogs = \[\];[\s\S]{0,300}try \{[\s\S]{0,200}recentLogs = lo
     'diagnostic.dump handler guards the snapshot call in a try/catch');
 assert.ok(/diagnosticDump\(\{[\s\S]{0,500}recentLogs,[\s\S]{0,200}\}\)/.test(hostSrc),
     'diagnostic.dump handler passes recentLogs into diagnosticDump');
+
+// 6. Crash hook registration: every wallet shell entry point installs the
+//    global error capture, and the background dump passes the buffer in.
+for (const m of ['packages/web/src/main.jsx', 'packages/desktop/renderer/main.jsx', 'packages/extension/src/popup/main.jsx']) {
+    assert.ok(read(m).includes('installShellErrorCapture()'), `${m} installs the crash hook`);
+}
+assert.ok(/installShellErrorCapture\(globalThis/.test(hostSrc), 'background installs the crash hook');
+assert.ok(/recentErrors: \[[\s\S]{0,200}req\?\.recentErrors[\s\S]{0,100}errorBuffer\.list\(\)/.test(hostSrc),
+    'diagnostic.dump passes recentErrors from the request and the background buffer');
+for (const m of ['packages/web/src/messaging.js', 'packages/desktop/renderer/messaging.js', 'packages/extension/src/popup/messaging.js']) {
+    assert.ok(/sendMessage\('diagnostic\.dump', \{ recentErrors: getRecentShellErrors\(\) \}\)/.test(read(m)),
+        `${m} sends the shell error buffer with diagnostic.dump`);
+}
 
 console.log('OK: logConsole.snapshot + diagnostic-dump integration');

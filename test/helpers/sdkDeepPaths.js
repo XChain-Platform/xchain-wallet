@@ -49,12 +49,15 @@ export const SDK_DEEP_PATHS = {
     endpoints: ['src/utils/endpoints.js', 'src/endpoints.js'],
     formats: ['src/protocol/formats.js', 'src/formats.js'],
     formatSelector: ['src/formatSelector.js'],
+    explorerClient: ['src/clients/explorer.js'],
     gatedFile: ['src/gatedFile.js'],
     musig2: ['src/musig2.js'],
     networks: ['src/networks.js'],
     preflightConstants: ['src/preflight/constants.js'],
     protocolConstants: ['src/protocol/constants.js'],
     protocolNetworks: ['src/protocol/networks.js', 'src/networks.js'],
+    protocolValidator: ['src/protocol/validator.js', 'src/validator.js'],
+    utility: ['src/utils/utility.js', 'src/utility.js'],
     wallet: ['src/wallet.js'],
 };
 

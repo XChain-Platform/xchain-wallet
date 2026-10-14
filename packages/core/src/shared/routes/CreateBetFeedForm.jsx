@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, Button, Input, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, Button, FormPage, Input, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -17,6 +17,7 @@ import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { protocolCoinTickerFor } from '../../registry/nativeFee.js';
+import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -28,6 +29,11 @@ import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx
 import { useBetChainIds } from './BetFeedsList.jsx';
 import styles from './IssueTokenForm.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import {
+    formatWithThousands,
+    normalizeLocalizedDecimal,
+} from '../utils/amountFormat.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -39,6 +45,13 @@ const MAX_LABEL = 250;
 const MAX_OUTCOMES = 16;
 const MAX_OUTCOME_LABEL = 64;
 const MAX_FEE_PCT = 10;
+const MIN_REFUND_WINDOW = 3600;
+const MAX_REFUND_WINDOW = 31536000;
+const MAX_DEADLINE_HORIZON = 31536000;
+const MAX_DESCRIPTION = 2000;
+const MAX_RESOLUTION_CRITERIA = 1000;
+const MAX_SOURCE = 500;
+const MAX_CATEGORY = 64;
 
 // Refund window presets, in seconds. This is how long after betting closes the
 // oracle still has to publish a result; past it, the chain refunds everyone.
@@ -75,7 +88,7 @@ function unwrap(resp) {
 // rejected for the same reason the indexer rejects them: they render as nothing,
 // which hides the difference between two labels that look identical.
 // eslint-disable-next-line no-control-regex
-const OUTCOME_BAD_CHARS = /[,|;]|[\u0000-\u001f]/;
+const OUTCOME_BAD_CHARS = /[,|;]|[\u0000-\u001f\u007f]/;
 
 /**
  * BET v0: open a betting market (a "feed") as its oracle.
@@ -147,6 +160,8 @@ export function CreateBetFeedForm({
     const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any} */ (null));
+    const [submitting, setSubmitting] = useState(false);
+    const submitLockRef = useRef(false);
     const [duplicated, setDuplicated] = useState(false);
 
     // A stable "now" for the cost quote. Refreshed slowly on purpose: the quote
@@ -234,6 +249,10 @@ export function CreateBetFeedForm({
     // broadcast, the miner fee is spent, and the market never exists.
     const coinTicker = protocolCoinTickerFor(descriptor || chainId);
     const nativeFee = useNativeFee(chainId);
+    const feeEstimate = useMemo(
+        () => estimateNativeSendFee({ chainId, chainRegistry, speed: 'normal' }),
+        [chainId],
+    );
 
     const cleanOutcomes = useMemo(
         () => outcomes.map((o) => o.trim()).filter((o) => o.length > 0),
@@ -366,6 +385,7 @@ export function CreateBetFeedForm({
         if (!label.trim()) return 'Give the market a question or title.';
         if (label.trim().length > MAX_LABEL) return `The title is ${label.trim().length} characters; the limit is ${MAX_LABEL}.`;
         if (!tick.trim()) return 'Choose the token bets are placed in. Betting is token-only: the chain coin cannot be wagered.';
+        if (cleanOutcomes.length !== outcomes.length) return 'Fill in every outcome, or remove the empty one.';
         if (cleanOutcomes.length < 2) return 'A market needs at least two outcomes.';
         if (cleanOutcomes.length > MAX_OUTCOMES) return `A market can have at most ${MAX_OUTCOMES} outcomes.`;
         if (cleanOutcomes.some((o) => o.length > MAX_OUTCOME_LABEL)) return `Each outcome label must be ${MAX_OUTCOME_LABEL} characters or fewer.`;
@@ -373,7 +393,11 @@ export function CreateBetFeedForm({
         if (new Set(cleanOutcomes).size !== cleanOutcomes.length) return 'Two outcomes have the same label. Each one must be distinct.';
         if (!deadlineUnix) return 'Pick when betting closes.';
         if (deadlineUnix <= nowSec) return 'Betting must close in the future.';
+        if (deadlineUnix - nowSec > MAX_DEADLINE_HORIZON) return 'Betting must close within one year.';
         if (!refundSeconds) return 'Set how long you have to publish the result.';
+        if (refundSeconds < MIN_REFUND_WINDOW || refundSeconds > MAX_REFUND_WINDOW) {
+            return 'Time to publish the result must be between one hour and one year.';
+        }
         if (feePct.trim()) {
             if (!/^\d+(\.\d{1,2})?$/.test(feePct.trim())) return 'Your fee must be a number with at most two decimal places, as a percent of the pot.';
             if (Number(feePct.trim()) > MAX_FEE_PCT) return `Your fee cannot exceed ${MAX_FEE_PCT}% of the pot.`;
@@ -386,6 +410,10 @@ export function CreateBetFeedForm({
         if (allowList.trim() && allowList.trim() === blockList.trim()) {
             return 'The same list is set as both allowed and blocked, so nobody could ever bet. Pick one.';
         }
+        if (description.trim().length > MAX_DESCRIPTION) return `The description must be ${MAX_DESCRIPTION} characters or fewer.`;
+        if (resolutionCriteria.trim().length > MAX_RESOLUTION_CRITERIA) return `The settlement rule must be ${MAX_RESOLUTION_CRITERIA} characters or fewer.`;
+        if (source.trim().length > MAX_SOURCE) return `The result source must be ${MAX_SOURCE} characters or fewer.`;
+        if (category.trim().length > MAX_CATEGORY) return `The category must be ${MAX_CATEGORY} characters or fewer.`;
         return null;
     }
 
@@ -397,9 +425,23 @@ export function CreateBetFeedForm({
         event?.preventDefault?.();
         const problem = validate();
         if (problem) { setFormError(problem); return; }
+        if (submitLockRef.current) return;
+        submitLockRef.current = true;
+        setSubmitting(true);
         setFormError(null);
         const from = sourceDescriptor();
         try {
+            if (isWatcherMode) {
+                const res = await messaging.buildBetActionPsbtRequest({
+                    chainId,
+                    from,
+                    builder: 'createMarketParams',
+                    params: marketParams,
+                    payFeeInNativeCoin: nativeFee.flag,
+                });
+                setResult(res);
+                return;
+            }
             const res = await actionConfirm.run({
                 chainId,
                 from,
@@ -428,6 +470,9 @@ export function CreateBetFeedForm({
                 coinTicker, mandatory: nativeFee.mandatory,
                 fallback: err?.message || 'Creating the market failed.',
             }));
+        } finally {
+            submitLockRef.current = false;
+            setSubmitting(false);
         }
     }
 
@@ -440,6 +485,9 @@ export function CreateBetFeedForm({
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
+                feeText={feeEstimate?.coinAmount
+                    ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
+                    : undefined}
                 signerReady={signerReady}
                 password={password}
                 onPasswordChange={setPassword}
@@ -487,19 +535,6 @@ export function CreateBetFeedForm({
         );
     }
 
-    // Creating a market means signing, so watcher mode has nothing to offer here.
-    // Said plainly rather than shown as a form that cannot be submitted.
-    if (isWatcherMode) {
-        return wrap(
-            <>
-                <p className={styles.hint}>
-                    This wallet is in watcher mode, so it cannot open a market. Opening one commits you
-                    to publishing the result, which needs the key that will later resolve it.
-                </p>
-            </>,
-        );
-    }
-
     if (loadError) {
         return wrap(
             <>
@@ -511,6 +546,15 @@ export function CreateBetFeedForm({
 
     if (result) {
         const txid = result?.txid || result?.tx_hash;
+        if (result?.psbtHex && !txid) {
+            return wrap(
+                <WatcherResultPanel
+                    result={result}
+                    onBuildAnother={() => setResult(null)}
+                    onDone={onBack}
+                />,
+            );
+        }
         // A queued result is SIGNED and not broadcast. The confirm
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
@@ -579,7 +623,23 @@ export function CreateBetFeedForm({
     })();
 
     return wrap(
-        <form onSubmit={submit} noValidate>
+        <FormPage
+            label="Open a market"
+            onSubmit={submit}
+            status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={submitting || actionConfirm.composing}
+                    disabled={submitting || actionConfirm.composing}
+                >
+                    {actionConfirm.composing
+                        ? 'Preparing review…'
+                        : isWatcherMode ? 'Create unsigned transaction' : 'Review market'}
+                </Button>
+            )}
+        >
             {duplicated ? (
                 <p className={styles.hint}>
                     Copied from market #{String(duplicateFeedIndex)}. Pick new dates, then check the terms:
@@ -629,8 +689,8 @@ export function CreateBetFeedForm({
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 <span className={styles.fromLabel}>Possible outcomes</span>
                 {outcomes.map((o, i) => (
-                    <div key={i} style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
-                        <div style={{ flex: 1 }}>
+                    <div key={i} className={styles.betOutcomeRow}>
+                        <div className={styles.betOutcomeField}>
                             <Input
                                 label={`Outcome ${i}`}
                                 value={o}
@@ -655,7 +715,7 @@ export function CreateBetFeedForm({
             <Input
                 label="Betting closes"
                 type="datetime-local"
-                hint="Set this comfortably BEFORE the event starts. Block timestamps can lag real time by up to about two hours, so a deadline set too close lets late information be bet on."
+                hint="Close betting well before the event. Block times can trail real time by about two hours, so a late deadline may allow bets after it starts."
                 value={deadlineInput}
                 onChange={(e) => setDeadlineInput(e.target.value)}
             />
@@ -664,7 +724,7 @@ export function CreateBetFeedForm({
                 label="Time to publish the result"
                 value={windowPreset}
                 onChange={(e) => setWindowPreset(e.target.value)}
-                hint="After betting closes you have this long to publish the winning outcome. Miss it and the network refunds every bet automatically, and you earn nothing."
+                hint="Time to publish the result after betting closes. If it expires, every bet is refunded and you earn nothing."
             >
                 {WINDOW_PRESETS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
             </Select>
@@ -689,9 +749,12 @@ export function CreateBetFeedForm({
 
             <Input
                 label="Your fee (optional)"
-                hint={`Your cut of the pot as a percent, e.g. 1.5 for 1.5%. Up to ${MAX_FEE_PCT}%. Taken only when you publish a result; a cancelled, void or expired market pays you nothing.`}
-                value={feePct}
-                onChange={(e) => setFeePct(e.target.value)}
+                hint={`Your share of the pot, such as 1.5 for 1.5%. Up to ${MAX_FEE_PCT}%. Paid only when you publish a result; cancelled, void, and expired markets pay nothing.`}
+                value={formatWithThousands(feePct)}
+                onChange={(e) => {
+                    const raw = e.target.value;
+                    setFeePct(normalizeLocalizedDecimal(raw) ?? raw);
+                }}
                 inputMode="decimal"
                 autoComplete="off"
             />
@@ -699,8 +762,11 @@ export function CreateBetFeedForm({
             <Input
                 label="Smallest bet allowed (optional)"
                 hint="Leave empty for no minimum. Useful because payouts round down: a tiny stake can win and still pay nothing."
-                value={minAmount}
-                onChange={(e) => setMinAmount(e.target.value)}
+                value={formatWithThousands(minAmount)}
+                onChange={(e) => {
+                    const raw = e.target.value;
+                    setMinAmount(normalizeLocalizedDecimal(raw) ?? raw);
+                }}
                 inputMode="decimal"
                 autoComplete="off"
             />
@@ -766,7 +832,7 @@ export function CreateBetFeedForm({
                 <>
                     <Input
                         label="Only these addresses may bet"
-                        hint="The number of an on-chain address list. Membership is checked when a bet is placed, so removing someone later does not undo a bet they already made."
+                        hint="Address list number. Membership is checked when each bet is placed, so later removals do not cancel existing bets."
                         value={allowList}
                         onChange={(e) => setAllowList(e.target.value)}
                         inputMode="numeric"
@@ -789,31 +855,20 @@ export function CreateBetFeedForm({
                 </>
             ) : null}
 
-            {!isHwSource && !signerReady ? (
+            {!isWatcherMode && !isHwSource && !signerReady ? (
                 <Input
                     label="Password"
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password"
                 />
             ) : null}
 
-            {formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    block
-                    loading={actionConfirm.composing}
-                    disabled={actionConfirm.composing}
-                >
-                    {actionConfirm.composing ? 'Preparing review…' : 'Review market'}
-                </Button>
-            </div>
             <p className={styles.hint}>
                 Everything above is permanent once the market is on the chain: there is no edit. Your only
                 later choices are publishing the winning outcome or cancelling and refunding everyone.
             </p>
-        </form>,
+        </FormPage>,
     );
 }

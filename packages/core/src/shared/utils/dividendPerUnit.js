@@ -94,6 +94,94 @@ export function multiplyDecimal(a, b) {
 }
 
 /**
+ * Exact decimal addition. Null when either side is unreadable.
+ *
+ * @param {unknown} a
+ * @param {unknown} b
+ * @returns {string | null}
+ */
+export function addDecimal(a, b) {
+    const pa = parseDecimal(a);
+    const pb = parseDecimal(b);
+    if (!pa || !pb) return null;
+    const scale = Math.max(pa.scale, pb.scale);
+    const da = pa.digits * 10n ** BigInt(scale - pa.scale);
+    const db = pb.digits * 10n ** BigInt(scale - pb.scale);
+    return render(da + db, scale);
+}
+
+/**
+ * Floor a non-negative decimal to the payment token's on-chain precision.
+ * Null means the value or precision is not usable.
+ *
+ * @param {unknown} value
+ * @param {unknown} places
+ * @returns {string | null}
+ */
+export function floorDecimal(value, places) {
+    const parsed = parseDecimal(value);
+    const rawPlaces = Number(places);
+    if (!parsed || parsed.digits < 0n || !Number.isFinite(rawPlaces) || rawPlaces < 0) return null;
+    const scale = Math.min(8, Math.trunc(rawPlaces));
+    if (parsed.scale <= scale) return render(parsed.digits, parsed.scale);
+    return render(parsed.digits / 10n ** BigInt(parsed.scale - scale), scale);
+}
+
+/**
+ * Project the recipient count and payout using the same per-recipient floor
+ * and payment-token list gates as DIVIDEND.
+ *
+ * @param {object} args
+ * @param {Array<{ address?: unknown, amount?: unknown }>} args.rows
+ * @param {unknown} args.amount
+ * @param {unknown} args.divisibility
+ * @param {string | null | undefined} [args.sourceAddress]
+ * @param {string[] | null | undefined} [args.allowMembers]
+ * @param {string[] | null | undefined} [args.blockMembers]
+ * @returns {{ eligibleCount: number, eligibleUnits: string | null, total: string | null,
+ *   sourceExcluded: boolean } | null}
+ */
+export function dividendPreview({
+    rows, amount, divisibility, sourceAddress, allowMembers, blockMembers,
+}) {
+    if (!Array.isArray(rows)) return null;
+    const allow = Array.isArray(allowMembers) && allowMembers.length > 0
+        ? new Set(allowMembers) : null;
+    const block = Array.isArray(blockMembers) && blockMembers.length > 0
+        ? new Set(blockMembers) : null;
+    const eligible = [];
+    const hasAmount = compareDecimal(amount, '0') === 1;
+    let total = hasAmount ? '0' : null;
+    let sourceExcluded = false;
+
+    for (const row of rows) {
+        const address = typeof row?.address === 'string' ? row.address : '';
+        if (sourceAddress && address === sourceAddress) {
+            sourceExcluded = true;
+            continue;
+        }
+        if ((allow && !allow.has(address)) || (block && block.has(address))) continue;
+        if (!hasAmount) {
+            eligible.push(row);
+            continue;
+        }
+        const payout = floorDecimal(multiplyDecimal(amount, row?.amount), divisibility);
+        if (payout === null) return null;
+        if (compareDecimal(payout, '0') !== 1) continue;
+        eligible.push(row);
+        total = addDecimal(total, payout);
+        if (total === null) return null;
+    }
+
+    return {
+        eligibleCount: eligible.length,
+        eligibleUnits: sumHolderUnits(eligible),
+        total,
+        sourceExcluded,
+    };
+}
+
+/**
  * Total units held across a holder set. Null when ANY row's amount is
  * unreadable: an understated divisor would hand Max a rate that overpays,
  * which is the very defect this module exists to stop.

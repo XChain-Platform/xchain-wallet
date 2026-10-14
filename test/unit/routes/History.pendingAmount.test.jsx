@@ -126,7 +126,7 @@ describe('History annotates what a pending transaction moves', () => {
     it('names the amount on an incoming pending SEND', async () => {
         const { view } = mountHistory({ mempool: [mempoolRow()] });
         await waitFor(() => expect(annotation(view)).toBeTruthy());
-        expect(annotation(view).textContent).toBe('receiving 100 XCHAIN');
+        expect(annotation(view).textContent).toBe('receiving +100 XCHAIN');
         expect(annotation(view).getAttribute('data-pending-amount')).toBe('in');
     });
 
@@ -135,7 +135,7 @@ describe('History annotates what a pending transaction moves', () => {
         // only thing that knows what was sent.
         const { view } = mountHistory({ pendingTxs: [ownSendRecord()] });
         await waitFor(() => expect(annotation(view)).toBeTruthy());
-        expect(annotation(view).textContent).toBe('sending 100 XCHAIN');
+        expect(annotation(view).textContent).toBe('sending -100 XCHAIN');
         expect(annotation(view).getAttribute('data-pending-amount')).toBe('out');
     });
 
@@ -176,7 +176,7 @@ describe('History annotates what a pending transaction moves', () => {
             mempool: [mempoolRow({ data: `SEND|0|XCHAIN|${exact}|${OURS}|` })],
         });
         await waitFor(() => expect(annotation(view)).toBeTruthy());
-        expect(annotation(view).textContent).toBe(`receiving ${exact} XCHAIN`);
+        expect(annotation(view).textContent).toBe(`receiving +${exact} XCHAIN`);
     });
 
     it('names every output of a multi-output SEND, not just the first', async () => {
@@ -188,13 +188,13 @@ describe('History annotates what a pending transaction moves', () => {
             })],
         });
         await waitFor(() => expect(annotation(view)).toBeTruthy());
-        expect(annotation(view).textContent).toBe('receiving 100 XCHAIN, 7 PEPE');
+        expect(annotation(view).textContent).toBe('receiving +100 XCHAIN, +7 PEPE');
     });
 
     it('carries the pre-validation caveat as the figure accessible name', async () => {
         const { view } = mountHistory({ mempool: [mempoolRow()] });
         await waitFor(() => expect(annotation(view)).toBeTruthy());
-        const caveat = 'Pending, not yet validated by the service: receiving 100 XCHAIN';
+        const caveat = 'Pending, not yet validated by the service: receiving +100 XCHAIN';
         expect(annotation(view).getAttribute('aria-label')).toBe(caveat);
         expect(annotation(view).getAttribute('title')).toBe(caveat);
     });

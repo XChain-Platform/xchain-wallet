@@ -42,6 +42,8 @@ import { StakeForm } from '../../packages/core/src/shared/routes/StakeForm.jsx';
 import { StakingActionForm } from '../../packages/core/src/shared/routes/StakingActionForm.jsx';
 import { ContractFundsForm } from '../../packages/core/src/shared/routes/ContractFundsForm.jsx';
 import { ContractStakeForm } from '../../packages/core/src/shared/routes/ContractStakeForm.jsx';
+import { CreateBetFeedForm } from '../../packages/core/src/shared/routes/CreateBetFeedForm.jsx';
+import { CreateOrderForm } from '../../packages/core/src/shared/routes/CreateOrderForm.jsx';
 import { ControllerBindForm } from '../../packages/core/src/shared/routes/ControllerBindForm.jsx';
 import { DeployContractForm } from '../../packages/core/src/shared/routes/DeployContractForm.jsx';
 import { ExecuteContractForm } from '../../packages/core/src/shared/routes/ExecuteContractForm.jsx';
@@ -59,12 +61,13 @@ import { ComposeMessage } from '../../packages/core/src/shared/routes/ComposeMes
 import { PollDetail } from '../../packages/core/src/shared/routes/PollDetail.jsx';
 
 const CHAIN = 'bitcoin-mainnet';
+const VOTE_DELEGATE = 'bc1qdevmock03aabbcc';
 
 // Same frozen fee-payer the Layer-4 harness uses: a newest HD address at
 // change index 0, which every form auto-selects as the source.
 const HD_ADDRESS = Object.freeze({
     id: 'addr-hd-0',
-    address: 'bc1qexampleexampleexampleexampleexampleex',
+    address: 'bc1qdevmock02aabbcc',
     publicKey: '02aabbcc',
     derivationPath: "m/84'/0'/0'/0/0",
     source: 'hd',
@@ -110,8 +113,8 @@ function recordingMessaging(overrides = {}) {
                 balances: {
                     native: { tick: 'BTC', quantity: '100000', divisibility: 8 },
                     tokens: [
-                        { tick: 'XCHAIN', quantity: '1000', divisibility: 8 },
-                        { tick: 'JDOG', quantity: '500', divisibility: 8 },
+                        { tick: 'XCHAIN', quantity: '100000000000', divisibility: 8 },
+                        { tick: 'JDOG', quantity: '50000000000', divisibility: 8 },
                     ],
                 },
             }],
@@ -123,6 +126,11 @@ function recordingMessaging(overrides = {}) {
         }),
         // AdvancedActionsForm's action picker is populated from the host.
         listActions: () => Promise.resolve(['BROADCAST', 'SEND']),
+        validateAction: () => Promise.resolve({ valid: true, errors: [] }),
+        getAddressBalances: () => Promise.resolve({
+            native: { tick: 'BTC', quantity: '100000000000', divisibility: 8 },
+            tokens: [{ tick: 'JDOG', quantity: '100000000000', divisibility: 8 }],
+        }),
         // PollDetail renders its ballot editor from a loaded, OPEN poll.
         governancePoll: () => Promise.resolve({
             poll_index: 7, tick: 'JDOG', poll_status: 'open',
@@ -174,6 +182,22 @@ async function drainMicrotasks(rounds = 12) {
     for (let i = 0; i < rounds; i += 1) await Promise.resolve();
 }
 
+function expectAccessibleFormControls(container) {
+    const controls = container.querySelectorAll('input:not([type="hidden"]), select, textarea');
+    for (const control of controls) {
+        expect(control).toHaveAccessibleName();
+        const descriptionIds = (control.getAttribute('aria-describedby') || '')
+            .split(/\s+/)
+            .filter(Boolean);
+        for (const id of descriptionIds) {
+            expect(document.getElementById(id), `${control.tagName} description #${id}`).toBeTruthy();
+        }
+        if (control.getAttribute('aria-invalid') === 'true') {
+            expect(descriptionIds.length, `${control.tagName} invalid state has a description`).toBeGreaterThan(0);
+        }
+    }
+}
+
 /**
  * Mount a form, run its `fill` step, click the named action button, then
  * Approve on the confirm page. Returns every recorded host dispatch.
@@ -185,7 +209,7 @@ async function drainMicrotasks(rounds = 12) {
  * @param {(utils: any) => void} [spec.fill]
  * @param {Array<(utils: any) => void>} [spec.steps]   extra interactions, each flushed on its own (picker screens need a render between clicks)
  */
-async function driveThroughConfirm({ Form, props, actionLabel, fill, steps = [], hw = false }) {
+async function driveThroughConfirm({ Form, props, actionLabel, fill, steps = [], hw = false, afterClick = null }) {
     const { messagingOverrides, ...formProps } = props;
     // The same drive, sourced from a paired device instead of an HD
     // key. Auto-select only picks `source === 'hd'`, so the hardware address
@@ -223,12 +247,20 @@ async function driveThroughConfirm({ Form, props, actionLabel, fill, steps = [],
         });
     }
 
+    expectAccessibleFormControls(utils.container);
+
     const button = utils.getByRole('button', { name: actionLabel });
     expect(button.disabled, `"${actionLabel}" button is enabled`).toBe(false);
     await domAct(async () => {
         fireEvent.click(button);
         await drainMicrotasks();
     });
+    if (afterClick) {
+        await domAct(async () => {
+            afterClick(utils);
+            await drainMicrotasks();
+        });
+    }
 
     // #40, asserted here rather than per form ON PURPOSE: every test in this
     // file drives a different form through this one helper, so the From row is
@@ -267,6 +299,52 @@ function expectSingleEncode(calls, { action, params, submitMethod }) {
 const setValue = (utils, label, value) => {
     fireEvent.change(utils.getByLabelText(label), { target: { value } });
 };
+
+async function mountFilledForm({ Form, props, steps = [], fill }) {
+    const { messagingOverrides, ...formProps } = props;
+    const { messaging, calls } = recordingMessaging(messagingOverrides);
+    let utils;
+    await domAct(async () => {
+        utils = render(
+            React.createElement(
+                MessagingProvider,
+                { shell: 'web', messaging },
+                React.createElement(Form, {
+                    walletId: 'w',
+                    chainId: CHAIN,
+                    onBack() {},
+                    ...formProps,
+                }),
+            ),
+        );
+        await drainMicrotasks();
+    });
+    for (const step of [...steps, ...(fill ? [fill] : [])]) {
+        // eslint-disable-next-line no-await-in-loop
+        await domAct(async () => {
+            step(utils);
+            await drainMicrotasks();
+        });
+    }
+    return { calls, utils };
+}
+
+async function clickAction(utils, label) {
+    await domAct(async () => {
+        fireEvent.click(utils.getByRole('button', { name: label }));
+        await drainMicrotasks();
+    });
+}
+
+async function approveAction(utils) {
+    await domAct(async () => {
+        const approve = Array.from(utils.container.querySelectorAll('button'))
+            .find((button) => /approve/i.test(button.textContent || '') && !button.disabled);
+        if (!approve) throw new Error('no enabled Approve button on the confirm page');
+        fireEvent.click(approve);
+        await drainMicrotasks();
+    });
+}
 
 // TokenField opens the shared TokenPicker screen; these two steps open it
 // and pick the row for `tick` out of the mocked wallet balances.
@@ -436,12 +514,12 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             Form: DelegateVoteForm,
             props: { presetTick: 'JDOG' },
             actionLabel: 'Delegate votes',
-            fill: (utils) => setValue(utils, 'Delegate to address', 'bc1qdelegate'),
+            fill: (utils) => setValue(utils, 'Delegate to address', VOTE_DELEGATE),
         });
         const compose = calls.find((c) => c.method === 'composeVoteForConfirm');
         expect(compose, 'composed through the VOTE builder route').toBeTruthy();
         expect(compose.args.builder).toBe('delegateVoteParams');
-        expect(compose.args.params).toMatchObject({ tick: 'JDOG', delegateTo: 'bc1qdelegate' });
+        expect(compose.args.params).toMatchObject({ tick: 'JDOG', delegateTo: VOTE_DELEGATE });
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
         const submit = calls.find((c) => c.method === 'delegateVoteAction');
         expect(submit, 'delegateVoteAction dispatched on Approve').toBeTruthy();
@@ -498,7 +576,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: ExecuteContractForm,
             props: { contractActionIndex: '9' },
-            actionLabel: 'Execute',
+            actionLabel: 'Call contract',
             fill: (utils) => setValue(utils, 'Method', 'transfer'),
         });
         expectSingleEncode(calls, {
@@ -532,7 +610,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
                     },
                 },
             },
-            actionLabel: 'Execute',
+            actionLabel: 'Call contract',
             steps: [
                 (utils) => setValue(utils, 'Method', 'fundLoan'),
                 openTokenField('Deposit'),
@@ -569,7 +647,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             (u) => setValue(u, 'Method', 'fundLoan'),
             openTokenField('Deposit'),
             pickToken('XCHAIN'),
-            (u) => fireEvent.click(u.getByRole('button', { name: 'Execute' })),
+            (u) => fireEvent.click(u.getByRole('button', { name: 'Call contract' })),
         ]) {
             // eslint-disable-next-line no-await-in-loop
             await domAct(async () => { step(utils); await drainMicrotasks(); });
@@ -663,7 +741,8 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: TokenWizard,
             props: {},
-            actionLabel: 'Issue token',
+            actionLabel: 'Review token',
+            afterClick: (utils) => fireEvent.click(utils.getByRole('button', { name: 'Continue to confirmation' })),
             steps: [
                 (utils) => fireEvent.click(utils.getByRole('button', { name: /Custom/ })),
                 (utils) => fireEvent.click(utils.getByRole('button', { name: 'Next' })),
@@ -678,6 +757,62 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             params: { TICK: 'JDOG' },
             submitMethod: 'issueToken',
         });
+    });
+
+    it('TokenWizard builds an unsigned ISSUE in watcher mode without asking for a password', async () => {
+        const build = vi.fn(async (args) => ({
+            psbtHex: '70736274ff00',
+            encoding: 'op_return',
+            chainId: args.chainId,
+            fromAddress: args.from.address,
+        }));
+        const { messaging, calls } = recordingMessaging({
+            getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+            buildActionPsbtRequest: build,
+        });
+        let utils;
+        await domAct(async () => {
+            utils = render(
+                <MessagingProvider shell="web" messaging={messaging}>
+                    <TokenWizard walletId="w" onBack={() => {}} />
+                </MessagingProvider>,
+            );
+            await drainMicrotasks();
+        });
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: /Custom/ }));
+            await drainMicrotasks();
+        });
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: 'Next' }));
+            await drainMicrotasks();
+        });
+        await domAct(async () => {
+            setValue(utils, 'Token name (ticker)', 'JDOG');
+            setValue(utils, 'Supply', '1000');
+            await drainMicrotasks();
+        });
+
+        expect(utils.queryByLabelText('Password')).toBeNull();
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: 'Review token' }));
+            await drainMicrotasks();
+        });
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: 'Continue to confirmation' }));
+            await drainMicrotasks();
+        });
+
+        expect(build).toHaveBeenCalledWith(expect.objectContaining({
+            chainId: CHAIN,
+            actionData: expect.objectContaining({
+                action: 'ISSUE',
+                params: expect.objectContaining({ TICK: 'JDOG' }),
+            }),
+        }));
+        expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
+        expect(utils.getByLabelText('Unsigned transaction hex')).toBeTruthy();
+        expect(utils.queryByLabelText('Password')).toBeNull();
     });
 
     it('AirdropForm confirms leg 1 (LIST) and signs the prebuilt PSBT', async () => {
@@ -761,7 +896,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: SwapForm,
             props: { initialChainId: CHAIN },
-            actionLabel: 'Swap',
+            actionLabel: 'Review',
             steps: [
                 // Give and get must differ: SwapForm rejects a same-ticker pair.
                 openTokenField('Give token:'), pickToken('XCHAIN'),
@@ -855,15 +990,22 @@ describe('Action forms confirm via the single-encode pipeline', () => {
     it('LinkForm composes LINK and signs the prebuilt PSBT', async () => {
         const { calls } = await driveThroughConfirm({
             Form: LinkForm,
-            props: {},
-            actionLabel: 'Link',
-            fill: (utils) => {
-                // Both side panels carry the same field label, so they are
-                // addressed positionally: chain A first, chain B second.
-                const [a, b] = utils.getAllByLabelText('Action to reference');
-                fireEvent.change(a, { target: { value: '11' } });
-                fireEvent.change(b, { target: { value: '22' } });
+            props: {
+                messagingOverrides: {
+                    getActionByIndex: () => Promise.resolve({ action: 'SEND', tick: 'JDOG', amount: '1' }),
+                },
             },
+            actionLabel: 'Link',
+            steps: [
+                (utils) => {
+                    // Both side panels carry the same field label, so they are
+                    // addressed positionally: chain A first, chain B second.
+                    const [a, b] = utils.getAllByLabelText('Action to reference');
+                    fireEvent.change(a, { target: { value: '11' } });
+                    fireEvent.change(b, { target: { value: '22' } });
+                },
+                () => vi.advanceTimersByTime(350),
+            ],
         });
         // The binding is the whole point: the pair the user read has to be
         // the pair inside the bytes that get signed.
@@ -883,7 +1025,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             Form: BroadcastForm,
             props: {},
             actionLabel: 'Broadcast',
-            fill: (utils) => setValue(utils, 'Message', 'hello chain'),
+            fill: (utils) => setValue(utils, 'Message (optional)', 'hello chain'),
         });
         expectSingleEncode(calls, {
             action: 'BROADCAST',
@@ -925,7 +1067,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             await drainMicrotasks();
         });
         await domAct(async () => {
-            setValue(utils, 'Message', 'hello from hardware');
+            setValue(utils, 'Message (optional)', 'hello from hardware');
             await drainMicrotasks();
         });
         await domAct(async () => {
@@ -966,7 +1108,8 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             // The software path carries the action verb, never "Review".
             actionLabel: 'Place buy order',
             fill: (utils) => {
-                setValue(utils, /^Price/, '2');
+                // /^Price/ alone also names the "Price and amount" field group.
+                setValue(utils, /^Price \(/, '2');
                 setValue(utils, /^Size/, '5');
             },
         });
@@ -997,9 +1140,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             actionLabel: 'Vote',
             fill: (utils) => {
                 // Approval mode: tick the first option.
-                const box = utils.container.querySelector('input[type="checkbox"]');
-                if (!box) throw new Error('no option checkbox on the ballot editor');
-                fireEvent.click(box);
+                fireEvent.click(utils.getByRole('checkbox', { name: '0: Yes' }));
             },
         });
 
@@ -1222,7 +1363,7 @@ describe('A migrated form maps its Approve failure through the one helper', () =
             },
         });
         const text = utils.container.textContent || '';
-        expect(text).toContain('has no BTC to spend');
+        expect(text).toContain('needs BTC for the protocol fee');
         expect(text, 'the encoder developer string never reaches the screen')
             .not.toContain('no spendable UTXOs');
     });
@@ -1244,8 +1385,195 @@ describe('A migrated form maps its Approve failure through the one helper', () =
             },
         });
         const text = utils.container.textContent || '';
-        expect(text).toContain('has no BTC to spend');
+        expect(text).toContain('needs BTC for the protocol fee');
         expect(text, 'the encoder developer string never reaches the screen')
             .not.toContain('no spendable UTXOs');
+    });
+});
+
+const PROTOCOL_FAILURE_FORMS = [
+    {
+        name: 'issue',
+        Form: IssueTokenForm,
+        props: {},
+        actionLabel: 'Issue token',
+        composeMethod: 'composeForConfirm',
+        submitMethod: 'issueToken',
+        fill: (u) => {
+            setValue(u, 'Ticker', 'RETRYISSUE');
+            setValue(u, 'Supply', '1000');
+        },
+        expectValues: (u) => {
+            expect(u.getByLabelText('Ticker').value).toBe('RETRYISSUE');
+            expect(u.getByLabelText('Supply').value).toBe('1000');
+        },
+    },
+    {
+        name: 'dispenser',
+        Form: DispenserForm,
+        props: { initialChainId: CHAIN, initialTick: 'JDOG' },
+        actionLabel: 'Create',
+        composeMethod: 'composeForConfirm',
+        submitMethod: 'dispenserAction',
+        fill: (u) => {
+            setValue(u, /^Give amount/, '10');
+            setValue(u, /^Escrow amount/, '100');
+            setValue(u, /^Trigger price/, '0.001');
+        },
+        expectValues: (u) => {
+            expect(u.getByLabelText(/^Give amount/).value).toBe('10');
+            expect(u.getByLabelText(/^Escrow amount/).value).toBe('100');
+            expect(u.getByLabelText(/^Trigger price/).value).toBe('0.001');
+        },
+    },
+    {
+        name: 'order',
+        Form: CreateOrderForm,
+        props: { initialChainId: CHAIN },
+        actionLabel: 'Place order',
+        composeMethod: 'composeForConfirm',
+        submitMethod: 'orderAction',
+        fill: (u) => {
+            setValue(u, 'Ticker', 'JDOG');
+            setValue(u, 'Amount', '5');
+            setValue(u, 'Amount (BTC)', '0.01');
+        },
+        expectValues: (u) => {
+            expect(u.getByLabelText('Ticker').value).toBe('JDOG');
+            expect(u.getByLabelText('Amount').value).toBe('5');
+            expect(u.getByLabelText('Amount (BTC)').value).toBe('0.01');
+        },
+    },
+    {
+        name: 'bet',
+        Form: CreateBetFeedForm,
+        props: { presetTick: 'JDOG' },
+        actionLabel: 'Review market',
+        composeMethod: 'composeBetForConfirm',
+        submitMethod: 'createMarketAction',
+        fill: (u) => {
+            const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16);
+            setValue(u, 'What is being bet on', 'Will retry work?');
+            setValue(u, 'Outcome 0', 'Yes');
+            setValue(u, 'Outcome 1', 'No');
+            setValue(u, 'Betting closes', tomorrow);
+        },
+        expectValues: (u) => {
+            expect(u.getByLabelText('What is being bet on').value).toBe('Will retry work?');
+            expect(u.getByLabelText('Outcome 0').value).toBe('Yes');
+            expect(u.getByLabelText('Outcome 1').value).toBe('No');
+            expect(u.getByLabelText('Betting closes').value).not.toBe('');
+        },
+    },
+    {
+        name: 'vote',
+        Form: DelegateVoteForm,
+        props: { presetTick: 'JDOG' },
+        actionLabel: 'Delegate votes',
+        composeMethod: 'composeVoteForConfirm',
+        submitMethod: 'delegateVoteAction',
+        fill: (u) => {
+            setValue(u, 'Delegate to address', VOTE_DELEGATE);
+            setValue(u, 'Memo (optional)', 'keep my vote');
+        },
+        expectValues: (u) => {
+            expect(u.getByLabelText('Delegate to address').value).toBe(VOTE_DELEGATE);
+            expect(u.getByLabelText('Memo (optional)').value).toBe('keep my vote');
+        },
+    },
+    {
+        name: 'stake',
+        Form: StakeForm,
+        props: {},
+        actionLabel: 'Stake',
+        composeMethod: 'composeForConfirm',
+        submitMethod: 'stakeAction',
+        fill: (u) => {
+            setValue(u, /^Amount/, '25');
+            setValue(u, 'Signing public key', 'a'.repeat(64));
+        },
+        expectValues: (u) => {
+            expect(u.getByLabelText(/^Amount/).value).toBe('25');
+            expect(u.getByLabelText('Signing public key').value).toBe('a'.repeat(64));
+        },
+    },
+];
+
+const SUBMIT_FAILURES = [
+    {
+        name: 'insufficient network fee',
+        makeError: () => new Error('broadcast failed (commit): Encoder RPC error: insufficient fee'),
+        shown: 'The network rejected this transaction because its fee is too low.',
+        hidden: 'broadcast failed',
+    },
+    {
+        name: 'network error',
+        makeError: () => new Error('Failed to fetch'),
+        shown: /The network is unreachable\. Check your connection and try again\./,
+        hidden: 'Failed to fetch',
+    },
+    {
+        name: 'signer cancellation',
+        makeError: () => new Error('User cancelled signing on the device.'),
+        shown: 'Signing was cancelled. Nothing was signed. Review the details and try again when you are ready.',
+        hidden: 'User cancelled signing on the device.',
+    },
+];
+
+function expectFailureBesideAction(utils, spec, shown, hidden) {
+    const message = utils.getByText(shown);
+    const action = utils.getByRole('button', { name: spec.actionLabel });
+    expect(message.closest('form')).toBe(action.closest('form'));
+    expect(utils.container.textContent || '').not.toContain(hidden);
+    spec.expectValues(utils);
+}
+
+describe.each(PROTOCOL_FAILURE_FORMS)('$name form submit failures', (spec) => {
+    it('shows a boundary-crossed protocol refusal and can compose again', async () => {
+        const reason = 'This token symbol is already registered.';
+        const refusal = Object.assign(new Error(`Encoder RPC error: ${reason}`), {
+            name: 'SDKEncoderError',
+        });
+        const compose = vi.fn()
+            .mockRejectedValueOnce(refusal)
+            .mockResolvedValue({ ...COMPOSED });
+        const { utils } = await mountFilledForm({
+            Form: spec.Form,
+            props: {
+                ...spec.props,
+                messagingOverrides: { [spec.composeMethod]: compose },
+            },
+            fill: spec.fill,
+        });
+
+        await clickAction(utils, spec.actionLabel);
+        expectFailureBesideAction(utils, spec, reason, 'Encoder RPC error');
+
+        await clickAction(utils, spec.actionLabel);
+        expect(utils.container.querySelector('[data-testid="confirm-source"]')).toBeTruthy();
+        expect(compose).toHaveBeenCalledTimes(2);
+        await clickAction(utils, 'Reject');
+    });
+
+    it.each(SUBMIT_FAILURES)('shows $name, keeps values, and retries', async (failure) => {
+        const submit = vi.fn()
+            .mockRejectedValueOnce(failure.makeError())
+            .mockResolvedValue({ txid: `retry-${spec.name}` });
+        const { utils } = await driveThroughConfirm({
+            Form: spec.Form,
+            props: {
+                ...spec.props,
+                messagingOverrides: { [spec.submitMethod]: submit },
+            },
+            actionLabel: spec.actionLabel,
+            fill: spec.fill,
+        });
+
+        expectFailureBesideAction(utils, spec, failure.shown, failure.hidden);
+
+        await clickAction(utils, spec.actionLabel);
+        await approveAction(utils);
+        expect(submit).toHaveBeenCalledTimes(2);
+        expect(utils.queryByText(failure.shown)).toBe(null);
     });
 });

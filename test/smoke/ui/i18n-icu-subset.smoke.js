@@ -50,9 +50,15 @@ assert.ok(
 
 // ─── ICU interpreter ──────────────────────────────────────────────
 
-const { format, t } = await import(
+const { format, registerLocale, setLocale, t } = await import(
     join(root, 'packages/core/src/i18n/index.js')
 );
+
+registerLocale('icu-smoke', {
+    'test.addressCount': '{count, plural, one {# address} other {# addresses}}',
+    'test.balanceUnavailable': 'Balance unavailable: {reason}',
+});
+await setLocale('icu-smoke');
 
 // 1. Plain substitution.
 assert.strictEqual(format('Hello {name}!', { name: 'world' }), 'Hello world!');
@@ -86,9 +92,9 @@ assert.strictEqual(
 //    it. (Same behaviour as the original simple-substitution helper.)
 assert.strictEqual(format('Hi {missing}', {}), 'Hi {missing}');
 
-// 7. The dictionary picked up the ICU plural for home.addressCount.
-assert.strictEqual(t('home.addressCount', { count: 1 }), '1 address');
-assert.strictEqual(t('home.addressCount', { count: 7 }), '7 addresses');
+// 7. A registered dictionary renders an ICU plural through t().
+assert.strictEqual(t('test.addressCount', { count: 1 }), '1 address');
+assert.strictEqual(t('test.addressCount', { count: 7 }), '7 addresses');
 
 // 8. A dictionary key carrying a simple `{name}` placeholder renders
 //    correctly. This runs through formatjs like every other key: the
@@ -97,18 +103,18 @@ assert.strictEqual(t('home.addressCount', { count: 7 }), '7 addresses');
 //    run read as proof the fallback was healthy while the fallback was
 //    untouched on this input.
 assert.strictEqual(
-    t('home.balanceUnavailable', { reason: 'offline' }),
+    t('test.balanceUnavailable', { reason: 'offline' }),
     'Balance unavailable: offline',
 );
 
-// 9. The legacy fallback itself, on the route a real dictionary key can
-//    take: `home.addressCount` is an ICU plural, and a plural arg the
+// 9. The legacy fallback itself, on the route a dictionary key can
+//    take: `test.addressCount` is an ICU plural, and a plural arg the
 //    caller omits cannot be pre-filled with its own token (the token
 //    string would coerce to NaN), so format() hands the whole template
 //    to legacyFormat, which emits bare tokens for every arg. Supplying
 //    `count` instead renders through formatjs, as item 7 shows.
 assert.strictEqual(
-    t('home.addressCount', {}),
+    t('test.addressCount', {}),
     '{count} addresses',
 );
 
@@ -119,18 +125,20 @@ assert.strictEqual(
 //     whether the caller typed `{}`. A simple-substitution key is output-identical
 //     either way, so only an ICU key exposes the split.
 assert.strictEqual(
-    t('home.addressCount'),
-    t('home.addressCount', {}),
+    t('test.addressCount'),
+    t('test.addressCount', {}),
 );
 assert.strictEqual(
-    t('home.addressCount'),
+    t('test.addressCount'),
     '{count} addresses',
 );
 //     Simple substitution is unchanged by that equivalence: a referenced
 //     arg the caller omits still renders as its bare token.
 assert.strictEqual(
-    t('home.balanceUnavailable'),
+    t('test.balanceUnavailable'),
     'Balance unavailable: {reason}',
 );
+
+await setLocale('en');
 
 console.log('OK: i18n locales layout + formatjs rendering (plural / select / mixed) + legacy-fallback route smoke');

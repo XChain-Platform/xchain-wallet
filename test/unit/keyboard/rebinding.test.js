@@ -96,7 +96,7 @@ describe('findBindingConflict', () => {
 describe('formatBinding named keys', () => {
     it('capitalizes named combo keys instead of shouting them', () => {
         expect(formatBinding('mod+enter', false)).toBe('Ctrl+Enter');
-        expect(formatBinding('mod+enter', true)).toBe('⌘Enter');
+        expect(formatBinding('mod+enter', true)).toBe('Cmd+Enter');
         expect(formatBinding('mod+k', false)).toBe('Ctrl+K');
     });
 });

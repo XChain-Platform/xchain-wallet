@@ -69,6 +69,9 @@ const SOURCE_ROW = {
  */
 function makeSdk(createTx) {
     return {
+        getUTXOs: vi.fn(async (address) => ({
+            utxos: [{ txid: '33'.repeat(32), vout: 0, value: 5000, scriptPubKey: `script:${address}` }],
+        })),
         encoder: { createTx },
         actions: { createAction: vi.fn(() => ({ actionString: 'SEND|0|JDOG|1|dest', action: 'SEND', version: 0 })) },
         wallet: {
@@ -153,6 +156,20 @@ async function compose(host, request = REQUEST) {
 }
 
 describe('action.composeForConfirm honours change-address rotation', () => {
+    it('exposes the source UTXOs used by Send coin control', async () => {
+        const { host } = makeHost({ rotation: false });
+        const res = await host.handle({
+            type: 'utxos.address',
+            request: { chainId: 'bitcoin-regtest', address: SOURCE },
+        });
+        expect(res.ok).toBe(true);
+        expect(res.result.utxos).toEqual([expect.objectContaining({
+            txid: '33'.repeat(32),
+            vout: 0,
+            value: 5000,
+        })]);
+    });
+
     it('[REGRESSION] builds change back to the source address when rotation is off', async () => {
         const { host, createTx, vault } = makeHost({ rotation: false });
         await compose(host);
@@ -186,5 +203,33 @@ describe('action.composeForConfirm honours change-address rotation', () => {
         const { host, createTx } = makeHost({ rotation: true, withSigner: false });
         await compose(host);
         expect(createTx.mock.calls[0][0].change).toBe(SOURCE);
+    });
+
+    it('lets Send pin wallet-owned change and coin-control inputs', async () => {
+        const { host, createTx, vault } = makeHost({ rotation: true });
+        const changeRow = {
+            ...SOURCE_ROW,
+            id: 'addr-change',
+            address: 'addr_0_0_1',
+            derivationPath: "m/84'/1'/0'/0/1",
+        };
+        await vault.addresses.put(changeRow);
+        const utxos = [{ txid: '11'.repeat(32), vout: 0, value: 5000, scriptPubKey: '0014aa' }];
+
+        await compose(host, { ...REQUEST, change: changeRow.address, utxos });
+
+        expect(createTx.mock.calls[0][0].change).toBe(changeRow.address);
+        expect(createTx.mock.calls[0][0].utxos).toEqual(utxos);
+    });
+
+    it('refuses a change address outside the wallet before encoding', async () => {
+        const { host, createTx } = makeHost({ rotation: false });
+        const res = await host.handle({
+            type: 'action.composeForConfirm',
+            request: { ...REQUEST, change: 'external-address' },
+        });
+        expect(res.ok).toBe(false);
+        expect(res.error.message).toMatch(/does not belong to this wallet/);
+        expect(createTx).not.toHaveBeenCalled();
     });
 });

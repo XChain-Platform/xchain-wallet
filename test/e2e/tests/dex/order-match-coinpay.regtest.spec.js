@@ -247,7 +247,7 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
 
         await test.step('wallet B is a second wallet and offers the coin', async () => {
             await gotoPalette(page, 'Switch wallet');
-            await page.getByRole('button', { name: 'Add Wallet' }).click();
+            await page.getByRole('button', { name: 'Add wallet' }).click();
             // navigate:false - this add-wallet flow starts at the onboarding
             // welcome INSIDE the unlocked shell, and a goto would throw the
             // session away and land back on wallet A.
@@ -363,9 +363,12 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await main.getByRole('button', { name: 'Pay now' }).first().click();
             await main.getByRole('button', { name: 'Review' }).click();
+            await page.getByRole('button', { name: 'Continue to confirmation' }).click();
+            await expectConfirmModal(page, 'the matched order payment', 60_000);
             const password = page.getByLabel('Password', { exact: true });
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-            await page.getByRole('button', { name: 'Sign payment' }).click();
+            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
+            await approveAndGetTxid(page);
             await expect(page.getByText('Payment broadcast'),
                 'the payment never reported being broadcast')
                 .toBeVisible({ timeout: 180_000 });
@@ -453,7 +456,7 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
 
         await test.step('wallet B mirrors it with auto-pay ARMED', async () => {
             await gotoPalette(page, 'Switch wallet');
-            await page.getByRole('button', { name: 'Add Wallet' }).click();
+            await page.getByRole('button', { name: 'Add wallet' }).click();
             await createWallet(page, { password: PASSWORD, name: 'Autopay Taker', navigate: false });
             await gotoPalette(page, 'Switch wallet');
             await page.getByRole('button', { name: /Autopay Taker/ }).first().click();

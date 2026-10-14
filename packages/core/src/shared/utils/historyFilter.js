@@ -25,7 +25,7 @@
 // All inputs are passed in explicitly so the function stays pure and
 // testable without mocking React state.
 
-import { entryTimeMs } from './pendingHistory.js';
+import { entryTimeMs, pendingDisplayState } from './pendingHistory.js';
 
 /**
  * @typedef {{
@@ -104,9 +104,15 @@ export function classifyEntryAction(entry, walletAddresses) {
  * - A blockless entry whose own record proves a block (`pending.chainConfirmed`)
  *   → confirmed: the wallet retired it itself, and no explorer row will
  *   ever arrive to say so in the usual way.
+ * - A transaction absent after a successful mempool sighting and its grace
+ *   period → failed. The row retains its dropped explanation, while the
+ *   status badge and filter stop calling it pending forever.
  * - Anything else → pending.
+ *
+ * @param {HistoryEntry} entry
+ * @param {number} [nowMs]
  */
-export function classifyEntryStatus(entry) {
+export function classifyEntryStatus(entry, nowMs = Date.now()) {
     if (!entry) return 'pending';
     const raw = entry.raw || {};
     const statusField = String(raw.status || raw.STATUS || '').toLowerCase();
@@ -114,6 +120,7 @@ export function classifyEntryStatus(entry) {
     if (raw.valid === 0 || raw.valid === false) return 'failed';
     if (Number(entry.blockIndex) > 0) return 'confirmed';
     if (entry.pending?.chainConfirmed === true) return 'confirmed';
+    if (entry.pending && pendingDisplayState(entry, nowMs) === 'dropped') return 'failed';
     return 'pending';
 }
 
@@ -130,6 +137,7 @@ export function classifyEntryStatus(entry) {
  *   dateFromMs?: number | null,
  *   dateToMs?: number | null,
  *   walletAddresses?: Set<string>,
+ *   contactNamesByAddress?: Map<string, string>,
  * }} opts
  */
 export function applyHistoryFilters(entries, opts) {
@@ -141,6 +149,7 @@ export function applyHistoryFilters(entries, opts) {
         dateFromMs = null,
         dateToMs = null,
         walletAddresses = new Set(),
+        contactNamesByAddress = new Map(),
     } = opts || {};
 
     const q = String(searchQuery || '').trim().toLowerCase();
@@ -168,7 +177,7 @@ export function applyHistoryFilters(entries, opts) {
             if (dateFromMs != null && ts < dateFromMs) return false;
             if (dateToMs != null && ts > dateToMs) return false;
         }
-        if (q && !entryMatchesSearch(e, q)) return false;
+        if (q && !entryMatchesSearch(e, q, contactNamesByAddress)) return false;
         return true;
     });
 }
@@ -186,15 +195,27 @@ const entryTimestampMs = entryTimeMs;
 
 const SEARCH_RAW_KEYS = [
     'memo', 'MEMO',
-    'tick', 'TICK', 'tick', 'ASSET',
+    'tick', 'TICK', 'asset', 'ASSET',
+    'amount', 'AMOUNT', 'quantity', 'QUANTITY',
+    'give_amount', 'GIVE_AMOUNT', 'get_amount', 'GET_AMOUNT',
+    'give_quantity', 'GIVE_QUANTITY', 'get_quantity', 'GET_QUANTITY',
     'destination', 'DESTINATION', 'recipient', 'RECIPIENT',
     'source', 'SOURCE',
+    'tx0_address', 'TX0_ADDRESS', 'tx1_address', 'TX1_ADDRESS',
+    'give_address', 'GIVE_ADDRESS', 'get_address', 'GET_ADDRESS',
     'token', 'TOKEN',
     'description', 'DESCRIPTION',
     'text', 'TEXT',
 ];
 
-function entryMatchesSearch(entry, q) {
+const SEARCH_ADDRESS_KEYS = [
+    'destination', 'DESTINATION', 'recipient', 'RECIPIENT',
+    'source', 'SOURCE',
+    'tx0_address', 'TX0_ADDRESS', 'tx1_address', 'TX1_ADDRESS',
+    'give_address', 'GIVE_ADDRESS', 'get_address', 'GET_ADDRESS',
+];
+
+function entryMatchesSearch(entry, q, contactNamesByAddress) {
     if (!entry) return false;
     if (containsCi(entry.action, q)) return true;
     if (containsCi(entry.address, q)) return true;
@@ -203,6 +224,12 @@ function entryMatchesSearch(entry, q) {
     const raw = entry.raw || {};
     for (const k of SEARCH_RAW_KEYS) {
         if (raw[k] != null && containsCi(String(raw[k]), q)) return true;
+    }
+    for (const k of SEARCH_ADDRESS_KEYS) {
+        const address = raw[k];
+        if (address == null) continue;
+        const contactName = contactNamesByAddress.get(String(address).toLowerCase());
+        if (containsCi(contactName, q)) return true;
     }
     return false;
 }

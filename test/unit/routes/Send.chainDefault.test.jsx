@@ -25,6 +25,7 @@ import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
 const BTC = 'bitcoin-mainnet';
 const DOGE = 'dogecoin-mainnet';
 const LTC = 'litecoin-mainnet';
+const TESTNET = 'bitcoin-testnet';
 
 const BTC_FROM = 'bc1qsendersendersendersendersendersendersa';
 const DOGE_FROM = 'DHy1Qk7Zx8dCn4eW1sT9pVb2xKq3rLm5Ns';
@@ -44,9 +45,10 @@ const ACTIVE = {
     [DOGE]: { id: 'addr-doge', address: DOGE_FROM },
     [LTC]: { id: 'addr-ltc', address: LTC_FROM },
 };
+const NO_SAVED_FEE = Object.freeze({ strategy: null, customSatsPerKb: null, rbfByDefault: null });
 const NATIVE_TICK = { [BTC]: 'BTC', [DOGE]: 'DOGE', [LTC]: 'LTC' };
 
-function mount({ settings, prefill, addresses = ADDRESSES, overrides = {} } = {}) {
+function mount({ settings, prefill, addresses = ADDRESSES, overrides = {}, onChangeAsset } = {}) {
     const base = {
         getAddressesByChain: vi.fn().mockResolvedValue(addresses),
         getActiveAddresses: vi.fn().mockResolvedValue(ACTIVE),
@@ -85,7 +87,9 @@ function mount({ settings, prefill, addresses = ADDRESSES, overrides = {} } = {}
         React.createElement(
             MessagingProvider,
             { shell: 'web', messaging },
-            React.createElement(Send, { walletId: 'w', onBack() {}, prefill: prefill || null }),
+            React.createElement(Send, {
+                walletId: 'w', onBack() {}, prefill: prefill || null, onChangeAsset,
+            }),
         ),
     );
     return messaging;
@@ -93,7 +97,7 @@ function mount({ settings, prefill, addresses = ADDRESSES, overrides = {} } = {}
 
 const fromField = () => screen.getByLabelText(/^From$/);
 
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); });
 
 describe('Send opens on the last-used chain', () => {
     it('opens on Dogecoin when Bitcoin was created first and Dogecoin was used last', async () => {
@@ -101,12 +105,16 @@ describe('Send opens on the last-used chain', () => {
         await waitFor(() => expect(fromField().value).toBe(DOGE_FROM));
     });
 
-    it('a prefilled chain (a token context) wins over the last-used chain', async () => {
-        mount({ settings: { lastUsedChain: { mainnet: DOGE } }, prefill: { chainId: BTC } });
-        await waitFor(() => expect(fromField().value).toBe(BTC_FROM));
+    it('a token selected on another chain switches Send from the last-used chain', async () => {
+        mount({
+            settings: { lastUsedChain: { mainnet: DOGE } },
+            prefill: { chainId: LTC, tick: 'LTCASSET' },
+        });
+        await waitFor(() => expect(fromField().value).toBe(LTC_FROM));
+        expect(screen.getByLabelText('Token')).toHaveValue('LTCASSET');
         // And stays: the load must not re-point a prefilled form.
         await new Promise((r) => { setTimeout(r, 50); });
-        expect(fromField().value).toBe(BTC_FROM);
+        expect(fromField().value).toBe(LTC_FROM);
     });
 
     it('falls back to the first chain when the last-used chain has no addresses any more', async () => {
@@ -118,6 +126,24 @@ describe('Send opens on the last-used chain', () => {
     it('a testnet slot never picks the chain on a mainnet wallet', async () => {
         mount({ settings: { lastUsedChain: { testnet: 'dogecoin-testnet' } } });
         await waitFor(() => expect(fromField().value).toBe(BTC_FROM));
+    });
+
+    it('shows a testnet asset only as its icon', async () => {
+        const testnetAddress = addr('addr-testnet', 'tb1qsendersendersendersendersendersenders', "m/84'/1'/0'/0/0");
+        mount({
+            settings: { activeNetwork: 'testnet' },
+            prefill: { chainId: TESTNET, tick: 'TBTC' },
+            addresses: { [TESTNET]: [testnetAddress] },
+            overrides: {
+                getActiveAddresses: vi.fn().mockResolvedValue({ [TESTNET]: testnetAddress }),
+            },
+            onChangeAsset: vi.fn(),
+        });
+
+        await waitFor(() => expect(fromField().value).toBe(testnetAddress.address));
+        expect(screen.getByRole('button', { name: /Change asset \(currently TBTC\)/ })).toBeTruthy();
+        expect(screen.queryByText('TBTC')).toBeNull();
+        expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
 
     it('still opens, on the first chain, when the settings read fails', async () => {
@@ -168,5 +194,51 @@ describe('Send records the chain a send succeeded on', () => {
 
         await new Promise((r) => { setTimeout(r, 50); });
         expect(messaging.updateSettings).not.toHaveBeenCalled();
+    });
+});
+
+describe('Send resets asset-specific draft fields', () => {
+    it('clears an amount when a typed token changes precision', async () => {
+        mount({ prefill: { chainId: BTC, tick: 'PEPE', amount: '1.123456789' } });
+
+        const amount = await screen.findByLabelText('Amount (PEPE)');
+        expect(amount).toHaveValue('1.123456789');
+        fireEvent.change(screen.getByLabelText('Token'), { target: { value: 'BTC' } });
+
+        expect(await screen.findByLabelText('Amount (BTC)')).toHaveValue('');
+        expect(screen.getByText('Token changed. The amount was cleared because the new token may use different decimal places.'))
+            .toBeInTheDocument();
+    });
+
+    it('clears cross-chain fields and never restores an old custom fee', async () => {
+        mount({
+            prefill: { chainId: BTC, tick: 'BTC', address: BTC_FROM, amount: '0.25' },
+            // Seeded fee records with no saved custom rate: an explicitly empty
+            // record would mean no chain is configured at all.
+            settings: { fees: { [BTC]: NO_SAVED_FEE, [DOGE]: NO_SAVED_FEE } },
+        });
+        await waitFor(() => expect(fromField().value).toBe(BTC_FROM));
+        fireEvent.change(await screen.findByLabelText('Network fee'), { target: { value: '3' } });
+        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '77' } });
+        expect(screen.getByLabelText('Network fee').getAttribute('aria-valuetext')).toContain('Custom: 77');
+
+        const to = screen.getByLabelText(/^To$/);
+        fireEvent.paste(to, {
+            clipboardData: { getData: () => 'xchain://dogecoin-mainnet/DOGE' },
+        });
+
+        await waitFor(() => expect(fromField().value).toBe(DOGE_FROM));
+        expect(screen.getByLabelText(/^To$/)).toHaveValue('');
+        expect(screen.getByLabelText('Amount (DOGE)')).toHaveValue('');
+        expect(screen.getByText('Network changed. The amount and network fee were reset because they may not be valid on the new network.'))
+            .toBeInTheDocument();
+        expect(screen.getByLabelText('Network fee').getAttribute('aria-valuetext')).toMatch(/^Normal:/);
+
+        fireEvent.paste(screen.getByLabelText(/^To$/), {
+            clipboardData: { getData: () => 'xchain://bitcoin-mainnet/BTC' },
+        });
+        await waitFor(() => expect(fromField().value).toBe(BTC_FROM));
+        expect(screen.getByLabelText('Network fee').getAttribute('aria-valuetext')).toMatch(/^Normal:/);
+        expect(screen.queryByDisplayValue('77')).not.toBeInTheDocument();
     });
 });

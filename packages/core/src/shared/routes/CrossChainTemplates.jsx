@@ -8,12 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useState } from 'react';
-import { Button, Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { useEffect, useRef, useState } from 'react';
+import { Button, EmptyState, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { CROSS_CHAIN_TEMPLATES } from '../../templates/cross-chain/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './ActionsMenu.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -52,13 +53,19 @@ const COIN_TICKER_TO_NAME = {
 export function CrossChainTemplates({ walletId, onLaunch, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [chainsWithAddresses, setChainsWithAddresses] = useState(/** @type {string[]} */ ([]));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const [loading, setLoading] = useState(true);
+    const [loadReload, setLoadReload] = useState(0);
+    const [launchError, setLaunchError] = useState(/** @type {string | null} */ (null));
+    const [launchingId, setLaunchingId] = useState(/** @type {string | null} */ (null));
+    const launchInFlightRef = useRef(false);
 
     useEffect(() => {
         let cancelled = false;
+        setLoading(true);
+        setLoadError(null);
         messaging.getAddressesByChain(walletId)
             .then((byChain) => {
                 if (cancelled) return;
@@ -66,18 +73,25 @@ export function CrossChainTemplates({ walletId, onLaunch, onBack }) {
                     .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
                     .map(([cid]) => cid);
                 setChainsWithAddresses(chains);
-                if (chains.length === 0) {
-                    setLoadError('No addresses yet. Use Receive to generate addresses on at least two chains before launching a cross-chain template.');
+                if (chains.length < 2) {
+                    setLoadError('Cross-chain templates need addresses on at least two chains. Use Receive on another chain first.');
                 }
+                setLoading(false);
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load wallet.');
+                if (!cancelled) {
+                    setLoadError(userFacingMessage(err, 'Could not load wallet chains. Try again.'));
+                    setLoading(false);
+                }
             });
         return () => { cancelled = true; };
-    }, [walletId, messaging]);
+    }, [walletId, messaging, loadReload]);
 
-    const launchTemplate = (template) => {
-        if (chainsWithAddresses.length === 0) return;
+    const launchTemplate = async (template) => {
+        if (chainsWithAddresses.length === 0 || launchInFlightRef.current) return;
+        launchInFlightRef.current = true;
+        setLaunchingId(template.id);
+        setLaunchError(null);
         const resolveChainId = (hint) => {
             const slot = hint === 'primary' ? 0 : hint === 'secondary' ? 1 : 2;
             return chainsWithAddresses[slot]
@@ -109,10 +123,17 @@ export function CrossChainTemplates({ walletId, onLaunch, onBack }) {
                 note: row.note,
             };
         });
-        onLaunch(prefill);
+        try {
+            await onLaunch(prefill);
+        } catch (err) {
+            setLaunchError(userFacingMessage(err, 'Could not open this template. Try again.'));
+        } finally {
+            launchInFlightRef.current = false;
+            setLaunchingId(null);
+        }
     };
 
-        const header = (
+    const header = (
         <PageHeader
             onBack={onBack}
             title="Cross-chain templates"
@@ -120,27 +141,53 @@ export function CrossChainTemplates({ walletId, onLaunch, onBack }) {
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            <div className={isFull ? styles.listFull : styles.listPopup}>
-                {children}
-            </div>
-            <div className={styles.actions}>
-            </div>
+            <ListPage>{children}</ListPage>
         </Screen>
     );
 
-    if (loadError) {
+    if (loading) {
         return wrap(
-            <StatusMessage variant="error" className={styles.entryDescription}>{loadError}</StatusMessage>,
+            <div role="status" aria-label="Loading cross-chain templates" aria-busy="true" className={styles.entryDescription}>
+                Loading templates…
+            </div>,
+        );
+    }
+
+    if (loadError) {
+        if (chainsWithAddresses.length < 2 && loadError.startsWith('Cross-chain templates need')) {
+            return wrap(
+                <EmptyState
+                    title="Two chains required"
+                    body="Use Receive to generate an address on another chain before launching a cross-chain template."
+                />,
+            );
+        }
+        return wrap(
+            <StatusMessage
+                variant="error"
+                className={styles.entryDescription}
+                recovery={{ label: 'Try again', onAction: () => setLoadReload((value) => value + 1) }}
+            >
+                {loadError}
+            </StatusMessage>,
         );
     }
 
     return wrap(
-        CROSS_CHAIN_TEMPLATES.map((t) => (
+        <>
+            {launchError ? (
+                <StatusMessage variant="error" className={styles.entryDescription}>
+                    {launchError}
+                </StatusMessage>
+            ) : null}
+            {CROSS_CHAIN_TEMPLATES.map((t) => (
             <article key={t.id} className={styles.entry} style={{ display: 'block' }}>
-                <span className={styles.entryLabel}>{t.name}</span>
-                <span className={styles.entryDescription}>{t.description}</span>
+                {/* Block lines: the card is display:block, so these spans
+                    were inline and the title ran straight into the text. */}
+                <span className={styles.entryLabel} style={{ display: 'block' }}>{t.name}</span>
+                <span className={styles.entryDescription} style={{ display: 'block' }}>{t.description}</span>
                 {Array.isArray(t.personas) && t.personas.length > 0 ? (
-                    <span className={styles.entryDescription} style={{ fontStyle: 'italic' }}>
+                    <span className={styles.entryDescription} style={{ display: 'block', fontStyle: 'italic' }}>
                         Persona: {t.personas.join(', ')}
                     </span>
                 ) : null}
@@ -156,14 +203,16 @@ export function CrossChainTemplates({ walletId, onLaunch, onBack }) {
                 <div style={{ marginTop: '0.75rem', display: 'flex', justifyContent: 'flex-end' }}>
                     <Button
                         variant="primary"
-                        onClick={() => launchTemplate(t)}
-                        disabled={chainsWithAddresses.length === 0}
+                        onClick={() => { void launchTemplate(t); }}
+                        loading={launchingId === t.id}
+                        disabled={chainsWithAddresses.length === 0 || launchingId !== null}
                     >
                         Use template
                     </Button>
                 </div>
             </article>
-        )),
+            ))}
+        </>,
     );
 }
 

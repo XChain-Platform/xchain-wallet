@@ -53,7 +53,7 @@ describe('market/obligationStatus classifyObligation', () => {
         // Blocking payment on a row that merely lacks a usable timestamp
         // would strand a legitimate obligation; that failure mode is
         // worse than showing no countdown.
-        for (const bad of [null, undefined, '', 'soon', NaN, -5, 0, 2e13]) {
+        for (const bad of [null, undefined, '', 'soon', NaN, -5, 0, Date.now(), 2e13]) {
             expect(classifyObligation(bad, NOW)).toEqual({ state: 'open', secondsLeft: null });
         }
     });

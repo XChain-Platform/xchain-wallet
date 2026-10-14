@@ -13,19 +13,25 @@
 // the lazy path is exercised end-to-end (unlike the Node smoke, which
 // registers pseudo-rtl by hand because plain Node has no import.meta.glob).
 
-import { beforeEach, describe, expect, test } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 
-import {
-    availableLocales,
-    getDirection,
-    getLocale,
-    setLocale,
-    t,
-} from '../../packages/core/src/i18n/index.js';
+let availableLocales;
+let getDirection;
+let getLocale;
+let setLocale;
+let t;
 
 beforeEach(async () => {
-    // Reset to a known baseline; en is always statically registered.
-    if (getLocale() !== 'en') await setLocale('en');
+    // Each case gets an unloaded locale registry so lazy-path assertions do
+    // not depend on whether an earlier case has already cached the chunk.
+    vi.resetModules();
+    ({
+        availableLocales,
+        getDirection,
+        getLocale,
+        setLocale,
+        t,
+    } = await import('../../packages/core/src/i18n/index.js'));
 });
 
 describe('lazy locale loading', () => {
@@ -37,9 +43,20 @@ describe('lazy locale loading', () => {
         expect(codes).toContain('pseudo-rtl');
     });
 
-    test('setLocale() lazily loads an un-registered locale, then applies it', async () => {
+    test('a completed lazy load cannot replace a newer locale choice', async () => {
+        document.documentElement.dir = 'ltr';
+        const pending = setLocale('pseudo-rtl');
+        await setLocale('en');
+
+        expect(await pending).toBe('en');
+        expect(getLocale()).toBe('en');
+        expect(t('common.back')).toBe('Back');
+        expect(document.documentElement.dir).toBe('ltr');
+    });
+
+    test('setLocale() applies a lazily discovered locale', async () => {
         // pseudo-rtl copy is bracket-wrapped, so a wrapped result proves
-        // the chunk was fetched and swapped into the live dictionary.
+        // the loaded dictionary is selected.
         const before = t('common.back');
         expect(before).toBe('Back');
 

@@ -19,6 +19,7 @@
 // preview surface can reuse it (§5.5).
 
 import styles from './PreflightPanel.module.css';
+import { Checkbox, Spinner } from '@xchain-wallet/core/ui';
 // Zero-dependency helper, deliberately not the useConfirmAction module: the
 // override identity must be ONE definition shared with the Approve gate, and
 // this component is rendered by the extension approval root, so it pulls in
@@ -29,6 +30,7 @@ import {
     preflightFindingKey,
 } from '../utils/preflightFindingKey.js';
 import { unverifiedText, warningText } from '../utils/preflightFindingCopy.js';
+import { formatDecimalAmount } from '../utils/amountFormat.js';
 
 // Tier-1 headline codes (xchain-sdk preflight constants.js). Duplicated as
 // literals rather than imported: this component is rendered by the extension
@@ -241,7 +243,7 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
     if (loading && !report) {
         return (
             <div className={styles.panel} data-testid="preflight-panel" aria-live="polite" aria-busy="true">
-                <span className={styles.spinner}>Checking…</span>
+                <Spinner size="sm" label="Checking…" className={styles.spinner} />
             </div>
         );
     }
@@ -332,10 +334,6 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
                 {chipText}
             </div>
 
-            {report.restricted ? (
-                <div className={styles.restrictedChip} data-testid="preflight-restricted">Partial check</div>
-            ) : null}
-
             {errors.length > 0 ? (
                 <ul className={styles.errors}>
                     {/* Keyed on the finding, never on the code: a BATCH report
@@ -351,15 +349,13 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
                         <li key={`${preflightFindingKey(f)}-${i}`} className={`${styles.finding} ${styles.findingError}`}>
                             <span className={styles.findingMsg}>{consensusRefusalMessage(f) || f.message}</span>
                             {f.overridable && !isHardPreflightFinding(f) ? (
-                                <label className={styles.ack}>
-                                    <input
-                                        type="checkbox"
-                                        checked={acknowledged.has(preflightFindingKey(f))}
-                                        onChange={() => onAcknowledge(preflightFindingKey(f))}
-                                        data-testid={`ack-${preflightFindingKey(f)}`}
-                                    />
-                                    Sign anyway
-                                </label>
+                                <Checkbox
+                                    className={styles.ack}
+                                    label="Sign anyway"
+                                    checked={acknowledged.has(preflightFindingKey(f))}
+                                    onChange={() => onAcknowledge(preflightFindingKey(f))}
+                                    data-testid={`ack-${preflightFindingKey(f)}`}
+                                />
                             ) : null}
                         </li>
                     ))}
@@ -386,6 +382,10 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
                 </ul>
             ) : null}
 
+            {report.restricted ? (
+                <div className={styles.restrictedChip} data-testid="preflight-restricted">Partial check</div>
+            ) : null}
+
             {notices.length > 0 ? (
                 <ul className={styles.notices} data-testid="preflight-notices">
                     {notices.map((f, i) => {
@@ -408,7 +408,7 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
 
             {report.unverified && report.unverified.length > 0 ? (
                 <details className={styles.unverifiedList}>
-                    <summary>Could not verify ({report.unverified.length})</summary>
+                    <summary>Could not verify ({formatDecimalAmount(report.unverified.length)})</summary>
                     <ul>
                         {report.unverified.map((u, i) => {
                             const { headline, detail } = unverifiedText(u);
@@ -426,7 +426,7 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
             ) : null}
 
             {typeof report.stateHeight === 'number' ? (
-                <div className={styles.stamp}>Checked at block {report.stateHeight}</div>
+                <div className={styles.stamp}>Checked at block {formatDecimalAmount(report.stateHeight)}</div>
             ) : null}
         </div>
     );

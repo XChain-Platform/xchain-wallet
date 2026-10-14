@@ -152,6 +152,12 @@ async function pickAllowList(utils) {
     return countText;
 }
 
+async function pickBlockList(utils) {
+    await step(() => fireEvent.click(utils.getByRole('button', { name: 'Set block-list' })));
+    const row = utils.getByText(`Address list #${LIST}`).closest('button');
+    await step(() => fireEvent.click(row));
+}
+
 async function pickDispenserAddress(utils, address) {
     await step(() => fireEvent.click(utils.getByRole('button', { name: 'Change dispenser address' })));
     await step(() => fireEvent.click(utils.getByRole('button', { name: `View address ${address}` })));
@@ -251,6 +257,18 @@ describe('DispenserForm Create feedback', () => {
         await clickCreate(utils);
         expect(utils.getByRole('alert').textContent)
             .toContain('Escrow amount must be a positive number.');
+    });
+
+    it('refuses one address list in both access-list slots', async () => {
+        const { messaging, calls } = recordingMessaging({ created: [SOURCE.address], current: [SOURCE.address] });
+        const utils = await mountForm(messaging);
+        await pickAllowList(utils);
+        await pickBlockList(utils);
+        await fillAmounts(utils);
+        await clickCreate(utils);
+
+        expect(utils.getByText(/both the allow-list and the block-list/)).toBeInTheDocument();
+        expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
     });
 });
 

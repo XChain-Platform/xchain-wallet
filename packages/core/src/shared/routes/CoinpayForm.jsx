@@ -9,7 +9,10 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import {
+    AddressText, Button, ChainBadge, EmptyState, FeeSelector, FormPage, Icon,
+    ListPage, PageHeader, Screen, SectionHeader, StatusMessage,
+} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
@@ -46,6 +49,10 @@ const EXPIRED_ERROR = 'This payment window has expired. Do not pay: a payment '
     + 'confirming after the deadline sends your coin without receiving the '
     + 'tokens. The escrowed tokens return to the seller.';
 
+const EXPIRY_LOSS_WARNING = 'This payment must confirm before the payment deadline. '
+    + 'If it confirms after the deadline, the coin is still sent but you do not '
+    + 'receive the tokens.';
+
 /**
  * §41.4 COINPAY authoring surface. Settles a pending coinpay
  * obligation (created when a non-BTC token matched against a native
@@ -75,7 +82,6 @@ export function CoinpayForm({
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -91,6 +97,10 @@ export function CoinpayForm({
     );
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
+    const [nativeBalance, setNativeBalance] = useState(
+        /** @type {{ loading: boolean, baseUnits: bigint | null }} */
+        ({ loading: false, baseUnits: null }),
+    );
 
     useEffect(() => {
         let cancelled = false;
@@ -220,6 +230,40 @@ export function CoinpayForm({
         && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
+    const requiredBaseUnits = summary?.coinAmount == null
+        ? null
+        : BigInt(summary.coinAmount) + BigInt(feeEstimate?.sats || 0);
+    const insufficientBalance = nativeBalance.baseUnits != null
+        && requiredBaseUnits != null
+        && nativeBalance.baseUnits < requiredBaseUnits;
+    const insufficientBalanceMessage = insufficientBalance
+        ? `Insufficient ${coinTicker || 'coin'} balance. This address has ${coinAmountLabel(nativeBalance.baseUnits, coinTicker)}, but the payment and estimated network fee require ${coinAmountLabel(requiredBaseUnits, coinTicker)}.`
+        : null;
+
+    useEffect(() => {
+        if (!selected?.chainId || !selected?.address) {
+            setNativeBalance({ loading: false, baseUnits: null });
+            return undefined;
+        }
+        if (typeof messaging.getAddressBalances !== 'function') {
+            setNativeBalance({ loading: false, baseUnits: null });
+            return undefined;
+        }
+        let cancelled = false;
+        setNativeBalance({ loading: true, baseUnits: null });
+        messaging.getAddressBalances(selected.chainId, selected.address)
+            .then((balances) => {
+                if (cancelled) return;
+                setNativeBalance({
+                    loading: false,
+                    baseUnits: nativeBalanceBaseUnits(balances, coinTicker),
+                });
+            })
+            .catch(() => {
+                if (!cancelled) setNativeBalance({ loading: false, baseUnits: null });
+            });
+        return () => { cancelled = true; };
+    }, [selected?.chainId, selected?.address, coinTicker, messaging]);
 
     // Validate the selected obligation before advancing to review.
     // Signs nothing; just gates stage transition.
@@ -228,6 +272,10 @@ export function CoinpayForm({
         if (!selected || !summary) return;
         if (summary.coinAmount == null || !summary.payeeAddress) {
             setSubmitError('Obligation has no valid payee or a coin amount too large to pay safely.');
+            return;
+        }
+        if (insufficientBalance) {
+            setSubmitError(insufficientBalanceMessage);
             return;
         }
         if (classifyObligation(summary.expiration).state === 'expired') {
@@ -243,6 +291,10 @@ export function CoinpayForm({
         if (!selected || !summary || stage === 'submitting' || ownerLane.composing) return;
         if (summary.coinAmount == null || !summary.payeeAddress) {
             setSubmitError('Obligation has no valid payee or a coin amount too large to pay safely.');
+            return;
+        }
+        if (insufficientBalance) {
+            setSubmitError(insufficientBalanceMessage);
             return;
         }
         // PC-15 funds-safety re-check at sign time: the deadline can pass
@@ -341,13 +393,16 @@ export function CoinpayForm({
         : 'Pay for matched order';
     const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={stage === 'review'
+                ? () => { setSubmitError(null); setStage('form'); }
+                : onBack}
+            backDisabled={stage === 'submitting'}
             title={titleText}
         />
     );
-    const wrap = (children) => (
-        <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+    const wrap = (children, template = 'list') => (
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>
+            {template === 'list' ? <ListPage>{children}</ListPage> : children}
         </Screen>
     );
 
@@ -392,7 +447,9 @@ export function CoinpayForm({
         }
         return wrap(
             <>
-                <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>Payment broadcast</p>
+                <StatusMessage variant="success">
+                    Payment broadcast successfully.
+                </StatusMessage>
                 {txid ? (
                     <p style={{ margin: '0 0 0.5rem' }}>
                         Transaction: <code>{txid}</code>
@@ -416,16 +473,33 @@ export function CoinpayForm({
         })();
 
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
-                <p className={styles.summary}>
-                    Pay {amountLabel} to complete
-                    matched order #{summary.actionIndex}.
-                </p>
+            <FormPage
+                label="Review matched order payment"
+                onSubmit={handleSubmit}
+                status={submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : stage === 'submitting' ? (
+                    <StatusMessage>Preparing payment for confirmation…</StatusMessage>
+                ) : null}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={stage === 'submitting' || ownerLane.composing}
+                    >
+                        {ownerLane.isWatcherMode
+                            ? 'Create unsigned transaction'
+                            : 'Continue to confirmation'}
+                    </Button>
+                )}
+            >
                 <dl className={styles.detailsList}>
-                    <DetailRow
-                        label="Chain"
-                        value={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : selected.chainId}
-                    />
+                    {descriptor ? (
+                        <DetailRow
+                            label="Chain"
+                            value={<ChainBadge descriptor={descriptor} size="sm" />}
+                        />
+                    ) : null}
                     <DetailRow
                         label="From"
                         value={<AddressText address={selected.address} />}
@@ -443,10 +517,12 @@ export function CoinpayForm({
                         value={amountLabel}
                     />
                     {coinpayExpiryText(summary.expiration) ? (
-                        <DetailRow label="Expires" value={coinpayExpiryText(summary.expiration)} />
+                        <DetailRow label="Payment deadline" value={coinpayExpiryText(summary.expiration)} />
                     ) : null}
                     <DetailRow label="Network fee" value={feeLabel} />
                 </dl>
+
+                <StatusMessage className={styles.error}>{EXPIRY_LOSS_WARNING}</StatusMessage>
 
                 {ownerLane.isWatcherMode ? (
                     <p className={styles.hint}>
@@ -455,22 +531,8 @@ export function CoinpayForm({
                         signed transaction to a Full-mode wallet to broadcast.
                     </p>
                 ) : null}
-                {submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
-                ) : null}
-
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting' || ownerLane.composing}
-                    >
-                        {ownerLane.isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : 'Continue to confirmation'}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
+            'form',
         );
     }
 
@@ -482,17 +544,15 @@ export function CoinpayForm({
                 <p className={styles.hint}>Scanning for payments due…</p>
             ) : null}
             {!scanning && obligations.length === 0 ? (
-                <p className={styles.hint}>
-                    No payments due right now. When one of your orders
-                    matches, the coin payment for it appears here.
-                </p>
+                <EmptyState
+                    title="No payments due"
+                    body="When one of your orders matches, the coin payment for it appears here."
+                />
             ) : null}
 
             {obligations.length > 0 ? (
                 <>
-                    <p style={{ margin: '0 0 0.25rem', fontWeight: 600 }}>
-                        Pending obligations
-                    </p>
+                    <SectionHeader title="Pending obligations" />
                     <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 0.75rem' }}>
                         {obligations.map((row) => {
                             const isSelected = selected
@@ -511,6 +571,7 @@ export function CoinpayForm({
                             ) ?? `${row.obligation.coin_amount} ${t || 'base units'}`;
                             return (
                                 <li key={`${row.chainId}-${row.obligation.action_index}`}>
+                                    {/* The native row button keeps the whole obligation card as one target. */}
                                     <button
                                         type="button"
                                         onClick={() => setSelected(row)}
@@ -522,7 +583,7 @@ export function CoinpayForm({
                                             padding: '0.5rem',
                                             marginBottom: '0.25rem',
                                             border: isSelected
-                                                ? '2px solid var(--xc-accent, #1976d2)'
+                                                ? '2px solid var(--xc-accent-primary)'
                                                 : '1px solid var(--xc-border)',
                                             borderRadius: '4px',
                                             background: 'transparent',
@@ -531,22 +592,25 @@ export function CoinpayForm({
                                         }}
                                     >
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                            {d ? <ChainBadge descriptor={d} size="sm" /> : <span>{row.chainId}</span>}
+                                            {d ? <ChainBadge descriptor={d} size="sm" /> : null}
                                             <span style={{ fontWeight: 600 }}>
                                                 Matched order #{String(row.obligation.action_index)}
                                             </span>
                                         </div>
                                         <div style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>
-                                            Pay {rowAmountLabel} →{' '}
+                                            Pay {rowAmountLabel}{' '}
+                                            <span className={styles.inlineDirectionalIcon}>
+                                                <Icon.ForwardIcon />
+                                            </span>{' '}
                                             <AddressText address={row.obligation.payee_address} />
                                         </div>
                                         <div style={{ fontSize: '0.75rem', color: 'var(--xc-fg-muted)' }}>
                                             From <AddressText address={row.address} />
                                             {coinpayExpiryText(row.obligation.expiration) ? (
-                                                <> · expires {coinpayExpiryText(row.obligation.expiration)}</>
+                                                <> · payment deadline {coinpayExpiryText(row.obligation.expiration)}</>
                                             ) : null}
                                             {classifyObligation(row.obligation.expiration).state === 'expired' ? (
-                                                <strong style={{ color: 'var(--xc-danger)' }}> · EXPIRED, do not pay</strong>
+                                                <strong style={{ color: 'var(--xc-danger-fg)' }}> · EXPIRED, do not pay</strong>
                                             ) : null}
                                         </div>
                                     </button>
@@ -558,12 +622,35 @@ export function CoinpayForm({
             ) : null}
 
             {selected && summary ? (
-                <form onSubmit={handleReview} noValidate>
+                <FormPage
+                    label="Selected payment obligation"
+                    onSubmit={handleReview}
+                    status={(submitError || insufficientBalanceMessage) ? (
+                        <StatusMessage variant="error" className={styles.error}>
+                            {submitError || insufficientBalanceMessage}
+                        </StatusMessage>
+                    ) : nativeBalance.loading ? (
+                        <StatusMessage>Checking available balance…</StatusMessage>
+                    ) : null}
+                    actions={(
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            disabled={!selected || !summary || nativeBalance.loading || insufficientBalance}
+                        >
+                            Review
+                        </Button>
+                    )}
+                >
                     <dl className={styles.detailsList}>
-                        <dt className={styles.detailsLabel}>Chain</dt>
-                        <dd className={styles.detailsValue}>
-                            {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : selected.chainId}
-                        </dd>
+                        {descriptor ? (
+                            <>
+                                <dt className={styles.detailsLabel}>Chain</dt>
+                                <dd className={styles.detailsValue}>
+                                    <ChainBadge descriptor={descriptor} size="sm" />
+                                </dd>
+                            </>
+                        ) : null}
                         <dt className={styles.detailsLabel}>Matched order</dt>
                         <dd className={styles.detailsValue}>
                             <code>{summary.actionIndex}</code>
@@ -582,7 +669,7 @@ export function CoinpayForm({
                         </dd>
                         {coinpayExpiryText(summary.expiration) ? (
                             <>
-                                <dt className={styles.detailsLabel}>Expires</dt>
+                                <dt className={styles.detailsLabel}>Payment deadline</dt>
                                 <dd className={styles.detailsValue}>
                                     {coinpayExpiryText(summary.expiration)}
                                 </dd>
@@ -601,24 +688,8 @@ export function CoinpayForm({
                         />
                     ) : null}
 
-                    {submitError ? (
-                        <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
-                    ) : null}
-
-                    <div className={styles.actions}>
-                        <Button
-                            type="submit"
-                            variant="primary"
-                            disabled={!selected || !summary}
-                        >
-                            Review
-                        </Button>
-                    </div>
-                </form>
-            ) : (
-                <div className={styles.actions}>
-                </div>
-            )}
+                </FormPage>
+            ) : null}
         </>,
     );
 }
@@ -657,6 +728,20 @@ function coinAmountLabel(baseUnits, coinTicker) {
     return coinText != null
         ? `${coinText} ${coinTicker || 'coins'}`
         : `${baseUnits} base units`;
+}
+
+function nativeBalanceBaseUnits(balances, coinTicker) {
+    const native = balances?.native;
+    if (!native || (coinTicker && String(native.tick || '').toUpperCase() !== coinTicker)) {
+        return null;
+    }
+    const quantity = String(native.quantity ?? '').trim();
+    if (!/^\d+$/.test(quantity)) return null;
+    try {
+        return BigInt(quantity);
+    } catch {
+        return null;
+    }
 }
 
 function isPendingForPayer(row, address) {

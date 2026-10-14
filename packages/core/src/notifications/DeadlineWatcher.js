@@ -51,6 +51,8 @@
 // order-fill notifications.
 
 import { targetBlockSecondsForCoin } from '../shared/utils/blockDateEstimate.js';
+import { taggedLogger } from './taggedLogger.js';
+import { ActiveAddressPoll, isVaultLockedError } from './activeAddressPoll.js';
 
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000;
 /** How far ahead a deadline counts as "approaching". */
@@ -58,8 +60,6 @@ const DEFAULT_WINDOW_SECONDS = 24 * 60 * 60;
 const SEEN_CAP_PER_CHAIN = 500;
 /** Past this many in one tick, send one summary instead. */
 const MAX_NOTIFICATIONS_PER_TICK = 5;
-
-const NOOP_LOGGER = { debug() {}, warn() {}, error() {} };
 
 /** Deep-link targets the shells route on. */
 const ROUTE_BY_KIND = {
@@ -82,7 +82,7 @@ export class DeadlineWatcher {
      * @param {() => Promise<import('./getActiveAddresses.js').ActiveAddress[]>} deps.getActiveAddresses
      * @param {(chainId: string) => import('../sdk/SDKRegistry.js').XChainSDKLike} deps.getSdkForChain
      * @param {() => Promise<import('../schemas/settings.js').Settings>} deps.getSettings
-     * @param {(n: { kind: string, title: string, body: string, data?: object }) => (void | Promise<void>)} deps.notify
+     * @param {(n: { kind: string, title: string, body: string, data?: object }) => (void | boolean | Promise<void | boolean>)} deps.notify
      * @param {(chainId: string) => (string | null)} [deps.coinForChain]  chain -> coin, for the block-interval conversion
      * @param {() => Promise<object | null>} [deps.loadSeen]
      * @param {(seen: object) => (void | Promise<void>)} [deps.saveSeen]
@@ -117,13 +117,20 @@ export class DeadlineWatcher {
         this._intervalMs = Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : DEFAULT_INTERVAL_MS;
         this._windowSeconds = Number.isFinite(windowSeconds) && windowSeconds > 0
             ? windowSeconds : DEFAULT_WINDOW_SECONDS;
-        this._log = logger || NOOP_LOGGER;
+        this._log = taggedLogger(logger, 'deadline');
+        this._addressPoll = new ActiveAddressPoll({
+            getActiveAddresses: this._getActiveAddresses,
+            intervalMs: this._intervalMs,
+            logger: this._log,
+            owner: 'DeadlineWatcher',
+        });
 
         this._timer = null;
         this._ticking = false;
         /** @type {Map<string, Set<string>>} chainId -> announced `kind:actionIndex` keys */
         this._seen = new Map();
         this._seenLoaded = false;
+        this._seenDirty = false;
     }
 
     /** Begin polling. Fires an immediate tick, then every intervalMs. Idempotent. */
@@ -145,6 +152,8 @@ export class DeadlineWatcher {
         }
         this._seen.clear();
         this._seenLoaded = false;
+        this._seenDirty = false;
+        this._addressPoll.reset();
     }
 
     /**
@@ -159,6 +168,10 @@ export class DeadlineWatcher {
             try {
                 settings = await this._getSettings();
             } catch (e) {
+                if (isVaultLockedError(e)) {
+                    this._addressPoll.reset();
+                    return;
+                }
                 this._log.error('DeadlineWatcher: getSettings failed', e);
                 return;
             }
@@ -166,6 +179,9 @@ export class DeadlineWatcher {
             const featureOn = !settings || !settings.notifications
                 || settings.notifications.deadlines !== false;
             if (!featureOn) return;
+
+            const addresses = await this._addressPoll.read();
+            if (!addresses || addresses.length === 0) return;
 
             if (!this._seenLoaded) {
                 this._seenLoaded = true;
@@ -183,15 +199,6 @@ export class DeadlineWatcher {
                 }
             }
 
-            let addresses;
-            try {
-                addresses = (await this._getActiveAddresses()) || [];
-            } catch (e) {
-                this._log.error('DeadlineWatcher: getActiveAddresses failed', e);
-                return;
-            }
-            if (addresses.length === 0) return;
-
             const byChain = new Map();
             for (const a of addresses) {
                 if (!a || !a.chainId || !a.address) continue;
@@ -207,11 +214,13 @@ export class DeadlineWatcher {
                     this._log.warn(`DeadlineWatcher: chain ${chainId} tick failed`, e);
                 }
             }
-            if (changed && this._saveSeen) {
+            if (changed && this._saveSeen) this._seenDirty = true;
+            if (this._seenDirty && this._saveSeen) {
                 try {
                     const out = {};
                     for (const [chainId, ids] of this._seen.entries()) out[chainId] = Array.from(ids);
                     await this._saveSeen(out);
+                    this._seenDirty = false;
                 } catch (e) {
                     this._log.warn('DeadlineWatcher: saveSeen failed', e);
                 }
@@ -246,32 +255,40 @@ export class DeadlineWatcher {
             if (!liveKeys.has(key)) { seen.delete(key); changed = true; }
         }
 
-        const fresh = due.filter((d) => !seen.has(d.key));
-        for (const d of fresh) {
-            if (seen.size >= SEEN_CAP_PER_CHAIN) break;
-            seen.add(d.key);
-            changed = true;
-        }
+        // Keep the soonest deadlines when the seen set is nearly full, and
+        // offer only as many as it can still record: an untracked overflow
+        // would look fresh and notify again every cycle. An entry is marked
+        // seen only once its notification is delivered, so a failed delivery
+        // retries on the next tick.
+        const fresh = due
+            .filter((d) => !seen.has(d.key))
+            .sort((a, b) => a.remaining - b.remaining)
+            .slice(0, Math.max(0, SEEN_CAP_PER_CHAIN - seen.size));
         this._seen.set(chainId, seen);
         if (fresh.length === 0) return changed;
 
-        // Soonest first: if the burst is capped, the user sees the urgent ones.
-        fresh.sort((a, b) => a.remaining - b.remaining);
-
         if (fresh.length > MAX_NOTIFICATIONS_PER_TICK) {
-            await this._safeNotify({
+            const delivered = await this._safeNotify({
                 kind: 'deadline-summary',
                 title: `${fresh.length} deadlines approaching`,
-                body: `${fresh.length} of your open items on ${chainLabel} run out within ${describeWindow(this._windowSeconds)}. The soonest is your ${LABEL_BY_KIND[fresh[0].kind]} ${fresh[0].remainingText}.`,
+                body: `${fresh.length} items on ${chainLabel} expire or close within ${describeWindow(this._windowSeconds)}. Your ${LABEL_BY_KIND[fresh[0].kind]} is first, ${fresh[0].remainingText}.`,
                 data: { chainId, count: fresh.length, kinds: fresh.map((d) => d.kind) },
             });
+            if (delivered) {
+                for (const d of fresh) {
+                    if (seen.size >= SEEN_CAP_PER_CHAIN) break;
+                    seen.add(d.key);
+                    changed = true;
+                }
+            }
             return changed;
         }
 
         for (const d of fresh) {
-            await this._safeNotify({
+            if (seen.size >= SEEN_CAP_PER_CHAIN) break;
+            const delivered = await this._safeNotify({
                 kind: 'deadline',
-                title: `Your ${LABEL_BY_KIND[d.kind]} ${d.kind === 'poll' ? 'closes soon' : 'expires soon'}`,
+                title: `${LABEL_BY_KIND[d.kind][0].toUpperCase()}${LABEL_BY_KIND[d.kind].slice(1)} ${d.kind === 'poll' ? 'closes soon' : 'expires soon'}`,
                 body: d.body(chainLabel),
                 data: {
                     chainId,
@@ -282,6 +299,10 @@ export class DeadlineWatcher {
                     ...(d.endBlock != null ? { endBlock: d.endBlock } : {}),
                 },
             });
+            if (delivered) {
+                seen.add(d.key);
+                changed = true;
+            }
         }
         return changed;
     }
@@ -434,9 +455,10 @@ export class DeadlineWatcher {
 
     async _safeNotify(n) {
         try {
-            await this._notify(n);
+            return await this._notify(n) !== false;
         } catch (e) {
             this._log.error('DeadlineWatcher: notify failed', e);
+            return false;
         }
     }
 }

@@ -58,6 +58,10 @@ async function drainMicrotasks(rounds = 12) {
 }
 
 function messagingWithRefusal() {
+    const refusal = Object.assign(new Error(`Encoder RPC error: ${REFUSAL}`), {
+        name: 'SDKEncoderError',
+        code: 'ENCODER_RPC_ERROR',
+    });
     const target = {
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: [SOURCE, FIRST, SECOND] }),
         getActiveAddresses: () => Promise.resolve({ [CHAIN]: SOURCE }),
@@ -65,7 +69,7 @@ function messagingWithRefusal() {
         getSettings: () => Promise.resolve({ walletMode: 'full' }),
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
         getWalletBalances: () => Promise.resolve({ [CHAIN]: [] }),
-        composeForConfirm: vi.fn().mockRejectedValue(new Error(REFUSAL)),
+        composeForConfirm: vi.fn().mockRejectedValue(refusal),
     };
     return new Proxy(target, {
         get(object, property) {

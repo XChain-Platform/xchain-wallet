@@ -1,0 +1,36 @@
+.pollList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.pollCard {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    padding: var(--xc-space-4);
+    text-align: start;
+    color: var(--xc-text);
+    background: var(--xc-surface-raised);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-lg);
+    box-shadow: var(--xc-list-shadow);
+    cursor: pointer;
+}
+
+.pollTitle {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.pollText {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    text-align: start;
+}
+
+.pollCard:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}

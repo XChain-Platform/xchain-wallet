@@ -68,7 +68,7 @@ assert.equal(findLookalike({ address: 'bc1q', candidates: known, minLength: 4 })
 
 // Threshold above the actual score → no match
 const tooStrict = findLookalike({
-    address: sneaky2,
+    address: 'Bc1qrealaddressonexamplecharsxx',
     candidates: known,
     threshold: 0.999,
 });
@@ -76,7 +76,7 @@ assert.equal(tooStrict, null, 'threshold above score suppresses match');
 
 // maxDistance gate
 const tooFar = findLookalike({
-    address: sneaky2,
+    address: 'Bc1qrealaddressonexamplecharsxx',
     candidates: known,
     maxDistance: 0,
 });

@@ -49,8 +49,7 @@ assert.ok(/settings\?\.hiddenTokens/.test(sectionSrc),
 
 // --- 2. Pinned section: reorder + unpin write through update() --------
 
-assert.ok(/function movePin\(idx, delta\)/.test(sectionSrc) ||
-    /const movePin = useCallback\(\(idx, delta\)/.test(sectionSrc),
+assert.ok(/const movePin = useCallback\(\(idx, delta\)/.test(sectionSrc),
     'movePin handler accepts (idx, delta) for ↑ / ↓ reorder');
 assert.ok(/writePinned\(next\)/.test(sectionSrc),
     'movePin writes the reordered array via writePinned');
@@ -71,8 +70,7 @@ assert.ok(/disabled=\{idx === pinned\.length - 1\}/.test(sectionSrc),
 
 assert.ok(/update\(\{ hiddenTokens: next \}\)/.test(sectionSrc),
     'hidden writes go through update({ hiddenTokens })');
-assert.ok(/const unhide = useCallback\(\(key\)/.test(sectionSrc) ||
-    /function unhide\(key\)/.test(sectionSrc),
+assert.ok(/const unhide = useCallback\(\(key\)/.test(sectionSrc),
     'per-row unhide handler exists');
 assert.ok(/const unhideAll = useCallback/.test(sectionSrc),
     'unhideAll handler exists');
@@ -85,9 +83,9 @@ assert.ok(/Unhide all/.test(sectionSrc),
 
 // --- 4. Empty-state hints ---------------------------------------------
 
-assert.ok(/No pinned tokens\./.test(sectionSrc),
+assert.ok(/title="No pinned tokens"[\s\S]*?body="Tap the star on a balance row to pin it\."/.test(sectionSrc),
     'empty pinned list shows the documented hint');
-assert.ok(/No hidden tokens\./.test(sectionSrc),
+assert.ok(/title="No hidden tokens"[\s\S]*?body="Tap the hide control on a balance row to hide it\."/.test(sectionSrc),
     'empty hidden list shows the documented hint');
 
 // --- 5. Settings.jsx mounts DisplaySection ----------------------------
@@ -98,9 +96,9 @@ const settingsSrc = readFileSync(
 );
 assert.ok(/import \{ DisplaySection \} from '\.\.\/components\/settings\/DisplaySection\.jsx'/.test(settingsSrc),
     'Settings.jsx imports DisplaySection');
-assert.ok(/id: 'display',[\s\S]{0,400}?Component: DisplaySection/.test(settingsSrc),
+assert.ok(/id: 'display',[\s\S]{0,600}?Component: DisplaySection/.test(settingsSrc),
     'Settings.jsx registers a display section bound to DisplaySection');
-assert.ok(/keywords: 'display pinned hidden tokens reorder unhide bulk star'/.test(settingsSrc),
+assert.ok(/keywords: 'display balance threshold number format pinned hidden tokens reorder unhide bulk star'/.test(settingsSrc),
     'display section ships search keywords so it surfaces in Settings search');
 assert.ok(/summary: displaySummary\(settings\)/.test(settingsSrc),
     'display section renders the displaySummary in the list view');

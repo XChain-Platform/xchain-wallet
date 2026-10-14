@@ -14,10 +14,26 @@
 // before getSettings resolved; the palette's Settings deep-link
 // was the first flow to drive it.
 
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Settings } from '../../../packages/core/src/shared/routes/Settings.jsx';
+
+const SETTINGS_SUBPAGE_IDS = [
+    'this-wallet',
+    'display',
+    'keyboard',
+    'privacy',
+    'safety',
+    'wallet-mode',
+    'backup',
+    'fees',
+    'network-endpoints',
+    'connected-sites',
+    'ads',
+    'developer',
+    'about',
+];
 
 describe('Settings while settings are loading', () => {
     it('renders the section list with a never-resolving getSettings', () => {
@@ -33,5 +49,69 @@ describe('Settings while settings are loading', () => {
         expect(screen.getByText('Backup')).toBeTruthy();
         expect(screen.getByText('Keyboard')).toBeTruthy();
         expect(screen.getByText('Network')).toBeTruthy();
+        expect(document.body.textContent).not.toContain('raw PSBT inspector');
+        expect(screen.getByRole('searchbox').closest('[data-settings-layout="responsive"]')).toBeTruthy();
+    });
+
+    it('shows the active account and opens its account picker', () => {
+        const onOpenAccountPicker = vi.fn();
+        const messaging = {
+            getSettings: () => new Promise(() => {}),
+            listConnectedSites: () => Promise.resolve([]),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <Settings
+                    onBack={() => {}}
+                    activeWallet={{ id: 'wallet-1', name: 'Main wallet' }}
+                    activeAccount={{ id: 'account-2', index: 1, name: 'Savings' }}
+                    onOpenAccountPicker={onOpenAccountPicker}
+                />
+            </MessagingProvider>,
+        );
+
+        expect(screen.getByText('Savings')).toBeTruthy();
+        fireEvent.click(screen.getByText('Accounts & addresses').closest('button'));
+        expect(onOpenAccountPicker).toHaveBeenCalledOnce();
+    });
+
+    it('drops This Wallet confirmation state when the active wallet changes', () => {
+        const messaging = {
+            getSettings: () => new Promise(() => {}),
+            listConnectedSites: () => Promise.resolve([]),
+            removeWallet: vi.fn(),
+        };
+        const tree = (wallet) => (
+            <MessagingProvider shell="web" messaging={messaging}>
+                <Settings
+                    onBack={() => {}}
+                    activeWallet={wallet}
+                    initialSubpageId="this-wallet"
+                />
+            </MessagingProvider>
+        );
+        const view = render(tree({ id: 'wallet-a', name: 'Alpha' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Remove…' }));
+        expect(screen.getByLabelText('Confirm wallet name')).toBeTruthy();
+
+        view.rerender(tree({ id: 'wallet-b', name: 'Beta' }));
+
+        expect(screen.queryByLabelText('Confirm wallet name')).toBeNull();
+        expect(screen.getByText('Beta')).toBeTruthy();
+        expect(screen.getByText('Beta').closest('[data-settings-layout="responsive"]')).toBeTruthy();
+    });
+
+    it.each(SETTINGS_SUBPAGE_IDS)('renders the %s sub-page through the shared Settings template', (subpageId) => {
+        const messaging = {
+            getSettings: () => new Promise(() => {}),
+            listConnectedSites: () => Promise.resolve([]),
+        };
+        const { container } = render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <Settings onBack={() => {}} initialSubpageId={subpageId} />
+            </MessagingProvider>,
+        );
+
+        expect(container.querySelector('[data-settings-page-template="subpage"]')).toBeTruthy();
     });
 });

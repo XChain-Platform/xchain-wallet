@@ -19,7 +19,7 @@
 // case the old wording got backwards, so the list test uses one.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, waitFor, cleanup } from '@testing-library/react';
+import { render, waitFor, cleanup, screen } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MyTokens } from '../../../packages/core/src/shared/routes/MyTokens.jsx';
@@ -28,12 +28,14 @@ import { buildCommands } from '../../../packages/core/src/shared/commandPalette/
 const CHAIN = 'bitcoin-regtest';
 const ADDRESS = 'mkHS9ne12qx9pS9VojpwU5xtRd4T7X7ZUt';
 
-function mountMyTokens({ tokens }) {
+function mountMyTokens({ tokens, error }) {
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({
             [CHAIN]: [{ id: 'addr-1', address: ADDRESS }],
         }),
-        getOwnedTokens: vi.fn().mockResolvedValue(tokens),
+        getOwnedTokens: error
+            ? vi.fn().mockRejectedValue(error)
+            : vi.fn().mockResolvedValue(tokens),
     };
     const messaging = new Proxy(target, {
         get(t, prop) {
@@ -64,7 +66,7 @@ describe('My Tokens copy matches its ownership query (D-82)', () => {
         const container = mountMyTokens({ tokens: [] });
 
         await waitFor(() => {
-            expect(container.textContent).toMatch(/don.t own any tokens yet/i);
+            expect(container.textContent).toMatch(/no owned tokens yet/i);
         });
         // The wallet that issued a token and then transferred it away lands
         // here; telling it that it never issued anything is simply false.
@@ -72,7 +74,7 @@ describe('My Tokens copy matches its ownership query (D-82)', () => {
     });
 
     it('a token that arrived by TRANSFER is not labelled as issued', async () => {
-        const container = mountMyTokens({
+        mountMyTokens({
             tokens: [{
                 tick: 'S18PROBE',
                 description: 'transferred in from another wallet',
@@ -84,10 +86,19 @@ describe('My Tokens copy matches its ownership query (D-82)', () => {
             }],
         });
 
+        const row = await screen.findByRole('button', { name: 'Open S18PROBE token details' });
+        expect(row).toHaveAttribute('type', 'button');
+        expect(row).toHaveTextContent('transferred in from another wallet');
+        expect(row).not.toHaveTextContent(/issued/i);
+    });
+
+    it('reports an ownership lookup failure instead of claiming the wallet is empty', async () => {
+        const container = mountMyTokens({ error: new Error('explorer offline') });
+
         await waitFor(() => {
-            expect(container.textContent).toContain('S18PROBE');
+            expect(container.textContent).toMatch(/could not load your owned tokens/i);
         });
-        expect(container.textContent).not.toMatch(/issued/i);
+        expect(container.textContent).not.toMatch(/no owned tokens yet/i);
     });
 
     it('the command-palette entry does not claim issuance scope', () => {

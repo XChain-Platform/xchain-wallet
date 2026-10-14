@@ -12,22 +12,32 @@
        rendered outside the frame but its 56px slot still steals layout
        space inside the frame. */
     position: absolute;
-    inset-inline-start: 0;
-    inset-inline-end: 0;
+    inset-inline-start: calc(0px - env(safe-area-inset-left, 0px));
+    inset-inline-end: calc(0px - env(safe-area-inset-right, 0px));
     bottom: 0;
-    height: 56px;
+    min-height: 3.5rem;
     display: flex;
     flex-direction: row;
     background: var(--xc-surface-raised);
     border-top: 1px solid var(--xc-border);
-    z-index: 50;
-    /* Respect iOS safe-area insets so the bar floats above the home indicator. */
+    z-index: var(--xc-z-sticky);
+    /* Fill the cutout gutters while keeping tabs and the home indicator clear. */
+    padding-inline-start: env(safe-area-inset-left, 0);
+    padding-inline-end: env(safe-area-inset-right, 0);
     padding-bottom: env(safe-area-inset-bottom, 0);
     box-sizing: content-box;
 }
 
+/* Off while the on-screen keyboard is up (web/src/platform/keyboardViewport.js
+   sets the attribute on iOS, where the keyboard overlays the page): the
+   bar would sit on the keyboard and take the room the focused field needs. */
+:global(html[data-xc-keyboard='open']) .bar {
+    display: none;
+}
+
 .tab {
     flex: 1 1 0;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -40,6 +50,7 @@
     font-size: var(--xc-text-xs);
     cursor: pointer;
     padding: var(--xc-space-1) var(--xc-space-2);
+    overflow: hidden;
     /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
        inheriting it from whichever line box the platform font produces. */
     min-height: var(--xc-tap-min);
@@ -51,16 +62,18 @@
 }
 
 .tabActive {
-    color: var(--xc-accent-primary, var(--xc-text));
+    color: var(--xc-accent-text, var(--xc-text));
     font-weight: 600;
 }
 
 .tabIcon {
+    --xc-icon-size: var(--xc-icon-md);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
-    height: 22px;
+    width: var(--xc-icon-md);
+    height: var(--xc-icon-md);
+    flex: 0 0 auto;
     position: relative;
 }
 
@@ -77,20 +90,18 @@
 }
 
 .tabLabel {
+    display: block;
+    flex: 0 0 auto;
+    max-width: 100%;
     line-height: 1.1;
-}
-
-/* Scrim + bottom sheet. The sheet sits above the bar so its safe-area
-   padding stacks correctly. */
-
-.scrim {
-    position: fixed;
-    inset: 0;
-    background: var(--xc-overlay, rgba(0, 0, 0, 0.45));
-    z-index: 60;
+    text-align: center;
+    white-space: normal;
+    overflow-wrap: normal;
+    word-break: normal;
 }
 
 .sheet {
+    box-sizing: border-box;
     position: fixed;
     inset-inline-start: 0;
     inset-inline-end: 0;
@@ -100,19 +111,36 @@
     border-top: 1px solid var(--xc-border);
     border-start-start-radius: var(--xc-radius-lg, 12px);
     border-start-end-radius: var(--xc-radius-lg, 12px);
-    z-index: 70;
+    z-index: var(--xc-z-modal);
     max-height: 70vh;
-    overflow-y: auto;
-    padding: var(--xc-space-2) 0 env(safe-area-inset-bottom, var(--xc-space-3));
-    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.18);
+    max-height: min(70vh, var(--xc-viewport-h, 100vh));
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    padding: var(--xc-space-2)
+        env(safe-area-inset-right, 0px)
+        calc(var(--xc-space-3) + env(safe-area-inset-bottom, var(--xc-space-3)))
+        env(safe-area-inset-left, 0px);
+    box-shadow: var(--xc-shadow-bottom-sheet);
 }
 
 .handle {
+    grid-column: 1 / -1;
     width: 36px;
     height: 4px;
-    margin: var(--xc-space-2) auto var(--xc-space-3);
-    border-radius: 2px;
+    margin: 0 auto var(--xc-space-1);
+    border-radius: var(--xc-radius-xs);
     background: var(--xc-border);
+}
+
+.sheetTitle {
+    min-width: 0;
+    margin: 0;
+    padding-inline-start: var(--xc-space-2);
+    font-size: var(--xc-text-lg);
+    line-height: 1.25;
+    overflow-wrap: anywhere;
 }
 
 .sheetList {
@@ -148,16 +176,17 @@
 }
 
 .sheetItemActive {
-    color: var(--xc-accent-primary, var(--xc-text));
+    color: var(--xc-accent-text, var(--xc-text));
     font-weight: 600;
 }
 
 .sheetIcon {
+    --xc-icon-size: var(--xc-icon-md);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 20px;
-    height: 20px;
+    width: var(--xc-icon-md);
+    height: var(--xc-icon-md);
     flex: 0 0 auto;
 }
 
@@ -165,19 +194,22 @@
 .sheetLabel {
     flex: 1 1 auto;
     min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 /* Unread count pill on a sheet row (e.g. Messaging). */
 .sheetBadge {
     flex: 0 0 auto;
-    min-width: 1.25rem;
-    padding: 0 0.4rem;
-    border-radius: 999px;
+    box-sizing: border-box;
+    min-width: var(--xc-badge-height-sm);
+    height: var(--xc-badge-height-sm);
+    padding: 0 var(--xc-badge-padding-inline-sm);
+    border-radius: var(--xc-badge-radius);
     background: var(--xc-accent-primary, #0b84ff);
     color: var(--xc-on-accent);
-    font-size: var(--xc-text-xs);
-    font-weight: 700;
-    line-height: 1.35rem;
+    font-size: var(--xc-badge-font-size-sm);
+    font-weight: var(--xc-badge-font-weight);
+    line-height: 1;
     text-align: center;
 }
 
@@ -191,5 +223,28 @@
     .sheetItemActive {
         outline: 2px solid currentColor;
         outline-offset: -2px;
+    }
+}
+
+/* A shorter row leaves room for route content on landscape phones without
+   reducing the tab buttons below the shared pointer-target floor. */
+@media (orientation: landscape) and (max-height: 480px) {
+    .bar {
+        min-height: 2.75rem;
+    }
+
+    .tab {
+        gap: 0;
+        padding-block: 2px;
+    }
+
+    .tabIcon {
+        --xc-icon-size: var(--xc-icon-sm);
+        width: var(--xc-icon-sm);
+        height: var(--xc-icon-sm);
+    }
+
+    .sheet {
+        max-height: calc(100% - 44px - env(safe-area-inset-bottom, 0px));
     }
 }

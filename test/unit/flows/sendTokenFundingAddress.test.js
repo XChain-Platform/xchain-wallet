@@ -78,4 +78,12 @@ describe('sendToken names the funding address for UTXO selection', () => {
         const { encoderOpts } = vi.mocked(submitAction).mock.calls[0][0];
         expect(encoderOpts.pubkey).toBe(FROM.publicKey);
     });
+
+    it('honours explicit coin-control inputs and change', async () => {
+        const utxos = [{ txid: '11'.repeat(32), vout: 0, value: 1000, scriptPubKey: '0014aa' }];
+        await sendToken(opts({ change: 'bcrt1qwalletchange', utxos }));
+        const { encoderOpts } = vi.mocked(submitAction).mock.calls[0][0];
+        expect(encoderOpts.change).toBe('bcrt1qwalletchange');
+        expect(encoderOpts.utxos).toBe(utxos);
+    });
 });

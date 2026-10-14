@@ -17,10 +17,20 @@
 
 import { createRoot } from 'react-dom/client';
 import { flows, registry } from '@xchain-wallet/core';
+import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import '@xchain-wallet/core/ui/tokens.css';
 import { App } from './App.jsx';
 import { initPanicModePersistence } from '../background/panicModeStorage.js';
 import { installExtensionWipeHook } from '../storage/wipeHook.js';
+import { installShellErrorCapture } from './errorCapture.js';
+import { isToolbarPopupView } from './launchState.js';
+
+logConsole.attach();
+
+document.documentElement.classList.toggle('xchain-toolbar-popup', isToolbarPopupView());
+
+// Register the crash hook before anything else can throw.
+installShellErrorCapture();
 
 // Publish the shell wipe hook before any surface can offer a wipe. This
 // entry also backs the side panel, and it renders core's Locked ("Forgot

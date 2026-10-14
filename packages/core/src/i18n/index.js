@@ -20,6 +20,7 @@
 //   registerLocale(code, d)  - add a dictionary at runtime
 //   getLocale()              - current locale code
 //   getDirection(locale?)    - 'rtl' | 'ltr' for the given (or current) code
+//   syncDocumentLocale()     - align the root lang and dir attributes
 //   availableLocales()       - codes of registered + lazily-discoverable
 //                              dictionaries
 //
@@ -55,6 +56,7 @@ import { en } from './locales/en/index.js';
 
 const DICTIONARIES = /** @type {Record<string, Dictionary>} */ ({ en });
 let currentLocale = 'en';
+let localeRequestId = 0;
 const subscribers = new Set();
 
 // --- lazy locale discovery (§54 FOLLOWUP 5) --------------------------
@@ -135,15 +137,20 @@ export function getLocale() {
     return currentLocale;
 }
 
-/** Flip the live locale, sync `document` direction, notify subscribers. */
-function applyLocale(locale) {
-    currentLocale = locale;
+/** Keep the root language metadata aligned with the active locale. */
+export function syncDocumentLocale(locale = currentLocale) {
     if (typeof document !== 'undefined' && document.documentElement) {
         document.documentElement.dir = getDirection(locale);
         // `pseudo-rtl` is English copy, so advertise `en` to assistive
         // tech / spellcheckers; real locales advertise themselves.
         document.documentElement.lang = locale === 'pseudo-rtl' ? 'en' : locale;
     }
+}
+
+/** Flip the live locale, sync `document` metadata, notify subscribers. */
+function applyLocale(locale) {
+    currentLocale = locale;
+    syncDocumentLocale(locale);
     for (const fn of subscribers) {
         try { fn(locale); } catch (_err) { /* sub errors never bubble */ }
     }
@@ -157,15 +164,21 @@ function applyLocale(locale) {
  * chunk, returns a promise that resolves after the chunk loads and the
  * locale is applied; a chunk-load failure keeps the current locale
  * (falling back to English's always-present dictionary) rather than
- * rejecting. Throws synchronously only when the locale is neither
- * registered nor lazily discoverable.
+ * rejecting. Only the latest request applies, so a slower chunk cannot
+ * overwrite a newer picker choice. Throws synchronously only when the
+ * locale is neither registered nor lazily discoverable.
  *
  * @param {string} locale
  * @returns {Promise<string>} the locale actually in effect afterwards
  */
 export function setLocale(locale) {
-    if (locale === currentLocale) return Promise.resolve(locale);
+    if (locale === currentLocale) {
+        syncDocumentLocale(locale);
+        localeRequestId += 1;
+        return Promise.resolve(locale);
+    }
     if (DICTIONARIES[locale]) {
+        localeRequestId += 1;
         applyLocale(locale);
         return Promise.resolve(locale);
     }
@@ -173,11 +186,13 @@ export function setLocale(locale) {
     if (!loader) {
         throw new Error(`setLocale: unknown locale "${locale}"`);
     }
+    const requestId = ++localeRequestId;
     return loader()
         .then((mod) => {
             // `{ import: 'default' }` hands back the default export
             // directly, but tolerate a namespace object too.
             DICTIONARIES[locale] = mod && mod.default ? mod.default : mod;
+            if (requestId !== localeRequestId) return currentLocale;
             applyLocale(locale);
             return locale;
         })
@@ -211,7 +226,11 @@ export function onLocaleChange(fn) {
  */
 export function t(key, vars) {
     const dict = DICTIONARIES[currentLocale] ?? DICTIONARIES.en;
-    const raw = dict[key] ?? DICTIONARIES.en[key] ?? key;
+    const localized = dict[key];
+    const raw = localized ?? DICTIONARIES.en[key] ?? key;
+    // English fallback copy follows English ICU rules. This matters for
+    // languages where values such as 21 select a singular plural category.
+    const formatLocale = localized == null ? 'en' : currentLocale;
     // Every lookup goes through format(), vars or not. An `if (!vars)
     // return raw` shortcut here made t(k) and t(k, {}) two different
     // functions for an ICU plural/select key: the vars-less call handed
@@ -220,7 +239,7 @@ export function t(key, vars) {
     // missing args object and already fast-paths a template with no `{`,
     // so the equivalence holds by construction rather than by a second
     // brace check here that could drift from the one in format().
-    return format(raw, vars, currentLocale);
+    return format(raw, vars, formatLocale);
 }
 
 // --- formatjs message formatting -------------------------------------
@@ -235,6 +254,7 @@ export function t(key, vars) {
 // keeps the dictionary key, `getLocale()` and `getDirection()` on the
 // original string while the formatting boundary sees a tag Intl accepts.
 const FORMAT_LOCALE_CACHE = new Map();
+const FORMAT_LOCALE_CACHE_MAX = 100;
 
 /** True when `Intl` accepts `code` as a structurally valid tag. */
 function isUsableTag(code) {
@@ -276,8 +296,16 @@ function resolveFormatLocale(code) {
             `i18n: locale "${key}" is not a tag Intl accepts; formatting as "${resolved}"`,
         );
     }
+    if (FORMAT_LOCALE_CACHE.size >= FORMAT_LOCALE_CACHE_MAX) {
+        FORMAT_LOCALE_CACHE.delete(FORMAT_LOCALE_CACHE.keys().next().value);
+    }
     FORMAT_LOCALE_CACHE.set(key, resolved);
     return resolved;
+}
+
+/** Return the Intl-safe locale for the active language or an explicit code. */
+export function getFormatLocale(locale = currentLocale) {
+    return resolveFormatLocale(locale);
 }
 
 // Compiled IntlMessageFormat instances are immutable and reusable, so

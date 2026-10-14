@@ -13,7 +13,15 @@
 // mainnet URL is unchanged (the coin just moved from the base to the segment).
 
 import { describe, it, expect } from 'vitest';
-import { tickerForCoin, explorerCoinCode } from '../../../packages/core/src/registry/coinTicker.js';
+import {
+    explorerCoinCode,
+    formatNativeBaseUnits,
+    nativeDecimalsFor,
+    smallBalanceBaseUnitsFor,
+    tickerForCoin,
+    tickerForDescriptor,
+    transactionExplorerLinks,
+} from '../../../packages/core/src/registry/coinTicker.js';
 import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
 
 describe('explorerCoinCode', () => {
@@ -62,5 +70,56 @@ describe('explorer descriptor bases are bare', () => {
         expect(`${d.explorer.defaultUrl}/${explorerCoinCode(d)}/address/x`)
             .toBe('http://localhost/RBTC/address/x');
         expect(tickerForCoin('bitcoin')).toBe('BTC');
+    });
+});
+
+describe('chain UI metadata', () => {
+    it('preserves bundled ticker, precision, and small-balance policy', () => {
+        expect(tickerForCoin('bitcoin')).toBe('BTC');
+        expect(tickerForCoin('litecoin')).toBe('LTC');
+        expect(tickerForCoin('dogecoin')).toBe('DOGE');
+        expect(formatNativeBaseUnits(1n, 'bitcoin')).toBe('0.00000001');
+        expect(nativeDecimalsFor('litecoin')).toBe(8);
+        expect(smallBalanceBaseUnitsFor('bitcoin')).toBe(546n);
+        expect(smallBalanceBaseUnitsFor('litecoin')).toBe(5460n);
+        expect(smallBalanceBaseUnitsFor('dogecoin')).toBe(1000000n);
+    });
+
+    it('uses descriptor metadata for a new chain without a UI mapping', () => {
+        const descriptor = {
+            coin: 'examplecoin',
+            networkKind: 'mainnet',
+            nativeTicker: 'EXM',
+            nativeDecimals: 2,
+            smallBalanceBaseUnits: '25',
+            transactionExplorers: [{
+                id: 'example',
+                label: 'Example Explorer',
+                iconImg: 'https://example.com/favicon.ico',
+                url: 'https://example.com/transaction/{txid}',
+            }],
+        };
+        expect(tickerForDescriptor(descriptor)).toBe('EXM');
+        expect(formatNativeBaseUnits(1234n, descriptor)).toBe('12.34');
+        expect(smallBalanceBaseUnitsFor(descriptor)).toBe(25n);
+        expect(transactionExplorerLinks(descriptor, 'ab/cd')).toEqual([{
+            id: 'example',
+            label: 'Example Explorer',
+            iconImg: 'https://example.com/favicon.ico',
+            url: 'https://example.com/transaction/ab%2Fcd',
+        }]);
+    });
+
+    it('preserves bundled external explorer coverage by network', () => {
+        const reg = defaultRegistry();
+        expect(transactionExplorerLinks(reg.get('bitcoin-testnet'), 'abc').map((link) => link.url))
+            .toEqual([
+                'https://mempool.space/testnet4/tx/abc',
+                'https://blockstream.info/testnet/tx/abc',
+            ]);
+        expect(transactionExplorerLinks(reg.get('litecoin-mainnet'), 'abc').map((link) => link.label))
+            .toEqual(['LitecoinSpace', 'Blockchair']);
+        expect(transactionExplorerLinks(reg.get('dogecoin-testnet'), 'abc')).toEqual([]);
+        expect(transactionExplorerLinks(reg.get('bitcoin-regtest'), 'abc')).toEqual([]);
     });
 });

@@ -9,7 +9,20 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import {
+    AddressText,
+    Button,
+    ChainBadge,
+    Checkbox,
+    FeeSelector,
+    FormPage,
+    Input,
+    ListPage,
+    PageHeader,
+    Screen,
+    SectionHeader,
+    StatusMessage,
+} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -27,7 +40,14 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
+import detailStyles from './PollDetail.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { explorerReadFailure } from '../../sdk/explorerErrors.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
+import { useTickBalance } from '../hooks/useTickBalance.js';
+import { compareDecimalStrings } from '../utils/amountFormat.js';
+import { latestBallotRows, pollResultPercentages } from './pollDisplay.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -42,6 +62,33 @@ function extractRows(resp) {
     if (Array.isArray(resp)) return resp;
     if (Array.isArray(resp.data)) return resp.data;
     return [];
+}
+
+function extractPoll(resp) {
+    if (!resp) return null;
+    if (Array.isArray(resp)) return resp[0] || null;
+    if (Array.isArray(resp.data)) return resp.data[0] || null;
+    if (resp.data && typeof resp.data === 'object') return resp.data;
+    if (resp.row && typeof resp.row === 'object') return resp.row;
+    return typeof resp === 'object' ? resp : null;
+}
+
+function statusLabel(status) {
+    if (status === 'failed_quorum') return 'Did not pass';
+    if (status === 'finalized') return 'Decided';
+    if (status === 'open' || !status) return 'Open';
+    const words = String(status).trim().toLowerCase().replace(/[_-]+/g, ' ');
+    return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+function votePollRef(vote) {
+    return vote?.poll_index ?? vote?.poll_action_index ?? vote?.poll_ref;
+}
+
+function ballotRowText(row, options, isSplit) {
+    const option = Number(row?.choice ?? row?.option_index);
+    const label = Number.isInteger(option) ? `${option}: ${options[option] ?? ''}` : 'Unknown option';
+    return isSplit ? `${label} (${String(row?.share ?? '0')} share)` : label;
 }
 
 /**
@@ -64,10 +111,13 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
 
     const [poll, setPoll] = useState(/** @type {any | null} */ (null));
     const [results, setResults] = useState(/** @type {any[] | null} */ (null));
+    const [currentHeight, setCurrentHeight] = useState(/** @type {number | null} */ (null));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
     const [addressesByChain, setAddressesByChain] = useState(/** @type {Record<string, any[]> | null} */ (null));
     const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
+    const [walletVotes, setWalletVotes] = useState(/** @type {any[] | null} */ (null));
+    const [voteLoadError, setVoteLoadError] = useState(false);
 
     // Ballot editor state. Approval: Set of chosen option indices. Split: map of
     // option index -> share string.
@@ -81,22 +131,67 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const validPollIndex = /^[1-9]\d*$/.test(String(pollIndex ?? '').trim());
 
     useEffect(() => {
+        if (!validPollIndex) {
+            setPoll(null);
+            setResults(null);
+            setCurrentHeight(null);
+            setLoadError('Poll number must be a positive whole number.');
+            return undefined;
+        }
         let cancelled = false;
-        setPoll(null); setResults(null); setLoadError(null);
-        Promise.all([
-            messaging.governancePoll({ chainId, pollIndex }),
-            messaging.governancePollResults({ chainId, pollIndex }).catch(() => null),
-        ])
-            .then(([p, r]) => {
+        let firstLoad = true;
+        setPoll(null); setResults(null); setCurrentHeight(null); setLoadError(null);
+        async function refreshPoll() {
+            try {
+                const [p, heightResponse] = await Promise.all([
+                    messaging.governancePoll({ chainId, pollIndex }),
+                    typeof messaging.getIndexerWatermark === 'function'
+                        ? messaging.getIndexerWatermark({ chainId }).catch(() => null)
+                        : Promise.resolve(null),
+                ]);
                 if (cancelled) return;
-                setPoll(p || null);
-                setResults(extractRows(r));
-            })
-            .catch((err) => { if (!cancelled) setLoadError(err?.message || 'Failed to load poll.'); });
-        return () => { cancelled = true; };
-    }, [chainId, pollIndex, messaging]);
+                const loadedPoll = extractPoll(p);
+                if (!loadedPoll) {
+                    if (firstLoad) setLoadError('Poll not found.');
+                    return;
+                }
+                const height = heightResponse?.watermark == null || heightResponse.watermark === ''
+                    ? null
+                    : Number(heightResponse.watermark);
+                const usableHeight = Number.isFinite(height) ? height : null;
+                setPoll(loadedPoll);
+                setCurrentHeight(usableHeight);
+                setLoadError(null);
+
+                const endBlock = loadedPoll.end_block == null || loadedPoll.end_block === ''
+                    ? Number.NaN
+                    : Number(loadedPoll.end_block);
+                const terminal = loadedPoll.poll_status && loadedPoll.poll_status !== 'open';
+                const closeReached = Number.isFinite(endBlock) && usableHeight !== null && usableHeight > endBlock;
+                if (terminal || closeReached) {
+                    const r = await messaging.governancePollResults({ chainId, pollIndex }).catch(() => null);
+                    if (!cancelled) setResults(extractRows(r));
+                } else {
+                    setResults(null);
+                }
+            } catch (err) {
+                if (!cancelled && firstLoad) {
+                    setLoadError(
+                        explorerReadFailure(err, 'load this poll')?.message
+                        || userFacingMessage(err, 'Could not load this poll. Try again.'),
+                    );
+                }
+            } finally {
+                firstLoad = false;
+            }
+        }
+        refreshPoll();
+        const refreshTimer = setInterval(refreshPoll, 30_000);
+        return () => { cancelled = true; clearInterval(refreshTimer); };
+    }, [chainId, pollIndex, messaging, validPollIndex]);
 
     useEffect(() => {
         let cancelled = false;
@@ -114,6 +209,28 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
     }, [walletId, chainId, messaging]);
 
     useEffect(() => {
+        if (!addressesByChain || !validPollIndex) return undefined;
+        let cancelled = false;
+        const addresses = addressesByChain[chainId] || [];
+        setWalletVotes(null);
+        setVoteLoadError(false);
+        Promise.all(addresses.map(async ({ address }) => {
+            const response = await messaging.governanceVotes({ chainId, query: address, type: 'address' });
+            return extractRows(response)
+                .filter((row) => String(votePollRef(row)) === String(pollIndex))
+                .map((row) => ({ ...row, source: row?.source || address }));
+        }))
+            .then((rows) => { if (!cancelled) setWalletVotes(rows.flat()); })
+            .catch(() => {
+                if (!cancelled) {
+                    setWalletVotes([]);
+                    setVoteLoadError(true);
+                }
+            });
+        return () => { cancelled = true; };
+    }, [addressesByChain, chainId, pollIndex, messaging, validPollIndex]);
+
+    useEffect(() => {
         if (stage === 'review') setTimeout(() => passwordRef.current?.focus(), 0);
     }, [stage]);
 
@@ -122,6 +239,13 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
         if (!fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
     }, [chainId, fromAddressId, addressesByChain]);
+    const voteBalance = useTickBalance({
+        messaging,
+        walletId,
+        chainId,
+        address: fromAddress?.address,
+        tick: poll?.tick || '',
+    });
 
     const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
     const [hwStatus, setHwStatus] = useState('idle');
@@ -156,7 +280,42 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
     const options = Array.isArray(poll?.options) ? poll.options : [];
     const isSplit = poll?.tally_mode === 'split';
     const maxSel = Number(poll?.max_selections) || 1;
-    const isOpen = !poll?.poll_status || poll.poll_status === 'open';
+    const pollReportsOpen = !poll?.poll_status || poll.poll_status === 'open';
+    const endBlock = poll?.end_block == null || poll.end_block === '' ? Number.NaN : Number(poll.end_block);
+    const hasCountdown = Number.isFinite(endBlock) && currentHeight !== null;
+    const blocksRemaining = hasCountdown ? endBlock - currentHeight : null;
+    const isOpen = pollReportsOpen && (blocksRemaining === null || blocksRemaining >= 0);
+    const resultPercentages = pollResultPercentages(results);
+    const walletBallots = useMemo(() => {
+        if (!walletVotes || !addressesByChain) return [];
+        return (addressesByChain[chainId] || []).map(({ address }) => ({
+            address,
+            rows: latestBallotRows(walletVotes, address),
+        })).filter(({ rows }) => rows.length > 0);
+    }, [addressesByChain, chainId, walletVotes]);
+    const sourceBallot = useMemo(
+        () => (fromAddress && walletVotes ? latestBallotRows(walletVotes, fromAddress.address) : []),
+        [fromAddress, walletVotes],
+    );
+    const initializedEditorRef = useRef('');
+
+    useEffect(() => {
+        if (!poll || !fromAddress || walletVotes === null) return;
+        const editorKey = `${chainId}:${String(pollIndex)}:${fromAddress.id}`;
+        if (initializedEditorRef.current === editorKey) return;
+        initializedEditorRef.current = editorKey;
+        if (isSplit) {
+            setSplitShares(Object.fromEntries(sourceBallot.map((row) => [
+                Number(row.choice ?? row.option_index), String(row.share ?? ''),
+            ])));
+            setApprovalChoices(new Set());
+        } else {
+            setApprovalChoices(new Set(sourceBallot
+                .map((row) => Number(row.choice ?? row.option_index))
+                .filter(Number.isInteger)));
+            setSplitShares({});
+        }
+    }, [chainId, fromAddress, isSplit, poll, pollIndex, sourceBallot, walletVotes]);
 
     function toggleApproval(i) {
         setApprovalChoices((prev) => {
@@ -255,8 +414,26 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
     function handleReview(event) {
         event.preventDefault();
         if (!fromAddress) { setFormError('No address on this chain to vote from.'); return; }
+        const voteBalanceComparison = compareDecimalStrings(voteBalance, '0');
+        if (voteBalanceComparison !== null && voteBalanceComparison !== 1) {
+            setFormError(`This address must hold some ${poll.tick || 'governance token'} to vote.`);
+            return;
+        }
+        if (isSplit) {
+            const enteredShares = Object.values(splitShares).filter((share) => String(share).trim() !== '');
+            if (enteredShares.some((share) => !/^\d+(?:\.\d+)?$/.test(String(share).trim()) || Number(share) <= 0)) {
+                setFormError('Each split share must be a positive plain number.');
+                return;
+            }
+            if (enteredShares.length > maxSel) {
+                setFormError(`Choose no more than ${maxSel} option${maxSel === 1 ? '' : 's'}.`);
+                return;
+            }
+        }
         const ballot = buildBallot();
         if (!ballot.length) { setFormError('Choose at least one option.'); return; }
+        const memoError = memoLengthError(memo.trim());
+        if (memoError) { setFormError(memoError); return; }
         setFormError(null);
         if (singleEncode) { openConfirmScreen(); return; }
         setStage('review');
@@ -310,7 +487,15 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
     }
 
     const header = <PageHeader onBack={onBack} title={`Poll #${String(pollIndex)}`} />;
-    const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
+    const wrap = (children) => (
+        <Screen
+            variant={variant}
+            header={header}
+            restoreScroll={!(stage === 'review' || stage === 'submitting')}
+        >
+            {children}
+        </Screen>
+    );
 
     if (loadError) {
         return wrap(
@@ -323,6 +508,10 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
 
     if (stage === 'done' && result) {
         const txid = result?.txid || result?.tx_hash;
+        const submittedBallot = buildBallot();
+        const submittedChoice = isSplit
+            ? submittedBallot.map((entry) => `${entry.option}: ${options[entry.option] ?? ''} (${entry.share} share)`).join(' · ')
+            : submittedBallot.map((option) => `${option}: ${options[option] ?? ''}`).join(' · ');
         // A queued result is SIGNED and not broadcast. The confirm
         // pipeline resolves that case rather than throwing, so without this
         // branch the done screen below reports it as a completed action.
@@ -333,30 +522,46 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
             return wrap(<WatcherResultPanel result={result} onBuildAnother={() => setStage('view')} onDone={onBack} />);
         }
         return wrap(
-            <>
-                <p className={styles.summary}>Ballot cast. It counts once the network records the action; weight is measured at the poll's close block.</p>
+            <ListPage>
+                <p className={styles.summary}>Vote submitted. It counts once the network records it; voting weight is measured at the poll&apos;s close block.</p>
                 <dl className={styles.detailsList}>
+                    <dt className={styles.detailsLabel}>Your choice</dt>
+                    <dd className={styles.detailsValue}>{submittedChoice}</dd>
                     <dt className={styles.detailsLabel}>Transaction ID</dt>
                     <dd className={styles.detailsValue}>{String(txid || 'n/a')}</dd>
                 </dl>
                 <div className={styles.actions}><Button variant="primary" onClick={onBack}>Done</Button></div>
-            </>,
+            </ListPage>,
         );
     }
 
     const pollInfo = (
         <dl className={styles.detailsList}>
-            <dt className={styles.detailsLabel}>Chain</dt>
-            <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
+            {descriptor ? (
+                <>
+                    <dt className={styles.detailsLabel}>Chain</dt>
+                    <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
+                </>
+            ) : null}
             <dt className={styles.detailsLabel}>Token</dt>
             <dd className={styles.detailsValue}>{poll.tick || 'n/a'}</dd>
             {poll.question ? (<><dt className={styles.detailsLabel}>Question</dt><dd className={styles.detailsValue}>{poll.question}</dd></>) : null}
             <dt className={styles.detailsLabel}>Status</dt>
-            <dd className={styles.detailsValue}>{poll.poll_status || 'open'}</dd>
+            <dd className={styles.detailsValue}>{pollReportsOpen && blocksRemaining !== null && blocksRemaining < 0
+                ? 'Awaiting finalization'
+                : statusLabel(poll.poll_status)}</dd>
             <dt className={styles.detailsLabel}>Mode</dt>
             <dd className={styles.detailsValue}>{poll.tally_mode || 'approval'} / {poll.weight_mode || 'balance'}</dd>
             <dt className={styles.detailsLabel}>Closes at block</dt>
             <dd className={styles.detailsValue}>{String(poll.end_block ?? 'n/a')}</dd>
+            {blocksRemaining !== null ? (
+                <>
+                    <dt className={styles.detailsLabel}>Voting window</dt>
+                    <dd className={`${styles.detailsValue} ${detailStyles.countdown}`}>{blocksRemaining > 0
+                        ? `${blocksRemaining} block${blocksRemaining === 1 ? '' : 's'} remaining`
+                        : blocksRemaining === 0 ? 'Final voting block' : 'Voting closed'}</dd>
+                </>
+            ) : null}
             {poll.poll_status === 'finalized' ? (
                 <>
                     <dt className={styles.detailsLabel}>Winning option</dt>
@@ -366,24 +571,74 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
         </dl>
     );
 
-    // Finalized results table (frozen per-option tally).
-    const resultsBlock = results && results.length ? (
+    const voteReceipt = (
         <div style={{ marginTop: '0.75rem' }}>
-            <span className={styles.fromLabel}>Results</span>
-            <table style={{ width: '100%', fontSize: '0.85rem' }}>
-                <thead><tr><th style={{ textAlign: 'left' }}>Option</th><th style={{ textAlign: 'right' }}>Weight</th><th style={{ textAlign: 'right' }}>Voters</th></tr></thead>
-                <tbody>
-                    {results.map((r) => (
-                        <tr key={String(r.option_index)}>
-                            <td>{r.option_index}: {options[r.option_index] ?? ''}</td>
-                            <td style={{ textAlign: 'right' }}>{String(r.total_weight ?? '0')}</td>
-                            <td style={{ textAlign: 'right' }}>{String(r.voter_count ?? '0')}</td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
+            <SectionHeader title="Your vote" />
+            {walletVotes === null ? (
+                <p className={styles.hint}>Loading your vote…</p>
+            ) : walletBallots.length ? (
+                walletBallots.map(({ address, rows }) => (
+                    <dl className={styles.detailsList} key={address}>
+                        <dt className={styles.detailsLabel}>Address</dt>
+                        <dd className={styles.detailsValue}><AddressText address={address} /></dd>
+                        <dt className={styles.detailsLabel}>Choice</dt>
+                        <dd className={styles.detailsValue}>{rows.map((row) => ballotRowText(row, options, isSplit)).join(' · ')}</dd>
+                    </dl>
+                ))
+            ) : (
+                <p className={styles.hint}>{voteLoadError
+                    ? 'Your vote could not be loaded.'
+                    : 'No direct vote from this wallet.'}</p>
+            )}
+            <p className={styles.hint}>A direct vote overrides any standing {poll.tick || 'token'} delegation. Delegated weight counts only when the delegate votes, and it does not add another voter.</p>
+            {isOpen && sourceBallot.length ? <p className={styles.hint}>You can change this address&apos;s vote until the poll closes. The latest confirmed vote from this address replaces its earlier vote.</p> : null}
         </div>
-    ) : null;
+    );
+
+    // Frozen results are unavailable while voting is open and can be absent
+    // briefly after close while the indexer finalizes the poll.
+    const resultsBlock = (
+        <div style={{ marginTop: '0.75rem' }}>
+            <SectionHeader title="Results" />
+            {results && results.length ? (
+                <ul className={detailStyles.resultList} aria-label="Poll results">
+                    {results.map((r, index) => {
+                        const optionText = `${r.option_index}: ${options[r.option_index] ?? ''}`;
+                        const percentage = resultPercentages[index] || 0;
+                        return (
+                            <li className={detailStyles.resultItem} key={String(r.option_index)}>
+                                <div className={detailStyles.resultHeader}>
+                                    <span className={detailStyles.resultOption}>{optionText}</span>
+                                    <span className={detailStyles.resultValues}>
+                                        <span>{String(r.total_weight ?? '0')} weight</span>
+                                        <span>{percentage}%</span>
+                                        <span>{String(r.voter_count ?? '0')} voter{Number(r.voter_count) === 1 ? '' : 's'}</span>
+                                    </span>
+                                </div>
+                                <div
+                                    className={detailStyles.resultTrack}
+                                    role="progressbar"
+                                    aria-label={`${optionText} weight`}
+                                    aria-valuemin={0}
+                                    aria-valuemax={100}
+                                    aria-valuenow={percentage}
+                                    aria-valuetext={`${String(r.total_weight ?? '0')} weight`}
+                                >
+                                    <div className={detailStyles.resultFill} style={{ width: `${percentage}%` }} />
+                                </div>
+                            </li>
+                        );
+                    })}
+                </ul>
+            ) : (
+                <p className={styles.hint}>
+                    {isOpen
+                        ? 'Final results appear after voting closes.'
+                        : pollReportsOpen ? 'Final results are being finalized.' : 'No finalized results are available.'}
+                </p>
+            )}
+        </div>
+    );
 
     // The confirm page, rendered in place of the poll while the
     // single-encode pipeline is live. The intent is decoded from the params
@@ -420,13 +675,28 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
             ? ballot.map((e) => `${e.option}: ${options[e.option] ?? ''} (${e.share})`).join(' · ')
             : ballot.map((i) => `${i}: ${options[i] ?? ''}`).join(' · ');
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
-                <p className={styles.summary}>Vote on poll #{String(pollIndex)} ({poll.tick}).</p>
+            <FormPage
+                label="Review vote"
+                onSubmit={handleSubmit}
+                status={(isWatcherMode || isHwSource) && submitError
+                    ? <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    : null}
+                actions={(
+                    <>
+                        <Button type="button" variant="ghost" onClick={() => setStage('view')} disabled={stage === 'submitting'}>Back</Button>
+                        <Button type="submit" variant="primary" loading={stage === 'submitting'}
+                            disabled={isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)}>
+                            {isWatcherMode ? 'Create unsigned transaction' : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}` : 'Submit vote'}
+                        </Button>
+                    </>
+                )}
+            >
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
                     <dt className={styles.detailsLabel}>Your choice</dt>
                     <dd className={styles.detailsValue}>{shown}</dd>
+                    {memo.trim() ? (<><dt className={styles.detailsLabel}>Memo</dt><dd className={styles.detailsValue}>{memo.trim()}</dd></>) : null}
                     <dt className={styles.detailsLabel}>Network fee</dt>
                     <dd className={styles.detailsValue}>
                         {feeEstimate
@@ -450,44 +720,48 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 )}
-                {(isWatcherMode || isHwSource) && submitError ? (<StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>) : null}
-                <div className={styles.actions}>
-                    <Button type="button" variant="ghost" onClick={() => setStage('view')} disabled={stage === 'submitting'}>Back</Button>
-                    <Button type="submit" variant="primary" loading={stage === 'submitting'}
-                        disabled={isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)}>
-                        {isWatcherMode ? 'Create unsigned transaction' : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}` : 'Cast ballot'}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
     return wrap(
-        <>
+        <ListPage>
             {pollInfo}
+            {voteReceipt}
             {resultsBlock}
             {isOpen ? (
-                <form onSubmit={handleReview} noValidate style={{ marginTop: '0.75rem' }}>
+                <FormPage
+                    className={detailStyles.ballotForm}
+                    label={sourceBallot.length ? 'Change vote' : 'Vote'}
+                    onSubmit={handleReview}
+                    status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
+                    actions={<Button type="submit" variant="primary" disabled={!fromAddress || options.length === 0}>{sourceBallot.length ? 'Change vote' : 'Vote'}</Button>}
+                >
                     <span className={styles.fromLabel}>{isSplit ? 'Split your weight across options' : `Choose up to ${maxSel} option${maxSel > 1 ? 's' : ''}`}</span>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.4rem' }}>
                         {options.map((label, i) => (
                             isSplit ? (
-                                <div key={i} style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
-                                    <div style={{ flex: 1 }}>
+                                <div key={i} className={detailStyles.splitOptionRow}>
+                                    <div className={detailStyles.splitOptionInput}>
                                         <Input label={`${i}: ${label}`} value={splitShares[i] || ''} inputMode="numeric"
                                             onChange={(e) => setSplitShares((prev) => ({ ...prev, [i]: e.target.value }))}
                                             placeholder="share" autoComplete="off" />
                                     </div>
                                 </div>
                             ) : (
-                                <label key={i} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                                    <input type="checkbox" checked={approvalChoices.has(i)} onChange={() => toggleApproval(i)} />
-                                    <span>{i}: {label}</span>
-                                </label>
+                                <Checkbox
+                                    key={i}
+                                    className={detailStyles.optionRow}
+                                    label={<span className={detailStyles.optionLabel}>{i}: {label}</span>}
+                                    checked={approvalChoices.has(i)}
+                                    disabled={!approvalChoices.has(i) && approvalChoices.size >= maxSel}
+                                    onChange={() => toggleApproval(i)}
+                                />
                             )
                         ))}
                     </div>
-                    <Input label="Memo (optional)" value={memo} onChange={(e) => setMemo(e.target.value)} autoComplete="off" />
+                    {options.length === 0 ? <p className={styles.hint}>This poll has no voting options.</p> : null}
+                    <Input label="Memo (optional)" hint={MEMO_HINT} value={memo} onChange={(e) => setMemo(e.target.value)} autoComplete="off" />
                     {feeTiers ? (
                         <FeeSelector
                             label="Network fee"
@@ -498,15 +772,11 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack }) {
                             customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                         />
                     ) : null}
-                    {formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
-                    <div className={styles.actions}>
-                        <Button type="submit" variant="primary" disabled={!fromAddress}>Vote</Button>
-                    </div>
                     {!fromAddress ? <p className={styles.hint}>No address on this chain. Use Receive to generate one, then vote.</p> : null}
-                </form>
+                </FormPage>
             ) : (
                 <p className={styles.hint} style={{ marginTop: '0.75rem' }}>Voting is closed for this poll.</p>
             )}
-        </>,
+        </ListPage>,
     );
 }

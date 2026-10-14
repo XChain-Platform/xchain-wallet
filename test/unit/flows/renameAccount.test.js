@@ -17,6 +17,9 @@ function memCollection(initial = []) {
     return {
         get: async (id) => (m.has(id) ? JSON.parse(JSON.stringify(m.get(id))) : null),
         put: async (rec) => { m.set(rec.id, JSON.parse(JSON.stringify(rec))); },
+        findBy: async (field, value) => [...m.values()]
+            .filter((record) => record[field] === value)
+            .map((record) => JSON.parse(JSON.stringify(record))),
         _map: m,
     };
 }
@@ -51,6 +54,17 @@ describe('renameAccount', () => {
         await expect(renameAccount({ accountId: 'acct-1', name: '   ', vault }))
             .rejects.toThrow(/non-empty/);
         // Unchanged.
+        expect((await vault.accounts.get('acct-1')).name).toBe('Account 1');
+    });
+
+    it('rejects a duplicate name within the wallet case-insensitively', async () => {
+        const vault = makeVault([
+            baseAccount,
+            { ...baseAccount, id: 'acct-2', index: 1, name: 'Savings' },
+        ]);
+
+        await expect(renameAccount({ accountId: 'acct-1', name: ' savings ', vault }))
+            .rejects.toThrow('An account named "savings" already exists.');
         expect((await vault.accounts.get('acct-1')).name).toBe('Account 1');
     });
 

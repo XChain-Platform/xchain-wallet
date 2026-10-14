@@ -56,8 +56,7 @@ assert.ok(/format=wif-only/.test(signerSrc),
 const buildSrc = read('packages/core/src/flows/buildActionPsbt.js');
 assert.ok(/import \{ logConsole \} from '\.\.\/shared\/utils\/logConsole\.js'/.test(buildSrc),
     'buildActionPsbt.js imports logConsole');
-assert.ok(/source: 'encoder'[\s\S]*?'createTx action='/.test(buildSrc)
-    || /createTx action=\$\{opts\.actionData\.action\}/.test(buildSrc),
+assert.ok(/createTx action=\$\{opts\.actionData\.action\}/.test(buildSrc),
     'buildActionPsbt records the encoder request');
 assert.ok(/createTx ok action=/.test(buildSrc),
     'buildActionPsbt records the encoder response');
@@ -72,7 +71,7 @@ assert.ok(/const register = \(name, handler\) => \{[\s\S]*?host\.register\(name,
     'bridge handlers wrap host.register through a local logging helper');
 assert.ok(/source: `bridge:\$\{name\}`/.test(bridgeSrc),
     'bridge log entries are tagged source=bridge:<channel>');
-assert.ok(/'→ '/.test(bridgeSrc) || /`→ \$\{origin\}`/.test(bridgeSrc),
+assert.ok(/`→ \$\{origin\}`/.test(bridgeSrc),
     'bridge wrapper records an entry arrow with origin');
 assert.ok(/'← ok'/.test(bridgeSrc), 'bridge wrapper records ok exit');
 assert.ok(/`← \$\{code\}`/.test(bridgeSrc), 'bridge wrapper records error code on throw');

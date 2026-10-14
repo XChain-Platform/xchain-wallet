@@ -17,9 +17,18 @@
 
 import { createRoot } from 'react-dom/client';
 import { registry } from '@xchain-wallet/core';
+import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
+import { installDesktopFiatRateSource } from './fiatRateSource.js';
 import { setShellCapabilities } from '@xchain-wallet/core/shared/shellCapabilities.js';
 import '@xchain-wallet/core/ui/tokens.css';
 import { App } from './App.jsx';
+import { DesktopUpdateBanner } from './DesktopUpdateBanner.jsx';
+import { installShellErrorCapture } from './errorCapture.js';
+
+logConsole.attach();
+
+// Register the crash hook before anything else can throw.
+installShellErrorCapture();
 
 // §9.7 / G007: hot-swap the renderer realm's chain registry with the
 // hub batch main verified at boot. The renderer CSP pins connect-src
@@ -39,6 +48,8 @@ try {
         .catch(() => { /* soft enhancement; bundled descriptors keep serving */ });
 } catch { /* never block app boot */ }
 
+installDesktopFiatRateSource();
+
 const container = document.getElementById('xchain-desktop-root');
 if (!container) {
     throw new Error('desktop: #xchain-desktop-root missing; check renderer/index.html');
@@ -50,4 +61,14 @@ if (!container) {
 // there, because neither can proxy its own traffic.
 setShellCapabilities({ socksProxy: true });
 
-createRoot(container).render(<App />);
+createRoot(container).render(
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'var(--xc-viewport-h, 100vh)' }}>
+        {/* The application menu is available before unlock, so update check
+            results stay mounted above every renderer state. It floats over
+            the page (position: fixed), so it takes no layout space. */}
+        <DesktopUpdateBanner />
+        <div style={{ flex: '1 1 auto', minHeight: 0, '--xc-screen-h': '100%' }}>
+            <App />
+        </div>
+    </div>,
+);

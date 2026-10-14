@@ -9,7 +9,9 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { AddressText, Button, ChainBadge, Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import {
+    AddressText, Button, ChainBadge, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, StatusMessage,
+} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useCoinpayObligations } from '../hooks/useCoinpayObligations.js';
@@ -57,7 +59,6 @@ const PROTOCOL_COIN_TICKER = {
 export function ObligationsView({ walletId, activeAccountId, onPay, onBack }) {
     const { shell, messaging } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     // PC-16: auto-pay armed/disarmed summary. "Disarmed" = consented
     // orders exist but no pre-unlocked signer can pay them (locked
@@ -82,18 +83,30 @@ export function ObligationsView({ walletId, activeAccountId, onPay, onBack }) {
 
     // Faster poll than the app-level badge: this screen is the user
     // actively watching deadlines.
-    const { obligations, scanning, refresh } = useCoinpayObligations(
+    const { obligations, scanning, error: scanError, refresh } = useCoinpayObligations(
         walletId,
         activeAccountId,
         { pollMs: 30_000 },
     );
 
-    // 1s tick drives the countdowns. One interval for the whole list.
+    // One interval drives every live countdown and clears at the final deadline.
     const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000));
     useEffect(() => {
-        const t = setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 1000);
+        const current = Math.floor(Date.now() / 1000);
+        setNowSec(current);
+        const hasLiveDeadline = () => obligations.some((o) => {
+            const expiration = Number(o.expiration);
+            return Number.isFinite(expiration) && expiration > 0
+                && expiration <= 1e13 && expiration > Math.floor(Date.now() / 1000);
+        });
+        if (!hasLiveDeadline()) return undefined;
+        const t = setInterval(() => setNowSec(() => {
+            const next = Math.floor(Date.now() / 1000);
+            if (!hasLiveDeadline()) clearInterval(t);
+            return next;
+        }), 1000);
         return () => clearInterval(t);
-    }, []);
+    }, [obligations]);
 
     const classified = obligations.map((o) => ({
         ...o,
@@ -106,16 +119,19 @@ export function ObligationsView({ walletId, activeAccountId, onPay, onBack }) {
         <PageHeader
             onBack={onBack}
             title="Payments due"
+            // Icon only: the header's trailing slot draws every button as a
+            // 38px circle, and the word "Refresh" ran off the screen edge.
             trailing={(
                 <Button
-                    variant="ghost"
+                    variant="secondary"
                     size="sm"
+                    icon={null}
                     onClick={refresh}
                     disabled={scanning}
-                    icon={<Icon.RefreshIcon />}
                     aria-label="Refresh payments"
+                    title="Refresh payments"
                 >
-                    Refresh
+                    <Icon.RefreshIcon />
                 </Button>
             )}
         />
@@ -123,7 +139,7 @@ export function ObligationsView({ walletId, activeAccountId, onPay, onBack }) {
 
     return (
         <Screen variant={variant} header={header}>
-            <div className={isFull ? styles.wrapFull : styles.wrapPopup}>
+            <ListPage>
                 {autopayArmed ? (
                     <p className={styles.hint}>
                         CoinPay auto-pay is armed for {autopayStatus.armed} order{autopayStatus.armed === 1 ? '' : 's'}:
@@ -141,20 +157,20 @@ export function ObligationsView({ walletId, activeAccountId, onPay, onBack }) {
                     <p className={styles.hint}>Scanning for payments due…</p>
                 ) : null}
 
-                {!scanning && classified.length === 0 ? (
-                    <div className={styles.empty}>
-                        <p className={styles.emptyTitle}>No payments due</p>
-                        <p className={styles.hint}>
-                            When one of your DEX orders matches against native
-                            coin (BTC, LTC, or DOGE), the coin payment that
-                            completes the trade appears here with its deadline.
-                            Unpaid matches expire and the escrowed tokens
-                            return to the seller.
-                        </p>
-                    </div>
+                {scanError ? (
+                    <StatusMessage variant="error" className={styles.hint}>{scanError}</StatusMessage>
+                ) : null}
+
+                {!scanning && !scanError && classified.length === 0 ? (
+                    <EmptyState
+                        icon={<Icon.ClockIcon />}
+                        title="No payments due"
+                        body="When a DEX order matches against BTC, LTC or DOGE, the coin payment that completes it appears here with its deadline."
+                    />
                 ) : null}
 
                 {payable.length > 0 ? (
+                    /* Safari needs an explicit list role because this class removes list styling. */
                     <ul className={styles.list} role="list" aria-label="Pending payments">
                         {payable.map((o) => (
                             <ObligationRow key={rowKey(o)} row={o} onPay={onPay} />
@@ -164,13 +180,18 @@ export function ObligationsView({ walletId, activeAccountId, onPay, onBack }) {
 
                 {expired.length > 0 ? (
                     <>
-                        <p className={styles.sectionLabel}>Expired, awaiting settlement</p>
-                        <p className={styles.hint}>
-                            These payment windows have closed. Do not pay them:
-                            a payment confirming after the deadline sends your
-                            coin without receiving the tokens. The match
-                            settles back to the seller at the next block.
-                        </p>
+                        <SectionHeader
+                            title="Expired, awaiting settlement"
+                            description={(
+                                <>
+                                    These payment windows have closed. Do not pay them:
+                                    a payment confirming after the deadline sends your
+                                    coin without receiving the tokens. The match
+                                    settles back to the seller at the next block.
+                                </>
+                            )}
+                        />
+                        {/* Safari needs an explicit list role because this class removes list styling. */}
                         <ul className={styles.list} role="list" aria-label="Expired payments">
                             {expired.map((o) => (
                                 <ObligationRow key={rowKey(o)} row={o} onPay={onPay} />
@@ -178,7 +199,7 @@ export function ObligationsView({ walletId, activeAccountId, onPay, onBack }) {
                         </ul>
                     </>
                 ) : null}
-            </div>
+            </ListPage>
         </Screen>
     );
 }
@@ -215,9 +236,7 @@ function ObligationRow({ row, onPay }) {
         <li className={styles.row}>
             <div className={styles.rowMain}>
                 <div className={styles.rowHead}>
-                    {descriptor
-                        ? <ChainBadge descriptor={descriptor} size="sm" />
-                        : <span>{row.chainId}</span>}
+                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : null}
                     <span className={styles.rowTitle}>
                         Matched order #{row.orderMatchActionIndex}
                     </span>

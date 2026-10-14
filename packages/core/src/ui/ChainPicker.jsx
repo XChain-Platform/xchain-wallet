@@ -8,10 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import * as branding from '../branding/branding.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { ChevronIcon } from './ChainPicker.icons.jsx';
+import { useBackHandler } from './backStack.js';
 import styles from './ChainPicker.module.css';
 
 /**
@@ -19,8 +20,7 @@ import styles from './ChainPicker.module.css';
  * "which network are we operating on" form (Send, Swap, Issue,
  * Compose message, Markets filter, etc.).
  *
- * Each row carries the chain's icon + display name + network-kind
- * suffix (mainnet implicit; testnet / regtest shown). Reads the icon
+ * Each row carries the chain's icon and display name. Reads the icon
  * URL from `branding.chainIconSmallUrl(chainId)` so the component
  * stays decoupled from the chain registry's image tick wiring.
  *
@@ -34,14 +34,7 @@ import styles from './ChainPicker.module.css';
  * @param {string} [props.label]
  * @param {string} [props.placeholder]
  * @param {boolean} [props.disabled]
- * @param {'md' | 'lg'} [props.size]   field size, matching Input: 'md'
- *        (36px, default) sits inline with a form's other inputs; 'lg'
- *        (48px) for hero screens.
- * @param {boolean} [props.hideNetworkKind]   When true, suppresses the
- *        ` · testnet` / ` · regtest` suffix in the subtext. Useful on
- *        Receive where the page is already scoped to the user's own
- *        addresses; defaults to false so Send / Swap / Issue keep the
- *        "real money vs play money" cue.
+ * @param {'sm' | 'md' | 'lg'} [props.size] field size matching Input; defaults to 'md'.
  */
 export function ChainPicker({
     value,
@@ -52,28 +45,32 @@ export function ChainPicker({
     placeholder = 'Select a network',
     disabled,
     size = 'md',
-    hideNetworkKind = false,
 }) {
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
+    const listboxId = useId();
     const triggerRef = useRef(null);
     const popoverRef = useRef(null);
+    const searchRef = useRef(null);
+    const focusOnOpenRef = useRef('selected');
+
+    const closePicker = useCallback((restoreFocus = false) => {
+        setOpen(false);
+        setQuery('');
+        if (restoreFocus) triggerRef.current?.focus();
+    }, []);
+    useBackHandler(open ? () => closePicker(true) : undefined);
 
     useEffect(() => {
         if (!open) return undefined;
         const onClick = (e) => {
             if (triggerRef.current?.contains(e.target)) return;
             if (popoverRef.current?.contains(e.target)) return;
-            setOpen(false);
+            closePicker(true);
         };
-        const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
         window.addEventListener('mousedown', onClick);
-        window.addEventListener('keydown', onKey);
-        return () => {
-            window.removeEventListener('mousedown', onClick);
-            window.removeEventListener('keydown', onKey);
-        };
-    }, [open]);
+        return () => window.removeEventListener('mousedown', onClick);
+    }, [closePicker, open]);
 
     const entries = useMemo(() => {
         return (chainIds || []).map((id) => {
@@ -100,23 +97,56 @@ export function ChainPicker({
 
     const selected = entries.find((e) => e.id === value) || null;
 
-    // The visible `label` below is a plain <span>, not a <label for>, so without
-    // this the trigger's accessible name is only whatever chain it happens to be
-    // showing: "Bitcoin · regtest, button", with nothing saying WHICH chain
-    // question it answers. On a form with one picker that is merely vague; on
-    // CrossChainSwapForm, which renders "Give chain" and "Get chain" side by
-    // side, it makes the two controls indistinguishable to a screen reader - and
-    // transposing them sends the money the wrong way.
-    //
-    // Same fix, and the same reasoning, as the sibling TokenField already
-    // carries ("the visual chip isn't a native form control"): put the field
-    // label and the current selection in the accessible name. Only when a label
-    // was given; a label-less picker keeps its text as its name rather than
-    // gaining a stray colon.
-    const selectionText = selected
-        ? `${selected.label}${!hideNetworkKind && selected.networkKind !== 'mainnet'
-            ? ` · ${selected.networkKind}` : ''}`
-        : placeholder;
+    useEffect(() => {
+        if (!open) return;
+        if (focusOnOpenRef.current === 'search') {
+            searchRef.current?.focus();
+            return;
+        }
+        const options = listboxOptions(popoverRef.current);
+        const selectedOption = options.find(
+            (option) => option.getAttribute('aria-selected') === 'true',
+        );
+        const fallback = focusOnOpenRef.current === 'last' ? options.at(-1) : options[0];
+        (selectedOption || fallback)?.focus();
+    }, [open]);
+
+    const openPicker = (focus = 'selected') => {
+        focusOnOpenRef.current = focus;
+        setOpen(true);
+    };
+
+    const onPopoverKeyDown = (e) => {
+        const options = listboxOptions(popoverRef.current);
+        if (e.target === searchRef.current) {
+            if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+            e.preventDefault();
+            (e.key === 'ArrowDown' ? options[0] : options.at(-1))?.focus();
+            return;
+        }
+
+        const index = options.indexOf(document.activeElement);
+        let nextIndex = null;
+        if (e.key === 'ArrowDown') nextIndex = (index + 1) % options.length;
+        if (e.key === 'ArrowUp') nextIndex = (index - 1 + options.length) % options.length;
+        if (e.key === 'Home') nextIndex = 0;
+        if (e.key === 'End') nextIndex = options.length - 1;
+        if (nextIndex !== null && options.length > 0) {
+            e.preventDefault();
+            options[nextIndex]?.focus();
+            return;
+        }
+        if ((e.key === 'Enter' || e.key === ' ') && index >= 0) {
+            e.preventDefault();
+            options[index].click();
+        }
+        if (e.key === 'Tab') closePicker();
+    };
+
+    // The visual label is a span, so the accessible name pairs the field label
+    // with its current selection. An unlabelled picker keeps its visible text as
+    // its name.
+    const selectionText = selected ? selected.label : placeholder;
     const accessibleName = label ? `${label}: ${selectionText}` : undefined;
 
     return (
@@ -126,9 +156,19 @@ export function ChainPicker({
                 type="button"
                 ref={triggerRef}
                 className={styles.trigger}
-                onClick={() => !disabled && setOpen((v) => !v)}
+                onClick={() => {
+                    if (disabled) return;
+                    if (open) closePicker();
+                    else openPicker(entries.length > 6 ? 'search' : 'selected');
+                }}
+                onKeyDown={(e) => {
+                    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+                    e.preventDefault();
+                    openPicker(e.key === 'ArrowUp' && !selected ? 'last' : 'selected');
+                }}
                 aria-haspopup="listbox"
                 aria-expanded={open ? 'true' : 'false'}
+                aria-controls={open ? listboxId : undefined}
                 aria-label={accessibleName}
                 disabled={disabled}
             >
@@ -139,12 +179,7 @@ export function ChainPicker({
                 ) : null}
                 <span className={styles.triggerText}>
                     {selected ? (
-                        <>
-                            <span className={styles.triggerLabel}>{selected.label}</span>
-                            {!hideNetworkKind && selected.networkKind !== 'mainnet' ? (
-                                <span className={styles.triggerKind}>{` · ${selected.networkKind}`}</span>
-                            ) : null}
-                        </>
+                        <span className={styles.triggerLabel}>{selected.label}</span>
                     ) : (
                         <span className={styles.triggerPlaceholder}>{placeholder}</span>
                     )}
@@ -154,16 +189,24 @@ export function ChainPicker({
                 </span>
             </button>
             {open ? (
-                <div ref={popoverRef} className={styles.popover} role="listbox">
+                <div
+                    ref={popoverRef}
+                    id={listboxId}
+                    className={styles.popover}
+                    role="listbox"
+                    aria-label={label || 'Networks'}
+                    onKeyDown={onPopoverKeyDown}
+                >
                     {entries.length > 6 ? (
                         <div className={styles.searchWrap}>
                             <input
+                                ref={searchRef}
                                 type="text"
                                 className={styles.search}
                                 placeholder="Search networks…"
+                                aria-label="Search networks"
                                 value={query}
                                 onChange={(e) => setQuery(e.target.value)}
-                                autoFocus
                             />
                         </div>
                     ) : null}
@@ -173,19 +216,17 @@ export function ChainPicker({
                                 <button
                                     type="button"
                                     role="option"
+                                    tabIndex={-1}
                                     aria-selected={value === e.id ? 'true' : 'false'}
                                     className={`${styles.item} ${value === e.id ? styles.itemActive : ''}`}
-                                    onClick={() => { onChange(e.id); setOpen(false); setQuery(''); }}
+                                    onClick={() => { onChange(e.id); closePicker(true); }}
                                 >
                                     <span className={styles.itemIcon} aria-hidden="true">
                                         {e.iconUrl ? <img src={e.iconUrl} alt="" /> : null}
                                     </span>
                                     <span className={styles.itemBody}>
                                         <span className={styles.itemLabel}>{e.label}</span>
-                                        <span className={styles.itemSub}>
-                                            {e.ticker}
-                                            {!hideNetworkKind && e.networkKind !== 'mainnet' ? ` · ${e.networkKind}` : ''}
-                                        </span>
+                                        <span className={styles.itemSub}>{e.ticker}</span>
                                     </span>
                                 </button>
                             </li>
@@ -198,4 +239,8 @@ export function ChainPicker({
             ) : null}
         </div>
     );
+}
+
+function listboxOptions(popover) {
+    return Array.from(popover?.querySelectorAll('[role="option"]') || []);
 }

@@ -27,7 +27,7 @@
 // none of the selected token.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, cleanup, act } from '@testing-library/react';
 import React from 'react';
 
 // The real picker is the whole AddressList screen (search, network segments,
@@ -71,18 +71,18 @@ const TOKEN = 'ACCESSLIST';
  * Balances as the venue had them: the token sits at the issuer address only,
  * and the active address holds nothing but coin.
  */
-function balancesFor(address) {
+function balancesFor(address, { issuerHasToken = true } = {}) {
     const native = { tick: 'LTC', quantity: '100000000', divisibility: 8 };
-    return address === ISSUER
+    return address === ISSUER && issuerHasToken
         ? { native, tokens: [{ tick: TOKEN, quantity: '100000000000', divisibility: 8 }] }
         : { native, tokens: [] };
 }
 
-function mount() {
+function mount(balanceOptions, props = {}) {
     const base = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
         getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: 'addr-1', address: ACTIVE } }),
-        getAddressBalances: vi.fn(async (_chainId, address) => balancesFor(address)),
+        getAddressBalances: vi.fn(async (_chainId, address) => balancesFor(address, balanceOptions)),
         getSettings: vi.fn().mockResolvedValue({ grace: { testSendThresholdSats: 0 } }),
         getSignerStatus: vi.fn().mockResolvedValue({ unlocked: false }),
         listContacts: vi.fn().mockResolvedValue([]),
@@ -107,7 +107,7 @@ function mount() {
         React.createElement(
             MessagingProvider,
             { shell: 'web', messaging },
-            React.createElement(Send, { walletId: 'w', onBack() {} }),
+            React.createElement(Send, { walletId: 'w', onBack() {}, ...props }),
         ),
     );
     return messaging;
@@ -124,6 +124,16 @@ async function selectToken() {
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 describe('Send: the funding address is shown and changeable', () => {
+    it('loads source addresses for the active account', async () => {
+        const messaging = mount(undefined, { accountId: 'account-2' });
+
+        await waitFor(() => expect(messaging.getAddressesByChain).toHaveBeenCalledWith(
+            'w',
+            'account-2',
+        ));
+        expect(messaging.getActiveAddresses).toHaveBeenCalledWith('w', 'account-2');
+    });
+
     it('renders the funding address on the compose form, defaulted to the active one', async () => {
         mount();
         await waitFor(() => expect(fromField().value).toBe(ACTIVE));
@@ -171,14 +181,28 @@ describe('Send: the funding address is shown and changeable', () => {
     });
 
     it('says so when the funding address holds none of the selected token', async () => {
-        mount();
+        const messaging = mount();
         await waitFor(() => expect(fromField().value).toBe(ACTIVE));
         await selectToken();
 
-        const said = await screen.findByText(/holds no ACCESSLIST/i);
+        await waitFor(() => expect(messaging.getAddressBalances).toHaveBeenCalledWith(CHAIN, ISSUER));
+        const probeResult = messaging.getAddressBalances.mock.results.at(-1).value;
+        await act(async () => { await probeResult; });
+        const said = screen.getByText(/holds no ACCESSLIST/i);
         // Names ADDRESSES, which is the thing the user can act on. The encoder's
         // own answer named UTXOs, which is what made the fix undiscoverable.
         expect(said.textContent).toMatch(/From field/i);
+        expect(said.textContent).not.toMatch(/Open Receive/i);
+    });
+
+    it('points to Receive when no address holds the selected token', async () => {
+        mount({ issuerHasToken: false });
+        await waitFor(() => expect(fromField().value).toBe(ACTIVE));
+        await selectToken();
+
+        const warning = await screen.findByText(/wallet has no funds to send yet/i);
+        expect(warning.textContent).toMatch(/Open Receive/i);
+        expect(warning.textContent).not.toMatch(/pick the address/i);
     });
 
     it('the warning clears once the funding address is switched to one that holds it', async () => {

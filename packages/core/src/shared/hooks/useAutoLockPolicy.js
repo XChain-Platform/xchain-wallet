@@ -29,6 +29,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useMessaging } from '../useMessaging.js';
 import { useAutoLock } from './useAutoLock.js';
 import { useSettings } from './useSettings.js';
+import { useToast } from '../components/ToastHost.jsx';
 import { isDemoWallet } from '../../flows/demoMode.js';
 import {
     AUTOLOCK_MINUTES_DEFAULT,
@@ -76,11 +77,12 @@ export function resolveAutoLockMinutes(raw) {
  * @param {string | null | undefined} [opts.activeWalletId]
  * @param {(() => void) | undefined} [opts.onLocked] shell refresh, run after a
  *   successful lock so the view switches to the Locked screen.
- * @returns {{ armed: boolean, idleMs: number, minutes: number }}
+ * @returns {{ armed: boolean, idleMs: number, minutes: number, checkNow: () => boolean }}
  */
 export function useAutoLockPolicy({ sessionState, activeWalletId, onLocked } = {}) {
     const { messaging, shell } = useMessaging();
     const { settings } = useSettings();
+    const { showToast } = useToast();
 
     const onLockedRef = useRef(onLocked);
     onLockedRef.current = onLocked;
@@ -126,7 +128,27 @@ export function useAutoLockPolicy({ sessionState, activeWalletId, onLocked } = {
     // an instant timeout if the enable flag ever raced ahead of it.
     const idleMs = (minutes || AUTOLOCK_MINUTES_DEFAULT) * 60 * 1000;
 
-    useAutoLock(lock, { enabled: armed, idleMs });
+    const explainDeferredLock = useCallback(() => {
+        showToast({
+            id: 'auto-lock-signing-deferred',
+            message: 'Auto-lock is waiting for the current signing request to finish.',
+            durationMs: 8000,
+        });
+    }, [showToast]);
+
+    const reportActivity = useCallback(() => {
+        if (!armed || typeof messaging?.reportAutoLock !== 'function') return;
+        Promise.resolve()
+            .then(() => messaging.reportAutoLock({ armed: true, idleMs, activity: true }))
+            .catch(() => { /* best-effort */ });
+    }, [messaging, armed, idleMs]);
+
+    const checkNow = useAutoLock(lock, {
+        enabled: armed,
+        idleMs,
+        onDeferred: explainDeferredLock,
+        onActivity: reportActivity,
+    });
 
     // §26 out-of-renderer backstop: the foreground hook above dies with the
     // renderer, so hand the shell's own process the arm decision and the
@@ -145,10 +167,10 @@ export function useAutoLockPolicy({ sessionState, activeWalletId, onLocked } = {
     useEffect(() => {
         if (sessionState === 'loading') return;
         if (typeof messaging?.reportAutoLock !== 'function') return;
-        Promise.resolve(
-            messaging.reportAutoLock({ armed, idleMs }),
-        ).catch(() => { /* best-effort */ });
+        Promise.resolve()
+            .then(() => messaging.reportAutoLock({ armed, idleMs }))
+            .catch(() => { /* best-effort */ });
     }, [messaging, sessionState, armed, idleMs]);
 
-    return { armed, idleMs, minutes };
+    return { armed, idleMs, minutes, checkNow };
 }

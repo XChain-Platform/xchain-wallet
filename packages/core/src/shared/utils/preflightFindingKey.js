@@ -43,7 +43,7 @@ const CONSENSUS_INVALID = /^\s*invalid:\s*(.+?)\s*\.?\s*$/i;
 const CONSENSUS_REFUSAL_COPY = [
     [
         /^trailing data after batch signatures$/i,
-        'The network refused this price batch because it contains extra data after its signatures.',
+        'This price batch would be refused because it contains extra data after its signatures.',
     ],
 ];
 const UNINFORMATIVE_REFUSAL = /^(?:internal encoder error|(?:(?:future )?internal|unknown|unexplained) (?:error|failure|refusal|.* wording))$/i;
@@ -59,7 +59,7 @@ const UNINFORMATIVE_REFUSAL = /^(?:internal encoder error|(?:(?:future )?interna
  * @param {{ severity?: string, data?: { status?: unknown, error?: unknown } }} f
  * @returns {string | null}
  */
-export function consensusRefusalReason(f) {
+function consensusRefusalReason(f) {
     if (f?.severity !== 'error') return null;
     const candidates = [f?.data?.status, f?.data?.error];
     for (const value of candidates) {
@@ -85,10 +85,12 @@ export function consensusRefusalMessage(f) {
         ? `batch command ${f.data.commandIndex + 1}`
         : 'this action';
     if (UNINFORMATIVE_REFUSAL.test(reason)) {
-        return `The network refused ${subject} for a reason the wallet could not explain.`;
+        return `${subject.charAt(0).toUpperCase() + subject.slice(1)} would be refused for a reason the wallet could not explain.`;
     }
-    const plainReason = reason.charAt(0).toUpperCase() + reason.slice(1);
-    return `The network refused ${subject}: ${plainReason}.`;
+    const plainReason = /^[A-Z][a-z]/.test(reason)
+        ? reason.charAt(0).toLowerCase() + reason.slice(1)
+        : reason;
+    return `${subject.charAt(0).toUpperCase() + subject.slice(1)} would be refused because ${plainReason}.`;
 }
 
 /** Return raw consensus wording for an explicit technical-details disclosure. */

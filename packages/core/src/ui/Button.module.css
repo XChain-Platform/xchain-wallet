@@ -1,20 +1,38 @@
 .btn {
+    --xc-button-height: var(--xc-control-h-md);
+    --xc-button-font-size: var(--xc-control-font-md, 14px);
+    --xc-button-padding-x: var(--xc-button-pad-x-md, 16px);
+    --xc-icon-size: var(--xc-control-icon-md, 20px);
     display: inline-flex;
+    flex-shrink: 0;
     align-items: center;
     justify-content: center;
     gap: var(--xc-space-2);
-    border-radius: var(--xc-radius-md);
+    position: relative;
+    min-height: var(--xc-button-height, 36px);
+    padding-block: 0;
+    padding-inline: var(--xc-button-padding-x, 16px);
+    border-radius: var(--xc-control-radius, 8px);
+    /* --xc-control-border is a colour token, so the width is a plain 1px:
+       passing the colour as a width made the whole shorthand invalid and
+       left every button without a border. */
     border: 1px solid transparent;
     font-family: var(--xc-font-sans);
+    font-size: var(--xc-button-font-size, 14px);
+    line-height: var(--xc-control-line, 1.25);
     font-weight: 600;
     cursor: pointer;
-    transition: background var(--xc-transition), border-color var(--xc-transition);
+    transition: background var(--xc-transition), border-color var(--xc-transition), transform var(--xc-transition);
     user-select: none;
     text-decoration: none;
-    /* Button labels never wrap. If a label is too long for its container,
-     * shorten the label - wrapping splits a single CTA into a paragraph
-     * and breaks alignment with the icon. */
-    white-space: nowrap;
+    max-width: 100%;
+    min-width: 0;
+    text-align: center;
+    /* flex-shrink: 0 keeps a row from squeezing a short label onto two lines;
+       a label wider than its whole column still wraps instead of spilling
+       out of the button. */
+    white-space: normal;
+    overflow-wrap: anywhere;
 }
 
 .icon {
@@ -27,6 +45,9 @@
 .label {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
+    min-width: 0;
+    white-space: normal;
 }
 
 .btn:focus-visible {
@@ -35,45 +56,105 @@
 }
 
 .btn:disabled {
-    opacity: 0.55;
+    opacity: var(--xc-disabled-opacity);
     cursor: not-allowed;
 }
 
+.btn:disabled:not(.link) {
+    background: var(--xc-control-disabled-bg);
+    border-color: var(--xc-control-disabled-border);
+    color: var(--xc-control-disabled-text);
+}
+
+.btn:active:not(:disabled) {
+    background: var(--xc-button-hover-bg);
+    border-color: var(--xc-button-hover-border);
+    filter: brightness(0.86);
+    transform: translateY(1px);
+}
+
+.btn[aria-pressed='true']:not(:disabled) {
+    box-shadow: 0 0 0 2px var(--xc-control-selected),
+        inset 0 0 0 2px var(--xc-control-selected-text);
+}
+
 .md {
-    padding: var(--xc-space-2) var(--xc-space-4);
-    font-size: var(--xc-text-md);
-    min-height: 36px;
+    --xc-button-height: var(--xc-control-h-md);
+    --xc-button-font-size: var(--xc-control-font-md, 14px);
+    --xc-button-padding-x: var(--xc-button-pad-x-md, 16px);
+    --xc-icon-size: var(--xc-control-icon-md, 20px);
+    min-height: var(--xc-control-h-md, 36px);
 }
 
 .sm {
-    padding: var(--xc-space-1) var(--xc-space-3);
-    font-size: var(--xc-text-sm);
-    min-height: 28px;
+    --xc-button-height: var(--xc-control-h-sm);
+    --xc-button-font-size: var(--xc-control-font-sm, 13px);
+    --xc-button-padding-x: var(--xc-button-pad-x-sm, 12px);
+    --xc-icon-size: var(--xc-control-icon-sm, 16px);
+    min-height: var(--xc-control-h-sm, 28px);
+}
+
+.lg {
+    --xc-button-height: var(--xc-control-h-lg);
+    --xc-button-font-size: var(--xc-control-font-lg, 16px);
+    --xc-button-padding-x: var(--xc-button-pad-x-lg, 20px);
+    --xc-icon-size: var(--xc-control-icon-lg, 24px);
+    min-height: var(--xc-control-h-lg, 44px);
+}
+
+.iconOnly {
+    width: var(--xc-button-height);
+    min-width: var(--xc-button-height);
+    padding-inline: 0;
+    gap: 0;
+    justify-content: center;
 }
 
 .block {
     width: 100%;
 }
 
-/* Default rule: every button variant has a coloured fill and #FFFFFF
- * text. Hardcoded white (rather than `--xc-text-inverted`) so dark-mode
- * inversion can't flip button text to black. */
+@media (pointer: coarse), (hover: none) {
+    .sm::before {
+        content: '';
+        position: absolute;
+        /* Offsetting by half the shortfall centres the hit target in both
+           writing directions without a direction-dependent translate. */
+        inset-block-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
+        inset-inline-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
+        width: max(100%, var(--xc-control-hit-min, 24px));
+        height: max(100%, var(--xc-control-hit-min, 24px));
+    }
+}
+
+/* Filled variants pair each semantic background with its contrast-tested
+ * label token. */
 
 .primary {
+    --xc-button-hover-bg: var(--xc-accent-primary-hover);
+    --xc-button-hover-border: var(--xc-accent-primary-hover);
     background: var(--xc-accent-primary);
     color: var(--xc-on-accent);
 }
-.primary:hover:not(:disabled) {
-    background: var(--xc-accent-primary-hover);
-}
 
 .secondary {
-    background: var(--xc-accent-secondary);
-    color: #FFFFFF;
-    border-color: var(--xc-accent-secondary);
+    --xc-button-hover-bg: var(--xc-control-bg-hover);
+    --xc-button-hover-border: var(--xc-control-border-hover);
+    background: transparent;
+    color: var(--xc-accent-text);
+    border-color: var(--xc-border-strong);
 }
-.secondary:hover:not(:disabled) {
-    filter: brightness(0.92);
+
+.link {
+    --xc-button-height: var(--xc-tap-min);
+    min-height: var(--xc-tap-min);
+    padding: 0 var(--xc-space-1);
+    background: transparent;
+    border-color: transparent;
+    color: var(--xc-accent-text);
+    font-weight: inherit;
+    text-decoration: underline;
+    text-underline-offset: 0.15em;
 }
 
 /* Ghost gets a neutral slate fill so white text reads clearly in both
@@ -81,42 +162,79 @@
  * "Coming from FreeWallet") that should still look obviously
  * clickable. */
 .ghost {
+    --xc-button-hover-bg: #334155;  /* slate-700 */
+    --xc-button-hover-border: #334155;
     background: #475569;  /* slate-600; ~7:1 against #FFFFFF */
     color: #FFFFFF;
     border-color: #475569;
 }
-.ghost:hover:not(:disabled) {
-    background: #334155;  /* slate-700 */
-    border-color: #334155;
-}
 
 .danger {
+    --xc-button-hover-bg: var(--xc-danger);
+    --xc-button-hover-border: var(--xc-danger);
     background: var(--xc-danger);
     color: var(--xc-on-danger);
 }
-.danger:hover:not(:disabled) {
-    filter: brightness(0.92);
-}
 
 .success {
-    background: var(--xc-success);
-    color: #FFFFFF;
+    --xc-button-hover-bg: var(--xc-success-fill);
+    --xc-button-hover-border: var(--xc-success-fill);
+    background: var(--xc-success-fill);
+    color: var(--xc-on-success);
 }
-.success:hover:not(:disabled) {
-    filter: brightness(0.92);
+
+@media (hover: hover) and (pointer: fine) {
+    .btn:hover:not(:disabled) {
+        background: var(--xc-button-hover-bg);
+        border-color: var(--xc-button-hover-border);
+    }
+
+    .danger:hover:not(:disabled),
+    .success:hover:not(:disabled) {
+        filter: brightness(0.92);
+    }
+}
+
+.spinnerStatus {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--xc-space-2);
+    flex: 0 0 auto;
 }
 
 .spinner {
-    width: 12px;
-    height: 12px;
+    width: var(--xc-spinner-size);
+    height: var(--xc-spinner-size);
+    box-sizing: border-box;
+    flex: 0 0 auto;
     border-radius: 50%;
-    border: 2px solid currentColor;
+    border: 0.125rem solid currentColor;
     border-top-color: transparent;
     animation: spin 0.7s linear infinite;
 }
 
+.spinner_sm {
+    --xc-spinner-size: var(--xc-icon-sm);
+}
+
+.spinner_md {
+    --xc-spinner-size: var(--xc-icon-md);
+}
+
+.spinner_lg {
+    --xc-spinner-size: var(--xc-icon-xl);
+}
+
+/* Overlays the centre of a busy Button; inset 0 centres it in either writing direction. */
+.busySpinner {
+    position: absolute;
+    inset: 0;
+}
+
+.loading .icon,
 .loading .label {
-    opacity: 0.85;
+    opacity: 0;
 }
 
 @keyframes spin {

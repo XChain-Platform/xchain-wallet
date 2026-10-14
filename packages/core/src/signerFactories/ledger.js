@@ -128,14 +128,9 @@ export function makeLedgerFactory({ getTransport, getAppClass, sdkRegistry }) {
             throw new Error('pairLedgerSigner: device did not report an app name');
         }
 
-        // The identity path is coin-type 0', and the Bitcoin Test app serves
-        // ONLY coin-type 1' (verified on Speculos: 44'/0'/0' answers 0x6a82
-        // there, 44'/1'/0' answers 0x6a82 on the mainnet app). Pairing with the
-        // Test app open therefore always fails, and the device's raw
-        // "UNKNOWN_ERROR (0x6a82)" tells the user nothing. Name the cause
-        // instead. The wallet does not support Ledger on testnet at all
-        // (LedgerSigner's unsupportedBitcoinNetworkError), so this is a
-        // wrong-app prompt rather than a missing feature.
+        // Pairing reads the identity from Bitcoin's coin-type 0' path. Any
+        // other open app rejects that request with an opaque device code, so
+        // identify the open app before attempting the derivation.
         //
         // Worded as end-user copy on purpose: PairSignerForm renders it in the
         // pairing dialog, so it carries no `pairLedgerSigner:` prefix (that
@@ -143,11 +138,10 @@ export function makeLedgerFactory({ getTransport, getAppClass, sdkRegistry }) {
         // would cost the reader the only actionable sentence) and no
         // coin-type / derivation wording (the reason lives in the comment
         // above, where the person who needs it is reading).
-        if (appInfo.name !== 'Bitcoin' && /test/i.test(appInfo.name)) {
+        if (appInfo.name !== 'Bitcoin') {
             throw new Error(
                 `The "${appInfo.name}" app is open on this device. `
-                + 'Open the Bitcoin app to pair. A hardware signer can only be paired '
-                + 'for the main Bitcoin network, not a test one.',
+                + 'Open the Bitcoin app on your Ledger, then try again.',
             );
         }
 

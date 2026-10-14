@@ -1,22 +1,6 @@
 /* Staking positions: one flat card list across every network, following the
-   My-dispensers list anatomy (48px icon with the chain badge overlaid in the
-   lower-right corner, name/subtitle body, trailing status chip). */
-
-/* Page containers: a plain column so the toolbar's own margin is the only
-   space above the list. The full variant centers to the same width the
-   token selector uses. */
-.wrapFull {
-    display: flex;
-    flex-direction: column;
-    max-width: 560px;
-    margin: var(--xc-space-6) auto 0;
-    padding: var(--xc-space-4);
-}
-
-.wrapPopup {
-    display: flex;
-    flex-direction: column;
-}
+   My-dispensers list anatomy (large icon with the chain badge at the
+   block-end inline-end corner, name/subtitle body, trailing status chip). */
 
 .toolbar {
     display: flex;
@@ -24,31 +8,32 @@
     align-items: center;
     gap: var(--xc-space-2);
     width: 100%;
-    /* Same tight toolbar-to-list gap as the messaging inbox. */
+    min-width: 0;
+    flex-wrap: wrap;
+    /* The toolbar-to-list gap matches the inbox's compact offset below the spacing scale. */
     margin-bottom: calc(var(--xc-space-1) + 2px);
 }
 
-.search {
-    flex: 1 1 0;
+.searchField {
+    flex: 1 1 12rem;
     min-width: 0;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
 }
 
-.search::placeholder {
-    color: var(--xc-text-muted);
+.toolbar > * {
+    flex-basis: 12rem;
+    max-width: 100%;
+}
+
+.searchField > * {
+    margin-bottom: 0;
 }
 
 /* Per-row unclaimed-reward indicator (§42.7.4: claimable rewards stay
    visible on the staking root, on the validator rows they belong to). */
 .rewardChip {
+    flex-shrink: 0;
     font-size: var(--xc-text-xs);
-    color: var(--xc-success, #2f9e63);
+    color: var(--xc-success);
     font-weight: 600;
     white-space: nowrap;
 }
@@ -64,6 +49,7 @@
 
 .row {
     display: flex;
+    min-width: 0;
     align-items: center;
     gap: var(--xc-space-3);
     padding: var(--xc-space-3);
@@ -87,14 +73,15 @@
 
 .row:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
+    /* The negative offset keeps the focus outline inside the clickable row. */
     outline-offset: -2px;
 }
 
 .iconWrap {
     position: relative;
     flex: 0 0 auto;
-    width: 48px;
-    height: 48px;
+    width: var(--xc-control-h-lg);
+    height: var(--xc-control-h-lg);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -112,17 +99,29 @@
     font-family: var(--xc-font-sans);
     font-weight: 700;
     font-size: var(--xc-text-md);
+    color: var(--xc-on-accent);
+}
+
+/* The fill is a per-ticker colour set inline; the letter colour lives here so
+   forced-colors mode can re-pair it. --xc-on-accent maps to Canvas there,
+   which only suits an accent fill, and the mode repaints this fill to Canvas
+   as well, so the letter would vanish into it. */
+@media (forced-colors: active) {
+    .iconLetter {
+        color: CanvasText;
+    }
 }
 
 .chainOverlay {
     position: absolute;
+    /* The badge overlaps the primary icon by a sub-grid optical offset. */
     bottom: -2px;
     inset-inline-end: -2px;
-    width: 20px;
-    height: 20px;
+    width: var(--xc-icon-lg);
+    height: var(--xc-icon-lg);
     border-radius: 50%;
-    background: #FFFFFF;
-    box-shadow: 0 0 0 1.5px var(--xc-surface);
+    background: var(--xc-surface);
+    box-shadow: var(--xc-shadow-surface-ring);
     object-fit: cover;
     display: block;
 }
@@ -132,6 +131,7 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
+    /* The stacked labels need an optical gap below the spacing scale. */
     gap: 2px;
 }
 
@@ -153,7 +153,7 @@
     min-width: 0;
 }
 
-/* Right-hand column of the row: status chip on top, amount beneath it. */
+/* Trailing column of the row: status chip on top, amount beneath it. */
 .trailing {
     flex: 0 0 auto;
     display: flex;
@@ -165,29 +165,31 @@
 /* Status chip on the row's trailing edge; tinted per state. */
 .status {
     flex: 0 0 auto;
+    white-space: nowrap;
     font-size: var(--xc-text-xs);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    padding: 2px 8px;
-    border-radius: 999px;
+    /* The compact chip inset stays below the spacing scale. */
+    padding: 2px var(--xc-space-2);
+    border-radius: var(--xc-radius-pill);
     background: var(--xc-bg-muted);
     color: var(--xc-text-muted);
 }
 
 .status_active {
-    background: rgba(34, 197, 94, 0.15);
-    color: var(--xc-success, #22C55E);
+    background: color-mix(in srgb, var(--xc-success) 15%, transparent);
+    color: var(--xc-success);
 }
 
 .status_cooldown {
-    background: rgba(234, 179, 8, 0.15);
-    color: var(--xc-warning, #B45309);
+    background: var(--xc-warning-bg);
+    color: var(--xc-warning-text);
 }
 
 .status_pending {
-    background: rgba(59, 130, 246, 0.15);
-    color: var(--xc-info, #2563EB);
+    background: color-mix(in srgb, var(--xc-accent-primary) 15%, transparent);
+    color: var(--xc-accent-text);
 }
 
 .amount {
@@ -195,6 +197,16 @@
     text-align: end;
     font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
+.duration {
+    max-width: 18rem;
+    text-align: end;
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    overflow-wrap: anywhere;
 }
 
 /* Circular header "+" button that opens the new-stake flow (same
@@ -204,8 +216,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 38px;
-    height: 38px;
+    width: var(--xc-control-h-md);
+    height: var(--xc-control-h-md);
     padding: 0;
     border: 1px solid var(--xc-border-strong);
     border-radius: 50%;
@@ -224,10 +236,60 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 0.75rem;
-    padding: 0.75rem;
-    margin-bottom: 0.75rem;
-    border: 1px solid var(--color-border, #d6dbe1);
-    border-radius: 8px;
-    background: var(--color-surface-raised, rgba(0, 0, 0, 0.02));
+    gap: var(--xc-space-3);
+    padding: var(--xc-space-3);
+    margin-bottom: var(--xc-space-3);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    background: var(--xc-surface-raised);
+}
+
+.claimable > :first-child {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+@media not all and (min-width: 400px) {
+    .row {
+        display: grid;
+        grid-template-columns: var(--xc-control-h-md) minmax(0, 1fr);
+        align-items: start;
+        gap: var(--xc-space-2);
+    }
+
+    .iconWrap {
+        width: var(--xc-control-h-md);
+        height: var(--xc-control-h-md);
+    }
+
+    .trailing {
+        grid-column: 2;
+        align-items: flex-start;
+        min-width: 0;
+    }
+
+    .name,
+    .subtitle {
+        white-space: normal;
+        overflow: visible;
+        overflow-wrap: anywhere;
+    }
+
+    .amount,
+    .duration {
+        max-width: 100%;
+        white-space: normal;
+        text-align: start;
+        overflow-wrap: anywhere;
+    }
+
+    .rewardChip {
+        white-space: nowrap;
+    }
+
+    .claimable {
+        align-items: stretch;
+        flex-direction: column;
+    }
 }

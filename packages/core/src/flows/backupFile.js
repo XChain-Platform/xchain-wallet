@@ -52,7 +52,7 @@ import {
     encodeBackupEnvelope,
     parseBackupEnvelope,
     stringifyBackupEnvelope,
-    deriveMasterKey,
+    deriveMasterKeyAsync,
     makeFreshKdfParams,
     encrypt,
     decrypt,
@@ -78,6 +78,7 @@ import {
 } from './restorePasswordCopy.js';
 
 export const BACKUP_PAYLOAD_VERSION = 1;
+export const MIN_BACKUP_PASSWORD_LENGTH = 8;
 
 export class BackupConflictError extends Error {
     /** @param {string[]} conflicts */
@@ -158,8 +159,11 @@ export async function exportBackupFile({
     if (typeof walletId !== 'string' || walletId.length === 0) {
         throw new Error('exportBackupFile: walletId is required');
     }
-    if (typeof password !== 'string' || password.length === 0) {
-        throw new Error('exportBackupFile: password is required');
+    // Require the same minimum used when creating a wallet so a backup cannot be protected by a trivial password.
+    if (typeof password !== 'string' || password.length < MIN_BACKUP_PASSWORD_LENGTH) {
+        throw new Error(
+            `exportBackupFile: password must be at least ${MIN_BACKUP_PASSWORD_LENGTH} characters`,
+        );
     }
 
     const wallet = await vault.wallets.get(walletId);
@@ -184,10 +188,25 @@ export async function exportBackupFile({
     const addresses = allAddresses.filter((a) =>
         (a.accountId && accountIds.has(a.accountId)) || importedAddrIds.has(a.id),
     );
-    const addressStrings = new Set(addresses.map((a) => a.address));
+    const addressScopes = new Set(addresses.map(addressScopeKey));
     const pendingTxs = includePendingTxs
-        ? allPending.filter((p) => addressStrings.has(p.fromAddress))
+        ? allPending.filter((p) => addressScopes.has(pendingTxScopeKey(p)))
         : [];
+    const connectedSites = allConnected.flatMap((site) => {
+        const grantedAccounts = site?.permissions?.accounts;
+        // Persisted records always carry this array. Keeping an unrecognized
+        // record intact lets the vault validator report the schema problem.
+        if (!Array.isArray(grantedAccounts)) return [site];
+        // An empty grant is the section 43.3 wildcard: it names no account to
+        // scope, and dropping it would lose the connection on restore.
+        if (grantedAccounts.length === 0) return [site];
+        const scopedAccounts = grantedAccounts.filter((id) => accountIds.has(id));
+        if (scopedAccounts.length === 0) return [];
+        return [{
+            ...site,
+            permissions: { ...site.permissions, accounts: scopedAccounts },
+        }];
+    });
 
     /** @type {BackupPayload} */
     const payload = {
@@ -196,7 +215,7 @@ export async function exportBackupFile({
         accounts,
         addresses,
         contacts: allContacts,
-        connectedSites: allConnected,
+        connectedSites,
         settings,
         signers: [],
         pendingTxs,
@@ -231,6 +250,20 @@ export async function exportBackupFile({
  *                                                          address ids so the restored wallet
  *                                                          coexists with what's already in
  *                                                          the vault. Cluster H FOLLOWUP 3.
+ * @property {DeviceKeyCallback} [onDeviceKey]              lends the re-key's new master key to the shell
+ *                                                          so its signer-pool unlock skips a second
+ *                                                          Argon2id round on identical inputs
+ */
+
+/**
+ * Receives the key the restored wallet is now sealed under (derived from
+ * `devicePassword` under `kdfParams`). The buffer is zeroed as soon as the
+ * callback returns, so a shell that needs it later copies it and zeroes its copy.
+ *
+ * @callback DeviceKeyCallback
+ * @param {Uint8Array} masterKey
+ * @param {import('../crypto/kdf.js').KdfParams} kdfParams   a copy of the new seal's params
+ * @returns {void | Promise<void>}
  */
 
 /**
@@ -256,6 +289,7 @@ export async function importBackupFile({
     devicePassword,
     onConflict = 'error',
     mode = 'fresh',
+    onDeviceKey,
 }) {
     if (!vault) throw new Error('importBackupFile: vault is required');
     if (typeof password !== 'string' || password.length === 0) {
@@ -283,18 +317,15 @@ export async function importBackupFile({
             `importBackupFile: unsupported payloadVersion ${decoded.payloadVersion} (expected ${BACKUP_PAYLOAD_VERSION})`,
         );
     }
-    if (!decoded.wallet || typeof decoded.wallet.id !== 'string') {
+    if (!decoded.wallet || typeof decoded.wallet.id !== 'string' || decoded.wallet.id.length === 0) {
         throw new Error('importBackupFile: payload missing wallet record');
     }
 
-    // Migrate the wallet the moment it leaves the envelope, for the same
-    // reason settings are migrated below: `put` validates against the CURRENT
-    // schema version and never migrates, so a record written before any bump
-    // fails the restore rather than the wallet. Ordering is load-bearing:
-    // `migrateWallet` returns a NEW object, while the re-key below rewrites
-    // the sealed blobs IN PLACE, so migrating afterwards would hand `put` a
-    // copy still sealed under the old device's password.
-    decoded.wallet = migrateWallet(decoded.wallet);
+    // Migrate and scope-check every record before the first vault write.
+    // Migration or scope errors in a later collection must not turn a restore
+    // into a wallet-only partial write, and records for another wallet must
+    // not ride in a valid encrypted envelope.
+    prepareDecodedPayload(decoded);
 
     // Re-seal the wallet's key material under this device's
     // password BEFORE anything is written. Doing it here rather than at
@@ -302,7 +333,7 @@ export async function importBackupFile({
     // a message naming which password is wrong, instead of at the user's
     // first signature with no message at all. Nothing has touched the
     // vault yet at this point, so the throw leaves it untouched.
-    const rekeyed = await rekeyWalletRecord(decoded.wallet, { walletPassword, devicePassword });
+    const rekeyed = await rekeyWalletRecord(decoded.wallet, { walletPassword, devicePassword, onDeviceKey });
 
     // §19.4: 'add' mode re-mints wallet / account / address ids so a restored
     // wallet coexists even where both vaults derived equal ones (a same-device
@@ -413,6 +444,7 @@ export class BackupPointerUnresolvedError extends Error {
  *          FILE lookup).
  * @property {'overwrite' | 'preserve' | 'error'} [onConflict]   default 'error'
  * @property {'fresh' | 'add'} [mode]                       default 'fresh'
+ * @property {DeviceKeyCallback} [onDeviceKey]              passed through to `importBackupFile`
  */
 
 /**
@@ -440,6 +472,7 @@ export async function restoreFromBackupPointer({
     resolveBackupContent,
     onConflict = 'error',
     mode = 'fresh',
+    onDeviceKey,
 }) {
     if (!vault) throw new Error('restoreFromBackupPointer: vault is required');
     if (typeof password !== 'string' || password.length === 0) {
@@ -467,6 +500,7 @@ export async function restoreFromBackupPointer({
         devicePassword,
         onConflict,
         mode,
+        onDeviceKey,
     });
 
     return { ...result, pointer: parsed };
@@ -515,10 +549,11 @@ async function collectConflicts(vault, payload, opts = {}) {
  *   - account.id, account.walletId
  *   - address.id, address.accountId
  *   - pendingTx.id    (kept independent; pending txs are address-scoped
- *                     via `fromAddress`, not id-scoped)
+ *                     via chain / network / `fromAddress`, not id-scoped)
  *
- * Contacts / connectedSites / settings ids stay as-is (they're global
- * across wallets and there's nothing to disambiguate). Exported for
+ * Contacts / connectedSites / settings ids stay as-is (they're global),
+ * while connectedSites.permissions.accounts follows the account remint.
+ * Exported for
  * test access; production callers go through `importBackupFile({mode:
  * 'add'})`.
  *
@@ -556,6 +591,14 @@ export function remintIdentifiers(decoded) {
         }
     }
 
+    for (const site of decoded.connectedSites ?? []) {
+        const grantedAccounts = site?.permissions?.accounts;
+        if (!Array.isArray(grantedAccounts)) continue;
+        site.permissions.accounts = grantedAccounts.map((accountId) => (
+            accountIdMap.get(accountId) ?? accountId
+        ));
+    }
+
     // Wallet's importedKeys point at the re-minted address ids by
     // value; rewire so a wif-imported wallet lands intact.
     if (Array.isArray(decoded.wallet.importedKeys)) {
@@ -567,9 +610,9 @@ export function remintIdentifiers(decoded) {
     }
 
     // PendingTxs: re-mint id so a re-import of the same backup doesn't
-    // collide; keep the rest of the row (fromAddress / txid / status)
-    // untouched. fromAddress is the canonical address string, not an
-    // id, so it survives the address-id re-mint.
+    // collide; keep the rest of the row (chain / network / fromAddress /
+    // txid / status) untouched. fromAddress is the canonical address string,
+    // not an id, so it survives the address-id re-mint.
     for (const ptx of decoded.pendingTxs ?? []) {
         if (ptx && typeof ptx.id === 'string') {
             ptx.id = randomUUID();
@@ -596,9 +639,15 @@ export function remintIdentifiers(decoded) {
  * @param {string} opts.walletPassword    what the backed-up wallet was sealed under
  * @param {string} opts.devicePassword    what it must open under from now on
  * @param {import('../crypto/kdf.js').KdfParams} [opts.kdfParams]  override for the new seal
+ * @param {DeviceKeyCallback} [opts.onDeviceKey]  shown the new key once the re-seal succeeds; never
+ *   called when nothing was re-sealed or the re-seal failed
  * @returns {Promise<boolean>}            true if anything was re-sealed
  */
-export async function rekeyWalletRecord(wallet, { walletPassword, devicePassword, kdfParams }) {
+export async function rekeyWalletRecord(wallet, { walletPassword, devicePassword, kdfParams, onDeviceKey }) {
+    // A caller that asked for the key must be able to receive it; checked before any derivation.
+    if (onDeviceKey !== undefined && typeof onDeviceKey !== 'function') {
+        throw new Error('rekeyWalletRecord: onDeviceKey must be a function');
+    }
     const hasSeed = typeof wallet?.encryptedSeed === 'string' && wallet.encryptedSeed.length > 0;
     const allKeys = Array.isArray(wallet?.importedKeys) ? wallet.importedKeys : [];
     const sealedKeys = allKeys.filter(
@@ -628,13 +677,17 @@ export async function rekeyWalletRecord(wallet, { walletPassword, devicePassword
         );
     }
 
-    const oldKey = deriveMasterKey(walletPassword, wallet.kdfParams);
+    /** @type {Uint8Array | null} */
+    let oldKey = null;
     let seed = null;
     /** @type {Uint8Array[]} */
     let wifs = [];
     /** @type {Uint8Array | null} */
     let passphrase = null;
+    /** @type {Uint8Array | null} */
+    let newKey = null;
     try {
+        oldKey = await deriveMasterKeyAsync(walletPassword, wallet.kdfParams);
         if (hasSeed) {
             try {
                 seed = await decrypt(oldKey, base64ToBytes(wallet.encryptedSeed));
@@ -663,38 +716,50 @@ export async function rekeyWalletRecord(wallet, { walletPassword, devicePassword
                 throw new BackupSeedPasswordError('passphrase');
             }
         }
-    } finally {
-        oldKey.fill(0);
-    }
 
-    // Fresh salt, inherited cost. `makeFreshKdfParams` supplies the salt.
-    const nextParams = kdfParams ?? makeFreshKdfParams({
-        iterations: wallet.kdfParams.iterations,
-        memory: wallet.kdfParams.memory,
-        parallelism: wallet.kdfParams.parallelism,
-    });
-    const newKey = deriveMasterKey(devicePassword, nextParams);
-    try {
-        if (seed) wallet.encryptedSeed = bytesToBase64(await encrypt(newKey, seed));
-        for (let i = 0; i < sealedKeys.length; i += 1) {
-            sealedKeys[i].encryptedWif = bytesToBase64(await encrypt(newKey, wifs[i]));
+        // Fresh salt, inherited cost. `makeFreshKdfParams` supplies the salt.
+        const nextParams = kdfParams ?? makeFreshKdfParams({
+            iterations: wallet.kdfParams.iterations,
+            memory: wallet.kdfParams.memory,
+            parallelism: wallet.kdfParams.parallelism,
+        });
+        newKey = await deriveMasterKeyAsync(devicePassword, nextParams);
+        try {
+            if (seed) wallet.encryptedSeed = bytesToBase64(await encrypt(newKey, seed));
+            for (let i = 0; i < sealedKeys.length; i += 1) {
+                sealedKeys[i].encryptedWif = bytesToBase64(await encrypt(newKey, wifs[i]));
+            }
+            if (passphrase) {
+                wallet.encryptedPassphrase = bytesToBase64(
+                    await encrypt(newKey, passphrase, PASSPHRASE_AAD),
+                );
+            }
+            wallet.kdfParams = nextParams;
+        } finally {
+            if (seed) seed.fill(0);
+            for (const wif of wifs) wif.fill(0);
+            if (passphrase) passphrase.fill(0);
+            seed = null;
+            wifs = [];
+            passphrase = null;
         }
-        if (passphrase) {
-            wallet.encryptedPassphrase = bytesToBase64(
-                await encrypt(newKey, passphrase, PASSPHRASE_AAD),
-            );
-        }
-        wallet.kdfParams = nextParams;
+        // Lend the key to the shell, whose signer-pool unlock would otherwise
+        // derive it again from the same password and params. The plaintext
+        // secrets are already zeroed; this buffer is zeroed right after.
+        if (onDeviceKey) await onDeviceKey(newKey, { ...nextParams });
+        return true;
     } finally {
-        newKey.fill(0);
+        if (oldKey) oldKey.fill(0);
+        if (newKey) newKey.fill(0);
         if (seed) seed.fill(0);
-        for (const w of wifs) w.fill(0);
+        for (const wif of wifs) wif.fill(0);
         if (passphrase) passphrase.fill(0);
+        oldKey = null;
+        newKey = null;
         seed = null;
         wifs = [];
         passphrase = null;
     }
-    return true;
 }
 
 async function applyCollection(collection, records, onConflict, writes, skipped, name, migrateRecord) {
@@ -717,4 +782,90 @@ async function applyCollection(collection, records, onConflict, writes, skipped,
         await collection.put(migrateRecord(rec));
         writes[name] += 1;
     }
+}
+
+function addressScopeKey(record) {
+    return JSON.stringify([record?.chain, record?.network, record?.address]);
+}
+
+function pendingTxScopeKey(record) {
+    return JSON.stringify([record?.chain, record?.network, record?.fromAddress]);
+}
+
+function prepareDecodedPayload(decoded) {
+    decoded.wallet = migrateWallet(decoded.wallet);
+    decoded.accounts = migratePayloadRecords(decoded.accounts, 'accounts', migrateAccount);
+    decoded.addresses = migratePayloadRecords(decoded.addresses, 'addresses', migrateAddress);
+    decoded.contacts = migratePayloadRecords(decoded.contacts, 'contacts', migrateContact);
+    decoded.connectedSites = migratePayloadRecords(
+        decoded.connectedSites, 'connectedSites', migrateConnectedSite,
+    );
+    decoded.pendingTxs = migratePayloadRecords(decoded.pendingTxs, 'pendingTxs', migratePendingTx);
+    if (decoded.signers != null && !Array.isArray(decoded.signers)) {
+        throw new Error('importBackupFile: payload signers must be an array');
+    }
+    decoded.signers ??= [];
+    if (decoded.settings != null) decoded.settings = migrateSettings(decoded.settings);
+
+    const walletId = decoded.wallet.id;
+    const accountIds = new Set(decoded.accounts.map((account) => account.id));
+    for (const account of decoded.accounts) {
+        if (account.walletId !== walletId) {
+            throw new Error(`importBackupFile: account "${account.id}" belongs to another wallet`);
+        }
+    }
+
+    const importedAddressIds = new Set(
+        (Array.isArray(decoded.wallet.importedKeys) ? decoded.wallet.importedKeys : [])
+            .map((key) => key?.addressId)
+            .filter((id) => typeof id === 'string' && id.length > 0),
+    );
+    const addressScopes = new Set();
+    for (const address of decoded.addresses) {
+        const belongsToAccount = typeof address.accountId === 'string'
+            && accountIds.has(address.accountId);
+        if (!belongsToAccount && !importedAddressIds.has(address.id)) {
+            throw new Error(`importBackupFile: address "${address.id}" belongs to another wallet`);
+        }
+        addressScopes.add(addressScopeKey(address));
+    }
+    // An imported key whose address record is absent is tolerated, as it
+    // always was: the exporter only copies address records that still exist,
+    // so a backup written after an address was removed carries the dangling
+    // reference, and refusing it would make that backup unrestorable.
+
+    // Earlier exporters scoped pending transactions by address text alone, so
+    // a valid older backup can carry one from another chain or network that
+    // shares the text. Drop it rather than refuse the whole restore; it is
+    // still never written.
+    decoded.pendingTxs = decoded.pendingTxs.filter(
+        (pendingTx) => addressScopes.has(pendingTxScopeKey(pendingTx)),
+    );
+    decoded.connectedSites = decoded.connectedSites.flatMap((site) => {
+        const grantedAccounts = site?.permissions?.accounts;
+        if (!Array.isArray(grantedAccounts)) return [site];
+        // An empty grant is the section 43.3 wildcard: it names no account to
+        // scope, and dropping it would lose the connection on restore.
+        if (grantedAccounts.length === 0) return [site];
+        const scopedAccounts = grantedAccounts.filter((accountId) => accountIds.has(accountId));
+        if (scopedAccounts.length === 0) return [];
+        return [{
+            ...site,
+            permissions: { ...site.permissions, accounts: scopedAccounts },
+        }];
+    });
+}
+
+function migratePayloadRecords(records, name, migrateRecord) {
+    if (records == null) return [];
+    if (!Array.isArray(records)) {
+        throw new Error(`importBackupFile: payload ${name} must be an array`);
+    }
+    return records.map((record, index) => {
+        if (!record || typeof record !== 'object'
+            || typeof record.id !== 'string' || record.id.length === 0) {
+            throw new Error(`importBackupFile: payload ${name}[${index}] has no id`);
+        }
+        return migrateRecord(record);
+    });
 }

@@ -1,40 +1,6 @@
 /* Copyright © 2025-2026 Dankest, LLC
  * SPDX-License-Identifier: AGPL-3.0-or-later */
 
-.backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 60;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: var(--xc-space-4);
-    background: rgba(0, 0, 0, 0.5);
-}
-
-.card {
-    width: 100%;
-    max-width: 22rem;
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-lg);
-    box-shadow: var(--xc-shadow-md);
-    padding: var(--xc-space-6);
-}
-
-.title {
-    font-size: var(--xc-text-lg);
-    font-weight: 700;
-    color: var(--xc-text);
-    margin: 0 0 var(--xc-space-4);
-}
-
-.empty {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-    margin: 0 0 var(--xc-space-4);
-}
-
 .field {
     display: flex;
     flex-direction: column;
@@ -55,6 +21,7 @@
     font-size: var(--xc-text-md);
     color: var(--xc-text);
     background: var(--xc-surface);
+    /* 1px keeps the native select boundary as a crisp hairline. */
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-md);
 }
@@ -67,21 +34,11 @@
 .error {
     margin: var(--xc-space-2) 0 0;
     font-size: var(--xc-text-sm);
-    color: var(--xc-danger);
+    color: var(--xc-danger-fg);
 }
 
 .progress {
     margin: var(--xc-space-2) 0 0;
     font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
-}
-
-.actions {
-    display: flex;
-    flex-direction: column;
-    margin-top: var(--xc-space-4);
-}
-
-.actions button {
-    width: 100%;
 }

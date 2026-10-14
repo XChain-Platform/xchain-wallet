@@ -144,6 +144,7 @@ export {
     buildGatedPublishPsbtRequest,
     composeGatedPublishForConfirm,
     MAX_GATED_PLAINTEXT_BYTES,
+    gateMinAmountValidationError,
 } from './gatedPublishAction.js';
 export {
     MAX_COMPILED_ACTION_BYTES,
@@ -247,7 +248,9 @@ export {
     refreshFiatRates,
     subscribeFiatRates,
     configureFiatRateSource,
+    isFiatRateSourceUrl,
     coinToFiat,
+    coinToFiatExact,
     fiatToCoin,
 } from './priceLookup.js';
 export {
@@ -327,6 +330,7 @@ export {
     placeBetAction,
     resolveMarketAction,
     cancelMarketAction,
+    buildBetActionPsbt,
 } from './betActions.js';
 export {
     betFeedsForChain,
@@ -525,6 +529,7 @@ export {
     BackupPointerUnresolvedError,
     BackupSeedPasswordError,
     BACKUP_PAYLOAD_VERSION,
+    MIN_BACKUP_PASSWORD_LENGTH,
 } from './backupFile.js';
 // Shells render the restore screen's copy, so they need the same
 // labels and the same failure classification core throws against.
@@ -582,6 +587,7 @@ export {
     isBiometricSupported,
     isBiometricRegistered,
     clearBiometricCredential,
+    retireBiometricAfterPasswordChange,
     registerBiometricCredential,
     unlockWithBiometric,
     setBiometricProvider,
@@ -593,6 +599,8 @@ export {
     BiometricUnsupportedError,
     BiometricNotRegisteredError,
     BiometricPrfUnavailableError,
+    BiometricCancelledError,
+    BIOMETRIC_CANCELLED_DETAIL,
 } from './biometricUnlock.js';
 export {
     setDirectUpdateProvider,
@@ -699,6 +707,7 @@ export {
     buildExportFilename,
     filterEntriesByDateRange,
     EXPORT_COLUMNS,
+    EXPORT_COLUMN_DETAILS,
 } from './historyExport.js';
 export {
     markDemoWallet,

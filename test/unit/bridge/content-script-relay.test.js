@@ -18,12 +18,16 @@
 // the call itself, so the callback (and its chrome.runtime.lastError
 // branch) never runs.
 
-import { describe, it, expect, beforeAll, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
+import contentScriptSource from '../../../packages/extension/src/content/contentScript.js?raw';
+import providerSource from '../../../packages/extension/src/inject/xchainProvider.js?raw';
 
 // Swapped per case; the relay is installed once, at import.
 let sendMessageImpl = () => {};
 
 const responses = [];
+let runtimeMessageListener = null;
+let postMessageSpy = null;
 
 function collect(event) {
     if (event.data && event.data.source === 'xchain-inject-response') {
@@ -40,12 +44,12 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 // window`, so a posted message is dropped before any of this is exercised.
 // A real page-world postMessage arrives with source === window, which is
 // what this builds.
-async function relay(message) {
+async function relay(message, origin = window.location.origin, source = window) {
     responses.length = 0;
     window.dispatchEvent(new MessageEvent('message', {
         data: message,
-        source: window,
-        origin: window.location.origin,
+        source,
+        origin,
     }));
     await settle();
     await settle();
@@ -53,20 +57,24 @@ async function relay(message) {
 }
 
 beforeAll(async () => {
+    postMessageSpy = vi.spyOn(window, 'postMessage');
     globalThis.chrome = {
         runtime: {
             id: 'testext',
             getURL: (p) => `chrome-extension://testext/${p}`,
             sendMessage: (...args) => sendMessageImpl(...args),
-            onMessage: { addListener: () => {} },
+            onMessage: { addListener: (listener) => { runtimeMessageListener = listener; } },
         },
     };
     window.addEventListener('message', collect);
     await import('../../../packages/extension/src/content/contentScript.js');
+    document.querySelector('script[src="chrome-extension://testext/inject/xchainProvider.js"]')
+        ?.dispatchEvent(new Event('load'));
 });
 
 afterEach(() => {
     sendMessageImpl = () => {};
+    postMessageSpy.mockClear();
 });
 
 describe('content-script relay always answers the page', () => {
@@ -113,5 +121,229 @@ describe('content-script relay always answers the page', () => {
         expect(relayed).toBe(false);
         expect(reply.ok).toBe(false);
         expect(reply.error.code).toBe('INVALID_PARAMS');
+    });
+
+    it('drops a request whose MessageEvent origin is not the document origin', async () => {
+        const sendMessage = vi.fn();
+        sendMessageImpl = sendMessage;
+        const replies = await relay({
+            source: 'xchain-inject',
+            id: 'req-wrong-origin',
+            type: 'bridge.getAccounts',
+            request: {},
+        }, 'https://attacker.example');
+        expect(sendMessage).not.toHaveBeenCalled();
+        expect(replies).toEqual([]);
+    });
+
+    it('drops a request whose MessageEvent source is not the current window', async () => {
+        const sendMessage = vi.fn();
+        sendMessageImpl = sendMessage;
+        const replies = await relay({
+            source: 'xchain-inject',
+            id: 'req-wrong-source',
+            type: 'bridge.getAccounts',
+            request: {},
+        }, window.location.origin, null);
+        expect(sendMessage).not.toHaveBeenCalled();
+        expect(replies).toEqual([]);
+    });
+
+    it('refuses malformed requests and unknown bridge names without relaying them', async () => {
+        const sendMessage = vi.fn();
+        sendMessageImpl = sendMessage;
+        const [badRequest] = await relay({
+            source: 'xchain-inject',
+            id: 'req-array',
+            type: 'bridge.signMessage',
+            request: [],
+        });
+        expect(badRequest.error.code).toBe('INVALID_PARAMS');
+
+        const [unknownType] = await relay({
+            source: 'xchain-inject',
+            id: 'req-unknown',
+            type: 'bridge.futurePrivilegedMethod',
+            request: {},
+        });
+        expect(unknownType.error.code).toBe('INVALID_PARAMS');
+        expect(sendMessage).not.toHaveBeenCalled();
+    });
+
+    it('stamps the document origin after the page request fields', async () => {
+        let relayed = null;
+        sendMessageImpl = (message, callback) => {
+            relayed = message;
+            callback({ ok: true, result: [] });
+        };
+        await relay({
+            source: 'xchain-inject',
+            id: 'req-stamped',
+            type: 'bridge.getAccounts',
+            request: { origin: 'https://victim.example' },
+        });
+        expect(relayed.request.origin).toBe(window.location.origin);
+    });
+
+    it.each([
+        { result: 'missing ok' },
+        { ok: true },
+    ])('turns malformed background reply %# into one internal-error envelope', async (response) => {
+        sendMessageImpl = (_message, callback) => { callback(response); };
+        const replies = await relay({
+            source: 'xchain-inject',
+            id: 'req-bad-reply',
+            type: 'bridge.getAccounts',
+            request: {},
+        });
+        expect(replies).toHaveLength(1);
+        expect(replies[0].ok).toBe(false);
+        expect(replies[0].error.code).toBe('INTERNAL_ERROR');
+    });
+});
+
+describe('content-script event and frame policy', () => {
+    it('answers the side-panel availability probe without relaying it', () => {
+        const sendResponse = vi.fn();
+        runtimeMessageListener({ type: 'xchain.contentProbe' }, {}, sendResponse);
+        expect(sendResponse).toHaveBeenCalledWith({ available: true });
+        expect(postMessageSpy).not.toHaveBeenCalled();
+    });
+
+    it('reports an unavailable provider when script injection is refused', () => {
+        const runtimeListeners = [];
+        const pageWindow = {
+            location: {
+                protocol: 'https:',
+                origin: 'https://dapp.example',
+                hostname: 'dapp.example',
+                pathname: '/',
+            },
+            addEventListener: vi.fn(),
+        };
+        pageWindow.top = pageWindow;
+        const script = {
+            addEventListener: vi.fn(),
+            remove: vi.fn(),
+        };
+        const pageDocument = {
+            contentType: 'text/html',
+            createElement: vi.fn(() => script),
+            documentElement: {
+                appendChild: vi.fn(() => { throw new Error('injection refused'); }),
+            },
+        };
+        const pageChrome = {
+            runtime: {
+                getURL: vi.fn(() => 'chrome-extension://testext/inject/xchainProvider.js'),
+                onMessage: { addListener: (listener) => runtimeListeners.push(listener) },
+            },
+        };
+        new Function('window', 'document', 'chrome', contentScriptSource)(
+            pageWindow,
+            pageDocument,
+            pageChrome,
+        );
+        const respond = vi.fn();
+        runtimeListeners[0]({ type: 'xchain.contentProbe' }, {}, respond);
+        expect(respond).toHaveBeenCalledWith({ available: false });
+        expect(pageWindow.addEventListener).toHaveBeenCalledOnce();
+    });
+
+    it('forwards only known, correctly shaped events for this document origin', () => {
+        runtimeMessageListener({
+            type: 'bridge.event',
+            origin: window.location.origin,
+            event: 'accountsChanged',
+            payload: [{ id: 'account-1', name: 'Primary' }],
+        });
+        expect(postMessageSpy).toHaveBeenCalledOnce();
+        expect(postMessageSpy).toHaveBeenCalledWith({
+            source: 'xchain-inject-event',
+            event: 'accountsChanged',
+            payload: [{ id: 'account-1', name: 'Primary' }],
+        }, window.location.origin);
+
+        postMessageSpy.mockClear();
+        runtimeMessageListener({
+            type: 'bridge.event',
+            origin: 'https://attacker.example',
+            event: 'accountsChanged',
+            payload: [{ id: 'account-1', name: 'Primary' }],
+        });
+        runtimeMessageListener({
+            type: 'bridge.event',
+            origin: window.location.origin,
+            event: 'accountsChanged',
+            payload: [{ name: 'missing id' }],
+        });
+        runtimeMessageListener({
+            type: 'bridge.event',
+            origin: window.location.origin,
+            event: 'internalState',
+            payload: {},
+        });
+        expect(postMessageSpy).not.toHaveBeenCalled();
+    });
+
+    it('does not inject or install listeners in a subframe', () => {
+        const frameWindow = {
+            top: {},
+            addEventListener: vi.fn(),
+        };
+        const frameDocument = { createElement: vi.fn() };
+        const frameChrome = {
+            runtime: {
+                getURL: vi.fn(),
+                onMessage: { addListener: vi.fn() },
+            },
+        };
+        const run = new Function('window', 'document', 'chrome', contentScriptSource);
+        run(frameWindow, frameDocument, frameChrome);
+        expect(frameDocument.createElement).not.toHaveBeenCalled();
+        expect(frameWindow.addEventListener).not.toHaveBeenCalled();
+        expect(frameChrome.runtime.onMessage.addListener).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        ['file URL', { protocol: 'file:', origin: 'null', hostname: '', pathname: '/wallet.html' }, 'text/html'],
+        ['browser page', { protocol: 'chrome:', origin: 'null', hostname: 'settings', pathname: '/' }, 'text/html'],
+        ['Chrome Web Store', { protocol: 'https:', origin: 'https://chromewebstore.google.com', hostname: 'chromewebstore.google.com', pathname: '/detail/wallet' }, 'text/html'],
+        ['legacy Web Store', { protocol: 'https:', origin: 'https://chrome.google.com', hostname: 'chrome.google.com', pathname: '/webstore/detail/wallet' }, 'text/html'],
+        ['PDF viewer', { protocol: 'https:', origin: 'https://docs.example', hostname: 'docs.example', pathname: '/manual.pdf' }, 'application/pdf'],
+    ])('keeps the relay and provider inert on a %s', (_name, location, contentType) => {
+        const makeWindow = () => {
+            const target = {
+                location,
+                document: { contentType },
+                addEventListener: vi.fn(),
+            };
+            target.top = target;
+            return target;
+        };
+        const relayWindow = makeWindow();
+        const relayDocument = {
+            contentType,
+            createElement: vi.fn(),
+            documentElement: { appendChild: vi.fn() },
+        };
+        const frameChrome = {
+            runtime: {
+                getURL: vi.fn(),
+                onMessage: { addListener: vi.fn() },
+            },
+        };
+        new Function('window', 'document', 'chrome', contentScriptSource)(
+            relayWindow,
+            relayDocument,
+            frameChrome,
+        );
+        expect(relayDocument.createElement).not.toHaveBeenCalled();
+        expect(relayWindow.addEventListener).not.toHaveBeenCalled();
+
+        const providerWindow = makeWindow();
+        new Function('window', providerSource)(providerWindow);
+        expect(providerWindow.xchain).toBeUndefined();
+        expect(providerWindow.addEventListener).not.toHaveBeenCalled();
     });
 });

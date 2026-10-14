@@ -8,23 +8,37 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useRef, useState } from 'react';
-import { Icon } from '@xchain-wallet/core/ui';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { Button, Icon } from '@xchain-wallet/core/ui';
+import { ConfirmModal } from './ConfirmModal.jsx';
 import { NetworkFilter } from './NetworkFilter.jsx';
+import { OverlaySurface } from './OverlaySurface.jsx';
+import { useAnchoredPopover } from '../hooks/useViewportClamp.js';
+import { useConfirmModal } from '../hooks/useConfirmModal.js';
+import {
+    activeNetworkLabel,
+    activeNetworkOptions,
+    activeNetworkSwitchCopy,
+    normalizeActiveNetwork,
+} from '../utils/activeNetworkSwitch.js';
 import styles from './HeaderSettingsButton.module.css';
+import menuStyles from './AppHeader.module.css';
+import { useBackHandler } from '../../ui/backStack.js';
 
 /**
- * Header gear-icon → settings popover. Three sections:
+ * Header gear-icon → settings popover. Four sections:
  *
  *   ▸ Wallet     summary row showing the active wallet name; click
  *                navigates to the WalletPicker route (full list +
  *                Add Wallet affordance)
  *   ▸ Account    same shape; click navigates to AccountPicker
- *   ▸ Network    inline coin-family filter (quick toggle, no nav)
+ *   ▸ Network    active Mainnet / Testnet / Regtest switch
+ *   ▸ Chain filter inline coin-family filter (quick toggle, no nav)
  *
  * Every section is opt-in: a host that only wires the pickers gets a
- * pure wallet/account switcher, and a host that only wires the filter
- * gets the old filter-only button. Sections whose handlers are missing
+ * pure wallet/account switcher, and a host that only wires a network
+ * control gets a network-only button. Sections whose handlers are missing
  * are omitted rather than rendered inert.
  *
  * Keeping the popover compact: full lists + add affordances belong on
@@ -32,50 +46,77 @@ import styles from './HeaderSettingsButton.module.css';
  * confirmation. The popover is just "what's active" + "tap to change".
  *
  * The gear icon shows a small dot when ANY non-default setting is
- * active (non-`all` network filter, non-first wallet, or non-first
- * account). Click outside / Escape closes.
+ * active (non-Mainnet network, non-`all` chain filter, non-first wallet,
+ * or non-first account). Click outside / Escape closes.
  *
  * @param {object} props
  * @param {{ id: string, name: string } | null} [props.activeWallet]      the wallet to display in the summary row
  * @param {{ id: string, name: string, index: number } | null} [props.activeAccount]
  * @param {() => void} [props.onOpenWalletPicker]                          host navigates to the wallet picker route
  * @param {() => void} [props.onOpenAccountPicker]                         host navigates to the account picker route
+ * @param {() => void} [props.onOpenSettings]                              host navigates to the full settings route
  * @param {boolean} [props.walletNonDefault]   used by the gear's status dot (caller knows whether the active wallet is the "first" one in the list)
  * @param {boolean} [props.accountNonDefault]
  * @param {import('../../registry/index.js').ChainRegistry} [props.chainRegistry]
  * @param {string[]} [props.coinFamilies]
  * @param {string} [props.networkFilter]
  * @param {(coin: string) => void} [props.onNetworkFilterChange]   omit (or omit the registry / families) to drop the Network section entirely
+ * @param {'mainnet'|'testnet'|'regtest'} [props.activeNetwork]
+ * @param {boolean} [props.developerMode]
+ * @param {(network: 'mainnet'|'testnet'|'regtest') => Promise<void>} [props.onActiveNetworkChange]
+ * @param {boolean} [props.menuRow] renders the trigger as a labelled overflow-menu row
+ * @param {() => void} [props.onNavigate] closes an owning menu before destination navigation
  */
 export function HeaderSettingsButton({
     activeWallet,
     activeAccount,
     onOpenWalletPicker,
     onOpenAccountPicker,
+    onOpenSettings,
     walletNonDefault = false,
     accountNonDefault = false,
     chainRegistry,
     coinFamilies,
     networkFilter,
     onNetworkFilterChange,
+    activeNetwork,
+    developerMode = false,
+    onActiveNetworkChange,
+    menuRow = false,
+    onNavigate,
 }) {
     const [open, setOpen] = useState(false);
+    const [switchingNetwork, setSwitchingNetwork] = useState(false);
+    const confirmDialog = useConfirmModal();
     const wrapRef = useRef(null);
+    const triggerRef = useRef(null);
+    // The system Back gesture and Escape close this before it leaves the
+    // screen; the shared stack consumes Escape, so focus goes back here.
+    const closePopover = useCallback(() => {
+        setOpen(false);
+        triggerRef.current?.querySelector('button')?.focus();
+    }, []);
+    useBackHandler(open ? closePopover : undefined);
+    // Flex wrapping can move the gear independently of the header slot, so
+    // the open panel derives its viewport coordinates from the gear itself.
+    const popoverPlacement = useAnchoredPopover(open, triggerRef);
 
     useEffect(() => {
         if (!open) return undefined;
         const onClick = (e) => {
             if (wrapRef.current?.contains(e.target)) return;
-            setOpen(false);
+            closePopover();
         };
-        const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+        const onFocusIn = (event) => {
+            if (event.target.closest?.('#xc-main')) setOpen(false);
+        };
         window.addEventListener('mousedown', onClick);
-        window.addEventListener('keydown', onKey);
+        window.addEventListener('focusin', onFocusIn);
         return () => {
             window.removeEventListener('mousedown', onClick);
-            window.removeEventListener('keydown', onKey);
+            window.removeEventListener('focusin', onFocusIn);
         };
-    }, [open]);
+    }, [closePopover, open]);
 
     // The Network section needs all four pieces to render anything
     // useful; NetworkFilter dereferences the registry and maps over the
@@ -85,36 +126,104 @@ export function HeaderSettingsButton({
         && Array.isArray(coinFamilies)
         && coinFamilies.length > 0
         && typeof onNetworkFilterChange === 'function';
+    const hasActiveNetwork = activeNetwork === 'mainnet'
+        || activeNetwork === 'testnet'
+        || activeNetwork === 'regtest';
+    const showActiveNetwork = hasActiveNetwork && typeof onActiveNetworkChange === 'function';
+    const currentNetwork = normalizeActiveNetwork(activeNetwork);
+    const networkOptions = activeNetworkOptions({ developerMode, current: currentNetwork });
 
     const filterActive = showNetwork && networkFilter && networkFilter !== 'all';
-    const anyNonDefault = Boolean(filterActive) || walletNonDefault || accountNonDefault;
+    const anyNonDefault = Boolean(filterActive)
+        || (hasActiveNetwork && currentNetwork !== 'mainnet')
+        || walletNonDefault
+        || accountNonDefault;
 
     const walletLabel = activeWallet?.name || null;
     const accountLabel = activeAccount?.name
         || (Number.isInteger(activeAccount?.index) ? `Account ${activeAccount.index + 1}` : null);
+    const navigate = (handler) => {
+        closePopover();
+        onNavigate?.();
+        handler();
+    };
+
+    const switchNetwork = async (next) => {
+        if (next === currentNetwork) return;
+        const copy = activeNetworkSwitchCopy(currentNetwork, next);
+        const confirmed = await confirmDialog.confirm({
+            ...copy,
+            confirmLabel: 'Switch network',
+        });
+        if (!confirmed) return;
+        setSwitchingNetwork(true);
+        try {
+            await onActiveNetworkChange(next);
+        } catch (err) {
+            // Keep the current badge and selection when persistence fails.
+            setSwitchingNetwork(false);
+            // eslint-disable-next-line no-console
+            console.error('activeNetwork update failed:', err);
+        }
+    };
 
     return (
-        <div ref={wrapRef} className={styles.wrap}>
-            <button
-                type="button"
-                className={`${styles.btn} ${anyNonDefault ? styles.btnActive : ''}`}
-                onClick={() => setOpen((v) => !v)}
-                aria-haspopup="dialog"
-                aria-expanded={open ? 'true' : 'false'}
-                aria-label="Settings"
-                title="Settings"
-            >
-                <Icon.GearIcon />
-                {anyNonDefault ? <span className={styles.dot} aria-hidden="true" /> : null}
-            </button>
-            {open ? (
-                <div className={styles.popover} role="dialog" aria-label="Wallet settings">
+        <>
+            <div ref={wrapRef} className={`${styles.wrap} ${menuRow ? menuStyles.settingsWrap : ''}`.trim()}>
+                <span ref={triggerRef} className={styles.trigger}>
+                    {menuRow ? (
+                        <button
+                            type="button"
+                            role="menuitem"
+                            className={menuStyles.actionRow}
+                            onClick={() => setOpen((v) => !v)}
+                            aria-haspopup="dialog"
+                            aria-expanded={open ? 'true' : 'false'}
+                            data-active={anyNonDefault ? 'true' : undefined}
+                        >
+                            <span className={menuStyles.rowIcon} aria-hidden="true">
+                                <Icon.GearIcon />
+                                {anyNonDefault ? <span className={styles.dot} /> : null}
+                            </span>
+                            <span className={menuStyles.rowLabel}>Settings</span>
+                            <span className={menuStyles.rowIcon} aria-hidden="true"><Icon.ForwardIcon /></span>
+                        </button>
+                    ) : (
+                        <Button
+                            variant="secondary"
+                            icon={(
+                                <>
+                                    <Icon.GearIcon />
+                                    {anyNonDefault ? <span className={styles.dot} /> : null}
+                                </>
+                            )}
+                            onClick={() => setOpen((v) => !v)}
+                            aria-haspopup="dialog"
+                            aria-expanded={open ? 'true' : 'false'}
+                            aria-label="Settings"
+                            title="Settings"
+                            data-active={anyNonDefault ? 'true' : undefined}
+                        />
+                    )}
+                </span>
+                {open && typeof document !== 'undefined' ? createPortal(
+                    <OverlaySurface
+                        variant="popover"
+                        surfaceRef={popoverPlacement.ref}
+                        style={popoverPlacement.style}
+                        title="Wallet settings"
+                        titleId="xc-wallet-settings-title"
+                        aria-labelledby="xc-wallet-settings-title"
+                        onMouseDown={(event) => event.stopPropagation()}
+                    >
+                    {/* Picker destinations stay native buttons to preserve full-row navigation semantics. */}
                     {onOpenWalletPicker ? (
                         <Section title="Wallet">
                             <button
                                 type="button"
                                 className={styles.summaryRow}
-                                onClick={() => { setOpen(false); onOpenWalletPicker(); }}
+                                onClick={() => navigate(onOpenWalletPicker)}
+                                title={walletLabel || 'Choose wallet'}
                             >
                                 <span className={`${styles.summaryName} ${walletLabel ? '' : styles.summaryEmpty}`}>
                                     {walletLabel || 'No wallet'}
@@ -129,7 +238,8 @@ export function HeaderSettingsButton({
                             <button
                                 type="button"
                                 className={styles.summaryRow}
-                                onClick={() => { setOpen(false); onOpenAccountPicker(); }}
+                                onClick={() => navigate(onOpenAccountPicker)}
+                                title={accountLabel || 'Choose account'}
                             >
                                 <span className={`${styles.summaryName} ${accountLabel ? '' : styles.summaryEmpty}`}>
                                     {accountLabel || 'Account 1'}
@@ -139,8 +249,24 @@ export function HeaderSettingsButton({
                         </Section>
                     ) : null}
 
-                    {showNetwork ? (
+                    {showActiveNetwork ? (
                         <Section title="Network">
+                            <select
+                                className={styles.networkSelect}
+                                value={currentNetwork}
+                                disabled={switchingNetwork || Boolean(confirmDialog.request)}
+                                onChange={(event) => switchNetwork(event.target.value)}
+                                aria-label="Active network in header"
+                            >
+                                {networkOptions.map((option) => (
+                                    <option key={option.value} value={option.value}>{option.label}</option>
+                                ))}
+                            </select>
+                        </Section>
+                    ) : null}
+
+                    {showNetwork ? (
+                        <Section title="Chain filter">
                             <NetworkFilter
                                 chainRegistry={chainRegistry}
                                 coinFamilies={coinFamilies}
@@ -149,9 +275,32 @@ export function HeaderSettingsButton({
                             />
                         </Section>
                     ) : null}
-                </div>
+
+                    {onOpenSettings ? (
+                        <div className={styles.section}>
+                            <button
+                                type="button"
+                                className={styles.summaryRow}
+                                onClick={() => navigate(onOpenSettings)}
+                                title="All settings"
+                            >
+                                <span className={styles.summaryName}>All settings</span>
+                                <span className={styles.summaryChevron} aria-hidden="true">›</span>
+                            </button>
+                        </div>
+                    ) : null}
+                    </OverlaySurface>,
+                    document.body,
+                ) : null}
+            </div>
+            {confirmDialog.request ? (
+                <ConfirmModal
+                    {...confirmDialog.request}
+                    onConfirm={confirmDialog.onConfirm}
+                    onCancel={confirmDialog.onCancel}
+                />
             ) : null}
-        </div>
+        </>
     );
 }
 

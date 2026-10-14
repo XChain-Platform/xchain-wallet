@@ -70,7 +70,23 @@ import { listEditValue } from './list_removal_description.js';
  * @param {import('../registry/index.js').ChainRegistry} [opts.chainRegistry]
  * @returns {DecodedAction}
  */
-export function decodeAction({ action, params, chainId, chainRegistry }) {
+export function decodeAction(opts = {}) {
+    try {
+        if (!opts || typeof opts !== 'object' || Array.isArray(opts)) return malformedAction();
+        const { action, params, chainId, chainRegistry } = opts;
+        if (typeof action !== 'string' || action.trim() === '') {
+            return malformedAction();
+        }
+        if (params !== undefined && (!params || typeof params !== 'object' || Array.isArray(params))) {
+            return malformedAction();
+        }
+        return decodeActionData({ action, params, chainId, chainRegistry });
+    } catch {
+        return malformedAction();
+    }
+}
+
+function decodeActionData({ action, params, chainId, chainRegistry }) {
     const p = params || {};
     const descriptor = chainRegistry && chainId ? chainRegistry.get(chainId) : null;
     const chainName = descriptor?.displayName ?? chainId ?? '';
@@ -93,7 +109,7 @@ export function decodeAction({ action, params, chainId, chainRegistry }) {
                 ...(memo && /[|;]/.test(memo)
                     ? ['Memo contains | or ;: the protocol will reject this transaction.']
                     : []),
-                ...(!amount || Number(amount) <= 0
+                ...(!isPositiveDecimal(amount)
                     ? ['Amount is not positive.']
                     : []),
                 ...(!dest ? ['Destination is empty.'] : []),
@@ -141,13 +157,13 @@ export function decodeAction({ action, params, chainId, chainRegistry }) {
             summary: `Mint ${amount || '?'} ${tick || '?'}${chainSuffix}${dest ? ` to ${dest}` : ''}`,
             details: [
                 { label: 'Token', value: tick },
-                { label: 'Amount', value: amount },
+                { label: 'Amount', value: amountWithAsset(amount, tick) },
                 ...(dest ? [{ label: 'Destination', value: dest }] : [{ label: 'Destination', value: 'broadcasting address' }]),
                 ...(memo ? [{ label: 'Memo', value: memo }] : []),
             ],
             warnings: [
                 ...(!tick ? ['Token ticker is empty.'] : []),
-                ...(!amount || Number(amount) <= 0
+                ...(!isPositiveDecimal(amount)
                     ? ['Amount is not positive.']
                     : []),
                 ...(memo && /[|;]/.test(memo)
@@ -173,13 +189,13 @@ export function decodeAction({ action, params, chainId, chainRegistry }) {
                 summary: `Destroy ${amount || '?'} ${tick || '?'}${chainSuffix}`,
                 details: [
                     { label: 'Token', value: tick },
-                    { label: 'Amount', value: amount },
+                    { label: 'Amount', value: amountWithAsset(amount, tick) },
                     ...(memo ? [{ label: 'Memo', value: memo }] : []),
                 ],
                 warnings: [
                     'Destroying is irreversible. The tokens cannot be recovered.',
                     ...(!tick ? ['Token ticker is empty.'] : []),
-                    ...(!amount || Number(amount) <= 0
+                    ...(!isPositiveDecimal(amount)
                         ? ['Amount is not positive.']
                         : []),
                     ...(memo && /[|;]/.test(memo)
@@ -213,14 +229,14 @@ export function decodeAction({ action, params, chainId, chainRegistry }) {
             details: [
                 ...legs.flatMap((l, i) => [
                     { label: `Burn ${i + 1}`, value: `${l.amount || '?'} ${l.tick || '?'}` },
-                    ...(l.memo ? [{ label: '  Memo', value: l.memo }] : []),
+                    ...(l.memo ? [{ label: 'Memo', value: l.memo }] : []),
                 ]),
                 ...(sharedMemo ? [{ label: 'Memo', value: sharedMemo }] : []),
             ],
             warnings: [
                 'Destroying is irreversible. The tokens cannot be recovered.',
                 ...(legs.some((l) => !l.tick) ? ['One or more token tickers are empty.'] : []),
-                ...(legs.some((l) => !l.amount || Number(l.amount) <= 0)
+                ...(legs.some((l) => !isPositiveDecimal(l.amount))
                     ? ['One or more amounts are not positive.']
                     : []),
                 ...(anyMemo && /[|;]/.test(anyMemo)
@@ -430,6 +446,8 @@ function decodeOrderSwap(action, p, chainSuffix) {
     const getOwnership = str(p.GET_OWNERSHIP) === '1';
     const getAddress = str(p.GET_ADDRESS);
     const expiration = str(p.EXPIRATION);
+    const allowList = str(p.ALLOW_LIST);
+    const blockList = str(p.BLOCK_LIST);
     const coinLabel = (coin) => (coin ? `${coin} (native coin)` : '');
     const giveLabel = giveOwnership
         ? `ownership of ${giveTick || '?'}`
@@ -442,14 +460,16 @@ function decodeOrderSwap(action, p, chainSuffix) {
         details: [
             { label: 'Give', value: giveLabel },
             { label: 'Get', value: getLabel },
-            ...(getAddress ? [{ label: 'Counterparty', value: getAddress }] : []),
+            ...(getAddress ? [{ label: 'Receive at', value: getAddress }] : []),
             ...(expiration ? [{ label: 'Expiration', value: expiration }] : []),
+            ...(allowList ? [{ label: 'Allow list', value: `#${allowList}` }] : []),
+            ...(blockList ? [{ label: 'Block list', value: `#${blockList}` }] : []),
             ...(memo ? [{ label: 'Memo', value: memo }] : []),
         ],
         warnings: [
-            ...(!giveOwnership && (!giveAmount || Number(giveAmount) <= 0)
+            ...(!giveOwnership && !isPositiveDecimal(giveAmount)
                 ? ['Give amount is not positive.'] : []),
-            ...(!getOwnership && (!getAmount || Number(getAmount) <= 0)
+            ...(!getOwnership && !isPositiveDecimal(getAmount)
                 ? ['Get amount is not positive.'] : []),
             ...memoWarnings,
         ],
@@ -479,7 +499,7 @@ function decodeStake(p, chainSuffix) {
             { label: 'Signing public key', value: pubkey },
         ],
         warnings: [
-            ...(!amount || Number(amount) <= 0 ? ['Stake amount is not positive.'] : []),
+            ...(!isPositiveDecimal(amount) ? ['Stake amount is not positive.'] : []),
             ...(!pubkey ? ['Signing public key is empty.'] : []),
             'Staked funds are locked until unstake plus the cooldown period.',
         ],
@@ -680,7 +700,7 @@ function decodeContractFunds(action, p, chainSuffix) {
         ],
         warnings: [
             ...(!idx ? ['Contract action index is empty.'] : []),
-            ...(!qty || Number(qty) <= 0 ? ['Amount is not positive.'] : []),
+            ...(!isPositiveDecimal(qty) ? ['Amount is not positive.'] : []),
             ...(action === 'WITHDRAW' ? ['Only the contract deployer can withdraw contract credit.'] : []),
         ],
     };
@@ -829,6 +849,7 @@ function decodeLink(p, chainSuffix) {
 function decodeSleep(p, chainSuffix) {
     const resumeBlock = str(p.RESUME_BLOCK);
     const tick = str(p.TICK);
+    const memo = str(p.MEMO);
     const isAddress = str(p.VERSION) === '0';
     const until = resumeBlock === '-1' ? ' indefinitely' : ` until block ${resumeBlock || '?'}`;
     let summary;
@@ -840,6 +861,7 @@ function decodeSleep(p, chainSuffix) {
         details: [
             ...(tick ? [{ label: 'Token', value: tick }] : []),
             { label: 'Resume block', value: resumeBlock },
+            ...(memo ? [{ label: 'Memo', value: memo }] : []),
         ],
         warnings: [
             ...(resumeBlock === '0' ? []
@@ -853,12 +875,19 @@ function decodeSleep(p, chainSuffix) {
 /* CALLBACK decoder: force-redeem a token per its callback terms. */
 function decodeCallback(p, chainSuffix) {
     const tick = str(p.TICK);
+    const memo = str(p.MEMO);
     return {
         summary: `Trigger callback redemption of ${tick || '?'}${chainSuffix}`,
-        details: [{ label: 'Token', value: tick }],
+        details: [
+            { label: 'Token', value: tick },
+            ...(memo ? [{ label: 'Memo', value: memo }] : []),
+        ],
         warnings: [
             'Callback redeems ALL holders\' tokens at the configured callback terms. This cannot be undone.',
             ...(!tick ? ['Token ticker is empty.'] : []),
+            ...(memo && /[|;]/.test(memo)
+                ? ['Memo contains | or ;: the protocol will reject this transaction.']
+                : []),
         ],
     };
 }
@@ -928,7 +957,7 @@ function decodeBet(p, chainSuffix) {
             warnings: [
                 'Bets are final. There is no cancel and no way to change your outcome once this is signed.',
                 'This is a parimutuel market, so your share is not fixed now: later bets change what a win pays.',
-                ...(!amount || Number(amount) <= 0 ? ['Stake is not positive.'] : []),
+                ...(!isPositiveDecimal(amount) ? ['Stake is not positive.'] : []),
                 ...memoWarn,
             ],
         };
@@ -1132,7 +1161,7 @@ function decodeAirdrop(p, chainSuffix) {
             ],
             warnings: [
                 ...(!tick ? ['Token ticker is empty.'] : []),
-                ...(!amount || Number(amount) <= 0
+                ...(!isPositiveDecimal(amount)
                     ? ['Per-recipient amount is not positive.']
                     : []),
                 ...(!listIdx ? ['List action index is empty.'] : []),
@@ -1168,13 +1197,13 @@ function decodeAirdrop(p, chainSuffix) {
 
     const details = drops.flatMap((d, i) => [
         { label: `Drop ${i + 1}`, value: `${d.amount || '?'} ${d.tick || '?'} to list${d.list ? ` #${d.list}` : ''}` },
-        ...(d.memo ? [{ label: `  Memo`, value: d.memo }] : []),
+        ...(d.memo ? [{ label: 'Memo', value: d.memo }] : []),
     ]);
     if (memo && version !== '3') details.push({ label: 'Memo', value: memo });
 
     const warnings = [
         ...(drops.some((d) => !d.tick) ? ['One or more token tickers are empty.'] : []),
-        ...(drops.some((d) => !d.amount || Number(d.amount) <= 0)
+        ...(drops.some((d) => !isPositiveDecimal(d.amount))
             ? ['One or more per-recipient amounts are not positive.']
             : []),
         ...(drops.some((d) => !d.list) ? ['One or more list action indexes are empty.'] : []),
@@ -1208,7 +1237,7 @@ function decodeDividend(p, chainSuffix) {
         warnings: [
             ...(!tick ? ['Holder ticker is empty.'] : []),
             ...(!dividendTick ? ['Dividend ticker is empty.'] : []),
-            ...(!amount || Number(amount) <= 0
+            ...(!isPositiveDecimal(amount)
                 ? ['Per-unit amount is not positive.']
                 : []),
             ...(memo && /[|;]/.test(memo)
@@ -1340,10 +1369,10 @@ function decodeDispenser(p, chainSuffix) {
 
     const warnings = [
         ...(!giveTick ? ['Give-token ticker is empty.'] : []),
-        ...(!giveAmount || Number(giveAmount) <= 0
+        ...(!isPositiveDecimal(giveAmount)
             ? ['Per-fill amount is not positive.']
             : []),
-        ...(!giveEscrow || Number(giveEscrow) <= 0
+        ...(!isPositiveDecimal(giveEscrow)
             ? ['Escrow amount is not positive.']
             : []),
         ...(giveAmount && giveEscrow && compareDecimalStrings(giveEscrow, giveAmount) === -1
@@ -1427,8 +1456,8 @@ function decodePrice(p, chainSuffix) {
             'Dispensers that name this address as their oracle will sell at this price once it takes effect.',
             ...(!tick ? ['Token ticker is empty.'] : []),
             ...(!fiat ? ['Currency is empty.'] : []),
-            ...(!value || Number(value) <= 0 ? ['Price is not a positive number.'] : []),
-            ...(fee && Number(fee) > 1
+            ...(!isPositiveDecimal(value) ? ['Price is not a positive number.'] : []),
+            ...(fee && compareDecimalStrings(fee, '1') === 1
                 ? ['Oracle usage fee is above 1 (100%): the protocol will reject this transaction.']
                 : []),
             ...(memo && /[|;]/.test(memo)
@@ -1573,10 +1602,10 @@ function decodeIssue(p, chainName, chainSuffix) {
             summary: `Update mint parameters of ${tick || '?'}${chainSuffix}`,
             details: [
                 { label: 'Token', value: tick },
-                ...(maxMint ? [{ label: 'Max mint per tx', value: maxMint }] : []),
-                ...(mintSupply ? [{ label: 'Mint now', value: mintSupply }] : []),
+                ...(maxMint ? [{ label: 'Max mint per tx', value: amountWithAsset(maxMint, tick) }] : []),
+                ...(mintSupply ? [{ label: 'Mint now', value: amountWithAsset(mintSupply, tick) }] : []),
                 ...(transferSupply ? [{ label: 'Transfer minted supply to', value: transferSupply }] : []),
-                ...(mintAddressMax ? [{ label: 'Max mint per address', value: mintAddressMax }] : []),
+                ...(mintAddressMax ? [{ label: 'Max mint per address', value: amountWithAsset(mintAddressMax, tick) }] : []),
                 ...(mintStart ? [{ label: 'Mint start block', value: mintStart }] : []),
                 ...(mintStop ? [{ label: 'Mint stop block', value: mintStop }] : []),
                 ...(memo ? [{ label: 'Memo', value: memo }] : []),
@@ -1619,7 +1648,7 @@ function decodeIssue(p, chainName, chainSuffix) {
                 { label: 'Token', value: tick },
                 ...(callbackBlock ? [{ label: 'Callback at block', value: callbackBlock }] : []),
                 ...(callbackTick ? [{ label: 'Callback token', value: callbackTick }] : []),
-                ...(callbackAmount ? [{ label: 'Callback amount', value: callbackAmount }] : []),
+                ...(callbackAmount ? [{ label: 'Callback amount', value: amountWithAsset(callbackAmount, callbackTick) }] : []),
                 ...(memo ? [{ label: 'Memo', value: memo }] : []),
             ],
             warnings: baseWarnings,
@@ -1685,19 +1714,19 @@ function decodeIssue(p, chainName, chainSuffix) {
 
     const details = [
         { label: 'Token', value: tick },
-        ...(maxSupply ? [{ label: 'Max supply', value: maxSupply }] : []),
-        ...(maxMint ? [{ label: 'Max mint per tx', value: maxMint }] : []),
-        ...(mintAddressMax ? [{ label: 'Max mint per address', value: mintAddressMax }] : []),
+        ...(maxSupply ? [{ label: 'Max supply', value: amountWithAsset(maxSupply, tick) }] : []),
+        ...(maxMint ? [{ label: 'Max mint per tx', value: amountWithAsset(maxMint, tick) }] : []),
+        ...(mintAddressMax ? [{ label: 'Max mint per address', value: amountWithAsset(mintAddressMax, tick) }] : []),
         ...(mintStart ? [{ label: 'Mint start block', value: mintStart }] : []),
         ...(mintStop ? [{ label: 'Mint stop block', value: mintStop }] : []),
         ...(decimals ? [{ label: 'Decimals', value: decimals }] : []),
         ...(description ? [{ label: 'Description', value: description }] : []),
-        ...(mintSupply ? [{ label: 'Initial mint', value: mintSupply }] : []),
+        ...(mintSupply ? [{ label: 'Initial mint', value: amountWithAsset(mintSupply, tick) }] : []),
         ...(transfer ? [{ label: 'Transfer ownership to', value: transfer }] : []),
         ...(transferSupply ? [{ label: 'Transfer initial supply to', value: transferSupply }] : []),
         ...(callbackBlock ? [{ label: 'Callback at block', value: callbackBlock }] : []),
         ...(callbackTick ? [{ label: 'Callback token', value: callbackTick }] : []),
-        ...(callbackAmount ? [{ label: 'Callback amount', value: callbackAmount }] : []),
+        ...(callbackAmount ? [{ label: 'Callback amount', value: amountWithAsset(callbackAmount, callbackTick) }] : []),
         ...(allowList ? [{ label: 'Allow list', value: allowList }] : []),
         ...(blockList ? [{ label: 'Block list', value: blockList }] : []),
         ...(lockFlags.length > 0
@@ -1752,11 +1781,21 @@ function decodeBatch(p, chainId, chainName, chainSuffix, chainRegistry) {
     }
 
     const decodedChildren = withoutFundedExecuteWarnings(commands, commands.map((cmd) => {
-        if (!cmd || typeof cmd !== 'object') {
+        if (!cmd || typeof cmd !== 'object' || Array.isArray(cmd)
+            || typeof cmd.action !== 'string' || cmd.action.trim() === ''
+            || (cmd.params !== undefined
+                && (!cmd.params || typeof cmd.params !== 'object' || Array.isArray(cmd.params)))) {
             return {
                 summary: 'Unknown command',
                 details: [],
                 warnings: ['A batch command is malformed.'],
+            };
+        }
+        if (cmd.action === 'BATCH') {
+            return {
+                summary: 'Nested batch command',
+                details: [],
+                warnings: ['Nested batch commands are malformed and cannot be decoded.'],
             };
         }
         return decodeAction({
@@ -1852,9 +1891,27 @@ function genericFallback(action, p, chainSuffix) {
     };
 }
 
+function malformedAction() {
+    return {
+        summary: 'Action data could not be decoded',
+        details: [],
+        warnings: [
+            'The action data is malformed. Review the raw transaction carefully before approving.',
+        ],
+    };
+}
+
+function isPositiveDecimal(value) {
+    return compareDecimalStrings(str(value), '0') === 1;
+}
+
 function str(v) {
     if (v === undefined || v === null) return '';
     return String(v);
+}
+
+function amountWithAsset(amount, asset) {
+    return amount && asset ? `${amount} ${asset}` : amount;
 }
 
 function toArray(v) {

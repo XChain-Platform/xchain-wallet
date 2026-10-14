@@ -48,6 +48,7 @@
 // passphrase is never persisted.
 
 import { sha256 } from '@noble/hashes/sha2';
+import { logConsole } from '../shared/utils/logConsole.js';
 import { activatePanicMode, PANIC_ARMED_DURESS } from './panicMode.js';
 
 const STORAGE_KEY = 'xchain-wallet:duress';
@@ -56,6 +57,20 @@ const STORAGE_KEY = 'xchain-wallet:duress';
 export const DURESS_STORAGE_KEY = STORAGE_KEY;
 
 let memoryFallback = null;
+let memoryFallbackActive = false;
+let storageFailureLogged = false;
+
+function keepMemoryFallback(record) {
+    memoryFallback = record ? { ...record } : null;
+    memoryFallbackActive = true;
+    if (storageFailureLogged) return;
+    storageFailureLogged = true;
+    logConsole.record({
+        source: 'duress-passphrase',
+        level: 'warn',
+        message: 'local storage write failed; using in-memory state',
+    });
+}
 
 // Injected async persistence (native shells: the Keychain/Keystore-backed
 // guard slot). When set it is authoritative and localStorage is bypassed.
@@ -67,6 +82,13 @@ let memoryFallback = null;
 // for. WebView storage is not a safe home for that on a native shell (SSC-7).
 /** @type {{ load: () => Promise<unknown>, save: (r: any) => Promise<void>, clear: () => Promise<void> } | null} */
 let persistentStore = null;
+let persistenceGeneration = 0;
+
+function persistBestEffort(operation) {
+    try {
+        void Promise.resolve(operation()).catch(() => {});
+    } catch (_err) { /* the synchronous cache remains authoritative */ }
+}
 
 export class DuressNotConfiguredError extends Error {
     constructor() {
@@ -91,7 +113,14 @@ function getStorage() {
 function coerceRecord(parsed) {
     const p = /** @type {any} */ (parsed);
     if (!p || typeof p.salt !== 'string' || typeof p.hash !== 'string') return null;
-    return p;
+    try {
+        if (base64ToBytes(p.salt).length !== 16 || base64ToBytes(p.hash).length !== 32) {
+            return null;
+        }
+        return p;
+    } catch (_err) {
+        return null;
+    }
 }
 
 /**
@@ -105,10 +134,24 @@ function coerceRecord(parsed) {
  * @returns {Promise<void>}
  */
 export async function configureDuressPersistence(store) {
+    if (store != null && (
+        typeof store.load !== 'function'
+        || typeof store.save !== 'function'
+        || typeof store.clear !== 'function'
+    )) {
+        throw new TypeError('configureDuressPersistence: store must implement load, save, and clear');
+    }
+    const generation = ++persistenceGeneration;
     persistentStore = store || null;
+    memoryFallback = null;
+    memoryFallbackActive = false;
     if (!persistentStore) return;
+    const configuredStore = persistentStore;
     try {
-        applyExternalDuressRecord(await persistentStore.load());
+        const loaded = await configuredStore.load();
+        if (generation === persistenceGeneration && persistentStore === configuredStore) {
+            applyExternalDuressRecord(loaded);
+        }
     } catch (_err) {
         // Leave the cache empty. Failing closed here is not an option: there
         // is nothing to fail closed TO, and a wallet that refuses to unlock
@@ -122,31 +165,29 @@ export async function configureDuressPersistence(store) {
  * @param {unknown} raw
  */
 export function applyExternalDuressRecord(raw) {
+    persistenceGeneration += 1;
     memoryFallback = coerceRecord(raw);
+    memoryFallbackActive = false;
 }
 
 /** Test seam: forget any injected persistence. */
 export function __resetDuressPersistenceForTests() {
+    persistenceGeneration += 1;
     persistentStore = null;
     memoryFallback = null;
+    memoryFallbackActive = false;
+    storageFailureLogged = false;
 }
 
 function readRecord() {
     if (persistentStore) return memoryFallback ? { ...memoryFallback } : null;
+    if (memoryFallbackActive) return memoryFallback ? { ...memoryFallback } : null;
     const store = getStorage();
     if (!store) return memoryFallback ? { ...memoryFallback } : null;
     try {
         const raw = store.getItem(STORAGE_KEY);
         if (!raw) return null;
-        const parsed = JSON.parse(raw);
-        if (
-            !parsed
-            || typeof parsed.salt !== 'string'
-            || typeof parsed.hash !== 'string'
-        ) {
-            return null;
-        }
-        return parsed;
+        return coerceRecord(JSON.parse(raw));
     } catch (_err) {
         return null;
     }
@@ -154,16 +195,15 @@ function readRecord() {
 
 function writeRecord(record) {
     if (persistentStore) {
+        persistenceGeneration += 1;
         memoryFallback = record ? { ...record } : null;
-        try {
-            if (record === null) void persistentStore.clear();
-            else void persistentStore.save({ ...record });
-        } catch (_err) { /* best-effort; the cache holds it this session */ }
+        const store = persistentStore;
+        persistBestEffort(() => (record === null ? store.clear() : store.save({ ...record })));
         return;
     }
     const store = getStorage();
     if (!store) {
-        memoryFallback = record ? { ...record } : null;
+        keepMemoryFallback(record);
         return;
     }
     try {
@@ -172,8 +212,10 @@ function writeRecord(record) {
         } else {
             store.setItem(STORAGE_KEY, JSON.stringify(record));
         }
+        memoryFallback = null;
+        memoryFallbackActive = false;
     } catch (_err) {
-        memoryFallback = record ? { ...record } : null;
+        keepMemoryFallback(record);
     }
 }
 
@@ -238,7 +280,6 @@ export function setDuressPassphrase(passphrase) {
 /** Discard the stored duress passphrase. */
 export function clearDuressPassphrase() {
     writeRecord(null);
-    memoryFallback = null;
 }
 
 /**

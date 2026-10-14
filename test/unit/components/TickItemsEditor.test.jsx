@@ -12,23 +12,35 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, cleanup, act, fireEvent } from '@testing-library/react';
 import React, { useState } from 'react';
 
-import { TickItemsEditor } from '../../../packages/core/src/shared/components/TickItemsEditor.jsx';
+import {
+    MAX_TICK_LOOKUPS,
+    TickItemsEditor,
+} from '../../../packages/core/src/shared/components/TickItemsEditor.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 import { classifyTickItems } from '../../../packages/core/src/shared/utils/listTickItems.js';
 
 const FOUND = { creator: 'bc1qcreator', totalSupply: '100', canonicalTick: 'GOODTOK' };
 const EMPTY = { creator: null, totalSupply: null, canonicalTick: null };
 
-function Harness({ initial, messaging, onOpenPicker = () => {}, onStatus, active = true }) {
+function Harness({
+    initial,
+    messaging,
+    onOpenPicker = () => {},
+    onStatus,
+    active = true,
+    coinQualified = false,
+}) {
     const [text, setText] = useState(initial);
     const [status, setStatus] = useState({});
     return active ? (
         <TickItemsEditor
             value={text}
             onChange={setText}
-            items={classifyTickItems(text)}
+            items={classifyTickItems(text, { coinQualified })}
             chainId="bitcoin-mainnet"
             chainLabel="Bitcoin"
+            listCoin="BTC"
+            coinQualified={coinQualified}
             messaging={messaging}
             onOpenPicker={onOpenPicker}
             status={status}
@@ -52,9 +64,65 @@ describe('TickItemsEditor', () => {
     it('counts valid, duplicate and invalid names', async () => {
         const messaging = fakeMessaging({});
         render(<Harness initial={'AAA\naaa\nBBB\nbad name!'} messaging={messaging} />);
-        expect(screen.getByText(/2 valid token names · 1 duplicate removed · 1 invalid/)).toBeInTheDocument();
-        expect(screen.getByText('Not a token name: bad name!')).toBeInTheDocument();
+        expect(screen.getByText(/2 valid token names · 1 duplicate ignored · 1 invalid/)).toBeInTheDocument();
+        const input = screen.getByLabelText('Tokens (one per line)');
+        const invalid = screen.getByText('Not a token name: bad name!');
+        expect(input).toHaveAttribute('aria-invalid', 'true');
+        expect(input.getAttribute('aria-describedby').split(' ')).toContain(invalid.id);
         await settle();
+    });
+
+    it('removes and reorders valid entries without discarding invalid input', () => {
+        render(<Harness initial={'FIRST\nbad name!\nSECOND\nTHIRD'} messaging={fakeMessaging({})} />);
+        const input = screen.getByLabelText('Tokens (one per line)');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Move THIRD up' }));
+        expect(input).toHaveValue('FIRST\nbad name!\nTHIRD\nSECOND');
+        expect(screen.getByText('Not a token name: bad name!')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Remove FIRST' }));
+        expect(input).toHaveValue('bad name!\nTHIRD\nSECOND');
+        expect(screen.getByRole('listitem', { name: 'THIRD, position 1 of 2' })).toHaveFocus();
+    });
+
+    it('supports keyboard reordering and announces the result', () => {
+        render(<Harness initial={'FIRST\nSECOND'} messaging={fakeMessaging({})} />);
+        const second = screen.getByRole('listitem', { name: 'SECOND, position 2 of 2' });
+        second.focus();
+        fireEvent.keyDown(second, { key: 'ArrowUp', altKey: true });
+
+        expect(screen.getByLabelText('Tokens (one per line)')).toHaveValue('SECOND\nFIRST');
+        expect(screen.getByRole('status')).toHaveTextContent('SECOND moved to position 1.');
+        expect(screen.getByRole('listitem', { name: 'SECOND, position 1 of 2' })).toHaveFocus();
+    });
+
+    it('disambiguates controls for the same ticker on different coins', () => {
+        render(
+            <Harness
+                initial={'BTC:SAME\nDOGE:SAME'}
+                messaging={fakeMessaging({})}
+                coinQualified
+            />,
+        );
+
+        expect(screen.getByLabelText('Coin for BTC:SAME')).toHaveValue('BTC');
+        expect(screen.getByLabelText('Coin for DOGE:SAME')).toHaveValue('DOGE');
+        fireEvent.click(screen.getByRole('button', { name: 'Move DOGE:SAME up' }));
+        expect(screen.getByLabelText('Tokens (one per line)')).toHaveValue('DOGE:SAME\nBTC:SAME');
+    });
+
+    it('accepts a many-line paste and caps token lookups', async () => {
+        const ticks = Array.from({ length: MAX_TICK_LOOKUPS + 5 }, (_, index) => `TOKEN${index}`);
+        const messaging = fakeMessaging(Object.fromEntries(ticks.map((tick) => [tick, FOUND])));
+        render(<Harness initial="" messaging={messaging} />);
+
+        fireEvent.change(screen.getByLabelText('Tokens (one per line)'), {
+            target: { value: ticks.join('\n') },
+        });
+        expect(screen.getByText(`${ticks.length} valid token names · checking…`)).toBeInTheDocument();
+        await settle();
+        expect(messaging.getTokenInfo).toHaveBeenCalledTimes(MAX_TICK_LOOKUPS);
+        expect(screen.getByText(/50 found · 5 not checked/)).toBeInTheDocument();
     });
 
     it('reports a found and a missing verdict after the lookup and warns about the missing one', async () => {
@@ -67,7 +135,40 @@ describe('TickItemsEditor', () => {
         expect(messaging.getTokenInfo).toHaveBeenCalledTimes(2);
         expect(onStatus).toHaveBeenLastCalledWith({ GOODTOK: 'found', NOSUCH: 'missing' });
         expect(screen.getByText(/1 found · 1 not found/)).toBeInTheDocument();
-        expect(screen.getByRole('alert')).toHaveTextContent('Not found on Bitcoin: NOSUCH.');
+        const input = screen.getByLabelText('Tokens (one per line)');
+        const error = screen.getByRole('alert');
+        expect(error).toHaveTextContent('Not found on Bitcoin: NOSUCH.');
+        expect(input).toHaveAttribute('aria-invalid', 'true');
+        expect(input.getAttribute('aria-describedby').split(' ')).toContain(error.id);
+    });
+
+    it('delivers a pending lookup to the latest status callback', async () => {
+        const messaging = fakeMessaging({ GOODTOK: FOUND });
+        const firstOnStatus = vi.fn();
+        const latestOnStatus = vi.fn();
+        const view = render(
+            <Harness initial="GOODTOK" messaging={messaging} onStatus={firstOnStatus} />,
+        );
+
+        view.rerender(
+            <Harness initial="GOODTOK" messaging={messaging} onStatus={latestOnStatus} />,
+        );
+        await settle();
+
+        expect(firstOnStatus).not.toHaveBeenCalled();
+        expect(latestOnStatus).toHaveBeenLastCalledWith({ GOODTOK: 'found' });
+    });
+
+    it('finishes checking when messaging throws synchronously', async () => {
+        const messaging = { getTokenInfo: vi.fn(() => { throw new Error('not connected'); }) };
+        const onStatus = vi.fn();
+        render(<Harness initial="GOODTOK" messaging={messaging} onStatus={onStatus} />);
+
+        await settle();
+
+        expect(screen.getByText('1 valid token name')).toBeInTheDocument();
+        expect(screen.queryByText(/checking…/)).toBeNull();
+        expect(onStatus).toHaveBeenLastCalledWith({ GOODTOK: null });
     });
 
     it('skips a ^ reference and shows it as not checked', async () => {

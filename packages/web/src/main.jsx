@@ -13,7 +13,9 @@
 // design-token custom properties install on `:root` for every route.
 
 import { createRoot } from 'react-dom/client';
-import { registry } from '@xchain-wallet/core';
+import { defaultRegistry } from '../../core/src/registry/index.js';
+import { syncChainRegistryFromHub } from '../../core/src/registry/remote.js';
+import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import '@xchain-wallet/core/ui/tokens.css';
 import { App } from './App.jsx';
 import {
@@ -22,19 +24,36 @@ import {
     floorStaleMessage,
 } from './platform/webviewFloor.js';
 import { BROKEN_SHELL_MESSAGE, nativeShellIsBroken } from './storage/nativeVault.js';
+import { installNativeKdfProvider } from './storage/nativeKdfProvider.js';
+import { installKeyboardViewport } from './platform/keyboardViewport.js';
+import { installShellErrorCapture } from './errorCapture.js';
+import { deferNonCriticalWork } from './deferNonCriticalWork.js';
+import { hideNativeSplash, NativeShellReady } from './platform/nativeShellReady.jsx';
+import { installNativeFontScale } from './platform/nativeFontScale.js';
+
+logConsole.attach();
+
+// Register the crash hook before anything else can throw.
+installShellErrorCapture();
+installNativeFontScale();
+
+// Install before React mounts so every mobile KDF entry uses the native
+// provider, including callers that do not request session status first.
+try { installNativeKdfProvider(); } catch { /* core retains its JS fallback */ }
 
 // §9.7 / G007: refresh chain descriptors from the hub's signed public
-// registry snapshot. Fire-and-forget soft enhancement: the signature must
-// verify against the pinned federation key or nothing changes, and any
-// failure (offline, tampered, unsigned) leaves the bundled descriptors
-// serving. Never blocks boot.
-try {
-    registry.syncChainRegistryFromHub({ registry: registry.defaultRegistry() })
-        .then((r) => {
-            if (!r.ok) console.info('web: chain-registry sync skipped:', r.reason);
-        })
-        .catch(() => { /* soft enhancement; bundled descriptors keep serving */ });
-} catch { /* never block app boot */ }
+// registry snapshot after the first screen paints. The signature must verify
+// against the pinned federation key or nothing changes, and any failure
+// leaves the bundled descriptors serving.
+function syncChainRegistry() {
+    try {
+        syncChainRegistryFromHub({ registry: defaultRegistry() })
+            .then((r) => {
+                if (!r.ok) console.info('web: chain-registry sync skipped:', r.reason);
+            })
+            .catch(() => { /* soft enhancement; bundled descriptors keep serving */ });
+    } catch { /* soft enhancement; bundled descriptors keep serving */ }
+}
 
 // §47.1 / G143: register this origin as a handler for `xchain:` URIs so
 // the OS / browser can open the web wallet when the user clicks an
@@ -56,6 +75,8 @@ try {
         } catch { /* not safelisted in this browser; web+xchain still works */ }
     }
 } catch { /* registration is a soft enhancement; never block app boot */ }
+
+try { installKeyboardViewport(); } catch { /* layout aid only; never block app boot */ }
 
 const container = document.getElementById('xchain-web-root');
 if (!container) {
@@ -106,19 +127,23 @@ const floor = checkWebViewFloor();
 // of this file). Nothing to do here but leave its panel alone.
 if (globalThis.__xchainBootFloor?.blocked) {
     console.warn('web: boot floor refused this engine before the bundle loaded');
+    hideNativeSplash();
 } else if (nativeShellIsBroken()) {
     renderBlockingPanel('XChain Wallet cannot open on this device', BROKEN_SHELL_MESSAGE);
+    hideNativeSplash();
 } else if (!floor.usable) {
     renderBlockingPanel(
         'This device cannot run XChain Wallet safely',
         floorFailureMessage(floor),
     );
+    hideNativeSplash();
 } else {
     if (floor.stale) {
         // Advice, not a gate. Logged rather than modal: the wallet works, and
         // the direct-APK audience includes de-Googled ROMs where the engine
         // ships with the OS and "just update it" is not one tap.
-        console.warn(floorStaleMessage(floor));
+        console.warn(`[web] ${floorStaleMessage(floor)}`);
     }
-    createRoot(container).render(<App />);
+    createRoot(container).render(<><App /><NativeShellReady /></>);
+    deferNonCriticalWork(syncChainRegistry);
 }

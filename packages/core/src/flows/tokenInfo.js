@@ -34,6 +34,11 @@
 // Kept as a standalone JSON file (not inlined) so it doubles as a
 // readable, copy-pasteable sample of a maxed-out TIS v1.0.0 envelope.
 import exampleTis from './demoExampleTis.json' with { type: 'json' };
+import {
+    ARWEAVE_GATEWAY_BASE,
+    IPFS_GATEWAY_BASE,
+} from '../branding/branding.js';
+import { fetchWithRetry } from '../shared/utils/fetchWithRetry.js';
 
 /**
  * @typedef {Object} TisMediaEntry
@@ -337,10 +342,10 @@ function normalizeMediaUrl(url) {
     const t = url.trim();
     if (!t) return null;
     if (t.startsWith('ipfs://')) {
-        return 'https://ipfs.io/ipfs/' + t.slice('ipfs://'.length);
+        return `${IPFS_GATEWAY_BASE}/${t.slice('ipfs://'.length)}`;
     }
     if (/^ar:/i.test(t)) {
-        return 'https://arweave.net/' + t.replace(/^ar:/i, '');
+        return `${ARWEAVE_GATEWAY_BASE}/${t.replace(/^ar:/i, '')}`;
     }
     if (/^https?:\/\//i.test(t)) return t;
     return null;
@@ -402,14 +407,20 @@ export function descriptionJsonUrl(description) {
         t = t.slice(0, semi).trim();
     }
     // Arweave gateway "/x.json" suffix trick: drop it; the gateway 404s.
-    t = t.replace(/^(https?:\/\/arweave\.net\/[^\/?#]+)\/x\.json$/i, '$1');
+    const arweavePrefix = `${ARWEAVE_GATEWAY_BASE}/`;
+    if (t.toLowerCase().startsWith(arweavePrefix.toLowerCase())) {
+        const suffix = t.slice(arweavePrefix.length);
+        if (/^[^\/?#]+\/x\.json$/i.test(suffix)) {
+            t = arweavePrefix + suffix.slice(0, -'/x.json'.length);
+        }
+    }
     if (/^ipfs:\/\//i.test(t)) {
-        return 'https://ipfs.io/ipfs/' + t.slice('ipfs://'.length);
+        return `${IPFS_GATEWAY_BASE}/${t.slice('ipfs://'.length)}`;
     }
     if (/^ar:/i.test(t)) {
-        return 'https://arweave.net/' + t.replace(/^ar:/i, '');
+        return `${ARWEAVE_GATEWAY_BASE}/${t.replace(/^ar:/i, '')}`;
     }
-    if (/^https?:\/\/arweave\.net\//i.test(t)) return t;
+    if (t.toLowerCase().startsWith(arweavePrefix.toLowerCase())) return t;
     if (/^https?:\/\//i.test(t) && /\.json(?:[?#]|$)/i.test(t)) return t;
     // Bare "host/path.json": promote to https.
     if (isBareHostPathJsonUrl(t)) {
@@ -1030,7 +1041,7 @@ export async function fetchTisBundle({ description, fetch: fetchImpl, signal }) 
     const jsonUrl = descriptionJsonUrl(description);
     if (!jsonUrl || typeof fetchImpl !== 'function') return null;
     try {
-        const resp = await fetchImpl(jsonUrl, { signal, redirect: 'follow' });
+        const resp = await fetchWithRetry(fetchImpl, jsonUrl, { signal, redirect: 'follow' });
         if (!resp || !resp.ok) return null;
         const text = await resp.text();
         return parseTisText(text);
@@ -1104,6 +1115,7 @@ function parseTisText(text) {
  * @param {import('../sdk/SDKRegistry.js').SDKRegistry} params.sdkRegistry
  * @param {string} params.chainId
  * @param {string} params.tick
+ * @param {boolean} [params.demo]
  * @param {boolean} [params.metadataFetchEnabled]
  * @param {typeof fetch} [params.fetch]
  * @returns {Promise<TokenInfo>}
@@ -1112,6 +1124,7 @@ export async function tokenInfoFor({
     sdkRegistry,
     chainId,
     tick,
+    demo = false,
     metadataFetchEnabled = true,
     fetch: fetchImpl,
 }) {
@@ -1119,24 +1132,13 @@ export async function tokenInfoFor({
     if (!chainId) throw new Error('tokenInfoFor: chainId is required');
     if (!tick) throw new Error('tokenInfoFor: tick is required');
     const sdk = sdkRegistry.get(chainId);
-    if (typeof sdk.getToken !== 'function') {
-        return withDemoFallback(chainId, tick, null, null);
-    }
-    let raw = null;
-    try {
-        raw = await sdk.getToken(tick);
-    } catch {
-        raw = null;
-    }
-    // When the SDK returned nothing (typical of the demo wallet whose
-    // stub SDK has no real indexer behind it), fall back to a synthetic
-    // row from the demo set. The fallback row's description is treated
-    // EXACTLY like a real on-chain description for the next step;
-    // demos can therefore point at a real TIS JSON URL and the wallet
-    // will fetch + parse it to exercise the live rendering path.
-    const haveRealRow = raw && (Array.isArray(raw) ? raw.length > 0 : true);
-    if (!haveRealRow) {
-        raw = demoRowFor(tick);
+    let raw = demo ? demoRowFor(tick) : null;
+    if (!demo && typeof sdk?.getToken === 'function') {
+        try {
+            raw = await sdk.getToken(tick);
+        } catch {
+            raw = null;
+        }
     }
     let tisBundle = null;
     if (metadataFetchEnabled) {
@@ -1161,9 +1163,9 @@ export async function tokenInfoFor({
     // When a demo entry ships a pre-built `tis` block (offline-friendly
     // bundle that doesn't need a network round-trip), use it as the
     // fallback if the live fetch came back empty.
-    if (!tisBundle) {
-        const demo = DEMO_TIS_BY_TICK[String(tick || '').toUpperCase()];
-        if (demo?.tis) tisBundle = tisToMediaBundle(demo.tis);
+    if (!tisBundle && demo) {
+        const fixture = DEMO_TIS_BY_TICK[String(tick || '').toUpperCase()];
+        if (fixture?.tis) tisBundle = tisToMediaBundle(fixture.tis);
     }
     resolveMediaDataRefs(tisBundle, sdk);
     return normalizeTokenInfo(chainId, tick, raw, tisBundle, {
@@ -1295,6 +1297,18 @@ const DEMO_TIS_BY_TICK = {
             categories: [{ type: 'main', data: 'Collectibles' }],
         },
     },
+    BITCRYSTAL: {
+        description: 'A demo Bitcrystals collectible with a permanently locked supply.',
+        owner: null,
+        supply: { current: '1', max: '1' },
+        locks: { description: true, max_supply: true, mint: true, mint_supply: true },
+    },
+    XCPCARD: {
+        description: 'A demo XCP founders card with a permanently locked supply.',
+        owner: null,
+        supply: { current: '1', max: '1' },
+        locks: { description: true, max_supply: true, mint: true, mint_supply: true },
+    },
     XCHAINLOGO: {
         description: 'Full-media showcase token. Pairs an image gallery with sample audio and video to exercise every TIS player on the token detail page.',
         owner: '1XChainDemoOwnerLitecoinAddressDemo',
@@ -1371,5 +1385,23 @@ const DEMO_TIS_BY_TICK = {
             categories: [{ type: 'main', data: 'Collectibles' }],
             website: 'https://dogecoin.com',
         },
+    },
+    LITEORD: {
+        description: 'A demo Litecoin ordinal with a permanently locked supply.',
+        owner: null,
+        supply: { current: '1', max: '1' },
+        locks: { description: true, max_supply: true, mint: true, mint_supply: true },
+    },
+    MIMBLEPUNK: {
+        description: 'A demo MimblePunk collectible with a permanently locked supply.',
+        owner: null,
+        supply: { current: '1', max: '1' },
+        locks: { description: true, max_supply: true, mint: true, mint_supply: true },
+    },
+    MEMECARD: {
+        description: 'A demo Dogecoin meme card with a permanently locked supply.',
+        owner: null,
+        supply: { current: '1', max: '1' },
+        locks: { description: true, max_supply: true, mint: true, mint_supply: true },
     },
 };

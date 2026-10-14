@@ -13,16 +13,21 @@
 .event {
     display: flex;
     justify-content: space-between;
+    flex-wrap: wrap;
     gap: var(--xc-space-2);
     font-size: var(--xc-text-xs);
 }
 
 .label {
+    min-width: 0;
     font-weight: 600;
+    overflow-wrap: anywhere;
 }
 
 .meta {
+    min-width: 0;
     color: var(--xc-text-muted);
+    overflow-wrap: anywhere;
 }
 
 .status {

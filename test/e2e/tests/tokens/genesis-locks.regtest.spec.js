@@ -301,7 +301,8 @@ async function onboardAndCreateLocked(page) {
         .toBeVisible({ timeout: 15_000 });
     await descriptionLock.check();
 
-    await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+    await main.getByRole('button', { name: 'Review token', exact: true }).click();
+    await main.getByRole('button', { name: 'Continue to confirmation', exact: true }).click();
     await expectConfirmScreen(page);
     const issued = await waitForIndexedAction(await approveAndGetTxid(page));
     expect(String(issued.status), `the venue rejected the ${TICK} genesis (${issued.status})`)
@@ -417,7 +418,8 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByLabel('Edition size').fill(String(EDITION_SIZE));
             await main.getByLabel('Copies per mint').fill(String(EDITION_PER_TX));
             await main.getByLabel('Image URL').fill(EDITION_DESCRIPTION);
-            await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+            await main.getByRole('button', { name: 'Review token', exact: true }).click();
+            await main.getByRole('button', { name: 'Continue to confirmation', exact: true }).click();
             await expectConfirmScreen(page);
             const issued = await waitForIndexedAction(await approveAndGetTxid(page));
             expect(String(issued.status)).toBe('valid');
@@ -556,7 +558,8 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByLabel('Token name (ticker)').fill(LOCKMINT_TICK);
             await main.getByLabel('Edition size').fill(String(EDITION_SIZE));
             await main.getByLabel('Copies per mint').fill(String(EDITION_PER_TX));
-            await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+            await main.getByRole('button', { name: 'Review token', exact: true }).click();
+            await main.getByRole('button', { name: 'Continue to confirmation', exact: true }).click();
             await expectConfirmScreen(page);
             expect(String((await waitForIndexedAction(await approveAndGetTxid(page))).status))
                 .toBe('valid');

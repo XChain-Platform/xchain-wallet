@@ -9,18 +9,22 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Screen, PageHeader, Icon, VerifiedBadge } from '@xchain-wallet/core/ui';
+import { EmptyState, ListPage, Screen, PageHeader, StatusMessage, VerifiedBadge } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
+import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { DetailCard } from './History.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { normalizeHistoryRow } from '../utils/historyRow.js';
 import { useActionProofVerification } from '../hooks/useProofVerification.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { useOnlineStatus } from '../hooks/useOnlineStatus.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './History.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const OFFLINE_ACTION_REASON = 'This action needs a network connection.';
 
 /**
  * @param {object} props
@@ -33,6 +37,7 @@ const chainRegistry = registryLib.defaultRegistry();
 export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWatermark, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
+    const browserOnline = useOnlineStatus();
 
     // M2.3: the shells hand this page a SNAPSHOT of the row the user clicked
     // and never revisit it, which is harmless for a confirmed action and wrong
@@ -52,6 +57,7 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
     }, [entryProp?.key]);
     useEffect(() => {
         if (!pendingTxHash || confirmed) return undefined;
+        if (!browserOnline) return undefined;
         if (!entryProp?.chainId || !entryProp?.address) return undefined;
         if (typeof messaging.getAddressHistory !== 'function') return undefined;
         const { chainId, address } = entryProp;
@@ -73,7 +79,9 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
                     // explorer can carry the transaction before it has a
                     // block, and swapping to that would lose the pending
                     // detail for nothing.
-                    if (built && Number(built.blockIndex) > 0) setConfirmed(built);
+                    if (built && Number(built.blockIndex) > 0) {
+                        setConfirmed({ ...built, detailContext: entryProp.detailContext });
+                    }
                 })
                 .catch(() => { /* transient; the next tick tries again */ });
         };
@@ -83,7 +91,7 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
             look();
         }, flowsLib.BALANCE_POLL_INTERVAL_MS);
         return () => { cancelled = true; clearInterval(id); };
-    }, [pendingTxHash, confirmed, entryProp, messaging]);
+    }, [pendingTxHash, confirmed, entryProp, messaging, browserOnline]);
 
     // Local peer cache: fetched once on mount when the entry is one
     // side of a cross-chain LINK pair. DetailCard handles loading +
@@ -105,6 +113,12 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
         const peerChainId = entry.link.peerChainId;
         const peerActionIndex = String(entry.link.peerActionIndex);
         const pKey = `${peerChainId}:${peerActionIndex}`;
+        if (!browserOnline) {
+            setPeerCache({
+                [pKey]: { loading: false, action: null, error: OFFLINE_ACTION_REASON },
+            });
+            return undefined;
+        }
         let cancelled = false;
         setPeerCache({ [pKey]: { loading: true, action: null, error: null } });
         messaging.getActionByIndex({ chainId: peerChainId, actionIndex: peerActionIndex })
@@ -118,12 +132,12 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
                     [pKey]: {
                         loading: false,
                         action: null,
-                        error: err?.message || String(err),
+                        error: userFacingMessage(err, 'Could not load the linked action. Try again.'),
                     },
                 });
             });
         return () => { cancelled = true; };
-    }, [entry, messaging, isPending]);
+    }, [entry, messaging, isPending, browserOnline]);
 
     // PC-50: the same SPV verdict the History list badges, on the detail view
     // the item names. Only a confirmed action with a numeric index is
@@ -138,32 +152,46 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
         return [{ key: 'detail', chainId: entry.chainId, actionIndex: entry.actionIndex }];
     }, [entry, isPending]);
     const verifyMap = useActionProofVerification({
-        messaging, items: verifyItems, enabled: verifyEnabled,
+        messaging, items: verifyItems, enabled: verifyEnabled && browserOnline,
     });
     const verdict = verifyMap.detail || null;
 
     if (!entry) {
         return (
             <Screen variant={variant} header={(
-                <PageHeader onBack={onBack} backLabel="Back to history" title="Action" />
+                <PageHeader
+                    onBack={onBack}
+                    backLabel={t('actionDetail.back')}
+                    title={t('actionDetail.title')}
+                />
             )}>
-                <p className={styles.empty}>No action selected.</p>
+                <ListPage>
+                    <EmptyState
+                        title={t('actionDetail.empty.title')}
+                        body={t('actionDetail.empty.body')}
+                        titleAs="p"
+                    />
+                </ListPage>
             </Screen>
         );
     }
 
     const descriptor = entry.chainId ? chainRegistry.get(entry.chainId) : null;
     const iconUrl = descriptor ? branding.chainIconSmallUrl(descriptor.id) : null;
+    const rawActionIndex = String(entry.actionIndex ?? '').trim();
+    const actionIndexLabel = /^\d+$/.test(rawActionIndex)
+        ? BigInt(rawActionIndex).toLocaleString('en-US')
+        : '';
     const header = (
         <PageHeader
             onBack={onBack}
-            backLabel="Back to history"
-            title={isPending
+            backLabel={t('actionDetail.back')}
+            title={isPending || !actionIndexLabel
                 // A pending action has no index, and the fallback here
                 // rendered it as "#0", an index that belongs to a real
                 // action on every chain.
                 ? actionDisplayLabel(entry.action)
-                : `${actionDisplayLabel(entry.action)} #${Number(entry.actionIndex || 0).toLocaleString('en-US')}`}
+                : `${actionDisplayLabel(entry.action)} #${actionIndexLabel}`}
             titleIcon={iconUrl ? (
                 <img
                     src={iconUrl}
@@ -179,7 +207,12 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
 
     return (
         <Screen variant={variant} header={header}>
-            <div className={styles.body}>
+            <ListPage className={styles.body}>
+                {!browserOnline ? (
+                    <StatusMessage variant="warning" id="history-offline-action-reason">
+                        {t('actionDetail.offline')}
+                    </StatusMessage>
+                ) : null}
                 {verdict ? (
                     <div className={styles.detailVerify}>
                         <VerifiedBadge status={verdict.status} reason={verdict.reason} size="sm" />
@@ -188,9 +221,11 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
                 <DetailCard
                     entry={entry}
                     peerCache={peerCache}
-                    chainTip={chainTip}
-                    indexerWatermark={indexerWatermark}
+                    chainTip={chainTip ?? entry.detailContext?.chainTip}
+                    indexerWatermark={indexerWatermark ?? entry.detailContext?.indexerWatermark}
+                    walletAddresses={entry.detailContext?.walletAddresses}
                     walletId={walletId}
+                    networkAvailable={browserOnline}
                     onDismissFailed={typeof messaging?.dismissFailedPendingTx === 'function'
                         ? async (pendingTxId) => {
                             // The record is gone once this resolves, so the
@@ -205,7 +240,7 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
                         }
                         : undefined}
                 />
-            </div>
+            </ListPage>
         </Screen>
     );
 }

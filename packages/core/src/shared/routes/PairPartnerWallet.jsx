@@ -10,10 +10,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-    Screen, PageHeader, Button, Input, Textarea, Icon, StatusMessage,
-    QrScanner, AnimatedQrFrames, CopyButton, InfoTip,
+    Screen, PageHeader, Button, FormPage, FormSection, Input, Textarea, Icon,
+    ListPage, StatusMessage, QrScanner, AnimatedQrFrames, CopyButton, InfoTip,
 } from '@xchain-wallet/core/ui';
 import { flows as flowsLib } from '@xchain-wallet/core';
+import { useProtectedScreen } from '../utils/screenGuard.js';
 import {
     encodeXcwChunks,
     createXcwCollector,
@@ -24,6 +25,8 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 
 const MIN_PASSWORD_LENGTH = 8;
 const ACCEPTED_WORD_COUNTS = [12, 15, 18, 21, 24];
+const INVALID_PARTNER_CODE = 'That pairing code is invalid or incomplete. '
+    + 'Paste or scan the complete code from the other wallet.';
 
 // A single QR frame stops being scannable somewhere past ~1200 bytes in
 // byte mode: at 1907 characters the symbol is version 40 (177x177 modules)
@@ -71,8 +74,13 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
     const variant = screenVariantFor(shell);
 
     const [stage, setStage] = useState(
-        /** @type {'role' | 'seed' | 'exchange' | 'done'} */ (initialMode ? 'seed' : 'role'),
+        /** @type {'role' | 'seed' | 'exchange' | 'done'} */ (
+            initialMode ? (existingWalletId ? 'exchange' : 'seed') : 'role'
+        ),
     );
+    // The seed step accepts the shared recovery phrase. Public pairing-code
+    // stages remain capturable so the partner device can scan them.
+    useProtectedScreen(stage === 'seed');
     const [walletMode, setWalletMode] = useState(
         /** @type {'watcher' | 'signer' | null} */ (initialMode || null),
     );
@@ -91,6 +99,7 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
     const [verification, setVerification] = useState(/** @type {any} */ (null));
 
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    const [partnerCodeError, setPartnerCodeError] = useState(/** @type {string | null} */ (null));
     const [busy, setBusy] = useState(false);
 
     const lane = flowsLib.describePairingLane(walletMode);
@@ -130,8 +139,8 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
         return () => { cancelled = true; };
     }, [stage, walletId, localCode, messaging, password, name]);
 
-    // The frames this device shows. A short code is one still frame, exactly
-    // as before. A long one (the normal case: three chains ≈ 1907 characters)
+    // The frames this device shows. A short code uses one still frame. A long
+    // one (the normal case: three chains ≈ 1907 characters)
     // is chunked with the §20.3 transport the wallet already ships, so the
     // partner's camera collects it frame by frame instead of being handed a
     // symbol nothing can decode. The codec takes bytes, and a pairing code is
@@ -149,11 +158,8 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
     }, [localCode]);
 
     // Every decoded frame from the partner's display. A single-frame code is
-    // taken as-is (unchanged behaviour); an XCW chunk accrues in the collector
-    // until the set completes and its SHA256 verifies, at which point the
-    // reassembled bytes are the partner's code. An incomplete set never
-    // produces one, which is the property that matters: half a pairing code
-    // must not reach `pairPartner`.
+    // parsed before it fills the field; XCW chunks accrue until the set and
+    // its SHA256 verify. An incomplete set never reaches `pairPartner`.
     //
     // MUST be stable across renders. `QrScanner` lists `onFrame` in its effect
     // deps, so a handler re-created on every render tears the camera down and
@@ -166,22 +172,37 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
             setPartnerCollector((prev) => {
                 const next = addChunkToCollector({ ...prev }, text);
                 if (next.error) {
-                    setError(`QR scan: ${next.error}`);
+                    setPartnerCodeError(INVALID_PARTNER_CODE);
                     return createXcwCollector();
                 }
                 if (next.complete && next.psbt) {
-                    setPartnerCode(new TextDecoder().decode(next.psbt).trim());
+                    const code = new TextDecoder().decode(next.psbt).trim();
+                    try {
+                        flowsLib.parsePairingPayload(code);
+                    } catch {
+                        setPartnerCodeError(INVALID_PARTNER_CODE);
+                        return createXcwCollector();
+                    }
+                    setPartnerCode(code);
                     setScanning(false);
-                    setError(null);
+                    setPartnerCodeError(null);
                     return createXcwCollector();
                 }
+                setPartnerCodeError(null);
                 return next;
             });
             return;
         }
-        setPartnerCode(text.trim());
+        const code = text.trim();
+        try {
+            flowsLib.parsePairingPayload(code);
+        } catch {
+            setPartnerCodeError(INVALID_PARTNER_CODE);
+            return;
+        }
+        setPartnerCode(code);
         setScanning(false);
-        setError(null);
+        setPartnerCodeError(null);
     }, []);
 
     function pickRole(mode) {
@@ -240,7 +261,14 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
         event.preventDefault();
         if (busy) return;
         if (partnerCode.trim().length === 0) {
-            setError('Paste or scan the pairing code from the other wallet.');
+            setPartnerCodeError('Paste or scan the pairing code from the other wallet.');
+            return;
+        }
+        let normalizedPartnerCode;
+        try {
+            normalizedPartnerCode = normalizePartnerCodeInput(partnerCode);
+        } catch (err) {
+            setPartnerCodeError(err?.message || INVALID_PARTNER_CODE);
             return;
         }
         if (typeof messaging.pairPartnerRequest !== 'function') {
@@ -248,12 +276,13 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
             return;
         }
         setError(null);
+        setPartnerCodeError(null);
         setBusy(true);
         try {
             const res = await messaging.pairPartnerRequest({
                 walletId,
                 walletMode,
-                partner: partnerCode.trim(),
+                partner: normalizedPartnerCode,
                 password: password || undefined,
                 label: name,
             });
@@ -273,34 +302,33 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
             title={lane.title || 'Pair a partner wallet'}
         />
     );
+    const step = pairingStep(stage, Boolean(existingWalletId), Boolean(initialMode));
 
     if (stage === 'role') {
         return (
             <Screen variant={variant} header={header}>
-                <p style={COPY}>
-                    An air-gapped pair is one recovery phrase held by two wallets: an
-                    online watcher that builds transactions, and an offline signer that
-                    signs them. Pick which one this device is.
-                </p>
-                <div style={STACK}>
-                    <Button
-                        variant="primary"
-                        block
-                        onClick={() => pickRole('watcher')}
-                        icon={<Icon.EyeIcon />}
-                    >
-                        This device watches. Pair a signer
-                    </Button>
-                    <Button
-                        variant="secondary"
-                        block
-                        onClick={() => pickRole('signer')}
-                        icon={<Icon.KeyIcon />}
-                    >
-                        This device signs. Pair a watcher
-                    </Button>
-                </div>
-                <InfoTip label="Both halves must come from the same recovery phrase. Write it down once, then type it into each device separately: it never travels between them." />
+                <ListPage>
+                    <StepIndicator {...step} />
+                    <div style={STACK}>
+                        <Button
+                            variant="primary"
+                            block
+                            onClick={() => pickRole('watcher')}
+                            icon={<Icon.EyeIcon />}
+                        >
+                            This device watches. Pair a signer
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            block
+                            onClick={() => pickRole('signer')}
+                            icon={<Icon.KeyIcon />}
+                        >
+                            This device signs. Pair a watcher
+                        </Button>
+                    </div>
+                    <InfoTip label="An air-gapped pair uses one recovery phrase on two wallets: an online watcher builds transactions and an offline signer signs them. Write the phrase down once, then type it into each device separately; it never travels between them." />
+                </ListPage>
             </Screen>
         );
     }
@@ -308,8 +336,17 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
     if (stage === 'seed') {
         return (
             <Screen variant={variant} header={header}>
-                <form onSubmit={handleSeedSubmit} noValidate>
-                    <p style={COPY}>{lane.help}</p>
+                <FormPage
+                    label="Pairing setup"
+                    onSubmit={handleSeedSubmit}
+                    status={error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
+                    actions={(
+                        <Button type="submit" variant="primary" loading={busy} disabled={busy}>
+                            Continue
+                        </Button>
+                    )}
+                >
+                    <StepIndicator {...step} />
                     <Input
                         label="Wallet name"
                         value={name}
@@ -318,11 +355,13 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                     />
                     <Textarea
                         label="Shared recovery phrase"
-                        hint="The same phrase you used (or will use) on the other half of the pair."
+                        hint={lane.help}
                         rows={3}
                         value={mnemonic}
                         onChange={(e) => setMnemonic(e.target.value)}
                         autoComplete="off"
+                        autoCapitalize="off"
+                        autoCorrect="off"
                         spellCheck={false}
                         disabled={busy}
                     />
@@ -342,13 +381,7 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                         autoComplete="new-password"
                         disabled={busy}
                     />
-                    {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
-                    <div style={STACK}>
-                        <Button type="submit" variant="primary" block loading={busy} disabled={busy}>
-                            Continue
-                        </Button>
-                    </div>
-                </form>
+                </FormPage>
             </Screen>
         );
     }
@@ -357,14 +390,37 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
         const frameCount = localFrames ? localFrames.length : 0;
         return (
             <Screen variant={variant} header={header}>
-                <form onSubmit={handlePairSubmit} noValidate>
-                    <p style={COPY}>
-                        Show this code to the other wallet, then bring its code back here.
-                        The code holds public keys only: no recovery phrase, no private key,
-                        and nothing that can spend.
-                    </p>
-
-                    <h2 style={SECTION_TITLE}>This wallet&rsquo;s code</h2>
+                <FormPage
+                    label="Partner code exchange"
+                    onSubmit={handlePairSubmit}
+                    sectioned
+                    status={error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
+                    actions={(
+                        <>
+                            <Button
+                                variant="ghost"
+                                onClick={() => {
+                                    // A re-opened scanner starts from nothing: half a
+                                    // set left over from a previous attempt would
+                                    // otherwise mix with frames from a different code.
+                                    setPartnerCollector(createXcwCollector());
+                                    setPartnerCodeError(null);
+                                    setScanning((s) => !s);
+                                }}
+                                disabled={busy}
+                                icon={<Icon.ScanIcon />}
+                            >
+                                {scanning ? 'Stop scanning' : 'Scan the other wallet\'s QR'}
+                            </Button>
+                            <Button type="submit" variant="primary" loading={busy} disabled={busy}>
+                                {lane.cta || 'Pair'}
+                            </Button>
+                        </>
+                    )}
+                >
+                    <StepIndicator {...step} />
+                    <InfoTip label="Pairing codes contain public keys only: no recovery phrase, no private key, and nothing that can spend." />
+                    <FormSection title="This wallet’s code">
                     {localCode ? (
                         <>
                             {localFrames ? (
@@ -401,10 +457,9 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                     ) : (
                         <StatusMessage>{busy ? 'Building this wallet\'s pairing code…' : 'No pairing code yet.'}</StatusMessage>
                     )}
+                    </FormSection>
 
-                    <h2 style={SECTION_TITLE}>
-                        {lane.partnerMode === 'signer' ? 'Signer wallet\'s code' : 'Watcher wallet\'s code'}
-                    </h2>
+                    <FormSection title={lane.partnerMode === 'signer' ? 'Signer wallet\'s code' : 'Watcher wallet\'s code'}>
                     {scanning ? (
                         <>
                             <QrScanner onFrame={handleScanFrame} />
@@ -420,58 +475,91 @@ export function PairPartnerWallet({ onBack, onPaired, walletId: existingWalletId
                         label="Paste the other wallet's code"
                         rows={3}
                         value={partnerCode}
-                        onChange={(e) => setPartnerCode(e.target.value)}
+                        onChange={(e) => {
+                            setPartnerCode(e.target.value);
+                            setPartnerCodeError(null);
+                        }}
+                        error={partnerCodeError || undefined}
                         autoComplete="off"
                         spellCheck={false}
                         disabled={busy}
                     />
-                    {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
-                    <div style={STACK}>
-                        <Button
-                            variant="ghost"
-                            block
-                            onClick={() => {
-                                // A re-opened scanner starts from nothing: half a
-                                // set left over from a previous attempt would
-                                // otherwise mix with frames from a different code.
-                                setPartnerCollector(createXcwCollector());
-                                setScanning((s) => !s);
-                            }}
-                            disabled={busy}
-                            icon={<Icon.ScanIcon />}
-                        >
-                            {scanning ? 'Stop scanning' : 'Scan the other wallet\'s QR'}
-                        </Button>
-                        <Button type="submit" variant="primary" block loading={busy} disabled={busy}>
-                            {lane.cta || 'Pair'}
-                        </Button>
-                    </div>
-                </form>
+                    </FormSection>
+                </FormPage>
             </Screen>
         );
     }
 
     return (
         <Screen variant={variant} header={header}>
-            <StatusMessage variant="success">
-                {verification?.message || 'Paired.'}
-            </StatusMessage>
-            {verification?.sharedChainIds?.length ? (
-                <p style={COPY}>
-                    Matching chains: {verification.sharedChainIds.join(', ')}.
-                </p>
-            ) : null}
-            <p style={COPY}>{lane.help}</p>
-            <div style={STACK}>
-                <Button
-                    variant="primary"
-                    block
-                    onClick={() => { if (typeof onPaired === 'function') onPaired(); }}
-                >
-                    Finish
-                </Button>
-            </div>
+            <ListPage>
+                <StepIndicator {...step} />
+                <StatusMessage variant="success">
+                    {verification?.message || 'Paired.'}
+                </StatusMessage>
+                {verification?.sharedChainIds?.length ? (
+                    <p style={COPY}>
+                        Matching chains: {verification.sharedChainIds.join(', ')}.
+                    </p>
+                ) : null}
+                <div style={STACK}>
+                    <Button
+                        variant="primary"
+                        block
+                        onClick={() => { (typeof onPaired === 'function' ? onPaired : onBack)?.(); }}
+                    >
+                        Finish
+                    </Button>
+                </div>
+            </ListPage>
         </Screen>
+    );
+}
+
+function normalizePartnerCodeInput(input) {
+    const trimmed = input.trim();
+    const frames = trimmed
+        .split(/[\r\n]+/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+    let code = trimmed;
+
+    // Accept a copied capture log as well as the complete text code.
+    if (frames.length > 0 && frames.every((frame) => frame.startsWith(XCW_PREFIX))) {
+        let collector = createXcwCollector();
+        for (const frame of frames) {
+            collector = addChunkToCollector(collector, frame);
+            if (collector.error) throw new Error(INVALID_PARTNER_CODE);
+        }
+        if (!collector.complete || !collector.psbt) {
+            throw new Error(
+                `This multi-frame pairing code is incomplete: received ${collector.receivedCount} `
+                + `of ${collector.total || '?'} frames.`,
+            );
+        }
+        code = new TextDecoder().decode(collector.psbt).trim();
+    }
+
+    try {
+        flowsLib.parsePairingPayload(code);
+    } catch {
+        throw new Error(INVALID_PARTNER_CODE);
+    }
+    return code;
+}
+
+function pairingStep(stage, hasExistingWallet, hasInitialMode) {
+    const stages = hasExistingWallet
+        ? (hasInitialMode ? ['exchange', 'done'] : ['role', 'exchange', 'done'])
+        : (hasInitialMode ? ['seed', 'exchange', 'done'] : ['role', 'seed', 'exchange', 'done']);
+    return { current: Math.max(1, stages.indexOf(stage) + 1), total: stages.length };
+}
+
+function StepIndicator({ current, total }) {
+    return (
+        <p aria-current="step" style={STEP_INDICATOR}>
+            Step {current} of {total}
+        </p>
     );
 }
 
@@ -488,14 +576,6 @@ const COPY = {
     marginBlockEnd: 'var(--xc-space-3)',
 };
 
-const SECTION_TITLE = {
-    color: 'var(--xc-text)',
-    fontSize: 'var(--xc-text-sm)',
-    fontWeight: 600,
-    marginBlockStart: 'var(--xc-space-4)',
-    marginBlockEnd: 'var(--xc-space-2)',
-};
-
 const CODE_BOX = {
     fontFamily: 'var(--xc-font-mono, monospace)',
     fontSize: 'var(--xc-text-xs)',
@@ -505,8 +585,6 @@ const CODE_BOX = {
     borderRadius: 'var(--xc-radius-md)',
     padding: 'var(--xc-space-2)',
     marginBlock: 'var(--xc-space-2)',
-    maxHeight: 120,
-    overflowY: 'auto',
     overflowWrap: 'anywhere',
 };
 
@@ -514,4 +592,11 @@ const FINGERPRINT = {
     fontFamily: 'var(--xc-font-mono, monospace)',
     fontSize: 'var(--xc-text-xs)',
     color: 'var(--xc-text-muted)',
+};
+
+const STEP_INDICATOR = {
+    color: 'var(--xc-text-muted)',
+    fontSize: 'var(--xc-text-xs)',
+    fontWeight: 600,
+    margin: '0 0 var(--xc-space-2)',
 };

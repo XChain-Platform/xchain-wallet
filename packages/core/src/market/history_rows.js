@@ -71,11 +71,32 @@ function historyResult(row, values) {
 }
 
 export function historyTimestamp(row) {
-    if (Number.isFinite(Number(row?.timestamp))) return Number(row.timestamp);
-    if (Number.isFinite(Number(row?.block_time))) return Number(row.block_time);
-    if (row?.created_at) {
+    const timestamp = unixTimestamp(row?.timestamp);
+    if (timestamp !== null) return timestamp;
+    const blockTime = unixTimestamp(row?.block_time);
+    if (blockTime !== null) return blockTime;
+    if (typeof row?.created_at === 'string' && row.created_at.trim() !== '') {
         const milliseconds = Date.parse(row.created_at);
-        if (Number.isFinite(milliseconds)) return Math.floor(milliseconds / 1000);
+        const createdAt = Math.floor(milliseconds / 1000);
+        if (Number.isFinite(milliseconds) && createdAt > 0 && createdAt < 10_000_000_000) {
+            return createdAt;
+        }
     }
     return null;
+}
+
+function unixTimestamp(value) {
+    if (value === null || value === undefined) return null;
+    let timestamp;
+    if (typeof value === 'number') {
+        timestamp = value;
+    } else if (typeof value === 'string' && /^\d+$/.test(value.trim())) {
+        timestamp = Number(value.trim());
+    } else {
+        return null;
+    }
+    if (!Number.isInteger(timestamp) || timestamp <= 0 || timestamp >= 10_000_000_000) {
+        return null;
+    }
+    return timestamp;
 }

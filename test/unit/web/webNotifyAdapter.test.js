@@ -55,6 +55,7 @@ const payload = { kind: 'incoming-pending', title: 'Incoming on Litecoin', body:
 describe('webNotifyAdapter', () => {
     afterEach(() => {
         vi.unstubAllGlobals();
+        localStorage.clear();
         stubVisibility('visible');
     });
 
@@ -64,7 +65,7 @@ describe('webNotifyAdapter', () => {
         window.addEventListener(NOTIFICATION_EVENT, onEvent);
         stubVisibility('visible');
         stubNotification('granted');
-        createWebNotifyAdapter()(payload);
+        expect(createWebNotifyAdapter()(payload)).toBe(true);
         window.removeEventListener(NOTIFICATION_EVENT, onEvent);
         expect(seen).toEqual([payload]);
     });
@@ -72,7 +73,7 @@ describe('webNotifyAdapter', () => {
     it('raises an OS notification when the tab is hidden and permission is granted', () => {
         stubVisibility('hidden');
         const ctor = stubNotification('granted');
-        createWebNotifyAdapter()(payload);
+        expect(createWebNotifyAdapter()(payload)).toBe(true);
         expect(ctor).toHaveBeenCalledTimes(1);
         expect(ctor.mock.calls[0][0]).toBe(payload.title);
         expect(ctor.mock.calls[0][1]).toEqual({ body: payload.body });
@@ -167,7 +168,63 @@ describe('webNotifyAdapter', () => {
     it('raises no OS notification without permission, and does not throw', () => {
         stubVisibility('hidden');
         const ctor = stubNotification('default');
-        expect(() => createWebNotifyAdapter()(payload)).not.toThrow();
+        expect(createWebNotifyAdapter()(payload)).toBe(false);
         expect(ctor).not.toHaveBeenCalled();
+    });
+
+    it('claims one transaction delivery across web-tab adapter instances', () => {
+        stubVisibility('visible');
+        const seen = [];
+        const onEvent = (event) => seen.push(event.detail);
+        window.addEventListener(NOTIFICATION_EVENT, onEvent);
+        const payment = {
+            ...payload,
+            data: { chainId: 'bitcoin-mainnet', txHash: 'same-event' },
+        };
+
+        expect(createWebNotifyAdapter({ now: () => 1000 })(payment)).toBe(true);
+        expect(createWebNotifyAdapter({ now: () => 1001 })({
+            ...payment,
+            kind: 'tx-confirmed',
+        })).toBe(false);
+        window.removeEventListener(NOTIFICATION_EVENT, onEvent);
+        expect(seen).toHaveLength(1);
+    });
+
+    it('claims one alert delivery across web-tab adapter instances', () => {
+        stubVisibility('visible');
+        const alert = {
+            kind: 'price-alert',
+            title: 'Price alert',
+            body: 'Bitcoin rose above $100,000.',
+            data: { chainId: 'bitcoin-mainnet', alertId: 'alert-1' },
+        };
+
+        expect(createWebNotifyAdapter({ now: () => 1000 })(alert)).toBe(true);
+        expect(createWebNotifyAdapter({ now: () => 1001 })(alert)).toBe(false);
+    });
+
+    it('serializes simultaneous tab claims before choosing one surface', async () => {
+        stubVisibility('visible');
+        const tails = new Map();
+        const locks = {
+            request: vi.fn((name, callback) => {
+                const result = (tails.get(name) || Promise.resolve()).then(callback);
+                tails.set(name, result.catch(() => {}));
+                return result;
+            }),
+        };
+        const payment = {
+            ...payload,
+            data: { chainId: 'bitcoin-mainnet', txHash: 'concurrent-event' },
+        };
+
+        const results = await Promise.all([
+            createWebNotifyAdapter({ locks, now: () => 1000 })(payment),
+            createWebNotifyAdapter({ locks, now: () => 1000 })(payment),
+        ]);
+
+        expect(results).toEqual([true, false]);
+        expect(locks.request).toHaveBeenCalledTimes(2);
     });
 });

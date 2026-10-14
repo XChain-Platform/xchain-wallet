@@ -1,9 +1,9 @@
 {
     "manifest_version": 3,
     "name": "XChain Wallet",
-    "version": "0.341.3",
-    "version_name": "0.341.3",
-    "description": "Self-custodial multi-chain wallet for the XChain Platform. Supports Bitcoin, Dogecoin, and Litecoin at launch.",
+    "version": "0.341.4",
+    "version_name": "0.341.4",
+    "description": "Self-custodial wallet for the XChain Platform. Current chain support: Bitcoin, Litecoin, and Dogecoin.",
     "homepage_url": "https://github.com/XChain-Platform/xchain-wallet",
     "icons": {
         "16": "icons/icon-16.png",
@@ -21,12 +21,33 @@
             "128": "icons/icon-128.png"
         }
     },
+    "options_ui": {
+        "page": "popup.html",
+        "open_in_tab": true
+    },
+    "commands": {
+        "open-wallet": {
+            "suggested_key": {
+                "default": "Alt+Shift+X"
+            },
+            "description": "Open XChain Wallet"
+        },
+        "lock-wallet": {
+            "suggested_key": {
+                "default": "Alt+Shift+L"
+            },
+            "description": "Lock XChain Wallet"
+        }
+    },
     "side_panel": {
         "default_path": "sidepanel.html"
     },
     "background": {
         "service_worker": "background.js",
         "type": "module"
+    },
+    "content_security_policy": {
+        "extension_pages": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https: wss: http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'"
     },
     "content_scripts": [
         {
@@ -46,7 +67,8 @@
             "matches": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"]
         }
     ],
-    "permissions": ["storage", "sidePanel", "notifications", "alarms"],
+    "permissions": ["storage", "sidePanel", "alarms"],
+    "optional_permissions": ["notifications"],
     "host_permissions": [],
     "protocol_handlers": [
         {

@@ -122,6 +122,10 @@ async function buildStack() {
         masterKey,
     });
     await vault.open();
+    await vault.settings.put({
+        ...schemas.createDefaultSettings(),
+        activeNetwork: 'regtest',
+    });
 
     const wallet = schemas.createWallet({
         name: 'Test',

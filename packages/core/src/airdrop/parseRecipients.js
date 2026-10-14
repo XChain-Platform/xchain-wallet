@@ -39,7 +39,11 @@
 // paste artifacts), because a form that does not yet know its chain
 // still has to render something. Every real call site passes a chain.
 
-import { isValidAddressForChain } from '../shared/utils/addressValidation.js';
+import {
+    isValidAddressAnyNetwork,
+    isValidAddressForChain,
+} from '../shared/utils/addressValidation.js';
+import { parseCsvRecords } from '../shared/utils/csv.js';
 
 const BASE58_ALPHABET = /^[1-9A-HJ-NP-Za-km-z]+$/;
 const BECH32_ALPHABET = /^[0-9a-z]+$/; // Lowercase per BIP173; we lowercase before testing.
@@ -53,14 +57,25 @@ const BECH32_ALPHABET = /^[0-9a-z]+$/; // Lowercase per BIP173; we lowercase bef
  * @returns {string[]}
  */
 export function parsePaste(text) {
+    return parsePasteEntries(text).map(({ value }) => value);
+}
+
+/**
+ * Parse pasted recipients while retaining each candidate's physical line.
+ * Comma-separated candidates on one row share that row's line number.
+ *
+ * @param {string} text
+ * @returns {Array<{ value: string, line: number }>}
+ */
+export function parsePasteEntries(text) {
     if (typeof text !== 'string' || text.length === 0) return [];
-    // Split on any newline or comma. Keeps the split lightweight; we
-    // don't try to be a full CSV parser here.
-    const parts = text.split(/[\r\n,]+/g);
     const out = [];
-    for (const raw of parts) {
-        const trimmed = stripWrappingQuotes(raw.trim());
-        if (trimmed.length > 0) out.push(trimmed);
+    const lines = text.split(/\r\n|\r|\n/);
+    for (let index = 0; index < lines.length; index += 1) {
+        for (const raw of lines[index].split(/,+/g)) {
+            const value = stripWrappingQuotes(raw.trim());
+            if (value.length > 0) out.push({ value, line: index + 1 });
+        }
     }
     return out;
 }
@@ -73,19 +88,28 @@ export function parsePaste(text) {
  * @returns {string[]}
  */
 export function parseCsv(text) {
+    return parseCsvEntries(text).map(({ value }) => value);
+}
+
+/**
+ * Parse first-column CSV recipients while retaining the physical line where
+ * each RFC 4180 record starts.
+ *
+ * @param {string} text
+ * @returns {Array<{ value: string, line: number }>}
+ */
+export function parseCsvEntries(text) {
     if (typeof text !== 'string' || text.length === 0) return [];
-    const lines = text.split(/\r?\n/);
+    const rows = parseCsvRecords(text);
     const out = [];
-    let skipHeader = false;
-    if (lines.length > 0) {
-        const firstCol = stripWrappingQuotes(firstCell(lines[0]).trim()).toLowerCase();
-        if (firstCol === 'address') skipHeader = true;
-    }
-    for (let i = skipHeader ? 1 : 0; i < lines.length; i += 1) {
-        const line = lines[i];
-        if (line === undefined) continue;
-        const first = stripWrappingQuotes(firstCell(line).trim());
-        if (first.length > 0) out.push(first);
+    // Find the header after any BOM and leading blank lines exported by spreadsheets.
+    const firstContent = rows.findIndex(({ cells }) => cells.some((cell) => cell.trim().length > 0));
+    if (firstContent === -1) return [];
+    const firstCol = rows[firstContent].cells[0].trim().replace(/^\uFEFF/, '').toLowerCase();
+    const start = firstContent + (firstCol === 'address' ? 1 : 0);
+    for (let i = start; i < rows.length; i += 1) {
+        const first = rows[i].cells[0].trim().replace(/^\uFEFF/, '');
+        if (first.length > 0) out.push({ value: first, line: rows[i].line });
     }
     return out;
 }
@@ -164,6 +188,12 @@ export function isRecipientForChain(addr, chain) {
  * @returns {{ valid: string[], invalid: string[], duplicates: number, wrongNetwork: string[] }}
  */
 export function classifyRecipients(candidates, chain) {
+    const classifier = createRecipientClassifier(chain, false);
+    for (const raw of candidates) classifier.add(raw);
+    return classifier.result();
+}
+
+function createRecipientClassifier(chain, includeLines) {
     /** @type {string[]} */
     const valid = [];
     /** @type {string[]} */
@@ -172,24 +202,83 @@ export function classifyRecipients(candidates, chain) {
     const wrongNetwork = [];
     const params = chainParams(chain);
     const seen = new Set();
+    const invalidLines = [];
+    const wrongNetworkLines = [];
     let duplicates = 0;
-    for (const raw of candidates) {
-        if (seen.has(raw)) {
+    const add = (raw, line) => {
+        const candidate = String(raw ?? '').trim();
+        if (!candidate) return;
+        // Bech32 is case-insensitive when the whole address uses one case.
+        const bech32 = /^(?:bc1|tb1|bcrt1|ltc1|tltc1|rltc1)/i.test(candidate)
+            && (candidate === candidate.toLowerCase() || candidate === candidate.toUpperCase());
+        const duplicateKey = bech32 ? candidate.toLowerCase() : candidate;
+        if (seen.has(duplicateKey)) {
             duplicates += 1;
-            continue;
+            return;
         }
-        seen.add(raw);
-        if (isRecipientForChain(raw, chain)) {
-            valid.push(raw);
-            continue;
+        seen.add(duplicateKey);
+        if (isRecipientForChain(candidate, chain)) {
+            valid.push(candidate);
+            return;
         }
-        invalid.push(raw);
+        invalid.push(candidate);
+        if (includeLines) invalidLines.push({ address: candidate, line });
         // Only meaningful once a chain is known: it is the difference
         // between "this is not an address" and "this is an address for
         // somewhere else".
-        if (params && isPlausibleAddress(raw)) wrongNetwork.push(raw);
+        if (params && isValidAddressAnyNetwork(candidate)) {
+            wrongNetwork.push(candidate);
+            if (includeLines) wrongNetworkLines.push({ address: candidate, line });
+        }
+    };
+    const result = () => includeLines
+        ? { valid, invalid, duplicates, wrongNetwork, invalidLines, wrongNetworkLines }
+        : { valid, invalid, duplicates, wrongNetwork };
+    return { add, result };
+}
+
+/**
+ * Classify parsed entries and retain source locations for rejected rows.
+ * The canonical string arrays match `classifyRecipients`, so publishing and
+ * pricing use the same first-occurrence-wins duplicate rule as plain paste.
+ *
+ * @param {Array<{ value: string, line: number }>} entries
+ * @param {{ coin?: string, network?: string, networkKind?: string } | null} [chain]
+ * @returns {{ valid: string[], invalid: string[], duplicates: number, wrongNetwork: string[],
+ *   invalidLines: Array<{ address: string, line: number }>,
+ *   wrongNetworkLines: Array<{ address: string, line: number }> }}
+ */
+export function classifyRecipientEntries(entries, chain) {
+    const classifier = createRecipientClassifier(chain, true);
+    for (const entry of entries) classifier.add(entry?.value, entry?.line);
+    return classifier.result();
+}
+
+/**
+ * Classify a large parsed list in bounded chunks so input and paint tasks can
+ * run between batches. A cancelled classification returns null.
+ *
+ * @param {Array<{ value: string, line: number }>} entries
+ * @param {{ coin?: string, network?: string, networkKind?: string } | null} [chain]
+ * @param {{ chunkSize?: number, yieldTask?: () => Promise<void>, shouldCancel?: () => boolean }} [options]
+ * @returns {Promise<ReturnType<typeof classifyRecipientEntries> | null>}
+ */
+export async function classifyRecipientEntriesAsync(entries, chain, options = {}) {
+    const rawChunkSize = Number(options.chunkSize);
+    const chunkSize = Number.isInteger(rawChunkSize) && rawChunkSize > 0 ? rawChunkSize : 250;
+    const yieldTask = options.yieldTask || (() => new Promise((resolve) => setTimeout(resolve, 0)));
+    const shouldCancel = options.shouldCancel || (() => false);
+    const classifier = createRecipientClassifier(chain, true);
+
+    for (let index = 0; index < entries.length; index += 1) {
+        if (index > 0 && index % chunkSize === 0) {
+            await yieldTask();
+            if (shouldCancel()) return null;
+        }
+        const entry = entries[index];
+        classifier.add(entry?.value, entry?.line);
     }
-    return { valid, invalid, duplicates, wrongNetwork };
+    return classifier.result();
 }
 
 /**
@@ -217,22 +306,30 @@ export function reconcileStoredList(expected, stored) {
     const want = Array.isArray(expected) ? expected.map((a) => String(a ?? '').trim()) : [];
     const got = Array.isArray(stored) ? stored : [];
     const gotExact = new Set();
-    const gotLower = new Set();
+    const gotBech32 = new Set();
     for (const row of got) {
         const s = String(
             (row && typeof row === 'object' ? (row.address ?? row.item ?? '') : row) ?? '',
         ).trim();
         if (!s) continue;
         gotExact.add(s);
-        gotLower.add(s.toLowerCase());
+        if (isValidBech32Address(s)) gotBech32.add(s.toLowerCase());
     }
-    const missing = want.filter((a) => a && !gotExact.has(a) && !gotLower.has(a.toLowerCase()));
+    const missing = want.filter((a) => a
+        && !gotExact.has(a)
+        && !(isValidBech32Address(a) && gotBech32.has(a.toLowerCase())));
     return {
         expectedCount: want.length,
         storedCount: gotExact.size,
         missing,
         ok: missing.length === 0,
     };
+}
+
+function isValidBech32Address(address) {
+    const lower = address.toLowerCase();
+    return /^(?:bc1|tb1|bcrt1|ltc1|tltc1|rltc1)/.test(lower)
+        && isValidAddressAnyNetwork(address);
 }
 
 function stripWrappingQuotes(s) {
@@ -243,19 +340,4 @@ function stripWrappingQuotes(s) {
         return s.slice(1, -1).trim();
     }
     return s;
-}
-
-function firstCell(line) {
-    // Minimal CSV cell extractor: takes everything before the first
-    // unquoted comma. Enough for addresses in the first column;
-    // doesn't try to parse every RFC 4180 edge case.
-    if (line.length === 0) return '';
-    if (line[0] === '"') {
-        const end = line.indexOf('"', 1);
-        if (end === -1) return line;
-        return line.slice(0, end + 1);
-    }
-    const comma = line.indexOf(',');
-    if (comma === -1) return line;
-    return line.slice(0, comma);
 }

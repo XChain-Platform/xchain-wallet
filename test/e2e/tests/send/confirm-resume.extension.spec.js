@@ -116,7 +116,7 @@ test.describe('Resuming a confirm the popup closed on (extension)', () => {
         await expect(sent, 'the resumed send reported no broadcast txid')
             .toContainText(/Transaction [0-9a-f]{64}/);
 
-        await reopened.getByRole('button', { name: 'Back' }).click();
+        await reopened.getByRole('button', { name: 'Back to home' }).click();
 
         // And the session is gone. This is the assertion that is about safety
         // rather than convenience: a surviving session would invite a second

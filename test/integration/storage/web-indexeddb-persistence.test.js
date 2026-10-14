@@ -405,11 +405,11 @@ describe('web vault persistence: kdfParams in localStorage', () => {
         expect(await new WebMetaBackend().load()).toBeNull();
     });
 
-    it('names the key when the stored JSON is corrupt, instead of throwing a bare SyntaxError', async () => {
+    it('refuses corrupt metadata instead of reading it as no wallet', async () => {
+        // The IndexedDB ciphertext may still need these exact KDF parameters,
+        // so malformed metadata surfaces as corruption rather than absence.
         globalThis.localStorage.setItem(DEFAULT_META_KEY, '{not json');
-        await expect(new WebMetaBackend().load()).rejects.toThrow(
-            new RegExp(`invalid JSON at key "${DEFAULT_META_KEY}"`),
-        );
+        await expect(new WebMetaBackend().load()).rejects.toMatchObject({ name: 'VaultCorruptError' });
     });
 
     it('clears the metadata', async () => {
@@ -419,14 +419,14 @@ describe('web vault persistence: kdfParams in localStorage', () => {
         expect(await meta.load()).toBeNull();
     });
 
-    it('explains itself when there is no localStorage (private-mode / SSR)', () => {
+    it('reports metadata storage as unavailable when there is no localStorage', async () => {
         const original = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
         Object.defineProperty(globalThis, 'localStorage', {
             value: undefined,
             configurable: true,
         });
         try {
-            expect(() => new WebMetaBackend()).toThrow(/localStorage is not available/);
+            await expect(new WebMetaBackend().load()).rejects.toMatchObject({ name: 'VaultUnavailableError' });
         } finally {
             if (original) Object.defineProperty(globalThis, 'localStorage', original);
             else delete globalThis.localStorage;

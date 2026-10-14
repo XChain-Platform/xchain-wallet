@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, Input, ListPage, ListRow, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -45,10 +45,15 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {() => void} [props.onOpenSharedLists]   shows "Shared lists" when passed
  * @param {() => void} props.onBack
  */
-export function MyLists({ walletId, activeAccountId, onOpenList, onCreateList, onCreateUnionList, onOpenSharedLists, onBack }) {
+export function MyLists(props) {
+    const { walletId, activeAccountId } = props;
+    const listKey = `${walletId}:${activeAccountId || ''}`;
+    return <MyListsScreen key={listKey} {...props} />;
+}
+
+function MyListsScreen({ walletId, activeAccountId, onOpenList, onCreateList, onCreateUnionList, onOpenSharedLists, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -59,21 +64,24 @@ export function MyLists({ walletId, activeAccountId, onOpenList, onCreateList, o
     const [listsByChain, setListsByChain] = useState(
         /** @type {Record<string, { loading: boolean, rows: any[], error: string | null }>} */ ({}),
     );
+    const [addressesReload, setAddressesReload] = useState(0);
+    const [listsReload, setListsReload] = useState(0);
     const [query, setQuery] = useState('');
     const [network, setNetwork] = useState('all');
 
     useEffect(() => {
         let cancelled = false;
+        setAddressesError(null);
         messaging.getAddressesByChain(walletId, activeAccountId)
             .then((byChain) => {
                 if (cancelled) return;
                 setAddressesByChain(byChain);
             })
-            .catch((err) => {
-                if (!cancelled) setAddressesError(err?.message || 'Failed to load addresses.');
+            .catch(() => {
+                if (!cancelled) setAddressesError('Failed to load addresses.');
             });
         return () => { cancelled = true; };
-    }, [walletId, messaging, activeAccountId]);
+    }, [walletId, messaging, activeAccountId, addressesReload]);
 
     useEffect(() => {
         if (!addressesByChain) return;
@@ -127,7 +135,7 @@ export function MyLists({ walletId, activeAccountId, onOpenList, onCreateList, o
             });
         }
         return () => { cancelled = true; };
-    }, [addressesByChain, messaging]);
+    }, [addressesByChain, messaging, listsReload]);
 
     const allRows = useMemo(() => {
         /** @type {any[]} */
@@ -148,7 +156,7 @@ export function MyLists({ walletId, activeAccountId, onOpenList, onCreateList, o
     const loadErrors = useMemo(() => (
         Object.entries(listsByChain)
             .filter(([, s]) => s.error)
-            .map(([cid, s]) => `${chainRegistry.get(cid)?.displayName || cid}: ${s.error}`)
+            .map(([cid, s]) => chainRegistry.get(cid)?.displayName || cid)
     ), [listsByChain]);
 
     const visibleRows = useMemo(() => {
@@ -168,17 +176,15 @@ export function MyLists({ walletId, activeAccountId, onOpenList, onCreateList, o
             onBack={onBack}
             backLabel="Back to home"
             titleIcon={<Icon.TokenListIcon />}
-            title="My Lists"
-            trailing={(onCreateList || onCreateUnionList || onOpenSharedLists) ? (
+            title="My lists"
+            // Only the round + belongs in the header: PageHeader styles every
+            // trailing button as a 38px circle, and the two text actions
+            // squeezed into circles spilled across the title at phone width.
+            // They live in the body's action row instead.
+            trailing={onCreateList ? (
                 <>
-                    {onOpenSharedLists ? (
-                        <Button variant="secondary" onClick={() => onOpenSharedLists()}>Shared lists</Button>
-                    ) : null}
-                    {onCreateUnionList ? (
-                        <Button variant="secondary" onClick={() => onCreateUnionList()}>Create union list</Button>
-                    ) : null}
                     {onCreateList ? (
-                        <button
+                        <Button
                             type="button"
                             className={local.addBtn}
                             onClick={() => onCreateList()}
@@ -186,39 +192,77 @@ export function MyLists({ walletId, activeAccountId, onOpenList, onCreateList, o
                             title="Create list"
                         >
                             <Icon.PlusIcon />
-                        </button>
+                        </Button>
                     ) : null}
                 </>
             ) : undefined}
         />
     );
-    const wrap = (children) => (
+    const secondaryActions = (onOpenSharedLists || onCreateUnionList) ? (
+        <div className={local.actions}>
+            {onOpenSharedLists ? (
+                <Button variant="secondary" size="sm" onClick={() => onOpenSharedLists()}>Shared lists</Button>
+            ) : null}
+            {onCreateUnionList ? (
+                <Button variant="secondary" size="sm" onClick={() => onCreateUnionList()}>Create union list</Button>
+            ) : null}
+        </div>
+    ) : null;
+
+    // Every state of the screen carries the secondary actions, as the
+    // header did before they moved out of it.
+    const wrap = (children, toolbar) => (
         <Screen variant={variant} header={header}>
-            <div className={isFull ? local.wrapFull : local.wrapPopup}>
+            <ListPage toolbar={toolbar}>
+                {secondaryActions}
                 {children}
-            </div>
+            </ListPage>
         </Screen>
     );
 
     if (addressesError) {
-        return wrap(<StatusMessage variant="error" className={styles.entryDescription}>{addressesError}</StatusMessage>);
+        return wrap(
+            <StatusMessage
+                variant="error"
+                className={styles.entryDescription}
+                recovery={{
+                    label: 'Try again',
+                    onAction: () => {
+                        setAddressesError(null);
+                        setAddressesByChain(null);
+                        setAddressesReload((value) => value + 1);
+                    },
+                }}
+            >
+                {addressesError}
+            </StatusMessage>,
+        );
     }
     if (!addressesByChain) {
-        return wrap(<p className={styles.entryDescription}>Loading addresses…</p>);
+        return wrap(
+            <div role="status" aria-label="Loading lists">
+                <Skeleton.List rows={5} />
+            </div>,
+        );
     }
     if (Object.keys(addressesByChain).length === 0) {
         return wrap(
-            <p className={styles.entryDescription}>
-                No addresses on any chain yet. Use Receive to generate one first, or Create list to publish your first.
-            </p>,
+            <EmptyState
+                title="No supported address"
+                body="Publishing a list requires an address on a supported chain."
+                titleAs="p"
+            />,
         );
     }
 
-    return wrap(
+    const toolbar = (
         <>
-            <div className={local.toolbar}>
-                <input
-                    type="text"
+            <div className={local.searchField}>
+                <Input
+                    type="search"
+                    size="md"
+                    enterKeyHint="search"
+                    autoCapitalize="off"
                     className={local.search}
                     placeholder="Search"
                     value={query}
@@ -228,37 +272,68 @@ export function MyLists({ walletId, activeAccountId, onOpenList, onCreateList, o
                     spellCheck={false}
                     aria-label="Search lists"
                 />
-                <NetworkFilterDropdown value={network} onChange={setNetwork} />
             </div>
+            <NetworkFilterDropdown value={network} onChange={setNetwork} />
+        </>
+    );
+
+    return wrap(
+        <>
             {loadErrors.length > 0 ? (
-                <StatusMessage variant="error" className={styles.entryDescription}>
-                    Couldn't load some lists. {loadErrors.join('; ')}
+                <StatusMessage
+                    variant="error"
+                    className={styles.entryDescription}
+                    recovery={{
+                        label: 'Try again',
+                        onAction: () => {
+                            setListsByChain({});
+                            setListsReload((value) => value + 1);
+                        },
+                    }}
+                >
+                    {/* Names the chains only: the raw fetch error carries API paths and
+                        HTTP codes that mean nothing to the user. */}
+                    Couldn't load your lists for {loadErrors.join(', ')}. Try again in a moment.
                 </StatusMessage>
             ) : null}
             {anyLoading && visibleRows.length === 0 ? (
-                <p className={styles.entryDescription}>Loading…</p>
-            ) : visibleRows.length === 0 ? (
-                <p className={styles.entryDescription}>
-                    {allRows.length === 0
-                        ? 'No lists published yet. Use Create list to publish your first (an address list for airdrops, or a token list for a project roster or gate).'
-                        : 'No lists match the current filter.'}
-                </p>
-            ) : (
-                <div className={local.list} role="list">
-                    {visibleRows.map((row) => (
-                        <ListRow
-                            key={`${row.chainId}:${row.action_index}`}
-                            row={row}
-                            onSelect={() => onOpenList(row.chainId, String(row.action_index))}
-                        />
-                    ))}
+                <div role="status" aria-label="Loading lists">
+                    <Skeleton.List rows={5} />
                 </div>
+            ) : loadErrors.length > 0 && allRows.length === 0 ? (
+                null
+            ) : visibleRows.length === 0 ? (
+                allRows.length === 0 ? (
+                    <EmptyState
+                        title="No lists yet"
+                        body="Create an address list for airdrops or a token list for project rosters and gates."
+                        actionLabel={onCreateList ? 'Create list' : undefined}
+                        onAction={onCreateList ? () => onCreateList() : undefined}
+                    />
+                ) : (
+                    <EmptyState title="No matching lists" body="Try a different search or network filter." titleAs="p" />
+                )
+            ) : (
+                <ul className={local.list} style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                    {visibleRows.map((row, index) => (
+                        <li
+                            key={`${row.chainId}:${row.action_index}`}
+                            style={{ borderTop: index === 0 ? 'none' : '1px solid var(--xc-border)' }}
+                        >
+                            <MyListRow
+                                row={row}
+                                onSelect={() => onOpenList(row.chainId, String(row.action_index))}
+                            />
+                        </li>
+                    ))}
+                </ul>
             )}
         </>,
+        toolbar,
     );
 }
 
-function ListRow({ row, onSelect }) {
+function MyListRow({ row, onSelect }) {
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
     const isTick = String(row.type) === '1';
     const isFork = row.list_action_index != null && row.list_action_index !== '';
@@ -269,43 +344,37 @@ function ListRow({ row, onSelect }) {
     const label = listLabel(index, row.name, kind);
     const ariaLabel = `Open ${listLabel(index, row.name, kind.toLowerCase())}`;
     return (
-        <button
+        <ListRow
             type="button"
             className={local.row}
-            role="listitem"
             onClick={onSelect}
             aria-label={ariaLabel}
-        >
-            <div className={local.iconWrap}>
-                <span className={local.iconLetter} aria-hidden="true">
-                    {isTick ? <Icon.TokenIcon /> : <Icon.AddressIcon />}
+            leading={(
+                <span className={local.iconWrap}>
+                    <span className={local.iconLetter} aria-hidden="true">
+                        {isTick ? <Icon.TokenIcon /> : <Icon.AddressIcon />}
+                    </span>
+                    {chainIconUrl ? (
+                        <img
+                            src={chainIconUrl}
+                            alt=""
+                            aria-hidden="true"
+                            title={chainRegistry.get(row.chainId)?.displayName}
+                            className={local.chainOverlay}
+                        />
+                    ) : null}
                 </span>
-                {chainIconUrl ? (
-                    <img
-                        src={chainIconUrl}
-                        alt=""
-                        aria-hidden="true"
-                        title={chainRegistry.get(row.chainId)?.displayName}
-                        className={local.chainOverlay}
-                    />
-                ) : null}
-            </div>
-            <div className={local.body}>
-                <div className={local.name}>
-                    {label}
-                </div>
-                <div className={local.subtitle}>
-                    {isFork
-                        ? `Forked from #${row.list_action_index} (${row.edit === '2' ? 'removed items' : 'added items'})`
-                        : 'Created list'}
-                </div>
-            </div>
-            <div className={local.trailing}>
+            )}
+            title={<span className={local.name}>{label}</span>}
+            subtitle={isFork
+                ? `Forked from #${row.list_action_index} (${row.edit === '2' ? 'removed items' : 'added items'})`
+                : 'Created list'}
+            trailing={(
                 <span className={`${local.status} ${valid ? local.status_valid : local.status_invalid}`}>
                     {valid ? 'Valid' : status}
                 </span>
-            </div>
-        </button>
+            )}
+        />
     );
 }
 

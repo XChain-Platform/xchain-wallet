@@ -599,8 +599,8 @@ assert.ok(
     /async function sdkBound\(\)\s*\{[\s\S]*?await sdkResolved;/.test(hostBridge),
     'hostBridge defines sdkBound(), which awaits sdkResolved',
 );
-const bindSites = hostBridge.match(/signerPool = new signersLib\.SignerPool\(\);/g) || [];
-const guardedBindSites = hostBridge.match(/await sdkBound\(\);\n\s*signerPool = new signersLib\.SignerPool\(\);/g) || [];
+const bindSites = hostBridge.match(/signerPool = new (?:signersLib\.)?SignerPool\(\);/g) || [];
+const guardedBindSites = hostBridge.match(/await sdkBound\(\);\n\s*signerPool = new (?:signersLib\.)?SignerPool\(\);/g) || [];
 assert.ok(bindSites.length >= 4, `expected the four signer-pool bind sites, found ${bindSites.length}`);
 assert.equal(
     guardedBindSites.length,

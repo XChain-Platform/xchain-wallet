@@ -61,7 +61,7 @@ assert.match(lockedSrc, /if \(remainingMs <= 0\) return undefined/, 'ticker no-o
 
 assert.match(
     lockedSrc,
-    /if \(busy \|\| password\.length === 0 \|\| isLockedOut\) return/,
+    /if \(unlockInFlightRef\.current \|\| busy \|\| password\.length === 0 \|\| isLockedOut\) return/,
     'submit aborted while locked out',
 );
 
@@ -84,8 +84,8 @@ assert.match(
 );
 assert.match(
     lockedSrc,
-    /Try again in \$\{formatCountdown\(nextRemaining\)\}/,
-    'error message names retry window when locked',
+    /nextRemaining > 0\s*\? null\s*: 'Incorrect password\.'/,
+    'field error yields to the live banner during lockout',
 );
 
 // --- input + button disabled while locked ------------------------------
@@ -121,6 +121,11 @@ assert.match(
     lockedSrc,
     /Math\.ceil\(ms \/ 1000\)/,
     'countdown rounds UP so it never shows 0 prematurely',
+);
+assert.match(
+    lockedSrc,
+    /totalSec === 1 \? 'second' : 'seconds'/,
+    'countdown uses plain-language time units',
 );
 
 // --- CSS slot ----------------------------------------------------------

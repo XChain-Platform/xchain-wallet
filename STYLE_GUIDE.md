@@ -2,6 +2,115 @@
 
 Living doc. The rule it exists to enforce: **if you find yourself copying CSS or JSX between two routes, lift it.** When in doubt, prefer one of the shared primitives below over re-rolling from scratch.
 
+The live catalog is the style guide page, served by the web dev server at `/style-guide/`. Its bar switches ordinary examples between Mobile (360px), Extension popup (400px) and Desktop (1024px) frames, and `?view=mobile|extension|desktop` in the URL opens a given view. Page-template examples instead show compact (360px), rail (768px), and full (1024px) widths together so the page gutter is visible at every layout tier.
+
+## Page templates
+
+**Every routed screen should be built from exactly one page template.** A screen is a `<Screen>` with a `<PageHeader>`, and its body is one `<FormPage>` or one `<ListPage>`. All of them come from `@xchain-wallet/core/ui`. The migration checklist at the end tracks routes that do not meet this rule yet.
+
+```jsx
+import { Screen, PageHeader, FormPage, FormSection, ListPage, EmptyState, SectionHeader } from '@xchain-wallet/core/ui';
+```
+
+| template | use it when the screen... | examples |
+|---|---|---|
+| `<FormPage>` | is a form the user fills in and submits | Send, rename, every action form, sign / verify |
+| `<FormPage sectioned>` + `<FormSection>` | is a long form whose fields fall into named groups | Issue token, Create dispenser, Create poll |
+| `<ListPage>` | shows things: a list, table, card grid, or read-only detail rows | Payments due, contacts, my tokens, polls, a dispenser's detail |
+
+Two parts go inside them: `<EmptyState>` is the one empty state (a list that loaded with nothing in it), and `<SectionHeader>` titles a group of content (it is also FormSection's heading). A detail screen with an Edit button is a ListPage; the edit screen it opens is a FormPage.
+
+### The page gutter and vertical rhythm
+
+`Screen.body` owns the only page inset. It applies `padding-inline: var(--xc-page-gutter)` and `padding-block-start: var(--xc-page-top)`. The responsive values are:
+
+| layout | `--xc-page-gutter` | `--xc-page-top` |
+|---|---:|---:|
+| compact, below 640px | 12px | 12px |
+| rail, 640px to 899px | 16px | 16px |
+| full, 900px and up | 24px | 16px |
+| short landscape, at any width | unchanged for its width | 8px |
+
+Page templates and route content do not add another outer horizontal inset. `ListPage` stretches across the complete content box. `FormPage` is bare below 600px and becomes one centered 560px card at 600px and up. The global `AppHeader`, `Screen.header`, and `Screen.footer` are chrome, not page content, so they keep their own padding and do not consume either page token.
+
+Use the semantic rhythm tokens at their named level: `--xc-label-gap` and `--xc-help-gap` (4px) inside a field, `--xc-form-gap` (16px) between fields, `--xc-section-gap` (24px) between form sections, and `--xc-space-8` (32px) for a page-level break between content groups. The page top inset always comes from `--xc-page-top`; do not recreate it with a first-child margin.
+
+**Do:** let `<Screen>` provide `--xc-page-gutter` and use `<FormPage>` or `<ListPage>` directly inside it. **Do not:** add `padding-inline: 16px` to a route wrapper or stack arbitrary `margin-top` values between fields.
+
+### The form rule: narrow is bare, wide is one card
+
+One rule on every platform (phone, extension popup, desktop app, browser), decided by **viewport width with a CSS media query at 600px**:
+
+- **Narrow, under 600px** (a phone, the 360 to 400px extension popup, a narrow desktop window): the form's fields sit bare on the page with only the page gutter. No card border, background or padding.
+- **Wide, 600px and up**: the form sits in one card, a centred column 560px wide.
+- **Long forms** are split into `<FormSection>`s inside `<FormPage sectioned>`: bare sections divided by their heading when narrow, a stack of section cards when wide.
+- **The action row** (`actions`) sits at the end of the form, after the last field or the last section card, and wraps. Each button grows to share the row, so a lone button is full width; put the primary action last so it lands on the right. Errors go in `status`, just above the actions.
+
+The breakpoint is a viewport media query, not a container query. Chrome 102, the oldest Android WebView engine we support, has no container queries. Do not choose the layout from the shell: a phone browser gets the narrow form and a wide desktop window gets the card. The sidebar nav appears at 640px, so 600 to 639px shows the bottom tab bar with a carded form; that is expected.
+
+**Do:** render the same `<FormPage>` markup at every width and let CSS make it bare or carded. **Do not:** branch on `screenVariantFor(shell)` or wrap wide forms in a route-local `.card`.
+
+### Viewport width scale
+
+Core CSS modules use this reviewed set of viewport widths. Choose the narrowest point that solves the layout problem instead of adding a nearby value.
+
+| width | use |
+|---|---|
+| `360px` | the extension popup width: fallbacks at or below the popup |
+| `400px` | extension-width detail layouts |
+| `420px` | narrow row and toolbar stacking |
+| `480px` | compact grids, dense controls and the header network badge |
+| `600px` | the form and narrow route boundary |
+| `640px` | rail layout and sidebar begin |
+| `900px` | full layout and labelled sidebar begin |
+| `48rem` | wide collectible grids |
+| `1024px` | desktop reference frame and future desktop-only refinements |
+
+The current CSS-module audit uses `360px`, `400px`, `420px`, `480px`, `600px`, `640px`, `900px`, and `48rem`. A below-breakpoint rule uses `not all and (min-width: N)` so the source names the real boundary without inventing `N - 1`. In particular, 600px remains on the wide side of the form rule. Values such as 359px, 399px, 599px, 601px, 639px, 899px, and 1023px are aliases, not additional breakpoints.
+
+### The list rule: full width to the scrollbar
+
+`<ListPage>` fills the Screen content box from `--xc-page-gutter` on the left to the page gutter and reserved scrollbar gutter on the right. Do not wrap it in a card or add a centered maximum width: lists, tables and card grids use all available content width at compact, rail, and full widths. The optional `toolbar` holds search, filter and sort; its first control takes the spare room and the rest wrap below it on a phone. Give a search box `type="search"` and an `aria-label`.
+
+### ListRow versus a card
+
+Use `<ListRow>` for repeated, full-width items that share one reading order: optional leading identity, title and subtitle, trailing value, then one row-level navigation or action. Use a card when one item is a self-contained content group with its own hierarchy, several related values, or multiple internal actions. A card is content inside a `ListPage`, not a replacement for the page template or page gutter.
+
+**Do:** render each history transaction as a `<ListRow title="Sent XCH" trailing="-12.50 XCH" onClick={openTransaction} />`. **Do not:** put every transaction in its own card, or compress a portfolio summary with several actions into one `ListRow`.
+
+### Props
+
+| component | props |
+|---|---|
+| `FormPage` | `onSubmit`, `actions`, `status`, `intro`, `sectioned`, `label` (accessible name), `noValidate` (default `true`), `className`, `ref` (the form), `children`, and other form attributes |
+| `FormSection` | `title`, `description`, `headingLevel` (`h2` default), `className`, `children` |
+| `ListPage` | `toolbar`, `intro`, `className`, `children`, and other root attributes such as `aria-label` |
+| `EmptyState` | `title`, `body` (one line), `icon`, `actionLabel` + `onAction`, `actionIcon`, `secondaryActionLabel` + `onSecondaryAction`, `secondaryActionIcon`, `titleAs` (`h2` default), `role` (`status` default), `className`, and other root attributes |
+| `SectionHeader` | `title`, `as` (`h2` default), `id`, `description`, `trailing`, `className` |
+
+```jsx
+// A form screen
+<Screen variant={variant} header={<PageHeader onBack={onBack} title="Verify signature" />}>
+    <FormPage
+        label="Verify signature"
+        onSubmit={handleSubmit}
+        status={error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
+        actions={<Button type="submit" variant="primary" loading={busy}>Verify signature</Button>}
+    >
+        <Input label="Address" ... />
+    </FormPage>
+</Screen>
+
+// A list screen with an empty state and a titled group
+<Screen variant={variant} header={<PageHeader onBack={onBack} title="Payments due" />}>
+    <ListPage toolbar={<input type="search" aria-label="Search payments" ... />}>
+        {rows.length === 0 ? <EmptyState title="No payments due" body="..." /> : <ul>...</ul>}
+        <SectionHeader title="Expired, awaiting settlement" />
+        <ul>...</ul>
+    </ListPage>
+</Screen>
+```
+
 ## Page chrome (secondary toolbar)
 
 Every routed screen has a secondary toolbar below the global AppHeader. It carries: a back chevron, a centered title (optionally with a route-action icon), and an optional trailing action slot.
@@ -28,101 +137,134 @@ return <Screen variant={variant} header={header}>{...}</Screen>;
 | prop | meaning |
 |---|---|
 | `onBack` | when set, renders a back chevron; omit to render a leading spacer |
+| `backLabel` | accessible label for the back button (`Back` default) |
 | `title` | centered title text |
 | `titleIcon` | optional inline icon to the left of the title (accent-colored) |
 | `backDisabled` | disables the back button while a submit is in flight; the chevron stays visible but inert |
-| `trailing` | optional right-side slot for page-scoped actions (filter, scan, etc.); buttons render as circular 38px controls |
+| `trailing` | optional right-side slot for page-scoped actions (filter, scan, etc.); buttons render as medium icon controls |
 
-**Why the chevron alignment is non-obvious**: AppHeader pads its bar by `space-3` while Screen.header pads by `space-4`, so the toolbar content starts 4px too far right. On top of that, the back chevron glyph sits about 10px inside its own 28px SVG (the `BackIcon` vertex is at 9/24 of the viewBox), so a box-aligned button still reads indented. `<PageHeader />` subtracts both via `margin-inline-start: calc(var(--xc-space-3) - var(--xc-space-4) - var(--xc-page-header-chevron-nudge))` so the chevron's point lands under the AppHeader logo's left edge. The trailing slot mirrors the bar-padding delta on the right, and its buttons render as circular 38px controls (the round counterpart to AppHeader's square menu buttons) so their right edges line up with the App header buttons.
+**Why the chevron alignment is non-obvious**: AppHeader and Screen.header are chrome with their own padding; neither uses `--xc-page-gutter`. `<PageHeader />` uses mirrored medium control lanes, aligns their boxes to the content edges, and centres each icon inside its control. This keeps the title centred without shifting the chevron inside its button.
 
 ## Buttons
 
-Use `<Button>` from `@xchain-wallet/core/ui` for anything button-shaped. Variants: `primary` (filled accent), `ghost` (transparent). Pass `loading` for spinner state.
+Use `<Button>` from `@xchain-wallet/core/ui` for anything button-shaped. Variants: `primary` (the one action the screen exists for), `secondary` (a second real action), `ghost` (cancel, back out, less-used actions), `danger` (destroys or spends irreversibly), `success` (approve a pending request). Sizes follow the shared `sm` / `md` / `lg` control scale below. `block` makes it full width, `loading` shows a spinner and disables it, `disabled` disables it, and `type` defaults to `button` so it never submits by accident. `icon` accepts a node; omit it to select an icon from a static string label or pass `null` to suppress that automatic icon. Other native button attributes pass through. A variant name outside this list retains the base Button layout and size but has no variant color styling, so treat it as invalid. The style guide's Buttons section shows every supported combination.
+
+For dialogs use the shared `NoticeModal` (one OK) from `@xchain-wallet/core/shared/components/NoticeModal.jsx` and `ConfirmModal` (Cancel / Confirm, `danger` for destructive confirms) from `@xchain-wallet/core/shared/components/ConfirmModal.jsx`, never `alert()` or `confirm()`.
 
 For icon-only buttons inside layouts (e.g. an action overlaid in an input box), a plain `<button>` is fine, but make it transparent (no background, no border) so it reads as an icon affordance, not a tappable rectangle. The hover state should change icon color only, not paint a fill.
 
+### Control sizes: sm, md and lg
+
+Buttons and field primitives share one visual height scale. Pass the component's `size` prop instead of copying a height or padding rule, and keep controls that sit in the same row on the same size.
+
+| size | token and height | use it when | do | do not |
+|---|---|---|---|---|
+| `sm` | `--xc-control-h-sm`, 28px (36px on touch) | a compact secondary control sits in a dense toolbar, table row, or filter cluster | `<Button size="sm">Clear</Button>` | shrink the primary submit action or an ordinary form field just to fit more content |
+| `md` | `--xc-control-h-md`, 36px (44px on touch) | the control is a normal button, field, select, tab, or segmented choice; this is the default | omit `size` on a routine `<Input label="Memo" />` | invent a nearby route-local height such as 40px |
+| `lg` | `--xc-control-h-lg`, 44px (48px on touch) | the control is the main entry or prominent action in a focused flow | use `size="lg"` for Send's To and Amount fields | make every field large or mix `lg` and `md` in one aligned field stack |
+
+On coarse-pointer or no-hover devices the tokens step up to 36/44/48px, so touch controls meet the 44px target at the default size. The painted `sm` control can also have a larger transparent pointer target there. Do not increase its visible height to manufacture a touch target.
+
 ## Inputs
 
-Use `<Input>` from `@xchain-wallet/core/ui` for everything single-line. Pass-through props (`type`, `inputMode`, `autoComplete`, `style`) all forward to the underlying `<input>`. Pass `label` / `hint` / `error` for the labeled-input pattern.
+Use `<Input>` from `@xchain-wallet/core/ui` for everything single-line. Pass-through props (`type`, `inputMode`, `autoComplete`, `style`) all forward to the underlying `<input>`. Pass `label` / `hint` / `error` for the labeled-input pattern. Its `size` prop is `sm` (28px), `md` (36px, default), or `lg` (44px with a weightier label), stepping up to 36/44/48px on touch. `Select`, `Textarea`, `AmountField`, `AddressCombobox`, `ChainPicker`, and `NetworkFilter` use the same size contract.
 
-**Primary entry inputs** (the To / Amount fields on Send) get the "big field" treatment:
+**Primary entry inputs** (the To / Amount fields on Send) use `size="lg"`:
 
 ```jsx
-style={{
-    fontSize: 'var(--xc-text-lg)',
-    padding: 'var(--xc-space-3) var(--xc-space-4)',
-    minHeight: '48px',
-}}
+<Input label="Amount" size="lg" />
 ```
 
-Don't use inline styles for normal inputs; keep the bump reserved for the few fields the user is most likely to interact with on a page.
+Use `md` for normal inputs. Do not duplicate the `lg` font, padding, or height with inline styles.
+
+## Selection controls
+
+### Chip versus SegmentedControl versus Tabs
+
+Choose these by what the selection changes, not by which shape fits the available space.
+
+| control | use it when | do | do not |
+|---|---|---|---|
+| `<Chip>` | a compact filter or preset can be toggled, or short metadata needs a static pill | use toggle chips for a Watchlist filter and a static chip for `BTC / LTC` | use a chip for a submit action or page navigation |
+| `<SegmentedControl>` | exactly one of two or three short options sets an inline mode or view of the same content | use `Grouped / Flat` for history grouping | use it for independent booleans, long labels, or unrelated actions |
+| `<Tabs>` | the choice replaces the primary panel inside the current routed page | use `Balances / Activity / DeFi` above one connected tab panel | use tabs as data filters, nest tab strips, or place them in `PageHeader` |
+
+### Checkbox versus Switch versus RadioGroup
+
+Use `<ChoiceControl>` for the checkbox and radio inputs. A settings switch is the switch treatment shown by `ToggleRow`; it remains a checkbox in the DOM with `role="switch"`.
+
+| control | use it when | do | do not |
+|---|---|---|---|
+| Checkbox | each boolean can be selected independently, or an acknowledgement is submitted with a form | use checkboxes for `Include spam` and `Include testnet` when either, both, or neither may be checked | use checkboxes when exactly one answer is required |
+| Switch | one independent setting takes effect immediately when toggled | use a switch for `Hide balances` and save the change on toggle | use a switch for a choice that waits for a Save or Continue action |
+| RadioGroup | exactly one answer from a visible set is submitted as one form value | use a labelled group for `Low / Normal / Fast` default fee priority | use radios for multiple selections or hide a long option list behind dozens of radio rows |
+
+### Required and optional fields
+
+Mark optional fields, not required fields. Required fields use their plain label, while every optional field ends with the exact suffix `(optional)`. Do not mix this with `(required)` markers, and keep units outside the marker: `Feed fee (%) (optional)`, not `Feed fee (optional, %)`.
+
+`Input`, `Select`, and `Textarea` expose the matching requirement through `aria-required`. A plain string label is required by default. Use the `optional` prop when a field is optional, especially when its base label is translated or dynamic; the component appends the suffix and sets `aria-required="false"`. Existing literal labels ending in `(optional)` receive the same accessibility state. The native `required` prop remains available when browser constraint validation is appropriate.
+
+```jsx
+<Input label="Account name" />
+<Input label={t('send.memo')} optional />
+<Select label="Network" value={chainId}>…</Select>
+```
 
 ## Amount field (with USD / coin swap)
 
-The Send screen's amount input is the standard layout for any field that takes a transferable value. Three behaviors to reproduce when adding one elsewhere:
+Use `<AmountField>` from `@xchain-wallet/core/shared/components/AmountField.jsx` for a transferable coin or token amount. It composes the shared `Input`, live thousand-separator formatting, an optional inline Max button, the coin / fiat swap footer, and optional balance text. It defaults to `size="md"`; Send and other hero screens pass `size="lg"`.
 
-1. **Big-field styling** (the `style={…}` block above).
-2. **Inline Max button** absolutely-positioned over the right padding of the input, never as a sibling that takes its own row.
-3. **Live thousand-separator formatting**, with the canonical comma-free value stored in state. Use the `formatWithThousands` helper + the `countNonCommaBefore` / `indexAfterNonCommaCount` pair from `Send.jsx` so the cursor doesn't fling around as commas appear/disappear.
-4. **Unit-swap footer**: a small button in the footer's left slot showing the derived value in the *other* unit ("≈ 12,345.67 USD" while typing coin, "≈ 0.001 BTC" while typing fiat). Tap to swap which unit is the input. Use `Icon.SwapIcon` for the affordance. Disabled / hidden when no `fiatRate` is available.
-5. **Footer right** carries contextual hint ("X TICK available", "Loading…", "Balance unavailable"). Optional, but if present, keep it on the right so the swap button stays anchored on the left.
+The parent owns the values and conversion. `amount` is the canonical coin-scale string. In fiat mode, preserve the user's exact text in `fiatAmount` and derive `amount` with `fiatToCoin` on every keystroke. `onAmountFieldChange` receives the raw displayed value and cursor position. The reusable cursor helpers live in `packages/core/src/shared/utils/amountFormat.js`: `formatWithThousands`, `countNonCommaBefore`, and `indexAfterNonCommaCount`.
+
+`fiatRate` enables the unit-swap footer, which shows the derived value in the other unit. Without a rate, the swap control is hidden. `balanceText` fills the footer's right side with context such as "X TICK available", "Loading…", or "Balance unavailable". Omit `onMax` when Max is not meaningful; use `maxDisabled` and `maxBusy` while it cannot run.
 
 ```jsx
-<div className={`${styles.amountBlock} ${styles.bigField}`}>
-    <div className={styles.amountFieldWrap}>
-        <Input
-            ref={amountInputRef}
-            label={`Amount (${activeUnit})`}
-            inputMode="decimal"
-            value={formatWithThousands(inputValue)}
-            onChange={(e) => onAmountFieldChange(e.target.value, e.target.selectionStart)}
-            style={{ /* big-field bump */ }}
-        />
-        <button type="button" className={styles.amountMaxInline} onClick={onMax}>
-            Max
-        </button>
-    </div>
-    <div className={styles.amountFooter}>
-        <button type="button" className={styles.amountUnitSwap} onClick={toggleAmountInputMode}>
-            <Icon.SwapIcon /><span>{derivedText}</span>
-        </button>
-        <span className={styles.amountFooterRight}>{availableText}</span>
-    </div>
-</div>
+import { AmountField } from '@xchain-wallet/core/shared/components/AmountField.jsx';
+
+<AmountField
+    size="lg"
+    amount={amount}
+    fiatAmount={fiatAmount}
+    tick={tick}
+    fiatRate={fiatRate}
+    fiatCurrency={fiatCurrency}
+    amountInputMode={amountInputMode}
+    onAmountFieldChange={onAmountFieldChange}
+    toggleAmountInputMode={toggleAmountInputMode}
+    inputRef={amountInputRef}
+    onMax={onMax}
+    maxDisabled={!spendableBalance}
+    maxBusy={maxBusy}
+    balanceText={availableText}
+/>
 ```
 
-**Canonical state rule:** whatever the user is typing in (fiat or coin), the value submitted to the network is always coin-scale. Keep a `fiatAmount` string for fidelity-of-display when the user is in fiat mode, and derive the canonical `amount` via `fiatToCoin` on every keystroke. Don't round-trip the user's typed string through the converter for re-display; that loses trailing zeros and disturbs the cursor.
+Do not round-trip the user's typed fiat string through the converter for display. That loses trailing zeros and disturbs the cursor.
 
 ## "To" field (recipient address)
 
-Use `<AddressCombobox>` from `@xchain-wallet/core/ui`; it ships the autocomplete dropdown for contacts and recent recipients. Wrap it in the same `.bigField` treatment as Amount, and overlay any single quick action (address-book opener, QR scanner) as an absolutely-positioned button in the input's right padding, the same pattern Max uses on Amount.
+Use `<AddressCombobox>` from `@xchain-wallet/core/ui`; it ships the autocomplete dropdown for contacts and recent recipients. It accepts the shared `size` prop and owns one optional trailing action through `icon`, `onIconClick`, and `iconLabel`. Use `icon="contacts"` for the address-book action or `icon="addresses"` for an own-address picker.
 
 ```jsx
-<div className={`${styles.toFieldWrap} ${styles.bigField}`}>
-    <AddressCombobox
-        label="To"
-        value={toAddress}
-        onChange={(e) => setToAddress(e.target.value)}
-        onPaste={onAddressPaste}
-        suggestions={suggestions}
-        placeholder="Enter or paste an address or name…"
-        style={{ /* big-field bump, paddingRight ~52px */ }}
-    />
-    <button
-        type="button"
-        className={styles.inlineContactsButton}
-        onClick={openAddressBook}
-        aria-label="Open address book"
-    >
-        <Icon.BookIcon />
-    </button>
-</div>
+<AddressCombobox
+    size="lg"
+    icon="contacts"
+    iconLabel="Open address book"
+    onIconClick={openAddressBook}
+    label="To"
+    value={toAddress}
+    onChange={(e) => setToAddress(e.target.value)}
+    onPaste={onAddressPaste}
+    suggestions={suggestions}
+    placeholder="Enter or paste an address or name…"
+/>
 ```
 
 **Rules:**
 - Always pass `suggestions`; it's what makes the combobox useful. Source them from contacts + recent send history scoped to the active chain.
 - Treat paste as a special event (`onPaste`) so you can run paste-time validation (chain match, novelty check) before the value lands in state.
-- Reserve right-padding (~52px per action) for inline buttons; do NOT stack icon buttons as siblings outside the input; they break the input's hit target.
+- Let `AddressCombobox` reserve the right padding and position its icon action. Do not wrap it in another absolutely-positioned button.
 - One inline action max (the most-used: typically Address Book). If you have multiple secondary actions (scan, paste-from-clipboard, etc.), move them to the toolbar's trailing slot or behind a `MoreIcon` overflow.
 
 ## Fee selector
@@ -178,33 +320,87 @@ The icon set lives in `packages/core/src/ui/icons/`. Most action icons are lucid
 | Concept | Icon | Lucide source |
 |---|---|---|
 | Send | `SendIcon` | `Send` (paper airplane) |
-| Receive | `ReceiveIcon` | hand-rolled (down arrow into tray) |
+| Receive | `ReceiveIcon` | `ArrowDownToLine` |
 | Scan a QR | `CameraIcon` | hand-rolled (camera body + lens) |
 | Address book / contacts | `BookIcon` | `BookOpen` |
 | Filter | `FilterIcon` | `Filter` (funnel) |
 | Search | `SearchIcon` | hand-rolled |
-| More / menu | `MoreIcon` | hand-rolled (horizontal dots) |
+| More / menu | `MoreIcon` | `MoreHorizontal` |
 | Settings | `GearIcon` | hand-rolled |
 | Lock / Unlock | `LockIcon` / `UnlockIcon` | hand-rolled |
 
-**Adding a new icon**: import the lucide source at the top of `icons/index.jsx`, wrap it in a thin export that passes `LUCIDE_PROPS` (matches the wallet's 18×18 size + stroke). Don't pull the icon directly at call sites; keep the indirection so we can swap one glyph for another without touching every route.
+**Adding a new icon**: import the lucide source at the top of `icons/index.jsx`, wrap it in a thin export that passes `LUCIDE_PROPS`, and include `data-xc-icon`. Don't pull the icon directly at call sites; keep the indirection so we can swap one glyph for another without touching every route.
 
-## Spacing + typography tokens
+Shared icons are sized by the `svg[data-xc-icon]` rule in `tokens.css`. A component selects a named size by setting `--xc-icon-size`; the rule defaults to `--xc-icon-md`. Keep literal pixel fallbacks in SVG `width`, `height`, or Lucide `size` props. Never put `var()` in an SVG sizing attribute because Chrome 102 can render the icon at its 300px default instead.
 
-Defined in `packages/core/src/ui/tokens.css`. Always use the token, never raw px values, so dark-mode / theme overrides apply uniformly.
+## Design tokens
 
-| Token | Approx value | Use for |
+Defined in `packages/core/src/ui/tokens.css`. Use the token instead of repeating its raw value in component styles, so theme and accessibility overrides apply uniformly.
+
+### Spacing and typography
+
+| Token | Value | Use for |
 |---|---|---|
 | `--xc-space-1` | 4px | gap inside compact controls |
 | `--xc-space-2` | 8px | gap between sibling controls |
-| `--xc-space-3` | 12px | section padding, default field margin |
-| `--xc-space-4` | 16px | input padding (big-field) |
-| `--xc-space-6` | 32px | card outer padding |
-| `--xc-text-xs` | 0.75rem | metadata, hint text |
-| `--xc-text-sm` | 0.875rem | labels, default body |
-| `--xc-text-md` | 1rem | body text |
-| `--xc-text-lg` | 1.125rem | big-field input text, section titles |
-| `--xc-text-xl` | 1.25rem | hero token name, page H1 |
+| `--xc-space-3` | 12px | compact card and tab padding |
+| `--xc-space-4` | 16px | large-input horizontal padding |
+| `--xc-space-5` | 20px | loose cluster spacing |
+| `--xc-space-6` | 24px | card outer padding |
+| `--xc-space-8` | 32px | section breaks and page-level rhythm |
+| `--xc-form-gap` | `var(--xc-space-4)` | gap between form fields |
+| `--xc-label-gap` | `var(--xc-space-1)` | gap from a field label to its control |
+| `--xc-help-gap` | `var(--xc-space-1)` | gap from a control to help or error text |
+| `--xc-section-gap` | `var(--xc-space-4)` | gap between form sections and list page blocks |
+| `--xc-section-header-gap` | `var(--xc-space-2)` | gap from a section header to its content |
+| `--xc-list-row-padding` | `var(--xc-space-3)` | inset inside a list row |
+| `--xc-page-gutter` | 12px compact, 16px rail, 24px full | the sole inline page inset, applied by `Screen.body` |
+| `--xc-page-top` | 12px compact, 16px rail/full, 8px short landscape | the sole page-content top inset, applied by `Screen.body` |
+| `--xc-text-xs` | 0.6875rem | metadata, hint text |
+| `--xc-text-sm` | 0.8125rem | labels, secondary body text |
+| `--xc-text-md` | 0.875rem | default body text and button labels |
+| `--xc-text-lg` | 1rem | large-input text, section titles, page title |
+| `--xc-text-xl` | 1.25rem | asset hero name, panel headings |
+| `--xc-text-2xl` | 1.5rem | hero figures and prominent asset tickers |
+| `--xc-control-h-sm` | 28px | compact control visual height; 36px on touch |
+| `--xc-control-h-md` | 36px | default control visual height; 44px on touch |
+| `--xc-control-h-lg` | 44px | hero control visual height; 48px on touch |
+| `--xc-control-font` | `var(--xc-text-md)` | shared control text |
+| `--xc-control-pad-x` | `var(--xc-space-3)` | shared control inline padding |
+
+### Icon sizes, radii, shadows and stacking
+
+| Token | Value |
+|---|---|
+| `--xc-icon-xs` | 14px |
+| `--xc-icon-sm` | 16px |
+| `--xc-icon-md` | 18px |
+| `--xc-icon-lg` | 20px |
+| `--xc-icon-xl` | 24px |
+| `--xc-radius-sm` | 4px |
+| `--xc-radius-md` | 8px |
+| `--xc-radius-lg` | 12px |
+| `--xc-radius-pill` | 9999px |
+| `--xc-control-radius` | `var(--xc-radius-md)` |
+| `--xc-badge-height-sm` | 24px |
+| `--xc-badge-height-md` | 32px |
+| `--xc-badge-radius` | `var(--xc-radius-pill)` |
+| `--xc-badge-font-size-sm` | `var(--xc-text-xs)` |
+| `--xc-badge-font-size-md` | `var(--xc-text-sm)` |
+| `--xc-badge-font-weight` | 700 |
+| `--xc-badge-icon-size-sm` | `var(--xc-icon-sm)` |
+| `--xc-badge-icon-size-md` | `var(--xc-icon-xl)` |
+| `--xc-badge-gap` | `var(--xc-space-1)` |
+| `--xc-badge-padding-inline-sm` | `var(--xc-space-2)` |
+| `--xc-badge-padding-inline-md` | `var(--xc-space-3)` |
+| `--xc-shadow-sm` | 0 1px 2px rgba(15, 23, 42, 0.06) |
+| `--xc-shadow-md` | 0 4px 12px rgba(15, 23, 42, 0.08) |
+| `--xc-z-base` | 1 |
+| `--xc-z-sticky` | 20 |
+| `--xc-z-dropdown` | 50 |
+| `--xc-z-overlay` | 60 |
+| `--xc-z-modal` | 1000 |
+| `--xc-z-toast` | 9999 |
 
 ## Colors
 
@@ -218,36 +414,39 @@ Same source: `tokens.css`. Highlights:
 | `--xc-surface` / `--xc-surface-raised` | card backgrounds |
 | `--xc-bg-muted` | hover backgrounds |
 | `--xc-border` / `--xc-border-strong` | hairlines |
-| `--xc-danger` / `--xc-warning` | error / warning states |
+| `--xc-danger`, `--xc-danger-fg`, `--xc-danger-bg`, `--xc-danger-text`, `--xc-on-danger` | danger actions, glyphs, tinted panels, panel text and text on danger fills |
+| `--xc-info`, `--xc-info-bg`, `--xc-info-text` | informational accents, tinted panels and panel text |
+| `--xc-warning`, `--xc-warning-bg`, `--xc-warning-text` | warning accents, tinted panels and panel text |
+| `--xc-success`, `--xc-success-fill`, `--xc-success-bg`, `--xc-on-success` | success glyphs, fills, tinted panels and text on success fills |
 
-Never hard-code hex. Use `color-mix(in srgb, var(--xc-accent-primary) 70%, white 30%)` for hover tints; that pattern is in the existing `.back:hover` rule and survives theme swaps.
+Do not hard-code interface colors in components. Use tokens, or `color-mix(in srgb, var(--xc-accent-primary) 70%, white 30%)` for a derived hover tint; that pattern is in the existing `.back:hover` rule and survives theme swaps. Token definitions, encoded image data, and data-driven semantic palettes are the places where literal color values belong.
 
-## Asset selector (tap to repick)
+## UI copy
 
-Whenever a screen has a currently-selected coin/token that the user may want to change, the affordance routes back to the picker (`ReceivePicker` / `SendPicker`). Two layout variants exist; pick the one that fits the screen, **and the click target follows from the layout**:
+Use sentence case for page titles, headings, buttons, menu items, field labels and status messages. Preserve the normal spelling of proper nouns, tickers and initialisms.
 
-**Horizontal "asset card"**, used on Receive. Gray card row with the icon on the left, primary name + secondary tick or network kind on the right, a `›` chevron pinned right. **Whole card is the button**: the icon, the name area, the chevron, the empty padding all navigate. Discoverable as "this row is a picker", consistent with picker rows elsewhere (BalanceList).
+In user-facing copy, say **recovery phrase**, not seed phrase or mnemonic, and **network fee**, not transaction fee, miner fee or gas fee. Protocol-specific fees remain distinct from the network fee.
+
+## Browser baseline
+
+Chrome 102 is the oldest supported Android WebView engine. CSS and SVG must keep working there: use viewport media queries instead of container queries, guard newer viewport units with `@supports`, and never use `var()` in SVG sizing attributes.
+
+## Asset selectors (tap to repick)
+
+Use `<TokenField>` from `@xchain-wallet/core/shared/components/TokenField.jsx` for the normal in-form asset selector. It is a field-shaped button that displays the selected `{ chainId, tick }`, `TickerIcon`, chain name, and a trailing token-list icon. The entire field opens the host-owned `TokenPicker`. It accepts `label` (`Token` default), `size` (`md` default or `lg`), `value`, `onOpenPicker`, `placeholder`, `disabled`, `error`, and `id`.
 
 ```jsx
-<button
-    type="button"
-    className={styles.assetCard}
-    onClick={onChangeAsset}
-    aria-label={`Change asset (currently ${assetName})`}
->
-    <span className={styles.assetIconWrap}>
-        <img className={styles.assetIcon} src={assetImageUrl} alt="" />
-        {/* token rows also overlay a small chain pip, see Receive.jsx */}
-    </span>
-    <span className={styles.assetText}>
-        <span className={styles.assetName}>{assetName}</span>
-        {isToken ? <span className={styles.assetSub}>{tick}</span> : null}
-    </span>
-    <span className={styles.assetChevron} aria-hidden="true">›</span>
-</button>
+<TokenField
+    label="Token"
+    size="lg"
+    value={{ chainId, tick }}
+    onOpenPicker={openTokenPicker}
+/>
 ```
 
-**Vertical "asset hero"**, used on Send. Large icon centered above a bold name. **Only the icon is tappable**: the name and surrounding whitespace stay inert. A hero element fills the row and would otherwise turn the entire top of the form into a navigation trap; scoping the hit target to the circular icon keeps the safe zone large.
+`TokenField` resolves the token art, chain pip, and letter fallback through the shared `TickerIcon`, so routes should not duplicate that chain. Creating a new ticker remains a free-text `Input`; a token fixed by route context should use the read-only `LockedTokenContext` instead.
+
+**Vertical asset hero**, used on Send, is the deliberate exception. A large icon is centered above a bold name, and only the icon is tappable. The name and surrounding whitespace stay inert. A hero element fills the row and would otherwise turn the entire top of the form into a navigation trap; scoping the hit target to the circular icon keeps the safe zone large.
 
 ```jsx
 <div className={styles.heroWrap}>
@@ -263,18 +462,14 @@ Whenever a screen has a currently-selected coin/token that the user may want to 
 </div>
 ```
 
-**Rule of thumb for new screens:**
-- A bounded card with content packed edge-to-edge and a visible chevron: make the whole card the button (horizontal variant).
-- A standalone hero centered on its own row with airy whitespace: make only the icon the button (vertical variant).
-
-**Rules for both variants:**
+**Hero rules:**
 
 - The icon image renders with `object-fit: contain` and **no `border-radius`** on the image itself, so the published art keeps its shape (round / square / odd). Any focus ring goes on the wrapper, not the image.
-- Native rows: image source is `branding.chainIconLargeUrl(descriptor.id)`. Non-native token rows: image source is the token's `imageUrl`, with `branding.chainIconSmallUrl(descriptor.id)` overlaid bottom-right as a small "pip" so the chain is still visible.
+- Native assets use `branding.chainIconLargeUrl(descriptor.id)`. Non-native tokens use the token's `imageUrl`, with `branding.chainIconSmallUrl(descriptor.id)` overlaid bottom-right as a small "pip" so the chain is still visible.
 - If no image is available, fall back to a colored letter chip tinted via `tickerColor(tick)` (exported from `BalanceList.jsx`).
-- The handler should always navigate to the picker (clear prefill, push `'<route>-picker'`). This stays true regardless of how the user arrived at the screen; a discoverable single-purpose action.
+- The host owns picker navigation and writes the selected `{ chainId, tick }` back into route state. Preserve the rest of the form state across that round trip.
 
-If a route needs an asset selector and you find yourself re-rolling the icon-resolution + chain-pip + fallback chain, lift it into a shared component before writing it a third time.
+If a route needs an asset selector, use `TokenField` or the existing Send hero rather than reimplementing icon resolution, the chain pip, and fallback behavior.
 
 ## When you can't reach for a primitive
 
@@ -282,7 +477,11 @@ If you genuinely need a one-off layout that doesn't fit any existing pattern, **
 
 ## Migration status
 
-- [x] `<PageHeader />` exists and is exported from `@xchain-wallet/core/ui`.
-- [ ] All existing routes use `<PageHeader />`. Migration tracked in TODO.md.
+- ✅ `<PageHeader />` exists and is exported from `@xchain-wallet/core/ui`.  
+- ⬜ All existing routes use `<PageHeader />`.  
+- ✅ Page templates (`FormPage`, `FormSection`, `ListPage`, `EmptyState`, `SectionHeader`) exist, are exported from `@xchain-wallet/core/ui`, and have style guide sections.  
+- ✅ Proof conversions: Verify signature (`FormPage`), Payments due (`ListPage` + `EmptyState` + `SectionHeader`), Agent accounts (`ListPage` + `EmptyState`).  
+- ⬜ Every remaining routed screen is built from one template. Converting a screen means: drop the `isFull ? styles.card` / `listCard` / `wrapFull` wrapper, put the body in the template, move errors into `status` and buttons into `actions`, and replace any per-route empty block with `EmptyState`.
+- ✅ Application callers use `EmptyState`; `EmptyStateNudge` remains only as an unused downstream-compatibility export.
 
-When you touch a route that still rolls its own header, please convert it. That's how the codebase converges over time without anyone having to do a big-bang refactor.
+When you touch a route that still rolls its own header, card or empty state, please convert it. That's how the codebase converges over time without anyone having to do a big-bang refactor.

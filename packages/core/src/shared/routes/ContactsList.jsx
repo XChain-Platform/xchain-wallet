@@ -9,15 +9,21 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, EmptyState, FormPage, Icon, Input, ListPage, ListRow, PageHeader, Screen, SectionHeader, Select, Skeleton, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
+import { useFocusTrap } from '../utils/focusTrap.js';
+import { useBackHandler } from '../../ui/backStack.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useToast } from '../components/ToastHost.jsx';
 import { NETWORK_OPTIONS, NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { ConfirmModal } from '../components/ConfirmModal.jsx';
+import { IdentityAvatar } from '../components/WalletIdentity.jsx';
 import { useConfirmModal } from '../hooks/useConfirmModal.js';
+import { useFormLeaveGuard } from '../hooks/useFormLeaveGuard.js';
 import { isValidAddressAnyNetwork, detectAddressChain } from '../utils/addressValidation.js';
 import { coinFamilyFor as chainFor, contactEntryChain as resolvedChain } from '../utils/contactChain.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { shareOrCopy, ShareOutcome } from '../share.js';
 import { ScanRoute } from './ScanRoute.jsx';
 import {
     compareContactsByName,
@@ -25,21 +31,43 @@ import {
     duplicateNameGroups,
     findContactByName,
     mergeContactGroup,
-    withEntriesAdded,
 } from '../utils/contactMerge.js';
 import styles from './IssueTokenForm.module.css';
 import picker from './ContactsList.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const CONTACTS_SORT_STORAGE_KEY = 'xc:contacts:sort';
+
+function contactsSortStorageKey(walletId) {
+    return `${CONTACTS_SORT_STORAGE_KEY}:${walletId || 'none'}`;
+}
+
+function readContactsSort(walletId) {
+    try {
+        return globalThis.localStorage?.getItem(contactsSortStorageKey(walletId)) === 'newest'
+            ? 'newest'
+            : 'name';
+    } catch {
+        return 'name';
+    }
+}
+
+function persistContactsSort(walletId, value) {
+    try {
+        globalThis.localStorage?.setItem(contactsSortStorageKey(walletId), value);
+    } catch {
+        // Storage can be unavailable in privacy-restricted shells.
+    }
+}
 
 /**
- * Small round coin badge for a contact entry's chain. Shows the network
- * icon when the chain is recognized, or a question-mark-in-a-circle when
- * the address format could not be matched to a known network ('unknown').
+ * Chain icon for a contact entry. The address selects the matching descriptor,
+ * while unknown formats keep the question-mark fallback.
  */
-function ChainCoinIcon({ chain }) {
-    const opt = NETWORK_OPTIONS.find((n) => n.value === chain);
-    if (opt) return <img src={opt.iconUrl} alt={opt.label} className={picker.chainIcon} />;
+function ChainCoinIcon({ chain, address }) {
+    const chainId = chainIdFor(chain, address);
+    const descriptor = chainId ? chainRegistry.get(chainId) : null;
+    if (descriptor) return <ChainBadge descriptor={descriptor} size="sm" />;
     return (
         <span className={picker.unknownIcon} aria-label="Unknown network" title="Unknown network">?</span>
     );
@@ -72,7 +100,6 @@ function ChainCoinIcon({ chain }) {
 export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPrefill, onScanPrefillConsumed, onOpenBackup }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
     const { showToast } = useToast();
     const confirmDialog = useConfirmModal();
 
@@ -85,10 +112,11 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     // happen. Dismissal lasts for this visit only: the edits stay unpublished.
     const [unpublished, setUnpublished] = useState(0);
     const [nudgeDismissed, setNudgeDismissed] = useState(false);
-    const refreshUnpublished = useCallback(async () => {
+    const refreshUnpublished = useCallback(async (isCurrent = () => true) => {
         if (typeof messaging?.labelSyncStatusRequest !== 'function') return;
         try {
             const s = await messaging.labelSyncStatusRequest();
+            if (!isCurrent()) return;
             const count = Number(s?.batch?.changeCount ?? s?.changeCount ?? 0);
             setUnpublished(s?.due || s?.pending ? Math.max(1, count) : 0);
         } catch {
@@ -112,7 +140,9 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     const [query, setQuery] = useState('');
     const [networkFilter, setNetworkFilter] = useState(/** @type {'all' | string} */ ('all'));
     // A long address book was unsorted (storage order); name is the default.
-    const [sortBy, setSortBy] = useState(/** @type {'name' | 'newest'} */ ('name'));
+    const [sortBy, setSortBy] = useState(
+        /** @type {'name' | 'newest'} */ (() => readContactsSort(walletId)),
+    );
     // One-line "Added to <name>" shown on the detail view after a save that
     // joined an existing contact instead of creating a second one.
     const [notice, setNotice] = useState(/** @type {string | null} */ (null));
@@ -127,12 +157,21 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     );
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [submitting, setSubmitting] = useState(false);
+    const [deleting, setDeleting] = useState(/** @type {string | null} */ (null));
+    const [editVersion, setEditVersion] = useState(/** @type {string | null} */ (null));
+    // An error answers the last Save; once the user edits the form it no
+    // longer describes it ("Name is required." stayed up under a typed name).
+    useEffect(() => { setSubmitError(null); }, [formName, formNotes, formEntries]);
 
     // Add-address modal (launched from the detail view's + button).
     const [addAddrOpen, setAddAddrOpen] = useState(false);
+    // The add-address dialog traps Tab and returns focus to its opener on close.
+    const addAddrRef = useRef(null);
+    useFocusTrap(addAddrRef, { active: addAddrOpen });
     const [addAddrValue, setAddAddrValue] = useState('');
     const [addAddrError, setAddAddrError] = useState(/** @type {string | null} */ (null));
     const [addAddrSaving, setAddAddrSaving] = useState(false);
+    useBackHandler(addAddrOpen ? () => setAddAddrOpen(false) : undefined, addAddrSaving);
     // The user's answer when the typed address's network cannot be read from
     // its bytes (shared testnet/regtest version bytes); null until they pick.
     const [addAddrChain, setAddAddrChain] = useState(/** @type {string | null} */ (null));
@@ -141,25 +180,68 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     // Message action needs the user to choose which address to use.
     const [addrPicker, setAddrPicker] = useState(/** @type {'send' | 'message' | null} */ (null));
     const actionsRef = useRef(null);
+    const walletScopeRef = useRef(walletId);
+    walletScopeRef.current = walletId;
 
     const loadContacts = useCallback(async () => {
+        const scope = walletId;
+        setLoadError(null);
         try {
             const rows = await messaging.listContacts();
+            if (walletScopeRef.current !== scope) return;
             setContacts(Array.isArray(rows) ? rows : []);
         } catch (err) {
+            if (walletScopeRef.current !== scope) return;
             setLoadError(err?.message || 'Failed to load contacts.');
         }
         // Every mutation on this screen ends in a reload, so this is the one
         // place the unpublished count needs refreshing.
-        await refreshUnpublished();
-    }, [messaging, refreshUnpublished]);
+        if (walletScopeRef.current === scope) {
+            await refreshUnpublished(() => walletScopeRef.current === scope);
+        }
+    }, [messaging, refreshUnpublished, walletId]);
 
-    useEffect(() => { loadContacts(); }, [loadContacts]);
+    useEffect(() => {
+        setContacts(null);
+        setLoadError(null);
+        setMode('list');
+        setActiveId(null);
+        setSortBy(readContactsSort(walletId));
+        setUnpublished(0);
+        setNudgeDismissed(false);
+        loadContacts();
+    }, [loadContacts, walletId]);
 
     const active = useMemo(() => {
         if (!activeId || !contacts) return null;
         return contacts.find((c) => c.id === activeId) || null;
     }, [activeId, contacts]);
+
+    const contactFormDirty = useMemo(() => {
+        if (active) {
+            const originalEntries = Array.isArray(active.entries) ? active.entries : [];
+            return formName !== String(active.name || '')
+                || formNotes !== String(active.notes || '')
+                || JSON.stringify(formEntries) !== JSON.stringify(originalEntries.map((entry) => ({
+                    chain: entry.chain,
+                    address: entry.address,
+                    label: entry.label || '',
+                })));
+        }
+        return [formName, formNotes].some((value) => value.trim().length > 0)
+            || formEntries.some((entry) => (
+                String(entry.address || '').trim().length > 0
+                || String(entry.label || '').trim().length > 0
+            ));
+    }, [active, formName, formNotes, formEntries]);
+    const leaveEdit = useCallback(() => {
+        setMode(active ? 'detail' : 'list');
+        if (!active) setActiveId(null);
+    }, [active]);
+    const leaveGuard = useFormLeaveGuard({
+        dirty: (mode === 'edit' || (mode === 'scan' && scanFromEdit)) && contactFormDirty,
+        onLeave: leaveEdit,
+    });
 
     const filteredContacts = useMemo(() => {
         if (!contacts) return [];
@@ -193,15 +275,20 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             for (const group of duplicateGroups) {
                 const { keep, dropIds } = mergeContactGroup(group);
                 // eslint-disable-next-line no-await-in-loop
-                await messaging.saveContact({ record: keep });
+                await messaging.saveContact({
+                    record: keep,
+                    replaceIds: dropIds,
+                    expectedUpdatedAt: keep.updatedAt,
+                });
                 for (const id of dropIds) {
+                    const dropped = group.find((contact) => contact.id === id);
                     // eslint-disable-next-line no-await-in-loop
-                    await messaging.deleteContact({ id });
+                    await messaging.deleteContact({ id, expectedUpdatedAt: dropped?.updatedAt });
                 }
             }
             await loadContacts();
         } catch (err) {
-            setLoadError(err?.message || 'Merge failed.');
+            setLoadError(userFacingMessage(err, 'Could not merge these contacts. Try again.'));
         } finally {
             setMerging(false);
         }
@@ -248,23 +335,20 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
 
     function startEdit(contact) {
         if (contact) {
+            setEditVersion(contact.updatedAt);
             setFormName(contact.name);
             setFormNotes(contact.notes || '');
             setFormEntries(contact.entries.length
                 ? contact.entries.map((e) => ({ chain: e.chain, address: e.address, label: e.label || '' }))
                 : [{ chain: 'bitcoin', address: '', label: '' }]);
         } else {
+            setEditVersion(null);
             setFormName('');
             setFormNotes('');
             setFormEntries([{ chain: 'bitcoin', address: '', label: '' }]);
         }
         setSubmitError(null);
         setMode('edit');
-    }
-
-    function launchScanFromEdit() {
-        setScanFromEdit(true);
-        setMode('scan');
     }
 
     function handleScanned(outcome) {
@@ -304,7 +388,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
         } else {
             setScanFromEdit(false);
             setMode(scanFromEdit ? 'edit' : 'list');
-            showToast({ message: 'No address detected in that QR code.' });
+            showToast({ message: 'No address detected in that QR code.', variant: 'error' });
         }
     }
 
@@ -320,6 +404,11 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             .filter((e) => e.chain && e.address);
         if (cleanedEntries.length === 0) {
             setSubmitError('At least one address entry is required.');
+            return;
+        }
+        const nameOwner = findContactByName(contacts, formName);
+        if (nameOwner && nameOwner.id !== active?.id) {
+            setSubmitError(`A contact named "${nameOwner.name}" already exists.`);
             return;
         }
         // An address whose network cannot be read from its bytes (the shared
@@ -341,25 +430,27 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             setSubmitError(`"${badEntry.address}" is not a valid Bitcoin, Litecoin, or Dogecoin address.`);
             return;
         }
+        const repeatedAddress = findRepeatedAddress(cleanedEntries);
+        if (repeatedAddress) {
+            setSubmitError(`"${repeatedAddress}" appears more than once in this contact.`);
+            return;
+        }
+        const addressOwner = cleanedEntries
+            .map((entry) => findContactByAddress(contacts, entry.address, entry.chain))
+            .find((contact) => contact && contact.id !== active?.id);
+        if (addressOwner) {
+            setSubmitError(`This address is already saved for ${addressOwner.name}.`);
+            return;
+        }
         setSubmitting(true);
         setSubmitError(null);
         try {
             if (active) {
                 await messaging.saveContact({
                     record: { ...active, name: formName.trim(), notes: formNotes, entries: cleanedEntries },
+                    expectedUpdatedAt: editVersion,
                 });
             } else {
-                // A name the book already holds is the same person: add the
-                // address to that contact rather than start a second one.
-                const existing = findContactByName(contacts, formName);
-                if (existing) {
-                    await messaging.saveContact({ record: withEntriesAdded(existing, cleanedEntries) });
-                    await loadContacts();
-                    setActiveId(existing.id);
-                    setMode('detail');
-                    setNotice(`Added to ${existing.name}.`);
-                    return;
-                }
                 await messaging.saveContact({
                     input: { name: formName.trim(), notes: formNotes, entries: cleanedEntries },
                 });
@@ -367,22 +458,29 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             await loadContacts();
             setMode(active ? 'detail' : 'list');
         } catch (err) {
-            setSubmitError(err?.message || 'Save failed.');
+            setSubmitError(userFacingMessage(err, 'Could not save this contact. Try again.'));
         } finally {
             setSubmitting(false);
         }
     }
 
     async function handleDelete(id) {
-        if (!(await confirmDialog.confirm({ title: 'Delete this contact?', confirmLabel: 'Delete', danger: true }))) return;
+        if (deleting) return;
+        setDeleting(`contact:${id}`);
+        const snapshot = contacts ? contacts.find((c) => c.id === id) : null;
+        const displayName = snapshot?.name || 'this contact';
         // Snapshot the full record before deletion so the §37.2 Undo
         // toast can re-create it via saveContact. We freeze the
         // displayed name here so the toast text doesn't change if the
         // user quickly creates another contact with the same id.
-        const snapshot = contacts ? contacts.find((c) => c.id === id) : null;
-        const displayName = snapshot?.name || 'Contact';
         try {
-            await messaging.deleteContact({ id });
+            if (!(await confirmDialog.confirm({
+                title: `Delete ${displayName} from contacts?`,
+                message: `${displayName} and all saved addresses will be removed. You can restore the contact with Undo.`,
+                confirmLabel: 'Delete contact',
+                danger: true,
+            }))) return;
+            await messaging.deleteContact({ id, expectedUpdatedAt: snapshot?.updatedAt });
             setActiveId(null);
             setMode('list');
             await loadContacts();
@@ -392,30 +490,57 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     actionLabel: 'Undo',
                     onAction: async () => {
                         try {
-                            await messaging.saveContact({ record: snapshot });
+                            await messaging.saveContact({ record: snapshot, expectedUpdatedAt: null });
                             await loadContacts();
                         } catch (err) {
-                            setLoadError(err?.message || 'Restore failed.');
+                            setLoadError(userFacingMessage(err, 'Could not restore this contact. Try again.'));
                         }
                     },
                 });
             }
         } catch (err) {
-            setLoadError(err?.message || 'Delete failed.');
+            setLoadError(userFacingMessage(err, 'Could not delete this contact. Try again.'));
+        } finally {
+            setDeleting(null);
+        }
+    }
+
+    async function handleShareContact() {
+        if (!active) return;
+        const text = [
+            active.name,
+            ...active.entries.map((entry) => {
+                const chain = resolvedChain(entry);
+                const network = NETWORK_OPTIONS.find((option) => option.value === chain)?.label || chain;
+                const label = entry.label?.trim() ? ` (${entry.label.trim()})` : '';
+                return `${network}${label}: ${entry.address}`;
+            }),
+        ].join('\n');
+        const outcome = await shareOrCopy({ title: `${active.name} contact`, text }, text);
+        if (outcome === ShareOutcome.COPIED) {
+            showToast({ message: 'Contact copied.' });
+        } else if (outcome === ShareOutcome.UNAVAILABLE) {
+            showToast({ message: 'Sharing is unavailable.' });
         }
     }
 
     // Remove a single address entry from the active contact, after a
     // confirmation that mirrors the delete-contact prompt.
     async function handleDeleteAddress(index) {
-        if (!active) return;
-        if (!(await confirmDialog.confirm({ title: 'Delete this address?', confirmLabel: 'Delete', danger: true }))) return;
+        if (!active || deleting) return;
+        setDeleting(`address:${index}`);
         const nextEntries = active.entries.filter((_, i) => i !== index);
         try {
-            await messaging.saveContact({ record: { ...active, entries: nextEntries } });
+            if (!(await confirmDialog.confirm({ title: 'Delete this address?', confirmLabel: 'Delete', danger: true }))) return;
+            await messaging.saveContact({
+                record: { ...active, entries: nextEntries },
+                expectedUpdatedAt: active.updatedAt,
+            });
             await loadContacts();
         } catch (err) {
-            setLoadError(err?.message || 'Delete failed.');
+            setLoadError(userFacingMessage(err, 'Could not delete this address. Try again.'));
+        } finally {
+            setDeleting(null);
         }
     }
 
@@ -438,16 +563,24 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             setAddAddrError('Pick the network this address belongs to.');
             return;
         }
+        const addressOwner = findContactByAddress(contacts, address, chain);
+        if (addressOwner) {
+            setAddAddrError(`This address is already saved for ${addressOwner.name}.`);
+            return;
+        }
         setAddAddrSaving(true);
         setAddAddrError(null);
         const entry = { chain, address, label: '' };
         try {
-            await messaging.saveContact({ record: { ...active, entries: [...active.entries, entry] } });
+            await messaging.saveContact({
+                record: { ...active, entries: [...active.entries, entry] },
+                expectedUpdatedAt: active.updatedAt,
+            });
             await loadContacts();
             setAddAddrOpen(false);
             setAddAddrValue('');
         } catch (err) {
-            setAddAddrError(err?.message || 'Save failed.');
+            setAddAddrError(userFacingMessage(err, 'Could not save this address. Try again.'));
         } finally {
             setAddAddrSaving(false);
         }
@@ -457,8 +590,8 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
         <PageHeader
             onBack={() => {
                 if (mode !== 'list') {
-                    setMode(mode === 'edit' && active ? 'detail' : 'list');
-                    if (mode === 'edit' && !active) setActiveId(null);
+                    if (mode === 'edit') leaveGuard.guardedOnBack();
+                    else setMode('list');
                 } else {
                     onBack();
                 }
@@ -468,13 +601,19 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                 : mode === 'detail' ? 'View Contact' : 'Contacts'}
             titleIcon={
                 mode === 'list' ? <Icon.UsersIcon />
-                    : mode === 'detail' ? <Icon.UserIcon />
+                    : mode === 'detail' && active ? (
+                        <IdentityAvatar
+                            name={active.name}
+                            seed={active.avatarSeed || active.id}
+                            context="header"
+                        />
+                    )
                     : (mode === 'edit' && active) ? <Icon.PencilIcon />
                     : (mode === 'edit' && !active) ? <Icon.PlusIcon />
                     : undefined
             }
             trailing={mode === 'list' ? (
-                <button
+                <Button
                     type="button"
                     className={picker.addButton}
                     onClick={() => { setActiveId(null); startEdit(null); }}
@@ -482,18 +621,14 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     title="Add contact"
                 >
                     <Icon.PlusIcon />
-                </button>
+                </Button>
             ) : null}
         />
     );
 
-    // `card` controls the raised inner card used by the form/detail views
-    // in the full (desktop) variant. The list view passes card=false so its
-    // contacts card sits directly on the screen background, exactly like the
-    // Home balances list (no card-in-card).
-    const wrap = (children, { card = true } = {}) => (
+    const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull && card ? <div className={styles.card}>{children}</div> : children}
+            {children}
             {confirmDialog.request ? (
                 <ConfirmModal
                     {...confirmDialog.request}
@@ -501,21 +636,34 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     onCancel={confirmDialog.onCancel}
                 />
             ) : null}
+            {leaveGuard.confirmation}
         </Screen>
     );
 
     if (loadError) {
         return wrap(
-            <>
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
-                <div className={styles.actions}>
-                </div>
-            </>,
+            <StatusMessage
+                variant="error"
+                className={styles.error}
+                recovery={{
+                    label: 'Try again',
+                    onAction: () => {
+                        setContacts(null);
+                        return loadContacts();
+                    },
+                }}
+            >
+                {loadError}
+            </StatusMessage>,
         );
     }
 
     if (contacts === null) {
-        return wrap(<p className={styles.hint}>Loading contacts…</p>);
+        return wrap(
+            <div role="status" aria-label="Loading contacts">
+                <Skeleton.List rows={5} />
+            </div>,
+        );
     }
 
     if (mode === 'scan') {
@@ -534,9 +682,20 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
         // Litecoin / Dogecoin / Unknown) and stored on the entry's chain.
         const entry0 = formEntries[0];
         return wrap(
-            <form onSubmit={handleSave} noValidate>
+            <FormPage
+                label="New contact"
+                onSubmit={handleSave}
+                status={submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <Button type="submit" variant="primary" loading={submitting}>
+                        Save
+                    </Button>
+                )}
+            >
                 <Input label="Name" value={formName} onChange={(e) => setFormName(e.target.value)} />
-                <Input
+                <AddressField
                     label="Address"
                     value={entry0.address}
                     onChange={(e) => {
@@ -544,6 +703,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                         setFormEntries([{ ...entry0, address, chain: chainFor(address) }]);
                     }}
                     placeholder=""
+                    autoComplete="off"
                 />
                 <NetworkReadout
                     address={entry0.address}
@@ -551,24 +711,13 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     onPick={(chain) => setFormEntries([{ ...entry0, chain }])}
                     style={{ margin: '0.25rem 0 0.75rem' }}
                 />
-                <div className={picker.notesField}>
-                    <label className={picker.notesLabel}>Notes</label>
-                    <textarea
-                        className={picker.notesTextarea}
-                        aria-label="Notes"
-                        value={formNotes}
-                        onChange={(e) => setFormNotes(e.target.value)}
-                    />
-                </div>
-                {submitError ? (
-                    <p role="alert" className={styles.error} style={{ marginTop: '0.5rem' }}>{submitError}</p>
-                ) : null}
-                <div className={picker.formActions}>
-                    <Button type="submit" variant="primary" block loading={submitting}>
-                        Save
-                    </Button>
-                </div>
-            </form>,
+                <Textarea
+                    label="Notes"
+                    aria-label="Notes"
+                    value={formNotes}
+                    onChange={(e) => setFormNotes(e.target.value)}
+                />
+            </FormPage>,
         );
     }
 
@@ -577,26 +726,26 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
         // formEntries (populated from the contact by startEdit). Addresses are
         // managed from the detail view, not this form.
         return wrap(
-            <form onSubmit={handleSave} noValidate>
-                <Input label="Name" value={formName} onChange={(e) => setFormName(e.target.value)} />
-                <div className={picker.notesField}>
-                    <label className={picker.notesLabel}>Notes</label>
-                    <textarea
-                        className={picker.notesTextarea}
-                        aria-label="Notes"
-                        value={formNotes}
-                        onChange={(e) => setFormNotes(e.target.value)}
-                    />
-                </div>
-                {submitError ? (
-                    <p role="alert" className={styles.error} style={{ marginTop: '0.5rem' }}>{submitError}</p>
+            <FormPage
+                label="Edit contact"
+                onSubmit={handleSave}
+                status={submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
-                <div className={picker.formActions}>
-                    <Button type="submit" variant="primary" block loading={submitting}>
+                actions={(
+                    <Button type="submit" variant="primary" loading={submitting}>
                         Save
                     </Button>
-                </div>
-            </form>,
+                )}
+            >
+                <Input label="Name" value={formName} onChange={(e) => setFormName(e.target.value)} />
+                <Textarea
+                    label="Notes"
+                    aria-label="Notes"
+                    value={formNotes}
+                    onChange={(e) => setFormNotes(e.target.value)}
+                />
+            </FormPage>,
         );
     }
 
@@ -618,11 +767,20 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
             else runAction(action, primary);
         };
         return wrap(
-            <>
+            <ListPage>
                 {notice ? <StatusMessage variant="success">{notice}</StatusMessage> : null}
                 <div className={picker.infoCard}>
-                    <div style={{ fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)', fontWeight: 700, marginBottom: '0.25rem' }}>Name</div>
-                    <div style={{ fontSize: 'var(--xc-text-lg)', fontWeight: 600 }}>{active.name}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-3)' }}>
+                        <IdentityAvatar
+                            name={active.name}
+                            seed={active.avatarSeed || active.id}
+                            context="hero"
+                        />
+                        <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)', fontWeight: 700, marginBottom: '0.25rem' }}>Name</div>
+                            <div style={{ fontSize: 'var(--xc-text-lg)', fontWeight: 600, overflowWrap: 'anywhere' }}>{active.name}</div>
+                        </div>
+                    </div>
                     {active.notes ? (
                         <>
                             <div style={{ fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)', fontWeight: 700, margin: '0.75rem 0 0.25rem' }}>Notes</div>
@@ -633,7 +791,7 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
 
                 <div className={picker.actionsWrap} ref={actionsRef}>
                     <div className={picker.quickActions} role="group" aria-label="Contact actions">
-                        <button
+                        <Button
                             type="button"
                             className={picker.quickAction}
                             onClick={() => startAction('send')}
@@ -643,8 +801,8 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                         >
                             <span className={picker.quickActionIcon} aria-hidden="true"><Icon.SendIcon /></span>
                             <span>Send</span>
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                             type="button"
                             className={picker.quickAction}
                             onClick={() => startAction('message')}
@@ -654,23 +812,33 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                         >
                             <span className={picker.quickActionIcon} aria-hidden="true"><Icon.MessageIcon /></span>
                             <span>Message</span>
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                             type="button"
                             className={picker.quickAction}
                             onClick={() => startEdit(active)}
                         >
                             <span className={picker.quickActionIcon} aria-hidden="true"><Icon.PencilIcon /></span>
                             <span>Edit</span>
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                            type="button"
+                            className={picker.quickAction}
+                            onClick={handleShareContact}
+                        >
+                            <span className={picker.quickActionIcon} aria-hidden="true"><Icon.UploadIcon /></span>
+                            <span>Share</span>
+                        </Button>
+                        <Button
                             type="button"
                             className={picker.quickAction}
                             onClick={() => handleDelete(active.id)}
+                            disabled={deleting !== null}
+                            aria-busy={deleting === `contact:${active.id}`}
                         >
                             <span className={picker.quickActionIcon} aria-hidden="true"><Icon.TrashIcon /></span>
-                            <span>Delete</span>
-                        </button>
+                            <span>{deleting === `contact:${active.id}` ? 'Deleting…' : 'Delete'}</span>
+                        </Button>
                     </div>
                     {addrPicker ? (
                         <ul className={picker.addrMenu} role="menu" aria-label="Choose an address">
@@ -679,58 +847,55 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                             </li>
                             {active.entries.map((e, i) => (
                                 <li key={i}>
-                                    <button
+                                    <Button
                                         type="button"
                                         role="menuitem"
                                         className={picker.addrMenuItem}
                                         onClick={() => runAction(addrPicker, e)}
                                     >
-                                        <ChainCoinIcon chain={resolvedChain(e)} />
-                                        <span className={picker.addressText} title={e.address}>{e.address}</span>
+                                        <ChainCoinIcon chain={resolvedChain(e)} address={e.address} />
+                                        <AddressText address={e.address} className={picker.addressText} />
                                         {e.label ? <span style={{ color: 'var(--xc-fg-muted)', marginLeft: '0.25rem' }}>({e.label})</span> : null}
-                                    </button>
+                                    </Button>
                                 </li>
                             ))}
                         </ul>
                     ) : null}
                 </div>
 
-                <div className={picker.tabsRow} role="tablist">
-                    <button
-                        type="button"
-                        role="tab"
-                        aria-selected="true"
-                        className={`${picker.tab} ${picker.tabActive}`}
-                    >
-                        <span className={picker.tabLabel}>Addresses</span>
-                    </button>
-                    <button
-                        type="button"
-                        className={picker.addAddressBtn}
-                        onClick={() => { setAddAddrValue(''); setAddAddrError(null); setAddAddrOpen(true); }}
-                        aria-label="Add address"
-                        title="Add address"
-                    >
-                        <Icon.PlusIcon />
-                    </button>
-                </div>
+                <SectionHeader
+                    title="Addresses"
+                    trailing={(
+                        <Button
+                            type="button"
+                            className={picker.addAddressBtn}
+                            onClick={() => { setAddAddrValue(''); setAddAddrError(null); setAddAddrOpen(true); }}
+                            aria-label="Add address"
+                            title="Add address"
+                        >
+                            <Icon.PlusIcon />
+                        </Button>
+                    )}
+                />
 
                 <ul className={picker.tabPanel} style={{ listStyle: 'none', padding: 0, margin: 'var(--xc-space-2) 0 0' }}>
                     {active.entries.map((e, i) => {
                         return (
                             <li key={i} className={picker.addressCard}>
-                                <ChainCoinIcon chain={resolvedChain(e)} />
-                                <span className={picker.addressText} title={e.address}>{e.address}</span>
+                                <ChainCoinIcon chain={resolvedChain(e)} address={e.address} />
+                                <AddressText address={e.address} className={picker.addressText} />
                                 {e.label ? <span style={{ color: 'var(--xc-fg-muted)', marginLeft: '0.25rem' }}>({e.label})</span> : null}
-                                <button
+                                <Button
                                     type="button"
                                     className={picker.addressDeleteBtn}
                                     onClick={() => handleDeleteAddress(i)}
+                                    disabled={deleting !== null}
+                                    aria-busy={deleting === `address:${i}`}
                                     aria-label="Delete address"
                                     title="Delete address"
                                 >
                                     <Icon.XIcon />
-                                </button>
+                                </Button>
                             </li>
                         );
                     })}
@@ -738,20 +903,23 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
 
                 {addAddrOpen ? (
                     <div
+                        ref={addAddrRef}
                         className={picker.modalOverlay}
                         role="dialog"
                         aria-modal="true"
-                        aria-label="Add address"
+                        aria-labelledby="xc-contact-add-address-title"
                         onMouseDown={(ev) => { if (ev.target === ev.currentTarget) setAddAddrOpen(false); }}
                     >
                         <div className={picker.modalCard}>
-                            <div className={picker.modalTitle}>Add address</div>
-                            <Input
+                            <div id="xc-contact-add-address-title" className={picker.modalTitle}>Add address</div>
+                            <AddressField
                                 label="Address"
                                 value={addAddrValue}
                                 onChange={(ev) => { setAddAddrValue(ev.target.value); setAddAddrChain(null); setAddAddrError(null); }}
+                                error={addAddrError}
                                 placeholder=""
                                 autoFocus
+                                autoComplete="off"
                             />
                             <NetworkReadout
                                 address={addAddrValue}
@@ -759,9 +927,6 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                                 onPick={(chain) => { setAddAddrChain(chain); setAddAddrError(null); }}
                                 style={{ marginBottom: 'var(--xc-space-2)' }}
                             />
-                            {addAddrError ? (
-                                <p role="alert" className={styles.error} style={{ marginTop: '0.25rem' }}>{addAddrError}</p>
-                            ) : null}
                             <div className={picker.modalActions}>
                                 <Button type="button" variant="ghost" onClick={() => setAddAddrOpen(false)}>Cancel</Button>
                                 <Button type="button" variant="primary" loading={addAddrSaving} onClick={handleAddAddress}>Add</Button>
@@ -769,36 +934,54 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                         </div>
                     </div>
                 ) : null}
-            </>,
+            </ListPage>,
         );
     }
 
     // mode === 'list'
     return wrap(
-        <>
-            <div className={picker.toolbar}>
-                <input
-                    type="text"
-                    className={picker.search}
-                    placeholder="Search"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    aria-label="Search contacts"
-                />
-                <NetworkFilterDropdown value={networkFilter} onChange={setNetworkFilter} />
-                <select
-                    className={picker.sort}
-                    value={sortBy}
-                    onChange={(e) => setSortBy(/** @type {'name' | 'newest'} */ (e.target.value))}
-                    aria-label="Sort contacts"
-                >
-                    <option value="name">A to Z</option>
-                    <option value="newest">Newest</option>
-                </select>
-            </div>
+        <ListPage
+            toolbar={(
+                <div className={picker.toolbar}>
+                    <div className={picker.search}>
+                        <Input
+                            type="search"
+                            size="md"
+                            enterKeyHint="search"
+                            autoCapitalize="off"
+                            placeholder="Search"
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                            autoComplete="off"
+                            autoCorrect="off"
+                            spellCheck={false}
+                            aria-label="Search contacts"
+                        />
+                    </div>
+                    <NetworkFilterDropdown
+                        value={networkFilter}
+                        onChange={setNetworkFilter}
+                        announceNetworkCount
+                    />
+                    <div className={picker.sort}>
+                        <Select
+                            value={sortBy}
+                            onChange={(e) => {
+                                const value = /** @type {'name' | 'newest'} */ (e.target.value);
+                                setSortBy(value);
+                                persistContactsSort(walletId, value);
+                            }}
+                            aria-label="Sort contacts"
+                        >
+                            {/* Native options remain because Select renders a native listbox. */}
+                            <option value="name">A to Z</option>
+                            {/* Native options remain because Select renders a native listbox. */}
+                            <option value="newest">Newest</option>
+                        </Select>
+                    </div>
+                </div>
+            )}
+        >
             {duplicateGroups.length > 0 ? (
                 <StatusMessage
                     id="contacts-duplicate-names"
@@ -824,57 +1007,111 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                     {typeof onOpenBackup === 'function' ? (
                         <>
                             {' '}
-                            <button type="button" className={picker.linkButton} onClick={() => setNudgeDismissed(true)}>
+                            <Button type="button" variant="link" size="sm" icon={null} onClick={() => setNudgeDismissed(true)}>
                                 Not now
-                            </button>
+                            </Button>
                         </>
                     ) : null}
                 </StatusMessage>
             ) : null}
             {contacts.length === 0 ? (
-                <div className={picker.emptyCard}>No contacts yet. Tap + to add one and label addresses across the inbox and history.</div>
+                <EmptyState
+                    title="No contacts yet"
+                    body="Saved contacts label addresses across the inbox and history."
+                    actionLabel="Create first contact"
+                    onAction={() => { setActiveId(null); startEdit(null); }}
+                    actionIcon={<Icon.PlusIcon />}
+                />
             ) : filteredContacts.length === 0 ? (
-                <div className={picker.emptyCard}>No contacts match your filters.</div>
+                <EmptyState
+                    title="No results for these filters"
+                    body="Reset the filters to see all contacts."
+                    actionLabel="Reset filters"
+                    onAction={() => {
+                        setQuery('');
+                        setNetworkFilter('all');
+                    }}
+                />
             ) : (
-                <div className={picker.list} role="list" aria-label="Contacts">
-                    {filteredContacts.map((c) => {
-                        const uniqueChains = [...new Set((c.entries || []).map(resolvedChain))];
+                <ul className={picker.list} aria-label="Contacts">
+                    {filteredContacts.map((c, index) => {
+                        const uniqueChains = [...new Map((c.entries || []).map((entry) => [
+                            `${resolvedChain(entry)}:${chainIdFor(resolvedChain(entry), entry.address) || ''}`,
+                            entry,
+                        ])).values()];
                         return (
-                            <button
+                            <li
                                 key={c.id}
-                                type="button"
-                                role="listitem"
-                                className={picker.row}
-                                onClick={() => { setActiveId(c.id); setMode('detail'); }}
+                                style={{ borderTop: index === 0 ? 'none' : '1px solid var(--xc-border)' }}
                             >
-                                <span className={picker.rowName}>{c.name}</span>
-                                <span className={picker.rowChains}>
-                                    {uniqueChains.map((chain) => (
-                                        <ChainCoinIcon key={chain} chain={chain} />
-                                    ))}
-                                </span>
-                            </button>
+                                <ListRow
+                                    type="button"
+                                    className={picker.row}
+                                    onClick={() => { setActiveId(c.id); setMode('detail'); }}
+                                    aria-label={c.name}
+                                    leading={(
+                                        <IdentityAvatar
+                                            name={c.name}
+                                            seed={c.avatarSeed || c.id}
+                                            context="list"
+                                        />
+                                    )}
+                                    title={<span className={picker.rowName}>{c.name}</span>}
+                                    trailing={(
+                                        <span className={picker.rowChains}>
+                                            {uniqueChains.map((entry) => (
+                                                <ChainCoinIcon
+                                                    key={`${resolvedChain(entry)}:${entry.address}`}
+                                                    chain={resolvedChain(entry)}
+                                                    address={entry.address}
+                                                />
+                                            ))}
+                                        </span>
+                                    )}
+                                />
+                            </li>
                         );
                     })}
-                </div>
+                </ul>
             )}
-        </>,
-        { card: false },
+        </ListPage>,
     );
 }
 
-// Find an existing contact that already holds `address`, comparing on the
-// trimmed value case-insensitively. Bech32 addresses are case-insensitive by
-// spec, and base58 addresses differing only by case don't occur in practice,
-// so a lowercased compare is safe and avoids a false miss on a bech32 scan
-// whose stored copy differs in case. Returns the first match, or null.
-export function findContactByAddress(contacts, address) {
-    const needle = (address || '').trim().toLowerCase();
+// Find an existing contact that already holds `address`. Bech32 comparison is
+// case-insensitive by specification, while Base58 comparison remains
+// case-sensitive. Returns the first match, or null.
+export function findContactByAddress(contacts, address, chain) {
+    const needle = contactAddressKey(address);
     if (!needle || !Array.isArray(contacts)) return null;
     return contacts.find((c) =>
         Array.isArray(c.entries)
-        && c.entries.some((e) => (e.address || '').trim().toLowerCase() === needle),
+        && c.entries.some((e) => (
+            (!chain || normalizedContactChain(e.chain) === normalizedContactChain(chain))
+            && contactAddressKey(e.address) === needle
+        )),
     ) || null;
+}
+
+function findRepeatedAddress(entries) {
+    const seen = new Set();
+    for (const entry of entries || []) {
+        const key = `${normalizedContactChain(entry?.chain)}|${contactAddressKey(entry?.address)}`;
+        if (!key) continue;
+        if (seen.has(key)) return entry.address.trim();
+        seen.add(key);
+    }
+    return null;
+}
+
+function normalizedContactChain(chain) {
+    return String(chain || '').trim().toLowerCase();
+}
+
+function contactAddressKey(address) {
+    const trimmed = String(address || '').trim();
+    const lower = trimmed.toLowerCase();
+    return /^(bc|tb|bcrt|ltc|tltc|rltc)1/.test(lower) ? lower : trimmed;
 }
 
 /**
@@ -935,15 +1172,17 @@ function NetworkReadout({ address, chain, onPick, style }) {
     return (
         <div style={{ ...rowStyle, flexWrap: 'wrap' }}>
             <label htmlFor="contact-network-pick">Network: cannot be read from this address. Which is it?</label>
-            <select
+            <Select
                 id="contact-network-pick"
                 aria-label="Network for this address"
                 value=""
                 onChange={(e) => { if (e.target.value) onPick(e.target.value); }}
             >
+                {/* A native option remains because Select renders a native listbox. */}
                 <option value="">Choose a network</option>
+                {/* Native options remain because Select renders a native listbox. */}
                 {choices.map((n) => <option key={n.value} value={n.value}>{n.label}</option>)}
-            </select>
+            </Select>
         </div>
     );
 }

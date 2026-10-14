@@ -30,10 +30,13 @@
 // (Send.jsx still passes `onSendAnother` for back-compat; the prop is
 // accepted under either name.)
 
-import { useCallback, useMemo, useState } from 'react';
-import { AnimatedQrFrames, Button, StatusMessage } from '../../ui/index.js';
+import { useEffect, useMemo, useState } from 'react';
+import { AnimatedQrFrames, Button, RadioGroup, StatusMessage } from '../../ui/index.js';
+import { CopyButton, FormSection, Textarea } from '../../ui/index.js';
+import { AddressText } from '../../ui/index.js';
 import { encodeXcwChunks } from '../../uri/psbtQr.js';
 import { encodeBbqrPsbtFrames } from '../../uri/bbqrPsbt.js';
+import { useToast } from './ToastHost.jsx';
 import styles from './WatcherResultPanel.module.css';
 
 /**
@@ -53,6 +56,10 @@ export function WatcherResultPanel({
 }) {
     const psbtHex = result?.psbtHex || '';
     const [qrFormat, setQrFormat] = useState('xcw');
+    const { announce } = useToast();
+    useEffect(() => {
+        announce(title);
+    }, [announce, title]);
     const exportFrames = useMemo(() => {
         if (!psbtHex) return null;
         try {
@@ -63,20 +70,16 @@ export function WatcherResultPanel({
             return { error: e?.message || String(e) };
         }
     }, [psbtHex, qrFormat]);
-    const copyHex = useCallback(() => {
-        if (!psbtHex) return;
-        try { navigator.clipboard?.writeText(psbtHex); } catch { /* best effort */ }
-    }, [psbtHex]);
     const formatLabel = qrFormat === 'bbqr' ? 'BBQr (hex)' : 'XCW chunks';
     const buildAnother = onBuildAnother || onSendAnother;
     return (
         <>
-            <div className={styles.successCard} role="status" aria-live="polite">
-                <h2 className={styles.successTitle}>{title}</h2>
+            <FormSection title={title}>
                 <p className={styles.successHint}>
                     Take this transaction to your Signer-mode wallet. Paste the hex,
-                    or scan the animated QR. Sign there, then paste the signed
-                    transaction into a Full-mode wallet to broadcast.
+                    or scan the animated QR. Signing authorizes this transaction
+                    only, so verify its details again on the signer. Then paste the
+                    signed transaction into a Normal-mode wallet to broadcast.
                 </p>
                 {result?.encoding ? (
                     <dl className={styles.successSummary}>
@@ -88,7 +91,7 @@ export function WatcherResultPanel({
                             <div className={styles.successRow}>
                                 <dt>From</dt>
                                 <dd className={styles.successMono}>
-                                    {result.fromAddress.slice(0, 8)}…{result.fromAddress.slice(-6)}
+                                    <AddressText address={result.fromAddress} size="sm" />
                                 </dd>
                             </div>
                         ) : null}
@@ -96,48 +99,36 @@ export function WatcherResultPanel({
                 ) : null}
                 <div className={styles.successTxidBlock}>
                     <p className={styles.successLabel}>Unsigned transaction (hex)</p>
-                    <textarea
+                    <Textarea
                         readOnly
                         aria-label="Unsigned transaction hex"
                         value={psbtHex}
                         rows={6}
+                        className={styles.machineText}
                         style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.75rem' }}
                     />
                     <div className={styles.successTxidRow}>
-                        <button
-                            type="button"
-                            className={styles.successLink}
-                            onClick={copyHex}
-                            aria-label="Copy unsigned transaction hex"
-                        >
-                            Copy hex
-                        </button>
+                        <CopyButton
+                            key={psbtHex}
+                            value={psbtHex}
+                            label="Copy hex"
+                            ariaLabel="Copy unsigned transaction hex"
+                        />
                     </div>
                 </div>
                 <div className={styles.successTxidBlock}>
-                    <p className={styles.successLabel}>QR format</p>
-                    <div role="radiogroup" aria-label="Animated QR format">
-                        <label style={{ marginRight: '1rem' }}>
-                            <input
-                                type="radio"
-                                name="watcher-qr-format"
-                                value="xcw"
-                                checked={qrFormat === 'xcw'}
-                                onChange={() => setQrFormat('xcw')}
-                            />{' '}
-                            XCW (this wallet)
-                        </label>
-                        <label>
-                            <input
-                                type="radio"
-                                name="watcher-qr-format"
-                                value="bbqr"
-                                checked={qrFormat === 'bbqr'}
-                                onChange={() => setQrFormat('bbqr')}
-                            />{' '}
-                            BBQr (Sparrow / Coldcard / SeedSigner)
-                        </label>
-                    </div>
+                    <RadioGroup
+                        legend="QR format"
+                        name="watcher-qr-format"
+                        value={qrFormat}
+                        onChange={setQrFormat}
+                        options={[
+                            { value: 'xcw', label: 'XCW (this wallet)' },
+                            { value: 'bbqr', label: 'BBQr (Sparrow / Coldcard / SeedSigner)' },
+                        ]}
+                        role="radiogroup"
+                        aria-label="Animated QR format"
+                    />
                 </div>
                 {exportFrames && exportFrames.error ? (
                     <StatusMessage variant="error">{exportFrames.error}</StatusMessage>
@@ -147,20 +138,22 @@ export function WatcherResultPanel({
                         <AnimatedQrFrames
                             frames={exportFrames}
                             alt="Unsigned transaction animated QR"
+                            announceLoading={false}
                         />
                         <details>
                             <summary className={styles.hint}>Plain-text chunks</summary>
-                            <textarea
+                            <Textarea
                                 readOnly
                                 aria-label={`Unsigned transaction ${formatLabel}`}
                                 value={exportFrames.join('\n')}
                                 rows={6}
+                                className={styles.machineText}
                                 style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.75rem' }}
                             />
                         </details>
                     </>
                 ) : null}
-            </div>
+            </FormSection>
             <div className={styles.actions}>
                 {buildAnother ? (
                     <Button variant="secondary" onClick={buildAnother}>

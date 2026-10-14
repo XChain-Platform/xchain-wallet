@@ -16,7 +16,7 @@ import { Section, Guidance, Markup, LiveExample } from '../StyleGuidePage.jsx';
 // a `type` prop and renders a different glyph per file extension, not
 // a stable single icon).
 const ICON_NAMES = [
-    'BackIcon', 'CheckIcon', 'XIcon', 'PlusIcon', 'MenuIcon', 'MoreIcon',
+    'BackIcon', 'CheckIcon', 'XIcon', 'PlusIcon', 'MintIcon', 'SweepIcon', 'MenuIcon', 'MoreIcon',
     'SendIcon', 'ReceiveIcon', 'SwapIcon', 'BroadcastIcon',
     'ScanIcon', 'CameraIcon', 'CopyIcon', 'PasteIcon', 'SearchIcon', 'FilterIcon',
     'BookIcon', 'AddressIcon', 'UsersIcon',
@@ -93,8 +93,8 @@ const SendGlyph = iconForLabel('Send');`}
                 <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
                     <span style={{ color: 'var(--xc-text)' }}><Icon.SendIcon /></span>
                     <span style={{ color: 'var(--xc-text-muted)' }}><Icon.SendIcon /></span>
-                    <span style={{ color: 'var(--xc-accent-primary)' }}><Icon.SendIcon /></span>
-                    <span style={{ color: 'var(--xc-danger)' }}><Icon.SendIcon /></span>
+                    <span style={{ color: 'var(--xc-accent-text)' }}><Icon.SendIcon /></span>
+                    <span style={{ color: 'var(--xc-danger-fg)' }}><Icon.SendIcon /></span>
                 </div>
             </LiveExample>
         </Section>

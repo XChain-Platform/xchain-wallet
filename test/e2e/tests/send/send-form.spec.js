@@ -15,8 +15,9 @@
 // old `bc1qtestrecipient000...` placeholders these specs used are (very
 // correctly) rejected. Any fixture address here has to be a real one.
 //
-// ADS donation consent is declined by the fixture: an enabled donation
-// appends an extra output, which would move the amounts asserted here.
+// The fixture turns ADS off in Settings after the onboarding notice: an
+// enabled donation appends an extra output, which would move the amounts
+// asserted here.
 //
 // Broadcast is not reachable in this shell: the web dev server runs the
 // dev-mock SDK, whose signing path throws by design. See the final test.
@@ -34,6 +35,19 @@ function toField(page) {
 
 function amountField(page) {
     return page.getByRole('textbox', { name: /^Amount/ });
+}
+
+async function serveZeroBalances(page) {
+    await page.route('**/src/devFakeBalances.js*', async (route) => {
+        const response = await route.fetch();
+        const fundedSource = await response.text();
+        const emptySource = fundedSource.replace(
+            '        native,\n        tokens: tokens,',
+            "        native: { ...native, quantity: '0' },\n        tokens: [],",
+        );
+        expect(emptySource, 'the dev balance fixture shape changed').not.toBe(fundedSource);
+        await route.fulfill({ response, body: emptySource });
+    });
 }
 
 /** Memo lives behind the collapsed "Advanced" disclosure. */
@@ -55,9 +69,23 @@ test.describe('send form', () => {
         await amountField(page).fill('0.01');
         await mainButton(page, 'Send').click();
 
+        // A checksum failure is presented as a typo (addressValidationError),
+        // and the form must not advance to the confirm page.
         await expect(page.getByRole('alert').first()).toContainText(
-            /not a valid Bitcoin address/i,
+            /This address has a typo/i,
         );
+        await expect(page.getByTestId('confirm-modal')).toHaveCount(0);
+    });
+
+    test('an invalid destination is rejected when the field loses focus', async ({ page }) => {
+        const error = page.getByRole('alert').filter({ hasText: /This address has a typo/i });
+        await toField(page).fill('bc1qtestrecipient00000000000000000000000000');
+        await expect(error).toHaveCount(0);
+
+        await page.keyboard.press('Tab');
+
+        await expect(error).toBeVisible();
+        await expect(page.getByTestId('confirm-modal')).toHaveCount(0);
     });
 
     test('zero amount is rejected', async ({ page }) => {
@@ -83,7 +111,7 @@ test.describe('send form', () => {
         await expect(page.getByRole('textbox', { name: 'Memo' })).toHaveCount(0);
         // The disclosure really did open, or this would pass on a collapsed
         // panel that simply renders nothing.
-        await expect(page.getByText('Replace-by-fee')).toBeVisible();
+        await expect(page.getByText('Allow a higher network fee later')).toBeVisible();
     });
 
     // With the `send` slice flag on (it now defaults true), Send goes
@@ -115,21 +143,31 @@ test.describe('send form', () => {
         // §5.2.5: the fee comes from the composed PSBT, so it is an exact
         // amount, not the form's rate estimate.
         await expect(confirm).toContainText(/Network fee: [\d.]+ BTC/);
-        // §5.2.6: the hardware note names this screen as the intent surface.
-        await expect(confirm).toContainText(/hardware device verifies native outputs/i);
+        // §5.2.6: the hardware note names this screen as the intent surface,
+        // so it appears only when a hardware device signs. This wallet signs
+        // in software, so the review leaves it out.
+        await expect(confirm).not.toContainText(/hardware device verifies native outputs/i);
     });
 
-    // §1.7 / wallet spec §21.7. The chain on the signing button is the last
-    // place the user sees WHICH network is about to move their money, and the
-    // confirm page is reached several screens after the chain was picked. This
-    // shipped as a bare "Approve" and only a browser caught it: the copy was
-    // internally consistent, so every unit test agreed with it.
-    test('the signing button names the chain it will sign on', async ({ page }) => {
+    // §1.7 / wallet spec §21.7. The confirm page is the last place the user
+    // sees WHICH network is about to move their money, and it is reached
+    // several screens after the chain was picked. The "Approve & Sign on
+    // <chain>" button form is retired and a native payment decodes to no action,
+    // so the chain badge carries it and the button stays exact.
+    test('the confirm page names the chain it will sign on', async ({ page }) => {
         await toField(page).fill(VALID_BTC);
         await amountField(page).fill('0.01');
         await mainButton(page, 'Send').click();
 
+        // The chain is named by the badge beside the signing footer: the chain
+        // suffix on the button itself was retired by operator decision. The
+        // button names the decoded action and amount ("Send 0.01 BTC"), but
+        // this venue's dev-mock host has no decoder.describe(), so it shows
+        // the bare "Approve" fallback; the decoded label is covered by the
+        // ConfirmActionModal unit tests.
+        await expect(page.getByTestId('confirm-chain-badge')).toHaveText('Bitcoin');
         await expect(page.getByTestId('confirm-approve')).toHaveText(/^Approve$/);
+        await expect(page.getByTestId('confirm-approve')).toBeEnabled();
     });
 
     // §5.1: exactly two exits. Reject returns to the form with its values
@@ -167,4 +205,17 @@ test.describe('send form', () => {
 
         await expect(page.getByRole('alert').first()).toBeVisible({ timeout: 20_000 });
     });
+});
+
+test('a zero-balance wallet offers Receive instead of the Send form', async ({ page }) => {
+    await serveZeroBalances(page);
+    await createWallet(page, { password: PASSWORD });
+    await gotoSection(page, 'Send');
+
+    await expect(page.getByRole('heading', { name: 'Nothing to send yet', exact: true }))
+        .toBeVisible();
+    await expect(page.getByRole('form', { name: 'Send' })).toHaveCount(0);
+
+    await mainButton(page, 'Receive').click();
+    await expect(page.getByRole('heading', { name: 'Receive', exact: true })).toBeVisible();
 });

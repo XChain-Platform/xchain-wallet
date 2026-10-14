@@ -55,6 +55,16 @@ const DISPENSER_GIVE_AMOUNT = {
 };
 
 describe('PreflightPanel warning copy (§5.2.4)', () => {
+    it('groups the checked block height', () => {
+        mount({ ...reportWith(), stateHeight: 1234567 });
+        expect(screen.getByText('Checked at block 1,234,567')).toBeTruthy();
+    });
+
+    it('groups the unverified check count', () => {
+        mount(reportWith({ unverified: Array(1234) }));
+        expect(screen.getByText('Could not verify (1,234)')).toBeTruthy();
+    });
+
     it('leads a warning with plain copy and keeps the SDK sentence as the detail', () => {
         mount(reportWith({ findings: [DISPENSER_GIVE_AMOUNT] }));
         const row = screen.getByTestId('preflight-warning-AMOUNT_NOT_POSITIVE');
@@ -81,6 +91,18 @@ describe('PreflightPanel warning copy (§5.2.4)', () => {
         const [headline, detail] = screen.getByTestId('preflight-warning-SOME_FUTURE_CODE').querySelectorAll('span');
         expect(headline.textContent).not.toContain('FUTURE_FIELD');
         expect(detail.textContent).toBe(f.message);
+    });
+
+    it('shows the Issue protocol-fee forfeiture finding once', () => {
+        mount(reportWith({ findings: [{
+            code: 'NATIVE_FEE_FORFEIT', severity: 'warning', source: 'client',
+            message: 'This action charges a protocol fee. If the chain rejects the action, any attached native-coin fee output is forfeited.',
+            data: { action: 'ISSUE' },
+        }] }));
+        const row = screen.getByTestId('preflight-warning-NATIVE_FEE_FORFEIT');
+        expect(row.querySelectorAll('span')).toHaveLength(1);
+        expect(within(row).getByText(WARNING_COPY.NATIVE_FEE_FORFEIT)).toBeTruthy();
+        expect(row.textContent.match(/protocol fee/g)).toHaveLength(1);
     });
 
     // Tier 1 demotes a balance error to a warning when the network accepted the

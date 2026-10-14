@@ -4,6 +4,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: nowrap;
     gap: var(--xc-space-3);
     padding: var(--xc-space-2) var(--xc-space-3);
     background: var(--xc-surface);
@@ -15,15 +16,130 @@
 .left {
     display: flex;
     align-items: center;
+    flex: 1 1 auto;
     gap: var(--xc-space-2);
     min-width: 0;
+    overflow: hidden;
 }
 
 .right {
     display: flex;
     align-items: center;
+    gap: var(--xc-space-1);
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+}
+
+.right > button,
+.actionTrigger > button {
+    width: var(--xc-control-h-md);
+    height: var(--xc-control-h-md);
+    border-radius: var(--xc-control-radius);
+    --xc-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
+}
+
+.bar [data-network-status-trigger] {
+    width: auto;
+    min-width: var(--xc-control-h-md);
+    gap: var(--xc-space-1);
+    padding: 0 var(--xc-space-2);
+}
+
+.bar [data-network-name] {
+    color: var(--xc-text);
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.actionWrap {
+    position: relative;
+    display: inline-flex;
+    flex: 0 0 auto;
+}
+
+.actionTrigger {
+    display: inline-flex;
+}
+
+.actionMenu {
+    position: absolute;
+    box-sizing: border-box;
+    top: calc(100% + 4px);
+    inset-inline-end: 0;
+    z-index: 20;
+    width: min(280px, calc(100vw - (2 * var(--xc-space-2))));
+    max-height: min(70vh, 520px);
+    overflow-y: auto;
+    padding: var(--xc-space-1);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-md);
+    background: var(--xc-surface);
+    box-shadow: var(--xc-shadow-header-menu);
+}
+
+.actionRow {
+    appearance: none;
+    box-sizing: border-box;
+    width: 100%;
+    min-height: var(--xc-tap-min);
+    display: flex;
+    align-items: center;
     gap: var(--xc-space-2);
-    flex-shrink: 0;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border: 0;
+    border-radius: var(--xc-radius-sm);
+    background: transparent;
+    color: var(--xc-text);
+    font: inherit;
+    font-size: var(--xc-text-sm);
+    text-align: start;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.settingsWrap,
+.settingsWrap > span {
+    width: 100%;
+}
+
+.actionRow:hover {
+    background: var(--xc-bg-muted);
+}
+
+.actionRow:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: -2px;
+}
+
+.rowIcon {
+    --xc-icon-size: var(--xc-control-icon-sm, var(--xc-icon-sm));
+    position: relative;
+    width: 24px;
+    height: 24px;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--xc-accent-text);
+}
+
+.rowLabel {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.shortcut {
+    flex: 0 0 auto;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+}
+
+@media (pointer: coarse), (hover: none) {
+    .shortcut {
+        display: none;
+    }
 }
 
 /* Logo is 750×464 (≈1.617:1). Width-only sizing preserves aspect
@@ -35,84 +151,21 @@
     display: block;
 }
 
-/* Outline pancake button; matches `.menuBtn` in Home.module.css
-   exactly. */
-.menuBtn {
-    appearance: none;
-    background: transparent;
-    border: 1px solid var(--xc-border-strong);
-    border-radius: 8px;
-    width: 38px;
-    height: 38px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--xc-text);
-    cursor: pointer;
-    flex: 0 0 auto;
+/* Short landscape screens keep the persistent controls reachable while
+   returning vertical space to the active route. */
+@media (orientation: landscape) and (max-height: 480px) {
+    .bar {
+        gap: var(--xc-space-2);
+        padding: var(--xc-space-1) var(--xc-space-2);
+    }
+
+    .logo {
+        width: 44px;
+    }
 }
 
-.menuBtn:hover {
-    background: var(--xc-bg-muted);
-}
-
-.menuBtn:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-
-/* Scan / addresses dropdown anchored under the QR button. */
-.scanWrap {
-    position: relative;
-    display: inline-flex;
-    flex: 0 0 auto;
-}
-
-.scanMenu {
-    position: absolute;
-    top: calc(100% + 4px);
-    inset-inline-end: 0;
-    z-index: 20;
-    min-width: 184px;
-    padding: 4px;
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
-.scanItem {
-    appearance: none;
-    background: transparent;
-    border: none;
-    width: 100%;
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    padding: 8px 10px;
-    border-radius: var(--xc-radius-sm);
-    color: var(--xc-text);
-    font-family: inherit;
-    font-size: var(--xc-text-sm);
-    text-align: start;
-    cursor: pointer;
-}
-
-.scanItem:hover {
-    background: var(--xc-bg-muted);
-}
-
-.scanItem:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: -2px;
-}
-
-.scanItemIcon {
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    color: var(--xc-text-muted);
+@media (max-width: 480px) {
+    .logo {
+        width: 44px;
+    }
 }

@@ -111,12 +111,13 @@ function createFakeWebContents(id) {
 // Keep the global bgSignerBridge registry clean between cases since
 // it's module-scoped per process.
 function resetRegistry() { bgSignerBridge.clearAll(); }
+const trustFakeSender = () => true;
 
 // --- 1. Lazy per-sender entry + register populates registry --------
 
 resetRegistry();
 const ipc1 = createFakeIpcMain();
-const detach1 = attachSignerBridgeListener({ ipcMain: ipc1 });
+const detach1 = attachSignerBridgeListener({ ipcMain: ipc1, isTrustedSender: trustFakeSender });
 const wc1 = createFakeWebContents(101);
 
 assert.equal(
@@ -162,7 +163,7 @@ assert.equal(
 
 resetRegistry();
 const ipc2 = createFakeIpcMain();
-const detach2 = attachSignerBridgeListener({ ipcMain: ipc2 });
+const detach2 = attachSignerBridgeListener({ ipcMain: ipc2, isTrustedSender: trustFakeSender });
 const wc2 = createFakeWebContents(202);
 ipc2._emit('xchain-wallet:signer-bridge', { sender: wc2 }, {
     kind: 'register', signerIds: ['sig-destroy'],
@@ -185,7 +186,7 @@ detach2();
 
 resetRegistry();
 const ipc4 = createFakeIpcMain();
-const detach4 = attachSignerBridgeListener({ ipcMain: ipc4 });
+const detach4 = attachSignerBridgeListener({ ipcMain: ipc4, isTrustedSender: trustFakeSender });
 const wc4 = createFakeWebContents(404);
 const register4 = () => ipc4._emit('xchain-wallet:signer-bridge', { sender: wc4 }, {
     kind: 'register', signerIds: ['sig-reload'],
@@ -208,7 +209,7 @@ detach4();
 
 resetRegistry();
 const ipc3 = createFakeIpcMain();
-const detach3 = attachSignerBridgeListener({ ipcMain: ipc3 });
+const detach3 = attachSignerBridgeListener({ ipcMain: ipc3, isTrustedSender: trustFakeSender });
 const wc3 = createFakeWebContents(303);
 ipc3._emit('xchain-wallet:signer-bridge', { sender: wc3 }, {
     kind: 'register', signerIds: ['sig-detach-a', 'sig-detach-b'],
@@ -226,7 +227,7 @@ assert.equal(bgSignerBridge.getTransport('sig-detach-b'), null,
 
 resetRegistry();
 const ipc5 = createFakeIpcMain();
-const detach5 = attachSignerBridgeListener({ ipcMain: ipc5 });
+const detach5 = attachSignerBridgeListener({ ipcMain: ipc5, isTrustedSender: trustFakeSender });
 const wc5 = createFakeWebContents(505);
 ipc5._emit('xchain-wallet:signer-bridge', { sender: wc5 }, {
     kind: 'register', signerIds: ['sig-shared'],
@@ -236,7 +237,7 @@ for (const ev of ['destroyed', 'did-navigate', 'render-process-gone']) {
     assert.equal(wc5._count(ev), 0, `detach() removes the ${ev} hook`);
 }
 const ipc6 = createFakeIpcMain();
-const detach6 = attachSignerBridgeListener({ ipcMain: ipc6 });
+const detach6 = attachSignerBridgeListener({ ipcMain: ipc6, isTrustedSender: trustFakeSender });
 // Another window registers the id the detached instance once held.
 const wc6 = createFakeWebContents(606);
 ipc6._emit('xchain-wallet:signer-bridge', { sender: wc6 }, {

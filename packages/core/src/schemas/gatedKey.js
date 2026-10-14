@@ -89,7 +89,12 @@ export function validateGatedKey(record) {
     check(errors, 'id', isNonEmptyString(r.id), 'must be a non-empty string');
     check(errors, 'walletId', isNonEmptyString(r.walletId), 'must be a non-empty string');
     check(errors, 'chainId', isNonEmptyString(r.chainId), 'must be a non-empty string');
-    check(errors, 'gateTicker', isNonEmptyString(r.gateTicker), 'must be a non-empty string');
+    check(
+        errors,
+        'gateTicker',
+        isNonEmptyString(r.gateTicker) && r.gateTicker === r.gateTicker.toUpperCase(),
+        'must be a non-empty uppercase string',
+    );
     // keyHash binds keyHex: both fixed-shape hex, and the hash must be
     // recomputable from the key by callers (verified at write sites via
     // sdk.gatedFile.verifyKey; the schema enforces shape only, since
@@ -101,6 +106,17 @@ export function validateGatedKey(record) {
     check(errors, 'source', GATED_KEY_SOURCES.includes(r.source),
         `must be one of ${GATED_KEY_SOURCES.join(', ')}`);
     check(errors, 'createdAt', isIsoTimestamp(r.createdAt), 'must be an ISO timestamp');
+    if (isNonEmptyString(r.walletId)
+        && isNonEmptyString(r.chainId)
+        && isNonEmptyString(r.gateTicker)
+        && typeof r.keyHash === 'string') {
+        check(
+            errors,
+            'id',
+            r.id === gatedKeyId(r),
+            'must match walletId, chainId, gateTicker, and keyHash',
+        );
+    }
     return result(errors);
 }
 

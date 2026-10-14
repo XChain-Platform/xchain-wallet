@@ -8,7 +8,46 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
+import {
+    AUTO_LOCK_GUARD_CHANGED_EVENT,
+    isAutoLockHeld,
+} from './autoLockGuard.js';
+
+const AUTO_LOCK_ACTIVITY_CHANNEL = 'xchain:auto-lock-activity';
+const ACTIVITY_REPORT_INTERVAL_MS = 1000;
+const CLOCK_DRIFT_TOLERANCE_MS = 5 * 60 * 1000;
+
+function monotonicNow() {
+    return typeof globalThis.performance?.now === 'function'
+        ? globalThis.performance.now()
+        : Date.now();
+}
+
+/**
+ * Measure an in-process idle interval without trusting a large wall-clock jump.
+ * Small differences preserve elapsed time across ordinary timer throttling,
+ * while a clock correction falls back to the monotonic clock.
+ */
+export function clockSafeElapsed(
+    wallStartedAt,
+    monotonicStartedAt,
+    wallNow = Date.now(),
+    monotonicCurrent = monotonicNow(),
+) {
+    const wallElapsed = Math.max(0, wallNow - wallStartedAt);
+    const monotonicElapsed = Math.max(0, monotonicCurrent - monotonicStartedAt);
+    if (Math.abs(wallElapsed - monotonicElapsed) > CLOCK_DRIFT_TOLERANCE_MS) {
+        return monotonicElapsed;
+    }
+    return Math.max(wallElapsed, monotonicElapsed);
+}
+
+function autoLockElapsed(startedAt) {
+    const wallElapsed = Math.max(0, Date.now() - startedAt.wall);
+    const monotonicElapsed = Math.max(0, monotonicNow() - startedAt.monotonic);
+    return Math.max(wallElapsed, monotonicElapsed);
+}
 
 /**
  * Foreground auto-lock timer (§26).
@@ -46,44 +85,128 @@ import { useEffect, useRef } from 'react';
  * @param {number} [opts.idleMs]   default 5 minutes
  * @param {number} [opts.tickMs]   default 30 seconds
  * @param {boolean} [opts.enabled] default true
+ * @param {() => void} [opts.onDeferred] called when an elapsed deadline waits for a guarded operation
+ * @param {() => void} [opts.onActivity] reports local activity to a shell backstop
+ * @returns {() => boolean} checks the deadline immediately and reports whether locking started
  */
 export function useAutoLock(
     onLock,
-    { idleMs = 5 * 60 * 1000, tickMs = 30 * 1000, enabled = true } = {},
+    {
+        idleMs = 5 * 60 * 1000,
+        tickMs = 30 * 1000,
+        enabled = true,
+        onDeferred,
+        onActivity,
+    } = {},
 ) {
-    const lastActivity = useRef(Date.now());
+    const lastActivity = useRef({ wall: Date.now(), monotonic: monotonicNow() });
     const onLockRef = useRef(onLock);
+    const onDeferredRef = useRef(onDeferred);
+    const onActivityRef = useRef(onActivity);
+    const checkNowRef = useRef(() => false);
     onLockRef.current = onLock;
+    onDeferredRef.current = onDeferred;
+    onActivityRef.current = onActivity;
 
     useEffect(() => {
-        if (!enabled) return undefined;
-        // Start every arm with a full idle window: while disabled the listeners
-        // are detached, so the clock still holds the moment of the last lock.
-        lastActivity.current = Date.now();
-        const bump = () => { lastActivity.current = Date.now(); };
+        if (enabled) lastActivity.current = { wall: Date.now(), monotonic: monotonicNow() };
+    }, [enabled]);
+
+    useEffect(() => {
+        if (!enabled) {
+            checkNowRef.current = () => false;
+            return undefined;
+        }
+        let deferred = false;
+        let lastActivityReportAt = -Infinity;
+        const resetActivity = () => {
+            lastActivity.current = { wall: Date.now(), monotonic: monotonicNow() };
+            deferred = false;
+        };
+        let activityChannel;
+        try {
+            if (typeof globalThis.BroadcastChannel === 'function') {
+                activityChannel = new globalThis.BroadcastChannel(AUTO_LOCK_ACTIVITY_CHANNEL);
+                activityChannel.onmessage = (event) => {
+                    if (event?.data?.type === 'activity') resetActivity();
+                };
+            }
+        } catch {
+            activityChannel = undefined;
+        }
+        const bump = () => {
+            resetActivity();
+            try { activityChannel?.postMessage({ type: 'activity' }); } catch { /* best-effort */ }
+            const now = monotonicNow();
+            if (now - lastActivityReportAt >= ACTIVITY_REPORT_INTERVAL_MS) {
+                lastActivityReportAt = now;
+                try { onActivityRef.current?.(); } catch { /* best-effort */ }
+            }
+        };
         const events = ['mousemove', 'keydown', 'scroll', 'click', 'touchstart'];
         for (const ev of events) {
             window.addEventListener(ev, bump, { passive: true });
         }
         let cancelled = false;
-        const tick = () => {
-            if (cancelled) return;
-            if (Date.now() - lastActivity.current >= idleMs) {
+        let handle;
+        function schedule() {
+            const elapsed = autoLockElapsed(lastActivity.current);
+            const remaining = Math.max(0, idleMs - elapsed);
+            handle = window.setTimeout(tick, Math.min(tickMs, remaining));
+        }
+        function tick() {
+            if (cancelled) return false;
+            const elapsed = autoLockElapsed(lastActivity.current);
+            if (elapsed >= idleMs) {
+                if (isAutoLockHeld()) {
+                    if (!deferred) onDeferredRef.current?.();
+                    deferred = true;
+                    schedule();
+                    return false;
+                }
                 try { onLockRef.current?.(); } catch (_err) { /* ignore */ }
                 // Re-arm instead of stopping. `onLock` is async and can
                 // fail (a messaging round-trip), and bailing here left the
                 // session unlocked with no timer for the rest of its life.
                 // The successful case tears the hook down anyway: the shell
                 // flips to `locked` and passes `enabled: false`.
-                lastActivity.current = Date.now();
+                lastActivity.current = { wall: Date.now(), monotonic: monotonicNow() };
+                deferred = false;
+                schedule();
+                return true;
             }
-            window.setTimeout(tick, tickMs);
+            schedule();
+            return false;
+        }
+        const checkNow = () => {
+            clearTimeout(handle);
+            return tick();
         };
-        const handle = window.setTimeout(tick, tickMs);
+        checkNowRef.current = checkNow;
+        const onVisibilityChange = () => {
+            const cap = /** @type {any} */ (globalThis).Capacitor;
+            const nativeAppOwnsResume = Boolean(
+                cap?.Plugins?.App?.addListener
+                && (typeof cap.isNativePlatform !== 'function' || cap.isNativePlatform()),
+            );
+            if (document.visibilityState === 'visible' && !nativeAppOwnsResume) checkNow();
+        };
+        const onGuardChange = () => {
+            if (!isAutoLockHeld()) checkNow();
+        };
+        document.addEventListener('visibilitychange', onVisibilityChange);
+        window.addEventListener(AUTO_LOCK_GUARD_CHANGED_EVENT, onGuardChange);
+        schedule();
         return () => {
             cancelled = true;
+            checkNowRef.current = () => false;
             clearTimeout(handle);
+            document.removeEventListener('visibilitychange', onVisibilityChange);
+            window.removeEventListener(AUTO_LOCK_GUARD_CHANGED_EVENT, onGuardChange);
             for (const ev of events) window.removeEventListener(ev, bump);
+            activityChannel?.close();
         };
     }, [enabled, idleMs, tickMs]);
+
+    return useCallback(() => checkNowRef.current(), []);
 }

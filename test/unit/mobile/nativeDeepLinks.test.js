@@ -51,12 +51,15 @@ afterEach(() => __setLinksPluginForTests(undefined));
 const CLAIMED_LINK = `https://xchain.io/wallet/link/?uri=${encodeURIComponent('xchain:TBTC/receive')}`;
 
 describe('isAcceptableDeepLink', () => {
-    it('accepts the two shapes the manifest claims', () => {
+    it('accepts the web link and payment schemes the manifest claims', () => {
         expect(isAcceptableDeepLink(CLAIMED_LINK)).toBe(true);
         // The claim is a wildcard, so deeper paths under it travel too.
         expect(isAcceptableDeepLink('https://xchain.io/wallet/link/v1/invoice/9')).toBe(true);
         expect(isAcceptableDeepLink('xchain:BTC/send?address=abc')).toBe(true);
         expect(isAcceptableDeepLink('XCHAIN:BTC/send')).toBe(true);
+        expect(isAcceptableDeepLink('bitcoin:bc1qrecipient?amount=1')).toBe(true);
+        expect(isAcceptableDeepLink('litecoin:ltc1qrecipient?amount=2')).toBe(true);
+        expect(isAcceptableDeepLink('dogecoin:DRecipient?amount=3')).toBe(true);
     });
 
     it('rejects the lookalikes a prefix check would accept', () => {
@@ -77,7 +80,7 @@ describe('isAcceptableDeepLink', () => {
             'javascript:alert(1)',
             'file:///etc/passwd',
             'data:text/html,<script>',
-            'bitcoin:bc1qexample',
+            'monero:4example',
         ]) {
             expect(isAcceptableDeepLink(url), url).toBe(false);
         }
@@ -122,6 +125,33 @@ describe('subscribeToNativeDeepLinks', () => {
         await vi.waitFor(() => expect(onLink).toHaveBeenCalledWith(CLAIMED_LINK));
     });
 
+    it('attaches the live listener before draining the launch queue', async () => {
+        let listener;
+        let pending = null;
+        const warmLink = 'xchain:BTC/send?address=warm';
+        const plugin = {
+            addListener: vi.fn(async (_event, cb) => {
+                listener = cb;
+                return { remove: vi.fn() };
+            }),
+            takePendingLink: vi.fn(async () => {
+                const url = pending;
+                pending = null;
+                if (listener) listener({ url: warmLink });
+                else pending = warmLink;
+                return { url };
+            }),
+        };
+        __setLinksPluginForTests(plugin);
+        const onLink = vi.fn();
+
+        subscribeToNativeDeepLinks(onLink);
+
+        await vi.waitFor(() => expect(onLink).toHaveBeenCalledWith(warmLink));
+        expect(plugin.addListener.mock.invocationCallOrder[0])
+            .toBeLessThan(plugin.takePendingLink.mock.invocationCallOrder[0]);
+    });
+
     it('delivers taps that arrive while the app is running', async () => {
         const plugin = fakeLinks();
         __setLinksPluginForTests(plugin);
@@ -132,7 +162,7 @@ describe('subscribeToNativeDeepLinks', () => {
         expect(onLink).toHaveBeenCalledWith('xchain:BTC/send?address=abc');
     });
 
-    it('filters a hostile URL even when the native side forwards one', async () => {
+    it('filters a hostile URL or unclaimed path even when the native side forwards one', async () => {
         // Native validates too. This is the half that still runs if the
         // plugin is ever replaced or an event is spoofed from inside the
         // WebView.
@@ -142,6 +172,7 @@ describe('subscribeToNativeDeepLinks', () => {
         subscribeToNativeDeepLinks(onLink);
         await vi.waitFor(() => expect(plugin.addListener).toHaveBeenCalled());
         plugin.emit('https://xchain.io.evil.com/wallet/send');
+        plugin.emit('https://xchain.io/wallet/privacy/?uri=xchain%3ABTC%2Fsend');
         plugin.emit('javascript:alert(1)');
         plugin.emit(undefined);
         expect(onLink).not.toHaveBeenCalled();
@@ -174,6 +205,51 @@ describe('subscribeToNativeDeepLinks', () => {
         __setLinksPluginForTests(plugin);
         const onLink = vi.fn();
         expect(() => subscribeToNativeDeepLinks(onLink)).not.toThrow();
+        await Promise.resolve();
+        expect(onLink).not.toHaveBeenCalled();
+    });
+
+    it('contains synchronous cold-start failures and rejected listener registration', async () => {
+        const plugin = fakeLinks({
+            overrides: {
+                takePendingLink: vi.fn(() => { throw new Error('plugin mismatch'); }),
+                addListener: vi.fn(async () => { throw new Error('listener unavailable'); }),
+            },
+        });
+        __setLinksPluginForTests(plugin);
+        const onLink = vi.fn();
+
+        const off = subscribeToNativeDeepLinks(onLink);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(() => off()).not.toThrow();
+
+        expect(plugin.takePendingLink).toHaveBeenCalledTimes(1);
+        expect(plugin.addListener).toHaveBeenCalledTimes(1);
+        expect(onLink).not.toHaveBeenCalled();
+    });
+
+    it('contains a rejected listener registration and still checks the launch queue', async () => {
+        const plugin = fakeLinks({
+            pending: CLAIMED_LINK,
+            overrides: { addListener: vi.fn().mockRejectedValue(new Error('bridge unavailable')) },
+        });
+        __setLinksPluginForTests(plugin);
+        const onLink = vi.fn();
+
+        subscribeToNativeDeepLinks(onLink);
+
+        await vi.waitFor(() => expect(onLink).toHaveBeenCalledWith(CLAIMED_LINK));
+    });
+
+    it('contains a synchronous pending-link bridge failure', async () => {
+        const plugin = fakeLinks({
+            overrides: { takePendingLink: vi.fn(() => { throw new Error('bridge unavailable'); }) },
+        });
+        __setLinksPluginForTests(plugin);
+        const onLink = vi.fn();
+
+        expect(() => subscribeToNativeDeepLinks(onLink)).not.toThrow();
+        await Promise.resolve();
         await Promise.resolve();
         expect(onLink).not.toHaveBeenCalled();
     });

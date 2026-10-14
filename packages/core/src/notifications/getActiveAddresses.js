@@ -20,6 +20,7 @@
  * @property {string} chainId   e.g. 'bitcoin-mainnet'
  * @property {string} label     human chain name for notification text, e.g. 'Bitcoin'
  * @property {string} network   'mainnet' | 'testnet' | 'regtest'
+ * @property {string} [walletName] wallet name for distinguishing background events
  */
 
 /**
@@ -36,12 +37,20 @@ export async function getActiveAddresses(vault, chainRegistry, opts = {}) {
     if (!chainRegistry) throw new Error('getActiveAddresses: chainRegistry is required');
     const { activeNetwork } = opts;
 
-    const records = await vault.addresses.list();
+    const [records, accounts, wallets] = await Promise.all([
+        vault.addresses.list(),
+        vault.accounts.list(),
+        vault.wallets.list(),
+    ]);
+    const walletIdByAccount = new Map(accounts.map((account) => [account.id, account.walletId]));
+    const demoWalletIds = new Set(wallets.filter((wallet) => wallet.origin === 'demo').map((wallet) => wallet.id));
+    const walletNameById = new Map(wallets.map((wallet) => [wallet.id, wallet.name]));
     const seen = new Set();
     /** @type {ActiveAddress[]} */
     const out = [];
     for (const a of records) {
         if (!a || !a.address) continue;
+        if (a.accountId && demoWalletIds.has(walletIdByAccount.get(a.accountId))) continue;
         if (activeNetwork && a.network !== activeNetwork) continue;
         const chainId = chainRegistry.chainIdFor(a.chain, a.network);
         if (!chainId) continue;
@@ -49,12 +58,15 @@ export async function getActiveAddresses(vault, chainRegistry, opts = {}) {
         if (seen.has(key)) continue;
         seen.add(key);
         const descriptor = chainRegistry.descriptorFor(chainId);
-        out.push({
+        const walletName = a.accountId ? walletNameById.get(walletIdByAccount.get(a.accountId)) : null;
+        const entry = {
             address: a.address,
             chainId,
             label: (descriptor && descriptor.displayName) || a.chain,
             network: a.network,
-        });
+        };
+        if (typeof walletName === 'string' && walletName.trim()) entry.walletName = walletName.trim();
+        out.push(entry);
     }
     return out;
 }

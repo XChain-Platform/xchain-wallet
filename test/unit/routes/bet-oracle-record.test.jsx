@@ -182,7 +182,7 @@ describe('OracleRecord (P8)', () => {
             betOracle: () => Promise.resolve({ data: [{ ...RECORD, fees_earned: [] }] }),
         });
         const utils = await mount(OracleRecord, messaging, { chainId: CHAIN, address: ORACLE });
-        expect(text(utils)).toMatch(/never been paid a fee/i);
+        expect(text(utils)).toMatch(/No settlement fees yet/i);
     });
 
     it('survives an explorer too old to report fees at all', async () => {
@@ -193,17 +193,18 @@ describe('OracleRecord (P8)', () => {
         // The record still renders; the missing field degrades to "no fees", never
         // to a crash on a non-array.
         expect(text(utils)).toMatch(/Markets opened/);
-        expect(text(utils)).toMatch(/never been paid a fee/i);
+        expect(text(utils)).toMatch(/No settlement fees yet/i);
     });
 
-    it('keeps the record on screen when the market listing fails', async () => {
+    it('keeps the record and does not claim there are no markets when the listing fails', async () => {
         const { messaging } = harness({
             betFeeds: () => Promise.reject(new Error('explorer down')),
         });
         const utils = await mount(OracleRecord, messaging, { chainId: CHAIN, address: ORACLE });
         const body = text(utils);
         expect(body).toMatch(/Markets opened/);
-        expect(body).toMatch(/No markets from this address/i);
+        expect(body).toMatch(/Could not load this address's markets/i);
+        expect(body).not.toMatch(/No markets from this address/i);
         expect(body).not.toMatch(/explorer down/);
     });
 
@@ -212,7 +213,7 @@ describe('OracleRecord (P8)', () => {
             betOracle: () => Promise.reject(new Error('explorer down')),
         });
         const utils = await mount(OracleRecord, messaging, { chainId: CHAIN, address: ORACLE });
-        expect(utils.container.querySelector('[role="alert"]').textContent).toMatch(/explorer down/);
+        expect(utils.getByRole('alert').textContent).toMatch(/explorer down/);
     });
 
     it('opens one of the oracle\'s markets on the chain the record was read from', async () => {
@@ -221,8 +222,7 @@ describe('OracleRecord (P8)', () => {
         const utils = await mount(OracleRecord, messaging, {
             chainId: CHAIN, address: ORACLE, onOpenMarket: (c, i) => opened.push([c, i]),
         });
-        const row = Array.from(utils.container.querySelectorAll('button'))
-            .find((b) => /Who wins the final\?/.test(b.textContent || ''));
+        const row = utils.getByRole('button', { name: /Who wins the final\?/ });
         await domAct(async () => { fireEvent.click(row); await drain(); });
         expect(opened).toEqual([[CHAIN, '2308']]);
     });
@@ -230,17 +230,15 @@ describe('OracleRecord (P8)', () => {
 
 describe('BetFeedDetail reaches the oracle record (the prop that had no caller)', () => {
 
-    it('turns the oracle address into a link that hands back chain + address', async () => {
+    it('turns the oracle address into an action button that hands back chain + address', async () => {
         const { messaging } = harness();
         const seen = [];
         const utils = await mount(BetFeedDetail, messaging, {
             walletId: 'w', chainId: CHAIN, feedIndex: '2308',
             onOpenOracle: (c, a) => seen.push([c, a]),
         });
-        const link = Array.from(utils.container.querySelectorAll('a'))
-            .find((a) => (a.textContent || '').includes(ORACLE));
-        expect(link, 'the market page shows no link to the oracle').toBeTruthy();
-        await domAct(async () => { fireEvent.click(link); await drain(); });
+        const button = utils.getByRole('button', { name: ORACLE });
+        await domAct(async () => { fireEvent.click(button); await drain(); });
         expect(seen).toEqual([[CHAIN, ORACLE]]);
     });
 
@@ -250,6 +248,7 @@ describe('BetFeedDetail reaches the oracle record (the prop that had no caller)'
             walletId: 'w', chainId: CHAIN, feedIndex: '2308',
         });
         expect(text(utils)).toMatch(new RegExp(ORACLE));
-        expect(utils.container.querySelector(`a[href="#"]`)).toBeNull();
+        expect(utils.queryByRole('link', { name: ORACLE })).toBeNull();
+        expect(utils.queryByRole('button', { name: ORACLE })).toBeNull();
     });
 });

@@ -2,38 +2,34 @@
    DispensersList (48px round icon + chain overlay, search + network
    filter toolbar, status chip on the trailing edge). */
 
-.wrapFull {
+/* Secondary list actions, under the header rather than in it. */
+.actions {
     display: flex;
-    flex-direction: column;
-    max-width: 560px;
-    margin: var(--xc-space-6) auto 0;
-    padding: var(--xc-space-4);
-}
-
-.wrapPopup {
-    display: flex;
-    flex-direction: column;
-}
-
-.toolbar {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
+    flex-wrap: wrap;
     gap: var(--xc-space-2);
-    width: 100%;
-    margin-bottom: calc(var(--xc-space-1) + 2px);
+    margin-bottom: var(--xc-space-2);
+}
+
+.searchField {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.searchField > * {
+    margin-bottom: 0;
 }
 
 .search {
     flex: 1 1 0;
     min-width: 0;
+    height: var(--xc-control-h-md);
     padding: var(--xc-space-2) var(--xc-space-3);
     font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-sm);
+    font-size: var(--xc-control-font-md, var(--xc-control-font));
     color: var(--xc-text);
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
+    border-radius: var(--xc-control-radius);
 }
 
 .search::placeholder {
@@ -43,6 +39,7 @@
 .list {
     display: flex;
     flex-direction: column;
+    width: 100%;
     background: var(--xc-surface);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-md);
@@ -105,18 +102,10 @@
     width: 20px;
     height: 20px;
     border-radius: 50%;
-    background: #FFFFFF;
+    background: var(--xc-surface);
     box-shadow: 0 0 0 1.5px var(--xc-surface);
     object-fit: cover;
     display: block;
-}
-
-.body {
-    flex: 1 1 auto;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
 }
 
 .name {
@@ -128,43 +117,26 @@
     min-width: 0;
 }
 
-.subtitle {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    min-width: 0;
-}
-
-.trailing {
-    flex: 0 0 auto;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: var(--xc-space-1);
-}
-
 .status {
     flex: 0 0 auto;
     font-size: var(--xc-text-xs);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    padding: 2px 8px;
+    padding: 2px var(--xc-space-2);
     border-radius: 999px;
     background: var(--xc-bg-muted);
     color: var(--xc-text-muted);
 }
 
 .status_valid {
-    background: rgba(34, 197, 94, 0.15);
-    color: var(--xc-success, #22C55E);
+    background: color-mix(in srgb, var(--xc-success) 15%, transparent);
+    color: var(--xc-success);
 }
 
 .status_invalid {
-    background: rgba(220, 38, 38, 0.15);
-    color: var(--xc-danger);
+    background: var(--xc-danger-bg);
+    color: var(--xc-danger-text);
 }
 
 /* Circular header "+" button that opens the Create list form (same

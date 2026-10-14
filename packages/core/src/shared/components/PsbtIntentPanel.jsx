@@ -18,11 +18,6 @@
 // back as change, and treats a failed decode as a LOUD state rather than
 // a missing line.
 //
-// Amounts stay in the chain's smallest unit (sats). The wallet cannot
-// convert without a descriptor for the PSBT's chain, and a guessed
-// conversion on a signing surface is worse than an honest raw number
-// (§3.5.5: never prettify what you cannot verify).
-
 import { AddressText } from '@xchain-wallet/core/ui';
 import { describeUnreadableReason, isUnreadableActionReason } from './psbtDecodeReasons.js';
 import {
@@ -30,7 +25,20 @@ import {
     formatExactSats,
     sumExactSats,
 } from '../../flows/psbtNetworkFee.js';
+import {
+    formatNativeBaseUnits,
+    tickerForDescriptor,
+} from '../../registry/coinTicker.js';
 import styles from './PsbtIntentPanel.module.css';
+
+function amountLabel(value, descriptor) {
+    const smallestUnits = formatExactSats(value);
+    if (smallestUnits === null) return null;
+    if (!descriptor) return `${smallestUnits} sats`;
+    const amount = formatNativeBaseUnits(value, descriptor);
+    const ticker = tickerForDescriptor(descriptor);
+    return amount === null || !ticker ? null : `${amount} ${ticker}`;
+}
 
 /**
  * The alert's first sentence for an action the wallet could not read. Names
@@ -54,7 +62,9 @@ function undecodedSentence(decodeError) {
  * @param {string} [props.signingAddress]         the address whose key will sign
  * @param {object|null} [props.decodedAction]     decodeActionFromPsbt intent, when the bytes decoded
  * @param {string|null} [props.decodeError]       why the action decode failed / was punted
+ * @param {string|null} [props.unavailableMessage] caller-facing reason the transaction is unavailable
  * @param {boolean} [props.loading]
+ * @param {object} [props.chainDescriptor]
  */
 export function PsbtIntentPanel({
     decomposed,
@@ -62,7 +72,9 @@ export function PsbtIntentPanel({
     signingAddress,
     decodedAction = null,
     decodeError = null,
+    unavailableMessage = null,
     loading = false,
+    chainDescriptor,
 }) {
     if (loading) {
         return <p className={styles.actionIntent}>Decoding transaction…</p>;
@@ -72,8 +84,12 @@ export function PsbtIntentPanel({
         // exactly when the user most needs to be cautious.
         return (
             <p className={styles.undecoded} role="alert" data-testid="psbt-undecodable">
-                This transaction could not be decoded, so the wallet cannot show you
-                what it does. Only continue if you trust where it came from.
+                {unavailableMessage || (
+                    <>
+                        This transaction could not be decoded, so the wallet cannot show you
+                        what it does. Only continue if you trust where it came from.
+                    </>
+                )}
             </p>
         );
     }
@@ -131,18 +147,22 @@ export function PsbtIntentPanel({
                 {inputs.map((inp, i) => {
                     const isOwn = !!inp.address && own.has(inp.address);
                     const signs = !!inp.address && !!signingAddress && inp.address === signingAddress;
+                    const amount = amountLabel(inp.value, chainDescriptor);
+                    const isUnknown = !inp.address || amount === null;
                     return (
-                        <div className={styles.row} key={`in-${i}`}>
+                        <div className={styles.row} key={`in-${i}`} data-testid="psbt-input">
                             <span className={signs ? styles.tag : styles.tagMuted}>
-                                {signs ? 'Signs with your key' : isOwn ? 'Your address' : 'Other signer'}
+                                {isUnknown
+                                    ? 'Unknown input'
+                                    : signs
+                                        ? 'Signs with your key'
+                                        : isOwn ? 'Your address' : 'Other signer'}
                             </span>
                             {inp.address
-                                ? <span className={styles.addr}><AddressText address={inp.address} /></span>
+                                ? <span className={styles.addr}><AddressText address={inp.address} truncate={false} /></span>
                                 : <span className={styles.dataOutput}>(unknown source script)</span>}
                             <span className={styles.value}>
-                                {formatExactSats(inp.value) !== null
-                                    ? `${formatExactSats(inp.value)} sats`
-                                    : 'amount unknown'}
+                                {amount !== null ? amount : 'amount unknown'}
                             </span>
                         </div>
                     );
@@ -155,16 +175,17 @@ export function PsbtIntentPanel({
                 </p>
                 {outputs.map((o, i) => {
                     const isChange = !!o.address && own.has(o.address);
+                    const amount = amountLabel(o.value, chainDescriptor);
                     return (
-                        <div className={styles.row} key={`out-${i}`}>
+                        <div className={styles.row} key={`out-${i}`} data-testid="psbt-output">
                             <span className={isChange ? styles.tagMuted : styles.tag}>
                                 {isChange ? 'Change (back to you)' : 'Recipient'}
                             </span>
                             {o.address
-                                ? <span className={styles.addr}><AddressText address={o.address} /></span>
+                                ? <span className={styles.addr}><AddressText address={o.address} truncate={false} /></span>
                                 : <span className={styles.dataOutput}>(data / non-address output)</span>}
                             <span className={styles.value}>
-                                {formatExactSats(o.value ?? 0)} sats
+                                {amount !== null ? amount : 'amount unknown'}
                             </span>
                         </div>
                     );
@@ -173,18 +194,20 @@ export function PsbtIntentPanel({
 
             <dl className={styles.totals}>
                 <dt className={styles.totalsLabel}>Leaving this wallet</dt>
-                <dd className={styles.totalsValue}>{formatExactSats(leaving ?? 0n)} sats</dd>
+                <dd className={styles.totalsValue}>
+                    {leaving != null ? amountLabel(leaving, chainDescriptor) : 'unavailable'}
+                </dd>
                 <dt className={styles.totalsLabel}>Total in</dt>
                 <dd className={styles.totalsValue}>
-                    {totalIn != null ? `${formatExactSats(totalIn)} sats` : 'unavailable'}
+                    {totalIn != null ? amountLabel(totalIn, chainDescriptor) : 'unavailable'}
                 </dd>
                 <dt className={styles.totalsLabel}>Total out</dt>
                 <dd className={styles.totalsValue}>
-                    {totalOut != null ? `${formatExactSats(totalOut)} sats` : 'unavailable'}
+                    {totalOut != null ? amountLabel(totalOut, chainDescriptor) : 'unavailable'}
                 </dd>
                 <dt className={styles.totalsLabel}>Network fee</dt>
                 <dd className={styles.totalsValue}>
-                    {fee != null ? `${formatExactSats(fee)} sats` : 'unavailable'}
+                    {fee != null ? amountLabel(fee, chainDescriptor) : 'unavailable'}
                 </dd>
             </dl>
         </div>

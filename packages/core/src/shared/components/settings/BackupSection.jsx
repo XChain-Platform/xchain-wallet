@@ -13,7 +13,7 @@
 // Live:
 //   - Export encrypted backup (.xchain-wallet): wires `exportBackupFile`
 //     core flow through the `wallet.exportBackup` host handler.
-//   - Back up seed phrase: wires `revealMnemonic` core flow through
+//   - Back up recovery phrase: wires `revealMnemonic` core flow through
 //     the `wallet.revealMnemonic` host handler. Inline password gate;
 //     mnemonic blurred until tapped; row collapses on done.
 //   - Test backup (dry-run restore): wires `dryRunRestore` core flow
@@ -40,29 +40,41 @@
 //     contact or label the chain copy doesn't know about.
 
 import { useEffect, useRef, useState } from 'react';
-import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
-import { ChainBadge } from '@xchain-wallet/core/ui';
+import {
+    crypto as cryptoLib,
+    flows as flowsLib,
+    registry as registryLib,
+    uri as uriLib,
+} from '@xchain-wallet/core';
+import {
+    Button,
+    ChainBadge,
+    CopyButton,
+    EmptyState,
+    FormSection,
+    Input,
+    SectionHeader,
+    Select,
+    StatusMessage,
+    Textarea,
+} from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../../useMessaging.js';
 import { DiagnosticDetails } from '../DiagnosticDetails.jsx';
 import { ActionConfirmScreen } from '../ActionConfirmScreen.jsx';
+import { KeyQR } from '../KeyQR.jsx';
 import { isUserRejection, useActionConfirmFlow } from '../../hooks/useActionConfirmFlow.js';
 import { useSignerReady } from '../../hooks/useSignerReady.js';
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
+import { useLongOperationStatus } from '../../hooks/useLongOperationStatus.js';
 import { ADDRESS_TYPE_LABEL } from '../../utils/addressTypeLabel.js';
-import { ROW, ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
+import { RECOVERY_PHRASE_WARNING } from '../../utils/securityMomentCopy.js';
+import { blurNumberInputOnWheel } from '../../utils/formInput.js';
+import { useProtectedScreen } from '../../utils/screenGuard.js';
+import { ROW_HINT, STACK, Status } from './_settingsPrimitives.jsx';
+import styles from './BackupSection.module.css';
 
 /** How often the Backup panel asks the background whether a batched publish came due. */
 const AUTO_SYNC_POLL_MS = 15_000;
-
-const ACTION_BTN = {
-    background: 'transparent',
-    border: '1px solid var(--xc-border)',
-    color: 'var(--xc-text)',
-    borderRadius: 'var(--xc-radius-sm)',
-    padding: 'var(--xc-space-1) var(--xc-space-3)',
-    fontSize: 'var(--xc-text-sm)',
-    cursor: 'pointer',
-};
 
 // Treat a seed-decrypt tag mismatch as a mistyped password (its message is the cipher library's).
 // Matched by name, since errors cross the shell messaging boundary as plain objects.
@@ -87,6 +99,9 @@ export function BackupSection({ activeWallet }) {
     const [exporting, setExporting] = useState(false);
     const [exportError, setExportError] = useState(/** @type {string | null} */ (null));
     const [pendingPassword, setPendingPassword] = useState(/** @type {string | null} */ (null));
+    const [exportResult, setExportResult] = useState(/** @type {{ fileName: string, walletName: string } | null} */ (null));
+    const exportAttemptRef = useRef(0);
+    const exportTime = useLongOperationStatus(exporting, { timeoutMs: 30_000 });
 
     // §19.3 reveal-seed state.
     const [revealStage, setRevealStage] = useState(
@@ -98,6 +113,29 @@ export function BackupSection({ activeWallet }) {
     const [mnemonicHidden, setMnemonicHidden] = useState(true);
     const [revealPassphraseEnabled, setRevealPassphraseEnabled] = useState(false);
     const [revealPassphrase, setRevealPassphrase] = useState(/** @type {string | null} */ (null));
+    const [revealedWalletId, setRevealedWalletId] = useState(/** @type {string | null} */ (null));
+    const revealAttemptRef = useRef(0);
+    const activeWalletId = activeWallet?.id || null;
+    const activeWalletIdRef = useRef(activeWalletId);
+    activeWalletIdRef.current = activeWalletId;
+
+    useProtectedScreen(revealStage !== 'idle');
+
+    useEffect(() => {
+        revealAttemptRef.current += 1;
+        setRevealing(false);
+        setMnemonic('');
+        setRevealPassphraseEnabled(false);
+        setRevealPassphrase(null);
+        setRevealedWalletId(null);
+        setMnemonicHidden(true);
+        setRevealStage('idle');
+        setRevealError(null);
+    }, [activeWalletId]);
+
+    useEffect(() => () => {
+        revealAttemptRef.current += 1;
+    }, []);
 
     // §19.6 dry-run restore state.
     const [dryRunStage, setDryRunStage] = useState(
@@ -153,6 +191,7 @@ export function BackupSection({ activeWallet }) {
     }
 
     const onExport = async (password) => {
+        if (exporting) return;
         if (typeof messaging?.exportBackupFile !== 'function') {
             setExportError('Backup export is not wired in this shell yet.');
             return;
@@ -161,6 +200,7 @@ export function BackupSection({ activeWallet }) {
             setExportError('No active wallet to back up.');
             return;
         }
+        const attempt = ++exportAttemptRef.current;
         setExporting(true);
         setExportError(null);
         try {
@@ -168,54 +208,71 @@ export function BackupSection({ activeWallet }) {
                 walletId: activeWallet.id,
                 password,
             });
-            triggerDownload(activeWallet.name || activeWallet.id, fileContent);
+            if (attempt !== exportAttemptRef.current) return;
+            const saved = triggerDownload(activeWallet.name || activeWallet.id, fileContent);
             // §19.7 / G034: successful encrypted-backup export counts as
             // a fresh backup verification for reminder purposes.
             try { flowsLib.markBackupVerified(activeWallet.id); } catch { /* best-effort */ }
+            setExportResult(saved);
             setPendingPassword(null);
         } catch (err) {
-            setExportError(err instanceof Error ? err.message : String(err));
+            if (attempt !== exportAttemptRef.current) return;
+            setExportError(userFacingMessage(err, 'Could not export the backup. Try again.'));
         } finally {
-            setExporting(false);
+            if (attempt === exportAttemptRef.current) setExporting(false);
         }
+    };
+
+    const cancelExport = () => {
+        exportAttemptRef.current += 1;
+        setExporting(false);
+        setPendingPassword(null);
+        setExportError(null);
     };
 
     const onReveal = async (password) => {
         if (typeof messaging?.revealMnemonicRequest !== 'function') {
-            setRevealError('Seed reveal is not wired in this shell yet.');
+            setRevealError('Recovery phrase reveal is not wired in this shell yet.');
             return;
         }
         if (!activeWallet?.id) {
             setRevealError('No active wallet.');
             return;
         }
+        const walletId = activeWallet.id;
+        const attempt = ++revealAttemptRef.current;
         setRevealing(true);
         setRevealError(null);
         try {
             const r = await messaging.revealMnemonicRequest({
-                walletId: activeWallet.id,
+                walletId,
                 password,
             });
+            if (attempt !== revealAttemptRef.current || activeWalletIdRef.current !== walletId) return;
             setMnemonic(r?.mnemonic || '');
             setRevealPassphraseEnabled(Boolean(r?.passphraseEnabled));
             setRevealPassphrase(typeof r?.bip39Passphrase === 'string' ? r.bip39Passphrase : null);
+            setRevealedWalletId(walletId);
             setRevealStage('shown');
             setMnemonicHidden(true);
         } catch (err) {
+            if (attempt !== revealAttemptRef.current || activeWalletIdRef.current !== walletId) return;
             const name = err?.name || '';
             const msg = name === 'NoMnemonicForWifOnlyError'
-                ? 'This wallet was imported from a private key only. There is no seed phrase to reveal.'
+                ? 'This wallet was imported from a private key only. There is no recovery phrase to reveal.'
                 : passwordStepFailure(err, 'Could not show the recovery phrase. Try again.');
             setRevealError(msg);
         } finally {
-            setRevealing(false);
+            if (attempt === revealAttemptRef.current) setRevealing(false);
         }
     };
 
     function handleHideMnemonic() {
+        revealAttemptRef.current += 1;
         setMnemonic('');
         setRevealPassphraseEnabled(false);
         setRevealPassphrase(null);
+        setRevealedWalletId(null);
         setMnemonicHidden(true);
         setRevealStage('idle');
         setRevealError(null);
@@ -381,7 +438,7 @@ export function BackupSection({ activeWallet }) {
                 <ActionConfirmScreen
                     confirmAction={actionConfirm.confirmAction}
                     screenVariant={screenVariantFor(shell)}
-                    chainLabel={publishPreparation?.chainId || ''}
+                    chainLabel={chainDisplayName(publishPreparation?.chainId)}
                     signerReady={signerReady}
                     password={publishPassword}
                     onPasswordChange={(value) => {
@@ -397,12 +454,18 @@ export function BackupSection({ activeWallet }) {
 
     return (
         <div style={STACK}>
-            {pendingPassword !== null ? (
+            {exportResult ? (
+                <BackupExportResult
+                    result={exportResult}
+                    onDone={() => setExportResult(null)}
+                />
+            ) : pendingPassword !== null ? (
                 <PasswordPrompt
                     label="Backup password"
-                    hint="Choose a password to encrypt the backup file. This is independent of the wallet-unlock password."
+                    hint={`Choose a password of at least ${flowsLib.MIN_BACKUP_PASSWORD_LENGTH} characters to encrypt this file separately from your wallet password before the browser saves it to its configured download location, usually the Downloads folder.`}
                     busy={exporting}
-                    onCancel={() => { setPendingPassword(null); setExportError(null); }}
+                    operationTime={exportTime}
+                    onCancel={cancelExport}
                     onSubmit={(pw) => onExport(pw)}
                     error={exportError}
                 />
@@ -410,35 +473,37 @@ export function BackupSection({ activeWallet }) {
                 <BackupRow
                     label="Export encrypted backup"
                     /* Spec §19.4 */
-                    hint="Saves a .xchain-wallet file containing this wallet's seed (encrypted), addresses, labels, contacts, and settings."
+                    hint="Save the wallet, addresses, labels, contacts, settings, and pending transactions in an encrypted .xchain-wallet file that requires its separate backup password."
                     actionLabel="Export…"
                     disabled={!activeWallet}
-                    onClick={() => { setPendingPassword(''); setExportError(null); }}
+                    onClick={() => { setPendingPassword(''); setExportError(null); setExportResult(null); }}
                 />
             )}
 
             {revealStage === 'password' ? (
                 <UnlockPrompt
-                    label="Reveal seed phrase"
-                    hint="Enter your wallet password. The seed phrase is the master key: anyone who sees it can spend your funds. Make sure no one is looking over your shoulder."
+                    label="Reveal recovery phrase"
+                    hint={`Enter your wallet password. ${RECOVERY_PHRASE_WARNING} Make sure no one is looking over your shoulder.`}
                     busy={revealing}
-                    onCancel={() => { setRevealStage('idle'); setRevealError(null); }}
+                    onCancel={handleHideMnemonic}
                     onSubmit={(pw) => onReveal(pw)}
                     error={revealError}
                 />
-            ) : revealStage === 'shown' ? (
+            ) : revealStage === 'shown' && revealedWalletId === activeWalletId ? (
                 <RevealedMnemonic
                     mnemonic={mnemonic}
                     hidden={mnemonicHidden}
+                    walletName={activeWallet?.name || activeWallet?.id || 'Wallet'}
                     passphraseEnabled={revealPassphraseEnabled}
                     passphrase={revealPassphrase}
                     onToggle={() => setMnemonicHidden((h) => !h)}
+                    onPrint={printRecoverySheet}
                     onDone={handleHideMnemonic}
                 />
             ) : (
                 <BackupRow
-                    label="Back up seed phrase"
-                    hint="Reveal the wallet's seed phrase so you can copy it onto paper or another device. Requires the wallet password every time."
+                    label="Back up recovery phrase"
+                    hint="Use the wallet password to reveal the words for copying to paper or another device."
                     actionLabel="Show…"
                     disabled={!activeWallet}
                     onClick={() => { setRevealStage('password'); setRevealError(null); }}
@@ -460,7 +525,7 @@ export function BackupSection({ activeWallet }) {
                 <BackupRow
                     label="Test backup (dry-run restore)"
                     /* Spec §19.6 */
-                    hint="Check that a recovery phrase matches this wallet's existing addresses. Nothing is saved, and the phrase is erased from memory after the check."
+                    hint="Check a recovery phrase against this wallet's existing addresses without saving it and erase it from memory afterward."
                     actionLabel="Test…"
                     disabled={!activeWallet}
                     onClick={() => { setDryRunStage('form'); setDryRunError(null); }}
@@ -543,69 +608,38 @@ export function BackupSection({ activeWallet }) {
 function LabelSyncDueNotice({ changeCount, disabled, onPublish, onDismiss }) {
     const what = changeCount === 1 ? '1 label change' : `${changeCount} label changes`;
     return (
-        <div
-            style={{
-                ...ROW,
-                alignItems: 'flex-start',
-                gap: 'var(--xc-space-2)',
-                border: '1px solid var(--xc-border)',
-                borderRadius: 'var(--xc-radius-sm)',
-                padding: 'var(--xc-space-3)',
-            }}
+        <FormSection
+            title="Labels changed since the last publish"
+            description={`${what} have not been saved to the blockchain yet. Publishing needs your wallet password, so the wallet asks once instead of after every rename.`}
+            className={styles.formSection}
         >
-            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>
-                    Labels changed since the last publish
-                </span>
-                <span style={ROW_HINT}>
-                    {what}
-                    {' '}
-                    have not been saved to the blockchain yet. Publishing needs your
-                    wallet password, so the wallet asks once instead of after every
-                    rename.
-                </span>
-            </div>
-            <div style={{ display: 'flex', gap: 'var(--xc-space-2)' }}>
-                <button type="button" onClick={onDismiss} style={ACTION_BTN}>
+            <div className={styles.actions}>
+                <Button variant="ghost" size="sm" onClick={onDismiss}>
                     Not now
-                </button>
-                <button
-                    type="button"
+                </Button>
+                <Button
+                    size="sm"
                     onClick={onPublish}
                     disabled={disabled}
-                    style={{
-                        ...ACTION_BTN,
-                        opacity: disabled ? 0.5 : 1,
-                        cursor: disabled ? 'not-allowed' : 'pointer',
-                    }}
                 >
                     Publish…
-                </button>
+                </Button>
             </div>
-        </div>
+        </FormSection>
     );
 }
 
 function BackupRow({ label, hint, actionLabel, disabled, onClick }) {
     return (
-        <div style={ROW}>
-            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>{label}</span>
-                {hint ? <span style={ROW_HINT}>{hint}</span> : null}
-            </div>
-            <button
-                type="button"
-                onClick={onClick}
-                disabled={disabled}
-                style={{
-                    ...ACTION_BTN,
-                    opacity: disabled ? 0.5 : 1,
-                    cursor: disabled ? 'not-allowed' : 'pointer',
-                }}
-            >
-                {actionLabel}
-            </button>
-        </div>
+        <SectionHeader
+            title={label}
+            description={hint}
+            trailing={(
+                <Button variant="ghost" size="sm" onClick={onClick} disabled={disabled}>
+                    {actionLabel}
+                </Button>
+            )}
+        />
     );
 }
 
@@ -618,18 +652,8 @@ function BackupRow({ label, hint, actionLabel, disabled, onClick }) {
 function UnlockPrompt({ label, hint, busy, error, onCancel, onSubmit }) {
     const [pw, setPw] = useState('');
     return (
-        <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--xc-space-2)',
-            padding: 'var(--xc-space-3)',
-            background: 'var(--xc-surface-raised)',
-            border: '1px solid var(--xc-border)',
-            borderRadius: 'var(--xc-radius-md)',
-        }}>
-            <div style={{ color: 'var(--xc-text)', fontWeight: 500 }}>{label}</div>
-            {hint ? <div style={ROW_HINT}>{hint}</div> : null}
-            <input
+        <FormSection title={label} description={hint} className={styles.formSection}>
+            <Input
                 type="password"
                 placeholder="Wallet password"
                 value={pw}
@@ -637,27 +661,25 @@ function UnlockPrompt({ label, hint, busy, error, onCancel, onSubmit }) {
                 autoFocus
                 autoComplete="current-password"
                 aria-label="Wallet password"
-                style={passwordStyle}
             />
             {error ? <Status text={error} tone="error" /> : null}
-            <div style={{ display: 'flex', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
-                <button type="button" onClick={onCancel} style={ACTION_BTN} disabled={busy}>Cancel</button>
-                <button
-                    type="button"
+            <div className={styles.actions}>
+                <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>Cancel</Button>
+                <Button
+                    size="sm"
                     onClick={() => onSubmit(pw)}
                     disabled={busy || pw.length === 0}
-                    style={{
-                        ...ACTION_BTN,
-                        background: pw.length > 0 ? 'var(--xc-accent-primary)' : 'transparent',
-                        borderColor: pw.length > 0 ? 'var(--xc-accent-primary)' : 'var(--xc-border)',
-                        color: pw.length > 0 ? 'var(--xc-bg)' : 'var(--xc-text-muted)',
-                    }}
                 >
                     {busy ? 'Revealing…' : 'Reveal'}
-                </button>
+                </Button>
             </div>
-        </div>
+        </FormSection>
     );
+}
+
+/** Cancels a copy gesture on a revealed seed or passphrase. */
+function blockSecretCopy(event) {
+    event.preventDefault();
 }
 
 /**
@@ -669,36 +691,39 @@ function UnlockPrompt({ label, hint, busy, error, onCancel, onSubmit }) {
  * §15.6: a wallet with a stored 25th-word passphrase shows it under the
  * words, behind the same tap-to-reveal blur and the same password gate
  * as the seed itself. There is no separate reveal toggle and no copy
- * control for it, matching the seed row above (see the "never paste it
- * into anything else" hint), since a clipboard write here would
- * contradict that same sentence. A wallet without `passphraseEnabled`
+ * control for it, matching the seed row above, because clipboard
+ * contents are available to other apps. A wallet without `passphraseEnabled`
  * renders nothing extra; a legacy wallet that has not captured its
  * passphrase yet (`passphraseEnabled` true, nothing stored) gets one
  * line saying so instead of a blank row.
  */
-function RevealedMnemonic({ mnemonic, hidden, passphraseEnabled, passphrase, onToggle, onDone }) {
+function RevealedMnemonic({
+    mnemonic,
+    hidden,
+    walletName,
+    passphraseEnabled,
+    passphrase,
+    onToggle,
+    onPrint,
+    onDone,
+}) {
     return (
-        <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--xc-space-2)',
-            padding: 'var(--xc-space-3)',
-            background: 'var(--xc-surface-raised)',
-            border: '1px solid var(--xc-warning, var(--xc-border-strong))',
-            borderRadius: 'var(--xc-radius-md)',
-        }}>
-            <div style={{ color: 'var(--xc-text)', fontWeight: 500 }}>
-                Your seed phrase
-            </div>
-            <div style={ROW_HINT}>
-                Write it on paper or store it in a password manager. Never type or
-                paste it into anything else. The wallet has nothing else that can
-                recover this. Losing the seed and your password loses the funds.
-            </div>
-            <button
-                type="button"
+        <FormSection
+            title="Your recovery phrase"
+            description={`${RECOVERY_PHRASE_WARNING} Write it on paper or store it in a password manager.`}
+            className={`${styles.formSection} ${styles.recoverySheet}`}
+        >
+            <div className={styles.sheetMeta} data-xc-recovery-sheet>Wallet: {walletName}</div>
+            {/* The words and the passphrase refuse a copy: the only way out of
+                this sheet is paper or the print path. */}
+            <Button
+                variant="ghost"
+                block
+                icon={null}
+                onCopy={blockSecretCopy}
                 onClick={onToggle}
-                aria-label={hidden ? 'Reveal seed phrase' : 'Hide seed phrase'}
+                aria-label={hidden ? 'Reveal recovery phrase' : 'Hide recovery phrase'}
+                className={styles.secret}
                 style={{
                     background: 'var(--xc-bg)',
                     border: '1px solid var(--xc-border)',
@@ -714,19 +739,23 @@ function RevealedMnemonic({ mnemonic, hidden, passphraseEnabled, passphrase, onT
                     minHeight: 60,
                     wordBreak: 'break-word',
                     whiteSpace: 'pre-wrap',
+                    WebkitUserSelect: 'none',
+                    userSelect: 'none',
                 }}
             >
                 {mnemonic || ' '}
-            </button>
+            </Button>
             {passphraseEnabled && typeof passphrase === 'string' ? (
                 <>
-                    <div style={{ color: 'var(--xc-text)', fontWeight: 500 }}>
-                        Passphrase (25th word)
-                    </div>
-                    <button
-                        type="button"
+                    <SectionHeader as="h3" title="Passphrase (25th word)" />
+                    <Button
+                        variant="ghost"
+                        block
+                        icon={null}
+                        onCopy={blockSecretCopy}
                         onClick={onToggle}
                         aria-label={hidden ? 'Reveal passphrase' : 'Hide passphrase'}
+                        className={styles.secret}
                         style={{
                             background: 'var(--xc-bg)',
                             border: '1px solid var(--xc-border)',
@@ -742,10 +771,12 @@ function RevealedMnemonic({ mnemonic, hidden, passphraseEnabled, passphrase, onT
                             minHeight: 60,
                             wordBreak: 'break-word',
                             whiteSpace: 'pre-wrap',
+                            WebkitUserSelect: 'none',
+                            userSelect: 'none',
                         }}
                     >
                         {passphrase || ' '}
-                    </button>
+                    </Button>
                 </>
             ) : passphraseEnabled ? (
                 <div style={ROW_HINT}>
@@ -753,19 +784,24 @@ function RevealedMnemonic({ mnemonic, hidden, passphraseEnabled, passphrase, onT
                     stored on this device yet.
                 </div>
             ) : null}
-            <div style={{
+            <div className={styles.screenOnly} style={{
                 color: 'var(--xc-text-muted)',
                 fontSize: 'var(--xc-text-xs)',
                 textAlign: 'center',
             }}>
                 {hidden ? 'Tap to reveal.' : 'Tap to hide again.'}
             </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <button type="button" onClick={onDone} style={ACTION_BTN}>
+            <div className={`${styles.screenOnly} ${styles.actions}`}>
+                {!hidden ? (
+                    <Button variant="ghost" size="sm" onClick={onPrint}>
+                        Print recovery sheet
+                    </Button>
+                ) : null}
+                <Button variant="ghost" size="sm" onClick={onDone}>
                     Done
-                </button>
+                </Button>
             </div>
-        </div>
+        </FormSection>
     );
 }
 
@@ -777,94 +813,89 @@ function DryRunForm({ busy, error, onCancel, onSubmit }) {
     const [mn, setMn] = useState('');
     const [format, setFormat] = useState(/** @type {'bip39' | 'counterwallet-legacy'} */ ('bip39'));
     const [passphrase, setPassphrase] = useState('');
-    const [gapLimit, setGapLimit] = useState(10);
+    const [gapLimit, setGapLimit] = useState('10');
 
-    const canSubmit = mn.trim().length > 0 && !busy;
+    const gapLimitNumber = Number(gapLimit);
+    const gapLimitValid = /^\d+$/.test(gapLimit)
+        && gapLimitNumber >= 1
+        && gapLimitNumber <= 100;
+    const canSubmit = mn.trim().length > 0 && gapLimitValid && !busy;
 
     return (
-        <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--xc-space-2)',
-            padding: 'var(--xc-space-3)',
-            background: 'var(--xc-surface-raised)',
-            border: '1px solid var(--xc-border)',
-            borderRadius: 'var(--xc-radius-md)',
-        }}>
-            <div style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Test backup</div>
-            <div style={ROW_HINT}>
-                Enter the recovery phrase from your paper backup (or password manager).
-                The wallet rebuilds the first {gapLimit} addresses on every active chain
-                from it and lists any that don't match. Nothing is saved.
-            </div>
-            <textarea
+        <FormSection
+            title="Test backup"
+            description={`Enter the recovery phrase from your paper backup (or password manager). The wallet rebuilds the first ${gapLimitValid ? gapLimitNumber : 'selected'} addresses on every active chain from it and lists any that don't match. Nothing is saved.`}
+            className={styles.formSection}
+        >
+            <Textarea
                 value={mn}
                 onChange={(e) => setMn(e.target.value)}
                 placeholder="Recovery phrase, words separated by spaces"
                 rows={3}
+                autoComplete="off"
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
                 aria-label="Recovery phrase to test"
-                style={{ ...passwordStyle, fontFamily: 'var(--xc-font-mono)', resize: 'vertical' }}
+                className={styles.mnemonicInput}
             />
-            <div style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'center', flexWrap: 'wrap' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 'var(--xc-text-sm)' }}>
-                    <span>Format:</span>
-                    <select
+            <div className={styles.fieldRow}>
+                <Select
+                    label="Format:"
                         value={format}
                         onChange={(e) => setFormat(/** @type {any} */ (e.target.value))}
                         aria-label="Phrase format"
-                        style={passwordStyle}
-                    >
+                >
+                        {/* Native options are the required children of the style guide Select. */}
                         <option value="bip39">Standard (BIP39)</option>
                         <option value="counterwallet-legacy">Counterwallet legacy</option>
-                    </select>
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 'var(--xc-text-sm)' }}>
-                    <span>Addresses to check:</span>
-                    <input
+                </Select>
+                <Input
+                        label="Addresses to check:"
                         type="number"
+                        inputMode="numeric"
+                        enterKeyHint="go"
+                        autoComplete="off"
                         min={1}
                         max={100}
+                        step={1}
                         value={gapLimit}
-                        onChange={(e) => setGapLimit(Math.max(1, Math.min(100, Number(e.target.value) || 10)))}
+                        onChange={(e) => setGapLimit(e.target.value)}
+                        onWheel={blurNumberInputOnWheel}
                         aria-label="Addresses to check"
-                        style={{ ...passwordStyle, width: 70 }}
+                        className={styles.gapLimitInput}
                     />
-                </label>
             </div>
             {format === 'bip39' ? (
-                <input
+                <Input
                     type="password"
                     placeholder="BIP39 passphrase (optional)"
                     value={passphrase}
                     onChange={(e) => setPassphrase(e.target.value)}
                     autoComplete="off"
                     aria-label="BIP39 passphrase"
-                    style={passwordStyle}
                 />
             ) : null}
+            {!gapLimitValid ? (
+                <Status text="Addresses to check must be a whole number from 1 to 100." tone="error" />
+            ) : null}
             {error ? <Status text={error} tone="error" /> : null}
-            <div style={{ display: 'flex', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
-                <button type="button" onClick={onCancel} style={ACTION_BTN} disabled={busy}>Cancel</button>
-                <button
-                    type="button"
+            <div className={styles.actions}>
+                <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>Cancel</Button>
+                <Button
+                    size="sm"
                     onClick={() => onSubmit({
                         mnemonic: mn.trim(),
                         format,
                         bip39Passphrase: format === 'bip39' ? passphrase : '',
-                        gapLimit,
+                        gapLimit: gapLimitNumber,
                     })}
                     disabled={!canSubmit}
-                    style={{
-                        ...ACTION_BTN,
-                        background: canSubmit ? 'var(--xc-accent-primary)' : 'transparent',
-                        borderColor: canSubmit ? 'var(--xc-accent-primary)' : 'var(--xc-border)',
-                        color: canSubmit ? 'var(--xc-bg)' : 'var(--xc-text-muted)',
-                    }}
                 >
                     {busy ? 'Testing…' : 'Run test'}
-                </button>
+                </Button>
             </div>
-        </div>
+        </FormSection>
     );
 }
 
@@ -875,37 +906,38 @@ function DryRunForm({ busy, error, onCancel, onSubmit }) {
 function DryRunReport({ result, onDone }) {
     const overall = result?.overallMatch === true;
     const perChain = Array.isArray(result?.perChain) ? result.perChain : [];
+    const title = overall
+        ? '✓ Backup matches this wallet on every active chain.'
+        : '✗ Backup does NOT match this wallet on at least one chain.';
     return (
-        <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--xc-space-2)',
-            padding: 'var(--xc-space-3)',
-            background: 'var(--xc-surface-raised)',
-            border: `1px solid ${overall ? 'var(--xc-accent-primary)' : 'var(--xc-danger)'}`,
-            borderRadius: 'var(--xc-radius-md)',
-        }}>
-            <div style={{
-                color: overall ? 'var(--xc-text)' : 'var(--xc-danger)',
-                fontWeight: 600,
-            }}>
-                {overall
-                    ? '✓ Backup matches this wallet on every active chain.'
-                    : '✗ Backup does NOT match this wallet on at least one chain.'}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {perChain.map((c) => (
+        <FormSection title={title} className={styles.formSection}>
+            {perChain.length > 0 ? (
+                <div className={styles.reportList}>
+                    {perChain.map((c) => (
                     <DryRunChainReport key={`${c.chainId}-${c.addressType}`} chain={c} />
-                ))}
+                    ))}
+                </div>
+            ) : (
+                <EmptyState
+                    title="No chain comparisons"
+                    body="Chain comparison results appear here after the test completes."
+                    titleAs="h3"
+                />
+            )}
+            <div className={styles.actions}>
+                <Button variant="ghost" size="sm" onClick={onDone}>Done</Button>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <button type="button" onClick={onDone} style={ACTION_BTN}>Done</button>
-            </div>
-        </div>
+        </FormSection>
     );
 }
 
 const chainRegistry = registryLib.defaultRegistry();
+
+function chainDisplayName(chainId) {
+    if (!chainId) return '';
+    return chainRegistry.get(chainId)?.displayName
+        || String(chainId).replace(/-(?:mainnet|testnet|regtest)$/i, '');
+}
 
 function DryRunChainReport({ chain }) {
     const descriptor = chain.chainId ? chainRegistry.get(chain.chainId) : null;
@@ -934,13 +966,15 @@ function DryRunChainReport({ chain }) {
         <div style={{ fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--xc-space-2)' }}>
                 <span>
-                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chain.chainId}{' '}
+                    {descriptor
+                        ? <ChainBadge descriptor={descriptor} size="sm" showNetworkKind={false} />
+                        : chainDisplayName(chain.chainId)}{' '}
                     <span style={{ color: 'var(--xc-text-muted)' }} title={chain.addressType}>{typeLabel}</span>
                 </span>
                 <span style={{ fontFamily: 'var(--xc-font-mono)' }}>
-                    <span style={{ color: 'var(--xc-accent-primary)' }}>{chain.matchedCount} ✓</span>
+                    <span style={{ color: 'var(--xc-accent-text)' }}>{chain.matchedCount} ✓</span>
                     {chain.divergentCount > 0
-                        ? <span style={{ color: 'var(--xc-danger)' }}> · {chain.divergentCount} ✗</span>
+                        ? <span style={{ color: 'var(--xc-danger-fg)' }}> · {chain.divergentCount} ✗</span>
                         : null}
                     {chain.missingCount > 0
                         ? <span style={{ color: 'var(--xc-text-muted)' }}> · {chain.missingCount} new</span>
@@ -948,6 +982,7 @@ function DryRunChainReport({ chain }) {
                 </span>
             </div>
             {differences.length > 0 ? (
+                /* A semantic result list has no dedicated style guide equivalent. */
                 <ul style={{ marginBlock: 4, paddingInlineStart: 'var(--xc-space-5)' }}>
                     {differences.map((difference) => (
                         <li key={difference.key} style={{ fontFamily: 'var(--xc-font-mono)', overflowWrap: 'anywhere' }}>
@@ -964,88 +999,173 @@ function DryRunChainReport({ chain }) {
     );
 }
 
-function PasswordPrompt({ label, hint, busy, error, onCancel, onSubmit }) {
+function PasswordPrompt({ label, hint, busy, operationTime, error, onCancel, onSubmit }) {
     const [pw1, setPw1] = useState('');
     const [pw2, setPw2] = useState('');
+    const passwordStrongEnough = pw1.length >= flowsLib.MIN_BACKUP_PASSWORD_LENGTH;
     const mismatch = pw2.length > 0 && pw1 !== pw2;
-    const canSubmit = pw1.length > 0 && pw1 === pw2 && !busy;
+    const canSubmit = passwordStrongEnough && pw2.length > 0 && pw1 === pw2 && !busy;
     return (
-        <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--xc-space-2)',
-            padding: 'var(--xc-space-3)',
-            background: 'var(--xc-surface-raised)',
-            border: '1px solid var(--xc-border)',
-            borderRadius: 'var(--xc-radius-md)',
-        }}>
-            <div style={{ color: 'var(--xc-text)', fontWeight: 500 }}>{label}</div>
-            {hint ? <div style={ROW_HINT}>{hint}</div> : null}
-            <input
+        <FormSection
+            title="Export encrypted backup"
+            description={hint}
+            className={styles.formSection}
+        >
+            <Input
+                label={label}
                 type="password"
                 placeholder="Backup password"
                 value={pw1}
                 onChange={(e) => setPw1(e.target.value)}
                 autoFocus
+                autoComplete="new-password"
                 aria-label="Backup password"
-                style={passwordStyle}
+                disabled={busy}
             />
-            <input
+            <Input
                 type="password"
                 placeholder="Confirm password"
                 value={pw2}
                 onChange={(e) => setPw2(e.target.value)}
+                autoComplete="new-password"
                 aria-label="Confirm backup password"
-                style={passwordStyle}
+                disabled={busy}
             />
+            {pw1.length > 0 && !passwordStrongEnough ? (
+                <Status
+                    text={`Backup password must be at least ${flowsLib.MIN_BACKUP_PASSWORD_LENGTH} characters.`}
+                    tone="error"
+                />
+            ) : null}
             {mismatch ? (
-                <Status text="Passwords don't match." tone="error" />
+                <Status text="Backup passwords do not match." tone="error" />
             ) : null}
             {error ? <Status text={error} tone="error" /> : null}
-            <div style={{ display: 'flex', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
-                <button type="button" onClick={onCancel} style={ACTION_BTN} disabled={busy}>Cancel</button>
-                <button
-                    type="button"
+            {operationTime?.showElapsed ? (
+                <Status text={`Encrypting for ${operationTime.elapsedSeconds} seconds…`} />
+            ) : null}
+            {operationTime?.timedOut ? (
+                <Status
+                    text="Encryption is taking longer than expected. Cancel and try again. If it repeats, close other memory-heavy apps before retrying."
+                    tone="error"
+                />
+            ) : null}
+            <div className={styles.actions}>
+                <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
+                <Button
+                    size="sm"
                     onClick={() => onSubmit(pw1)}
                     disabled={!canSubmit}
-                    style={{
-                        ...ACTION_BTN,
-                        background: canSubmit ? 'var(--xc-accent-primary)' : 'transparent',
-                        borderColor: canSubmit ? 'var(--xc-accent-primary)' : 'var(--xc-border)',
-                        color: canSubmit ? 'var(--xc-bg)' : 'var(--xc-text-muted)',
-                    }}
                 >
                     {busy ? 'Exporting…' : 'Export'}
-                </button>
+                </Button>
             </div>
-        </div>
+        </FormSection>
     );
 }
 
-const passwordStyle = {
-    background: 'var(--xc-bg)',
-    color: 'var(--xc-text)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-sm)',
-    padding: 'var(--xc-space-2) var(--xc-space-3)',
-    fontSize: 'var(--xc-text-sm)',
-    fontFamily: 'inherit',
-};
+function BackupExportResult({ result, onDone }) {
+    const [location, setLocation] = useState('');
+    const [pointer, setPointer] = useState('');
+    const [pointerError, setPointerError] = useState(/** @type {string | null} */ (null));
 
-function triggerDownload(walletName, fileContent) {
+    const createPointer = () => {
+        setPointer('');
+        setPointerError(null);
+        let url;
+        try {
+            url = new URL(location.trim());
+        } catch {
+            setPointerError('Enter the full HTTPS address where the encrypted backup file is stored.');
+            return;
+        }
+        // Require an encrypted transport because another device fetches the backup from this exact address.
+        if (url.protocol !== 'https:') {
+            setPointerError('The backup location must use HTTPS.');
+            return;
+        }
+        setPointer(uriLib.buildBackupPointer({
+            location: url.toString(),
+            name: result.walletName,
+        }));
+    };
+
+    return (
+        <FormSection title="Backup file saved" className={styles.formSection}>
+            <Status text={result.fileName} />
+            <div style={ROW_HINT}>
+                Your browser sent this file to its configured download location, usually the Downloads folder. Move it somewhere safe and recoverable. The password is not in the file and cannot be recovered.
+            </div>
+            <SectionHeader
+                as="h3"
+                title="Optional backup pointer QR"
+                description="After uploading the encrypted file to an HTTPS address you control, enter that address to make a QR for another device. The QR contains only the address and wallet name. It does not contain the backup file or password."
+            />
+            <Input
+                type="url"
+                placeholder="https://example.com/my-backup.xchain-wallet"
+                value={location}
+                onChange={(e) => { setLocation(e.target.value); setPointer(''); setPointerError(null); }}
+                aria-label="Backup file HTTPS address"
+                autoComplete="off"
+            />
+            {pointerError ? <Status text={pointerError} tone="error" /> : null}
+            {pointer ? (
+                <div style={{ display: 'grid', justifyItems: 'center', gap: 'var(--xc-space-2)' }}>
+                    <KeyQR value={pointer} alt="Backup pointer QR" />
+                    <code style={{ overflowWrap: 'anywhere', color: 'var(--xc-text-muted)' }}>{pointer}</code>
+                </div>
+            ) : null}
+            <div className={styles.actions}>
+                <Button variant="ghost" size="sm" onClick={createPointer}>Create pointer QR</Button>
+                <Button variant="ghost" size="sm" onClick={onDone}>Done</Button>
+            </div>
+        </FormSection>
+    );
+}
+
+function printRecoverySheet() {
+    document.body.classList.add('xc-print-recovery-sheet');
+    try {
+        window.print();
+    } finally {
+        document.body.classList.remove('xc-print-recovery-sheet');
+    }
+}
+
+function triggerDownload(fallbackWalletName, fileContent) {
+    if (typeof fileContent !== 'string') {
+        throw new Error('Backup export returned no file contents.');
+    }
+    let envelope;
+    try {
+        envelope = cryptoLib.parseBackupEnvelope(fileContent);
+    } catch {
+        throw new Error('Backup export returned an invalid file.');
+    }
+    const walletName = typeof envelope.walletName === 'string' && envelope.walletName.length > 0
+        ? envelope.walletName
+        : fallbackWalletName;
     const safeName = String(walletName || 'wallet')
         .replace(/[^a-zA-Z0-9._-]+/g, '-')
-        .slice(0, 60) || 'wallet';
-    const stamp = new Date().toISOString().slice(0, 10);
+        .replace(/^[._-]+|[._-]+$/g, '')
+        .slice(0, 60)
+        .replace(/[._-]+$/g, '') || 'wallet';
+    const createdAt = new Date(envelope.createdAt);
+    const stamp = Number.isNaN(createdAt.getTime())
+        ? new Date().toISOString().slice(0, 10)
+        : createdAt.toISOString().slice(0, 10);
+    const fileName = `${safeName}-backup-${stamp}.xchain-wallet`;
     const blob = new Blob([fileContent], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${safeName}-${stamp}.xchain-wallet`;
+    a.download = fileName;
     document.body.appendChild(a);
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return { fileName, walletName: String(walletName || 'wallet') };
 }
 
 /**
@@ -1086,41 +1206,34 @@ function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, 
     const canSubmit = !busy && !loadingChains;
 
     return (
-        <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--xc-space-2)',
-            padding: 'var(--xc-space-3)',
-            background: 'var(--xc-surface-raised)',
-            border: '1px solid var(--xc-border)',
-            borderRadius: 'var(--xc-radius-md)',
-        }}>
-            <div style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Publish labels on-chain</div>
-            <div style={ROW_HINT}>
-                The labels + contacts are encrypted under a key derived from this
-                wallet's seed and stored on the blockchain. Only someone who already
-                has your seed can decrypt them. The transaction pays a network fee.
-            </div>
+        <FormSection
+            title="Publish labels on-chain"
+            description="The labels + contacts are encrypted under a key derived from this wallet's seed and stored on the blockchain. Only someone who already has your seed can decrypt them. The transaction pays a network fee."
+            className={styles.formSection}
+        >
             {chains === null ? (
                 <div style={ROW_HINT}>Loading chains…</div>
             ) : chains.length === 0 ? (
-                <Status text={chainsError || 'No chains have addresses on this wallet. Generate one first.'} tone="error" />
+                <EmptyState
+                    title="No chains with addresses"
+                    body={chainsError || 'No chains have addresses on this wallet. Generate one first.'}
+                    titleAs="h3"
+                    role={chainsError ? 'alert' : 'status'}
+                />
             ) : (
-                <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 'var(--xc-text-sm)' }}>
-                    <span style={ROW_HINT}>Chain</span>
-                    <select
-                        value={chainId}
-                        onChange={(e) => setChainId(e.target.value)}
-                        aria-label="Publish chain"
-                        style={passwordStyle}
-                    >
-                        {chains.map((cid) => (
-                            <option key={cid} value={cid}>{cid}</option>
-                        ))}
-                    </select>
-                </label>
+                <Select
+                    label="Chain"
+                    value={chainId}
+                    onChange={(e) => setChainId(e.target.value)}
+                    aria-label="Publish chain"
+                >
+                    {/* Native options are the required children of the style guide Select. */}
+                    {chains.map((cid) => (
+                        <option key={cid} value={cid}>{chainDisplayName(cid)}</option>
+                    ))}
+                </Select>
             )}
-            <input
+            <Input
                 type="password"
                 placeholder="Wallet password"
                 value={password}
@@ -1128,26 +1241,19 @@ function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, 
                 autoFocus
                 autoComplete="current-password"
                 aria-label="Wallet password"
-                style={passwordStyle}
             />
             {error ? <Status text={error} tone="error" /> : null}
-            <div style={{ display: 'flex', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
-                <button type="button" onClick={onCancel} style={ACTION_BTN} disabled={busy}>Cancel</button>
-                <button
-                    type="button"
+            <div className={styles.actions}>
+                <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>Cancel</Button>
+                <Button
+                    size="sm"
                     onClick={() => onSubmit({ chainId, password })}
                     disabled={!canSubmit}
-                    style={{
-                        ...ACTION_BTN,
-                        background: canSubmit ? 'var(--xc-accent-primary)' : 'transparent',
-                        borderColor: canSubmit ? 'var(--xc-accent-primary)' : 'var(--xc-border)',
-                        color: canSubmit ? 'var(--xc-bg)' : 'var(--xc-text-muted)',
-                    }}
                 >
                     {busy ? 'Publishing…' : loadingChains ? 'Loading chains…' : 'Publish'}
-                </button>
+                </Button>
             </div>
-        </div>
+        </FormSection>
     );
 }
 
@@ -1162,68 +1268,39 @@ function PublishLabelsReport({ result, onDone }) {
     // failure resolves queued, with the signed bytes in the broadcast queue.
     if (!txid) {
         return (
-            <div data-testid="publish-labels-queued" style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 'var(--xc-space-2)',
-                padding: 'var(--xc-space-3)',
-                background: 'var(--xc-surface-raised)',
-                border: '1px solid var(--xc-border)',
-                borderRadius: 'var(--xc-radius-md)',
-            }}>
-                <div style={{ color: 'var(--xc-text)', fontWeight: 600 }}>
-                    Labels signed, not broadcast yet
-                </div>
-                <div style={ROW_HINT}>
-                    {result?.queued
-                        ? 'The label transaction is waiting in the queued-transactions banner and will be sent from there.'
-                        : 'No transaction ID came back, so the labels may not be on-chain yet. Check the queued-transactions banner before publishing again.'}
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                    <button type="button" onClick={onDone} style={ACTION_BTN}>Done</button>
-                </div>
+            <div data-testid="publish-labels-queued">
+                <FormSection title="Labels signed, not broadcast yet" className={styles.formSection}>
+                    <div style={ROW_HINT}>
+                        {result?.queued
+                            ? 'The label transaction is waiting in the queued-transactions banner and will be sent from there.'
+                            : 'No transaction ID came back, so the labels may not be on-chain yet. Check the queued-transactions banner before publishing again.'}
+                    </div>
+                    <div className={styles.actions}>
+                        <Button variant="ghost" size="sm" onClick={onDone}>Done</Button>
+                    </div>
+                </FormSection>
             </div>
         );
     }
     return (
-        <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--xc-space-2)',
-            padding: 'var(--xc-space-3)',
-            background: 'var(--xc-surface-raised)',
-            border: '1px solid var(--xc-accent-primary)',
-            borderRadius: 'var(--xc-radius-md)',
-        }}>
-            <div style={{ color: 'var(--xc-text)', fontWeight: 600 }}>
-                ✓ Labels published
-            </div>
+        <FormSection title="✓ Labels published" className={styles.formSection}>
             <dl style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px var(--xc-space-3)', margin: 0 }}>
                 <dt style={ROW_HINT}>Transaction ID</dt>
                 <dd style={{ margin: 0, fontFamily: 'var(--xc-font-mono)', fontSize: 'var(--xc-text-xs)', wordBreak: 'break-all' }}>{txid}</dd>
                 <dt style={ROW_HINT}>Chain</dt>
-                <dd style={{ margin: 0, fontSize: 'var(--xc-text-sm)' }}>{result?.chainId || '-'}</dd>
+                <dd style={{ margin: 0, fontSize: 'var(--xc-text-sm)' }}>
+                    {chainDisplayName(result?.chainId) || '-'}
+                </dd>
                 <dt style={ROW_HINT}>Encrypted size</dt>
                 <dd style={{ margin: 0, fontSize: 'var(--xc-text-sm)' }}>{result?.sizeBytes ?? 0} bytes</dd>
                 <dt style={ROW_HINT}>Discovery name</dt>
                 <dd style={{ margin: 0, fontFamily: 'var(--xc-font-mono)', fontSize: 'var(--xc-text-xs)', wordBreak: 'break-all' }}>{result?.discoveryName || '-'}</dd>
             </dl>
-            <div style={{ display: 'flex', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
-                <button
-                    type="button"
-                    onClick={() => {
-                        if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-                            navigator.clipboard.writeText(txid).catch(() => {});
-                        }
-                    }}
-                    style={ACTION_BTN}
-                    disabled={!txid}
-                >
-                    Copy txid
-                </button>
-                <button type="button" onClick={onDone} style={ACTION_BTN}>Done</button>
+            <div className={styles.actions}>
+                <CopyButton value={txid} label="Copy txid" />
+                <Button variant="ghost" size="sm" onClick={onDone}>Done</Button>
             </div>
-        </div>
+        </FormSection>
     );
 }
 
@@ -1266,41 +1343,34 @@ function RestoreLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
     const canSubmit = !!chainId && password.length > 0 && !busy;
 
     return (
-        <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--xc-space-2)',
-            padding: 'var(--xc-space-3)',
-            background: 'var(--xc-surface-raised)',
-            border: '1px solid var(--xc-border)',
-            borderRadius: 'var(--xc-radius-md)',
-        }}>
-            <div style={{ color: 'var(--xc-text)', fontWeight: 500 }}>Check chain for backed-up contacts</div>
-            <div style={ROW_HINT}>
-                Decrypts the labels + contacts FILE this wallet's seed published
-                on the chain below, if any, and merges anything found into this
-                wallet. Nothing already here is removed.
-            </div>
+        <FormSection
+            title="Check chain for backed-up contacts"
+            description="Decrypts the labels + contacts FILE this wallet's seed published on the chain below, if any, and merges anything found into this wallet. Nothing already here is removed."
+            className={styles.formSection}
+        >
             {chains === null ? (
                 <div style={ROW_HINT}>Loading chains…</div>
             ) : chains.length === 0 ? (
-                <Status text={chainsError || 'No chains have addresses on this wallet. Generate one first.'} tone="error" />
+                <EmptyState
+                    title="No chains with addresses"
+                    body={chainsError || 'No chains have addresses on this wallet. Generate one first.'}
+                    titleAs="h3"
+                    role={chainsError ? 'alert' : 'status'}
+                />
             ) : (
-                <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 'var(--xc-text-sm)' }}>
-                    <span style={ROW_HINT}>Chain</span>
-                    <select
-                        value={chainId}
-                        onChange={(e) => setChainId(e.target.value)}
-                        aria-label="Restore chain"
-                        style={passwordStyle}
-                    >
-                        {chains.map((cid) => (
-                            <option key={cid} value={cid}>{cid}</option>
-                        ))}
-                    </select>
-                </label>
+                <Select
+                    label="Chain"
+                    value={chainId}
+                    onChange={(e) => setChainId(e.target.value)}
+                    aria-label="Restore chain"
+                >
+                    {/* Native options are the required children of the style guide Select. */}
+                    {chains.map((cid) => (
+                        <option key={cid} value={cid}>{chainDisplayName(cid)}</option>
+                    ))}
+                </Select>
             )}
-            <input
+            <Input
                 type="password"
                 placeholder="Wallet password"
                 value={password}
@@ -1308,32 +1378,25 @@ function RestoreLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
                 autoFocus
                 autoComplete="current-password"
                 aria-label="Wallet password"
-                style={passwordStyle}
             />
             {error ? <Status text={error} tone="error" /> : null}
-            <div style={{ display: 'flex', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
-                <button type="button" onClick={onCancel} style={ACTION_BTN} disabled={busy}>Cancel</button>
-                <button
-                    type="button"
+            <div className={styles.actions}>
+                <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>Cancel</Button>
+                <Button
+                    size="sm"
                     onClick={() => onSubmit({ chainId, password })}
                     disabled={!canSubmit}
-                    style={{
-                        ...ACTION_BTN,
-                        background: canSubmit ? 'var(--xc-accent-primary)' : 'transparent',
-                        borderColor: canSubmit ? 'var(--xc-accent-primary)' : 'var(--xc-border)',
-                        color: canSubmit ? 'var(--xc-bg)' : 'var(--xc-text-muted)',
-                    }}
                 >
                     {busy ? 'Checking…' : 'Check'}
-                </button>
+                </Button>
             </div>
-        </div>
+        </FormSection>
     );
 }
 
 /**
  * Turn a `wallet.restoreLabels` result into the one line the user reads.
- * Exported for the unit test: the three outcomes worth telling apart are
+ * The three outcomes worth telling apart are
  * "found and merged something", "authenticated nothing under this seed
  * on this chain", and "the search itself failed" (an unreachable
  * explorer, collected per-chain in `errors` rather than thrown, per
@@ -1342,12 +1405,12 @@ function RestoreLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
  * @param {any} result
  * @returns {string}
  */
-export function restoreLabelsMessage(result) {
+function restoreLabelsMessage(result) {
     if (!result) return '';
     if (result.skipped === 'wif-only') {
         return 'This wallet was imported from a private key only. There is no seed to check on-chain backups with.';
     }
-    const chainLabel = result.chainId || result.requestedChainId || 'this chain';
+    const chainLabel = chainDisplayName(result.chainId || result.requestedChainId) || 'this chain';
     if (result.restored === true) {
         const contacts = Number(result.contactsAdded || 0) + Number(result.contactsUpdated || 0);
         const labels = Number(result.addressesUpdated || 0);
@@ -1367,21 +1430,10 @@ export function restoreLabelsMessage(result) {
  */
 function RestoreLabelsReport({ result, onDone }) {
     return (
-        <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--xc-space-2)',
-            padding: 'var(--xc-space-3)',
-            background: 'var(--xc-surface-raised)',
-            border: `1px solid ${result?.restored ? 'var(--xc-accent-primary)' : 'var(--xc-border)'}`,
-            borderRadius: 'var(--xc-radius-md)',
-        }}>
-            <div style={{ color: 'var(--xc-text)', fontWeight: 600 }}>
-                {restoreLabelsMessage(result)}
+        <FormSection title={restoreLabelsMessage(result)} className={styles.formSection}>
+            <div className={styles.actions}>
+                <Button variant="ghost" size="sm" onClick={onDone}>Done</Button>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <button type="button" onClick={onDone} style={ACTION_BTN}>Done</button>
-            </div>
-        </div>
+        </FormSection>
     );
 }

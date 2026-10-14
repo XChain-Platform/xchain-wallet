@@ -8,8 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useState, useEffect } from 'react';
-import { AddressText, InfoTip } from '@xchain-wallet/core/ui';
+import { useEffect, useRef, useState } from 'react';
+import { AddressText, Checkbox, InfoTip } from '@xchain-wallet/core/ui';
 import styles from './DerivationPathCrossCheck.module.css';
 
 /**
@@ -57,6 +57,8 @@ export function DerivationPathCrossCheck({
         : signerKind === 'ledger' ? 'Ledger' : 'your device';
 
     const [confirmed, setConfirmed] = useState(false);
+    const onConfirmedChangeRef = useRef(onConfirmedChange);
+    onConfirmedChangeRef.current = onConfirmedChange;
 
     // Reset the checkbox whenever the path or address changes. The user
     // must re-confirm if the values they were verifying have rotated under
@@ -64,8 +66,8 @@ export function DerivationPathCrossCheck({
     // change.
     useEffect(() => {
         setConfirmed(false);
-        onConfirmedChange?.(false);
-    }, [path, address, onConfirmedChange]);
+        onConfirmedChangeRef.current?.(false);
+    }, [path, address]);
 
     function handleToggle(event) {
         const next = event.target.checked;
@@ -83,7 +85,7 @@ export function DerivationPathCrossCheck({
                     Derivation path
                     <InfoTip
                         aria="Derivation path help"
-                        label="The BIP32 path that locates this account inside your seed. Different paths produce different addresses from the same seed. Verify it matches what your device displays so the host can't trick the device into signing for a different sub-account."
+                        label="Locates this account within your recovery phrase. Compare it with your device to make sure you sign from the intended account."
                     />
                 </dt>
                 <dd className={styles.value}><code className={styles.path}>{path}</code></dd>
@@ -91,8 +93,12 @@ export function DerivationPathCrossCheck({
                 <dd className={styles.value}><AddressText address={address} /></dd>
             </dl>
             <p className={styles.instruction}>
-                Verify <strong>both</strong> the derivation path <strong>and</strong> the address shown on your <strong>{deviceLabel}</strong> match the values shown here.
-                If either differs, reject on the device.
+                Verify <strong>both</strong> the derivation path and address on your <strong>{deviceLabel}</strong> match the values above.
+                Approve only when both match.
+            </p>
+            <p className={styles.deviceHint}>
+                If either value is different, the device may be using a different account or signing address.
+                Reject on the device. Nothing is signed, and you can check the selected account before trying again.
             </p>
             <p className={styles.deviceHint}>
                 {signerKind === 'trezor'
@@ -102,15 +108,12 @@ export function DerivationPathCrossCheck({
                     : 'Step through the device screens to compare both values.'}
             </p>
             {requireExplicitConfirm ? (
-                <label className={styles.confirmRow}>
-                    <input
-                        type="checkbox"
-                        checked={confirmed}
-                        onChange={handleToggle}
-                        className={styles.confirmCheckbox}
-                    />
-                    <span>I've verified the path and address on my {deviceLabel}.</span>
-                </label>
+                <Checkbox
+                    className={styles.confirmRow}
+                    label={`I've verified the path and address on my ${deviceLabel}.`}
+                    checked={confirmed}
+                    onChange={handleToggle}
+                />
             ) : null}
         </section>
     );

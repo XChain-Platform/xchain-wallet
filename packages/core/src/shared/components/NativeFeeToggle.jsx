@@ -74,6 +74,10 @@ export function NativeFeeToggle({
     const copy = protocolFeeRowCopy({
         fee, coinTicker, mandatory, checked: !!checked, unverified,
     });
+    const hint = copy.variant === 'toggle'
+        ? `On sends the protocol fee's ${coinTicker} equivalent as an on-chain output; `
+          + `off deducts the fee from your XCHAIN balance. ${copy.hint}`
+        : copy.hint;
 
     // A statement covers both the no-choice chains and any action whose fee is
     // known to be zero: on a free action even Bitcoin's switch would be a
@@ -86,7 +90,7 @@ export function NativeFeeToggle({
                         {copy.label}
                     </span>
                     <span style={ROW_HINT}>
-                        {copy.hint}
+                        {hint}
                     </span>
                 </div>
             </div>
@@ -96,7 +100,7 @@ export function NativeFeeToggle({
     return (
         <ToggleRow
             label={copy.label}
-            hint={copy.hint}
+            hint={hint}
             checked={!!checked}
             onChange={onChange}
             disabled={disabled}

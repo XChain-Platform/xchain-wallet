@@ -32,7 +32,7 @@ describe('useScreenShortcuts', () => {
         expect(e).toHaveBeenCalledOnce();
     });
 
-    it('suppresses single keys while typing but lets combos through', () => {
+    it('suppresses single keys and modifier combos while typing', () => {
         const e = vi.fn();
         const submit = vi.fn();
         render(<Harness keys={{ e, 'mod+enter': submit }} />);
@@ -41,6 +41,9 @@ describe('useScreenShortcuts', () => {
         fireEvent.keyDown(field, { key: 'e' });
         expect(e).not.toHaveBeenCalled();
         fireEvent.keyDown(field, { key: 'Enter', ctrlKey: true });
+        expect(submit).not.toHaveBeenCalled();
+
+        fireEvent.keyDown(document.body, { key: 'Enter', ctrlKey: true });
         expect(submit).toHaveBeenCalledOnce();
     });
 
@@ -55,13 +58,17 @@ describe('useScreenShortcuts', () => {
 
     it('is inert when disabled and ignores modified keys it does not own', () => {
         const e = vi.fn();
-        const { rerender } = render(<Harness enabled={false} keys={{ e }} />);
+        const question = vi.fn();
+        const { rerender } = render(<Harness enabled={false} keys={{ e, '?': question }} />);
         press({ key: 'e' });
         expect(e).not.toHaveBeenCalled();
-        rerender(<Harness enabled keys={{ e }} />);
+        rerender(<Harness enabled keys={{ e, '?': question }} />);
         press({ key: 'e', altKey: true });
+        press({ key: 'E', shiftKey: true });
         expect(e).not.toHaveBeenCalled();
         press({ key: 'e' });
         expect(e).toHaveBeenCalledOnce();
+        press({ key: '?', shiftKey: true });
+        expect(question).toHaveBeenCalledOnce();
     });
 });

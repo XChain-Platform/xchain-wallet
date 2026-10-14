@@ -8,9 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useRef, useState } from 'react';
-import { Icon } from '@xchain-wallet/core/ui';
 import * as branding from '../../branding/branding.js';
+import { NetworkFilter } from './NetworkFilter.jsx';
 import styles from './NetworkFilterDropdown.module.css';
 
 // Each entry carries the icon URL at module load time so the dropdown renders
@@ -22,6 +21,13 @@ export const NETWORK_OPTIONS = [
     { value: 'dogecoin', label: 'Dogecoin', iconUrl: branding.chainIconSmallUrl('dogecoin-mainnet') },
 ];
 
+const chainRegistry = {
+    byCoin(coin) {
+        const option = NETWORK_OPTIONS.find((entry) => entry.value === coin);
+        return option ? [{ id: `${coin}-mainnet`, displayName: option.label }] : [];
+    },
+};
+
 /**
  * Network filter dropdown shared by the contacts list and the Send address
  * book. A native <select> can't render images inside options, so this is a
@@ -32,69 +38,31 @@ export const NETWORK_OPTIONS = [
  * @param {object} props
  * @param {'all' | string} props.value      currently selected network
  * @param {(value: string) => void} props.onChange
+ * @param {'sm' | 'md' | 'lg'} [props.size]
+ * @param {boolean} [props.announceNetworkCount]
  */
-export function NetworkFilterDropdown({ value, onChange }) {
-    const [open, setOpen] = useState(false);
-    const triggerRef = useRef(null);
-    const popoverRef = useRef(null);
-
-    useEffect(() => {
-        if (!open) return undefined;
-        const onDown = (e) => {
-            if (triggerRef.current?.contains(e.target)) return;
-            if (popoverRef.current?.contains(e.target)) return;
-            setOpen(false);
-        };
-        const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
-        window.addEventListener('mousedown', onDown);
-        window.addEventListener('keydown', onKey);
-        return () => {
-            window.removeEventListener('mousedown', onDown);
-            window.removeEventListener('keydown', onKey);
-        };
-    }, [open]);
-
-    const selected = NETWORK_OPTIONS.find((n) => n.value === value) || null;
+export function NetworkFilterDropdown({
+    value,
+    onChange,
+    size = 'md',
+    announceNetworkCount = false,
+}) {
+    const selectedValue = value || 'all';
+    const countLabel = `${NETWORK_OPTIONS.length} networks`;
+    const ariaLabel = announceNetworkCount && selectedValue === 'all'
+        ? `Filter by network: All networks, ${countLabel}`
+        : 'Filter by network';
 
     return (
-        <div className={styles.networkWrap}>
-            <button
-                ref={triggerRef}
-                type="button"
-                className={styles.networkTrigger}
-                onClick={() => setOpen((v) => !v)}
-                aria-haspopup="listbox"
-                aria-expanded={open ? 'true' : 'false'}
-                aria-label="Filter by network"
-            >
-                <span className={styles.networkTriggerIcon} aria-hidden="true">
-                    {selected?.iconUrl ? <img src={selected.iconUrl} alt="" /> : <Icon.FilterIcon />}
-                </span>
-                <span className={styles.networkTriggerLabel}>
-                    {selected ? selected.label : 'All Networks'}
-                </span>
-                <span className={styles.networkCaret} aria-hidden="true">&#9660;</span>
-            </button>
-            {open ? (
-                <ul ref={popoverRef} className={styles.networkPopover} role="listbox">
-                    {[{ value: 'all', label: 'All Networks', iconUrl: null, icon: <Icon.FilterIcon /> }, ...NETWORK_OPTIONS].map((n) => (
-                        <li key={n.value}>
-                            <button
-                                type="button"
-                                role="option"
-                                aria-selected={value === n.value ? 'true' : 'false'}
-                                className={`${styles.networkOption} ${value === n.value ? styles.networkOptionActive : ''}`}
-                                onClick={() => { onChange(n.value); setOpen(false); }}
-                            >
-                                <span className={styles.networkOptionIcon} aria-hidden="true">
-                                    {n.iconUrl ? <img src={n.iconUrl} alt="" /> : n.icon || null}
-                                </span>
-                                {n.label}
-                            </button>
-                        </li>
-                    ))}
-                </ul>
-            ) : null}
+        <div className={`${styles.networkWrap} ${styles[size] || ''}`.trim()}>
+            <NetworkFilter
+                chainRegistry={chainRegistry}
+                coinFamilies={NETWORK_OPTIONS.map((entry) => entry.value)}
+                value={selectedValue}
+                onChange={onChange}
+                ariaLabel={ariaLabel}
+                size={size}
+            />
         </div>
     );
 }

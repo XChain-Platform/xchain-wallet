@@ -55,6 +55,22 @@ describe('<ExtensionBanner>', () => {
         expect(container.firstChild).toBeNull();
     });
 
+    it('renders when accessing sessionStorage throws', () => {
+        const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'sessionStorage');
+        Object.defineProperty(globalThis, 'sessionStorage', {
+            configurable: true,
+            get: () => { throw new Error('storage disabled'); },
+        });
+        window.xchain = makeProvider();
+
+        try {
+            render(<ExtensionBanner />);
+            expect(screen.getByRole('button', { name: 'Use extension wallet' })).toBeTruthy();
+        } finally {
+            Object.defineProperty(globalThis, 'sessionStorage', descriptor);
+        }
+    });
+
     it('offers "Use extension wallet" when the extension is detected', () => {
         window.xchain = makeProvider();
         render(<ExtensionBanner />);

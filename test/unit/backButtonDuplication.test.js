@@ -68,7 +68,6 @@ const PARSER_PLUGINS = [
 // here and delete its bottom button in the same change.
 const HEADER_LESS_SCREENS = new Set([
     'packages/core/src/shared/routes/CreateWallet.jsx',
-    'packages/core/src/shared/routes/ResumeConfirm.jsx',
     'packages/core/src/shared/components/OpenOrdersPanel.jsx',
 ]);
 
@@ -91,7 +90,6 @@ const STEP_BACK_REQUIRED = [
     'packages/core/src/shared/routes/PollDetail.jsx',
     'packages/core/src/shared/routes/ProjectRosterForm.jsx',
     'packages/core/src/shared/routes/PublishFileForm.jsx',
-    'packages/core/src/shared/routes/ResumeConfirm.jsx',
 ];
 
 // "Back", "Back to tracker", "Back to compose". Deliberately anchored so
@@ -122,8 +120,19 @@ function backControls(code) {
     traverse(ast, {
         JSXElement(path) {
             const label = path.node.children
-                .filter((c) => c.type === 'JSXText')
-                .map((c) => c.value.trim())
+                .map((child) => {
+                    if (child.type === 'JSXText') return child.value.trim();
+                    const expression = child.type === 'JSXExpressionContainer'
+                        ? child.expression
+                        : null;
+                    const key = expression?.type === 'CallExpression'
+                        && expression.callee?.type === 'Identifier'
+                        && expression.callee.name === 't'
+                        && ['Literal', 'StringLiteral'].includes(expression.arguments[0]?.type)
+                        ? expression.arguments[0].value
+                        : null;
+                    return key === 'common.back' ? 'Back' : '';
+                })
                 .filter(Boolean)
                 .join(' ')
                 .trim();
@@ -154,6 +163,14 @@ describe('bottom Back buttons do not duplicate the header chevron', () => {
     it('discovers JSX files to scan', () => {
         // A glob that silently matched nothing would make this a no-op.
         expect(entries.length).toBeGreaterThan(100);
+    });
+
+    it('gives bespoke back buttons a destination-specific accessible name', () => {
+        const offenders = entries
+            .filter(([, code]) => /aria-label=(?:"Back"|'Back')/.test(code))
+            .map(([file]) => file);
+
+        expect(offenders).toEqual([]);
     });
 
     for (const [file, code] of entries) {

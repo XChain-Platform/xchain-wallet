@@ -35,15 +35,31 @@
 // `chromeMessaging.sendMessage` wrapper). Keeps the route-level
 // messaging helpers nearly identical across shells.
 
+import { deriveMasterKeyAsync, makeFreshKdfParams } from '../../core/src/crypto/kdf.js';
+import { defaultRegistry } from '../../core/src/registry/index.js';
+import { SDKRegistry } from '../../core/src/sdk/SDKRegistry.js';
+import { isDevMockAddress, mockDeriveAddress } from '../../core/src/sdk/devMockAddresses.js';
+import { SignerPool } from '../../core/src/signers/SignerPool.js';
+import { Vault } from '../../core/src/storage/Vault.js';
+import { VaultEvictedError } from '../../core/src/storage/backend.js';
+import { configureFiatRateSource } from '../../core/src/flows/priceLookup.js';
+import { PassphraseMismatchError } from '../../core/src/flows/unlockWallet.js';
+import { NotificationService } from '../../core/src/notifications/NotificationService.js';
+import { PriceAlertWatcher } from '../../core/src/notifications/PriceAlertWatcher.js';
+import { GovernancePollWatcher } from '../../core/src/notifications/GovernancePollWatcher.js';
+import { DeadlineWatcher } from '../../core/src/notifications/DeadlineWatcher.js';
+import { DispenserEscrowWatcher } from '../../core/src/notifications/DispenserEscrowWatcher.js';
+import { CoinpayAutopayWatcher } from '../../core/src/notifications/CoinpayAutopayWatcher.js';
+import { getActiveAddresses } from '../../core/src/notifications/getActiveAddresses.js';
 import {
-    crypto as cryptoLib,
-    registry as registryLib,
-    sdk as sdkLib,
-    signers as signersLib,
-    storage as storageLib,
-    notifications as notificationsLib,
-    flows as flowsLib,
-} from '@xchain-wallet/core';
+    SOUND_PREVIEW_EVENT,
+    withNotificationSound,
+} from '../../core/src/notifications/notificationSounds.js';
+import {
+    getBroadcastTxids,
+    markPendingTxIndexed,
+    markPendingTxMempoolSeen,
+} from '../../core/src/notifications/pendingTxBridge.js';
 import { createWebNotifyAdapter } from './notifications/webNotifyAdapter.js';
 // Cross-package relative path rather than `@xchain-wallet/extension` so
 // this module resolves under Node without the pnpm workspace symlink
@@ -59,6 +75,8 @@ import {
     sealBroadcastQueueStore,
 } from '../../extension/src/background/broadcastQueueStore.js';
 import { hydrateEnvelopeError } from '../../extension/src/background/MessageHost.js';
+import { startLabelSyncRestoreTask } from '../../extension/src/background/labelSyncRestoreTasks.js';
+import { createVaultKeyring } from '../../extension/src/background/vaultKeyring.js';
 // Same reason as the line above: one resolver across shells, so the fresh and
 // add restore lanes cannot drift on which pointer schemes they will fetch.
 import { resolveBackupPointerContent } from '../../extension/src/background/backupPointerResolver.js';
@@ -87,6 +105,14 @@ import {
     installDevMockConsole,
 } from './devMockEvents.js';
 import { buildDevMockActionString } from './devMockActionString.js';
+
+// The page holds the open vault itself and caches no session key or signing
+// password, so a password change only needs the meta slot kdfParams the vault
+// key is derived under.
+function webVaultKeyring() {
+    // Resolved per read, so building a host never touches the meta store.
+    return createVaultKeyring({ metaBackend: { load: () => createMetaBackend().load() } });
+}
 
 // §50 / Cluster L FOLLOWUP 4: shell-specific diagnostic env + build
 // for the dump handler. Same shape across all three createBackgroundHost
@@ -117,11 +143,14 @@ import {
 } from './storage/backends.js';
 import { requestPersistentStorage } from './storage/storagePersistence.js';
 import { installNativeBiometricProvider } from './storage/nativeBiometricProvider.js';
+import { installNativeKdfProvider } from './storage/nativeKdfProvider.js';
+import { installNativeQrScanner } from './storage/nativeQrScanner.js';
 import { installNativeGuardPersistence } from './storage/nativeGuards.js';
 import { installDirectUpdateProvider } from './update/directUpdateProvider.js';
 import { resolveSdkFactory } from './sdkFactory.js';
+import { deferNonCriticalWork } from './deferNonCriticalWork.js';
 
-const chainRegistry = registryLib.defaultRegistry();
+const chainRegistry = defaultRegistry();
 
 // Dev-mode SDK stub: fallback when `xchain-sdk` isn't resolvable.
 //
@@ -156,7 +185,7 @@ const chainRegistry = registryLib.defaultRegistry();
 // production builds.
 if (!import.meta.env?.PROD) {
     const rates = fakeNativeFiatRates();
-    flowsLib.configureFiatRateSource({
+    configureFiatRateSource({
         fetch: async (url) => {
             const u = String(url);
             if (u.includes('simple/price')) {
@@ -361,7 +390,7 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
             deriveAddress(publicKeyHex, opts) {
                 // No fallback type: mockDeriveAddress reads the chain
                 // descriptor's default, which is p2pkh on dogecoin.
-                return sdkLib.mockDeriveAddress(chainId, opts?.type, publicKeyHex);
+                return mockDeriveAddress(chainId, opts?.type, publicKeyHex);
             },
             signPsbt() { throw new Error('Dev SDK stub: signing requires the real xchain-sdk'); },
             validateAddress(addr) {
@@ -407,7 +436,7 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
         encoder: {
             async createTx({ data, pubkey, customOutputs, change }) {
                 const changeAddr = change
-                    || sdkLib.mockDeriveAddress(chainId, undefined, pubkey);
+                    || mockDeriveAddress(chainId, undefined, pubkey);
                 const outputs = [
                     // Inline OP_RETURN action carrier (zero value) - but ONLY
                     // when there is an action.: a plain native-coin
@@ -512,7 +541,7 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
         // this venue is concerned). Any real address is one this venue has
         // never seen, which is what first contact means.
         getPublicKey(address) {
-            return Promise.resolve(sdkLib.isDevMockAddress(address) ? MOCK_RECIPIENT_PUBKEY : null);
+            return Promise.resolve(isDevMockAddress(address) ? MOCK_RECIPIENT_PUBKEY : null);
         },
     };
     // Compose: explicit fields (wallet/auth) win; everything else falls
@@ -560,14 +589,14 @@ const createLoadingSdk = () => makeLoadingSdkSurface();
 // post-resolution calls (Send) get the real SDK. For a clean production
 // run users should onboard AFTER the swap; the `sdkResolved` promise
 // below gives callers a handle on that.
-let sdkRegistry = new sdkLib.SDKRegistry({
+let sdkRegistry = new SDKRegistry({
     chainRegistry,
     sdkFactory: createDevMockSdk ?? createLoadingSdk,
 });
 
 export const sdkResolved = resolveSdkFactory({ devMockFactory: createDevMockSdk })
     .then((result) => {
-        sdkRegistry = new sdkLib.SDKRegistry({
+        sdkRegistry = new SDKRegistry({
             chainRegistry,
             sdkFactory: result.factory,
         });
@@ -641,7 +670,7 @@ class WebBroadcastClaims extends Set {
 // Signing routes hand their flow a hook that queues the signed bytes when the
 // broadcast fails, so the lease has to outlive that network call the way the
 // queue routes' own claims make it outlive theirs.
-const QUEUE_WRITING_ROUTE = /^(action\.|wallet\.publishLabels$|broadcast\.queue\.enqueue$)/;
+const QUEUE_WRITING_ROUTE = /^(action\.|wallet\.publishLabels$|broadcast\.queue\.enqueue$|broadcast\.signedTx$|messaging\.handshake$|tx\.replace$|multisigSign\.finalize$)/;
 let routeClaimSeq = 0;
 
 async function runRouteHoldingLease(store, type, run) {
@@ -710,6 +739,7 @@ let coinpayAutopayWatcher = null;
 let deadlineWatcher = null;
 let dispenserEscrowWatcher = null;
 let priceOracleInstance = null;
+let cancelNotificationStart = null;
 
 const WEB_VAULT_LOCK_NAME = 'xchain-wallet:vault-session';
 
@@ -853,24 +883,33 @@ const DEADLINE_SEEN_KEY = 'xchain.deadlines.seen';
 // PC-46: chain -> announced `actionIndex:bucket` keys.
 const DISPENSER_ESCROW_SEEN_KEY = 'xchain.dispenserEscrow.seen';
 
-// §46: start the live notification watcher once a vault + host exist. All
-// three host-creation paths (create / import / unlock) call this; lock stops
-// it. Idempotent: a second call while already running is a no-op. `getFlows`
-// is hoisted (a function declaration below), so referencing it here is safe.
+// §46: queue the live notification watchers once a vault + host exist. The
+// idle boundary gives the home transition a paint before the initial price and
+// history reads. Lock cancels work that has not started.
 function startNotifications() {
-    if (notificationService || !vault) return;
+    if (notificationService || cancelNotificationStart || !vault) return;
+    const scheduledVault = vault;
+    cancelNotificationStart = deferNonCriticalWork(() => {
+        cancelNotificationStart = null;
+        if (!vault || vault !== scheduledVault || notificationService) return;
+        startNotificationsNow();
+    });
+}
+
+// `getFlows` is hoisted below, so every watcher can resolve it lazily here.
+function startNotificationsNow() {
     // One sound-aware adapter for every producer below (§6 M4.1): core
     // resolves the sound per delivery from settings.sounds, the adapter plays
     // it on the in-app path. The adapter is stateless, so sharing one is safe.
-    const notify = notificationsLib.withNotificationSound(createWebNotifyAdapter(), async () => {
+    const notify = withNotificationSound(createWebNotifyAdapter(), async () => {
         const flowsNs = await getFlows();
         return flowsNs.getSettings(vault);
     });
-    notificationService = new notificationsLib.NotificationService({
+    notificationService = new NotificationService({
         getActiveAddresses: async () => {
             const flowsNs = await getFlows();
             const settings = await flowsNs.getSettings(vault);
-            return notificationsLib.getActiveAddresses(vault, chainRegistry, {
+            return getActiveAddresses(vault, chainRegistry, {
                 activeNetwork: settings.activeNetwork,
             });
         },
@@ -880,9 +919,9 @@ function startNotifications() {
             return flowsNs.getSettings(vault);
         },
         notify,
-        getPendingTxids: () => notificationsLib.getBroadcastTxids(vault),
-        onTxConfirmed: (txid) => notificationsLib.markPendingTxIndexed(vault, txid),
-        onMempoolSeen: (txid) => notificationsLib.markPendingTxMempoolSeen(vault, txid),
+        getPendingTxids: () => getBroadcastTxids(vault),
+        onTxConfirmed: (txid) => markPendingTxIndexed(vault, txid),
+        onMempoolSeen: (txid) => markPendingTxMempoolSeen(vault, txid),
         logger: console,
     });
     notificationService.start().catch((err) => {
@@ -891,7 +930,7 @@ function startNotifications() {
 
     // §46 price-alert poll watcher: same lifecycle, same notify adapter.
     if (!priceAlertWatcher && typeof globalThis.fetch === 'function') {
-        priceAlertWatcher = new notificationsLib.PriceAlertWatcher({
+        priceAlertWatcher = new PriceAlertWatcher({
             getNativePrices: async ({ chainIds, fiatCurrency }) => {
                 if (!priceOracleInstance) {
                     const flowsNs = await getFlows();
@@ -918,11 +957,11 @@ function startNotifications() {
     // held token (binding polls flagged). Same lifecycle, same notify adapter;
     // seen-state persists in localStorage so a reload doesn't re-baseline.
     if (!governancePollWatcher) {
-        governancePollWatcher = new notificationsLib.GovernancePollWatcher({
+        governancePollWatcher = new GovernancePollWatcher({
             getActiveAddresses: async () => {
                 const flowsNs = await getFlows();
                 const settings = await flowsNs.getSettings(vault);
-                return notificationsLib.getActiveAddresses(vault, chainRegistry, {
+                return getActiveAddresses(vault, chainRegistry, {
                     activeNetwork: settings.activeNetwork,
                 });
             },
@@ -948,11 +987,11 @@ function startNotifications() {
     // PC-45: deadline watcher. COINPAY obligations (PC-15) and unstake
     // cooldowns (PC-47) own their own timers; this deep-links to them.
     if (!deadlineWatcher) {
-        deadlineWatcher = new notificationsLib.DeadlineWatcher({
+        deadlineWatcher = new DeadlineWatcher({
             getActiveAddresses: async () => {
                 const flowsNs = await getFlows();
                 const settings = await flowsNs.getSettings(vault);
-                return notificationsLib.getActiveAddresses(vault, chainRegistry, {
+                return getActiveAddresses(vault, chainRegistry, {
                     activeNetwork: settings.activeNetwork,
                 });
             },
@@ -979,11 +1018,11 @@ function startNotifications() {
     // PC-46: low-escrow alert. Auto-refill stays deferred (no per-event
     // consent); this deep-links to PC-19's refill stage instead.
     if (!dispenserEscrowWatcher) {
-        dispenserEscrowWatcher = new notificationsLib.DispenserEscrowWatcher({
+        dispenserEscrowWatcher = new DispenserEscrowWatcher({
             getActiveAddresses: async () => {
                 const flowsNs = await getFlows();
                 const settings = await flowsNs.getSettings(vault);
-                return notificationsLib.getActiveAddresses(vault, chainRegistry, {
+                return getActiveAddresses(vault, chainRegistry, {
                     activeNetwork: settings.activeNetwork,
                 });
             },
@@ -1011,11 +1050,15 @@ function startNotifications() {
     // open. The payer lease in the vault keeps two tabs from paying the
     // same match twice.
     if (!coinpayAutopayWatcher && host) {
-        coinpayAutopayWatcher = new notificationsLib.CoinpayAutopayWatcher({
+        coinpayAutopayWatcher = new CoinpayAutopayWatcher({
             vault,
             sdkRegistry,
             chainRegistry,
             getSigner: (walletId) => (signerPool ? signerPool.get(walletId) : null),
+            getSettings: async () => {
+                const flowsNs = await getFlows();
+                return flowsNs.getSettings(vault);
+            },
             reservationLedger: host.reservationLedger,
             notify,
             shellKind: 'web',
@@ -1027,6 +1070,10 @@ function startNotifications() {
 }
 
 function stopNotifications() {
+    if (cancelNotificationStart) {
+        cancelNotificationStart();
+        cancelNotificationStart = null;
+    }
     if (notificationService) {
         try { notificationService.stop(); } catch (_err) { /* best-effort */ }
         notificationService = null;
@@ -1065,6 +1112,10 @@ export async function getSessionStatus() {
     // the biometric enrollment flag honest after the user enrolls, disables,
     // or re-registers a fingerprint in system settings. No-op in a browser.
     try {
+        // First, so the unlock and onboarding derivations run natively.
+        installNativeKdfProvider();
+        // The iPhone WebView cannot read QR codes; its shell scans natively.
+        installNativeQrScanner();
         if (!installNativeWipeHook({ afterWipe: sealPageBroadcastQueue })) installPageWipeSeal();
         installNativeScreenGuard();
         await installNativeBiometricProvider();
@@ -1119,7 +1170,7 @@ export async function getSessionStatus() {
             // Unreadable meta says nothing either way; fall through to the
             // factual no-wallet answer rather than inventing an eviction.
         }
-        if (meta && meta.kdfParams) throw new storageLib.VaultEvictedError();
+        if (meta && meta.kdfParams) throw new VaultEvictedError();
     }
     const hasWallet = blob !== null;
     const hasSession = host !== null;
@@ -1343,10 +1394,10 @@ export async function createWalletLocal(req) {
     let ownHost = null;
     try {
         await assertFreshVault({ metaBackend: meta, storageBackend: createStorageBackend() });
-        const kdfParams = cryptoLib.makeFreshKdfParams();
-        masterKey = cryptoLib.deriveMasterKey(password, kdfParams);
+        const kdfParams = makeFreshKdfParams();
+        masterKey = await deriveMasterKeyAsync(password, kdfParams);
         const storage = createStorageBackend();
-        const v = new storageLib.Vault({ backend: storage, masterKey });
+        const v = new Vault({ backend: storage, masterKey });
         openedVault = v;
         await v.open();  // blank document
         const flowsNs = await getFlows();
@@ -1360,11 +1411,14 @@ export async function createWalletLocal(req) {
             strengthBits,
             bip39Passphrase,
             kdfParams,
+            // Same password, same params: the wallet seal reuses the vault
+            // key instead of paying a second Argon2id round.
+            masterKey,
         });
         await v.save();
         vault = v;
         await sdkBound();
-        signerPool = new signersLib.SignerPool();
+        signerPool = new SignerPool();
         ownPool = signerPool;
         await signerPool.populate({
             vault,
@@ -1372,6 +1426,8 @@ export async function createWalletLocal(req) {
             bip39Passphrase,
             chainRegistry,
             sdkRegistry,
+            masterKey,
+            masterKeyKdfParams: kdfParams,
         });
         host = createBackgroundHost({
             vault,
@@ -1380,6 +1436,7 @@ export async function createWalletLocal(req) {
             signerPool,
             getDiagnosticContext: webDiagnosticContext,
             broadcastQueueStore: sharedBroadcastQueueStore(),
+            vaultKeyring: webVaultKeyring(),
         });
         ownHost = host;
         startNotifications();
@@ -1396,28 +1453,34 @@ export async function createWalletLocal(req) {
 }
 
 /**
- * Import a pre-existing mnemonic (BIP39 12/24-word or Counterwallet
- * legacy 12-word). Same persistence path as `createWalletLocal`: fresh
- * kdfParams, open vault, run the core `importMnemonic` flow, save meta.
+ * Import a pre-existing mnemonic or a single WIF private key. Same persistence
+ * path as `createWalletLocal`: fresh kdfParams, open vault, run the matching
+ * core import flow, save meta.
  *
- * @param {{ password: string, mnemonic: string, name?: string, bip39Passphrase?: string, activeChainIds?: string[] }} req
- * @returns {Promise<{ format: 'bip39' | 'counterwallet-legacy', walletName: string }>}
+ * @param {{ password: string, mnemonic?: string, wif?: string, chainId?: string, name?: string, bip39Passphrase?: string, activeChainIds?: string[] }} req
+ * @returns {Promise<{ format: 'bip39' | 'counterwallet-legacy' | 'wif-only', walletName: string, walletId: string, labelSyncToken: string | null }>}
  */
 export async function importMnemonicLocal(req) {
     const password = req?.password;
     const mnemonic = req?.mnemonic;
+    const wif = req?.wif;
+    const importingWif = typeof wif === 'string' && wif.trim().length > 0;
     if (typeof password !== 'string' || password.length === 0) {
         throw new Error('wallet.import: password is required');
     }
-    if (typeof mnemonic !== 'string' || mnemonic.trim().length === 0) {
-        throw new Error('wallet.import: mnemonic is required');
+    if (!importingWif && (typeof mnemonic !== 'string' || mnemonic.trim().length === 0)) {
+        throw new Error('wallet.import: recovery phrase or WIF private key is required');
     }
     const {
         name = 'Imported Wallet',
         bip39Passphrase = '',
         activeChainIds = DEFAULT_ACTIVE_CHAIN_IDS,
         origin,
+        chainId,
     } = req;
+    if (importingWif && (typeof chainId !== 'string' || chainId.length === 0)) {
+        throw new Error('wallet.import: chainId is required for a WIF private key');
+    }
 
     const meta = createMetaBackend();
 
@@ -1428,7 +1491,7 @@ export async function importMnemonicLocal(req) {
     // not valid". The format check is microseconds and importMnemonic
     // re-validates anyway, so this is a fast path, not a second gate.
     const flowsNs = await getFlows();
-    if (!flowsNs.detectMnemonicFormat(flowsNs.normalizeMnemonic(mnemonic))) {
+    if (!importingWif && !flowsNs.detectMnemonicFormat(flowsNs.normalizeMnemonic(mnemonic))) {
         throw new Error(
             'That recovery phrase is not valid. Check for typos, missing words, or a phrase from a different wallet.',
         );
@@ -1443,28 +1506,43 @@ export async function importMnemonicLocal(req) {
     let ownHost = null;
     try {
         await assertFreshVault({ metaBackend: meta, storageBackend: createStorageBackend() });
-        const kdfParams = cryptoLib.makeFreshKdfParams();
-        masterKey = cryptoLib.deriveMasterKey(password, kdfParams);
+        const kdfParams = makeFreshKdfParams();
+        masterKey = await deriveMasterKeyAsync(password, kdfParams);
         const storage = createStorageBackend();
-        const v = new storageLib.Vault({ backend: storage, masterKey });
+        const v = new Vault({ backend: storage, masterKey });
         openedVault = v;
         await v.open();
-        const result = await flowsNs.importMnemonic({
-            password,
-            mnemonic,
-            vault: v,
-            chainRegistry,
-            sdkRegistry,
-            activeChainIds,
-            name,
-            bip39Passphrase,
-            origin,
-            kdfParams,
-        });
+        await sdkBound();
+        const result = importingWif
+            ? await flowsNs.importSingleWif({
+                password,
+                wif: wif.trim(),
+                chainId,
+                vault: v,
+                chainRegistry,
+                sdkRegistry,
+                name,
+                kdfParams,
+            })
+            : await flowsNs.importMnemonic({
+                password,
+                mnemonic,
+                vault: v,
+                chainRegistry,
+                sdkRegistry,
+                activeChainIds,
+                name,
+                bip39Passphrase,
+                origin,
+                kdfParams,
+                // Same password, same params: the wallet seal reuses the vault
+                // key instead of paying a second Argon2id round.
+                masterKey,
+            });
         await v.save();
         vault = v;
         await sdkBound();
-        signerPool = new signersLib.SignerPool();
+        signerPool = new SignerPool();
         ownPool = signerPool;
         await signerPool.populate({
             vault,
@@ -1472,6 +1550,8 @@ export async function importMnemonicLocal(req) {
             bip39Passphrase,
             chainRegistry,
             sdkRegistry,
+            masterKey,
+            masterKeyKdfParams: kdfParams,
         });
         host = createBackgroundHost({
             vault,
@@ -1480,6 +1560,7 @@ export async function importMnemonicLocal(req) {
             signerPool,
             getDiagnosticContext: webDiagnosticContext,
             broadcastQueueStore: sharedBroadcastQueueStore(),
+            vaultKeyring: webVaultKeyring(),
         });
         ownHost = host;
         startNotifications();
@@ -1489,16 +1570,21 @@ export async function importMnemonicLocal(req) {
         // published earlier. Runs after sdkBound() so the explorer endpoints
         // are resolved, and after the wallet is fully persisted so a dead
         // explorer can only cost the restore, never the import.
-        const labelSync = await restoreLabelSyncBestEffort({
-            flowsNs,
-            vault: v,
-            walletId: result.wallet.id,
-            password,
-            bip39Passphrase,
-            chainIds: typeof flowsNs.labelSyncSearchChainIds === 'function'
-                ? flowsNs.labelSyncSearchChainIds(chainRegistry, activeChainIds)
-                : activeChainIds,
-        });
+        const labelSyncToken = importingWif || origin === 'created'
+            ? null
+            : startLabelSyncRestoreTask({
+                walletId: result.wallet.id,
+                run: () => restoreLabelSyncBestEffort({
+                    flowsNs,
+                    vault: v,
+                    walletId: result.wallet.id,
+                    password,
+                    bip39Passphrase,
+                    chainIds: typeof flowsNs.labelSyncSearchChainIds === 'function'
+                        ? flowsNs.labelSyncSearchChainIds(chainRegistry, activeChainIds)
+                        : activeChainIds,
+                }),
+            });
         // `walletId` rides along because the fresh-install caller may need to
         // keep working with the wallet it just made: the pairing lane
         // imports the shared phrase here and then asks the host to derive that
@@ -1506,10 +1592,10 @@ export async function importMnemonicLocal(req) {
         // lane imported the phrase and then dead-ended on "the shell returned
         // no wallet id" - a hard stop after the wallet already existed.
         return {
-            format: result.format,
+            format: result.format ?? result.wallet.format,
             walletName: result.wallet.name,
             walletId: result.wallet.id,
-            labelSync,
+            labelSyncToken,
         };
     } catch (err) {
         if (!sessionStarted) tearDownFailedOnboarding({ openedVault, ownPool, ownHost });
@@ -1529,7 +1615,9 @@ export async function importMnemonicLocal(req) {
  *
  * @param {{ flowsNs: any, vault: any, walletId: string, password: string, bip39Passphrase: string, chainIds: string[] }} opts
  */
-async function restoreLabelSyncBestEffort({ flowsNs, vault: v, walletId, password, bip39Passphrase, chainIds }) {
+async function restoreLabelSyncBestEffort({
+    flowsNs, vault: v, walletId, password, bip39Passphrase, chainIds,
+}) {
     if (typeof flowsNs?.restoreLabelSyncAfterImport !== 'function') return null;
     try {
         return await flowsNs.restoreLabelSyncAfterImport({
@@ -1592,6 +1680,9 @@ export async function importBackupLocal(req) {
     const meta = createMetaBackend();
     const lease = await acquireWebVaultLease();
     let masterKey = null;
+    // This call's own copy of the key the restored wallet is now sealed under.
+    let deviceKey = null;
+    let deviceKdfParams = null;
     let sessionStarted = false;
     // What THIS call put into module state, so a failure tears down only that.
     let openedVault = null;
@@ -1600,10 +1691,10 @@ export async function importBackupLocal(req) {
     try {
         await assertFreshVault({ metaBackend: meta, storageBackend: createStorageBackend() });
         const flowsNs = await getFlows();
-        const kdfParams = cryptoLib.makeFreshKdfParams();
-        masterKey = cryptoLib.deriveMasterKey(password, kdfParams);
+        const kdfParams = makeFreshKdfParams();
+        masterKey = await deriveMasterKeyAsync(password, kdfParams);
         const storage = createStorageBackend();
-        const v = new storageLib.Vault({ backend: storage, masterKey });
+        const v = new Vault({ backend: storage, masterKey });
         openedVault = v;
         await v.open();
         const common = {
@@ -1612,6 +1703,13 @@ export async function importBackupLocal(req) {
             walletPassword,
             devicePassword: password,
             mode: 'fresh',
+            // Core zeroes the lent buffer when this returns, so keep a copy;
+            // the finally below zeroes it whether or not the restore succeeds.
+            onDeviceKey: (key, params) => {
+                if (deviceKey) deviceKey.fill(0);
+                deviceKey = key.slice();
+                deviceKdfParams = params;
+            },
         };
         // Nothing is persisted or unlocked until the merge has actually
         // succeeded: a wrong wallet password leaves the install fresh and
@@ -1626,7 +1724,7 @@ export async function importBackupLocal(req) {
         await v.save();
         vault = v;
         await sdkBound();
-        signerPool = new signersLib.SignerPool();
+        signerPool = new SignerPool();
         ownPool = signerPool;
         // The restored seal now opens under `password`, which is exactly why
         // the re-key had to happen first: populate would otherwise skip the
@@ -1636,6 +1734,11 @@ export async function importBackupLocal(req) {
             password,
             chainRegistry,
             sdkRegistry,
+            // The re-key's own key: same password, same params as the restored
+            // seal, so the wallet skips a second Argon2id round. The vault key
+            // serves only when nothing was re-sealed (no key material to pool).
+            masterKey: deviceKey ?? masterKey,
+            masterKeyKdfParams: deviceKey ? deviceKdfParams : kdfParams,
         });
         host = createBackgroundHost({
             vault,
@@ -1644,6 +1747,7 @@ export async function importBackupLocal(req) {
             signerPool,
             getDiagnosticContext: webDiagnosticContext,
             broadcastQueueStore: sharedBroadcastQueueStore(),
+            vaultKeyring: webVaultKeyring(),
         });
         ownHost = host;
         startNotifications();
@@ -1661,6 +1765,7 @@ export async function importBackupLocal(req) {
         throw err;
     } finally {
         if (masterKey) masterKey.fill(0);
+        if (deviceKey) deviceKey.fill(0);
         if (lease && !sessionStarted) await releaseWebVaultLease(lease);
     }
 }
@@ -1717,9 +1822,9 @@ export async function unlockWalletLocal(req) {
     let ownPool = null;
     let ownHost = null;
     try {
-        masterKey = cryptoLib.deriveMasterKey(password, meta.kdfParams);
+        masterKey = await deriveMasterKeyAsync(password, meta.kdfParams);
         const storage = createStorageBackend();
-        const v = new storageLib.Vault({ backend: storage, masterKey });
+        const v = new Vault({ backend: storage, masterKey });
         try {
             await v.open();
         } catch (err) {
@@ -1734,7 +1839,7 @@ export async function unlockWalletLocal(req) {
         // for software signers) reuse pre-unlocked signers without
         // re-prompting. Pool is cleared in lockWalletLocal.
         await sdkBound();
-        signerPool = new signersLib.SignerPool();
+        signerPool = new SignerPool();
         ownPool = signerPool;
         // Best-effort, as in the shared handleWalletUnlock: a populate
         // failure must not block an unlock whose password was right. The
@@ -1749,6 +1854,11 @@ export async function unlockWalletLocal(req) {
                 bip39Passphrase,
                 chainRegistry,
                 sdkRegistry,
+                // A wallet sealed under the vault's own params (the onboarding
+                // wallet) opens with this key instead of a second Argon2id
+                // round; the pool never keeps it, and the finally below zeroes it.
+                masterKey,
+                masterKeyKdfParams: meta.kdfParams,
             });
         } catch (_err) { /* best-effort, see above */ }
         // A typed 25th word that reproduced NONE of the passphrase wallets'
@@ -1760,7 +1870,7 @@ export async function unlockWalletLocal(req) {
         // out until the next unlock, exactly as if no passphrase was typed.
         if (bip39Passphrase && pooled
             && pooled.passphraseMismatch.length > 0 && pooled.passphraseMatched.length === 0) {
-            throw new flowsLib.PassphraseMismatchError(pooled.passphraseMismatchNames);
+            throw new PassphraseMismatchError(pooled.passphraseMismatchNames);
         }
         // Legacy passphrase wallets the password opened but that hold no
         // stored 25th word yet. The pool reports them as two parallel arrays;
@@ -1780,6 +1890,7 @@ export async function unlockWalletLocal(req) {
             signerPool,
             getDiagnosticContext: webDiagnosticContext,
             broadcastQueueStore: sharedBroadcastQueueStore(),
+            vaultKeyring: webVaultKeyring(),
         });
         ownHost = host;
         startNotifications();
@@ -1859,7 +1970,7 @@ export async function sendMessage(type, request) {
 // no listener (ruling I-34b) and the section hides Preview there.
 const previewAdapter = createWebNotifyAdapter();
 if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
-    window.addEventListener(notificationsLib.SOUND_PREVIEW_EVENT, (e) => {
+    window.addEventListener(SOUND_PREVIEW_EVENT, (e) => {
         const soundId = e && e.detail && e.detail.soundId;
         if (typeof soundId === 'string') previewAdapter.playSound(soundId);
     });

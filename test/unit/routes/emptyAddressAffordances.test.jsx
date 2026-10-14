@@ -36,7 +36,10 @@ const REGTEST_SETTINGS = {
 const WALLET = { id: 'wallet-a', name: 'Main Wallet' };
 const ACCOUNT = { id: 'account-a', index: 0, walletId: WALLET.id };
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    localStorage.removeItem('xc:backupReminderFundedAt');
+});
 
 function emptyMessaging(overrides = {}) {
     return {
@@ -101,16 +104,41 @@ describe('offerableChainIds', () => {
 });
 
 describe('Home with no addresses', () => {
-    it('offers a generate CTA instead of pointing at Receive', async () => {
+    it('offers one funding state with address generation and optional buying', async () => {
+        const onExchange = vi.fn();
         mount(
-            <Home activeWalletId={WALLET.id} activeAccountId={ACCOUNT.id} />,
+            <Home
+                activeWalletId={WALLET.id}
+                activeAccountId={ACCOUNT.id}
+                onExchange={onExchange}
+            />,
             emptyMessaging(),
         );
 
         const cta = await screen.findByRole('button', { name: /Generate an address/i });
         expect(cta).toBeTruthy();
-        // The old copy told the user to go somewhere else and stopped there.
+        expect(screen.getAllByText('Fund your wallet')).toHaveLength(1);
+        expect(screen.queryByText('No coins yet')).toBeNull();
         expect(screen.queryByText(/Use Receive to generate one/)).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Buy coins' }));
+        expect(onExchange).toHaveBeenCalledTimes(1);
+    });
+
+    it('places the backup reminder after the first funding step', async () => {
+        // The reminder appears only once a wallet has held funds, so this is a
+        // wallet that was funded before and is empty again.
+        localStorage.setItem('xc:backupReminderFundedAt', JSON.stringify({
+            [WALLET.id]: Date.parse('2020-01-01T00:00:00.000Z'),
+        }));
+        const oldWallet = { ...WALLET, createdAt: '2020-01-01T00:00:00.000Z' };
+        mount(
+            <Home activeWalletId={WALLET.id} activeAccountId={ACCOUNT.id} />,
+            emptyMessaging({ listWallets: vi.fn().mockResolvedValue([oldWallet]) }),
+        );
+
+        const funding = await screen.findByText('Fund your wallet');
+        const reminder = await screen.findByRole('region', { name: 'Back up your wallet' });
+        expect(funding.compareDocumentPosition(reminder) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
     it('opens Add addresses and derives on an active chain', async () => {

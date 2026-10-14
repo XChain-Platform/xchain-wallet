@@ -22,7 +22,7 @@
 // therefore trusted, keeping that data off the wire narrows the blast
 // radius of any future logging or telemetry bug in the popup layer.
 
-import { decoder, flows, registry, schemas } from '@xchain-wallet/core';
+import { crypto as coreCrypto, decoder, flows, registry, schemas } from '@xchain-wallet/core';
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
 import { sharedListDirectory } from '@xchain-wallet/core/flows/sharedLists.js';
 import { listTickCoinSupport } from '@xchain-wallet/core/flows/listTickCoinSupport.js';
@@ -30,17 +30,30 @@ import { supplyHistoryFor } from '@xchain-wallet/core/flows/supplyHistory.js';
 import { capRbfToDescriptor } from '@xchain-wallet/core/flows/rbfCap.js';
 import {
     buildEditFeedListsParams,
+    buildBetActionPsbt,
     editBetFeedListsAction,
 } from '@xchain-wallet/core/flows/betActions.js';
+import {
+    createErrorRingBuffer,
+    installShellErrorCapture,
+} from '@xchain-wallet/core/flows/diagnosticDump.js';
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import { MessageHost } from './MessageHost.js';
 import { registerBridgeHandlers } from '../bridge/handlers.js';
+import {
+    notifyAccountsChanged,
+    notifyDisconnectedSites,
+    notifyNetworkChanged,
+} from '../bridge/bridgeEvents.js';
 import { applyAutoLockSignal } from './autoLockState.js';
 import * as signerBridge from './signerBridge.js';
 import { createBroadcastQueueStorage } from './broadcastQueueStorage.js';
 import { createBroadcastQueueStore } from './broadcastQueueStore.js';
 import { createBroadcastQueueEngine } from './broadcastQueueEngine.js';
-import { createSendHold } from './sendHold.js';
+import {
+    createHoldBeforeBroadcast,
+    createSendHoldRegistry,
+} from './sendHold.js';
 import { createSignThrottleStorage } from './signThrottleStorage.js';
 import { createLogConsoleStorage } from './logConsoleStorage.js';
 import {
@@ -51,6 +64,10 @@ import { DEFAULT_ACTIVE_CHAIN_IDS } from './walletCreate.js';
 // Shared with the PRE-HOST fresh-install restore lane, which never reaches this
 // host: one resolver so the two lanes cannot drift on what they will fetch.
 import { resolveBackupPointerContent } from './backupPointerResolver.js';
+import {
+    startLabelSyncRestoreTask,
+    waitForLabelSyncRestoreTask,
+} from './labelSyncRestoreTasks.js';
 
 const {
     importedAddressIdsFor,
@@ -60,6 +77,7 @@ const {
     renameAccount,
     importMnemonic,
     restoreLabelSyncAfterImport,
+    rekeyWalletRecord,
     labelSyncSearchChainIds,
     unlockWallet,
     receiveAddress,
@@ -246,7 +264,9 @@ const {
     verifyAddressBalance,
     verifyAddressAction,
     getActiveNetwork,
+    filterChainIdsByActiveNetwork,
     createPriceOracle,
+    isFiatRateSourceUrl,
     getMarkets,
     getMarket,
     getMarketHistory,
@@ -296,6 +316,7 @@ const {
     listBlockedOrigins,
     addBlockedOrigin,
     removeBlockedOrigin,
+    isOriginBlocked,
     listBlocklistAuditLog,
     clearBlocklistAuditLog,
     refreshChainRegistry,
@@ -648,9 +669,9 @@ function hwId(address, deps) {
 }
 
 /**
- * Return the newest (highest external index) HD address for a wallet +
- * chain, or `null` if no address exists. External = change = 0 in the
- * BIP44-style derivation path. Skips imported WIFs: those aren't a
+ * Return the newest (highest external index) derivable address for a wallet
+ * and chain, or `null` if no address exists. External = change = 0 in the
+ * BIP44-style derivation path. Skips imported WIFs because those have no
  * "receive next" concept.
  *
  * @param {{ walletId: string, chainId: string, addressType?: string }} req
@@ -698,7 +719,7 @@ async function newestAddress(req, { vault, chainRegistry }) {
         if (a.chain !== descriptor.coin) continue;
         if (a.network !== descriptor.networkKind) continue;
         if (a.addressType !== type) continue;
-        if (a.source !== 'hd') continue;
+        if (!['hd', 'trezor', 'ledger', 'watch-only'].includes(a.source)) continue;
         if (typeof a.derivationPath !== 'string') continue;
         const parts = a.derivationPath.split('/');
         if (parts.length < 2) continue;
@@ -747,6 +768,14 @@ function permanentReleasePatch(entry, failure) {
         txid: entry.commitTxid ?? entry.txid ?? null,
         error: failure,
     };
+}
+
+const QUEUED_BROADCAST_RETRY_BASE_MS = 1_000;
+const QUEUED_BROADCAST_RETRY_MAX_MS = 60_000;
+
+function queuedBroadcastRetryDelay(attempt) {
+    const exponent = Math.max(0, Math.min(16, attempt - 1));
+    return Math.min(QUEUED_BROADCAST_RETRY_MAX_MS, QUEUED_BROADCAST_RETRY_BASE_MS * (2 ** exponent));
 }
 
 async function retainReplacementPlan(vault, result, fallbackPsbtHex, requestedRbf, descriptor) {
@@ -845,6 +874,16 @@ function assertReplacementPsbt({ replacement, plan, actionString, decodeActionSt
     }
 }
 
+async function cancelMatchingApprovals(approvals, matches) {
+    if (typeof approvals?.cancelOriginsMatching !== 'function') return 0;
+    return approvals.cancelOriginsMatching(matches);
+}
+
+async function emitSiteDisconnect(bridgeEvents, origin, reason = 'user-requested') {
+    if (typeof bridgeEvents?.disconnect !== 'function') return;
+    await bridgeEvents.disconnect(origin, reason);
+}
+
 /**
  * Read the selected wallet's accounts and the connected sites straight from
  * the vault and hand both to the bridge broadcaster.
@@ -865,6 +904,32 @@ async function announceWalletSwitch(req, vault, bridgeEvents) {
     const sites = await vault.connectedSites.list();
     await bridgeEvents.walletSwitched(accounts, sites);
     return { ok: true };
+}
+
+async function announceNetworkChange(previous, next, vault, chainRegistry, bridgeEvents) {
+    if (getActiveNetwork(previous) === getActiveNetwork(next)) return;
+    if (typeof bridgeEvents?.chainChanged !== 'function') return;
+    const activeChainIds = filterChainIdsByActiveNetwork(
+        Object.keys(next?.fees ?? {}),
+        next,
+        chainRegistry,
+    );
+    const sites = await vault.connectedSites.list();
+    await notifyNetworkChanged({ events: bridgeEvents, sites, activeChainIds });
+}
+
+async function announceAccountChange(vault, bridgeEvents, changedAccountIds, sites) {
+    if (typeof bridgeEvents?.accountsChanged !== 'function') return;
+    const [accounts, connectedSites] = await Promise.all([
+        vault.accounts.list(),
+        sites ? Promise.resolve(sites) : vault.connectedSites.list(),
+    ]);
+    await notifyAccountsChanged({
+        events: bridgeEvents,
+        accounts,
+        sites: connectedSites,
+        changedAccountIds,
+    });
 }
 
 function toSafeWallet(w) {
@@ -928,6 +993,7 @@ function toSafeWallet(w) {
  * @param {import('./MessageHost.js').MessageHostDeps & {
  *   approvals?: import('../bridge/Approvals.js').Approvals,
  *   getDiagnosticContext?: DiagnosticContext,
+ *   surfaceStateEvents?: { publish: (kind: 'wallet' | 'network', payload: Record<string, unknown>) => Promise<unknown> | unknown },
  * }} deps
  * @returns {MessageHost}
  */
@@ -936,6 +1002,7 @@ export function createBackgroundHost(deps) {
         approvals,
         getDiagnosticContext,
         bridgeEvents,
+        surfaceStateEvents,
         // Called after a settings.update whose patch touches
         // `privacy`, so a shell that routes requests itself can re-apply
         // before the next one. Desktop uses it for Tor routing; the web
@@ -966,13 +1033,59 @@ export function createBackgroundHost(deps) {
         // bridge: never `console`) so arbitrary console.* args from
         // third-party content-script code can't reach disk.
         logConsoleStorage = createLogConsoleStorage(),
-        // One host-level send hold. Injected so tests (and later the registry
-        // that feeds beforeBroadcast) share the same instance as the cancel route.
+        // One host-level send hold shared by beforeBroadcast and the cancel route.
+        // Injectable so timer and cancellation behavior can be tested without delays.
         sendHold: injectedSendHold,
         ...hostDeps
     } = deps ?? {};
     const host = new MessageHost(hostDeps);
-    const sendHold = injectedSendHold ?? createSendHold();
+    const sendHold = injectedSendHold ?? createSendHoldRegistry();
+    // Popup and side panel share this host. Matching semantic sends stay
+    // exclusive through signing and broadcast while unrelated sends proceed.
+    const activeSendIntents = new Set();
+
+    async function publishSurfaceState(kind, payload) {
+        if (typeof surfaceStateEvents?.publish !== 'function') return;
+        try {
+            await surfaceStateEvents.publish(kind, payload);
+        } catch {
+            // Surface notification is best-effort after the vault mutation commits.
+        }
+    }
+
+    async function sendWithHold(req, flowDeps) {
+        const legs = Array.isArray(req?.legs) && req.legs.length > 0
+            ? req.legs
+            : [{ to: req?.to, tick: req?.tick, amount: req?.amount, memo: req?.memo }];
+        const intentKey = JSON.stringify([
+            req?.walletId ?? null,
+            req?.chainId ?? null,
+            req?.from?.address ?? null,
+            legs.map((leg) => [
+                leg?.to ?? null,
+                typeof leg?.tick === 'string' ? leg.tick.toUpperCase() : null,
+                leg?.amount == null ? null : String(leg.amount),
+                leg?.memo ?? null,
+            ]),
+        ]);
+        if (activeSendIntents.has(intentKey)) {
+            const err = new Error('A matching send is already in progress in another wallet window.');
+            err.name = 'SendAlreadyInProgressError';
+            throw err;
+        }
+        activeSendIntents.add(intentKey);
+        try {
+            const opts = { ...req, ...flowDeps };
+            const beforeBroadcast = createHoldBeforeBroadcast({
+                sendHold,
+                holdId: opts.holdId,
+                undoSeconds: opts.undoSeconds,
+            });
+            return await sendToken({ ...opts, beforeBroadcast });
+        } finally {
+            activeSendIntents.delete(intentKey);
+        }
+    }
 
     // ONE reservation ledger per host, shared across every
     // approval window. A single background SW serves all popup windows, so
@@ -988,6 +1101,10 @@ export function createBackgroundHost(deps) {
     // ledger with chrome.storage.session makes the reservations survive that
     // restart; the store returns null outside an extension (Node tests, web
     // and desktop shells), where the ledger stays in-memory.
+    // Crash hook: uncaught errors and rejections feed the dump's recent_errors.
+    const errorBuffer = createErrorRingBuffer();
+    installShellErrorCapture(globalThis, errorBuffer);
+
     const confirmSessionStorage = createConfirmActionSessionStorage();
     const reservationLedger = createReservationLedger(
         confirmSessionStorage ? { store: reservationStoreFrom(confirmSessionStorage) } : undefined,
@@ -1185,6 +1302,10 @@ export function createBackgroundHost(deps) {
         return wallets.map(toSafeWallet);
     });
 
+    host.register('wallet.labelSyncRestoreResult', (req) => (
+        waitForLabelSyncRestoreTask(req?.token)
+    ));
+
     host.register('wallet.exists', async (req, { vault }) => {
         const id = req?.walletId;
         if (typeof id !== 'string' || !id) return { exists: false };
@@ -1193,7 +1314,11 @@ export function createBackgroundHost(deps) {
 
     // The wallet UI names the wallet the user just selected, so connected
     // sites can get accountsChanged with that wallet's granted accounts.
-    host.register('wallet.setActive', (req, { vault }) => announceWalletSwitch(req, vault, bridgeEvents));
+    host.register('wallet.setActive', async (req, { vault }) => {
+        const result = await announceWalletSwitch(req, vault, bridgeEvents);
+        await publishSurfaceState('wallet', { walletId: req.walletId });
+        return result;
+    });
 
     // Add a wallet to an already-open vault; the Add Wallet create and import
     // screens both land here. `wallet.create` / `wallet.import` are not
@@ -1238,21 +1363,26 @@ export function createBackgroundHost(deps) {
         // 'preserve': the vault already holds the other wallets' contacts and
         // labels, and an added wallet's published copy must not overwrite a
         // record the user edited here since.
-        const labelSync = await restoreLabelSyncBestEffort({
-            vault,
-            walletId: r.wallet.id,
-            password: req?.password,
-            bip39Passphrase: req?.bip39Passphrase,
-            chainIds: labelSyncSearchChainIds(chainRegistry, activeChainIds),
-            sdkRegistry,
-            onConflict: 'preserve',
-        });
+        const labelSyncToken = r.wallet.origin === 'created'
+            ? null
+            : startLabelSyncRestoreTask({
+                walletId: r.wallet.id,
+                run: () => restoreLabelSyncBestEffort({
+                    vault,
+                    walletId: r.wallet.id,
+                    password: req?.password,
+                    bip39Passphrase: req?.bip39Passphrase,
+                    chainIds: labelSyncSearchChainIds(chainRegistry, activeChainIds),
+                    sdkRegistry,
+                    onConflict: 'preserve',
+                }),
+            });
         return {
             format: r.format,
             wallet: toSafeWallet(r.wallet),
             account: r.account,
             addresses: r.addresses,
-            labelSync,
+            labelSyncToken,
         };
     });
 
@@ -1302,7 +1432,11 @@ export function createBackgroundHost(deps) {
     });
 
     host.register('account.rename', async (req, { vault }) => {
+        const previous = await vault.accounts.get(req?.accountId);
         const updated = await renameAccount({ ...req, vault });
+        if (previous?.name !== updated.name) {
+            await announceAccountChange(vault, bridgeEvents, [updated.id]);
+        }
         return { account: updated };
     });
 
@@ -1347,6 +1481,7 @@ export function createBackgroundHost(deps) {
             chainRegistry,
             sdkRegistry,
         });
+        await announceAccountChange(vault, bridgeEvents, [r.account.id]);
         return { account: r.account, addresses: r.addresses };
     });
 
@@ -1357,6 +1492,10 @@ export function createBackgroundHost(deps) {
         signer.lock();
         return { ok: true };
     });
+
+    host.register('wallet.changePassword', async (req, flowDeps) => (
+        changeWalletPassword(req, flowDeps)
+    ));
 
     // Can this wallet sign WITHOUT a password right now? True iff the
     // unlocked session has a pre-unlocked SoftwareSigner for it in the
@@ -1445,6 +1584,7 @@ export function createBackgroundHost(deps) {
         if (typeof network !== 'string' || !network) {
             throw new Error('settings.setActiveNetwork: network is required');
         }
+        const previousSettings = await getSettings(vault);
         let settings = await updateSettings(vault, { activeNetwork: network });
 
         let addresses = { created: [], existing: [], failed: [], skipped: 'no-wallet' };
@@ -1472,13 +1612,25 @@ export function createBackgroundHost(deps) {
                 settings = await ensureSettings(vault, chainRegistry, networkChainIds);
             }
         }
+        await announceNetworkChange(
+            previousSettings,
+            settings,
+            vault,
+            chainRegistry,
+            bridgeEvents,
+        );
+        await publishSurfaceState('network', { settings });
         return { settings, addresses };
     });
 
-    host.register('settings.update', async (req, { vault, sdkRegistry }) => {
+    host.register('settings.update', async (req, { vault, chainRegistry, sdkRegistry }) => {
         const patch = req && typeof req === 'object' && 'patch' in req
             ? /** @type {Record<string, unknown>} */ (req.patch)
             : /** @type {Record<string, unknown>} */ (req ?? {});
+        const previousSettings = patch
+            && Object.prototype.hasOwnProperty.call(patch, 'activeNetwork')
+            ? await getSettings(vault)
+            : null;
         const result = await updateSettings(vault, patch);
         // A saved endpoint takes effect on the next request, not
         // at the next wallet restart. Invalidates only the chains whose
@@ -1512,6 +1664,16 @@ export function createBackgroundHost(deps) {
                 console.error('[xchain] privacy settings apply failed:', err);
             }
         }
+        if (patch && Object.prototype.hasOwnProperty.call(patch, 'activeNetwork')) {
+            await announceNetworkChange(
+                previousSettings,
+                result,
+                vault,
+                chainRegistry,
+                bridgeEvents,
+            );
+            await publishSurfaceState('network', { settings: result });
+        }
         return result;
     });
 
@@ -1542,7 +1704,16 @@ export function createBackgroundHost(deps) {
         if (req?.walletMode === 'watcher' || req?.walletMode === 'signer') {
             await updateSettings(vault, { walletMode: req.walletMode });
         }
-        const pooled = await sessionSigner(req, vault, signerPool);
+        const wallet = await vault.wallets.get(walletId);
+        if (!wallet) {
+            throw new Error(`pairing: no wallet with id "${walletId}"`);
+        }
+        // A standalone xpub export confirms the password every time. Public
+        // keys cannot spend, but they reveal the account's complete address
+        // history, so an unlocked session alone does not authorize disclosure.
+        const pooled = req?.publicExport === true
+            ? null
+            : await sessionSigner(req, vault, signerPool);
         const signer = pooled
             || await unlockWallet({
                 vault,
@@ -1553,7 +1724,7 @@ export function createBackgroundHost(deps) {
                 sdkRegistry,
             });
         try {
-            return await fn(signer, await getSettings(vault));
+            return await fn(signer, await getSettings(vault), wallet);
         } finally {
             // The pool owns the lifecycle of a pooled signer; only a signer
             // we unlocked ourselves gets locked here.
@@ -1575,12 +1746,30 @@ export function createBackgroundHost(deps) {
 
     host.register('pairing.payload', async (req, deps) => {
         const { chainRegistry } = deps;
-        return withPairingSigner(req, deps, async (signer, settings) => {
+        return withPairingSigner(req, deps, async (signer, settings, wallet) => {
             const keys = await collectPairingKeys({
                 signer,
                 chainRegistry,
                 chainIds: pairingChainIds(req, settings, chainRegistry),
+                accountIndex: Number.isInteger(req?.accountIndex) && req.accountIndex >= 0
+                    ? req.accountIndex
+                    : 0,
+                format: wallet.format,
             });
+            if (req?.publicExport === true) {
+                const publicKeys = keys
+                    .filter((key) => /^(?:xpub|tpub)[1-9A-HJ-NP-Za-km-z]+$/.test(key?.xpub || ''))
+                    .map((key) => ({
+                        chainId: key.chainId,
+                        addressType: key.addressType,
+                        path: key.path,
+                        xpub: key.xpub,
+                    }));
+                if (publicKeys.length === 0) {
+                    throw new Error('pairing.payload: this wallet has no extended public keys to export');
+                }
+                return { payload: { keys: publicKeys }, encoded: null };
+            }
             const payload = buildPairingPayload({
                 walletMode: settings?.walletMode,
                 keys,
@@ -1592,11 +1781,12 @@ export function createBackgroundHost(deps) {
 
     host.register('pairing.pair', async (req, deps) => {
         const { vault, chainRegistry } = deps;
-        return withPairingSigner(req, deps, async (signer, settings) => {
+        return withPairingSigner(req, deps, async (signer, settings, wallet) => {
             const keys = await collectPairingKeys({
                 signer,
                 chainRegistry,
                 chainIds: pairingChainIds(req, settings, chainRegistry),
+                format: wallet.format,
             });
             const local = buildPairingPayload({
                 walletMode: settings?.walletMode,
@@ -1673,7 +1863,7 @@ export function createBackgroundHost(deps) {
     // button on About panel, etc.) so users can paste it into a bug
     // report. No secrets included: this passes the diagnosticDump flow's
     // own redaction.
-    host.register('diagnostic.dump', async (_req, { vault, chainRegistry }) => {
+    host.register('diagnostic.dump', async (req, { vault, chainRegistry }) => {
         // §50 / Cluster L FOLLOWUP 4: fill env / build / signers so the
         // dump tells support which shell + build + paired devices were
         // running. The shell-supplied callback contributes env + build
@@ -1725,6 +1915,12 @@ export function createBackgroundHost(deps) {
             env: ctx.env,
             build: ctx.build,
             signers,
+            // Shell-side crashes arrive with the request; merge them with the
+            // background's own buffer, oldest first (the dump keeps the tail).
+            recentErrors: [
+                ...(Array.isArray(req?.recentErrors) ? req.recentErrors : []),
+                ...errorBuffer.list(),
+            ],
             recentLogs,
         });
     });
@@ -1946,6 +2142,10 @@ export function createBackgroundHost(deps) {
         if (typeof walletId !== 'string' || !walletId) {
             throw new Error('wallet.remove: walletId is required');
         }
+        const [removedAccounts, sitesBefore] = await Promise.all([
+            vault.accounts.findBy('walletId', walletId),
+            vault.connectedSites.list(),
+        ]);
         const result = await removeWallet({ vault, walletId });
         if (signerPool && typeof signerPool.evict === 'function') {
             try { signerPool.evict(walletId); } catch { /* best-effort */ }
@@ -1956,11 +2156,36 @@ export function createBackgroundHost(deps) {
         // blob and rehydrate into every later boot, and no route can list them
         // again because the banner only ever asks for the active wallet.
         await pruneWalletFromQueue(walletId);
+        const removedAccountIds = new Set(removedAccounts.map((account) => account.id));
+        const affectedOrigins = new Set(sitesBefore
+            .filter((site) => {
+                if (removedAccountIds.size === 0) return false;
+                const grants = Array.isArray(site?.permissions?.accounts)
+                    ? site.permissions.accounts
+                    : [];
+                return grants.length === 0 || grants.some((id) => removedAccountIds.has(id));
+            })
+            .map((site) => site.origin));
+        const sitesAfter = await vault.connectedSites.list();
+        const survivingOrigins = new Set(sitesAfter.map((site) => site.origin));
+        await notifyDisconnectedSites({
+            events: bridgeEvents,
+            sites: sitesBefore.filter((site) => (
+                affectedOrigins.has(site.origin) && !survivingOrigins.has(site.origin)
+            )),
+            reason: 'wallet-removed',
+        });
+        await announceAccountChange(
+            vault,
+            bridgeEvents,
+            [],
+            sitesAfter.filter((site) => affectedOrigins.has(site.origin)),
+        );
         return result;
     });
 
-    // §35.1 + §43 connected-sites maintenance. List/delete; the
-    // approval-flow record creation lives in bridge/handlers.js.
+    // §35.1 + §43 connected-sites maintenance. The approval-flow record
+    // creation lives in bridge/handlers.js.
     host.register('sites.list', async (_req, { vault }) => {
         const sites = await vault.connectedSites.list();
         return [...sites].sort((a, b) => (b.lastUsedAt || '').localeCompare(a.lastUsedAt || ''));
@@ -1970,7 +2195,22 @@ export function createBackgroundHost(deps) {
         if (typeof id !== 'string' || !id) {
             throw new Error('sites.delete: id is required');
         }
+        let site = null;
+        if (typeof vault.connectedSites.get === 'function') {
+            site = await vault.connectedSites.get(id);
+        } else if (typeof vault.connectedSites.list === 'function') {
+            site = (await vault.connectedSites.list()).find((candidate) => candidate.id === id);
+        }
+        const cancellation = site
+            ? cancelMatchingApprovals(approvals, (origin) => origin === site.origin)
+            : Promise.resolve(0);
         await vault.connectedSites.delete(id);
+        if (site) {
+            await Promise.all([
+                cancellation,
+                emitSiteDisconnect(bridgeEvents, site.origin, 'user-revoked'),
+            ]);
+        }
         return { ok: true };
     });
 
@@ -1992,6 +2232,10 @@ export function createBackgroundHost(deps) {
         if (typeof site.origin !== 'string' || !site.origin) {
             throw new Error('sites.restore: site.origin is required');
         }
+        const settings = await vault.settings.get().catch(() => null);
+        if (isOriginBlocked(settings?.blockedOrigins, site.origin)) {
+            throw new Error('sites.restore: origin is blocked');
+        }
         await vault.connectedSites.put(site);
         return { ok: true };
     });
@@ -2008,7 +2252,35 @@ export function createBackgroundHost(deps) {
         if (typeof origin !== 'string' || !origin) {
             throw new Error('sites.block: origin is required');
         }
-        return addBlockedOrigin({ vault, origin });
+        const cancelPending = () => cancelMatchingApprovals(
+            approvals,
+            (candidate) => typeof candidate === 'string'
+                && isOriginBlocked([origin], candidate),
+        );
+        const initialCancellation = cancelPending();
+        const sitesBeforeBlock = typeof vault.connectedSites.list === 'function'
+            ? await vault.connectedSites.list()
+            : [];
+        const result = await addBlockedOrigin({ vault, origin });
+        const evictedIds = new Set(result.evictedSiteIds);
+        let evictedOrigins = [...new Set(
+            sitesBeforeBlock
+                .filter((site) => evictedIds.has(site.id))
+                .map((site) => site.origin),
+        )];
+        if (evictedOrigins.length === 0
+            && evictedIds.size > 0
+            && !result.blocked.startsWith('*.')) {
+            evictedOrigins = [result.blocked];
+        }
+        await Promise.all([
+            initialCancellation,
+            cancelPending(),
+            ...evictedOrigins.map((evictedOrigin) => (
+                emitSiteDisconnect(bridgeEvents, evictedOrigin, 'blocked-by-user')
+            )),
+        ]);
+        return result;
     });
     host.register('sites.unblock', async (req, { vault }) => {
         const origin = req?.origin;
@@ -2234,15 +2506,30 @@ export function createBackgroundHost(deps) {
     host.register('addresses.setLabel', async (req, { vault }) => {
         const id = req?.id;
         if (!id) throw new Error('addresses.setLabel: id is required');
-        const label = typeof req?.label === 'string' ? req.label : '';
         const rec = await vault.addresses.get(id);
         if (!rec) throw new Error('addresses.setLabel: address not found');
+        const requestedLabel = typeof req?.label === 'string' ? req.label.trim() : '';
+        const label = requestedLabel || schemas.address.defaultAddressLabel(rec);
         await vault.addresses.put({ ...rec, label });
         // §19.5.2 auto-sync: the label just changed on disk, so the
         // on-chain copy is stale. The scheduler batches this with every
         // other rename in the burst.
         const account = rec.accountId ? await vault.accounts.get(rec.accountId) : null;
         noteLabelChange({ vault }, account?.walletId ?? null);
+        return { ok: true, label };
+    });
+
+    // Keep hidden addresses in the vault and off the main list. The list's
+    // collapsed hidden section remains the recovery path for this flag.
+    host.register('addresses.setHidden', async (req, { vault }) => {
+        const id = req?.id;
+        if (!id) throw new Error('addresses.setHidden: id is required');
+        if (typeof req?.hidden !== 'boolean') {
+            throw new Error('addresses.setHidden: hidden must be a boolean');
+        }
+        const rec = await vault.addresses.get(id);
+        if (!rec) throw new Error('addresses.setHidden: address not found');
+        await vault.addresses.put({ ...rec, hidden: req.hidden });
         return { ok: true };
     });
 
@@ -2344,9 +2631,10 @@ export function createBackgroundHost(deps) {
     });
 
     host.register('action.send', async (req, { vault, chainRegistry, sdkRegistry, signerPool }) => {
-        const result = await sendToken({
+        const result = await sendWithHold({
             ...req,
             signer: await sessionSigner(req, vault, signerPool),
+        }, {
             vault,
             chainRegistry,
             sdkRegistry,
@@ -2431,6 +2719,7 @@ export function createBackgroundHost(deps) {
                 ...(req.fee !== undefined && { fee: req.fee }),
                 ...(req.feePerKb !== undefined && { feePerKb: req.feePerKb }),
                 ...(req.rbf !== undefined && { rbf: req.rbf }),
+                ...(Array.isArray(req.utxos) && req.utxos.length > 0 ? { utxos: req.utxos } : {}),
             };
         }
 
@@ -2443,7 +2732,14 @@ export function createBackgroundHost(deps) {
         // A caller that named its own change destination is stating where the
         // value must land; a privacy preference does not get to move it. Only
         // the default (change back to the spender) is rotated.
-        if (encoderOpts.change === undefined) encoderOpts = { ...encoderOpts, change };
+        if (typeof req?.change === 'string' && req.change) {
+            if (!ownAddresses.includes(req.change)) {
+                throw new Error('action.composeForConfirm: change address does not belong to this wallet');
+            }
+            encoderOpts = { ...encoderOpts, change: req.change };
+        } else if (encoderOpts.change === undefined) {
+            encoderOpts = { ...encoderOpts, change };
+        }
 
         return composeActionForConfirm({
             vault, chainRegistry, sdkRegistry, chainId, actionData, encoderOpts,
@@ -2478,12 +2774,20 @@ export function createBackgroundHost(deps) {
             pubkey: source.publicKey,
             ...(req.feePerKb !== undefined && { feePerKb: req.feePerKb }),
             ...(req.rbf !== undefined && { rbf: req.rbf }),
+            ...(Array.isArray(req.utxos) && req.utxos.length > 0 ? { utxos: req.utxos } : {}),
         };
         encoderOpts = deviceHardenedEncoderOpts(req, encoderOpts);
-        const { change } = await confirmChangeAndOwnAddresses({
+        const { change, ownAddresses } = await confirmChangeAndOwnAddresses({
             req, vault, chainRegistry, signerPool, chainId, sourceAddress: source.address,
         });
-        if (encoderOpts.change === undefined) encoderOpts = { ...encoderOpts, change };
+        if (typeof req?.change === 'string' && req.change) {
+            if (!ownAddresses.includes(req.change)) {
+                throw new Error('action.quoteMaxSendable: change address does not belong to this wallet');
+            }
+            encoderOpts = { ...encoderOpts, change: req.change };
+        } else if (encoderOpts.change === undefined) {
+            encoderOpts = { ...encoderOpts, change };
+        }
 
         return flows.quoteMaxSendable({
             sdkRegistry, chainRegistry, vault, chainId,
@@ -3009,6 +3313,9 @@ export function createBackgroundHost(deps) {
         ));
         const conflictRecord = recordFor(originalTxHash);
         if (!conflictRecord) throw new Error('tx.replace: transaction is not a pending transaction in this wallet');
+        if (conflictRecord.chainConfirmed === true || conflictRecord.status === 'indexed') {
+            throw new Error('This transaction is already confirmed.');
+        }
         if (!['broadcast', 'broadcasting'].includes(conflictRecord.status)) {
             throw new Error('tx.replace: transaction is no longer replaceable');
         }
@@ -3042,6 +3349,18 @@ export function createBackgroundHost(deps) {
             feeRate: req?.feeRate,
             transactionBytes,
         });
+        const coinAmount = (value) => {
+            const amount = BigInt(value);
+            const whole = amount / 100000000n;
+            const fraction = String(amount % 100000000n).padStart(8, '0').replace(/0+$/, '');
+            return fraction ? `${whole}.${fraction}` : String(whole);
+        };
+        const feeQuote = {
+            originalFee: coinAmount(plan.originalFeeSats),
+            replacementFee: coinAmount(plan.replacementFeeSats),
+            feeIncrease: coinAmount(plan.feeIncreaseSats),
+        };
+        if (req?.preview === true) return feeQuote;
 
         let actionString = null;
         if (strategy !== 'cancel') {
@@ -3168,13 +3487,10 @@ export function createBackgroundHost(deps) {
             status: 'rbf-replaced',
             rbfReplacement: replacementTxHash,
         });
-        const feeIncreaseSats = BigInt(plan.feeIncreaseSats);
-        const whole = feeIncreaseSats / 100000000n;
-        const fraction = String(feeIncreaseSats % 100000000n).padStart(8, '0').replace(/0+$/, '');
         return {
             replacementTxHash,
             broadcastedAt,
-            feeIncrease: fraction ? `${whole}.${fraction}` : String(whole),
+            ...feeQuote,
         };
     });
     // The two node answers that mean "these exact bytes are already on the
@@ -3210,6 +3526,18 @@ export function createBackgroundHost(deps) {
             const idx = q.findIndex((entry) => entry.id === id);
             if (idx < 0) throw new Error(`broadcast.queue: no queued entry "${id}"`);
             const entry = q[idx];
+            const retryAfterMs = Number.isFinite(entry.nextRetryAt)
+                ? Math.ceil(entry.nextRetryAt - Date.now())
+                : 0;
+            if (retryAfterMs > 0) {
+                const seconds = Math.max(1, Math.ceil(retryAfterMs / 1_000));
+                const retryError = new Error(
+                    `Sending is paused after a network failure. Try again in ${seconds} ${seconds === 1 ? 'second' : 'seconds'}.`,
+                );
+                retryError.name = flows.BROADCAST_FAILED_TRANSIENT_NAME;
+                retryError.retryAfterMs = retryAfterMs;
+                throw retryError;
+            }
             const sdk = sdkRegistry.get(entry.chainId);
             // The ENCODER is what broadcasts. `sdk.wallet.broadcastTx` takes the
             // encoder as a second argument and refuses without it ("Encoder client
@@ -3323,6 +3651,23 @@ export function createBackgroundHost(deps) {
                     const cur = q.findIndex((e) => e.id === id);
                     if (cur >= 0) q.splice(cur, 1);
                     await persistQueue();
+                } else {
+                    const retryAttempt = Number.isSafeInteger(entry.retryAttempt) && entry.retryAttempt > 0
+                        ? entry.retryAttempt + 1
+                        : 1;
+                    const retryDelayMs = queuedBroadcastRetryDelay(retryAttempt);
+                    const cur = q.findIndex((e) => e.id === id);
+                    if (cur >= 0) {
+                        q[cur] = {
+                            ...q[cur],
+                            retryAttempt,
+                            nextRetryAt: Date.now() + retryDelayMs,
+                        };
+                        await persistQueue();
+                    }
+                    if (err && typeof err === 'object') {
+                        try { err.retryAfterMs = retryDelayMs; } catch { /* a frozen error keeps no retry hint */ }
+                    }
                 }
                 // Carry the verdict this catch just ACTED on across the messaging
                 // boundary, which keeps only { name, message }. Without it the
@@ -3845,7 +4190,7 @@ export function createBackgroundHost(deps) {
         });
     }
 
-    registerHwHandler('action.send.hw', sendToken);
+    registerHwHandler('action.send.hw', sendWithHold);
     registerHwHandler('action.sweep.hw', sweepToken);
     registerHwHandler('action.issue.hw', issueToken);
     registerHwHandler('action.mint.hw', mintToken);
@@ -4572,6 +4917,10 @@ export function createBackgroundHost(deps) {
         return { ...composed, betParams: params };
     });
 
+    host.register('action.bet.psbt', async (req, { chainRegistry, sdkRegistry }) => {
+        return buildBetActionPsbt({ ...req, chainRegistry, sdkRegistry });
+    });
+
     // BET reads (no signing): market list / one market with pools + timeline /
     // placed bets / an oracle's track record.
     host.register('bet.feeds', async (req, { sdkRegistry }) => {
@@ -4738,8 +5087,8 @@ export function createBackgroundHost(deps) {
         return aggregateMultisigSession({ ...req, vault, sdkRegistry });
     });
 
-    host.register('multisigSign.finalize', async (req, { vault }) => {
-        return finalizeMultisigSigningSession({ ...req, vault });
+    host.register('multisigSign.finalize', async (req, { vault, sdkRegistry }) => {
+        return finalizeMultisigSigningSession({ ...req, vault, sdkRegistry });
     });
 
     // §22.3 + §42.9 local-cosigner contribution (Step 21). Unlocks
@@ -5061,6 +5410,22 @@ export function createBackgroundHost(deps) {
         return addressBalances({ ...req, sdkRegistry, chainRegistry });
     });
 
+    host.register('utxos.address', async (req, { sdkRegistry }) => {
+        const chainId = req?.chainId;
+        const address = req?.address;
+        if (typeof chainId !== 'string' || !chainId) {
+            throw new Error('utxos.address: chainId is required');
+        }
+        if (typeof address !== 'string' || !address) {
+            throw new Error('utxos.address: address is required');
+        }
+        const sdk = sdkRegistry.get(chainId);
+        if (typeof sdk?.getUTXOs !== 'function') {
+            throw new Error(`utxos.address: SDK unavailable for "${chainId}"`);
+        }
+        return sdk.getUTXOs(address);
+    });
+
     host.register('history.address', async (req, { sdkRegistry }) => {
         return addressHistory({ ...req, sdkRegistry });
     });
@@ -5142,6 +5507,36 @@ export function createBackgroundHost(deps) {
     const priceOracle = (typeof globalThis !== 'undefined' && typeof globalThis.fetch === 'function')
         ? createPriceOracle({ fetch: globalThis.fetch.bind(globalThis) })
         : null;
+    // The fiat-rate lookup (flows/priceLookup.js) runs in the page. Where
+    // the page may not fetch (the desktop renderer pins connect-src 'self'),
+    // the shell routes its requests here; only the lookup's own URLs pass,
+    // and CoinGecko stays behind the same privacy switch as prices.native.
+    host.register('prices.fiatFetch', async (req, { vault }) => {
+        const url = typeof req?.url === 'string' ? req.url : '';
+        if (!isFiatRateSourceUrl(url)) return { ok: false, status: 0, error: 'not a fiat-rate source' };
+        if (typeof globalThis.fetch !== 'function') return { ok: false, status: 0, error: 'fetch unavailable' };
+        if (new URL(url).hostname === 'api.coingecko.com') {
+            const settings = vault ? await vault.settings.get() : null;
+            if (settings?.privacy?.priceDataEnabled === false) {
+                return { ok: false, status: 0, error: 'price data disabled' };
+            }
+        }
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
+        try {
+            const resp = await globalThis.fetch(url, {
+                headers: { Accept: 'application/json' },
+                signal: controller.signal,
+            });
+            if (!resp.ok) return { ok: false, status: resp.status };
+            return { ok: true, status: resp.status, body: await resp.json() };
+        } catch (err) {
+            return { ok: false, status: 0, error: err?.message ? String(err.message) : String(err) };
+        } finally {
+            clearTimeout(timeoutId);
+        }
+    });
+
     host.register('prices.native', async (req, { vault }) => {
         try {
             const settings = await vault.settings.get();
@@ -5206,4 +5601,204 @@ export function createBackgroundHost(deps) {
     host.sealBroadcastQueue = sealBroadcastQueue;
 
     return host;
+}
+
+/**
+ * A host whose shell supplied no vault keyring cannot tell whether the vault
+ * itself is sealed under the password being changed, and changing only the
+ * wallet record in that case locks the person out of their own wallet.
+ */
+export class PasswordChangeUnavailableError extends Error {
+    constructor() {
+        super('This app cannot change the wallet password from here. Your password has not been changed.');
+        this.name = 'PasswordChangeUnavailableError';
+    }
+}
+
+/**
+ * A wallet record changed while a password change was being prepared (a
+ * rename, an imported key or a new wallet from another window, or a second
+ * change). Nothing was written; the person can simply try again.
+ */
+export class PasswordChangeConflictError extends Error {
+    constructor() {
+        super('Your wallets changed while the password was being changed. Your password has not been changed; try again.');
+        this.name = 'PasswordChangeConflictError';
+    }
+}
+
+/**
+ * Change the password every seal the current password made: the target
+ * wallet's, any other wallet sealed under the same password, and the vault
+ * document's own key when the current password is the unlock password.
+ *
+ * The vault document is sealed under a key derived from the unlock password
+ * and the meta slot's kdfParams, and each wallet record's seed under its own
+ * derivation. Re-sealing only the wallet record left the vault on the old
+ * password: the next unlock refused the new password, and the old one opened
+ * the vault with the changed wallet silently missing from the signer pool.
+ *
+ * Every replacement record is prepared on a detached copy and the whole set is
+ * written in ONE `vault.rekey` call together with the new document key, so an
+ * authentication, encryption or storage failure leaves the stored vault and
+ * the live session exactly as they were. KDF parameters, salt included, are
+ * kept on every seal: the meta slot keeps describing the vault, and the
+ * onboarding wallet keeps sharing its params with the vault key.
+ *
+ * @returns {Promise<{ changed: true, vaultRekeyed: boolean, walletIds: string[] }>}
+ *   `vaultRekeyed` says the unlock password itself changed, which is what a
+ *   biometric enrolment wraps.
+ */
+export async function changeWalletPassword(req, deps, operations = {}) {
+    const walletId = req?.walletId;
+    const currentPassword = req?.currentPassword;
+    const newPassword = req?.newPassword;
+    if (typeof walletId !== 'string' || walletId.length === 0) {
+        throw new Error('wallet.changePassword: walletId is required');
+    }
+    if (typeof currentPassword !== 'string' || currentPassword.length === 0) {
+        throw new Error('wallet.changePassword: currentPassword is required');
+    }
+    if (typeof newPassword !== 'string' || newPassword.length === 0) {
+        throw new Error('wallet.changePassword: newPassword is required');
+    }
+    if (newPassword.length < 8) {
+        throw new Error('New password must be at least 8 characters.');
+    }
+    if (newPassword === currentPassword) {
+        throw new Error('Choose a new password that differs from the current password.');
+    }
+
+    const unlock = operations.unlockWallet ?? unlockWallet;
+    const rekey = operations.rekeyWalletRecord ?? rekeyWalletRecord;
+    const deriveKey = operations.deriveMasterKey ?? coreCrypto.deriveMasterKeyAsync;
+    const wallet = await deps.vault.wallets.get(walletId);
+    if (!wallet) throw new Error(`Wallet not found: ${walletId}`);
+
+    const signer = await unlock({
+        walletId,
+        password: currentPassword,
+        vault: deps.vault,
+        chainRegistry: deps.chainRegistry,
+        sdkRegistry: deps.sdkRegistry,
+    });
+    try {
+        signer.lock();
+    } catch {
+        // Verification has completed; signer cleanup is best-effort.
+    }
+
+    const keyring = deps.vaultKeyring;
+    const vaultKdfParams = typeof keyring?.kdfParams === 'function' ? await keyring.kdfParams() : null;
+    if (!vaultKdfParams || typeof keyring.commit !== 'function') {
+        throw new PasswordChangeUnavailableError();
+    }
+
+    /** @type {Uint8Array | null} */
+    let oldVaultKey = null;
+    /** @type {Uint8Array | null} */
+    let newVaultKey = null;
+    try {
+        oldVaultKey = await deriveKey(currentPassword, vaultKdfParams);
+        const vaultRekeyed = deps.vault.keyMatches(oldVaultKey);
+
+        // Re-seal on detached copies; nothing below touches the live records.
+        // The target first, so its own failure is the one reported. Another
+        // wallet the old password does not open was sealed under a different
+        // password and keeps it.
+        // The records every replacement is prepared from. The vault write below
+        // refuses unless these are still the stored records, so a wallet write
+        // that lands during the derivations is never overwritten or left on
+        // the old password. The target was read before the verification
+        // unlock, so it must still be the stored one too.
+        const stored = await deps.vault.wallets.list();
+        if (!stored.includes(wallet)) throw new PasswordChangeConflictError();
+        const target = detachedWalletCopy(wallet);
+        const sealOpts = (candidate) => ({
+            walletPassword: currentPassword,
+            devicePassword: newPassword,
+            kdfParams: candidate.kdfParams,
+        });
+        if (!await rekey(target, sealOpts(target))) {
+            throw new Error('This wallet has no password-protected key material.');
+        }
+        const candidates = [target];
+        for (const other of stored) {
+            if (other.id === walletId) continue;
+            const candidate = detachedWalletCopy(other);
+            try {
+                if (await rekey(candidate, sealOpts(candidate))) candidates.push(candidate);
+            } catch (err) {
+                if (/** @type {any} */ (err)?.name !== 'BackupSeedPasswordError') throw err;
+            }
+        }
+
+        if (vaultRekeyed) newVaultKey = await deriveKey(newPassword, vaultKdfParams);
+        let applied;
+        try {
+            applied = await deps.vault.rekey({
+                ...(newVaultKey ? { masterKey: newVaultKey } : {}),
+                wallets: candidates,
+                readWallets: stored,
+            });
+        } catch (err) {
+            if (/** @type {any} */ (err)?.name === 'VaultConflictError') throw new PasswordChangeConflictError();
+            throw err;
+        }
+
+        const result = { changed: true, vaultRekeyed, walletIds: candidates.map((c) => c.id) };
+        // A lock that lands while the change runs closes this vault. The blob
+        // is written either way, so the change stands, but nothing below may
+        // run after a lock: a session key or signing password written now, or
+        // a signer pooled now, would leave the wallet usable behind the lock.
+        const stillOpen = () => deps.vault.isOpen !== false;
+        if (applied === false || !stillOpen()) return result;
+
+        // Committed. The shell's caches follow the vault key: a stale session
+        // key would reopen nothing after a worker restart or relaunch, and a
+        // stale signing password would refill the pool with nothing. A failure
+        // here does not undo the change; it costs one password unlock later.
+        // The keyring writes only while its slot still holds the old key,
+        // which a lock clears before it closes the vault.
+        if (newVaultKey) {
+            try {
+                await keyring.commit({ masterKey: newVaultKey, password: newPassword, previousKey: oldVaultKey });
+            } catch (err) {
+                console.error('[xchain] wallet.changePassword: session cache not updated:', err);
+            }
+        }
+
+        // The pooled signers hold the same seeds, but they were opened from
+        // the old seals; reopen them from the records as stored now.
+        const pool = deps.signerPool;
+        for (const candidate of candidates) {
+            if (!pool || !stillOpen()) break;
+            try {
+                await pool.unlockOne({
+                    wallet: candidate,
+                    password: newPassword,
+                    chainRegistry: deps.chainRegistry,
+                    sdkRegistry: deps.sdkRegistry,
+                });
+                // Each unlock is an Argon2id derivation; a lock can land inside it.
+                if (!stillOpen()) pool.evict?.(candidate.id);
+            } catch {
+                pool.evict?.(candidate.id);
+            }
+        }
+        return result;
+    } finally {
+        if (oldVaultKey) oldVaultKey.fill(0);
+        if (newVaultKey) newVaultKey.fill(0);
+    }
+}
+
+function detachedWalletCopy(wallet) {
+    return {
+        ...wallet,
+        kdfParams: wallet.kdfParams ? { ...wallet.kdfParams } : wallet.kdfParams,
+        importedKeys: Array.isArray(wallet.importedKeys)
+            ? wallet.importedKeys.map((key) => ({ ...key }))
+            : wallet.importedKeys,
+    };
 }

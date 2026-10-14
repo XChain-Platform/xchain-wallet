@@ -12,7 +12,7 @@
 //
 // Surfaces signed transactions that were queued for broadcast, typically
 // because the user was offline when they signed. Each row exposes
-// "Broadcast now" and "Discard" affordances and clears itself from the
+// "Send now" and "Remove" affordances and clears itself from the
 // queue on action. Hidden when the queue is empty, so it costs nothing
 // in the normal case.
 //
@@ -21,11 +21,11 @@
 // v0.293.0 moved the queue into chrome.storage.local / localStorage so
 // it survives reload (Cluster G FOLLOWUP 2); v0.294.0 adds the §49.5
 // reconnection prompt: when reachability flips offline/degraded →
-// normal AND the queue is non-empty, surface a one-shot toast with an
-// "Open queue" action so the user knows to retry (Cluster G FOLLOWUP 3).
+// normal AND the queue is non-empty, surface a one-shot toast with a
+// "Review" action so the user knows the transactions are ready to send.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { ChainBadge } from '@xchain-wallet/core/ui';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { ChainBadge, useReducedMotion } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging } from '../useMessaging.js';
 import { useReachability } from '../hooks/useReachability.js';
@@ -44,24 +44,74 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
     const { messaging } = useMessaging();
     const [queue, setQueue] = useState(/** @type {any[]} */ ([]));
     const [busyId, setBusyId] = useState(/** @type {string | null} */ (null));
+    const [busyKind, setBusyKind] = useState(/** @type {'send' | 'remove' | null} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    const titleId = useId();
     // Cluster G FOLLOWUP 3: reconnection prompt. Track previous
     // reachability `overall` so a transition `offline|degraded → normal`
     // with a non-empty queue surfaces a one-shot toast nudging the user
     // to broadcast.
     const { overall: reachabilityOverall } = useReachability({});
     const { showToast } = useToast();
+    const reducedMotion = useReducedMotion();
     const prevOverallRef = useRef(/** @type {string | null} */ (null));
     const lastPromptedAtRef = useRef(/** @type {number} */ (0));
-    const bannerRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+    const bannerRef = useRef(/** @type {HTMLElement | null} */ (null));
+    const mountedRef = useRef(false);
+    const currentInputRef = useRef({ messaging, walletId });
+    const refreshRequestRef = useRef(0);
+    const actionRef = useRef(/** @type {object | null} */ (null));
+    const queueWalletRef = useRef(walletId);
+    const normalizedQueueRef = useRef({ source: null, shown: /** @type {any[]} */ ([]) });
+    currentInputRef.current = { messaging, walletId };
+    if (queueWalletRef.current !== walletId) {
+        queueWalletRef.current = walletId;
+        refreshRequestRef.current += 1;
+        normalizedQueueRef.current = { source: null, shown: [] };
+        actionRef.current = null;
+        // React retries this render before commit, so queued sends never cross
+        // the wallet boundary while the replacement list is in flight.
+        setQueue([]);
+        setBusyId(null);
+        setBusyKind(null);
+        setError(null);
+    }
+
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => {
+            mountedRef.current = false;
+            refreshRequestRef.current += 1;
+        };
+    }, []);
 
     // Re-list the queue; resolves the list shown, or null when it could not be read.
     const refresh = useCallback(async () => {
         if (!walletId || typeof messaging?.listQueuedBroadcasts !== 'function') return null;
+        const requestId = ++refreshRequestRef.current;
         try {
             const list = await messaging.listQueuedBroadcasts({ walletId });
-            const shown = Array.isArray(list) ? list : [];
-            setQueue(shown);
+            let shown = normalizedQueueRef.current.shown;
+            if (normalizedQueueRef.current.source !== list) {
+                if (Array.isArray(list)) {
+                    const seenIds = new Set();
+                    shown = list.filter((entry) => {
+                        if (seenIds.has(entry?.id)) return false;
+                        seenIds.add(entry?.id);
+                        return true;
+                    });
+                } else {
+                    shown = [];
+                }
+                normalizedQueueRef.current = { source: list, shown };
+            }
+            const current = currentInputRef.current;
+            if (mountedRef.current
+                && current.messaging === messaging
+                && current.walletId === walletId
+                && refreshRequestRef.current === requestId) {
+                setQueue(shown);
+            }
             return shown;
         } catch (_err) {
             // The list endpoint is read-only; failures here surface
@@ -71,12 +121,15 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
     }, [messaging, walletId]);
 
     useEffect(() => {
-        refresh();
+        void refresh();
         if (intervalMs > 0) {
-            const id = setInterval(refresh, intervalMs);
-            return () => clearInterval(id);
+            const id = setInterval(() => { void refresh(); }, intervalMs);
+            return () => {
+                clearInterval(id);
+                refreshRequestRef.current += 1;
+            };
         }
-        return undefined;
+        return () => { refreshRequestRef.current += 1; };
     }, [refresh, intervalMs]);
 
     // Reconnection prompt: fire once per offline|degraded → normal
@@ -94,34 +147,45 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
         lastPromptedAtRef.current = now;
         showToast({
             message: queue.length === 1
-                ? 'You have 1 queued transaction. Broadcast now?'
-                : `You have ${queue.length} queued transactions. Broadcast now?`,
-            actionLabel: 'Open queue',
+                ? '1 transaction is ready to send.'
+                : `${queue.length} transactions are ready to send.`,
+            actionLabel: 'Review',
             onAction: () => {
-                // Source of truth is the banner; focus it so screen
-                // readers + keyboard users land on the action buttons.
-                if (bannerRef.current && typeof bannerRef.current.focus === 'function') {
-                    bannerRef.current.focus();
-                    bannerRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                const sendButton = bannerRef.current?.querySelector('[data-queued-send]');
+                if (sendButton && typeof sendButton.focus === 'function') {
+                    sendButton.focus();
+                    bannerRef.current.scrollIntoView({
+                        block: 'center',
+                        behavior: reducedMotion ? 'auto' : 'smooth',
+                    });
                 }
             },
             durationMs: 12_000,
         });
-    }, [reachabilityOverall, queue.length, showToast]);
+    }, [reachabilityOverall, queue.length, reducedMotion, showToast]);
 
     if (queue.length === 0) return null;
 
     async function broadcast(id) {
-        if (busyId) return;
+        if (actionRef.current) return;
+        const action = { messaging, walletId };
+        actionRef.current = action;
         setBusyId(id);
+        setBusyKind('send');
         setError(null);
         try {
             await messaging.broadcastQueuedRequest({ walletId, id });
-            await refresh();
+            if (!isCurrentAction(action)) return;
+            const list = await refresh();
+            if (!isCurrentAction(action)) return;
+            if (!list) setQueue((prev) => prev.filter((entry) => entry.id !== id));
+            showToast({ message: 'Transaction sent.', variant: 'success' });
         } catch (err) {
+            if (!isCurrentAction(action)) return;
             // Re-list first: the host removes the entry before it throws on a
             // permanent rejection or a refused claim, so the row may be gone.
             const list = await refresh();
+            if (!isCurrentAction(action)) return;
             const outcome = queuedBroadcastFailure(err, list, id);
             if (outcome.removed) {
                 // The row is gone, so tell the user in a toast rather than under a list without it.
@@ -131,34 +195,67 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
                 setError(outcome.message);
             }
         } finally {
-            setBusyId(null);
+            if (actionRef.current === action) actionRef.current = null;
+            if (mountedRef.current) {
+                setBusyId(null);
+                setBusyKind(null);
+            }
         }
     }
     async function discard(id) {
-        if (busyId) return;
+        if (actionRef.current) return;
+        const action = { messaging, walletId };
+        actionRef.current = action;
         setBusyId(id);
+        setBusyKind('remove');
+        setError(null);
         try {
             await messaging.discardQueuedRequest({ walletId, id });
-            await refresh();
-        } catch (err) {
+            if (!isCurrentAction(action)) return;
+            const list = await refresh();
+            if (!isCurrentAction(action)) return;
+            if (!list) setQueue((prev) => prev.filter((entry) => entry.id !== id));
+            showToast({ message: 'Transaction removed from the queue.' });
+        } catch (_err) {
+            if (!isCurrentAction(action)) return;
             // Re-list so a row the host already removed does not linger.
-            await refresh();
-            setError(err?.message || 'Discard failed.');
+            const list = await refresh();
+            if (!isCurrentAction(action)) return;
+            const removed = Array.isArray(list) && !list.some((entry) => entry?.id === id);
+            if (removed) {
+                showToast({ message: 'Transaction removed from the queue.' });
+            } else {
+                setError(list
+                    ? 'Could not remove this transaction. It is still waiting to send.'
+                    : 'Could not confirm whether this transaction was removed. Check the queue again.');
+            }
         } finally {
-            setBusyId(null);
+            if (actionRef.current === action) actionRef.current = null;
+            if (mountedRef.current) {
+                setBusyId(null);
+                setBusyKind(null);
+            }
         }
     }
 
+    function isCurrentAction(action) {
+        const current = currentInputRef.current;
+        return mountedRef.current
+            && current.messaging === action.messaging
+            && current.walletId === action.walletId;
+    }
+
     return (
-        <div
+        <section
             ref={bannerRef}
-            role="status"
-            aria-live="polite"
+            aria-labelledby={titleId}
             className={styles.banner}
-            tabIndex={-1}
         >
-            <div className={styles.title}>
-                Queued for broadcast ({queue.length})
+            <div
+                id={titleId}
+                className={styles.title}
+            >
+                Waiting to send ({queue.length})
             </div>
             <ul className={styles.list}>
                 {queue.map((entry) => (
@@ -166,7 +263,9 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
                         <div className={styles.summary}>
                             <span className={styles.summaryText}>{entry.summary}</span>
                             <span className={styles.meta}>
-                                {chainLabel(entry.chainId)} · signed {ageString(entry.signedAt)}
+                                {chainBadge(entry.chainId)}
+                                {chainRegistry.get(entry.chainId) ? ' · ' : ''}
+                                signed {ageString(entry.signedAt)}
                             </span>
                             {/* A resumed claim is a send the wallet had already handed to
                                 the network when it was interrupted, so it may have landed.
@@ -186,19 +285,26 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
                                 type="button"
                                 className={styles.broadcastBtn}
                                 onClick={() => broadcast(entry.id)}
-                                disabled={busyId === entry.id}
+                                disabled={busyId !== null}
+                                data-queued-send
+                                aria-label={busyId === entry.id && busyKind === 'send'
+                                    ? `Sending: ${entry.summary}`
+                                    : `Send now: ${entry.summary}`}
                             >
                                 {busyId === entry.id
-                                    ? 'Broadcasting…'
-                                    : (entry.resumedClaim ? 'Try sending again' : 'Broadcast now')}
+                                    ? 'Sending…'
+                                    : (entry.resumedClaim ? 'Try sending again' : 'Send now')}
                             </button>
                             <button
                                 type="button"
                                 className={styles.discardBtn}
                                 onClick={() => discard(entry.id)}
-                                disabled={busyId === entry.id}
+                                disabled={busyId !== null}
+                                aria-label={busyId === entry.id && busyKind === 'remove'
+                                    ? `Removing from queue: ${entry.summary}`
+                                    : `Remove from queue: ${entry.summary}`}
                             >
-                                Discard
+                                {busyId === entry.id && busyKind === 'remove' ? 'Removing…' : 'Remove'}
                             </button>
                         </div>
                     </li>
@@ -207,12 +313,12 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
             {error ? (
                 <div role="alert" className={styles.error}>{error}</div>
             ) : null}
-        </div>
+        </section>
     );
 }
 
 /**
- * Word a failed "Broadcast now" from the host's verdict and the queue re-listed after it.
+ * Word a failed send from the host's verdict and the queue re-listed after it.
  *
  * Never tells the user to compose a fresh transaction: an entry the host refused
  * as no longer queued may already have reached a node, and a re-compose can pay twice.
@@ -242,20 +348,32 @@ export function queuedBroadcastFailure(err, list, id) {
         };
     }
     if (kind === 'transient') {
+        const retryAfterMs = err && typeof err === 'object'
+            ? Number(/** @type {any} */ (err).retryAfterMs)
+            : NaN;
+        if (Number.isFinite(retryAfterMs) && retryAfterMs > 0) {
+            const seconds = Math.max(1, Math.ceil(retryAfterMs / 1_000));
+            return {
+                removed,
+                message: 'Sending failed, and the transaction is still queued. '
+                    + `Try again in ${seconds} ${seconds === 1 ? 'second' : 'seconds'}.`,
+            };
+        }
         return {
             removed,
             message: 'Sending failed, and the transaction is still queued. '
                 + 'You can try sending it again once the network is reachable.',
         };
     }
-    return { removed, message: /** @type {any} */ (err)?.message || 'Broadcast failed.' };
+    return {
+        removed,
+        message: 'Could not send this transaction. It is still waiting to send. Try again.',
+    };
 }
 
-// Name the chain the way every other screen does (the raw id shows only
-// when the registry has no entry for it).
-function chainLabel(chainId) {
+function chainBadge(chainId) {
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
-    return descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId;
+    return descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : null;
 }
 
 function ageString(signedAt) {

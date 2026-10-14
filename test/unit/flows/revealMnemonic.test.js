@@ -13,7 +13,7 @@
 // decrypts the stored passphrase, using the master key retained from
 // that one KDF round rather than paying a second derivation.
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 import { ARGON2ID_TEST_TIMEOUT_MS } from '../../helpers/argon2idTimeout.js';
 import { revealMnemonic, NoMnemonicForWifOnlyError } from '../../../packages/core/src/flows/revealMnemonic.js';
@@ -30,7 +30,6 @@ import { deriveMasterKey } from '../../../packages/core/src/crypto/kdf.js';
 // that long stops answering vitest's RPC, and the coverage run ends on
 // `[vitest-worker]: Timeout calling "onTaskUpdate"` with every test passing.
 // See test/vitest/unit.config.js for the three suites that pay full cost.
-import { vi } from 'vitest';
 vi.setConfig({ testTimeout: ARGON2ID_TEST_TIMEOUT_MS });
 
 const PASSWORD = 'correct horse battery staple';

@@ -1658,6 +1658,10 @@ export async function waitForTokenBalance(address, tick, min, timeoutMs = INDEX_
     throw new Error(`${tick} balance never reached ${min} for ${address} (last=${last})`);
 }
 
+export function activeNetworkControl(page) {
+    return page.getByRole('combobox', { name: 'Active network', exact: true });
+}
+
 /**
  * Flips the wallet onto the regtest network and waits for it to come
  * back up.
@@ -1681,7 +1685,7 @@ export async function switchToRegtest(page, password) {
     // because it has no nav surface.
     await openSettings(page);
 
-    await page.getByRole('button', { name: /^Developer Mode/ }).click();
+    await page.getByRole('button', { name: /^Developer mode/ }).click();
     const devToggle = page.getByRole('switch', { name: 'Developer Mode', exact: true });
     await expect(devToggle).toBeVisible();
     if (!(await devToggle.isChecked())) {
@@ -1698,7 +1702,10 @@ export async function switchToRegtest(page, password) {
     // network it switches to. Before that fix it only moved a filter,
     // stranding the wallet with no addresses and no UI path to make one -
     // so if this ever regresses, the funding step below is where it shows.
-    await page.getByLabel('Active network').selectOption('regtest');
+    await activeNetworkControl(page).selectOption('regtest');
+    // The switch reloads the wallet, so Settings asks first.
+    const confirm = page.getByRole('dialog', { name: 'Switch to Regtest?' });
+    await confirm.getByRole('button', { name: 'Switch network', exact: true }).click();
 
     await unlockAfterReload(page, password);
 }
@@ -1722,7 +1729,7 @@ export async function unlockAfterReload(page, password) {
 
     if (await unlock.count() === 0) return;
 
-    await page.getByLabel('Password').fill(password);
+    await page.getByLabel('Password', { exact: true }).fill(password);
     await unlock.click();
     // Home's balance hero, not the Lock button: the popup renders no nav at
     // all, and below 600px Lock sits inside the closed More sheet.
@@ -1763,7 +1770,10 @@ export async function unlockAfterReload(page, password) {
 export async function readReceiveAddress(page) {
     await gotoSection(page, 'Receive');
 
-    const field = page.getByLabel('Address', { exact: true });
+    const field = page.getByRole('textbox', {
+        name: 'Copy payment link for receive address',
+        exact: true,
+    });
     await expect(field).toBeVisible({ timeout: 30_000 });
 
     if (!REGTEST_ADDRESS_RE.test(await field.inputValue())) {
@@ -1777,7 +1787,7 @@ export async function readReceiveAddress(page) {
         // already the exact option text and no mapping is needed.
         await page.getByRole('option', { name: REGTEST_CHAIN_LABEL, exact: true }).click();
 
-        await page.getByRole('list', { name: 'Wallet addresses' })
+        await page.getByRole('list', { name: 'Addresses' })
             .getByRole('button', { name: /^View address / }).first().click();
     }
 

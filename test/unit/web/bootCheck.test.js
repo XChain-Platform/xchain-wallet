@@ -39,6 +39,9 @@ const traverse = _traverse.default || _traverse;
 const BOOT_CHECK = join(process.cwd(), 'packages/web/public/boot-check.js');
 const INDEX_HTML = join(process.cwd(), 'packages/web/index.html');
 const VITE_CONFIG = join(process.cwd(), 'packages/web/vite.config.js');
+const SCREEN_CSS = join(process.cwd(), 'packages/core/src/ui/Screen.module.css');
+const LEFT_NAV_CSS = join(process.cwd(), 'packages/core/src/shared/components/LeftNav.module.css');
+const DESKTOP_MAIN = join(process.cwd(), 'packages/desktop/renderer/main.jsx');
 
 const source = readFileSync(BOOT_CHECK, 'utf8');
 
@@ -325,5 +328,13 @@ describe('the ES2022 markers are tied to the build target', () => {
         // If this fails, `build.target` moved and boot-check.js's two library
         // probes are now testing for the wrong era. Change both together.
         expect(readFileSync(VITE_CONFIG, 'utf8')).toContain("target: 'es2022'");
+    });
+
+    it('keeps shell consumers on the vh fallback available before WebView 108', () => {
+        for (const file of [SCREEN_CSS, LEFT_NAV_CSS, DESKTOP_MAIN]) {
+            const text = readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+            expect(text, file).toContain('var(--xc-viewport-h, 100vh)');
+            expect(text, file).not.toMatch(/\b(?:dvh|svh)\b/);
+        }
     });
 });

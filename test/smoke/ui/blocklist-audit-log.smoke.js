@@ -210,8 +210,8 @@ for (const [name, src] of [['popup', popupShim], ['web', webShim]]) {
 
 assert.match(sectionSrc, /<BlocklistAuditPanel/,
     'BlocklistAuditPanel mounted in the section');
-assert.match(sectionSrc, /function BlocklistAuditPanel\(\)/,
-    'BlocklistAuditPanel defined');
+assert.match(sectionSrc, /function BlocklistAuditPanel\(\{ confirm \}\)/,
+    'BlocklistAuditPanel receives the shared confirmation action');
 assert.match(sectionSrc, /messaging\.listBlocklistAuditLog\(\)/,
     'panel reads from listBlocklistAuditLog');
 assert.match(sectionSrc, /messaging\.clearBlocklistAuditLog\(\)/,

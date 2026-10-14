@@ -34,6 +34,8 @@
 //   8. When both trees exist, the staged webDir is byte-identical to
 //      packages/web/dist: the mobile shell ships the web shell's bytes or it
 //      is not the same wallet.
+//   9. Native launch screens have light and dark backgrounds, keep their mark
+//      bounded on tablets, and hand off through the platform readiness path.
 
 import { strict as assert } from 'node:assert';
 import { spawnSync } from 'node:child_process';
@@ -92,17 +94,86 @@ assert.equal(
     'https',
     'androidScheme https: crypto.subtle needs a secure context',
 );
+assert.deepEqual(
+    capConfig.server?.allowNavigation,
+    [],
+    'remote origins stay in the system browser instead of entering the wallet WebView',
+);
 assert.equal(
     capConfig.android?.allowMixedContent,
     false,
     'mixed content refused in the WebView',
 );
-assert.deepEqual(
-    capConfig.plugins,
-    {},
-    'no plugins registered yet: every registered plugin is reachable from any'
-    + ' script in the WebView (§1 bridge boundary), so they arrive one at a'
-    + ' time with the feature that needs them',
+assert.equal(
+    capConfig.plugins?.SystemBars?.style,
+    'DEFAULT',
+    'native system bars start with content that contrasts with the active splash appearance',
+);
+
+// --- 2a. Native splash configuration ---------------------------------
+
+// Android's SplashScreen theme owns the handoff to the post-splash theme.
+// Keeping the artwork in the animated-icon slot gives it a bounded box on
+// phones and tablets; a window background bitmap instead scales to the whole
+// viewport. The night override uses the same two page-background tokens as
+// the SPA, so the native and web frames meet without a color flash.
+const lightSplashStyles = readFileSync(
+    join(android, 'app', 'src', 'main', 'res', 'values', 'styles.xml'),
+    'utf8',
+);
+const darkSplashStyles = readFileSync(
+    join(android, 'app', 'src', 'main', 'res', 'values-night', 'styles.xml'),
+    'utf8',
+);
+for (const [mode, styles, background, lightBars] of [
+    ['light', lightSplashStyles, '#FFFFFF', 'true'],
+    ['dark', darkSplashStyles, '#0B0F17', 'false'],
+]) {
+    assert.match(
+        styles,
+        new RegExp(`<item name="windowSplashScreenBackground">${background}</item>`),
+        `${mode} Android splash background matches the SPA theme token`,
+    );
+    assert.match(
+        styles,
+        /<item name="windowSplashScreenAnimatedIcon">@mipmap\/ic_launcher_foreground<\/item>/,
+        `${mode} Android splash keeps its mark in the platform's bounded icon slot`,
+    );
+    assert.match(
+        styles,
+        /<item name="postSplashScreenTheme">@style\/AppTheme\.NoActionBar<\/item>/,
+        `${mode} Android splash hands off when the shell content is ready`,
+    );
+    assert.match(
+        styles,
+        new RegExp(`<item name="android:windowLightStatusBar">${lightBars}</item>`),
+        `${mode} Android splash keeps system-bar content legible`,
+    );
+    assert.doesNotMatch(
+        styles,
+        /<item name="android:background">@drawable\/splash<\/item>/,
+        `${mode} Android splash must not stretch a viewport-sized bitmap`,
+    );
+}
+
+const iosLaunch = readFileSync(
+    join(mobile, 'ios', 'App', 'App', 'Base.lproj', 'LaunchScreen.storyboard'),
+    'utf8',
+);
+assert.match(
+    iosLaunch,
+    /<color key="backgroundColor" systemColor="systemBackgroundColor"\/>/,
+    'iOS launch background follows the active light or dark system appearance',
+);
+assert.match(
+    iosLaunch,
+    /<color key="textColor" systemColor="labelColor"\/>/,
+    'iOS launch mark stays legible in both appearances',
+);
+assert.doesNotMatch(
+    iosLaunch,
+    /image="Splash"|contentMode="scaleAspectFill"/,
+    'iOS launch view must not scale a square bitmap across iPad windows',
 );
 
 // --- 3 + 4. Gradle: SDK floor and tag-derived version -----------------
@@ -138,6 +209,19 @@ assert.ok(
     )),
     'no MainActivity left behind at the pre-rename package path',
 );
+// BridgeActivity (via AppCompatActivity) declares onStart public, and Java
+// refuses an override that narrows it to protected, so the APK fails to compile.
+const mainActivityJava = readFileSync(join(
+    android, 'app', 'src', 'main', 'java', 'io', 'xchain', 'wallet', 'android',
+    'MainActivity.java',
+), 'utf8');
+for (const hook of ['onStart', 'onResume', 'onPause', 'onStop', 'onDestroy', 'onRestart']) {
+    assert.doesNotMatch(
+        mainActivityJava,
+        new RegExp(`\\b(?:protected|private)\\s+void\\s+${hook}\\s*\\(`),
+        `MainActivity keeps ${hook} public, as BridgeActivity declares it`,
+    );
+}
 assert.match(
     appGradle,
     /versionCode versionProps\['versionCode'\]/,
@@ -193,6 +277,13 @@ assert.match(
     /androidx\.core\.content\.FileProvider[\s\S]*?android:exported="false"/,
     'the FileProvider is not exported',
 );
+for (const component of manifest.matchAll(/<(activity|receiver|provider)\b([\s\S]*?)\/?>(?:\s*<\/\1>)?/g)) {
+    assert.match(
+        component[2],
+        /android:exported="(?:true|false)"/,
+        `every ${component[1]} declares android:exported explicitly`,
+    );
+}
 
 // --- 6. No Firebase / Play Services -----------------------------------
 
@@ -320,6 +411,7 @@ const jsSources = [
     readFileSync(join(wsRoot, 'packages', 'web', 'src', 'storage', 'backends.js'), 'utf8'),
     readFileSync(join(wsRoot, 'packages', 'web', 'src', 'storage', 'nativeBiometricProvider.js'), 'utf8'),
     readFileSync(join(wsRoot, 'packages', 'web', 'src', 'update', 'installOrigin.js'), 'utf8'),
+    readFileSync(join(wsRoot, 'packages', 'web', 'src', 'update', 'directUpdateCheck.js'), 'utf8'),
 ].join('\n');
 const calledFromJs = new Set(
     [...jsSources.matchAll(/callNativeVault\(\s*'(\w+)'/g)].map((m) => m[1]),
@@ -527,17 +619,35 @@ assert.deepEqual(
     [
         'android.permission.CAMERA',
         'android.permission.INTERNET',
+        'android.permission.POST_NOTIFICATIONS',
         'android.permission.USE_BIOMETRIC',
         'android.permission.USE_FINGERPRINT',
+        'android.permission.VIBRATE',
     ],
-    'exactly four permissions: internet, camera (QR), and the two spellings of'
-    + ' biometric. Every addition here is store-review surface (§5) and has to'
+    'exactly six permissions: internet, vibrate (haptics), camera (QR), notifications, and the'
+    + ' two spellings of biometric. Every addition here is store-review surface (§5) and has to'
     + ' earn its place against a shipped feature.',
+);
+assert.doesNotMatch(
+    manifest,
+    /android\.permission\.(?:READ_EXTERNAL_STORAGE|WRITE_EXTERNAL_STORAGE|MANAGE_EXTERNAL_STORAGE)/,
+    'legacy and broad storage permissions stay out of the manifest',
 );
 assert.match(
     manifest,
     /USE_FINGERPRINT"\s*\n?\s*android:maxSdkVersion="27"/,
     'the legacy fingerprint permission is capped at API 27',
+);
+const qrScanner = readFileSync(join(wsRoot, 'packages', 'core', 'src', 'ui', 'QrScanner.jsx'), 'utf8');
+assert.match(
+    qrScanner,
+    /data-testid="qr-scanner-camera-rationale"[\s\S]*?uses the camera only to scan QR codes[\s\S]*?paste the code instead/,
+    'the JS shell explains camera use and the paste alternative before Android prompts',
+);
+assert.match(
+    qrScanner,
+    /cameraRationaleAccepted[\s\S]*?!cameraRationaleAccepted[\s\S]*?getUserMedia/,
+    'the Android rationale gate runs before getUserMedia requests camera permission',
 );
 
 // --- 10. S3: deep links, camera, ceremony -----------------------------
@@ -614,6 +724,13 @@ assert.match(
     /<data android:scheme="xchain" \/>/,
     'the xchain: scheme is accepted inbound',
 );
+for (const scheme of ['bitcoin', 'litecoin', 'dogecoin']) {
+    assert.match(
+        manifest,
+        new RegExp(`<data android:scheme="${scheme}" \\/>`),
+        `${scheme}: payment links are accepted inbound`,
+    );
+}
 assert.doesNotMatch(
     manifest,
     /android:scheme="http"[^s]/,
@@ -626,6 +743,13 @@ const linksJava = readFileSync(
     'utf8',
 );
 assert.match(linksJava, /@CapacitorPlugin\(name = "XChainLinks"\)/);
+for (const constant of ['SCHEME_BITCOIN', 'SCHEME_LITECOIN', 'SCHEME_DOGECOIN']) {
+    assert.match(
+        linksJava,
+        new RegExp(`${constant}\\.equalsIgnoreCase\\(scheme\\)`),
+        `${constant} is declared in the manifest but rejected by the native link inbox`,
+    );
+}
 assert.match(
     linksJava,
     /public void takePendingLink\(PluginCall call\)/,
@@ -1033,15 +1157,45 @@ assert.match(appGradle, /minifyEnabled false/,
     + 'crash and ANR report from that build onward is unreadable.');
 assert.match(appGradle, /R8 DECISION, PINNED/, 'and the reasoning is written down');
 assert.equal(
-    capConfig.android?.webContentsDebuggingEnabled,
+    Object.hasOwn(capConfig.android, 'webContentsDebuggingEnabled'),
     false,
-    'no WebView debugging in the shipped app',
+    'Capacitor follows the native debuggable flag instead of disabling DevTools in debug builds',
+);
+assert.match(
+    appGradle,
+    /release\s*\{\s*(?:\/\/[^\n]*\s*)*debuggable false/,
+    'release clears FLAG_DEBUGGABLE so Capacitor disables WebView debugging',
+);
+assert.match(
+    appGradle,
+    /debug\s*\{\s*debuggable true/,
+    'debug sets FLAG_DEBUGGABLE so Capacitor keeps WebView debugging available',
+);
+// Capacitor's debug-build logging writes every plugin call's arguments to
+// logcat, and the argon2id and biometricEnroll calls carry the wallet
+// password: a debug build then left it readable to anyone with USB
+// debugging (seen on an LG K51, 2026-10-12). Android logs nothing from the
+// bridge in any build; iOS keeps its debug-only console (ios-console.sh).
+assert.equal(
+    capConfig.android?.loggingBehavior,
+    'none',
+    'no Capacitor bridge logging on Android: plugin arguments include the wallet password',
 );
 
 // Screenshot protection: the switch is native, the policy is in core, and
 // every screen that shows or accepts key material asks for it.
 assert.match(pluginJava, /public void setScreenProtected\(PluginCall call\)/);
 assert.match(pluginJava, /FLAG_SECURE/, 'the native switch really sets FLAG_SECURE');
+assert.doesNotMatch(
+    mainActivity,
+    /LayoutParams\.FLAG_SECURE/,
+    'FLAG_SECURE stays out of MainActivity so protection is not app-wide',
+);
+assert.match(
+    mainActivity,
+    /FLAG_SECURE stays out of the activity-wide setup/,
+    'MainActivity documents why the secure flag is route-scoped',
+);
 for (const route of [
     'ViewPrivateKey.jsx',
     'CreateWallet.jsx',
@@ -1058,6 +1212,22 @@ for (const route of [
         `${route} protects its screen (seed, key export, phrase entry, unlock)`,
     );
 }
+const addressListSrc = readFileSync(
+    join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'AddressList.jsx'), 'utf8',
+);
+assert.match(
+    addressListSrc,
+    /useProtectedScreen\(showWifForm\)/,
+    'the WIF private-key entry is protected without blocking capture on the address list',
+);
+const pairPartnerSrc = readFileSync(
+    join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'PairPartnerWallet.jsx'), 'utf8',
+);
+assert.match(
+    pairPartnerSrc,
+    /useProtectedScreen\(stage === 'seed'\)/,
+    'the shared recovery phrase is protected while public pairing codes stay capturable',
+);
 // And NOT on the screens where blocking screenshots would be user-hostile.
 for (const route of ['Receive.jsx', 'Settings.jsx']) {
     const p = join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', route);
@@ -1094,6 +1264,26 @@ assert.match(
 // running Android 8 or 9.
 assert.match(pluginJava, /getInstallSourceInfo\(/);
 assert.match(pluginJava, /getInstallerPackageName\(/);
+
+// Native Argon2id: same parameters as the JS derivation, off the UI thread,
+// on an exactly pinned BouncyCastle whose checksums Gradle verifies.
+assert.match(pluginJava, /@PluginMethod\s+public void argon2id\(final PluginCall call\)/,
+    'XChainVault.argon2id is a plugin method');
+assert.match(pluginJava, /kdfExecutor\.execute\(/, 'the derivation runs on its own executor, not the plugin thread');
+assert.match(pluginJava, /catch \(OutOfMemoryError e\)[\s\S]*?call\.reject\(/,
+    'running out of memory rejects (the JS falls back) instead of crashing the app');
+const kdfJava = readFileSync(join(vaultDir, 'Argon2idKdf.java'), 'utf8');
+assert.match(kdfJava, /Argon2Parameters\.ARGON2_id\)/, 'the variant is Argon2id');
+assert.match(kdfJava, /ARGON2_VERSION_13/, 'the version is 0x13, the one existing wallets used');
+const bcVersion = /bouncyCastleVersion = '(\d+(?:\.\d+)+)'/.exec(variables)?.[1];
+assert.ok(bcVersion, 'BouncyCastle is pinned to an exact version in variables.gradle');
+assert.match(appGradle, /implementation "org\.bouncycastle:bcprov-jdk18on:\$bouncyCastleVersion"/,
+    'the app depends on bcprov alone, at the pinned version');
+const verificationXml = readFileSync(join(android, 'gradle', 'verification-metadata.xml'), 'utf8');
+assert.ok(
+    verificationXml.includes(`<component group="org.bouncycastle" name="bcprov-jdk18on" version="${bcVersion}">`),
+    `verification-metadata.xml carries checksums for bcprov-jdk18on ${bcVersion}`,
+);
 // And the banner has to be mounted somewhere, or the whole lane is inert.
 const webApp = readFileSync(join(wsRoot, 'packages', 'web', 'src', 'App.jsx'), 'utf8');
 assert.match(webApp, /<UpdateNoticeBanner \/>/, 'the notice is mounted in the shared shell');
@@ -1378,7 +1568,9 @@ assert.match(
 console.log(
     'OK: mobile shell smoke (S1: Capacitor scaffold layout; appId io.xchain.wallet.android (D1 revised);'
     + ' webDir www; androidScheme https for secure-context crypto.subtle; no mixed content;'
-    + ' zero registered plugins; minSdkVersion 26 (D2); versionCode/versionName read from the'
+    + ' built-in SystemBars starts with splash-compatible contrast; native splash uses matching light/dark'
+    + ' backgrounds, bounded artwork and platform-ready handoff; minSdkVersion 26 (D2);'
+    + ' versionCode/versionName read from the'
     + ' tag-derived version.properties with no literal fallback and a hard failure when absent;'
     + ' exactly one exported component; no google-services wiring; keystores + generated version'
     + ' file + staged webDir all git-ignored; staged assets byte-identical to packages/web/dist.'
@@ -1387,10 +1579,10 @@ console.log(
     + ' Class 3 only, invalidated by enrollment, CryptoObject-bound, with no device-credential'
     + ' fallback; vault writes fsync before an atomic rename and refuse to overwrite an unreadable'
     + ' vault; ciphertext unreadable while the device is locked; permissions are exactly internet,'
-    + ' camera and the two biometric spellings, the legacy one capped at API 27.'
+    + ' vibrate, camera, notifications and the two biometric spellings, the legacy one capped at API 27.'
     + ' S3: auto-verified App Links scoped to the same xchain.io/wallet/link/ prefix the parser unwraps'
     + ' and the iOS association claims, leaving the listings\' own /wallet/privacy/ and /wallet/support/'
-    + ' URLs to the browser, plus the inbound xchain: scheme and no'
+    + ' URLs to the browser, plus inbound xchain and payment schemes and no'
     + ' http downgrade, all on the one exported activity; XChainLinks queues the cold-start link and'
     + ' clears it on read; the JS half agrees on the plugin name and refuses lookalike hosts;'
     + ` assetlinks ships as a ${fingerprints.length}-fingerprint template (${playSlots.length} Play`
@@ -1400,7 +1592,8 @@ console.log(
     + ' S4: allowBackup=false with BOTH the cloud-backup and device-transfer surfaces excluded and'
     + ' the API 26-30 rules beside them; cleartext refused and user-added CAs untrusted in release,'
     + ' with the regtest exemption confined to the debug source set; R8 pinned off with its reasoning;'
-    + ' no WebView debugging; FLAG_SECURE wired to the five screens that show or accept key material'
+    + ' WebView debugging follows the build type and is off in release; remote navigation denied;'
+    + ' FLAG_SECURE wired to every route state that shows or accepts key material'
     + ' and deliberately not to receive/settings; the update feed carries one semver field and the'
     + ' client renders none of it, identifies nobody and refuses redirects; the capability floor is'
     + ' feature-detected before React mounts; and the listing pack, wire audit, privacy-policy mobile'

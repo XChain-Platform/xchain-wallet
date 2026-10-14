@@ -24,7 +24,8 @@
         "Changing any value below is a deliberate manifest-surface decision (spec §8 D-items), not a",
         "routine edit. Change it in the same commit that changes manifest.json, and say why."
     ],
-    "permissions": ["storage", "sidePanel", "notifications", "alarms"],
+    "permissions": ["storage", "sidePanel", "alarms"],
+    "optional_permissions": ["notifications"],
     "host_permissions": [],
     "content_script_matches": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"]
 }

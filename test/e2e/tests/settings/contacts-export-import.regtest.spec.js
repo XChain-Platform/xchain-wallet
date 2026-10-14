@@ -183,10 +183,12 @@ test.describe('Settings: contacts export / import', () => {
                 // panel is a `role="dialog"` named by its title. Scoped to the
                 // dialog rather than picked off the page by label, because the
                 // detail screen behind it carries a "Delete" of its own.
-                const dialog = page.getByRole('dialog', { name: 'Delete this contact?' });
+                const dialog = page.getByRole('dialog', {
+                    name: `Delete ${CONTACT_NAME} from contacts?`,
+                });
                 await expect(dialog, 'deleting a contact raised no confirmation')
                     .toBeVisible({ timeout: 30_000 });
-                await dialog.getByRole('button', { name: 'Delete', exact: true }).click();
+                await dialog.getByRole('button', { name: 'Delete contact', exact: true }).click();
 
                 await expect(contactRow(page, CONTACT_NAME),
                     'the contact could not be deleted, so the restore below would prove nothing')

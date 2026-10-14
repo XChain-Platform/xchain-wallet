@@ -19,8 +19,8 @@
 // Fetch cadence: polled every 5s on-screen, paused on hidden tab.
 // Reuses the AirdropForm / OrderbookPanel visibility-gated pattern.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, AddressText } from '@xchain-wallet/core/ui';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Button, AddressText, StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
@@ -33,6 +33,7 @@ import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { compareAmounts } from '../../market/orderMath.js';
+import { startVisibleInterval } from '../utils/visibleInterval.js';
 import {
     divideDecimalStrings,
     subtractDecimalStrings,
@@ -40,6 +41,13 @@ import {
 
 const POLL_INTERVAL_MS = 5000;
 const chainRegistry = registryLib.defaultRegistry();
+const ORDER_GRID_COLUMNS = 'minmax(3rem, 0.6fr) repeat(3, minmax(5.5rem, 1fr)) minmax(4.75rem, auto)';
+const NUMERIC_CELL_STYLE = {
+    minWidth: 0,
+    textAlign: 'right',
+    fontVariantNumeric: 'tabular-nums',
+    overflowWrap: 'anywhere',
+};
 
 /**
  * @param {object} props
@@ -54,20 +62,49 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
     const [balancesHidden] = useBalancesHidden();
     const [addresses, setAddresses] = useState(/** @type {any[]} */ ([]));
     const [orders, setOrders] = useState(/** @type {any[]} */ ([]));
+    const [addressesLoading, setAddressesLoading] = useState(true);
+    const [ordersLoading, setOrdersLoading] = useState(true);
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [confirmOrder, setConfirmOrder] = useState(/** @type {any | null} */ (null));
     const [submitting, setSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [watcherResult, setWatcherResult] = useState(/** @type {any | null} */ (null));
+    const mountedRef = useRef(false);
+    const autopayRequestRef = useRef(0);
+    const panelVersionRef = useRef(0);
+
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => { mountedRef.current = false; };
+    }, []);
+
+    useEffect(() => {
+        panelVersionRef.current += 1;
+        setConfirmOrder(null);
+        setSubmitting(false);
+        setSubmitError(null);
+        setWatcherResult(null);
+    }, [walletId, chainId, tick1, tick2]);
 
     useEffect(() => {
         let cancelled = false;
+        setAddresses([]);
+        setOrders([]);
+        setAddressesLoading(true);
+        setOrdersLoading(true);
+        setLoadError(null);
         messaging.getAddressesByChain(walletId)
             .then((byChain) => {
                 if (cancelled) return;
                 setAddresses(byChain?.[chainId] || []);
+                setAddressesLoading(false);
             })
-            .catch(() => {});
+            .catch((err) => {
+                if (cancelled) return;
+                setLoadError(readFailureMessage(err, 'load your open orders'));
+                setAddressesLoading(false);
+                setOrdersLoading(false);
+            });
         return () => { cancelled = true; };
     }, [messaging, walletId, chainId]);
 
@@ -79,6 +116,8 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
         /** @type {Map<string, any>} */ (new Map()),
     );
     const loadAutopay = useCallback(async () => {
+        const requestId = ++autopayRequestRef.current;
+        if (mountedRef.current) setAutopayByIndex(new Map());
         if (typeof messaging.listAutopayOrders !== 'function') return;
         try {
             if (typeof messaging.resolveAutopayIndexes === 'function') {
@@ -89,49 +128,69 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
             for (const r of records || []) {
                 if (r?.orderActionIndex != null) map.set(String(r.orderActionIndex), r);
             }
-            setAutopayByIndex(map);
+            if (mountedRef.current && requestId === autopayRequestRef.current) {
+                setAutopayByIndex(map);
+            }
         } catch { /* toggle simply not shown */ }
     }, [messaging, walletId, chainId]);
-    useEffect(() => { loadAutopay(); }, [loadAutopay]);
+    useEffect(() => {
+        loadAutopay();
+        return () => { autopayRequestRef.current += 1; };
+    }, [loadAutopay]);
 
     async function handleAutopayToggle(record) {
+        const panelVersion = panelVersionRef.current;
         try {
             await messaging.setAutopayEnabled({ id: record.id, enabled: record.autopay !== true });
+            if (!mountedRef.current || panelVersion !== panelVersionRef.current) return;
             await loadAutopay();
         } catch (err) {
-            setLoadError(readFailureMessage(err, 'change autopay for this order'));
+            if (mountedRef.current && panelVersion === panelVersionRef.current) {
+                setLoadError(readFailureMessage(err, 'change autopay for this order'));
+            }
         }
     }
 
     useEffect(() => {
-        if (addresses.length === 0) return undefined;
+        if (addressesLoading) return undefined;
+        if (addresses.length === 0) {
+            setOrders([]);
+            setOrdersLoading(false);
+            return undefined;
+        }
         let cancelled = false;
+        let requestId = 0;
+        setOrdersLoading(true);
         const tick = async () => {
             if (cancelled) return;
             if (typeof document !== 'undefined'
                 && document.visibilityState === 'hidden') return;
+            const currentRequest = ++requestId;
             try {
                 const results = await Promise.all(addresses.map((addr) =>
                     messaging.getMarketOrders({
                         chainId, tick1, tick2, address: addr.address,
                     }).then((resp) => ({ addr, rows: extractRows(resp) }))
-                      .catch(() => ({ addr, rows: [] }))
                 ));
-                if (cancelled) return;
+                if (cancelled || currentRequest !== requestId) return;
                 const flat = [];
                 for (const { addr, rows } of results) {
                     for (const row of rows) flat.push({ ...row, __owner: addr });
                 }
                 setOrders(flat);
                 setLoadError(null);
+                setOrdersLoading(false);
             } catch (err) {
-                if (!cancelled) setLoadError(readFailureMessage(err, 'load your open orders'));
+                if (!cancelled && currentRequest === requestId) {
+                    setLoadError(readFailureMessage(err, 'load your open orders'));
+                    setOrdersLoading(false);
+                }
             }
         };
-        tick();
-        const handle = setInterval(tick, POLL_INTERVAL_MS);
-        return () => { cancelled = true; clearInterval(handle); };
-    }, [messaging, chainId, tick1, tick2, addresses]);
+        if (typeof document === 'undefined' || document.visibilityState !== 'hidden') tick();
+        const stopPollInterval = startVisibleInterval(tick, POLL_INTERVAL_MS);
+        return () => { cancelled = true; stopPollInterval(); };
+    }, [messaging, chainId, tick1, tick2, addresses, addressesLoading]);
 
     const rows = useMemo(() => {
         return orders.map((o) => summarizeOrder(o, tick1, tick2)).filter(Boolean);
@@ -154,6 +213,7 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
         if (!confirmOrder || submitting || cancelLane.composing) return;
         setSubmitting(true);
         setSubmitError(null);
+        const panelVersion = panelVersionRef.current;
         const orderActionIndex = String(confirmOrder.action_index);
         try {
             const result = await cancelLane.run({
@@ -164,6 +224,7 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                 encoderOpts: nativeFee.flag ? { payFeeInNativeCoin: true } : {},
                 submitExtra: { orderActionIndex },
             });
+            if (!mountedRef.current || panelVersion !== panelVersionRef.current) return;
             if (cancelLane.isWatcherMode) {
                 setWatcherResult(result);
                 return;
@@ -171,7 +232,8 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
             setConfirmOrder(null);
             setOrders((prev) => prev.filter((o) => o.action_index !== confirmOrder.action_index));
         } catch (err) {
-            if (!isUserRejection(err)) {
+            if (mountedRef.current && panelVersion === panelVersionRef.current
+                && !isUserRejection(err)) {
                 setSubmitError(err?.name === 'InvalidPasswordError'
                     ? 'Incorrect password.'
                     : submitFailureMessage(err, {
@@ -181,7 +243,9 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                     }));
             }
         } finally {
-            setSubmitting(false);
+            if (mountedRef.current && panelVersion === panelVersionRef.current) {
+                setSubmitting(false);
+            }
         }
     }
 
@@ -211,24 +275,23 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
     }
 
     return (
-        <div
+        <section
+            aria-label="Open orders"
+            aria-busy={addressesLoading || ordersLoading || undefined}
             style={{
                 border: '1px solid var(--xc-border)',
                 borderRadius: '4px',
                 padding: '0.5rem',
             }}
         >
-            {loadError ? (
-                <p style={{
-                    margin: 'var(--xc-space-3) 0',
-                    color: 'var(--xc-text-muted)',
-                    fontSize: 'var(--xc-text-sm)',
-                    textAlign: 'center',
-                }}>
-                    {loadError}
-                </p>
+            <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>Open orders</p>
+            {addressesLoading || ordersLoading ? (
+                <StatusMessage variant="status">Loading open orders…</StatusMessage>
             ) : null}
-            {!loadError && rows.length === 0 ? (
+            {loadError ? (
+                <StatusMessage variant="error">{loadError}</StatusMessage>
+            ) : null}
+            {!loadError && !addressesLoading && !ordersLoading && rows.length === 0 ? (
                 <p style={{
                     margin: 'var(--xc-space-3) 0',
                     color: 'var(--xc-text-muted)',
@@ -238,66 +301,83 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                     No open orders on this market.
                 </p>
             ) : null}
-            <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                {rows.map((r) => (
-                    <li
-                        key={r.actionIndex}
-                        style={{
-                            display: 'grid',
-                            gridTemplateColumns: '0.5fr 1fr 1fr 1fr 0.75fr',
-                            gap: '0.25rem',
-                            padding: '0.25rem',
-                            fontSize: '0.8rem',
-                            alignItems: 'center',
-                        }}
-                    >
-                        <span style={{ color: r.side === 'buy' ? '#26a69a' : '#ef5350' }}>
-                            {r.side === 'buy' ? 'Buy' : 'Sell'}
-                        </span>
-                        <span>{balancesHidden ? '•••••' : r.price}</span>
-                        <span>{balancesHidden ? '•••••' : r.size}</span>
-                        <span>
-                            {r.filled > 0
-                                ? (balancesHidden ? '••••• filled' : `${r.filled}/${r.size} filled`)
-                                : <span style={{ color: 'var(--xc-fg-muted)' }}>open</span>}
-                        </span>
-                        <Button
-                            variant="danger"
-                            size="sm"
-                            onClick={() => {
-                                setConfirmOrder(r.raw);
-                                setSubmitError(null);
-                            }}
-                            disabled={submitting}
-                        >
-                            Cancel
-                        </Button>
-                        {(() => {
-                            const consent = autopayByIndex.get(String(r.actionIndex));
-                            if (!consent) return null;
-                            const on = consent.autopay === true;
-                            return (
-                                <label style={{
-                                    gridColumn: '1 / -1',
-                                    display: 'flex',
-                                    gap: '0.35rem',
+            {rows.length > 0 ? (
+                <div style={{ maxWidth: '100%', overflowX: 'auto' }}>
+                    <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: ORDER_GRID_COLUMNS,
+                        gap: '0.25rem',
+                        minWidth: '28rem',
+                        padding: '0 0.25rem 0.25rem',
+                        color: 'var(--xc-text-muted)',
+                        fontSize: '0.75rem',
+                    }}>
+                        <span>Side</span>
+                        <span style={NUMERIC_CELL_STYLE}>Price</span>
+                        <span style={NUMERIC_CELL_STYLE}>Size ({tick1})</span>
+                        <span style={NUMERIC_CELL_STYLE}>Filled</span>
+                        <span style={{ textAlign: 'right' }}>Action</span>
+                    </div>
+                    <ul style={{ listStyle: 'none', padding: 0, margin: 0, minWidth: '28rem' }}>
+                        {rows.map((r, index) => (
+                            <li
+                                key={`${r.actionIndex}-${r.raw.__owner?.id ?? r.raw.__owner?.address ?? 'owner'}-${index}`}
+                                style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: ORDER_GRID_COLUMNS,
+                                    gap: '0.25rem',
+                                    padding: '0.25rem',
+                                    fontSize: '0.8rem',
                                     alignItems: 'center',
-                                    fontSize: '0.7rem',
-                                    color: 'var(--xc-text-muted)',
-                                    cursor: 'pointer',
+                                }}
+                            >
+                                <span style={{
+                                    color: r.side === 'buy' ? 'var(--xc-success)' : 'var(--xc-danger)',
+                                    fontWeight: 600,
                                 }}>
-                                    <input
-                                        type="checkbox"
-                                        checked={on}
-                                        onChange={() => handleAutopayToggle(consent)}
-                                    />
-                                    CoinPay auto-pay {on ? 'on' : 'off (notify-only)'}
-                                </label>
-                            );
-                        })()}
-                    </li>
-                ))}
-            </ul>
+                                    {r.side === 'buy' ? 'Buy' : 'Sell'}
+                                </span>
+                                <span style={NUMERIC_CELL_STYLE}>{balancesHidden ? '•••••' : r.price}</span>
+                                <span style={NUMERIC_CELL_STYLE}>{balancesHidden ? '•••••' : r.size}</span>
+                                <span style={NUMERIC_CELL_STYLE}>
+                                    {r.filled > 0
+                                        ? (balancesHidden ? '••••• filled' : `${r.filled}/${r.size} filled`)
+                                        : <span style={{ color: 'var(--xc-fg-muted)' }}>open</span>}
+                                </span>
+                                <Button
+                                    variant="danger"
+                                    size="sm"
+                                    onClick={() => {
+                                        setConfirmOrder(r.raw);
+                                        setSubmitError(null);
+                                    }}
+                                    disabled={submitting}
+                                >
+                                    Cancel
+                                </Button>
+                                {(() => {
+                                    const consent = autopayByIndex.get(String(r.actionIndex));
+                                    if (!consent) return null;
+                                    const on = consent.autopay === true;
+                                    return (
+                                        <div style={{
+                                            gridColumn: '1 / -1',
+                                            fontSize: '0.7rem',
+                                            color: 'var(--xc-text-muted)',
+                                        }}>
+                                            <Switch
+                                                label={`CoinPay auto-pay ${on ? 'on' : 'off (notify-only)'}`}
+                                                checked={on}
+                                                onChange={() => handleAutopayToggle(consent)}
+                                            />
+                                        </div>
+                                    );
+                                })()}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            ) : null}
             {confirmOrder ? (
                 <form
                     onSubmit={handleCancel}
@@ -309,9 +389,12 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                         borderRadius: '4px',
                     }}
                 >
-                    <p style={{ margin: '0 0 0.5rem', fontSize: '0.85rem' }}>
-                        Cancel order #{String(confirmOrder.action_index)}
+                    <p style={{ margin: '0 0 0.25rem', fontSize: '0.85rem', fontWeight: 600 }}>
+                        Cancel order #{String(confirmOrder.action_index)}?
                         {confirmOwner ? <> from <AddressText address={confirmOwner.address} /></> : null}
+                    </p>
+                    <p style={{ margin: '0 0 0.5rem', fontSize: '0.8rem' }}>
+                        This submits a cancellation transaction for the remaining order. Once confirmed, it cannot be undone.
                     </p>
                     {submitError ? (
                         <p role="alert" style={{ margin: '0.25rem 0 0', color: '#ef5350', fontSize: '0.75rem' }}>
@@ -340,12 +423,19 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                     </div>
                 </form>
             ) : null}
-        </div>
+        </section>
     );
 }
 
 function summarizeOrder(o, tick1, tick2) {
     if (!o || typeof o !== 'object') return null;
+    const lifecycle = String(o.current_status ?? o.state?.status ?? '').toLowerCase();
+    if (lifecycle && lifecycle !== 'open') return null;
+    const expiration = Number(o.state?.expiration ?? o.expiration);
+    if (Number.isFinite(expiration) && expiration > 0
+        && expiration < 10_000_000_000 && expiration <= Math.floor(Date.now() / 1000)) return null;
+    const remaining = o.state?.give_remaining ?? o.give_remaining ?? o.giveRemaining;
+    if (remaining != null && compareAmounts(String(remaining), '0') !== 1) return null;
     const summarySide = String(o.type || '').toLowerCase();
     const summaryPrice = String(o.price ?? '').trim();
     const summarySize = String(o.amount ?? '').trim();

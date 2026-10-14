@@ -15,7 +15,7 @@
 // to the signed request and pin the base-unit amount that request becomes.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, cleanup, act } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DispenserDetail } from '../../../packages/core/src/shared/routes/DispenserDetail.jsx';
@@ -69,13 +69,14 @@ const REFUSED = {
     findings: [{ severity: 'error', overridable: false, code: 'INVALID_FIELD_VALUE', message: 'The network would refuse this action.' }],
 };
 
-function mount(dispenser, {
+async function mount(dispenser, {
     addresses = [buyerAddress],
     dogeSats = '1000000000',
     destinationRows = [],
     settings = {},
     preflight = PASS,
 } = {}) {
+    vi.useFakeTimers();
     const messaging = {
         getDispenserByActionIndex: vi.fn().mockResolvedValue(dispenser),
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: addresses }),
@@ -121,27 +122,44 @@ function mount(dispenser, {
             }),
         ),
     );
+    for (let pass = 0; pass < 3; pass += 1) {
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(400);
+        });
+    }
+    vi.useRealTimers();
     return messaging;
 }
 
 const buyButton = () => screen.findByRole('button', { name: /^Buy \d+ fills?$/ });
 const noBuyButton = () => screen.queryByRole('button', { name: /^Buy \d+ fills?$/ });
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+});
+
+async function settleDestinationLookup() {
+    for (let pass = 0; pass < 3; pass += 1) {
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(400);
+        });
+    }
+}
 
 describe('coin-paid dispenser: Buy from this wallet', () => {
     it('shows a Buy control with the native balance, beside the pay-to address and Copy', async () => {
-        mount(COIN_PAID);
+        await mount(COIN_PAID);
         expect(await buyButton()).toBeInTheDocument();
         expect(await screen.findByText(/10 DOGE available/)).toBeInTheDocument();
         // The other-wallet path stays for buyers who prefer it.
         expect(screen.getByText(OWNER, { selector: 'code' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /^Copy$/ })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^Copy dispenser payment address$/ })).toBeInTheDocument();
         expect(document.body.textContent).not.toMatch(/on the roadmap/);
     });
 
     it('signs 3 fills of 2 DOGE as one native send of 600000000 base units to the dispenser', async () => {
-        const messaging = mount(COIN_PAID);
+        const messaging = await mount(COIN_PAID);
         await screen.findByText(/10 DOGE available/);
         fireEvent.change(await screen.findByLabelText(/Fills/i), { target: { value: '3' } });
         const buy = await buyButton();
@@ -154,6 +172,12 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
             from: { address: BUYER },
         });
         expect(screen.getByTestId('confirm-source')).toHaveTextContent(BUYER.slice(0, 6));
+        expect(screen.getByText('Review purchase')).toBeInTheDocument();
+        const review = screen.getByTestId('buy-review-summary');
+        expect(review).toHaveTextContent('Price per fill2.00000000 DOGE');
+        expect(review).toHaveTextContent('Fills3');
+        expect(review).toHaveTextContent('You pay6 DOGE');
+        expect(review).toHaveTextContent('You receive300 DOGESWAP');
         fireEvent.change(await screen.findByLabelText(/Password/i), { target: { value: 'pw' } });
         const approve = screen.getByTestId('confirm-approve');
         await waitFor(() => expect(approve).toBeEnabled());
@@ -180,7 +204,7 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
     });
 
     it('shows a failed buy in house copy, not the encoder wording', async () => {
-        const messaging = mount(COIN_PAID);
+        const messaging = await mount(COIN_PAID);
         messaging.sendToken.mockRejectedValueOnce(new Error('no spendable UTXOs found for the funding address'));
         await screen.findByText(/10 DOGE available/);
         const buy = await buyButton();
@@ -191,23 +215,25 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
         await waitFor(() => expect(approve).toBeEnabled());
         fireEvent.click(approve);
 
-        expect(await screen.findByText(/This address has no DOGE to spend/)).toBeInTheDocument();
+        expect(await screen.findByText(/This address needs DOGE for the protocol fee and the network fee/)).toBeInTheDocument();
         expect(document.body.textContent).not.toMatch(/no spendable UTXOs/);
     });
 
     it('shows the dispenser destination notice on the shared Confirm screen', async () => {
-        const messaging = mount(COIN_PAID, { destinationRows: [COIN_PAID] });
+        const messaging = await mount(COIN_PAID, { destinationRows: [COIN_PAID] });
         await screen.findByText(/10 DOGE available/);
-        await waitFor(() => expect(messaging.getDispensersForAddress).toHaveBeenCalled(), { timeout: 3000 });
-        fireEvent.click(await buyButton());
+        vi.useFakeTimers();
+        fireEvent.click(screen.getByRole('button', { name: /^Buy \d+ fills?$/ }));
+        await settleDestinationLookup();
 
-        expect(await screen.findByText(/This pays dispenser #816/, {}, { timeout: 3000 }))
+        expect(screen.getByText(/This pays dispenser #816/))
             .toBeInTheDocument();
+        expect(messaging.getDispensersForAddress).toHaveBeenCalled();
         expect(screen.getByText(/you would receive 100 DOGESWAP/)).toBeInTheDocument();
     });
 
     it('dry-runs a token-paid buy before signing the composed bytes', async () => {
-        const messaging = mount(TOKEN_PAID);
+        const messaging = await mount(TOKEN_PAID);
         await screen.findByText(/250 MEMEVALID available/);
         fireEvent.click(await buyButton());
 
@@ -233,7 +259,7 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
         ['coin', COIN_PAID, 'DOGE', '2'],
         ['token', TOKEN_PAID, 'MEMEVALID', '5'],
     ])('builds an unsigned %s purchase in watcher mode', async (_kind, dispenser, tick, amount) => {
-        const messaging = mount(dispenser, { settings: { walletMode: 'watcher' } });
+        const messaging = await mount(dispenser, { settings: { walletMode: 'watcher' } });
         await screen.findByText(new RegExp(`${tick} available`));
         const build = await screen.findByRole('button', { name: 'Create unsigned transaction' });
         await waitFor(() => expect(build).toBeEnabled());
@@ -254,15 +280,46 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
 
     it('blocks a fill count the native balance cannot cover', async () => {
         // 10 DOGE buys 5 fills, not 6.
-        mount(COIN_PAID);
+        await mount(COIN_PAID);
         await screen.findByText(/10 DOGE available/);
         fireEvent.change(await screen.findByLabelText(/Fills/i), { target: { value: '6' } });
         await waitFor(async () => expect(await buyButton()).toBeDisabled());
         expect(await screen.findByTestId('preflight-chip')).toHaveTextContent(/Will likely fail/);
     });
 
+    it('shows per-fill terms and validates whole, available fills before review', async () => {
+        await mount({ ...COIN_PAID, escrow_remaining: '200' });
+        await screen.findByText(/10 DOGE available/);
+        const totals = screen.getByTestId('buy-totals');
+        expect(totals).toHaveTextContent('Price per fill2.00000000 DOGE');
+        expect(totals).toHaveTextContent('You receive per fill100 DOGESWAP');
+        expect(totals).toHaveTextContent('You pay2 DOGE');
+        expect(totals).toHaveTextContent('You receive100 DOGESWAP');
+
+        fireEvent.change(screen.getByLabelText(/Fills/i), { target: { value: '1.5' } });
+        expect(screen.getByRole('alert')).toHaveTextContent(/whole number of fills/i);
+        expect(screen.getByRole('button', { name: /^Buy fills$/ })).toBeDisabled();
+
+        fireEvent.change(screen.getByLabelText(/Fills/i), { target: { value: '3' } });
+        expect(screen.getByRole('alert')).toHaveTextContent(/Only 2 complete fills remain/);
+        expect(await buyButton()).toBeDisabled();
+    });
+
+    it.each([
+        ['closed', { current_status: 'cancelled', escrow_remaining: '1000' }],
+        ['empty', { current_status: 'open', escrow_remaining: '0' }],
+    ])('does not offer payment controls for a %s dispenser', async (_name, state) => {
+        await mount({ ...COIN_PAID, ...state });
+        await screen.findByText(state.current_status, { selector: 'dd' });
+        expect(noBuyButton()).toBeNull();
+        expect(screen.queryByText('Pay to buy')).toBeNull();
+        if (state.escrow_remaining === '0') {
+            expect(screen.getByText(/no complete fills left to buy/i)).toBeInTheDocument();
+        }
+    });
+
     it('keeps the list warning on a restricted dispenser next to the Buy control', async () => {
-        mount({ ...COIN_PAID, allow_list: '1690' });
+        await mount({ ...COIN_PAID, allow_list: '1690' });
         await buyButton();
         const alerts = screen.getAllByRole('alert').map((el) => el.textContent);
         expect(alerts.filter((t) => /list #1690/.test(t))).toHaveLength(1);
@@ -272,13 +329,13 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
     it('offers no Buy control when the row names a coin this chain does not pay in', async () => {
         // The send flow recognises a native payment by the CHAIN's ticker, so a
         // row asking for another coin is one this wallet must not try to pay.
-        mount({ ...COIN_PAID, get_coin: 'LTC' });
+        await mount({ ...COIN_PAID, get_coin: 'LTC' });
         await screen.findByText(/Pay to buy/);
         expect(noBuyButton()).toBeNull();
     });
 
     it('offers no Buy control for a fiat-priced dispenser, and keeps the pay-here panel', async () => {
-        mount(FIAT_PRICED);
+        await mount(FIAT_PRICED);
         await screen.findByText(/Pay to buy/);
         expect(noBuyButton()).toBeNull();
         expect(document.body.textContent).toMatch(/fiat-priced/);
@@ -287,14 +344,14 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
 
 describe('dispenser owned by the viewer', () => {
     it('shows no Buy control and no pay-here panel on a coin-paid dispenser', async () => {
-        mount(COIN_PAID, { addresses: [buyerAddress, ownerAddress] });
+        await mount(COIN_PAID, { addresses: [buyerAddress, ownerAddress] });
         await screen.findByText(/\(you\)/);
         expect(noBuyButton()).toBeNull();
         expect(screen.queryByText(/Pay to buy/)).toBeNull();
     });
 
     it('shows no Buy control on a token-paid dispenser', async () => {
-        mount(TOKEN_PAID, { addresses: [buyerAddress, ownerAddress] });
+        await mount(TOKEN_PAID, { addresses: [buyerAddress, ownerAddress] });
         await screen.findByText(/\(you\)/);
         expect(noBuyButton()).toBeNull();
     });
@@ -306,7 +363,7 @@ describe('Buy through the shared Confirm screen: failure paths', () => {
     // Token-paid only: a coin-paid buy is a bare native payment, which carries
     // no XChain action and so skips the dry run (useConfirmAction.js).
     it('blocks a token-paid buy the dry run says the network would refuse', async () => {
-        const messaging = mount(TOKEN_PAID, { preflight: REFUSED });
+        const messaging = await mount(TOKEN_PAID, { preflight: REFUSED });
         await screen.findByText(/250 MEMEVALID available/);
         const buy = await buyButton();
         await waitFor(() => expect(buy).toBeEnabled());
@@ -324,7 +381,7 @@ describe('Buy through the shared Confirm screen: failure paths', () => {
     });
 
     it('returns quietly to the form when the buyer rejects at Confirm', async () => {
-        const messaging = mount(TOKEN_PAID);
+        const messaging = await mount(TOKEN_PAID);
         await screen.findByText(/250 MEMEVALID available/);
         fireEvent.click(await buyButton());
         await waitFor(() => expect(messaging.preflight).toHaveBeenCalledTimes(1));

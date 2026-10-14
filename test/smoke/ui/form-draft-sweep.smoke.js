@@ -19,12 +19,13 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withEnglishCopy } from '../_localized-source.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
 
-const issueSrc = read('packages/core/src/shared/routes/IssueTokenForm.jsx');
+const issueSrc = withEnglishCopy(read('packages/core/src/shared/routes/IssueTokenForm.jsx'));
 const dispSrc = read('packages/core/src/shared/routes/DispenserForm.jsx');
 
 for (const [label, src, viewName, restoreFields] of [
@@ -77,7 +78,7 @@ for (const [label, src, viewName, restoreFields] of [
     // 6. Banner copy + Restore / Discard wiring.
     assert.ok(/recovery=\{\{ label: 'Restore', onAction: restoreDraft \}\}/.test(src),
         `${label} banner exposes a Restore action`);
-    assert.ok(/aria-label="Discard saved draft"/.test(src),
+    assert.ok(/<DraftDiscardButton onClick=\{dismissDraft\} label="Discard saved draft">/.test(src),
         `${label} banner exposes a Discard button`);
     assert.ok(/draft\.hasDraft\(\) && !draftPending/.test(src),
         `${label} only shows the banner when a draft exists and isn't already pending`);

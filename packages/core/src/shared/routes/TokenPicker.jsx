@@ -8,8 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Icon, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Button, EmptyState, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import {
     BalanceList,
@@ -19,15 +19,41 @@ import {
     sortByChainThenAsset,
     coinFromChainId,
 } from '../components/BalanceList.jsx';
-import { EmptyStateNudge } from '../components/EmptyStateNudge.jsx';
+import { NetworkFilter } from '../components/NetworkFilter.jsx';
 import { bridgeDisplayTick } from './BridgeTick.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useSettings } from '../hooks/useSettings.js';
+import {
+    pinnedTokensForWallet,
+    pinnedTokensPatchForWallet,
+} from '../../schemas/settings.js';
 import styles from './TokenPicker.module.css';
 
 const PLATFORM_QUERY_MIN_CHARS = 3;
 const PLATFORM_QUERY_DEBOUNCE_MS = 350;
 
 const chainRegistry = registryLib.defaultRegistry();
+
+// Rows show the chain only as an icon overlay, and every chain lists the same
+// tickers, so the row's accessible name says which chain (without the network
+// kind) the asset is on.
+function tokenSelectionLabel(row) {
+    const chain = chainRegistry.get(row.chainId)?.displayName;
+    return `Select ${row.displayName || row.tick}${chain ? ` on ${chain}` : ''}`;
+}
+
+function withoutRenderedChainLabels(rows) {
+    return rows.map((row) => ({ ...row, chainDisplayName: '', networkKind: '' }));
+}
+
+function hasSpendableBalance(row) {
+    if (row?.unavailable) return true;
+    try {
+        return BigInt(row?.quantity || 0) > 0n;
+    } catch {
+        return false;
+    }
+}
 
 /**
  * TokenPicker: the single "pick a coin or token" screen shared by the
@@ -66,6 +92,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {import('react').ReactNode} [props.titleIcon]
  * @param {string} [props.backLabel]
  * @param {() => void} [props.onBack]
+ * @param {import('react').ElementType} [props.listPageComponent]
  * @param {(sel: { chainId: string, tick: string, kind?: string, displayName?: string, imageUrl?: string | null }) => void} props.onSelect
  */
 export function TokenPicker({
@@ -83,22 +110,35 @@ export function TokenPicker({
     titleIcon,
     backLabel,
     onBack,
+    listPageComponent: ListPageComponent = ListPage,
     onSelect,
 }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
     const isReceive = purpose === 'receive';
+    const { settings } = useSettings();
+    const allowRemoteImages = Boolean(settings)
+        && settings.privacy?.metadataFetchEnabled !== false;
 
-    const [balances, setBalances] = useState(
-        /** @type {Record<string, any[]> | null} */ (null),
-    );
-    const [addressesByChain, setAddressesByChain] = useState(
-        /** @type {Record<string, any[]> | null} */ (null),
-    );
     const [hiddenTokens, setHiddenTokens] = useState(/** @type {string[]} */ ([]));
     const [pinnedTokens, setPinnedTokens] = useState(/** @type {string[]} */ ([]));
-    const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const [balanceReload, setBalanceReload] = useState(0);
+    const [balanceLoad, setBalanceLoad] = useState({
+        walletId: null,
+        accountId: null,
+        isReceive: null,
+        reload: null,
+        balances: null,
+        addressesByChain: null,
+        error: null,
+    });
+    const balanceLoadMatches = balanceLoad.walletId === walletId
+        && balanceLoad.accountId === accountId
+        && balanceLoad.isReceive === isReceive
+        && balanceLoad.reload === balanceReload;
+    const balances = balanceLoadMatches ? balanceLoad.balances : null;
+    const addressesByChain = balanceLoadMatches ? balanceLoad.addressesByChain : null;
+    const loadError = balanceLoadMatches ? balanceLoad.error : null;
 
     const [networkFilterLocal, setNetworkFilterLocal] = useState('all');
     const networkFilter = networkFilterProp ?? networkFilterLocal;
@@ -111,6 +151,7 @@ export function TokenPicker({
     const [kindFilterLocal, setKindFilterLocal] = useState(/** @type {'all' | 'coins' | 'tokens'} */ ('all'));
     const kindFilter = kindFilterProp ?? kindFilterLocal;
     const setKindFilter = onKindFilterChangeProp ?? setKindFilterLocal;
+    const [rovingOption, setRovingOption] = useState(null);
 
     // Open with the caret in the search box (xchain-wallet#57): a user who
     // starts typing a ticker straight away otherwise types into the page, and
@@ -128,28 +169,35 @@ export function TokenPicker({
     useEffect(() => {
         let cancelled = false;
         if (typeof messaging?.getSettings !== 'function') return undefined;
+        setPinnedTokens([]);
         messaging.getSettings()
             .then((s) => {
                 if (cancelled) return;
                 const hides = Array.isArray(s?.hiddenTokens)
                     ? s.hiddenTokens.filter((k) => typeof k === 'string')
                     : [];
-                const pins = Array.isArray(s?.pinnedTokens)
-                    ? s.pinnedTokens.filter((k) => typeof k === 'string')
-                    : [];
+                const pins = pinnedTokensForWallet(s, walletId)
+                    .filter((k) => typeof k === 'string');
                 setHiddenTokens(hides);
                 setPinnedTokens(pins);
             })
             .catch(() => { /* empty hide/pin lists are fine defaults */ });
         return () => { cancelled = true; };
-    }, [messaging]);
+    }, [messaging, walletId]);
 
     useEffect(() => {
         if (!walletId) return undefined;
         let cancelled = false;
-        setBalances(null);
-        setAddressesByChain(null);
-        setLoadError(null);
+        const pendingLoad = {
+            walletId,
+            accountId,
+            isReceive,
+            reload: balanceReload,
+            balances: null,
+            addressesByChain: null,
+            error: null,
+        };
+        setBalanceLoad(pendingLoad);
         (async () => {
             try {
                 // Receive needs addresses-by-chain too: it surfaces every
@@ -158,30 +206,41 @@ export function TokenPicker({
                 const canByChain = typeof messaging.getAddressesByChain === 'function';
                 const isDemo = flowsLib.isDemoWallet(walletId);
                 let b;
+                let byChain = null;
                 if (isDemo && canByChain) {
                     // Demo balances are synthesized from the address map for
                     // both purposes; only Receive keeps the map around.
-                    const byChain = await messaging.getAddressesByChain(walletId, accountId);
-                    if (!cancelled && isReceive) setAddressesByChain(byChain);
+                    byChain = await messaging.getAddressesByChain(walletId, accountId);
                     b = flowsLib.synthesizeDemoBalances(byChain);
                 } else {
                     const byChainPromise = (isReceive && canByChain)
                         ? messaging.getAddressesByChain(walletId, accountId)
                         : Promise.resolve(null);
-                    const [byChain, walletBalances] = await Promise.all([
+                    const [nextByChain, walletBalances] = await Promise.all([
                         byChainPromise,
                         messaging.getWalletBalances(walletId, accountId),
                     ]);
-                    if (!cancelled && isReceive) setAddressesByChain(byChain);
+                    byChain = nextByChain;
                     b = walletBalances;
                 }
-                if (!cancelled) setBalances(b);
+                if (!cancelled) {
+                    setBalanceLoad({
+                        ...pendingLoad,
+                        balances: b,
+                        addressesByChain: isReceive ? byChain : null,
+                    });
+                }
             } catch (err) {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load balances.');
+                if (!cancelled) {
+                    setBalanceLoad({
+                        ...pendingLoad,
+                        error: err?.message || 'Failed to load balances.',
+                    });
+                }
             }
         })();
         return () => { cancelled = true; };
-    }, [walletId, accountId, messaging, isReceive]);
+    }, [walletId, accountId, messaging, isReceive, balanceReload]);
 
     const allRows = useMemo(() => {
         const rowsFromBalances = buildBalanceRows(balances, chainRegistry);
@@ -214,7 +273,9 @@ export function TokenPicker({
 
     const tokenQueryTrim = tokenQuery.trim().toLowerCase();
     const rows = useMemo(() => {
-        let next = allRows;
+        let next = isReceive
+            ? allRows
+            : allRows.filter(hasSpendableBalance);
         if (networkFilter !== 'all') {
             next = next.filter((r) => coinFromChainId(r.chainId) === networkFilter);
         }
@@ -227,7 +288,10 @@ export function TokenPicker({
             next = next.filter((r) => {
                 const tick = String(r.tick || '').toLowerCase();
                 const name = String(r.displayName || '').toLowerCase();
-                return tick.includes(tokenQueryTrim) || name.includes(tokenQueryTrim);
+                const assetId = `${r.chainId || ''}:${r.tick || ''}`.toLowerCase();
+                return tick.includes(tokenQueryTrim)
+                    || name.includes(tokenQueryTrim)
+                    || assetId.includes(tokenQueryTrim);
             });
         }
         // A bridged copy is stored origin-rooted ('BTC.PEPECASH') and must not
@@ -242,11 +306,32 @@ export function TokenPicker({
             if (!origin) return r;
             return { ...r, displayName: `${label} (from ${origin})` };
         });
-        return sortByChainThenAsset(next);
-    }, [allRows, networkFilter, kindFilter, tokenQueryTrim]);
+        const sorted = sortByChainThenAsset(next);
+        return isReceive
+            ? [
+                ...sorted.filter(hasSpendableBalance),
+                ...sorted.filter((row) => !hasSpendableBalance(row)),
+            ]
+            : sorted;
+    }, [allRows, isReceive, networkFilter, kindFilter, tokenQueryTrim]);
 
     const hiddenSet = useMemo(() => new Set(hiddenTokens), [hiddenTokens]);
     const pinnedSet = useMemo(() => new Set(pinnedTokens), [pinnedTokens]);
+    const handleTogglePin = useCallback((key, nextPinned) => {
+        if (typeof key !== 'string' || !key) return;
+        setPinnedTokens((previous) => {
+            const nextSet = new Set(previous);
+            if (nextPinned) nextSet.add(key);
+            else nextSet.delete(key);
+            const next = Array.from(nextSet);
+            if (typeof messaging?.updateSettings === 'function') {
+                messaging.updateSettings(
+                    pinnedTokensPatchForWallet(walletId, next),
+                ).catch(() => {});
+            }
+            return next;
+        });
+    }, [messaging, walletId]);
 
     // Platform discovery (receive only): when the user types a partial
     // ticker, substring-search every chain the wallet has addresses on and
@@ -256,6 +341,8 @@ export function TokenPicker({
     // with a per-component cache keyed by `${chainId}::${query}`.
     const [platformResults, setPlatformResults] = useState(/** @type {any[]} */ ([]));
     const [platformBusy, setPlatformBusy] = useState(false);
+    const [platformError, setPlatformError] = useState(/** @type {string | null} */ (null));
+    const [platformReload, setPlatformReload] = useState(0);
     const platformCacheRef = useRef(/** @type {Map<string, any>} */ (new Map()));
 
     const localKeySet = useMemo(() => {
@@ -275,25 +362,29 @@ export function TokenPicker({
         ) {
             setPlatformResults([]);
             setPlatformBusy(false);
+            setPlatformError(null);
             return undefined;
         }
         let cancelled = false;
+        setPlatformResults([]);
         setPlatformBusy(true);
+        setPlatformError(null);
         const handle = setTimeout(async () => {
-            const chainIds = Object.keys(addressesByChain);
+            const chainIds = Object.keys(addressesByChain).filter((chainId) => (
+                networkFilter === 'all' || coinFromChainId(chainId) === networkFilter
+            ));
             const cache = platformCacheRef.current;
             try {
                 const lookups = await Promise.all(chainIds.map(async (chainId) => {
                     const cacheKey = `${chainId}::${query}`;
                     if (cache.has(cacheKey)) return { chainId, hits: cache.get(cacheKey) };
                     try {
-                        const hits = await messaging.searchTokens({ chainId, query });
+                        const hits = await messaging.searchTokens({ chainId, query, limit: 50 });
                         const normalized = Array.isArray(hits) ? hits : [];
                         cache.set(cacheKey, normalized);
-                        return { chainId, hits: normalized };
+                        return { chainId, hits: normalized, failed: false };
                     } catch {
-                        cache.set(cacheKey, []);
-                        return { chainId, hits: [] };
+                        return { chainId, hits: [], failed: true };
                     }
                 }));
                 if (cancelled) return;
@@ -307,6 +398,9 @@ export function TokenPicker({
                     }
                 }
                 setPlatformResults(sortByChainThenAsset(found));
+                if (lookups.some(({ failed }) => failed)) {
+                    setPlatformError('Could not search all platform tokens. Try again.');
+                }
             } finally {
                 if (!cancelled) setPlatformBusy(false);
             }
@@ -315,7 +409,66 @@ export function TokenPicker({
             cancelled = true;
             clearTimeout(handle);
         };
-    }, [isReceive, tokenQuery, kindFilter, addressesByChain, messaging, localKeySet]);
+    }, [isReceive, tokenQuery, kindFilter, networkFilter, addressesByChain, messaging, localKeySet, platformReload]);
+
+    const resetFilters = () => {
+        setTokenQuery('');
+        setNetworkFilter('all');
+        if (!kindLocked) setKindFilter('all');
+    };
+    const filtersActive = Boolean(tokenQuery.trim())
+        || networkFilter !== 'all'
+        || (!kindLocked && kindFilter !== 'all');
+
+    const visibleOptionRows = rows.filter((row) => !hiddenSet.has(`${row.chainId}:${row.tick}`));
+    const hiddenOptionRows = rows.filter((row) => hiddenSet.has(`${row.chainId}:${row.tick}`));
+    const sortedOptionRows = pinnedSet.size > 0
+        ? [
+            ...visibleOptionRows.filter((row) => pinnedSet.has(`${row.chainId}:${row.tick}`)),
+            ...visibleOptionRows.filter((row) => !pinnedSet.has(`${row.chainId}:${row.tick}`)),
+        ]
+        : visibleOptionRows;
+    const optionRows = [
+        ...sortedOptionRows,
+        ...hiddenOptionRows,
+        ...platformResults,
+    ];
+    const renderedRows = useMemo(() => withoutRenderedChainLabels(rows), [rows]);
+    const renderedPlatformResults = useMemo(
+        () => withoutRenderedChainLabels(platformResults),
+        [platformResults],
+    );
+    const optionKeys = optionRows.map((row) => `${row.chainId}:${row.tick}`);
+    const optionTabStop = rovingOption && optionKeys.includes(rovingOption)
+        ? rovingOption
+        : optionKeys[0];
+
+    const handlePickerKeyDown = (e) => {
+        if (e.key === 'Escape' && typeof onBack === 'function') {
+            e.preventDefault();
+            onBack();
+            return;
+        }
+        if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+        const current = e.target.closest?.('[data-balance-option]');
+        if (!current) return;
+        const options = Array.from(e.currentTarget.querySelectorAll('[data-balance-option]'));
+        const index = options.indexOf(current);
+        let next = null;
+        if (e.key === 'ArrowDown') next = (index + 1) % options.length;
+        if (e.key === 'ArrowUp') next = (index - 1 + options.length) % options.length;
+        if (e.key === 'Home') next = 0;
+        if (e.key === 'End') next = options.length - 1;
+        if (next === null || next === index) return;
+        e.preventDefault();
+        setRovingOption(options[next].dataset.balanceOption);
+        options[next].focus();
+    };
+
+    const handlePickerFocus = (e) => {
+        const option = e.target.closest?.('[data-balance-option]');
+        if (option) setRovingOption(option.dataset.balanceOption);
+    };
 
     const handleSelect = (tok) => onSelect?.({
         chainId: tok.chainId,
@@ -324,6 +477,20 @@ export function TokenPicker({
         displayName: tok.displayName,
         imageUrl: tok.imageUrl,
     });
+    const resultsRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+    const handleSearchKeyDown = (event) => {
+        if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'Enter') return;
+        const results = Array.from(resultsRef.current?.querySelectorAll('button[aria-label^="Select "]') || []);
+        const result = event.key === 'ArrowUp' ? results.at(-1) : results[0];
+        if (!result) return;
+        event.preventDefault();
+        if (event.key === 'Enter') result.click();
+        else result.focus();
+    };
+    const clearSearch = () => {
+        setTokenQuery('');
+        searchRef.current?.focus();
+    };
 
     const headerTitle = title ?? (isReceive ? 'Receive' : 'Send');
     const headerIcon = titleIcon ?? (isReceive ? <Icon.ReceiveIcon /> : <Icon.SendIcon />);
@@ -357,22 +524,21 @@ export function TokenPicker({
     }, [balances]);
 
     const emptyTitle = partialRead
-        ? 'Balances could not be fully loaded'
+        ? 'Incomplete balance data'
         : tokenQueryTrim
             ? 'No matching balances'
             : (networkFilter === 'all'
                 ? (isReceive ? 'No balances to receive against yet' : 'Nothing to send yet')
                 : 'No balances on this network');
     const emptyBody = partialRead
-        ? 'Some of this wallet\'s token balances could not be read just now, so this list may be '
-            + 'incomplete. It is not a statement that you hold nothing. Try again in a moment.'
+        ? 'Some token balances could not be read, so this list may be incomplete.'
         : tokenQueryTrim
-        ? `Nothing matches "${tokenQuery.trim()}". Clear the filter to see everything.`
+        ? `No balances match "${tokenQuery.trim()}".`
         : (networkFilter === 'all'
             ? (isReceive
-                ? 'Pick a chain to display a fresh receive address. Tokens you have not held before can be received on whichever chain they belong to.'
-                : 'Receive coins or tokens first, then come back to send them.')
-            : undefined);
+                ? 'Choose a chain to display a fresh receive address for it.'
+                : 'Sendable coin and token balances appear here after funds are received.')
+            : 'Balances on this network appear here after this wallet receives funds.');
 
     const KIND_OPTIONS = [
         { id: 'all',    label: 'All' },
@@ -380,113 +546,136 @@ export function TokenPicker({
         { id: 'tokens', label: 'Tokens' },
     ];
 
-    const body = (
+    const toolbar = (
         <>
-            {loadError ? (
-                <StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>
-            ) : null}
-            <div className={styles.toolbar}>
-                <input
+            <div className={styles.searchField} style={{ display: 'flex', flex: '1 1 160px', minWidth: 0, gap: 'var(--xc-space-1)' }}>
+                <Input
                     ref={searchRef}
-                    type="text"
+                    type="search"
+                    enterKeyHint="search"
                     className={styles.search}
                     placeholder="Search"
                     value={tokenQuery}
                     onChange={(e) => setTokenQuery(e.target.value)}
+                    onKeyDown={handleSearchKeyDown}
                     autoComplete="off"
                     autoCorrect="off"
                     autoCapitalize="characters"
                     spellCheck={false}
                     aria-label="Search coins or tokens"
+                    aria-controls={balances !== null ? 'xc-token-picker-results' : undefined}
                 />
-                {/* A caller that pins `kindFilter` is stating a
-                    protocol constraint, not a default. Rendering the segments
-                    anyway would offer a choice the action cannot honour, and
-                    the segments would appear dead because the pinned prop wins
-                    over the local state they set. */}
-                <div
-                    className={styles.kindSegments}
-                    role="tablist"
-                    aria-label="Asset kind"
-                    hidden={kindLocked}
-                    style={kindLocked ? { display: 'none' } : undefined}
-                >
-                    {KIND_OPTIONS.map((opt) => {
-                        const active = (kindFilter || 'all') === opt.id;
-                        return (
-                            <button
-                                key={opt.id}
-                                type="button"
-                                role="tab"
-                                aria-selected={active}
-                                className={`${styles.kindSegment} ${active ? styles.kindSegmentActive : ''}`}
-                                onClick={() => setKindFilter(opt.id)}
-                            >
-                                {opt.label}
-                            </button>
-                        );
-                    })}
-                </div>
+                {tokenQuery ? (
+                    <Button type="button" size="sm" variant="ghost" icon={null} onClick={clearSearch} aria-label="Clear token search">
+                        <Icon.XIcon />
+                    </Button>
+                ) : null}
             </div>
+            <div className={styles.networkFilter}>
+                <NetworkFilter
+                    chainRegistry={chainRegistry}
+                    coinFamilies={coinFamilies}
+                    value={networkFilter}
+                    onChange={setNetworkFilter}
+                />
+            </div>
+            {/* A caller that pins `kindFilter` is stating a
+                protocol constraint, not a default. Rendering the segments
+                anyway would offer a choice the action cannot honour, and
+                the segments would appear dead because the pinned prop wins
+                over the local state they set. */}
+            <Tabs
+                items={KIND_OPTIONS}
+                value={kindFilter || 'all'}
+                onChange={setKindFilter}
+                aria-label="Asset kind"
+                hidden={kindLocked}
+                style={kindLocked
+                    ? { display: 'none' }
+                    : { flex: '0 0 auto', width: 'auto' }}
+            />
+        </>
+    );
+
+    const body = (
+        <ListPageComponent toolbar={toolbar} onKeyDown={handlePickerKeyDown} onFocus={handlePickerFocus}>
+            {loadError ? (
+                <StatusMessage
+                    variant="error"
+                    className={styles.error}
+                    recovery={{ label: 'Try again', onAction: () => setBalanceReload((value) => value + 1) }}
+                >
+                    {loadError}
+                </StatusMessage>
+            ) : null}
             {balances === null && !loadError ? (
                 <div role="status" aria-label="Loading balances">
                     <Skeleton.List rows={5} />
                 </div>
             ) : null}
             {balances ? (
-                <>
+                <div id="xc-token-picker-results" ref={resultsRef} role="group" aria-label="Coins and tokens">
                     {rows.length > 0 ? (
                         <BalanceList
-                            rows={rows}
+                            rows={renderedRows}
                             onSelectToken={handleSelect}
+                            getRowActionLabel={tokenSelectionLabel}
                             hiddenKeys={hiddenSet}
                             pinnedKeys={pinnedSet}
-                            // The held-balance list is cross-chain too
-                            // whenever the caller has not pinned a network, so
-                            // a user holding the same tick on two chains would
-                            // otherwise face the same indistinguishable rows the
-                            // platform section had. Pinned network = one chain =
-                            // naming it on every row is the noise the default
-                            // avoids.
-                            showChain={networkFilter === 'all'}
+                            onTogglePin={handleTogglePin}
+                            hideSmallBalances={settings?.privacy?.hideSmallBalances === true}
+                            smallBalanceThreshold={settings?.smallBalanceThreshold || 'dust'}
+                            allowRemoteImages={allowRemoteImages}
+                            getRowTabIndex={(row) => (
+                                `${row.chainId}:${row.tick}` === optionTabStop ? 0 : -1
+                            )}
                         />
-                    ) : (platformResults.length === 0 && !platformBusy) ? (
-                        <EmptyStateNudge
+                    ) : (platformResults.length === 0 && !platformBusy && !platformError) ? (
+                        <EmptyState
                             title={emptyTitle}
                             body={emptyBody}
+                            actionLabel={filtersActive ? 'Reset filters' : undefined}
+                            onAction={filtersActive ? resetFilters : undefined}
                         />
                     ) : null}
-                    {(platformResults.length > 0 || platformBusy) ? (
+                    {(platformResults.length > 0 || platformBusy || platformError) ? (
                         <div className={styles.platformSection}>
-                            <div className={styles.platformHeading}>On the platform</div>
+                            <SectionHeader title="On the platform" />
                             {platformBusy && platformResults.length === 0 ? (
                                 <div role="status" aria-label="Searching platform">
                                     <Skeleton.List rows={1} />
                                 </div>
                             ) : null}
+                            {platformError ? (
+                                <StatusMessage
+                                    variant="error"
+                                    className={styles.error}
+                                    recovery={{ label: 'Try again', onAction: () => setPlatformReload((value) => value + 1) }}
+                                >
+                                    {platformError}
+                                </StatusMessage>
+                            ) : null}
                             {platformResults.length > 0 ? (
                                 <BalanceList
-                                    rows={platformResults}
+                                    rows={renderedPlatformResults}
                                     onSelectToken={handleSelect}
-                                    // This section searches EVERY chain
-                                    // the wallet holds an address on, so the
-                                    // same tick legitimately appears once per
-                                    // chain. Without the chain named, those
-                                    // rows are identical, and picking one
-                                    // re-targets the calling form's network.
-                                    showChain
+                                    getRowActionLabel={tokenSelectionLabel}
+                                    allowRemoteImages={allowRemoteImages}
+                                    getRowTabIndex={(row) => (
+                                        `${row.chainId}:${row.tick}` === optionTabStop ? 0 : -1
+                                    )}
                                 />
                             ) : null}
                         </div>
                     ) : null}
-                </>
+                </div>
             ) : null}
-        </>
+        </ListPageComponent>
     );
 
     return (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{body}</div> : body}
+            {body}
         </Screen>
     );
 }

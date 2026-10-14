@@ -695,7 +695,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
             await selectVenueChain(scope, 'Network');
             await scope.getByLabel('Method', { exact: true }).fill('inc');
             // No gas-limit field: EXECUTE runs at the protocol gas ceiling.
-            await scope.getByRole('button', { name: 'Execute', exact: true }).click();
+            await scope.getByRole('button', { name: 'Call contract', exact: true }).click();
 
             const confirm = page.getByTestId('confirm-modal');
             await expect(confirm).toBeVisible({ timeout: 60_000 });
@@ -853,7 +853,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
                 'the banner counted zero sent chunks over a run whose chunk 0 is on chain and paid for')
                 .toBeGreaterThanOrEqual(1);
 
-            await main.getByRole('button', { name: 'Resume this deploy', exact: true }).click();
+            await main.getByRole('button', { name: 'Resume publishing', exact: true }).click();
 
             // The resume must restore the whole plan, not just the source.
             // The flow assembles phase 2 from the record, so a blank field here

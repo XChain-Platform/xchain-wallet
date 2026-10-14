@@ -8,9 +8,10 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
-import { Icon } from '@xchain-wallet/core/ui';
+import { Chip, Icon } from '@xchain-wallet/core/ui';
+import { useBackHandler } from '../../ui/backStack.js';
 import styles from './NetworkFilter.module.css';
 
 /**
@@ -31,29 +32,42 @@ import styles from './NetworkFilter.module.css';
  * @param {string[]} props.coinFamilies   coin families discovered in the active dataset, ordered for display
  * @param {string} props.value
  * @param {(coin: string) => void} props.onChange
+ * @param {string} [props.ariaLabel]
+ * @param {'sm' | 'md' | 'lg'} [props.size]
  */
-export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange }) {
+export function NetworkFilter({
+    chainRegistry,
+    coinFamilies,
+    value,
+    onChange,
+    ariaLabel,
+    size = 'md',
+}) {
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
+    const listboxId = useId();
     const triggerRef = useRef(null);
     const popoverRef = useRef(null);
-    // Close on outside click / Escape
+    const searchRef = useRef(null);
+    const focusOnOpenRef = useRef('selected');
+
+    const closeFilter = useCallback((restoreFocus = false) => {
+        setOpen(false);
+        setQuery('');
+        if (restoreFocus) triggerRef.current?.querySelector('button')?.focus();
+    }, []);
+    useBackHandler(open ? () => closeFilter(true) : undefined);
 
     useEffect(() => {
         if (!open) return undefined;
         const onClick = (e) => {
             if (triggerRef.current?.contains(e.target)) return;
             if (popoverRef.current?.contains(e.target)) return;
-            setOpen(false);
+            closeFilter(true);
         };
-        const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
         window.addEventListener('mousedown', onClick);
-        window.addEventListener('keydown', onKey);
-        return () => {
-            window.removeEventListener('mousedown', onClick);
-            window.removeEventListener('keydown', onKey);
-        };
-    }, [open]);
+        return () => window.removeEventListener('mousedown', onClick);
+    }, [closeFilter, open]);
 
     const entries = useMemo(() => {
         return coinFamilies.map((coin) => {
@@ -79,22 +93,80 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange }) 
     const triggerLabel = value === 'all'
         ? 'All networks'
         : (entries.find((e) => e.coin === value)?.label || value);
-    const triggerSub = value === 'all'
+    const triggerCount = value === 'all'
         ? `${entries.length} ${entries.length === 1 ? 'network' : 'networks'}`
         : null;
+    const triggerAriaLabel = ariaLabel
+        || [triggerLabel, triggerCount].filter(Boolean).join(', ');
     const triggerIconUrl = value === 'all'
         ? null
         : branding.chainIconSmallUrl(entries.find((e) => e.coin === value)?.chainId || '');
 
+    useEffect(() => {
+        if (!open) return;
+        if (focusOnOpenRef.current === 'search') {
+            searchRef.current?.focus();
+            return;
+        }
+        const options = listboxOptions(popoverRef.current);
+        const selectedOption = options.find(
+            (option) => option.getAttribute('aria-selected') === 'true',
+        );
+        const fallback = focusOnOpenRef.current === 'last' ? options.at(-1) : options[0];
+        (selectedOption || fallback)?.focus();
+    }, [open]);
+
+    const openFilter = (focus = 'selected') => {
+        focusOnOpenRef.current = focus;
+        setOpen(true);
+    };
+
+    const onPopoverKeyDown = (e) => {
+        const options = listboxOptions(popoverRef.current);
+        if (e.target === searchRef.current) {
+            if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+            e.preventDefault();
+            (e.key === 'ArrowDown' ? options[0] : options.at(-1))?.focus();
+            return;
+        }
+
+        const index = options.indexOf(document.activeElement);
+        let nextIndex = null;
+        if (e.key === 'ArrowDown') nextIndex = (index + 1) % options.length;
+        if (e.key === 'ArrowUp') nextIndex = (index - 1 + options.length) % options.length;
+        if (e.key === 'Home') nextIndex = 0;
+        if (e.key === 'End') nextIndex = options.length - 1;
+        if (nextIndex !== null && options.length > 0) {
+            e.preventDefault();
+            options[nextIndex]?.focus();
+            return;
+        }
+        if ((e.key === 'Enter' || e.key === ' ') && index >= 0) {
+            e.preventDefault();
+            options[index].click();
+        }
+        if (e.key === 'Tab') closeFilter();
+    };
+
     return (
-        <div className={styles.wrap}>
-            <button
-                type="button"
-                ref={triggerRef}
+        <div ref={triggerRef} className={`${styles.wrap} ${styles[size] || ''}`.trim()}>
+            <Chip
+                pressed={value !== 'all'}
                 className={styles.trigger}
-                onClick={() => setOpen((v) => !v)}
+                onClick={() => {
+                    if (open) closeFilter();
+                    else openFilter(entries.length > 6 ? 'search' : 'selected');
+                }}
+                onKeyDown={(e) => {
+                    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+                    e.preventDefault();
+                    openFilter(e.key === 'ArrowUp' ? 'last' : 'selected');
+                }}
                 aria-haspopup="listbox"
                 aria-expanded={open ? 'true' : 'false'}
+                aria-controls={open ? listboxId : undefined}
+                aria-label={triggerAriaLabel}
+                title={triggerLabel}
             >
                 <span className={styles.triggerIcon} aria-hidden="true">
                     {triggerIconUrl ? (
@@ -105,37 +177,46 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange }) 
                 </span>
                 <span className={styles.triggerText}>
                     <span className={styles.triggerLabel}>{triggerLabel}</span>
-                    {triggerSub ? (
-                        <span className={styles.triggerSub}>{triggerSub}</span>
-                    ) : null}
                 </span>
                 <span className={styles.triggerCaret} aria-hidden="true">
                     {open ? '▴' : '▾'}
                 </span>
-            </button>
+            </Chip>
             {open ? (
-                <div ref={popoverRef} className={styles.popover} role="listbox">
+                <div
+                    ref={popoverRef}
+                    className={styles.popover}
+                    onKeyDown={onPopoverKeyDown}
+                >
                     {entries.length > 6 ? (
                         <div className={styles.searchWrap}>
                             <Icon.SearchIcon />
                             <input
-                                type="text"
+                                ref={searchRef}
+                                type="search"
+                                enterKeyHint="search"
+                                autoCapitalize="off"
+                                autoCorrect="off"
+                                spellCheck={false}
                                 className={styles.search}
                                 placeholder="Search networks…"
+                                aria-label="Search networks"
                                 value={query}
                                 onChange={(e) => setQuery(e.target.value)}
-                                autoFocus
                             />
                         </div>
                     ) : null}
-                    <ul className={styles.list}>
-                        <li>
+                    <ul id={listboxId} className={styles.list} role="listbox" aria-label="Networks">
+                        <li role="presentation">
                             <button
                                 type="button"
                                 role="option"
+                                tabIndex={-1}
+                                aria-label="All networks"
                                 aria-selected={value === 'all' ? 'true' : 'false'}
                                 className={`${styles.item} ${value === 'all' ? styles.itemActive : ''}`}
-                                onClick={() => { onChange('all'); setOpen(false); setQuery(''); }}
+                                onClick={() => { onChange('all'); closeFilter(true); }}
+                                title="All networks"
                             >
                                 <span className={styles.itemIcon} aria-hidden="true">
                                     <Icon.FilterIcon />
@@ -144,16 +225,19 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange }) 
                                 <span className={styles.itemTicker}>{entries.length}</span>
                             </button>
                         </li>
-                        {filtered.map((e) => {
+                        {filtered.map((e, index) => {
                             const iconUrl = branding.chainIconSmallUrl(e.chainId || '');
                             return (
-                                <li key={e.coin}>
+                                <li key={`${e.coin}-${index}`} role="presentation">
                                     <button
                                         type="button"
                                         role="option"
+                                        tabIndex={-1}
+                                        aria-label={e.label}
                                         aria-selected={value === e.coin ? 'true' : 'false'}
                                         className={`${styles.item} ${value === e.coin ? styles.itemActive : ''}`}
-                                        onClick={() => { onChange(e.coin); setOpen(false); setQuery(''); }}
+                                        onClick={() => { onChange(e.coin); closeFilter(true); }}
+                                        title={e.label}
                                     >
                                         <span className={styles.itemIcon} aria-hidden="true">
                                             {iconUrl ? <img src={iconUrl} alt="" /> : null}
@@ -165,7 +249,13 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange }) 
                             );
                         })}
                         {filtered.length === 0 ? (
-                            <li className={styles.empty}>No matching networks.</li>
+                            <li
+                                className={styles.empty}
+                                role="option"
+                                aria-disabled="true"
+                            >
+                                No matching networks.
+                            </li>
                         ) : null}
                     </ul>
                 </div>
@@ -177,4 +267,8 @@ export function NetworkFilter({ chainRegistry, coinFamilies, value, onChange }) 
 function shortLabelForCoin(coin) {
     const map = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
     return map[coin] || coin.toUpperCase();
+}
+
+function listboxOptions(popover) {
+    return Array.from(popover?.querySelectorAll('[role="option"]:not([aria-disabled="true"])') || []);
 }

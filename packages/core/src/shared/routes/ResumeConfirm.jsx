@@ -30,7 +30,7 @@
 //      would have done it is not on screen.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Button, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, FormPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useConfirmAction, isConfirmOpenPhase } from '../hooks/useConfirmAction.js';
@@ -38,6 +38,14 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { isHwSource } from '../components/SignCredentials.jsx';
 import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.js';
+import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
+import { copyText } from '../clipboard.js';
+import styles from './ResumeConfirm.module.css';
+import { useWalletMode } from '../hooks/useWalletMode.js';
+import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
+import { useSettings } from '../hooks/useSettings.js';
+import { explorerPageUrl } from '../utils/explorerLinks.js';
+import { useToast } from '../components/ToastHost.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -51,6 +59,8 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const confirmAction = useConfirmAction();
+    const { isWatcherMode } = useWalletMode();
+    const { settings } = useSettings();
     const [password, setPassword] = useState('');
     // Live mirror of `password`, because `confirm()` captures onApprove ONCE
     // and the user types afterwards - a plain closure would dispatch the empty
@@ -59,7 +69,10 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
     const passwordRef = useRef('');
     const [error, setError] = useState(/** @type {string | null} */(null));
     const [result, setResult] = useState(/** @type {any} */(null));
+    const [copied, setCopied] = useState('');
+    const [copyError, setCopyError] = useState(/** @type {string | null} */(null));
     const startedRef = useRef(false);
+    const { announce } = useToast();
 
     const composed = session?.composed || {};
     const chainId = composed.chainId || session?.request?.chainId || null;
@@ -74,9 +87,24 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
     const fromAddress = session?.dispatch?.base?.from || session?.request?.from || null;
     const hw = isHwSource(fromAddress);
 
+    const copyValue = useCallback(async (label, value) => {
+        const { ok } = await copyText(value);
+        if (!ok) {
+            setCopyError('Copy failed: clipboard unavailable.');
+            return;
+        }
+        setCopyError(null);
+        setCopied(label);
+        const copiedLabel = label === 'from' ? 'From address copied.'
+            : label === 'to' ? 'To address copied.'
+            : 'Transaction ID copied.';
+        announce(copiedLabel);
+        setTimeout(() => setCopied((current) => current === label ? '' : current), 1500);
+    }, [announce]);
+
     const start = useCallback(async () => {
         try {
-            const { method, base } = flowsLib.resumeDispatch(session, { isHw: hw });
+            const { base } = flowsLib.resumeDispatch(session, { isHw: hw });
             const res = await confirmAction.confirm({
                 chainId,
                 source: base.from?.address || session?.request?.from?.address,
@@ -104,11 +132,12 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
                 // mid-resume deliberately leaves it stored - the user has not
                 // finished with it, and it is still resumable.
                 onApprove: (_creds, built) => {
+                    const approvedDispatch = flowsLib.resumeDispatch(session, { isHw: hw });
                     // The shared mapping, so a stored TAPROOT pair keeps its
                     // reveal and recovery record and is not refused unsigned.
                     const prebuiltPsbt = prebuiltPsbtFromComposed(built);
-                    return messaging[method]({
-                        ...base,
+                    return messaging[approvedDispatch.method]({
+                        ...approvedDispatch.base,
                         prebuiltPsbt,
                         ...(hw
                             ? { signerId: fromAddress?.signerId }
@@ -149,10 +178,45 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
     // opens it on mount rather than making the user press a second button to
     // reach the one they were already looking at.
     useEffect(() => {
+        if (isWatcherMode) return;
         if (startedRef.current) return;
         startedRef.current = true;
         start();
-    }, [start]);
+    }, [isWatcherMode, start]);
+
+    if (isWatcherMode) {
+        return (
+            <Screen
+                variant={variant}
+                header={(
+                    <PageHeader
+                        onBack={onCancel}
+                        backLabel="Back to home"
+                        title="Unsigned transaction"
+                    />
+                )}
+            >
+                <FormPage label="Unsigned transaction">
+                    {composed?.psbt ? (
+                        <WatcherResultPanel
+                            result={{
+                                psbtHex: String(composed.psbt),
+                                encoding: composed.encoding,
+                                chainId,
+                                fromAddress: fromAddress?.address,
+                            }}
+                            onDone={async () => {
+                                await messaging.clearConfirmSession({ id: session.id }).catch(() => {});
+                                onCancel?.();
+                            }}
+                        />
+                    ) : (
+                        <StatusMessage variant="error">The unfinished transaction has no unsigned PSBT to export.</StatusMessage>
+                    )}
+                </FormPage>
+            </Screen>
+        );
+    }
 
     if (isConfirmOpenPhase(confirmAction.phase)) {
         return (
@@ -172,17 +236,130 @@ export function ResumeConfirm({ session, onDone, onCancel }) {
         );
     }
 
+    const txid = result?.txid || result?.broadcast?.txid || '';
+    const base = session?.dispatch?.base || session?.request || {};
+    const sourceValue = base?.from?.address || base?.from || fromAddress?.address || '';
+    const destinationValue = base?.to || base?.destination || '';
+    const sourceAddress = typeof sourceValue === 'string' ? sourceValue : '';
+    const destinationAddress = typeof destinationValue === 'string' ? destinationValue : '';
+    const actionCode = composed?.action || String(composed?.actionString || '').split('|')[0];
+    const statusLabel = result?.queued
+        ? 'Signed, waiting to broadcast'
+        : txid ? 'Pending confirmation' : 'Submitted';
+    const title = result?.queued
+        ? 'Waiting to broadcast'
+        : txid ? 'Broadcast pending'
+        : result ? 'Submitted'
+        : 'Unfinished transaction';
+    const explorerUrl = explorerPageUrl({
+        chainId,
+        kind: 'transaction',
+        value: txid,
+        settings,
+    });
+
     return (
-        <Screen variant={variant} title={result ? 'Sent' : 'Unfinished transaction'}>
-            {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
-            {result ? (
-                <p data-testid="resume-confirm-sent">
-                    Sent.{result.txid || result.broadcast?.txid
-                        ? ` Transaction ${result.txid || result.broadcast?.txid}`
-                        : ''}
-                </p>
-            ) : null}
-            <Button onClick={() => (result ? onDone?.(result) : onCancel?.())}>Back</Button>
+        <Screen
+            variant={variant}
+            header={(
+                <PageHeader
+                    onBack={() => (result ? onDone?.(result) : onCancel?.())}
+                    backLabel="Back to home"
+                    title={title}
+                />
+            )}
+        >
+            <FormPage label={title}>
+                {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
+                {copyError ? <StatusMessage variant="error">{copyError}</StatusMessage> : null}
+                {result ? (
+                    <section
+                        className={styles.resultCard}
+                        data-testid="resume-confirm-sent"
+                        role="status"
+                        aria-live="polite"
+                        style={{ overflowWrap: 'anywhere' }}
+                    >
+                        <dl className={styles.details}>
+                            <div className={styles.detailRow}>
+                                <dt>Status</dt>
+                                <dd>{statusLabel}</dd>
+                            </div>
+                            {actionCode ? (
+                                <div className={styles.detailRow}>
+                                    <dt>Action</dt>
+                                    <dd>{actionDisplayLabel(actionCode)}</dd>
+                                </div>
+                            ) : null}
+                            {descriptor || chainId ? (
+                                <div className={styles.detailRow}>
+                                    <dt>Network</dt>
+                                    <dd>{descriptor?.displayName || chainId}</dd>
+                                </div>
+                            ) : null}
+                            {sourceAddress ? (
+                                <div className={styles.detailRow}>
+                                    <dt>From</dt>
+                                    <dd className={styles.copyableValue}>
+                                        <code>{sourceAddress}</code>
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            size="sm"
+                                            icon={null}
+                                            onClick={() => copyValue('from', sourceAddress)}
+                                            aria-label="Copy from address"
+                                        >
+                                            {copied === 'from' ? 'From address copied' : 'Copy'}
+                                        </Button>
+                                    </dd>
+                                </div>
+                            ) : null}
+                            {destinationAddress ? (
+                                <div className={styles.detailRow}>
+                                    <dt>To</dt>
+                                    <dd className={styles.copyableValue}>
+                                        <code>{destinationAddress}</code>
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            size="sm"
+                                            icon={null}
+                                            onClick={() => copyValue('to', destinationAddress)}
+                                            aria-label="Copy to address"
+                                        >
+                                            {copied === 'to' ? 'To address copied' : 'Copy'}
+                                        </Button>
+                                    </dd>
+                                </div>
+                            ) : null}
+                            {txid ? (
+                                <div className={styles.detailRow}>
+                                    <dt>Transaction ID</dt>
+                                    <dd className={styles.copyableValue}>
+                                        <code>{txid}</code>
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            size="sm"
+                                            icon={null}
+                                            onClick={() => copyValue('txid', txid)}
+                                            aria-label="Copy transaction ID"
+                                        >
+                                            {copied === 'txid' ? 'Transaction ID copied' : 'Copy'}
+                                        </Button>
+                                    </dd>
+                                </div>
+                            ) : null}
+                        </dl>
+                        {explorerUrl && !result?.queued ? (
+                            <a href={explorerUrl} target="_blank" rel="noopener noreferrer">
+                                View on explorer ↗
+                            </a>
+                        ) : null}
+                    </section>
+                ) : null}
+            </FormPage>
         </Screen>
     );
 }

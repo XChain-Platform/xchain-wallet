@@ -12,11 +12,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
     PageHeader,
+    FormPage,
     Button,
     Input,
     ChainBadge,
+    ChainPicker,
     AddressText,
- NetworkField,  Icon, StatusMessage, FeeSelector, AddressField,} from '@xchain-wallet/core/ui';
+    Icon,
+    StatusMessage,
+    FeeSelector,
+    AddressField,
+    FormErrorSummary,
+    Switch,
+} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -43,16 +51,42 @@ import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { TICKER_HINT, tickerGrammarError } from '../utils/tickerGrammar.js';
+import { isValidAddressForChain } from '../utils/addressValidation.js';
+import { tickLookupVerdict } from '../utils/listTickItems.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
+import { useFeeFiat } from '../hooks/useFeeFiat.js';
+import { useFormLeaveGuard } from '../hooks/useFormLeaveGuard.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { DraftDiscardButton } from '../components/DraftDiscardButton.jsx';
 import {
     compareDecimalStrings,
     subtractDecimalStrings,
 } from '../utils/amountFormat.js';
+import { t } from '../../i18n/index.js';
 
 const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
+
+function isPositiveDecimal(value) {
+    const text = String(value || '').trim();
+    return /^\d+(?:\.\d+)?$/.test(text) && compareDecimalStrings(text, '0') === 1;
+}
+
+function isNonNegativeDecimal(value) {
+    const text = String(value || '').trim();
+    return /^\d+(?:\.\d+)?$/.test(text) && compareDecimalStrings(text, '0') !== -1;
+}
+
+function hasAmountPrecision(value, decimals) {
+    const [, fraction = ''] = String(value || '').trim().split('.');
+    return fraction.length <= decimals;
+}
+
+function isValidIssueAddress(value, descriptor) {
+    return !!descriptor?.coin && !!descriptor?.networkKind
+        && isValidAddressForChain(String(value).trim(), descriptor.coin, descriptor.networkKind);
+}
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -79,7 +113,6 @@ export function IssueTokenForm({ walletId, onBack }) {
     const signerReady = useSignerReady(walletId);
     const { settings } = useSettings();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -97,6 +130,10 @@ export function IssueTokenForm({ walletId, onBack }) {
     );
 
     const [ticker, setTicker] = useState('');
+    const [tickerCheck, setTickerCheck] = useState(
+        /** @type {{ ticker: string, status: 'idle' | 'checking' | 'available' | 'taken' | 'unknown' }} */
+        ({ ticker: '', status: 'idle' }),
+    );
     const [supply, setSupply] = useState('');
     // Blank means "mint the whole supply now". Kept as its own
     // string so an explicit 0 stays distinguishable from an untouched field.
@@ -132,6 +169,7 @@ export function IssueTokenForm({ walletId, onBack }) {
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    const [validationAttempt, setValidationAttempt] = useState(0);
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
@@ -140,7 +178,9 @@ export function IssueTokenForm({ walletId, onBack }) {
         ? Number(settings.privacy.formDraftTtlMs)
         : undefined;
     const draft = useFormDraft({ view: 'issue-token', walletId, ttlMs: formDraftTtlMs });
-    const [draftPending, setDraftPending] = useState(() => draft.hasDraft());
+    // A stored draft waits for an explicit Restore. A fresh form starts
+    // saving immediately so an auto-lock unmount cannot erase typed values.
+    const [draftPending, setDraftPending] = useState(() => !draft.hasDraft());
     useEffect(() => {
         if (stage !== 'form' || !draftPending) return;
         draft.save({
@@ -171,8 +211,20 @@ export function IssueTokenForm({ walletId, onBack }) {
     }, [draft]);
     const dismissDraft = useCallback(() => {
         draft.clear();
-        setDraftPending(false);
+        setDraftPending(true);
     }, [draft]);
+    const hasRealInput = useMemo(() => (
+        [ticker, supply, initialMint, maxMint, description, transferTo, transferSupplyTo, password]
+            .some((value) => String(value || '').trim().length > 0)
+        || divisible
+        || lockSupply
+    ), [ticker, supply, initialMint, maxMint, description, transferTo, transferSupplyTo, password, divisible, lockSupply]);
+    const leaveGuard = useFormLeaveGuard({
+        dirty: stage !== 'done' && hasRealInput,
+        submitting: stage === 'submitting',
+        signedUnbroadcast: stage === 'done' && result?.queued === true && result?.unsaved === true,
+        onLeave: onBack,
+    });
 
     // The active map and the settings read are best-effort: a host without
     // `getActiveAddresses` / `getSettings`, or one whose call fails, still
@@ -236,18 +288,66 @@ export function IssueTokenForm({ walletId, onBack }) {
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
+    const { formatNativeFee, formatProtocolFee } = useFeeFiat({
+        chainId: descriptor?.id,
+        chainCoin: descriptor?.coin,
+        nativeTicker: coinTicker,
+        settings,
+    });
     const fromAddress = useMemo(() => {
         if (!chainId || !fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
     }, [chainId, fromAddressId, addressesByChain]);
 
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
+    const tickerLookupSupported = Object.prototype.hasOwnProperty.call(messaging, 'getTokenInfo')
+        && typeof messaging.getTokenInfo === 'function';
+
+    // A late response for an earlier ticker must not mark the current name as
+    // taken. Cleanup ties each debounced lookup to the exact field value and
+    // network that started it, while lookup failures leave protocol validation
+    // to composition instead of trapping the form during an explorer outage.
+    useEffect(() => {
+        const checkedTicker = ticker.trim();
+        setTickerCheck({ ticker: checkedTicker, status: checkedTicker ? 'checking' : 'idle' });
+        if (!chainId || !checkedTicker || tickerGrammarError(checkedTicker)
+            || !tickerLookupSupported) {
+            setTickerCheck({ ticker: checkedTicker, status: 'idle' });
+            return undefined;
+        }
+        let cancelled = false;
+        const timer = setTimeout(() => {
+            Promise.resolve()
+                .then(() => messaging.getTokenInfo({ chainId, tick: checkedTicker }))
+                .then((info) => {
+                    if (cancelled) return;
+                    // The host answers an unknown tick with an all-empty
+                    // record, not null, so only a found record marks it taken.
+                    const verdict = tickLookupVerdict(info);
+                    setTickerCheck({
+                        ticker: checkedTicker,
+                        status: verdict === 'found' ? 'taken'
+                            : verdict === 'missing' ? 'available' : 'unknown',
+                    });
+                })
+                .catch(() => {
+                    if (!cancelled) setTickerCheck({ ticker: checkedTicker, status: 'unknown' });
+                });
+        }, 350);
+        return () => { cancelled = true; clearTimeout(timer); };
+    }, [chainId, ticker, messaging, tickerLookupSupported]);
 
     // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
     // prices the broadcast (mirrors DispenserForm / SwapForm).
     const [feePick, setFeePick] = useState(
         /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
     );
+    // Custom rates use the selected chain's native unit. A network change
+    // returns to that network's normal tier instead of reinterpreting the old
+    // numeric rate under a different unit and showing it as a fresh preview.
+    useEffect(() => {
+        setFeePick({ mode: 'normal' });
+    }, [chainId]);
     const feeTiers = useMemo(
         () => estimateNativeSendFeeTiers({ chainId, chainRegistry }),
         [chainId],
@@ -261,6 +361,7 @@ export function IssueTokenForm({ walletId, onBack }) {
     const feeEstimate = feePick.mode === 'custom'
         ? feeCustomEstimate
         : (feeTiers ? feeTiers[feePick.mode] : estimateNativeSendFee({ chainId, chainRegistry, speed: feePick.mode }));
+    const feeFiat = feeEstimate ? formatNativeFee(feeEstimate.coinAmount) : null;
     const feePerKb = (feeEstimate && feeEstimate.unit
         && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
@@ -338,6 +439,7 @@ export function IssueTokenForm({ walletId, onBack }) {
 
     function handleReview(event) {
         event.preventDefault();
+        setValidationAttempt((attempt) => attempt + 1);
         if (!chainId || !fromAddress) {
             setFormError('Pick a source address first.');
             return;
@@ -350,8 +452,25 @@ export function IssueTokenForm({ walletId, onBack }) {
             setFormError(tickerError);
             return;
         }
-        if (!supply.trim() || Number(supply) <= 0) {
+        const checkedTicker = ticker.trim();
+        if (tickerLookupSupported
+            && (tickerCheck.ticker !== checkedTicker || tickerCheck.status === 'checking')) {
+            setFormError('Wait for the ticker availability check to finish.');
+            return;
+        }
+        if (tickerCheck.ticker === checkedTicker && tickerCheck.status === 'taken') {
+            setFormError(t('issue.tickerTaken', { ticker: checkedTicker }));
+            return;
+        }
+        if (!isPositiveDecimal(supply)) {
             setFormError('Supply must be a positive number.');
+            return;
+        }
+        const amountDecimals = divisible ? 8 : 0;
+        if (!hasAmountPrecision(supply, amountDecimals)) {
+            setFormError(divisible
+                ? 'Supply can have at most 8 decimal places.'
+                : 'Supply must be a whole number for an indivisible token.');
             return;
         }
         // An initial mint above the cap is rejected outright by the
@@ -359,9 +478,14 @@ export function IssueTokenForm({ walletId, onBack }) {
         // it is caught here rather than at broadcast.
         const mintText = initialMint.trim();
         if (mintText) {
-            const mintNum = Number(mintText);
-            if (!Number.isFinite(mintNum) || mintNum < 0) {
+            if (!isNonNegativeDecimal(mintText)) {
                 setFormError('Initial mint must be zero or a positive number.');
+                return;
+            }
+            if (!hasAmountPrecision(mintText, amountDecimals)) {
+                setFormError(divisible
+                    ? 'Initial mint can have at most 8 decimal places.'
+                    : 'Initial mint must be a whole number for an indivisible token.');
                 return;
             }
             if (compareDecimalStrings(mintText, supply.trim()) === 1) {
@@ -370,7 +494,7 @@ export function IssueTokenForm({ walletId, onBack }) {
             }
             // Minting nothing on a token that can never mint leaves a token
             // with no supply and no way to ever create any.
-            if (mintNum === 0 && lockSupply) {
+            if (compareDecimalStrings(mintText, '0') === 0 && lockSupply) {
                 setFormError(
                     'An initial mint of 0 needs minting left unlocked, or the token can never have any supply.',
                 );
@@ -379,11 +503,24 @@ export function IssueTokenForm({ walletId, onBack }) {
         }
         const maxMintText = maxMint.trim();
         if (maxMintText) {
-            const maxMintNum = Number(maxMintText);
-            if (!Number.isFinite(maxMintNum) || maxMintNum <= 0) {
+            if (!isPositiveDecimal(maxMintText)) {
                 setFormError('Max mint per transaction must be a positive number, or left blank for no limit.');
                 return;
             }
+            if (!hasAmountPrecision(maxMintText, amountDecimals)) {
+                setFormError(divisible
+                    ? 'Max mint per transaction can have at most 8 decimal places.'
+                    : 'Max mint per transaction must be a whole number for an indivisible token.');
+                return;
+            }
+        }
+        if (transferTo.trim() && !isValidIssueAddress(transferTo, descriptor)) {
+            setFormError('Transfer ownership address is not valid for the active chain.');
+            return;
+        }
+        if (transferSupplyTo.trim() && !isValidIssueAddress(transferSupplyTo, descriptor)) {
+            setFormError('Initial mint destination is not valid for the active chain.');
+            return;
         }
         // A supply destination with no initial mint would be silently dropped
         // by the chain; say so instead of composing a transaction that does
@@ -550,15 +687,16 @@ export function IssueTokenForm({ walletId, onBack }) {
     }
         const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={leaveGuard.guardedOnBack}
             title={stage === 'review' || stage === 'submitting'
-                    ? 'Review issue'
-                    : `Issue token`}
+                    ? t('issue.reviewTitle')
+                    : t('issue.title')}
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>
+            {children}
+            {leaveGuard.confirmation}
         </Screen>
     );
 
@@ -566,7 +704,7 @@ export function IssueTokenForm({ walletId, onBack }) {
         return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
     }
     if (!addressesByChain || !chainId) {
-        return wrap(<p className={styles.hint}>Loading…</p>);
+        return wrap(<p className={styles.hint}>{t('common.loading')}</p>);
     }
 
     if (stage === 'done') {
@@ -576,44 +714,79 @@ export function IssueTokenForm({ walletId, onBack }) {
                 <WatcherResultPanel
                     result={result}
                     onBuildAnother={handleBuildAnother}
-                    onDone={onBack}
+                    onDone={leaveGuard.guardedOnBack}
                 />,
             );
         }
         // Signed but not broadcast, so the token does not exist yet.
         if (result?.queued) {
             return wrap(
-                <QueuedResultPanel onDone={onBack} what="issuance" unsaved={result.unsaved} />,
+                <QueuedResultPanel onDone={leaveGuard.guardedOnBack} what={t('issue.issuance')} unsaved={result.unsaved} />,
             );
         }
         return wrap(
             <>
-                <h2 className={styles.successTitle}>Token issued</h2>
+                <h2 className={styles.successTitle}>{t('issue.success')}</h2>
                 {txid ? (
                     <>
-                        <p className={styles.successLabel}>Transaction ID</p>
+                        <p className={styles.successLabel}>{t('send.txid')}</p>
                         <code className={styles.txid}>{txid}</code>
                     </>
                 ) : (
-                    <p className={styles.hint}>Broadcast complete.</p>
+                    <p className={styles.hint}>{t('issue.broadcastComplete')}</p>
                 )}
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Done</Button>
+                    <Button variant="primary" onClick={leaveGuard.guardedOnBack}>{t('common.done')}</Button>
                 </div>
             </>,
         );
     }
 
     if (stage === 'review' || stage === 'submitting') {
+        // Cluster P FOLLOWUP 4: hardware and watcher failures offer Edit
+        // because changing form inputs is the recovery path.
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
+            <FormPage
+                label={t('issue.reviewTokenIssue')}
+                onSubmit={handleSubmit}
+                status={(isWatcherMode || isHwSource) && submitError ? (
+                    <StatusMessage
+                        variant="error"
+                        recovery={{ label: t('common.edit'), onAction: () => { setSubmitError(null); setStage('form'); } }}
+                    >
+                        {submitError}
+                    </StatusMessage>
+                ) : null}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={stage === 'submitting'}
+                        disabled={
+                            isWatcherMode
+                                ? false
+                                : isHwSource
+                                    ? hwStatus !== 'available'
+                                    : (!signerReady && password.length === 0)
+                        }
+                    >
+                        {isWatcherMode
+                            ? t('send.review.createUnsigned')
+                            : isHwSource
+                                ? t('send.review.signOn', { device: fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger' })
+                                : t('send.review.sign')}
+                    </Button>
+                )}
+            >
                 <p className={styles.summary}>{decoded?.summary}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
-                    <dt className={styles.detailsLabel}>From</dt>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>{t('send.fields.chain')}</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
+                    <dt className={styles.detailsLabel}>{t('send.fields.from')}</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
                     </dd>
@@ -621,10 +794,11 @@ export function IssueTokenForm({ walletId, onBack }) {
                         <DetailRow key={d.label} label={d.label} value={d.value} />
                     ))}
                     <DetailRow
-                        label="Network fee"
+                        label={t('send.networkFee')}
                         value={feeEstimate
                             ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
-                            : 'Estimate unavailable'}
+                                + (feeFiat ? ` (${feeFiat})` : '')
+                            : 'Fee estimate unavailable for this chain.'}
                     />
                 </dl>
                 {payFeeInNativeCoin ? (
@@ -641,9 +815,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                 ) : null}
                 {isWatcherMode ? (
                     <p className={styles.hint}>
-                        Watcher mode: this wallet will build an unsigned transaction.
-                        Sign it on your Signer-mode wallet, then bring the
-                        signed transaction to a Full-mode wallet to broadcast.
+                        {t('common.watcherBuildsUnsigned')}
                     </p>
                 ) : (
                     <SignCredentials
@@ -662,46 +834,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 )}
-                {(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage
-                        variant="error"
-                        recovery={
-                            // Cluster P FOLLOWUP 4: the post-submit
-                            // error class is "encoder rejected /
-                            // network unreachable / device unplugged".
-                            // Returning to the form stage lets the
-                            // user adjust an input or re-stage the HW
-                            // device without retyping the password.
-                            // Wrong-password isn't reachable on this
-                            // branch (no password input in HW /
-                            // watcher modes).
-                            { label: 'Edit', onAction: () => { setSubmitError(null); setStage('form'); } }
-                        }
-                    >
-                        {submitError}
-                    </StatusMessage>
-                ) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={
-                            isWatcherMode
-                                ? false
-                                : isHwSource
-                                    ? hwStatus !== 'available'
-                                    : (!signerReady && password.length === 0)
-                        }
-                    >
-                        {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : (descriptor ? `Sign on ${descriptor.displayName}` : 'Sign')}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -712,13 +845,19 @@ export function IssueTokenForm({ walletId, onBack }) {
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
                 feeText={feeEstimate?.coinAmount
-                    ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
-                    : undefined}
+                    ? t('send.networkFeeValue', {
+                        amount: feeEstimate.coinAmount,
+                        ticker: coinTicker,
+                    }).trim()
+                        + (feeFiat ? ` (${feeFiat})` : '')
+                    : t('common.networkFeeUnavailable')}
                 signerReady={signerReady}
                 password={password}
                 onPasswordChange={setPassword}
+                formatNativeFee={formatNativeFee}
+                formatProtocolFee={formatProtocolFee}
                 hintClassName={styles.hint}
                 // Hardware swaps the password field for the device block
                 // and gates Approve on the device being available (§5.1).
@@ -735,7 +874,7 @@ export function IssueTokenForm({ walletId, onBack }) {
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title={t('send.fromAddress')}
                 walletId={walletId}
                 chainId={chainId}
                 onPick={(a) => {
@@ -765,52 +904,70 @@ export function IssueTokenForm({ walletId, onBack }) {
     const draftBanner = draft.hasDraft() && !draftPending ? (
         <StatusMessage
             variant="status"
-            recovery={{ label: 'Restore', onAction: restoreDraft }}
+            recovery={{ label: t('send.draft.restore'), onAction: restoreDraft }}
         >
-            You have an unfinished issue draft.
-            <button
-                type="button"
-                onClick={dismissDraft}
-                aria-label="Discard saved draft"
-                style={{
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'inherit',
-                    textDecoration: 'underline',
-                    cursor: 'pointer',
-                    padding: 0,
-                    marginInlineStart: 'var(--xc-space-2)',
-                    fontSize: 'var(--xc-text-xs)',
-                }}
-            >
-                Discard
-            </button>
+            {t('issue.draft.unfinished')}
+            <DraftDiscardButton onClick={dismissDraft} label={t('send.draft.discardLabel')}>
+                {t('send.draft.discard')}
+            </DraftDiscardButton>
         </StatusMessage>
     ) : null;
 
+    let issueErrorTarget;
+    if (/ticker/i.test(formError || '')) issueErrorTarget = { id: 'issue-ticker', label: 'Ticker' };
+    else if (/^Supply /i.test(formError || '')) issueErrorTarget = { id: 'issue-supply', label: 'Supply' };
+    else if (/initial mint/i.test(formError || '') && !/destination|Sending the initial mint/i.test(formError || '')) {
+        issueErrorTarget = { id: 'issue-initial-mint', label: 'Initial mint' };
+    } else if (/Max mint/i.test(formError || '')) {
+        issueErrorTarget = { id: 'issue-max-mint', label: 'Max mint per transaction' };
+    } else if (/Transfer ownership/i.test(formError || '')) {
+        issueErrorTarget = { id: 'issue-transfer-owner', label: 'Transfer ownership to' };
+    } else if (/Initial mint destination|Sending the initial mint/i.test(formError || '')) {
+        issueErrorTarget = { id: 'issue-transfer-supply', label: 'Send the initial mint to' };
+    }
+    const issueErrors = formError
+        ? [{ ...issueErrorTarget, message: formError }]
+        : [];
+
     return wrap(
-        <form onSubmit={handleReview} noValidate>
+        <FormPage
+            label={t('issue.title')}
+            onSubmit={handleReview}
+            onChangeCapture={() => { if (formError) setFormError(null); }}
+            status={<FormErrorSummary errors={issueErrors} focusKey={validationAttempt} />}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={actionConfirm.composing}
+                    disabled={!fromAddress || !ticker || !supply || actionConfirm.composing}
+                >
+                    {singleEncode ? t('issue.title') : t('common.preview')}
+                </Button>
+            )}
+        >
             {draftBanner}
-            <NetworkField value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
+            <ChainPicker label={t('settings.network.label')} value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
 
             {fromAddress ? (
                 <AddressField
-                    label="From"
+                    label={t('send.fields.from')}
                     icon="addresses"
                     value={fromAddress.address}
                     readOnly
                     onChange={() => {}}
                     onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel="Choose source address"
+                    iconLabel={t('send.source.choose')}
                 />
             ) : (
                 <StatusMessage variant="error" className={styles.error}>
-                    No address on this chain. Use Receive to generate one first.
+                    {t('send.source.noAddress')}
                 </StatusMessage>
             )}
 
             <Input
-                label="Ticker"
+                id="issue-ticker"
+                label={t('issue.ticker')}
                 hint={TICKER_HINT}
                 value={ticker}
                 onChange={(e) => setTicker(e.target.value)}
@@ -818,63 +975,63 @@ export function IssueTokenForm({ walletId, onBack }) {
                 autoComplete="off"
                 autoCorrect="off"
                 spellCheck={false}
+                error={tickerCheck.ticker === ticker.trim() && tickerCheck.status === 'taken'
+                    ? t('issue.tickerTaken', { ticker: ticker.trim() })
+                    : undefined}
             />
             <Input
-                label="Supply"
-                hint="The most that can ever exist."
+                id="issue-supply"
+                label={t('issue.supply')}
+                hint={t('issue.supplyHint')}
                 inputMode="decimal"
                 value={supply}
                 onChange={(e) => setSupply(e.target.value)}
                 autoComplete="off"
             />
             <Input
-                label="Initial mint (optional)"
+                id="issue-initial-mint"
+                label={t('issue.initialMintOptional')}
                 hint={mintHeadroom
-                    ? `Leaves ${mintHeadroom} to mint later.`
-                    : 'How much exists at creation. Leave blank to mint the whole supply now; a smaller number leaves the rest to mint later.'}
+                    ? t('issue.initialMintHeadroom', { amount: mintHeadroom })
+                    : t('issue.initialMintHint')}
                 inputMode="decimal"
                 value={initialMint}
                 onChange={(e) => setInitialMint(e.target.value)}
                 autoComplete="off"
             />
             <Input
-                label="Max mint per transaction (optional)"
-                hint="Caps how much can be minted in one transaction. Leave blank for no limit."
+                id="issue-max-mint"
+                label={t('issue.maxMintOptional')}
+                hint={t('issue.maxMintHint')}
                 inputMode="decimal"
                 value={maxMint}
                 onChange={(e) => setMaxMint(e.target.value)}
                 autoComplete="off"
             />
-            <label className={styles.checkRow}>
-                <input
-                    type="checkbox"
-                    checked={divisible}
-                    onChange={(e) => setDivisible(e.target.checked)}
-                />
-                <span>Divisible (8 decimal places)</span>
-            </label>
+            <Switch
+                label={t('issue.divisible')}
+                checked={divisible}
+                onChange={(e) => setDivisible(e.target.checked)}
+            />
             <Input
-                label="Description (optional)"
-                hint="Up to 250 characters. Stored on-chain."
+                label={t('issue.descriptionOptional')}
+                hint={t('issue.descriptionHint')}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 autoComplete="off"
                 maxLength={250}
             />
-            <label className={styles.checkRow}>
-                <input
-                    type="checkbox"
-                    checked={lockSupply}
-                    onChange={(e) => setLockSupply(e.target.checked)}
-                />
-                <span>Lock supply + minting (irreversible)</span>
-            </label>
+            <Switch
+                label={t('issue.lockSupply')}
+                checked={lockSupply}
+                onChange={(e) => setLockSupply(e.target.checked)}
+            />
             {lockSupply && mintHeadroom ? (
                 // Locking minting alongside a partial initial mint strands the
                 // remainder forever: the cap says one thing, the token can only
                 // ever hold another. Say so before the fee is spent.
                 <StatusMessage variant="status">
-                    {`Locking minting means the ${mintHeadroom} left under the cap can never be minted. Clear this box to mint it later.`}
+                    {t('issue.lockSupplyWarning', { amount: mintHeadroom })}
                 </StatusMessage>
             ) : null}
             {/* Bridgeability, the ISSUE format 7 fields (xchain-token-bridge.md
@@ -887,45 +1044,41 @@ export function IssueTokenForm({ walletId, onBack }) {
                 for good in milestone 1. */}
             <div className={styles.warnings}>
                 <p className={styles.hint}>
-                    Bridging is off. After the token exists you can open it to
-                    other chains from Manage Token, set how deep a lock must be
-                    buried before validators sign it, and freeze both settings for
-                    your holders.
+                    {t('issue.bridgingHint')}
                 </p>
                 <p className={styles.hint}>
-                    One thing to decide now: a token bound to an address allow-list
-                    or block-list cannot be bridged, and a bound list can never be
-                    cleared. If you may want this token on other chains, do not bind
-                    a list to it.
+                    {t('issue.boundListHint')}
                 </p>
             </div>
             <AddressField
-                label="Transfer ownership to (optional)"
+                id="issue-transfer-owner"
+                label={t('issue.transferOwnershipOptional')}
                 icon="contacts"
-                hint="Leave blank to keep control. This hands over the right to manage the token; the minted tokens stay with the issuing address unless you also send them below."
+                hint={t('issue.transferOwnershipHint')}
                 value={transferTo}
                 onChange={(e) => setTransferTo(e.target.value)}
                 onIconClick={() => { setContactsTarget('owner'); setContactsPickerOpen(true); }}
             />
             <AddressField
-                label="Send the initial mint to (optional)"
+                id="issue-transfer-supply"
+                label={t('issue.sendInitialMintOptional')}
                 icon="contacts"
-                hint="Leave blank to keep the minted tokens at the issuing address."
+                hint={t('issue.sendInitialMintHint')}
                 value={transferSupplyTo}
                 onChange={(e) => setTransferSupplyTo(e.target.value)}
                 onIconClick={() => { setContactsTarget('supply'); setContactsPickerOpen(true); }}
             />
 
-            {feeTiers ? (
-                <FeeSelector
-                    label="Network fee"
-                    coinTicker={coinTicker}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                />
-            ) : null}
+            <FeeSelector
+                key={chainId}
+                label={t('send.networkFee')}
+                coinTicker={coinTicker}
+                formatFiat={formatNativeFee}
+                tiers={feeTiers}
+                value={feePick}
+                onChange={setFeePick}
+                customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+            />
 
             <NativeFeeToggle
                 checked={payFeeInNativeCoin}
@@ -933,28 +1086,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                 coinTicker={coinTicker}
                 mandatory={nativeFeeMandatory}
             />
-            {formError ? (
-                // Cluster P FOLLOWUP 4: formError surfaces field-level
-                // validation ("Ticker is required", "Supply must be a
-                // positive number", "Pick a source address first").
-                // No one-click recovery affordance fits here; the user
-                // edits the offending field and re-submits. Auditable
-                // per-form decision: terminal-as-rendered, recovery is
-                // user-iteration via the Inputs above.
-                <StatusMessage variant="error">{formError}</StatusMessage>
-            ) : null}
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    block
-                    loading={actionConfirm.composing}
-                    disabled={!fromAddress || !ticker || !supply || actionConfirm.composing}
-                >
-                    {singleEncode ? 'Issue token' : 'Preview'}
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }
 

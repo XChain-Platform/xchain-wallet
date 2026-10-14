@@ -171,12 +171,14 @@ describe('the DEX route components', () => {
         const specifiers = importSpecifiers(dexCode());
         expect(specifiers.length).toBeGreaterThan(0);
         const listed = [...SURFACE_MODULES.dex, ...DEX_SHARED_IMPORTS];
-        const unlisted = specifiers.filter((s) => !listed.some((m) => s.endsWith(`/${m}`)));
+        const unlisted = specifiers.filter(
+            (s) => !listed.some((m) => s === m || s.endsWith(`/${m}`)),
+        );
         expect(unlisted, 'add each to SURFACE_MODULES.dex in surfaces/registry.js').toEqual([]);
 
         // And the allowlist may neither rot nor overlap the registry.
         for (const shared of DEX_SHARED_IMPORTS) {
-            expect(specifiers.some((s) => s.endsWith(`/${shared}`))).toBe(true);
+            expect(specifiers.some((s) => s === shared || s.endsWith(`/${shared}`))).toBe(true);
             expect(SURFACE_MODULES.dex).not.toContain(shared);
         }
     });
@@ -197,9 +199,9 @@ describe('the DEX views', () => {
     });
 });
 
-// Shared components the surface merely USES, which registry.js deliberately
-// leaves out of SURFACE_MODULES (ReceivePicker also serves `receive-picker`).
-const DEX_SHARED_IMPORTS = ['shared/routes/ReceivePicker.jsx'];
+// Imports the surface merely USES, which registry.js deliberately leaves out
+// of SURFACE_MODULES (ReceivePicker also serves `receive-picker`).
+const DEX_SHARED_IMPORTS = ['react', 'shared/routes/ReceivePicker.jsx'];
 
 /** dex.jsx with comments stripped, so prose naming a view or module is not counted. */
 function dexCode() {

@@ -191,6 +191,29 @@ describe('flows/unlockWallet with a stored 25th-word passphrase', () => {
         signer.lock();
     });
 
+    it('copies a supplied master key and leaves ownership with its caller', async () => {
+        const plain = await makeRecord({ passphrase: null, name: 'Everyday' });
+        const callerKey = deriveMasterKey(PASSWORD, plain.kdfParams);
+        const expected = new Uint8Array(callerKey);
+        const signer = await unlockWalletRecord({
+            wallet: plain,
+            password: PASSWORD,
+            masterKey: callerKey,
+            ...REG,
+        });
+        const signerKey = signer.getMasterKey();
+
+        expect(callerKey).toEqual(expected);
+        expect(signerKey).toEqual(expected);
+        expect(signerKey).not.toBe(callerKey);
+
+        signer.lock();
+        expect(signerKey.every((byte) => byte === 0)).toBe(true);
+        expect(callerKey).toEqual(expected);
+        callerKey.fill(0);
+        expected.fill(0);
+    });
+
     it('fails loudly when the stored blob was not sealed under this wallet', async () => {
         const stored = await makeRecord({ passphrase: PASSPHRASE, stored: true });
         // Same shape, a different wallet's key: a mixed-up or tampered record

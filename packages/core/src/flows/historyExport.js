@@ -14,7 +14,8 @@
 // export taken multiple times in one day stays sorted by chain scope.
 //
 // CSV is RFC-4180: fields with commas / quotes / newlines get wrapped
-// in double quotes and inner double quotes are doubled.
+// in double quotes and inner double quotes are doubled. Formula-like
+// values receive a leading apostrophe so spreadsheets import them as text.
 //
 // Cluster I FOLLOWUP 5 (v0.288.0): both converters now accept an
 // optional `columns` parameter that filters which fields land in the
@@ -32,7 +33,32 @@ export const EXPORT_COLUMNS = /** @type {const} */ ([
     'timestamp',
     'iso',
     'source',
+    'tick',
+    'amount',
+    'memo',
+    'fiatCurrency',
 ]);
+
+/**
+ * Human-readable names and meanings for every selectable export field.
+ * The keys remain stable for JSON consumers while CSV and the export dialog
+ * can explain fields whose storage names are terse.
+ */
+export const EXPORT_COLUMN_DETAILS = Object.freeze({
+    chainId: Object.freeze({ label: 'Chain', description: 'Chain and network identifier.' }),
+    address: Object.freeze({ label: 'Wallet address', description: 'Wallet address associated with the history row.' }),
+    action: Object.freeze({ label: 'Action', description: 'Transaction action type.' }),
+    actionIndex: Object.freeze({ label: 'Action index', description: 'Chain action index.' }),
+    txHash: Object.freeze({ label: 'Transaction hash', description: 'Transaction identifier.' }),
+    blockIndex: Object.freeze({ label: 'Block index', description: 'Confirmed block height, or zero while pending.' }),
+    timestamp: Object.freeze({ label: 'Unix timestamp', description: 'Source timestamp in seconds or milliseconds.' }),
+    iso: Object.freeze({ label: 'Date (ISO 8601 UTC)', description: 'Timestamp normalized to ISO 8601 with a UTC zone.' }),
+    source: Object.freeze({ label: 'Source', description: 'Sending address reported by the action.' }),
+    tick: Object.freeze({ label: 'Asset', description: 'Native coin or token ticker for the amount.' }),
+    amount: Object.freeze({ label: 'Amount', description: 'Exact source decimal text with no floating-point conversion.' }),
+    memo: Object.freeze({ label: 'Memo', description: 'Action memo, when present.' }),
+    fiatCurrency: Object.freeze({ label: 'Fiat currency', description: 'Selected three-letter fiat currency code.' }),
+});
 
 const COLUMN_SET = new Set(EXPORT_COLUMNS);
 
@@ -55,26 +81,59 @@ function timestampToSeconds(timestamp) {
     return value >= 1e12 ? value / 1000 : value;
 }
 
-function valueFor(entry, column) {
+function rawValue(entry, ...keys) {
+    const raw = entry?.raw || {};
+    for (const key of keys) {
+        const value = entry?.[key] ?? raw?.[key];
+        if (value !== null && value !== undefined) return value;
+    }
+    return '';
+}
+
+function valueFor(entry, column, { fiatCurrency }) {
     if (column === 'iso') {
         const timestamp = timestampToSeconds(entry?.timestamp);
         return timestamp !== null
             ? new Date(timestamp * 1000).toISOString()
             : '';
     }
+    if (column === 'memo') {
+        return rawValue(entry, 'memo', 'MEMO');
+    }
+    if (column === 'tick') return rawValue(entry, 'tick', 'TICK', 'token');
+    // String conversion performs no arithmetic, so source decimal strings
+    // remain exact instead of passing through IEEE-754 operations.
+    if (column === 'amount') {
+        const value = rawValue(entry, 'amount', 'AMOUNT', 'quantity', 'QUANTITY');
+        return value === '' ? '' : String(value);
+    }
+    if (column === 'fiatCurrency') return fiatCurrency;
     return entry?.[column];
+}
+
+function headerFor(column, fiatCurrency) {
+    const label = EXPORT_COLUMN_DETAILS[column]?.label || column;
+    return column === 'fiatCurrency' ? `${label} (${fiatCurrency})` : label;
+}
+
+function columnHeaders(columns, fiatCurrency) {
+    return Object.fromEntries(columns.map((column) => [column, headerFor(column, fiatCurrency)]));
 }
 
 /**
  * @param {Array<{ chainId: string, address: string, action: string, actionIndex: string, txHash: string, blockIndex: number, timestamp: number, source: string, raw?: object, link?: object | null }>} entries
- * @param {{ columns?: string[] }} [opts]       optional column filter; defaults to every EXPORT_COLUMNS field
+ * @param {{ columns?: string[], fiatCurrency?: string }} [opts] optional column filter and selected fiat code
  * @returns {string}                            RFC-4180 CSV text
  */
 export function entriesToCsv(entries, opts = {}) {
     const cols = pickColumns(opts.columns);
-    const lines = [cols.join(',')];
+    const fiatCurrency = normalizeFiatCurrency(opts.fiatCurrency);
+    const lines = [cols.map((column) => csvField(headerFor(column, fiatCurrency))).join(',')];
     for (const e of entries || []) {
-        const row = cols.map((c) => valueFor(e, c)).map(csvField).join(',');
+        const row = cols
+            .map((c) => valueFor(e, c, { fiatCurrency }))
+            .map(csvField)
+            .join(',');
         lines.push(row);
     }
     return lines.join('\n') + '\n';
@@ -88,22 +147,19 @@ export function entriesToCsv(entries, opts = {}) {
 export function entriesToJson(entries, meta) {
     const { columns: requestedColumns, ...metaRest } = meta || {};
     const cols = pickColumns(requestedColumns);
+    const fiatCurrency = normalizeFiatCurrency(metaRest.fiatCurrency);
     const payload = {
         format: 'xchain-wallet-history-export@1',
         exportedAt: new Date().toISOString(),
         ...metaRest,
+        fiatCurrency,
         columns: cols,
+        columnHeaders: columnHeaders(cols, fiatCurrency),
         entries: (entries || []).map((e) => {
             const row = {};
             for (const c of cols) {
-                if (c === 'iso') {
-                    const timestamp = timestampToSeconds(e?.timestamp);
-                    row.iso = timestamp !== null
-                        ? new Date(timestamp * 1000).toISOString()
-                        : null;
-                } else {
-                    row[c] = e?.[c];
-                }
+                const value = valueFor(e, c, { fiatCurrency });
+                row[c] = c === 'iso' && value === '' ? null : value;
             }
             // Preserve link + raw outside the column-set so JSON exports
             // stay decodable end-to-end (CSV intentionally drops them).
@@ -113,6 +169,11 @@ export function entriesToJson(entries, meta) {
         }),
     };
     return JSON.stringify(payload, null, 2);
+}
+
+function normalizeFiatCurrency(value) {
+    const code = String(value || 'USD').trim().toUpperCase();
+    return /^[A-Z]{3}$/.test(code) ? code : 'USD';
 }
 
 /**
@@ -151,7 +212,8 @@ export function buildExportFilename({ scope = 'all', format, date }) {
 
 function csvField(v) {
     if (v === null || v === undefined) return '';
-    const s = String(v);
+    const text = String(v);
+    const s = /^[=+\-@]/.test(text) ? `'${text}` : text;
     if (/[",\n\r]/.test(s)) {
         return `"${s.replace(/"/g, '""')}"`;
     }

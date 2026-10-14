@@ -31,7 +31,7 @@ export const REDUCED_MOTION_ATTR = 'data-xc-reduced-motion';
 const MEDIA_QUERY = '(prefers-reduced-motion: reduce)';
 
 /** The OS preference alone, with no user override applied. */
-export function osPrefersReducedMotion() {
+function osPrefersReducedMotion() {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
     try {
         return window.matchMedia(MEDIA_QUERY).matches;
@@ -68,7 +68,7 @@ export function resolveReducedMotion() {
  * @param {(reduced: boolean) => void} onChange
  * @returns {() => void} unsubscribe
  */
-export function subscribeReducedMotion(onChange) {
+function subscribeReducedMotion(onChange) {
     const notify = () => onChange(resolveReducedMotion());
     /** @type {Array<() => void>} */
     const teardown = [];

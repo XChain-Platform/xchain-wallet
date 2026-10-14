@@ -378,16 +378,18 @@ assert.equal(
 
 // Hub: HTTP 200 with a snapshot the wallet itself would refuse. The wallet
 // pins the federation key, so an unsigned or mis-signed registry is a dead
-// demo even though the host is plainly up.
+// demo even though the host is plainly up. The bodies carry the schema
+// version the hub serves, so each is refused for the reason under test.
 const unsigned = classifyProbe(hubProbe, {
     status: 200,
-    body: JSON.stringify({ generatedAt: '2026-08-02T00:00:00.000Z', descriptors: [{ coin: 'bitcoin' }] }),
+    body: JSON.stringify({ schema_version: 1, generatedAt: '2026-08-02T00:00:00.000Z', descriptors: [{ coin: 'bitcoin' }] }),
 });
 assert.equal(unsigned.state, 'failure', 'an unsigned chain-registry is refused by the wallet, so it fails here too');
 assert.match(unsigned.detail, /signature/);
 const wrongSigner = classifyProbe(hubProbe, {
     status: 200,
     body: JSON.stringify({
+        schema_version: 1,
         generatedAt: '2026-08-02T00:00:00.000Z',
         descriptors: [{ coin: 'bitcoin' }],
         signature: 'a'.repeat(128),

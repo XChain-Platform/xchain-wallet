@@ -83,7 +83,7 @@ const WRONG_PASSWORD = 'regtestpassword124';
 /** The four affordances the sub-page is supposed to offer, row -> action. */
 const OFFERED = [
     ['Export encrypted backup', 'Export…'],
-    ['Back up seed phrase', 'Show…'],
+    ['Back up recovery phrase', 'Show…'],
     ['Test backup (dry-run restore)', 'Test…'],
     ['Publish labels on-chain', 'Publish now…'],
 ];
@@ -116,7 +116,7 @@ async function phraseInPage(page, phrase) {
 
 /** The tap-to-reveal control, which holds the phrase as its own text. */
 function seedToggle(page) {
-    return page.getByRole('button', { name: /^(Reveal|Hide) seed phrase$/ });
+    return page.getByRole('button', { name: /^(Reveal|Hide) recovery phrase$/ });
 }
 
 test.describe('Settings: backup sub-page', () => {
@@ -189,11 +189,11 @@ test.describe('Settings: backup sub-page', () => {
                 // here on purpose.
                 await expect(
                     page.getByRole('main').getByRole('button', { name: 'Reveal', exact: true })
-                        .or(page.getByText('Your seed phrase', { exact: true })).first(),
+                        .or(page.getByText('Your recovery phrase', { exact: true })).first(),
                     'the reveal attempt never came back from its busy state')
                     .toBeVisible({ timeout: 120_000 });
 
-                await expect(page.getByText('Your seed phrase', { exact: true }),
+                await expect(page.getByText('Your recovery phrase', { exact: true }),
                     'a WRONG wallet password opened the seed-phrase panel')
                     .toHaveCount(0);
                 expect(await phraseInPage(page, phrase),
@@ -209,7 +209,7 @@ test.describe('Settings: backup sub-page', () => {
                 await page.getByLabel('Wallet password').fill(PASSWORD);
                 await page.getByRole('main').getByRole('button', { name: 'Reveal', exact: true }).click();
 
-                await expect(page.getByText('Your seed phrase', { exact: true }),
+                await expect(page.getByText('Your recovery phrase', { exact: true }),
                     'the wallet\'s OWN password did not open the seed-phrase panel, so either the row '
                     + 'is broken or the refusal above proved nothing')
                     .toBeVisible({ timeout: 120_000 });
@@ -249,7 +249,7 @@ test.describe('Settings: backup sub-page', () => {
                 // so a single read taken the instant after the click samples it
                 // mid-flight - `blur(4px)` is neither verdict. Poll for the
                 // settled value instead of racing the animation.
-                await expect(page.getByRole('button', { name: 'Hide seed phrase' }),
+                await expect(page.getByRole('button', { name: 'Hide recovery phrase' }),
                     'tapping the phrase did not flip the tap-to-reveal control into its shown state')
                     .toBeVisible({ timeout: 30_000 });
                 await expect.poll(
@@ -292,7 +292,7 @@ test.describe('Settings: backup sub-page', () => {
                     'the seed-phrase row stopped asking for the password after it had been given once, '
                     + 'so the "requires the wallet password every time" promise on this row is false')
                     .toBeVisible({ timeout: 30_000 });
-                await expect(page.getByText('Your seed phrase', { exact: true }),
+                await expect(page.getByText('Your recovery phrase', { exact: true }),
                     'the phrase was shown again without any password at all')
                     .toHaveCount(0);
             });

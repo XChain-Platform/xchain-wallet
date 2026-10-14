@@ -85,7 +85,7 @@ assert.match(send, /messaging\.gatedSendReadiness\(/, 'Send probes readiness');
 assert.match(send, /gatedInfo\?\.state === 'blocked'/, 'blocked state stops review');
 assert.match(send, /messaging\.gatedContentScan\(/, 'recovery scan wired');
 assert.match(send, /isWatcherMode \|\| isHwSource/, 'HW/watcher get capability copy instead of the scan');
-assert.match(send, /will NOT be able to open the missing pack/, 'partial state lists missing packs');
+assert.match(send, /t\('send\.gated\.partial'/, 'partial state lists missing packs through i18n');
 
 // ---- Non-SEND give-side warnings (never block) --------------------------
 const hook = read('packages', 'core', 'src', 'shared', 'hooks', 'useGatedTickNotice.js');

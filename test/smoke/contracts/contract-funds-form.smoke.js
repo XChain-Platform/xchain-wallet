@@ -65,8 +65,7 @@ for (const call of [
 // Wrong-password handling + HW branch.
 assert.ok(/InvalidPasswordError/.test(formSrc),
     'ContractFundsForm distinguishes wrong-password');
-assert.ok(/isHwSource\s*\?\s*messaging\.depositActionHw\s*:\s*messaging\.depositAction/.test(formSrc)
-    || /isDeposit[\s\S]*?isHwSource/.test(formSrc),
+assert.ok(/const fn = isDeposit\s*\? \(isHwSource \? messaging\.depositActionHw : messaging\.depositAction\)\s*: \(isHwSource \? messaging\.withdrawActionHw : messaging\.withdrawAction\)/.test(formSrc),
     'ContractFundsForm branches HW vs software + mode on submit');
 
 // --- Core flows + guards ---

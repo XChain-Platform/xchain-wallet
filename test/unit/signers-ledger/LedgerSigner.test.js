@@ -172,6 +172,14 @@ describe('LedgerSigner.getStatus', () => {
         expect(await s.getStatus()).toBe('disconnected');
     });
 
+    it('returns "locked" when the app-info probe reports a locked device', async () => {
+        const failure = Object.assign(new Error('Device is locked'), { name: 'LockedDeviceError' });
+        const s = makeSigner({}, {
+            transport: makeTransport({ send: vi.fn().mockRejectedValue(failure) }),
+        });
+        expect(await s.getStatus()).toBe('locked');
+    });
+
     it('returns "disconnected" when the device answers with no app name', async () => {
         const s = makeSigner({}, { transport: makeTransport({ name: '' }) });
         expect(await s.getStatus()).toBe('disconnected');
@@ -252,12 +260,12 @@ describe('LedgerSigner.getAddresses', () => {
         expect(getWalletPublicKey.mock.calls[0][1]).toMatchObject({ format });
     });
 
-    it('propagates app errors as SignerStatusError', async () => {
+    it('normalizes an on-device address rejection', async () => {
         const s = makeSigner({
             getWalletPublicKey: vi.fn().mockRejectedValue(Object.assign(new Error('HID error'), { statusCode: 0x6985 })),
         });
         await expect(s.getAddresses({ chainId: 'bitcoin-mainnet', accountIndex: 0, change: 0, startIndex: 0, count: 1 }))
-            .rejects.toThrow(/getWalletPublicKey failed/);
+            .rejects.toMatchObject({ status: 'cancelled', code: 'HW_CANCELLED' });
     });
 
     it('§17.6: passes verify per the flag (device confirmation)', async () => {
@@ -319,10 +327,20 @@ describe('LedgerSigner.signMessage', () => {
         await expect(s.signMessage({ message: 'hi', path: '84/0/0' })).rejects.toThrow(/path is required/);
     });
 
-    it('propagates Ledger SDK errors as SignerStatusError', async () => {
-        const s = makeSigner({ signMessage: vi.fn().mockRejectedValue(new Error('user rejected')) });
-        await expect(s.signMessage({ message: 'hi', path: "m/84'/0'/0'/0/0" }))
-            .rejects.toThrow(/signMessage failed/);
+    it.each([
+        ['device not found', new Error('No device selected'), 'disconnected', 'HW_DEVICE_NOT_FOUND', /No Ledger was found/],
+        ['locked', Object.assign(new Error('Device is locked'), { name: 'LockedDeviceError' }), 'locked', 'HW_LOCKED', /Ledger is locked/],
+        ['wrong app', Object.assign(new Error('UNKNOWN_ERROR'), { statusCode: 0x6a82 }), 'wrong-app', 'HW_WRONG_APP', /wrong app is open/],
+        ['user rejected', Object.assign(new Error('Condition of use not satisfied'), { statusCode: 0x6985 }), 'cancelled', 'HW_CANCELLED', /Nothing was signed/],
+        ['cable unplugged', Object.assign(new Error('Device disconnected'), { name: 'DisconnectedDeviceDuringOperation' }), 'disconnected', 'HW_DISCONNECTED', /disconnected before signing finished/],
+        ['old firmware', new Error('Device firmware is too old'), 'firmware', 'HW_FIRMWARE', /firmware is too old/],
+    ])('normalizes %s without exposing SDK detail', async (_case, failure, status, code, copy) => {
+        const s = makeSigner({ signMessage: vi.fn().mockRejectedValue(failure) });
+        const err = await s.signMessage({ message: 'hi', path: "m/84'/0'/0'/0/0" }).catch((error) => error);
+
+        expect(err).toMatchObject({ status, code });
+        expect(err.message).toMatch(copy);
+        expect(err.message).not.toMatch(/UNKNOWN_ERROR|0x6a82|Condition of use/);
     });
 });
 

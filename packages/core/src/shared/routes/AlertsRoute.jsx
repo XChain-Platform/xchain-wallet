@@ -15,47 +15,196 @@
 // destination (Decentralized Exchange, Marketplace, ...). Reuses
 // AlertsOverlay.module.css for the alert-row styling.
 
-import { Screen, PageHeader } from '@xchain-wallet/core/ui';
+import { useEffect, useRef, useState } from 'react';
+import { Button, EmptyState, Icon, ListPage, Screen, PageHeader } from '@xchain-wallet/core/ui';
+import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { alertVersion, readAlertCenter, writeAlertCenter } from '../utils/alertCenterMemory.js';
 import styles from '../components/AlertsOverlay.module.css';
+import { alertSeverityPresentation } from '../components/alertSeverity.js';
+import { NotificationsSection } from '../components/settings/NotificationsSection.jsx';
 
 /**
  * @param {object} props
  * @param {() => void} props.onBack
- * @param {Array<{ id: string, severity: 'info' | 'warning' | 'critical', title: string, message: string, action?: { label: string, onSelect: () => void } }>} [props.alerts]
+ * @param {string} [props.walletId]
+ * @param {Array<{ id: string, severity: 'info' | 'warning' | 'critical', title: string, message: string, read?: boolean, action?: { label: string, onSelect: () => void | PromiseLike<void> } }>} [props.alerts]
  */
-export function AlertsRoute({ onBack, alerts = [] }) {
+export function AlertsRoute({ onBack, walletId, alerts = [] }) {
     const { shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const header = <PageHeader onBack={onBack} title="Alerts" />;
+    const header = <PageHeader onBack={onBack} title={t('alerts.title')} />;
+    const sourceAlerts = Array.isArray(alerts) ? alerts : [];
+    const emptyStateRef = useRef(null);
+    const [pendingFocus, setPendingFocus] = useState(null);
+    const [centerState, setCenterState] = useState(() => readAlertCenter(walletId));
+    const [notificationsOpen, setNotificationsOpen] = useState(false);
+    const visibleAlerts = sourceAlerts.filter((alert) => !centerState.cleared.has(alert.id));
+    const unreadAlerts = visibleAlerts.filter((alert) => !alert.read && !centerState.read.has(alertVersion(alert)));
+
+    useEffect(() => {
+        setCenterState(readAlertCenter(walletId));
+    }, [walletId]);
+
+    // Focus follows the control the user just removed, so keyboard users are not dropped to the page top.
+    useEffect(() => {
+        if (!pendingFocus) return;
+        const target = pendingFocus === 'empty'
+            ? emptyStateRef.current
+            : document.querySelector(`[data-alert-focus="${pendingFocus}"]`);
+        target?.focus();
+        setPendingFocus(null);
+    }, [centerState, pendingFocus]);
+
+    const commitState = (next) => {
+        writeAlertCenter(walletId, next);
+        setCenterState(next);
+    };
+
+    const markRead = (alert, restoreFocus = false) => {
+        const key = alertVersion(alert);
+        if (centerState.read.has(key)) return;
+        if (restoreFocus) setPendingFocus(alert.action ? `open-${alert.id}` : 'clear');
+        commitState({
+            ...centerState,
+            read: new Set([...centerState.read, key]),
+        });
+    };
+
+    const openAlert = async (alert) => {
+        markRead(alert);
+        try {
+            await alert.action?.onSelect();
+        } catch (_err) {
+            // Alert actions navigate outside this route, so their failures must not reject the click handler.
+        }
+    };
+
+    if (notificationsOpen) {
+        const notificationsHeader = (
+            <PageHeader
+                onBack={() => setNotificationsOpen(false)}
+                title={t('alerts.notificationsTitle')}
+            />
+        );
+        return (
+            <Screen variant={variant} header={notificationsHeader}>
+                <ListPage>
+                    <NotificationsSection walletId={walletId} />
+                </ListPage>
+            </Screen>
+        );
+    }
+
+    const toolbar = visibleAlerts.length > 0 ? (
+        <div className={styles.controls}>
+            <span className={styles.unreadCount} aria-live="polite">
+                {t('alerts.unreadCount', { count: unreadAlerts.length })}
+            </span>
+            <Button
+                variant="secondary"
+                size="md"
+                icon={null}
+                disabled={unreadAlerts.length === 0}
+                onClick={() => {
+                    setPendingFocus('clear');
+                    commitState({
+                        ...centerState,
+                        read: new Set([
+                            ...centerState.read,
+                            ...visibleAlerts.map(alertVersion),
+                        ]),
+                    });
+                }}
+            >
+                {t('alerts.markAllRead')}
+            </Button>
+            <Button
+                variant="ghost"
+                size="md"
+                icon={null}
+                data-alert-focus="clear"
+                onClick={() => {
+                    setPendingFocus('empty');
+                    commitState({
+                        ...centerState,
+                        cleared: new Set([
+                            ...centerState.cleared,
+                            ...visibleAlerts.map((alert) => alert.id),
+                        ]),
+                    });
+                }}
+            >
+                {t('alerts.clear')}
+            </Button>
+        </div>
+    ) : null;
 
     return (
         <Screen variant={variant} header={header}>
-            <div className={styles.body}>
-                {alerts.length === 0 ? (
-                    <p className={styles.empty}>No alerts. You&apos;re all caught up.</p>
+            <ListPage toolbar={toolbar}>
+                {visibleAlerts.length === 0 ? (
+                    <div
+                        ref={emptyStateRef}
+                        tabIndex={-1}
+                        aria-label={t('alerts.empty')}
+                    >
+                        <EmptyState
+                            title={t('alerts.empty.title')}
+                            body={t('alerts.empty.body')}
+                            actionLabel={t('alerts.empty.action')}
+                            onAction={() => setNotificationsOpen(true)}
+                            actionIcon={<Icon.GearIcon />}
+                        />
+                    </div>
                 ) : (
+                    /* Safari needs an explicit list role because this class removes list styling. */
                     <ul className={styles.list} role="list">
-                        {alerts.map((a) => (
-                            <li key={a.id} className={`${styles.alert} ${styles[a.severity] || styles.info}`}>
-                                <div className={styles.alertHead}>
-                                    <span className={styles.alertTitle}>{a.title}</span>
-                                </div>
-                                <div className={styles.alertMessage}>{a.message}</div>
-                                {a.action ? (
-                                    <button
-                                        type="button"
-                                        className={styles.alertAction}
-                                        onClick={() => a.action.onSelect()}
-                                    >
-                                        {a.action.label}
-                                    </button>
-                                ) : null}
-                            </li>
-                        ))}
+                        {visibleAlerts.map((a) => {
+                            const severity = alertSeverityPresentation(a.severity);
+                            const isUnread = !a.read && !centerState.read.has(alertVersion(a));
+                            return (
+                                <li
+                                    key={a.id}
+                                    className={`${styles.alert} ${styles[severity.kind]} ${isUnread ? styles.unread : styles.read}`}
+                                >
+                                    <div className={styles.alertHead}>
+                                        <span className={styles.severity}>{severity.label}</span>
+                                        <span className={styles.alertTitle}>{a.title}</span>
+                                        <span className={styles.readStatus}>{isUnread ? t('alerts.unread') : t('alerts.read')}</span>
+                                    </div>
+                                    <div className={styles.alertMessage}>{a.message}</div>
+                                    {a.action ? (
+                                        // Opening an alert's screen also marks it read.
+                                        <Button
+                                            variant="primary"
+                                            size="sm"
+                                            icon={null}
+                                            data-alert-focus={`open-${a.id}`}
+                                            onClick={() => openAlert(a)}
+                                            style={{ alignSelf: 'flex-start' }}
+                                        >
+                                            {a.action.label}
+                                        </Button>
+                                    ) : null}
+                                    {isUnread ? (
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            icon={null}
+                                            aria-label={t('alerts.markReadLabel', { title: a.title })}
+                                            onClick={() => markRead(a, true)}
+                                            style={{ alignSelf: 'flex-start' }}
+                                        >
+                                            {t('alerts.markRead')}
+                                        </Button>
+                                    ) : null}
+                                </li>
+                            );
+                        })}
                     </ul>
                 )}
-            </div>
+            </ListPage>
         </Screen>
     );
 }

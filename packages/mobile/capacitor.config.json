@@ -4,13 +4,20 @@
     "webDir": "www",
     "android": {
         "allowMixedContent": false,
-        "webContentsDebuggingEnabled": false
+        "loggingBehavior": "none"
     },
     "server": {
-        "androidScheme": "https"
+        "androidScheme": "https",
+        "allowNavigation": []
     },
-    "plugins": {},
+    "plugins": {
+        "SystemBars": {
+            "insetsHandling": "css",
+            "initialViewportFitValueHint": "cover",
+            "style": "DEFAULT"
+        }
+    },
     "ios": {
-        "contentInset": "always"
+        "contentInset": "never"
     }
 }

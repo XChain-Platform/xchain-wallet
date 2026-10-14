@@ -1,0 +1,294 @@
+// Copyright © 2025–2026 Dankest, LLC
+// Based on XChain Platform by Dankest, LLC - https://dankest.llc
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+import React, { useState } from 'react';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useLastView } from '../../packages/core/src/shared/hooks/useLastView.js';
+import {
+    readLastViewRoute,
+    writeLastView,
+} from '../../packages/core/src/shared/utils/lastViewMemory.js';
+import { MessagingProvider } from '../../packages/core/src/shared/MessagingProvider.jsx';
+import { ListDetail } from '../../packages/core/src/shared/routes/ListDetail.jsx';
+import { MarketView } from '../../packages/core/src/shared/routes/MarketView.jsx';
+import { MyOrdersView } from '../../packages/core/src/shared/routes/MyOrdersView.jsx';
+import { TokenDetail } from '../../packages/core/src/shared/routes/TokenDetail.jsx';
+import { __clearTokenInfoCache } from '../../packages/core/src/shared/hooks/useTokenInfo.js';
+import { PageHeader } from '../../packages/core/src/ui/PageHeader.jsx';
+import { resetBackStackForTests } from '../../packages/core/src/ui/backStack.js';
+
+const WALLET = 'route-wallet';
+const MARKET = { chainId: 'bitcoin-mainnet', tick1: 'XCHAIN', tick2: 'BTC' };
+const savedResizeObserver = globalThis.ResizeObserver;
+
+beforeAll(() => {
+    globalThis.ResizeObserver = class {
+        observe() {}
+        disconnect() {}
+    };
+});
+
+afterAll(() => {
+    globalThis.ResizeObserver = savedResizeObserver;
+});
+
+function RouteHarness() {
+    const [view, setView] = useState('markets');
+    const [market, setMarket] = useState(null);
+    useLastView({
+        walletId: WALLET,
+        currentView: view,
+        currentParams: view === 'market' ? market : null,
+        onResumeParams: (nextView, params) => {
+            if (nextView === 'market') setMarket(params);
+        },
+        onResume: setView,
+    });
+    return (
+        <>
+            <PageHeader title={view} onBack={() => setView('home')} />
+            <output>{view}:{market?.tick1 || ''}/{market?.tick2 || ''}</output>
+            <button
+                type="button"
+                onClick={() => {
+                    setMarket(MARKET);
+                    setView('market');
+                }}
+            >
+                Open market
+            </button>
+        </>
+    );
+}
+
+function LockCycleHarness() {
+    const [sessionState, setSessionState] = useState('unlocked');
+    const [view, setView] = useState('home');
+    useLastView({
+        walletId: WALLET,
+        sessionActive: sessionState === 'unlocked',
+        currentView: view,
+        onResume: setView,
+    });
+    return (
+        <>
+            <output>{sessionState}:{view}</output>
+            <button type="button" onClick={() => setView('history')}>History</button>
+            <button type="button" onClick={() => setView('send')}>Send</button>
+            <button
+                type="button"
+                onClick={() => {
+                    setSessionState('locked');
+                    setView('home');
+                }}
+            >
+                Auto-lock
+            </button>
+            <button type="button" onClick={() => setSessionState('unlocked')}>Unlock</button>
+        </>
+    );
+}
+
+function SecretRouteHarness() {
+    const [view, setView] = useState('home');
+    useLastView({
+        walletId: WALLET,
+        currentView: view,
+        onResume: setView,
+    });
+    return (
+        <>
+            <output>{view}</output>
+            <button type="button" onClick={() => setView('addresses')}>Addresses</button>
+            <button type="button" onClick={() => setView('view-private-key')}>Export key</button>
+            <button type="button" onClick={() => setView('migrate-bip39')}>Reveal recovery phrase</button>
+            <button type="button" onClick={() => setView('addresses')}>Leave export</button>
+        </>
+    );
+}
+
+beforeEach(() => {
+    localStorage.clear();
+    resetBackStackForTests();
+    window.history.replaceState(null, '');
+});
+
+afterEach(() => {
+    cleanup();
+    __clearTokenInfoCache();
+    resetBackStackForTests();
+    vi.restoreAllMocks();
+});
+
+describe('contextual route state', () => {
+    it('restores the screen at lock only when it is safe to resume', async () => {
+        render(<LockCycleHarness />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'History' }));
+        await waitFor(() => expect(readLastViewRoute(WALLET)).toEqual({
+            view: 'history',
+            params: null,
+        }));
+        fireEvent.click(screen.getByRole('button', { name: 'Auto-lock' }));
+        expect(screen.getByText('locked:home')).toBeInTheDocument();
+        expect(readLastViewRoute(WALLET)?.view).toBe('history');
+        fireEvent.click(screen.getByRole('button', { name: 'Unlock' }));
+        expect(await screen.findByText('unlocked:history')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(readLastViewRoute(WALLET)).toBeNull());
+        fireEvent.click(screen.getByRole('button', { name: 'Auto-lock' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Unlock' }));
+        expect(await screen.findByText('unlocked:home')).toBeInTheDocument();
+    });
+
+    it('round-trips validated deep params and rejects an incomplete saved route', () => {
+        writeLastView(WALLET, 'token-detail', {
+            chainId: 'bitcoin-mainnet',
+            tick: 'ALPHA',
+            quantity: '12',
+            balance: '12',
+            privateKey: 'private-key',
+            password: 'wallet-password',
+            psbt: 'unsigned-transaction',
+            seed: 'recovery words',
+            ignored: { unsafe: true },
+        });
+        expect(readLastViewRoute(WALLET)).toEqual({
+            view: 'token-detail',
+            params: {
+                chainId: 'bitcoin-mainnet',
+                tick: 'ALPHA',
+            },
+        });
+        writeLastView(WALLET, 'lists');
+        expect(readLastViewRoute(WALLET)).toEqual({ view: 'lists', params: null });
+
+        localStorage.setItem('xc:lastView:' + WALLET, JSON.stringify({
+            view: 'list-detail',
+            params: { chainId: 'bitcoin-mainnet' },
+        }));
+        expect(readLastViewRoute(WALLET)).toBeNull();
+    });
+
+    it('restores a deep screen and its params across browser Back and Forward', async () => {
+        render(<RouteHarness />);
+        await waitFor(() => expect(window.history.state?.xcRoute?.view).toBe('markets'));
+
+        fireEvent.click(screen.getByRole('button', { name: 'Open market' }));
+        await waitFor(() => expect(window.history.state?.xcRoute?.view).toBe('market'));
+        expect(screen.getByText('market:XCHAIN/BTC')).toBeInTheDocument();
+        await waitFor(() => expect(readLastViewRoute(WALLET)).toEqual({
+            view: 'market',
+            params: MARKET,
+        }));
+
+        window.history.back();
+        await waitFor(() => expect(screen.getByText('markets:XCHAIN/BTC')).toBeInTheDocument());
+
+        window.history.forward();
+        await waitFor(() => expect(screen.getByText('market:XCHAIN/BTC')).toBeInTheDocument());
+    });
+
+    it.each([
+        ['Export key', 'view-private-key'],
+        ['Reveal recovery phrase', 'migrate-bip39'],
+    ])('replaces the %s route with the prior safe history snapshot', async (button, secretView) => {
+        render(<SecretRouteHarness />);
+        await waitFor(() => expect(window.history.state?.xcRoute?.view).toBe('home'));
+
+        fireEvent.click(screen.getByRole('button', { name: 'Addresses' }));
+        await waitFor(() => expect(window.history.state?.xcRoute?.view).toBe('addresses'));
+
+        const replaceState = vi.spyOn(window.history, 'replaceState');
+        fireEvent.click(screen.getByRole('button', { name: button }));
+        expect(screen.getByText(secretView)).toBeInTheDocument();
+        await waitFor(() => expect(window.history.state?.xcRoute?.view).toBe('addresses'));
+        expect(replaceState).toHaveBeenLastCalledWith(expect.objectContaining({
+            xcRoute: expect.objectContaining({ view: 'addresses' }),
+        }), '');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Leave export' }));
+        window.history.back();
+        await waitFor(() => expect(screen.getByText('home')).toBeInTheDocument());
+
+        window.history.forward();
+        await waitFor(() => expect(screen.getByText('addresses')).toBeInTheDocument());
+        expect(screen.queryByText(secretView)).toBeNull();
+    });
+
+    it('renders a plain not-found state when a saved list no longer exists', async () => {
+        const messaging = {
+            getListByActionIndex: vi.fn().mockResolvedValue(null),
+            getActionFormats: vi.fn().mockResolvedValue([]),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <ListDetail
+                    chainId="bitcoin-mainnet"
+                    actionIndex="404"
+                    onBack={() => {}}
+                    onFork={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        expect(await screen.findByText('List not found')).toBeInTheDocument();
+        expect(screen.queryByText('Loading…')).toBeNull();
+    });
+
+    it('renders plain not-found states for deleted token and market params', async () => {
+        const messaging = new Proxy({
+            getTokenInfo: vi.fn().mockResolvedValue(null),
+            getMarket: vi.fn().mockResolvedValue(null),
+            getMarketHistory: vi.fn().mockResolvedValue([]),
+            getAddressesByChain: vi.fn().mockResolvedValue({}),
+        }, {
+            get: (target, property) => target[property] || (() => Promise.resolve([])),
+        });
+        const token = render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <TokenDetail
+                    walletId={WALLET}
+                    chainId="bitcoin-mainnet"
+                    tick="DELETED"
+                    kind="token"
+                    onBack={() => {}}
+                />
+            </MessagingProvider>,
+        );
+        expect(await screen.findByText('Token not found')).toBeInTheDocument();
+        token.unmount();
+
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <MarketView
+                    walletId={WALLET}
+                    chainId="bitcoin-mainnet"
+                    tick1="DELETED"
+                    tick2="BTC"
+                    onBack={() => {}}
+                />
+            </MessagingProvider>,
+        );
+        expect(await screen.findByText('Market not found')).toBeInTheDocument();
+    });
+
+    it('renders the orders empty state when a deep orders destination no longer exists', async () => {
+        const messaging = {
+            getAddressesByChain: vi.fn().mockResolvedValue({}),
+            listAutopayOrders: vi.fn().mockResolvedValue([]),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <MyOrdersView walletId={WALLET} onBack={() => {}} />
+            </MessagingProvider>,
+        );
+
+        expect(await screen.findByText('No orders yet')).toBeInTheDocument();
+        expect(screen.getByText(/orders you place on the DEX/i)).toBeInTheDocument();
+    });
+});

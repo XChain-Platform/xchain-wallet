@@ -12,16 +12,18 @@
 // wallet whose whole job is to hand over a spending key, and the only ⬜ on that
 // line where a defect is unrecoverable rather than merely annoying.
 //
-// FOUR THINGS THAT CAN BE WRONG HERE, and none of them is visible without
+// SIX THINGS THAT CAN BE WRONG HERE, and none of them is visible without
 // driving it:
 //   1. The key is in the DOM before the user has agreed to see it. Everything
 //      else on this screen is a warning ABOUT a key that is, in that case,
 //      already there.
-//   2. The revealed key is not this address's key. A screen that shows A's
+//   2. Export skips the wallet-password confirmation.
+//   3. Password confirmation renders the key before a separate reveal tap.
+//   4. The revealed key is not this address's key. A screen that shows A's
 //      address beside B's key looks completely correct, and the only way to
 //      catch it is to derive the address back from the key independently.
-//   3. Hide does not hide.
-//   4. The blur auto-hide (§17.7.1) is not wired. It is the control that covers
+//   5. Hide does not hide.
+//   6. The blur auto-hide (§17.7.1) is not wired. It is the control that covers
 //      the case the warning list explicitly raises - screen-sharing - and a
 //      listener that quietly stops firing looks identical to one that works
 //      until the moment it matters.
@@ -187,11 +189,24 @@ test.describe('revealing an address private key', () => {
 
             await test.step('the revealed key really controls THIS address', async () => {
                 const main = page.getByRole('main');
-                await main.getByRole('button', { name: 'I understand, show key' }).click();
+                await main.getByRole('button', { name: 'I understand, continue' }).click();
+                const password = main.getByLabel('Wallet password');
+                await expect(password, 'private-key export did not request the wallet password')
+                    .toBeVisible();
+                await password.fill(PASSWORD);
+                await main.getByRole('button', { name: 'Confirm password' }).click();
+
+                const reveal = main.getByRole('button', { name: 'Tap to reveal private key' });
+                await expect(reveal, 'password confirmation did not leave the key masked')
+                    .toBeVisible({ timeout: 60_000 });
+                await expect(wifCode(page),
+                    'the private key entered the DOM before the explicit reveal tap')
+                    .toHaveCount(0);
+                await reveal.click();
 
                 const code = wifCode(page);
-                await expect(code, 'no key appeared after agreeing to the warning')
-                    .toBeVisible({ timeout: 60_000 });
+                await expect(code, 'no key appeared after the explicit reveal tap')
+                    .toBeVisible({ timeout: 15_000 });
 
                 // From here on the key is held in a local and never printed.
                 const wif = (await code.textContent() || '').trim();

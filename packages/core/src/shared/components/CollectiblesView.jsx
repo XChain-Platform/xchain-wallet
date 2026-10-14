@@ -10,8 +10,8 @@
 
 import { useState } from 'react';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
-import { Icon } from '@xchain-wallet/core/ui';
-import { EmptyStateNudge } from './EmptyStateNudge.jsx';
+import { Button, EmptyState, Icon } from '@xchain-wallet/core/ui';
+import { isAssetImageSourceAllowed, tickerColor } from './BalanceList.jsx';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import styles from './CollectiblesView.module.css';
 
@@ -33,6 +33,7 @@ import styles from './CollectiblesView.module.css';
  *
  * @param {object} props
  * @param {Array<{chainId: string, tick: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string, imageUrl?: string | null}>} props.rows
+ * @param {boolean} [props.demo]
  * @param {string} [props.emptyTitle]
  * @param {string} [props.emptyBody]
  * @param {() => void} [props.onReceive]
@@ -40,39 +41,44 @@ import styles from './CollectiblesView.module.css';
  * @param {Set<string> | null} [props.pinnedKeys]
  * @param {(key: string, nextPinned: boolean) => void} [props.onTogglePin]
  * @param {Set<string> | null} [props.hiddenKeys]
+ * @param {Set<string> | null} [props.automaticHiddenKeys]
  * @param {(key: string, nextHidden: boolean) => void} [props.onToggleHide]
+ * @param {boolean} [props.allowRemoteImages]
  */
 export function CollectiblesView({
     rows,
+    demo = false,
     emptyTitle = 'No collectibles yet',
-    emptyBody,
+    emptyBody = 'Collectibles appear here after this wallet receives them.',
     onReceive,
     onSelectToken,
     pinnedKeys,
     onTogglePin,
     hiddenKeys,
+    automaticHiddenKeys,
     onToggleHide,
+    allowRemoteImages = true,
 }) {
     const [hiddenExpanded, setHiddenExpanded] = useState(false);
 
     if (!rows || rows.length === 0) {
         return (
-            <EmptyStateNudge
+            <EmptyState
                 title={emptyTitle}
                 body={emptyBody}
                 actionLabel={onReceive ? 'Receive' : undefined}
                 onAction={onReceive}
-                icon={onReceive ? <Icon.ReceiveIcon /> : undefined}
+                actionIcon={onReceive ? <Icon.ReceiveIcon /> : undefined}
             />
         );
     }
 
-    const visible = hiddenKeys
-        ? rows.filter((r) => !hiddenKeys.has(`${r.chainId}:${r.tick}`))
-        : rows;
-    const hidden = hiddenKeys
-        ? rows.filter((r) => hiddenKeys.has(`${r.chainId}:${r.tick}`))
-        : [];
+    const isHidden = (row) => {
+        const key = `${row.chainId}:${row.tick}`;
+        return Boolean(hiddenKeys?.has(key) || automaticHiddenKeys?.has(key));
+    };
+    const visible = rows.filter((row) => !isHidden(row));
+    const hidden = rows.filter(isHidden);
     const sortedRows = pinnedKeys && pinnedKeys.size > 0
         ? [
             ...visible.filter((r) => pinnedKeys.has(`${r.chainId}:${r.tick}`)),
@@ -87,11 +93,13 @@ export function CollectiblesView({
                     <CollectibleCard
                         key={`${r.chainId}:${r.tick}`}
                         row={r}
+                        demo={demo}
                         pinned={pinnedKeys ? pinnedKeys.has(`${r.chainId}:${r.tick}`) : false}
                         hidden={false}
                         onSelect={onSelectToken}
                         onTogglePin={onTogglePin}
                         onToggleHide={onToggleHide}
+                        allowRemoteImages={allowRemoteImages}
                     />
                 ))}
             </div>
@@ -108,16 +116,20 @@ export function CollectiblesView({
                 </button>
             ) : null}
             {hidden.length > 0 && hiddenExpanded ? (
-                <div className={styles.grid}>
+                <div className={styles.grid} role="list" aria-label="Hidden collectibles">
                     {hidden.map((r) => (
                         <CollectibleCard
                             key={`hidden:${r.chainId}:${r.tick}`}
                             row={r}
-                            pinned={false}
+                            demo={demo}
+                            pinned={pinnedKeys ? pinnedKeys.has(`${r.chainId}:${r.tick}`) : false}
                             hidden
                             onSelect={onSelectToken}
                             onTogglePin={onTogglePin}
-                            onToggleHide={onToggleHide}
+                            onToggleHide={automaticHiddenKeys?.has(`${r.chainId}:${r.tick}`)
+                                ? undefined
+                                : onToggleHide}
+                            allowRemoteImages={allowRemoteImages}
                         />
                     ))}
                 </div>
@@ -126,8 +138,9 @@ export function CollectiblesView({
     );
 }
 
-function CollectibleCard({ row, pinned, hidden, onSelect, onTogglePin, onToggleHide }) {
-    const [imgFailed, setImgFailed] = useState(false);
+function CollectibleCard({ row, demo, pinned, hidden, onSelect, onTogglePin, onToggleHide, allowRemoteImages }) {
+    const [failedImageUrl, setFailedImageUrl] = useState(null);
+    const [failedChainIconUrl, setFailedChainIconUrl] = useState(null);
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
     // Fetch tick metadata to surface a real image when the row payload
     // doesn't already carry one. `useTokenInfo`'s module-level cache means
@@ -136,18 +149,22 @@ function CollectibleCard({ row, pinned, hidden, onSelect, onTogglePin, onToggleH
     const assetInfo = useTokenInfo({
         chainId: row.chainId,
         tick: row.tick,
-        skip: row.kind === 'native' || hidden,
+        skip: row.kind === 'native' || hidden || !allowRemoteImages,
+        demo,
     });
     const fallbackImageUrl = assetInfo && typeof assetInfo.imageUrl === 'string'
         && assetInfo.imageUrl.length > 0
         ? assetInfo.imageUrl
         : null;
-    const effectiveImageUrl = (typeof row.imageUrl === 'string' && row.imageUrl.length > 0)
+    const candidateImageUrl = (typeof row.imageUrl === 'string' && row.imageUrl.length > 0)
         ? row.imageUrl
         : fallbackImageUrl;
+    const effectiveImageUrl = isAssetImageSourceAllowed(candidateImageUrl, allowRemoteImages)
+        ? candidateImageUrl
+        : null;
     const showImage = typeof effectiveImageUrl === 'string'
         && effectiveImageUrl.length > 0
-        && !imgFailed;
+        && failedImageUrl !== effectiveImageUrl;
     const clickable = typeof onSelect === 'function';
     const handleClick = clickable
         ? () => onSelect({
@@ -157,31 +174,27 @@ function CollectibleCard({ row, pinned, hidden, onSelect, onTogglePin, onToggleH
             displayName: row.displayName,
             divisibility: row.divisibility,
             fiatRate: row.fiatRate,
+            fiatRateSource: row.fiatRateSource,
             quantity: row.quantity,
+            imageUrl: effectiveImageUrl,
         })
         : undefined;
-    const Tag = clickable ? 'button' : 'div';
     const key = `${row.chainId}:${row.tick}`;
+    const CardContent = clickable ? 'button' : 'div';
     return (
-        <Tag
+        <div
             className={`${styles.card} ${clickable ? styles.cardClickable : ''} ${pinned ? styles.cardPinned : ''} ${hidden ? styles.cardHidden : ''}`}
-            type={clickable ? 'button' : undefined}
             role="listitem"
-            onClick={handleClick}
-            aria-label={clickable
-                ? `Open ${row.displayName || row.tick} details`
-                : undefined}
         >
-            <div className={styles.thumb}>
-                {showImage ? (
-                    <img
-                        src={effectiveImageUrl}
-                        alt=""
-                        aria-hidden="true"
-                        className={styles.thumbImg}
-                        onError={() => setImgFailed(true)}
-                    />
-                ) : (
+            <CardContent
+                className={styles.cardContent}
+                type={clickable ? 'button' : undefined}
+                onClick={handleClick}
+                aria-label={clickable
+                    ? `Open ${row.displayName || row.tick} details`
+                    : undefined}
+            >
+                <div className={styles.thumb}>
                     <span
                         className={styles.thumbLetter}
                         style={{ background: tickerColor(row.tick) }}
@@ -189,66 +202,64 @@ function CollectibleCard({ row, pinned, hidden, onSelect, onTogglePin, onToggleH
                     >
                         {row.tick.slice(0, 2)}
                     </span>
-                )}
-                {chainIconUrl ? (
-                    <img
-                        src={chainIconUrl}
-                        alt=""
-                        aria-hidden="true"
-                        title={row.chainDisplayName}
-                        className={styles.chainOverlay}
-                    />
-                ) : null}
-                {typeof onTogglePin === 'function' ? (
-                    <span
-                        role="button"
-                        tabIndex={0}
-                        className={`${styles.pinBtn} ${pinned ? styles.pinBtnActive : ''}`}
-                        aria-pressed={pinned}
-                        aria-label={pinned ? `Unpin ${row.tick}` : `Pin ${row.tick}`}
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            onTogglePin(key, !pinned);
-                        }}
-                    >
-                        {pinned ? '★' : '☆'}
-                    </span>
-                ) : null}
-                {typeof onToggleHide === 'function' ? (
-                    <span
-                        role="button"
-                        tabIndex={0}
-                        className={`${styles.hideBtn} ${hidden ? styles.hideBtnActive : ''}`}
-                        aria-pressed={hidden}
-                        aria-label={hidden ? `Unhide ${row.tick}` : `Hide ${row.tick}`}
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            onToggleHide(key, !hidden);
-                        }}
-                    >
-                        {hidden ? '⊕' : '⊘'}
-                    </span>
-                ) : null}
-            </div>
-            <div className={styles.meta}>
-                <div className={styles.name} title={row.displayName}>{row.displayName}</div>
-                <div className={styles.subtitle}>{row.tick}</div>
-            </div>
-        </Tag>
+                    {showImage ? (
+                        <img
+                            src={effectiveImageUrl}
+                            width={192}
+                            height={192}
+                            alt=""
+                            aria-hidden="true"
+                            className={styles.thumbImg}
+                            loading="lazy"
+                            decoding="async"
+                            style={{ position: 'absolute', inset: 0 }}
+                            onError={() => setFailedImageUrl(effectiveImageUrl)}
+                        />
+                    ) : null}
+                    {chainIconUrl && failedChainIconUrl !== chainIconUrl ? (
+                        <img
+                            src={chainIconUrl}
+                            width={20}
+                            height={20}
+                            alt=""
+                            aria-hidden="true"
+                            title={row.chainDisplayName}
+                            className={styles.chainOverlay}
+                            loading="lazy"
+                            decoding="async"
+                            onError={() => setFailedChainIconUrl(chainIconUrl)}
+                        />
+                    ) : null}
+                </div>
+                <div className={styles.meta}>
+                    <div className={styles.name} title={row.displayName}>{row.displayName}</div>
+                    <div className={styles.subtitle}>{row.tick}</div>
+                </div>
+            </CardContent>
+            {typeof onTogglePin === 'function' ? (
+                <Button
+                    size="sm"
+                    variant={pinned ? 'primary' : 'secondary'}
+                    icon={<span aria-hidden="true">{pinned ? '★' : '☆'}</span>}
+                    aria-pressed={pinned}
+                    aria-label={pinned ? `Unpin ${row.tick}` : `Pin ${row.tick}`}
+                    title={pinned ? 'Unpin' : 'Pin to top'}
+                    onClick={() => onTogglePin(key, !pinned)}
+                    className={styles.pinBtn}
+                />
+            ) : null}
+            {typeof onToggleHide === 'function' ? (
+                <Button
+                    size="sm"
+                    variant={hidden ? 'primary' : 'secondary'}
+                    icon={<span aria-hidden="true">{hidden ? '⊕' : '⊘'}</span>}
+                    aria-pressed={hidden}
+                    aria-label={hidden ? `Unhide ${row.tick}` : `Hide ${row.tick}`}
+                    title={hidden ? 'Unhide' : 'Hide'}
+                    onClick={() => onToggleHide(key, !hidden)}
+                    className={styles.hideBtn}
+                />
+            ) : null}
+        </div>
     );
-}
-
-const PALETTE = [
-    '#1E90C7', '#7B2C8F', '#0EA5E9', '#10B981', '#F59E0B',
-    '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316',
-    '#6366F1', '#84CC16', '#06B6D4', '#A855F7', '#F43F5E',
-];
-function tickerColor(tick) {
-    let h = 0;
-    for (let i = 0; i < tick.length; i += 1) {
-        h = (h * 31 + tick.charCodeAt(i)) >>> 0;
-    }
-    return PALETTE[h % PALETTE.length];
 }

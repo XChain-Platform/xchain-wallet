@@ -14,6 +14,15 @@ import { describe, it, expect } from 'vitest';
 import { LICENSE_SUMMARY, LICENSE_TEXT } from '../../packages/core/src/license.js';
 
 describe('license', () => {
+    it.each([
+        ['summary', LICENSE_SUMMARY],
+        ['full text', LICENSE_TEXT],
+    ])('stores every %s paragraph without hard line breaks', (_label, text) => {
+        const paragraphs = text.trim().split('\n\n');
+        expect(paragraphs.length).toBeGreaterThan(1);
+        expect(paragraphs.every((paragraph) => !paragraph.includes('\n'))).toBe(true);
+    });
+
     describe('LICENSE_SUMMARY', () => {
         it('is a non-empty string', () => {
             expect(typeof LICENSE_SUMMARY).toBe('string');

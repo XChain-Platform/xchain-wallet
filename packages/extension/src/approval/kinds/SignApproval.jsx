@@ -9,11 +9,21 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Screen, Button, Input, ChainBadge, Icon } from '@xchain-wallet/core/ui';
 import {
+    Screen,
+    FormPage,
+    ListPage,
+    Button,
+    ChoiceControl,
+    Input,
+    ChainBadge,
+    Icon,
+} from '@xchain-wallet/core/ui';
+import { useBackHandler } from '@xchain-wallet/core/ui/backStack.js';
+import {
+    i18n,
     registry as registryLib,
     decoder as decoderLib,
-    schemas as schemasLib,
 } from '@xchain-wallet/core';
 import { BalanceChanges } from '@xchain-wallet/core/shared/components/BalanceChanges.jsx';
 import { RawPsbtViewer } from '@xchain-wallet/core/shared/components/RawPsbtViewer.jsx';
@@ -32,9 +42,14 @@ import { describeUnreadableReason } from '@xchain-wallet/core/shared/components/
 import { describePolicyReason } from '@xchain-wallet/core/shared/components/coSignPolicyReasons.js';
 import { isDeveloperMessage, userFacingMessage } from '@xchain-wallet/core/shared/utils/userFacingMessage.js';
 import { canApproveWithReport, toggleAcknowledged } from '@xchain-wallet/core/shared/hooks/useConfirmAction.js';
+import { useFeeFiat } from '@xchain-wallet/core/shared/hooks/useFeeFiat.js';
 import { resolveDisplayTickers } from '@xchain-wallet/core/shared/utils/resolveDisplayTickers.js';
 import { actionDisplayLabel, psbtActionSummary } from '@xchain-wallet/core/shared/utils/actionDisplayLabel.js';
 import { neutralizeControlText } from '@xchain-wallet/core/shared/utils/textHardening.js';
+import { resolveFeeUnit, settingsCustomToDisplayRate } from '@xchain-wallet/core/flows/feeEstimate.js';
+import { WATCH_ONLY_SIGNING_MESSAGE } from '@xchain-wallet/core/shared/addressSelection.js';
+import { OriginIdentity } from '@xchain-wallet/core/shared/components/OriginIdentity.jsx';
+import { formatNativeBaseUnits, tickerForDescriptor } from '../../../../core/src/registry/coinTicker.js';
 import {
     listWallets,
     resolveApproval,
@@ -52,6 +67,7 @@ import shared from '../approval.module.css';
 import styles from './SignApproval.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const { t } = i18n;
 
 // Cache of `^id` -> resolved ticker name, keyed by chain. A ticker id is
 // immutable, so entries never expire. Resolves a single compaction reference
@@ -82,8 +98,8 @@ const KIND_TITLE = {
 };
 
 /**
- * Shared approval screen for the four password-gated sign kinds
- * (`signMessage` / `signPsbt` / `signAction` / `signIn`). The inner
+ * Shared approval screen for the password-gated sign kinds
+ * (`signMessage` / `signPsbt` / `signAction` / `coSign` / `signIn`). The inner
  * summary block renders per-kind; everything else (origin badge,
  * password input, always-allow toggle, footer buttons) is shared.
  *
@@ -102,46 +118,179 @@ const KIND_TITLE = {
  *
  * @param {object} props
  * @param {string} props.id
- * @param {'signMessage' | 'signPsbt' | 'signAction' | 'signIn'} props.kind
+ * @param {'signMessage' | 'signPsbt' | 'signAction' | 'coSign' | 'signIn'} props.kind
  * @param {any} props.payload  The bridge-level request
  * @param {() => void} props.onReject
  */
 export function SignApproval({ id, kind, payload, onReject }) {
-    const origin = payload?.origin || '';
+    const origin = neutralizeControlText(payload?.origin || '', { maxLength: 2048 });
     const chainId = payload?.chainId || null;
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
 
     const [walletId, setWalletId] = useState(/** @type {string | null} */ (null));
+    // True once listWallets has answered either way. The PSBT decode waits on
+    // it so the panel is built once, with the wallet's own addresses, instead
+    // of rendering, dropping back to "Decoding" when walletId lands, and
+    // rendering again with different change labels and totals.
+    const [walletsSettled, setWalletsSettled] = useState(false);
     const [password, setPassword] = useState('');
     const [savePermanent, setSavePermanent] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [busy, setBusy] = useState(false);
+    useBackHandler(onReject, busy);
     const [signInChoice, setSignInChoice] = useState(0);
+    const [walletMode, setWalletMode] = useState(/** @type {string | null} */ (null));
+    const [watchOnlyBlocked, setWatchOnlyBlocked] = useState(false);
+    const [signInAllowedAddresses, setSignInAllowedAddresses] = useState(
+        /** @type {Set<string> | null} */ (null),
+    );
+    const [settings, setSettings] = useState(/** @type {any | null} */ (null));
     const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const requestedFee = approvalFeeRequest(payload, descriptor);
+    const nativeTicker = tickerForDescriptor(descriptor);
+    const { formatNativeFee } = useFeeFiat({
+        chainId,
+        chainCoin: requestedFee?.coinAmount ? descriptor?.coin : null,
+        nativeTicker,
+        settings,
+    });
+    const approvalFeeText = requestedFee
+        ? formatApprovalFee(requestedFee, nativeTicker, formatNativeFee)
+        : null;
+
+    const walletSigningTargets = useMemo(() => {
+        if (!chainId) return [];
+        if (kind === 'signMessage') {
+            const address = payload?.payload?.address;
+            return typeof address === 'string' && address ? [{ address }] : [];
+        }
+        if (kind === 'signAction') {
+            const address = payload?.payload?.from?.address || payload?.from?.address;
+            return typeof address === 'string' && address ? [{ address }] : [];
+        }
+        if (kind === 'signPsbt' && Array.isArray(payload?.payload?.signingPaths)) {
+            return payload.payload.signingPaths.flatMap((entry) => {
+                if (typeof entry?.address === 'string' && entry.address) {
+                    return [{ address: entry.address }];
+                }
+                if (typeof entry?.derivationPath === 'string' && entry.derivationPath) {
+                    return [{ derivationPath: entry.derivationPath }];
+                }
+                return [];
+            });
+        }
+        return [];
+    }, [chainId, kind, payload]);
 
     // Sign-in signs as one address the user picks here, from the list the
     // background built out of this site's grant; nothing else can be chosen.
-    const signInAddresses = kind === 'signIn' && Array.isArray(payload?.payload?.addresses)
-        ? payload.payload.addresses.filter(
-            (c) => typeof c?.address === 'string' && c.address && typeof c?.chainId === 'string',
-        )
+    const signInAddresses = kind === 'signIn'
+        && signInAllowedAddresses
+        && Array.isArray(payload?.payload?.addresses)
+        ? payload.payload.addresses.filter((candidate) => (
+            typeof candidate?.address === 'string'
+            && candidate.address
+            && typeof candidate?.chainId === 'string'
+            && signInAllowedAddresses.has(`${candidate.chainId}:${candidate.address}`)
+        ))
         : [];
     const signInPick = signInAddresses[signInChoice] ?? null;
 
     useEffect(() => {
-        listWallets()
-            .then((list) => {
-                if (Array.isArray(list) && list.length > 0) {
-                    setWalletId(list[0].id);
+        let cancelled = false;
+        setWalletId(null);
+        setWatchOnlyBlocked(false);
+        setSignInAllowedAddresses(null);
+        setWalletsSettled(false);
+        async function loadSigningWallet() {
+            try {
+                const list = await listWallets();
+                if (cancelled) return;
+                const wallets = Array.isArray(list)
+                    ? list.filter((wallet) => typeof wallet?.id === 'string' && wallet.id)
+                    : [];
+                if (wallets.length === 0) {
+                    setError('No signing wallet is available.');
+                    return;
                 }
-            })
-            .catch((err) => {
+
+                if (walletSigningTargets.length === 0 && kind !== 'signIn') {
+                    setWalletId(wallets[0].id);
+                    return;
+                }
+
+                const candidates = await Promise.all(wallets.map(async (wallet) => {
+                    try {
+                        const byChain = await getAddressesByChain(wallet.id);
+                        const addresses = kind === 'signIn'
+                            ? Object.entries(byChain || {}).flatMap(([addressChainId, rows]) => (
+                                (Array.isArray(rows) ? rows : [])
+                                    .map((address) => ({ ...address, chainId: addressChainId }))
+                            ))
+                            : byChain?.[chainId] || [];
+                        return { wallet, addresses };
+                    } catch {
+                        return { wallet, addresses: [] };
+                    }
+                }));
+                if (cancelled) return;
+                const offeredSignInAddresses = new Set(
+                    (Array.isArray(payload?.payload?.addresses) ? payload.payload.addresses : [])
+                        .filter((candidate) => candidate?.chainId && candidate?.address)
+                        .map((candidate) => `${candidate.chainId}:${candidate.address}`)
+                        .filter(Boolean),
+                );
+                const targetMatches = ({ addresses }, requireSigningKey) => (
+                    (kind === 'signIn'
+                        ? addresses.some((address) => offeredSignInAddresses
+                            .has(`${address?.chainId}:${address?.address}`)
+                            && (!requireSigningKey || address?.source !== 'watch-only'))
+                        : walletSigningTargets.every((target) => addresses.some((address) => (
+                        (target.address
+                            ? address?.address === target.address
+                            : address?.derivationPath === target.derivationPath)
+                        && (!requireSigningKey || address?.source !== 'watch-only')
+                    ))))
+                );
+                if (kind === 'signIn'
+                    && !candidates.some((candidate) => targetMatches(candidate, false))) {
+                    setWalletId(wallets[0].id);
+                    setSignInAllowedAddresses(offeredSignInAddresses);
+                    return;
+                }
+                const match = candidates.find((candidate) => targetMatches(candidate, true));
+                if (!match) {
+                    if (candidates.some((candidate) => targetMatches(candidate, false))) {
+                        setWatchOnlyBlocked(true);
+                        setError(WATCH_ONLY_SIGNING_MESSAGE);
+                    } else {
+                        setError('The requested signing account is not available in this wallet.');
+                    }
+                    return;
+                }
+                setWalletId(match.wallet.id);
+                if (kind === 'signIn') {
+                    setSignInAllowedAddresses(new Set(
+                        match.addresses
+                            .filter((address) => address?.source !== 'watch-only'
+                                && offeredSignInAddresses
+                                    .has(`${address?.chainId}:${address?.address}`))
+                            .map((address) => `${address.chainId}:${address.address}`),
+                    ));
+                }
+            } catch (err) {
+                if (cancelled) return;
                 // Show the error but still let the user reject cleanly.
                 setError(err?.message || 'Failed to load wallets.');
-            });
-        // Focus the password field once the screen paints.
-        setTimeout(() => inputRef.current?.focus(), 0);
-    }, []);
+            } finally {
+                // Every answer, a match, no match or a failure, settles the
+                // list so the PSBT decode runs exactly once.
+                if (!cancelled) setWalletsSettled(true);
+            }
+        }
+        void loadSigningWallet();
+        return () => { cancelled = true; };
+    }, [chainId, kind, payload, walletSigningTargets]);
 
     // §21.3 / §48.4 raw-view gate. The approval window doesn't sit
     // inside the shared MessagingProvider, so it can't use the
@@ -161,9 +310,13 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 // lands. Idempotent under the registry has() guard.
                 try { registryLib.hydrateCustomChainsFromSettings(chainRegistry, s); } catch { /* bundled descriptors keep serving */ }
                 if (cancelled) return;
+                setSettings(s || null);
                 setDeveloperMode(Boolean(s?.developerMode));
+                setWalletMode(s?.walletMode || 'full');
             })
-            .catch(() => { /* keep developerMode false on failure */ });
+            .catch(() => { /* keep developerMode false on failure */
+                if (!cancelled) setWalletMode('full');
+            });
         return () => { cancelled = true; };
     }, []);
 
@@ -261,9 +414,13 @@ export function SignApproval({ id, kind, payload, onReject }) {
     // failure shows an explicit warning rather than silently falling back
     // to the opaque hex.
     const psbtHexForSign = kind === 'signPsbt' ? payload?.payload?.psbtHex : null;
+    const psbtPayloadMissing = kind === 'signPsbt'
+        && (typeof psbtHexForSign !== 'string' || psbtHexForSign.trim().length === 0);
     const [psbtIntent, setPsbtIntent] = useState(
         /** @type {{ loading: boolean, error: string | null, decomposed: any | null, ownAddresses: Set<string>, action: any | null, actionDecodeReason: string | null, feeMode: string | null }} */
-        ({ loading: false, error: null, decomposed: null, ownAddresses: new Set(), action: null, actionDecodeReason: null, feeMode: null }),
+        // Starts loading for a PSBT so the first paint says "Decoding", not the
+        // undecodable alert the panel shows for a settled null decode.
+        ({ loading: kind === 'signPsbt', error: null, decomposed: null, ownAddresses: new Set(), action: null, actionDecodeReason: null, feeMode: null }),
     );
     useEffect(() => {
         if (kind !== 'signPsbt') return undefined;
@@ -284,6 +441,10 @@ export function SignApproval({ id, kind, payload, onReject }) {
             loading: true, error: null, decomposed: null, ownAddresses: new Set(),
             action: null, actionDecodeReason: null, feeMode: null,
         });
+        // Decode once, after the wallet list is known, so the own-address set
+        // (change labels, "Leaving this wallet", the own-inputs refusal) comes
+        // in the same result as the decode rather than in a second pass.
+        if (!walletsSettled) return undefined;
         async function loadIntent() {
             try {
                 // Own-address set is best-effort: it only labels change vs
@@ -338,7 +499,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
         }
         loadIntent();
         return () => { cancelled = true; };
-    }, [kind, chainId, psbtHexForSign, walletId]);
+    }, [kind, chainId, psbtHexForSign, walletId, walletsSettled]);
 
     const psbtSourceAddress = useMemo(() => {
         if (kind !== 'signPsbt' || !Array.isArray(psbtIntent.decomposed?.inputs)) return null;
@@ -502,16 +663,18 @@ export function SignApproval({ id, kind, payload, onReject }) {
         { maxLength: 80 },
     );
 
-    // For a PSBT sign, block approval whenever the independent decode failed
-    // (or produced nothing). The summary already warns visually, but that is
-    // presentational only: without this gate the user can still approve a
-    // transaction whose effects could not be verified. Mirrors PsbtSignForm,
-    // which already refuses to sign on `!decomposed`.
+    // For a PSBT sign, block approval when the request has no usable payload
+    // or whenever the independent decode failed (or produced nothing). The
+    // summary already warns visually, but that is presentational only: without
+    // this gate the user can still approve a transaction whose effects could
+    // not be verified. Mirrors PsbtSignForm, which already refuses to sign on
+    // `!decomposed`.
     const psbtDecodeFailed =
-        kind === 'signPsbt' &&
-        !!psbtHexForSign &&
-        !psbtIntent.loading &&
-        (psbtIntent.error !== null || psbtIntent.decomposed === null);
+        psbtPayloadMissing ||
+        (kind === 'signPsbt' &&
+            !!psbtHexForSign &&
+            !psbtIntent.loading &&
+            (psbtIntent.error !== null || psbtIntent.decomposed === null));
 
     // Also hold approval while the independent decode is still in flight:
     // the intent summary (destinations / amounts / fee) has not rendered
@@ -570,12 +733,18 @@ export function SignApproval({ id, kind, payload, onReject }) {
     // Hold sign-in until an offered address is selected
     const signInBlocked = kind === 'signIn' && !signInPick;
 
+    const watcherMode = walletMode === 'watcher';
+    const watcherCopy = ['signPsbt', 'signAction', 'coSign'].includes(kind)
+        ? 'Watcher mode never signs or asks for a password. Reject this request and move its unsigned transaction to a Signer wallet.'
+        : 'Watcher mode never signs or asks for a password. Reject this request or switch to Normal mode to sign on this device.';
     const approvalBlocked = psbtApprovalBlocked || coSignApprovalBlocked
         || !!psbtRefusal || preflightBlocked || signInBlocked;
+    const signingUnavailable = watcherMode || watchOnlyBlocked;
+    const modeApprovalBlocked = walletMode === null || signingUnavailable;
 
-    async function handleApprove(event) {
-        event.preventDefault();
+    async function handleApprove() {
         if (busy || password.length === 0 || !walletId || approvalBlocked) return;
+        if (modeApprovalBlocked) return;
         setBusy(true);
         setError(null);
         try {
@@ -602,51 +771,60 @@ export function SignApproval({ id, kind, payload, onReject }) {
 
     return (
         <Screen
-            variant="popup"
+            variant="small"
             header={
                 <div className={shared.header}>
                     <span className={shared.title}>{title}</span>
-                    <span className={shared.origin}>{origin}</span>
                 </div>
             }
             footer={
                 <div className={shared.footer}>
                     <Button
-                        variant="ghost"
+                        variant="danger"
                         block
                         icon={<Icon.ThumbsDownIcon />}
                         onClick={onReject}
                         disabled={busy}
                     >
-                        Reject
+                        {t('extension.approval.reject')}
                     </Button>
-                    <Button
-                        type="submit"
-                        form="sign-approval-form"
-                        variant="primary"
-                        block
-                        icon={<Icon.ThumbsUpIcon />}
-                        loading={busy}
-                        disabled={password.length === 0 || !walletId || approvalBlocked}
-                    >
-                        {approveLabel}
-                    </Button>
+                    {!signingUnavailable ? (
+                        <Button
+                            type="button"
+                            variant="primary"
+                            block
+                            icon={<Icon.ThumbsUpIcon />}
+                            loading={busy}
+                            disabled={password.length === 0 || !walletId || approvalBlocked}
+                            onClick={handleApprove}
+                        >
+                            {approveLabel}
+                        </Button>
+                    ) : null}
                 </div>
             }
         >
-            {descriptor ? (
-                <div className={styles.chainLine}>
-                    <ChainBadge descriptor={descriptor} size="sm" />
-                </div>
-            ) : null}
+            <ListPage>
+                {descriptor ? (
+                    <div className={styles.chainLine}>
+                        <ChainBadge descriptor={descriptor} size="sm" showName />
+                    </div>
+                ) : null}
 
             {origin ? (
-                <section className={styles.source} aria-label="Source">
-                    <p className={styles.sourceLabel}>Verified site</p>
-                    <p className={styles.sourceOrigin}>{origin}</p>
-                    {appName ? (
-                        <p className={styles.sourceApp}>The site calls itself: {appName}</p>
-                    ) : null}
+                <section className={styles.source} aria-label={t('extension.sign.source')}>
+                    <OriginIdentity
+                        origin={payload?.origin || ''}
+                        label={t('extension.approval.requestingSite')}
+                        headingClassName={styles.sourceLabel}
+                        originClassName={styles.sourceOrigin}
+                        embedded
+                        as="div"
+                    >
+                        {appName ? (
+                            <p className={styles.sourceApp}>{t('extension.sign.declaredName', { name: appName })}</p>
+                        ) : null}
+                    </OriginIdentity>
                 </section>
             ) : null}
 
@@ -662,27 +840,35 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 sourceAddress={preflightSourceAddress}
             />
 
+            {approvalFeeText ? (
+                <div className={shared.summary} data-testid="sign-approval-fee">
+                    <p className={shared.summaryLabel}>{t('send.networkFee')}</p>
+                    <p className={shared.summaryValue}>{approvalFeeText}</p>
+                </div>
+            ) : null}
+
             {kind === 'signIn' ? (
-                <fieldset className={shared.summary} aria-label="Sign in as">
-                    <legend className={shared.summaryLabel}>Sign in as</legend>
+                <fieldset className={shared.summary} aria-label={t('extension.sign.signInAs')}>
+                    <legend className={shared.summaryLabel}>{t('extension.sign.signInAs')}</legend>
                     {signInAddresses.length === 0 ? (
                         <p className={shared.error} role="alert">
-                            This site has no address it may sign in with.
+                            {t('extension.sign.noSignInAddress')}
                         </p>
                     ) : signInAddresses.map((c, i) => {
                         const d = chainRegistry.get(c.chainId);
                         return (
-                            <label className={shared.toggleRow} key={`${c.chainId}:${c.address}`}>
-                                <input
-                                    type="radio"
-                                    name="sign-in-address"
-                                    checked={i === signInChoice}
-                                    onChange={() => setSignInChoice(i)}
-                                    disabled={busy}
-                                />
-                                {d ? <ChainBadge descriptor={d} size="sm" /> : null}
-                                <span>{neutralizeControlText(c.address, { maxLength: 120 })}</span>
-                            </label>
+                            <ChoiceControl
+                                className={shared.toggleRow}
+                                key={`${c.chainId}:${c.address}`}
+                                type="radio"
+                                name="sign-in-address"
+                                checked={i === signInChoice}
+                                onChange={() => setSignInChoice(i)}
+                                disabled={busy}
+                            >
+                                {d ? <ChainBadge descriptor={d} size="sm" showName /> : null}
+                                <span dir="ltr">{neutralizeControlText(c.address, { maxLength: 120 })}</span>
+                            </ChoiceControl>
                         );
                     })}
                 </fieldset>
@@ -702,6 +888,9 @@ export function SignApproval({ id, kind, payload, onReject }) {
                         ? { ...psbtIntent.action, summary: psbtActionSummary(psbtIntent.action) }
                         : null}
                     decodeError={psbtIntent.error || psbtIntent.actionDecodeReason}
+                    unavailableMessage={psbtPayloadMissing
+                        ? 'This request is missing the transaction to sign'
+                        : null}
                 />
             ) : null}
 
@@ -747,6 +936,9 @@ export function SignApproval({ id, kind, payload, onReject }) {
                         result={previewResult}
                         loading={previewBalances.loading}
                         error={previewBalances.error}
+                        chainCoin={descriptor?.networkKind === 'mainnet' ? descriptor.coin : null}
+                        fiatCurrency={settings?.fiatCurrency || 'USD'}
+                        allowCoingeckoFallback={settings?.privacy?.priceDataEnabled !== false}
                     />
                 </>
             ) : null}
@@ -763,38 +955,50 @@ export function SignApproval({ id, kind, payload, onReject }) {
                 }
             />
 
-            <form
-                id="sign-approval-form"
-                onSubmit={handleApprove}
-                noValidate
-                className={styles.form}
-            >
-                <Input
-                    ref={inputRef}
-                    type="password"
-                    label="Password"
-                    hint="Required to sign. Your password stays in this window."
-                    value={password}
-                    onChange={(e) => {
-                        setPassword(e.target.value);
-                        if (error) setError(null);
-                    }}
-                    autoComplete="current-password"
-                    disabled={busy}
-                    error={error || undefined}
-                />
-                {showSavePermanent ? (
-                    <label className={shared.toggleRow}>
-                        <input
-                            type="checkbox"
+                {watchOnlyBlocked ? (
+                    <p className={styles.refusal} role="status">
+                        {WATCH_ONLY_SIGNING_MESSAGE}
+                    </p>
+                ) : watcherMode ? (
+                    <p className={styles.refusal} role="status">
+                        {watcherCopy}
+                    </p>
+                ) : walletMode === null ? (
+                    <p role="status">{t('extension.sign.checkingWalletMode')}</p>
+                ) : null}
+            </ListPage>
+            {!signingUnavailable && walletMode !== null ? (
+                <FormPage
+                    id="sign-approval-form"
+                    label={title}
+                    onSubmit={(event) => event.preventDefault()}
+                >
+                    <Input
+                        ref={inputRef}
+                        type="password"
+                        label={t('common.password')}
+                        hint={t('extension.sign.passwordHint')}
+                        value={password}
+                        onChange={(e) => {
+                            setPassword(e.target.value);
+                            if (error) setError(null);
+                        }}
+                        autoComplete="current-password"
+                        disabled={busy}
+                        error={error || undefined}
+                    />
+                    {showSavePermanent ? (
+                        <ChoiceControl
+                            className={shared.toggleRow}
                             checked={savePermanent}
                             onChange={(e) => setSavePermanent(e.target.checked)}
                             disabled={busy}
-                        />
-                        <span>Always allow this on {origin}</span>
-                    </label>
-                ) : null}
-            </form>
+                        >
+                            <span>{t('extension.sign.alwaysAllow')}</span>
+                        </ChoiceControl>
+                    ) : null}
+                </FormPage>
+            ) : null}
         </Screen>
     );
 }
@@ -836,18 +1040,72 @@ function advisoryPreflightReport(report) {
     };
 }
 
+function firstApprovalField(payload, names) {
+    const inner = payload?.payload;
+    const sources = [inner, inner?.requested, payload];
+    for (const source of sources) {
+        if (!source || typeof source !== 'object') continue;
+        for (const name of names) {
+            if (Object.hasOwn(source, name)
+                && source[name] !== null
+                && source[name] !== '') {
+                return { name, value: source[name] };
+            }
+        }
+    }
+    return null;
+}
+
+function approvalFeeRequest(payload, descriptor) {
+    const fee = firstApprovalField(payload, ['fee', 'networkFeeSats']);
+    const rate = firstApprovalField(payload, ['feeRate', 'feePerKb']);
+    const actionNeedsFeeSummary = ['SEND', 'SWEEP'].includes(
+        String(payload?.action || '').toUpperCase(),
+    );
+    if (!fee && !rate && !actionNeedsFeeSummary) return null;
+
+    const coinAmount = fee ? formatNativeBaseUnits(fee.value, descriptor) : null;
+    let rateText = null;
+    if (rate && (typeof rate.value === 'number' || typeof rate.value === 'string')) {
+        const unit = resolveFeeUnit(descriptor);
+        const raw = String(rate.value).trim();
+        if (rate.name === 'feePerKb') {
+            const feePerKb = Number(raw);
+            if (Number.isFinite(feePerKb) && feePerKb >= 0) {
+                rateText = `${settingsCustomToDisplayRate(unit, feePerKb)} ${unit}`;
+            }
+        } else if (/^[+]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(raw)) {
+            rateText = `${raw} ${unit}`;
+        } else if (raw) {
+            rateText = neutralizeControlText(raw, { maxLength: 80 });
+        }
+    }
+
+    return { coinAmount, rateText };
+}
+
+function formatApprovalFee(requestedFee, nativeTicker, formatNativeFee) {
+    if (requestedFee.coinAmount !== null && nativeTicker) {
+        const fiat = formatNativeFee(requestedFee.coinAmount);
+        return `${requestedFee.coinAmount} ${nativeTicker}${fiat ? ` (${fiat})` : ''}`;
+    }
+    return t('extension.sign.feeSetBySite', {
+        rate: requestedFee.rateText ? ` (${requestedFee.rateText})` : '',
+    });
+}
+
 function SignSummary({ kind, payload, decoded, intentLoading, sourceAddress = null }) {
     const inner = payload?.payload || {};
     switch (kind) {
         case 'signMessage':
             return (
                 <div className={shared.summary}>
-                    <p className={shared.summaryLabel}>Message</p>
-                    <HardenedSignedText value={inner.message} warningNoun="message" />
+                    <p className={shared.summaryLabel}>{t('verifySignature.message')}</p>
+                    <HardenedSignedText value={inner.message} warningNoun={t('extension.sign.warningNoun.message')} />
                     {inner.address ? (
                         <>
-                            <p className={shared.summaryLabel} style={{ marginTop: 8 }}>Signer</p>
-                            <pre className={shared.summaryValue}>{inner.address}</pre>
+                            <p className={shared.summaryLabel} style={{ marginTop: 8 }}>{t('signerSelect.title')}</p>
+                            <pre className={shared.summaryValue} dir="ltr">{inner.address}</pre>
                         </>
                     ) : null}
                 </div>
@@ -859,7 +1117,7 @@ function SignSummary({ kind, payload, decoded, intentLoading, sourceAddress = nu
             // paths (when the dApp scoped the request to specific inputs).
             return Array.isArray(inner.signingPaths) && inner.signingPaths.length > 0 ? (
                 <div className={shared.summary}>
-                    <p className={shared.summaryLabel}>Signing paths</p>
+                    <p className={shared.summaryLabel}>{t('extension.sign.signingPaths')}</p>
                     <pre className={shared.summaryValue}>
                         {inner.signingPaths.join('\n')}
                     </pre>
@@ -873,11 +1131,11 @@ function SignSummary({ kind, payload, decoded, intentLoading, sourceAddress = nu
             if (!decoded) {
                 return (
                     <div className={shared.summary}>
-                        <p className={shared.summaryLabel}>{actionDisplayLabel(payload?.action) || 'Action'}</p>
+                        <p className={shared.summaryLabel}>{actionDisplayLabel(payload?.action) || t('actionDetail.title')}</p>
                         <p className={shared.summaryValue} style={{ whiteSpace: 'normal' }}>
                             {intentLoading
-                                ? 'Reading this action…'
-                                : 'This action could not be described. Approve only if you know exactly what it does.'}
+                                ? t('extension.sign.action.reading')
+                                : t('extension.sign.action.unavailable')}
                         </p>
                     </div>
                 );
@@ -885,7 +1143,7 @@ function SignSummary({ kind, payload, decoded, intentLoading, sourceAddress = nu
             return (
                 <>
                     <div className={shared.summary}>
-                        <p className={shared.summaryLabel}>{actionDisplayLabel(payload?.action) || 'Action'}</p>
+                        <p className={shared.summaryLabel}>{actionDisplayLabel(payload?.action) || t('actionDetail.title')}</p>
                         <p
                             className={shared.summaryValue}
                             style={{ whiteSpace: 'normal', fontFamily: 'var(--xc-font-sans)', fontSize: 13, lineHeight: 1.4 }}
@@ -898,14 +1156,14 @@ function SignSummary({ kind, payload, decoded, intentLoading, sourceAddress = nu
                             asks for approval has to name it. */}
                         {sourceAddress ? (
                             <>
-                                <p className={shared.summaryLabel} style={{ marginTop: 8 }}>From</p>
-                                <pre className={shared.summaryValue} data-testid="sign-approval-source">{sourceAddress}</pre>
+                                <p className={shared.summaryLabel} style={{ marginTop: 8 }}>{t('send.fields.from')}</p>
+                                <pre className={shared.summaryValue} data-testid="sign-approval-source" dir="ltr">{sourceAddress}</pre>
                             </>
                         ) : null}
                         {decoded.details.length > 0 ? (
                             <details className={styles.details}>
                                 <summary className={styles.detailsToggle}>
-                                    Details ({decoded.details.length})
+                                    {t('send.review.details', { count: decoded.details.length })}
                                 </summary>
                                 <dl className={styles.detailsList}>
                                     {decoded.details.map((row) => (
@@ -931,13 +1189,13 @@ function SignSummary({ kind, payload, decoded, intentLoading, sourceAddress = nu
         case 'signIn':
             return (
                 <div className={shared.summary}>
-                    <p className={shared.summaryLabel}>Sign in to</p>
+                    <p className={shared.summaryLabel}>{t('extension.sign.signInTo')}</p>
                     <HardenedSignedText
                         value={inner.appId || payload?.origin || ''}
-                        warningNoun="sign-in"
+                        warningNoun={t('extension.sign.warningNoun.signIn')}
                     />
-                    <p className={shared.summaryLabel} style={{ marginTop: 8 }}>One-time code</p>
-                    <HardenedSignedText value={inner.nonce} warningNoun="sign-in" />
+                    <p className={shared.summaryLabel} style={{ marginTop: 8 }}>{t('extension.sign.oneTimeCode')}</p>
+                    <HardenedSignedText value={inner.nonce} warningNoun={t('extension.sign.warningNoun.signIn')} />
                 </div>
             );
         default:
@@ -953,7 +1211,7 @@ function HardenedSignedText({ value, warningNoun }) {
             <pre className={shared.summaryValue}>{display}</pre>
             {display !== original ? (
                 <p className={styles.textWarning}>
-                    Control characters are displayed safely. The original {warningNoun} text is what you will sign.
+                    {t('extension.sign.controlCharacters', { noun: warningNoun })}
                 </p>
             ) : null}
         </>
@@ -1019,7 +1277,7 @@ function coSignPolicySentence(policyReason) {
 function CoSignTechnicalDetails({ testId, text }) {
     return (
         <details className={styles.details} data-testid={testId}>
-            <summary className={styles.detailsToggle}>Technical details</summary>
+            <summary className={styles.detailsToggle}>{t('pending.detail.technicalDetails')}</summary>
             <code style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{text}</code>
         </details>
     );
@@ -1035,8 +1293,8 @@ function CoSignIntentSummary({ loading, error, preview }) {
     if (loading) {
         return (
             <div className={shared.summary}>
-                <p className={shared.summaryLabel}>Co-sign request</p>
-                <p className={shared.summaryValue} style={{ whiteSpace: 'normal' }}>Decoding request…</p>
+                <p className={shared.summaryLabel}>{t('extension.sign.coSignRequest')}</p>
+                <p className={shared.summaryValue} style={{ whiteSpace: 'normal' }}>{t('extension.sign.decodingRequest')}</p>
             </div>
         );
     }
@@ -1046,7 +1304,7 @@ function CoSignIntentSummary({ loading, error, preview }) {
                 <ul className={styles.warnings} role="alert">
                     <li>
                         {coSignErrorSentence(error)}
-                        {' '}Only approve it if you trust the source.
+                        {' '}{t('extension.sign.trustSource')}
                     </li>
                 </ul>
                 {error && isDeveloperMessage(error) ? (
@@ -1061,15 +1319,15 @@ function CoSignIntentSummary({ loading, error, preview }) {
 
     return (
         <div className={shared.summary}>
-            <p className={shared.summaryLabel}>Agent account</p>
+            <p className={shared.summaryLabel}>{t('extension.sign.agentAccount')}</p>
             <p className={shared.summaryValue} style={{ whiteSpace: 'normal' }}>
-                {acct.name || 'Co-signer account'}
+                {acct.name || t('extension.sign.coSignerAccount')}
                 {acct.aggregateAddress ? ` (${acct.aggregateAddress})` : ''}
             </p>
 
             {preview.decodeOk ? (
                 <>
-                    <p className={shared.summaryLabel}>Action</p>
+                    <p className={shared.summaryLabel}>{t('actionDetail.title')}</p>
                     <p className={shared.summaryValue} style={{ whiteSpace: 'normal' }}>
                         {actionDisplayLabel(preview.action) || preview.action}
                         {preview.amount !== undefined ? ` ${preview.amount}` : ''}
@@ -1077,7 +1335,7 @@ function CoSignIntentSummary({ loading, error, preview }) {
                     </p>
                     {dests.length > 0 ? (
                         <>
-                            <p className={shared.summaryLabel}>To</p>
+                            <p className={shared.summaryLabel}>{t('send.fields.to')}</p>
                             <p className={shared.summaryValue} style={{ whiteSpace: 'normal' }}>{dests.join(', ')}</p>
                         </>
                     ) : null}
@@ -1098,7 +1356,7 @@ function CoSignIntentSummary({ loading, error, preview }) {
                     <ul className={styles.warnings} role="alert">
                         <li>
                             {coSignPolicySentence(preview.policyReason)}
-                            {' '}The co-signer will refuse it even if you approve.
+                            {' '}{t('extension.sign.policyRefusal')}
                         </li>
                     </ul>
                     {preview.policyReason ? (
@@ -1108,21 +1366,9 @@ function CoSignIntentSummary({ loading, error, preview }) {
             ) : null}
             {preview.decodeOk && preview.policyOk && preview.needsConfirmation ? (
                 <p className={shared.summaryValue} style={{ whiteSpace: 'normal' }}>
-                    Above the policy confirm-threshold: review carefully before approving.
+                    {t('extension.sign.confirmThreshold')}
                 </p>
             ) : null}
         </div>
     );
-}
-
-function formatSats(value) {
-    const n = Number(value || 0);
-    return `${n.toLocaleString()} sats`;
-}
-
-function ellipsizeMiddle(s, head = 12, tail = 8) {
-    const str = String(s ?? '');
-    return str.length > head + tail + 1
-        ? `${str.slice(0, head)}…${str.slice(-tail)}`
-        : str;
 }

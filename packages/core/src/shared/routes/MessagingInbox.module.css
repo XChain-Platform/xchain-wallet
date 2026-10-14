@@ -14,69 +14,24 @@
 .toolbar {
     display: flex;
     flex-direction: row;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--xc-space-2);
     width: 100%;
+    /* The half-grid addition aligns the toolbar with its neighboring route controls. */
     margin-bottom: calc(var(--xc-space-1) + 2px);
 }
 
-.search {
-    flex: 1 1 0;
+.toolbar > * {
+    flex: 1 1 12rem;
     min-width: 0;
-    box-sizing: border-box;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
-}
-
-.search::placeholder {
-    color: var(--xc-text-muted);
-}
-
-/* Circular header "+" button that launches the new-conversation flow. */
-.addBtn {
-    appearance: none;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 38px;
-    height: 38px;
-    padding: 0;
-    border: 1px solid var(--xc-border-strong);
-    border-radius: 50%;
-    background: transparent;
-    color: var(--xc-text);
-    cursor: pointer;
-    flex: 0 0 auto;
-}
-
-.addBtn:hover {
-    background: var(--xc-bg-muted);
-}
-
-.addBtn:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
+    margin-bottom: 0;
 }
 
 /* Encrypted-session requests: counterparties who published their key to one of
    our addresses. Each row offers a "Share my key" reply (format-1 handshake). */
-.requestCard {
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-lg);
-    padding: var(--xc-space-3);
+.requestSection {
     margin-bottom: var(--xc-space-2);
-}
-
-.requestIntro {
-    margin: 0 0 var(--xc-space-2);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
 }
 
 .requestList {
@@ -113,13 +68,8 @@
 .requestActions {
     display: flex;
     flex-direction: row;
+    flex-wrap: wrap;
     align-items: center;
-    gap: var(--xc-space-2);
-}
-
-.requestAuth {
-    display: flex;
-    flex-direction: column;
     gap: var(--xc-space-2);
 }
 
@@ -150,8 +100,8 @@
     margin: var(--xc-space-3) 0 var(--xc-space-2);
     font-size: var(--xc-text-xs);
     font-weight: 700;
-    color: var(--xc-accent-primary);
-    scroll-margin-top: 56px;
+    color: var(--xc-accent-text);
+    scroll-margin-top: calc(var(--xc-control-h-lg) + var(--xc-space-2));
 }
 
 .unreadDivider::before,
@@ -161,6 +111,47 @@
     height: 1px;
     background: var(--xc-accent-primary);
     opacity: 0.4;
+}
+
+.messageBubble {
+    min-width: 0;
+    padding: 0.4rem 0.7rem;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+.messageLink {
+    color: inherit;
+    text-decoration: underline;
+    overflow-wrap: anywhere;
+}
+
+.attachmentLink {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    margin-top: var(--xc-space-2);
+    color: inherit;
+    overflow-wrap: anywhere;
+}
+
+.attachmentLink svg {
+    flex: 0 0 auto;
+    width: var(--xc-icon-sm);
+    height: var(--xc-icon-sm);
+}
+
+.messageMeta {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    /* The half-grid top inset visually separates metadata from message copy. */
+    margin: 2px 0.3rem 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
 }
 
 /* Docked thread composer: lives in the Screen footer, which flex-pins it to
@@ -177,6 +168,11 @@
     margin: calc(var(--xc-space-2) - var(--xc-space-3)) calc(var(--xc-space-2) - var(--xc-space-4));
 }
 
+.composer > div {
+    flex: 1 1 auto;
+    margin-bottom: 0;
+}
+
 .composerInput {
     flex: 1 1 auto;
     min-width: 0;
@@ -188,25 +184,9 @@
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
     border-inline-end: none;
-    border-radius: var(--xc-radius-md) 0 0 var(--xc-radius-md);
-}
-
-.composerSend {
-    flex: 0 0 auto;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    color: var(--xc-on-accent);
-    background: var(--xc-accent-primary);
-    border: 1px solid var(--xc-accent-primary);
-    border-radius: 0 var(--xc-radius-md) var(--xc-radius-md) 0;
-    cursor: pointer;
-}
-
-.composerSend:hover {
-    background: var(--xc-accent-primary-hover);
-    border-color: var(--xc-accent-primary-hover);
+    border-radius: 0;
+    border-start-start-radius: var(--xc-control-radius);
+    border-end-start-radius: var(--xc-control-radius);
 }
 
 /* Replace the browser focus ring (which outlines only the input half and
@@ -220,61 +200,18 @@
     color: var(--xc-text-muted);
 }
 
-/* Send-confirmation review rows: label on the left, value on the right. */
-.confirmList {
-    margin: var(--xc-space-3) 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-3);
-}
-
-.confirmRow {
-    display: flex;
-    flex-direction: row;
-    align-items: baseline;
-    gap: var(--xc-space-3);
-}
-
-.confirmLabel {
-    flex: 0 0 auto;
-    min-width: 6.5rem;
-    margin: 0;
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-    color: var(--xc-text-muted);
-}
-
-.confirmValue {
-    flex: 1 1 auto;
-    min-width: 0;
-    margin: 0;
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    text-align: start;
-}
-
-/* Card wrapping the active-chat list. */
-.convCard {
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-lg);
-    overflow: hidden;
-}
-
-/* Scrollable conversation list inside the card. */
+/* The page owns scrolling so the conversation list stays in the same scroll flow. */
 .convList {
     list-style: none;
     padding: 0;
     margin: 0;
-    max-height: 60vh;
-    overflow-y: auto;
 }
 
 /* One chat row: line 1 = name/address + relative time; line 2 = preview. */
 .convItem {
     display: flex;
     flex-direction: column;
+    /* Half-grid spacing keeps the two conversation lines visually connected. */
     gap: 2px;
     width: 100%;
     text-align: start;
@@ -286,6 +223,13 @@
     cursor: pointer;
 }
 
+.convItem > span {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+}
+
 .convList li:last-child .convItem {
     border-bottom: none;
 }
@@ -294,7 +238,7 @@
     background: var(--xc-bg-muted);
 }
 
-/* Line 1: name/address (left, ellipsized) + relative timestamp (right). */
+/* Line 1: name/address at the start + relative timestamp at the end. */
 .convTop {
     display: flex;
     align-items: baseline;
@@ -303,7 +247,7 @@
     min-width: 0;
 }
 
-/* Holds the unread dot + name on the left of line 1, taking the row's free
+/* Holds the unread dot + name at the start of line 1, taking the row's free
    width so the name still ellipsizes and the timestamp keeps its place. */
 .convNameWrap {
     display: flex;
@@ -314,12 +258,12 @@
     overflow: hidden;
 }
 
-/* Unread indicator: a small accent dot to the left of a conversation's name,
+/* Unread indicator: a small accent dot before a conversation's name,
    iOS-Messages style. Cleared once the thread is opened. */
 .unreadDot {
     flex: 0 0 auto;
-    width: 8px;
-    height: 8px;
+    width: var(--xc-space-2);
+    height: var(--xc-space-2);
     border-radius: 50%;
     background: var(--xc-accent-primary);
     /* Nudge onto the text center so it reads as inline with the name. */
@@ -368,6 +312,8 @@
     white-space: nowrap;
     font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
+    -webkit-user-select: text;
+    user-select: text;
 }
 
 /* Box-shadow focus rings are not painted in forced-colors mode, so give

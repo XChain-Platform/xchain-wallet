@@ -8,10 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Screen, PageHeader, Icon } from '@xchain-wallet/core/ui';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Button, EmptyState, Icon, Input, ListPage, PageHeader, Screen, SectionHeader } from '@xchain-wallet/core/ui';
+import { useBackHandler } from '../../ui/backStack.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { shellCapabilities } from '../shellCapabilities.js';
+import { resolveBindings } from '../keyboard/shortcuts.js';
 import { WALLET_VERSION } from '../../buildInfo.js';
 import { AboutSection } from '../components/settings/AboutSection.jsx';
 import { AdsSection } from '../components/settings/AdsSection.jsx';
@@ -26,18 +29,178 @@ import { FeesSection } from '../components/settings/FeesSection.jsx';
 import { LanguageRegionSection } from '../components/settings/LanguageRegionSection.jsx';
 import { NetworkEndpointsSection } from '../components/settings/NetworkEndpointsSection.jsx';
 import { NetworkSection } from '../components/settings/NetworkSection.jsx';
+import { normalizeActiveNetwork } from '../utils/activeNetworkSwitch.js';
+
+// Names the network the wallet is actually on, so the Network row never claims
+// Mainnet while a test network is active.
+function activeNetworkLabel(value) {
+    const id = normalizeActiveNetwork(value);
+    return id.charAt(0).toUpperCase() + id.slice(1);
+}
 import { NotificationsSection } from '../components/settings/NotificationsSection.jsx';
 import { PrivacySection } from '../components/settings/PrivacySection.jsx';
 import { SafetySection } from '../components/settings/SafetySection.jsx';
 import { ThisWalletSection } from '../components/settings/ThisWalletSection.jsx';
 import { WalletModeSection } from '../components/settings/WalletModeSection.jsx';
-import { WALLET_MODE_DEFAULT } from '../../schemas/settings.js';
+import {
+    NUMBER_FORMAT_DEFAULT,
+    SMALL_BALANCE_THRESHOLD_DEFAULT,
+    WALLET_MODE_DEFAULT,
+} from '../../schemas/settings.js';
 import {
     clearActiveWallet,
     writeActiveWallet,
 } from '../utils/activeWalletMemory.js';
 import { wipeWalletStorage } from '../utils/wipeWalletStorage.js';
-import styles from './ActionsMenu.module.css';
+import { writeLastView } from '../utils/lastViewMemory.js';
+import actionStyles from './ActionsMenu.module.css';
+import settingsStyles from './Settings.module.css';
+
+const row = (title, terms = '', target = title) => ({ title, terms, target });
+
+export const SETTINGS_SEARCH_ROWS = Object.freeze({
+    'accounts-addresses': [row('Accounts & addresses', 'account address signer change pairing')],
+    'this-wallet': [
+        row('Wallet', 'switch rename name vault'),
+        row('Upgrade recovery phrase', 'migrate legacy seed mnemonic'),
+        row('Extended public keys', 'xpub export watch only'),
+        row('Change wallet password', 'password security'),
+        row('Remove wallet', 'delete destroy'),
+    ],
+    appearance: [row('Theme', 'dark light system'), row('Reduced motion', 'animation accessibility')],
+    display: [
+        row('Hide small balances', 'dust threshold'),
+        row('Small-balance threshold', 'dust balance minimum'),
+        row('Balance number format', 'decimal digits grouping'),
+        row('Show pin button on rows', 'star favorite affordance'),
+        row('Show hide button on rows', 'conceal affordance'),
+        row('Watched tokens', 'watch token ticker'),
+        row('Pinned tokens', 'pin star favorite reorder'),
+        row('Hidden tokens', 'hide unhide concealed'),
+        row('Saved chain filters', 'list preferences reset'),
+        row('Reset display settings', 'defaults clear'),
+    ],
+    keyboard: [
+        ...resolveBindings({}).map((shortcut) => row(shortcut.label, `${shortcut.group} shortcut hotkey keys`)),
+        row('Reset all shortcuts', 'restore defaults bindings'),
+    ],
+    'language-region': [row('Language', 'locale translation'), row('Fiat currency', 'money usd eur local currency')],
+    privacy: [
+        row('Tor routing', 'proxy onion network privacy'),
+        row('Change-address rotation', 'change address privacy'),
+        row('Blur sensitive data on blur', 'hide conceal window focus'),
+        row('Labels survive restore', 'backup recovery metadata'),
+        row('Haptic feedback', 'vibration touch'),
+        row('Native coin price data', 'prices market third party'),
+        row('Fetch token metadata', 'token information third party'),
+        row('Always require hardware cross-check confirm', 'hardware wallet verify address path'),
+        row('Clipboard auto-clear', 'copy clear timeout seconds'),
+        row('Form draft retention', 'saved forms persistence timeout'),
+    ],
+    safety: [
+        row('Auto-lock timeout', 'lock idle minutes'),
+        row('New-recipient test-send warning (sats)', 'test send threshold new address'),
+        row('Lookalike address warnings', 'similar address scam'),
+        row('Hold signed sends before broadcast', 'undo cancel delay transaction'),
+        row('Hold duration in seconds (0 disables)', 'undo send delay timeout'),
+        row('Biometric unlock', 'fingerprint face id touch id'),
+        row('Panic mode', 'freeze signing emergency'),
+        row('Duress passphrase', 'decoy emergency password'),
+        row('Backup reminders', 'recovery reminder'),
+    ],
+    'wallet-mode': [
+        row('Normal', 'full sign broadcast'),
+        row('Watcher (watch-only)', 'unsigned psbt cold storage'),
+        row('Signer (air-gapped)', 'offline psbt cold storage'),
+    ],
+    backup: [
+        row('Export encrypted backup', 'backup file password'),
+        row('Back up recovery phrase', 'seed mnemonic words reveal'),
+        row('Test backup (dry-run restore)', 'verify seed recovery phrase'),
+        row('Publish labels on-chain', 'backup metadata contacts blockchain'),
+        row('Check chain for backed-up contacts', 'restore labels address book'),
+    ],
+    fees: [
+        row('Fee strategy', 'fee fees network fee rate priority'),
+        row('Custom fee rate', 'fee fees network fee sats per byte', 'Fee strategy'),
+        row('Allow fee bump (Replace-by-Fee)', 'fee fees rbf speed up transaction'),
+    ],
+    network: [row('Active network', 'mainnet testnet regtest switch chain')],
+    'network-endpoints': [
+        row('Chain registry refresh', 'networks update registry'),
+        row('Explorer URL', 'endpoint block explorer'),
+        row('Encoder URL', 'endpoint transaction encoder'),
+        row('Hub URL', 'endpoint node api'),
+    ],
+    notifications: [
+        row('Desktop notifications', 'browser os permission alerts'),
+        row('Transaction confirmations', 'confirmed sent transaction alert'),
+        row('Incoming receipts', 'received payment alert'),
+        row('Incoming pending payments', 'mempool unconfirmed payment alert'),
+        row('Incoming messages', 'message alert'),
+        row('Governance polls', 'vote proposal alert'),
+        row('Deadlines', 'expiry expiration alert'),
+        row('Dispenser running low', 'escrow stock alert'),
+        row('Dispenser fills', 'sale purchase alert'),
+        row('Order fills', 'dex trade matched alert'),
+        row('Price alerts', 'market price target'),
+        row('Quiet hours', 'do not disturb dnd schedule'),
+        row('Notification sounds', 'audio noise alert'),
+    ],
+    'connected-sites': [
+        row('Sign-request throttle', 'dapp request rate limit abuse'),
+        row('Burst', 'sign throttle maximum requests'),
+        row('Window (seconds)', 'sign throttle duration rate limit'),
+        row('Blocked sites', 'dapp website origin denylist'),
+        row('Site block history', 'blocked unblocked audit log'),
+        row('Chains', 'dapp permission networks'),
+        row('Accounts', 'dapp permission addresses'),
+        row('Sign messages', 'dapp permission signature'),
+        row('Sign actions', 'dapp permission transaction'),
+    ],
+    contacts: [
+        row('Contacts in this wallet', 'address book count'),
+        row('Export', 'contacts address book json csv download'),
+        row('Import', 'contacts address book json csv upload'),
+    ],
+    ads: [
+        row('Automatic Donation System', 'ads donations enable disable'),
+        row('Set aside per outgoing transaction (sats)', 'per transaction donation amount network fee'),
+        row('Send donation when pending reaches (sats)', 'trigger threshold accumulated donation'),
+        row('Pending donation', 'accumulated donation'),
+        row('Lifetime donations', 'donation total history'),
+    ],
+    developer: [
+        row('Developer Mode', 'development advanced regtest'),
+        row('Learn Mode', 'education explain'),
+        row('Show variant popover', 'layout preview'),
+        row('Auto-approve localhost dApps', 'local dapp connect permission'),
+        row('Cache password for localhost auto-sign', 'local dapp signing timeout'),
+        row('Logs and diagnostics console', 'debug log console'),
+        row('Regtest networks', 'local network development'),
+        row('Regtest faucet', 'mint test coins miner'),
+        row('Miner URL', 'faucet endpoint'),
+        row('Amount', 'faucet mint test coins'),
+        row('Custom chains', 'add network descriptor'),
+        row('Custom chain descriptor JSON', 'add network paste'),
+    ],
+    updates: [row('Check for updates', 'new version upgrade latest release')],
+    about: [
+        row('Version', 'app release'),
+        row('Build identifier', 'build commit revision'),
+        row('Platform', 'shell operating system'),
+        row('Update channel', 'release channel'),
+        row('Check for new versions', 'updates upgrade latest release'),
+        row('License', 'agpl legal'),
+        row('Notice', 'legal attribution'),
+        row('Reproducible build', 'verify build'),
+        row('Verify a release', 'signature verification'),
+        row('Release signatures', 'gpg fingerprint'),
+        row('Disclosure policy', 'security vulnerability'),
+        row('Diagnostics', 'debug report copy'),
+        row('Feedback', 'contact report issue'),
+    ],
+});
 
 /**
  * Settings page (§35).
@@ -65,6 +228,7 @@ import styles from './ActionsMenu.module.css';
  * @param {() => void} [props.onOpenAccountPicker]
  * @param {string} [props.initialSubpageId]   §24 Cluster Y FOLLOWUP 2: open this drilldown panel on mount (e.g. 'connected-sites' from a deep nav row)
  * @param {(sel: { chainId: string, tick: string }) => void} [props.onNavigateToMint]   Developer Mode's regtest faucet "Mint test XCHAIN" button
+ * @param {() => void} [props.onOpenBackupInTab]
  * @param {() => void} [props.reload]
  */
 export function Settings({
@@ -75,45 +239,82 @@ export function Settings({
     onOpenAccountPicker,
     initialSubpageId = null,
     onNavigateToMint,
+    onOpenBackupInTab,
     reload = reloadPage,
 }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const [query, setQuery] = useState('');
     const [subpageId, setSubpageId] = useState(/** @type {string | null} */ (initialSubpageId || null));
+    const [searchTarget, setSearchTarget] = useState(/** @type {string | null} */ (null));
     const [siteCount, setSiteCount] = useState(/** @type {number | null} */ (null));
+    const [siteSearchTerms, setSiteSearchTerms] = useState('');
+    const [walletManagementBusy, setWalletManagementBusy] = useState(false);
+    const sectionOpenerRefs = useRef(new Map());
+    const pendingFocusRestore = useRef(/** @type {string | null} */ (null));
 
     const { settings } = useSettings();
+
+    const closeSubpage = useCallback(() => {
+        pendingFocusRestore.current = subpageId;
+        setSubpageId(null);
+        setSearchTarget(null);
+    }, [subpageId]);
+
+    // A Settings drilldown is nested UI, so Escape and the system Back action
+    // close it before the surrounding route.
+    useBackHandler(subpageId ? closeSubpage : undefined);
+
+    useEffect(() => {
+        if (subpageId || !pendingFocusRestore.current) return;
+        const openerId = pendingFocusRestore.current;
+        pendingFocusRestore.current = null;
+        sectionOpenerRefs.current.get(openerId)?.focus();
+    }, [subpageId]);
 
     useEffect(() => {
         let alive = true;
         if (typeof messaging?.listConnectedSites !== 'function') return undefined;
         messaging.listConnectedSites()
-            .then((list) => { if (alive) setSiteCount(Array.isArray(list) ? list.length : 0); })
-            .catch(() => { if (alive) setSiteCount(0); });
+            .then((list) => {
+                if (!alive) return;
+                const sites = Array.isArray(list) ? list : [];
+                setSiteCount(sites.length);
+                setSiteSearchTerms(sites.flatMap((site) => [site?.appName, site?.origin]).filter(Boolean).join(' '));
+            })
+            .catch(() => {
+                if (alive) {
+                    setSiteCount(0);
+                    setSiteSearchTerms('');
+                }
+            });
         return () => { alive = false; };
     }, [messaging]);
 
     const handleWalletRemoved = useCallback(async (removedWalletId) => {
         clearActiveWallet();
-        if (typeof messaging?.listWallets !== 'function') {
-            throw new Error('Could not refresh the wallet list.');
-        }
+        try {
+            // Require a fresh list before selecting a replacement wallet.
+            if (typeof messaging?.listWallets !== 'function') {
+                throw new Error('Could not refresh the wallet list.');
+            }
+            const listed = await messaging.listWallets();
+            const wallets = Array.isArray(listed) ? listed : listed?.wallets;
+            // Reject unknown response shapes so an empty-looking result cannot wipe a real vault.
+            if (!Array.isArray(wallets)) {
+                throw new Error('Could not refresh the wallet list.');
+            }
 
-        const listed = await messaging.listWallets();
-        const wallets = Array.isArray(listed) ? listed : listed?.wallets;
-        if (!Array.isArray(wallets)) {
-            throw new Error('Could not refresh the wallet list.');
+            const nextWallet = wallets.find((wallet) => wallet?.id && wallet.id !== removedWalletId);
+            if (nextWallet) {
+                writeActiveWallet(nextWallet.id);
+            } else {
+                await wipeWalletStorage();
+            }
+        } finally {
+            // Reload even when fallback selection fails so no live screen keeps the removed wallet selected.
+            reload();
         }
-
-        const nextWallet = wallets.find((wallet) => wallet?.id && wallet.id !== removedWalletId);
-        if (nextWallet) {
-            writeActiveWallet(nextWallet.id);
-        } else {
-            await wipeWalletStorage();
-        }
-
-        reload();
     }, [messaging, reload]);
 
     const walletLabel = activeWallet?.name || 'No wallet';
@@ -123,18 +324,22 @@ export function Settings({
     const sections = useMemo(() => /** @type {SectionDef[]} */ ([
         {
             id: 'this-wallet',
-            title: 'This Wallet',
-            description: 'Wallet name, switch / rename, remove wallet.',
-            keywords: 'wallet name remove rename migrate bip39 delete destroy',
+            title: 'This wallet',
+            description: 'Manage its name, extended public keys, switching, and removal.',
+            keywords: 'wallet name xpub extended public key watch only export switch rename remove delete destroy migrate bip39 upgrade recovery phrase encrypted seed backup',
             kind: 'internal-drill',
             Component: ThisWalletSection,
-            props: { activeWallet, onOpenWalletPicker, onWalletRemoved: handleWalletRemoved },
+            props: {
+                activeWallet, onOpenWalletPicker, activeAccount,
+                onWalletRemoved: handleWalletRemoved,
+                onBusyChange: setWalletManagementBusy,
+            },
             summary: walletLabel,
         },
         {
             id: 'accounts-addresses',
-            title: 'Accounts & Addresses',
-            description: 'Active account, change addresses, signer pairing.',
+            title: 'Accounts & addresses',
+            description: 'Choose the active account and manage change addresses and signer pairing.',
             keywords: 'account address signer change addresses',
             kind: 'external-drill',
             visible: Boolean(onOpenAccountPicker && activeWallet),
@@ -144,16 +349,17 @@ export function Settings({
         {
             id: 'appearance',
             title: 'Appearance',
-            description: 'Theme, accent color, reduced motion.',
-            keywords: 'appearance theme color motion accent dark light reduced',
+            description: 'Choose the theme and motion preference.',
+            keywords: 'appearance theme system default motion dark light reduced follow',
             kind: 'panel',
             Component: AppearanceSection,
         },
         {
             id: 'display',
             title: 'Display',
-            description: 'Pinned and hidden tokens: reorder pinned, bulk-unhide hidden.',
-            keywords: 'display pinned hidden tokens reorder unhide bulk star',
+            description: 'Control balance thresholds, number formatting, and pinned or hidden tokens.',
+            keywords: 'display balance threshold number format pinned hidden tokens reorder unhide bulk star',
+            searchTerms: 'row affordances show pin hide button unpin list preferences saved chain filters reset',
             kind: 'internal-drill',
             Component: DisplaySection,
             summary: displaySummary(settings),
@@ -161,25 +367,26 @@ export function Settings({
         {
             id: 'keyboard',
             title: 'Keyboard',
-            description: 'Keyboard shortcuts: view and rebind.',
-            keywords: 'keyboard shortcuts rebind keys hotkeys bindings palette',
+            description: 'View and rebind shortcuts.',
+            keywords: 'keyboard shortcuts rebind reset keys hotkeys bindings open command palette lock wallet settings new send go balances history receive dex contacts filter export pin hide focused token submit form',
             kind: 'internal-drill',
             Component: KeyboardSection,
             summary: keyboardSummary(settings),
+            visible: variant !== 'small',
         },
         {
             id: 'language-region',
-            title: 'Language & Region',
-            description: 'Language, currency.',
-            keywords: 'language region currency fiat locale',
+            title: 'Language & region',
+            description: 'Choose the interface language and fiat currency.',
+            keywords: 'language region currency fiat locale custom iso code',
             kind: 'panel',
             Component: LanguageRegionSection,
         },
         {
             id: 'privacy',
             title: 'Privacy',
-            description: 'Tor, change-address rotation, hide small balances, blur on blur, labels survive restore.',
-            keywords: 'privacy tor rotation hide balances labels blur',
+            description: 'Control network privacy, sensitive-data visibility, metadata requests, and restore behavior.',
+            keywords: 'privacy tor routing change address rotation blur sensitive data labels survive restore haptic feedback native coin price data fetch token metadata hardware cross check confirm form draft retention',
             kind: 'internal-drill',
             Component: PrivacySection,
             summary: privacySummary(settings),
@@ -187,16 +394,16 @@ export function Settings({
         {
             id: 'safety',
             title: 'Safety',
-            description: 'Auto-lock, undo-send, test-send threshold, panic mode, backup reminders.',
-            keywords: 'safety autolock auto lock undo panic backup reminders',
+            description: 'Set auto-lock, send safeguards, panic mode, biometric access, and backup reminders.',
+            keywords: 'safety autolock auto lock timeout test send warning threshold cancel sends undo biometric unlock wallet password panic mode duress passphrase backup reminders',
             kind: 'internal-drill',
             Component: SafetySection,
             summary: safetySummary(settings),
         },
         {
             id: 'wallet-mode',
-            title: 'Wallet Mode',
-            description: 'Full / Watcher (watch-only) / Signer (air-gapped). Pairs of watcher + signer wallets enable transaction-via-QR signing.',
+            title: 'Wallet mode',
+            description: 'Choose whether this device signs, broadcasts, or prepares transactions for air-gapped signing.',
             keywords: 'wallet mode full watcher watch only signer air gapped psbt cold storage',
             kind: 'internal-drill',
             Component: WalletModeSection,
@@ -205,18 +412,18 @@ export function Settings({
         {
             id: 'backup',
             title: 'Backup',
-            description: 'Seed phrase, dry-run restore, encrypted backup file.',
-            keywords: 'backup seed phrase restore encrypted file labels export',
+            description: 'Export recovery data, verify a recovery phrase, and restore labels and contacts.',
+            keywords: 'backup password wallet password export encrypted file reveal back up seed recovery phrase mnemonic test dry run restore publish labels on chain contacts',
             kind: 'internal-drill',
             Component: BackupSection,
-            props: { activeWallet },
+            props: { activeWallet, reload },
             summary: 'Encrypted file export',
         },
         {
             id: 'fees',
             title: 'Fees',
-            description: 'Per-chain fee strategy, RBF defaults.',
-            keywords: 'fees fee strategy rbf chain custom',
+            description: 'Choose the fee strategy and fee-bumping default for each chain.',
+            keywords: 'fees fee strategy rate rbf replace by fee chain custom allow bump defaults',
             kind: 'internal-drill',
             Component: FeesSection,
             summary: feesSummary(settings),
@@ -226,41 +433,57 @@ export function Settings({
             title: 'Network',
             // Optional-chained: settings is null until the async read lands,
             // and the section list renders during that window.
-            description: settings?.developerMode
-                ? 'Choose Mainnet, Testnet, or Regtest. Filters every visible chain and stops queries to the inactive networks. The page reloads on change.'
-                : 'Choose Mainnet or Testnet. Filters every visible chain and stops queries to the inactive networks. The page reloads on change.',
-            keywords: settings?.developerMode
-                ? 'network mainnet testnet regtest active filter chain switch mode dev'
-                : 'network mainnet testnet active filter chain switch mode',
+            description: settings?.developerMode === true
+                ? 'Choose Mainnet, Testnet, or Regtest to control which chains the wallet queries and displays; changing the network reloads the page.'
+                : settings?.developerMode === false
+                    ? (normalizeActiveNetwork(settings.activeNetwork) === 'mainnet'
+                        ? 'Mainnet is active. Turn on Developer mode to choose a test network.'
+                        : `${activeNetworkLabel(settings.activeNetwork)} is active. Turn on Developer mode to switch networks.`)
+                    : 'Choose Mainnet or Testnet to control which chains the wallet queries and displays; changing the network reloads the page.',
+            keywords: settings?.developerMode === true
+                ? 'network active mainnet testnet regtest filter chain switch mode dev'
+                : settings?.developerMode === false
+                    ? 'network active mainnet developer mode'
+                    : 'network active mainnet testnet filter chain switch mode',
             kind: 'panel',
             Component: NetworkSection,
             // The section needs the wallet so the switch can derive
             // that wallet's first address on each chain of the new network.
-            props: { activeWallet },
+            props: {
+                activeWallet,
+                reload: () => {
+                    // Resume on Home because the saved route belongs to the
+                    // previous network's data.
+                    writeLastView(activeWallet?.id, 'home');
+                    reload();
+                },
+            },
         },
         {
             id: 'network-endpoints',
-            title: 'Network & Endpoints',
-            description: 'Per-chain explorer, encoder, and hub URLs.',
-            keywords: 'network endpoints explorer encoder hub url chain registry',
+            title: 'Network & endpoints',
+            description: 'Set explorer, encoder, and hub URLs for each chain.',
+            keywords: 'network endpoints explorer encoder hub url chain registry reset default save',
             kind: 'internal-drill',
             Component: NetworkEndpointsSection,
+            visible: settings?.developerMode !== false,
             summary: endpointsSummary(settings),
         },
         {
             id: 'notifications',
             title: 'Notifications',
-            description: 'Confirmations, receipts, dispenser fills, order fills, price alerts.',
-            keywords: 'notifications confirmations receipts dispenser order price alert',
+            description: 'Choose which wallet events trigger notifications, sounds, or price alerts.',
+            keywords: 'notifications desktop permission transaction confirmations incoming receipts pending payments messages governance polls deadlines dispenser running low fills order price alerts sounds quiet hours do not disturb',
             kind: 'panel',
             Component: NotificationsSection,
             props: { walletId: activeWallet?.id },
         },
         {
             id: 'connected-sites',
-            title: 'Connected Sites',
-            description: 'dApp connections and per-site permissions.',
-            keywords: 'connected sites dapp permissions origin disconnect',
+            title: 'Connected sites',
+            description: 'Review dApp connections and control each site\'s permissions.',
+            keywords: 'connected sites website dapp connections permissions chains accounts sign messages actions origin disconnect block unblock blocked mutations throttle burst window',
+            searchTerms: siteSearchTerms,
             kind: 'internal-drill',
             Component: ConnectedSitesSection,
             summary: connectedSitesSummary(siteCount),
@@ -268,40 +491,48 @@ export function Settings({
         {
             id: 'contacts',
             title: 'Contacts',
-            description: 'Export and import the address book.',
-            keywords: 'contacts address book export import',
+            description: 'Export or import the address book.',
+            keywords: 'contacts address book export import json file drop private encrypted',
             kind: 'panel',
             Component: ContactsSection,
         },
         {
             id: 'ads',
-            title: 'Automatic Donation System',
+            title: 'Automatic donation system',
             description: 'Turn automatic donations on or off, set per-chain amounts and thresholds, and view lifetime totals.',
-            keywords: 'donation ads automatic per chain amount threshold lifetime',
+            keywords: 'donation ads automatic on off per chain transaction amount trigger threshold address lifetime totals',
             kind: 'internal-drill',
             Component: AdsSection,
             summary: adsSummary(settings),
         },
         {
             id: 'developer',
-            title: 'Developer Mode',
-            description: 'Custom endpoints, regtest networks, raw PSBT inspector.',
-            keywords: 'developer mode regtest custom endpoints psbt raw learn',
+            title: 'Developer mode',
+            description: 'Configure regtest networks, custom endpoints, local dApp controls, and diagnostics.',
+            keywords: 'developer mode learn variant popover regtest networks faucet mint custom chains endpoints diagnostics logs console localhost dapps auto approve auto sign cache password miner url',
             kind: 'internal-drill',
             Component: DeveloperModeSection,
-            props: { onNavigateToMint },
+            props: { activeWallet, activeAccount, onNavigateToMint, reload },
             summary: developerSummary(settings),
         },
+        ...(desktopUpdaterBridge() ? [{
+            id: 'updates',
+            title: 'Updates',
+            description: 'Check for a new version of the desktop wallet.',
+            keywords: 'updates update check for updates new version upgrade latest release',
+            kind: 'panel',
+            Component: UpdateCheckPanel,
+        }] : []),
         {
             id: 'about',
             title: 'About',
-            description: 'Version, license, reproducible build verification, release signatures.',
-            keywords: 'about version license repro reproducible signatures release security',
+            description: 'View version, license, build verification, release signature, and diagnostic details.',
+            keywords: 'about version update channel check new versions license notice repro reproducible build verify verification release signatures gpg fingerprint disclosure policy security diagnostics copy preview',
             kind: 'internal-drill',
             Component: AboutSection,
             summary: WALLET_VERSION,
         },
-    ]), [walletLabel, accountLabel, onOpenWalletPicker, onOpenAccountPicker, activeWallet, settings, siteCount, onNavigateToMint, handleWalletRemoved]);
+    ]), [walletLabel, accountLabel, onOpenWalletPicker, onOpenAccountPicker, activeWallet, activeAccount, settings, siteCount, siteSearchTerms, onNavigateToMint, handleWalletRemoved, reload, variant]);
 
     // List-view filter. Hoisted ABOVE the subpage early-return so that
     // both render paths call the same number of hooks; flipping
@@ -309,33 +540,63 @@ export function Settings({
     // call from the second render, tripping React's
     // "Rendered fewer hooks than expected" guard.
     const filtered = useMemo(() => {
-        const q = query.trim().toLowerCase();
-        if (!q) return sections;
-        return sections.filter((s) =>
-            s.title.toLowerCase().includes(q)
-            || s.description.toLowerCase().includes(q)
-            || s.keywords.toLowerCase().includes(q),
-        );
+        const visibleSections = sections.filter((section) => section.visible !== false);
+        const q = normalizeSearchText(query);
+        if (!q) return visibleSections;
+        return visibleSections.filter((s) => {
+            const searchable = normalizeSearchText([
+                s.title,
+                s.description,
+                s.keywords,
+                s.searchTerms,
+                s.summary,
+            ].filter(Boolean).join(' '));
+            const terms = q.split(' ');
+            const sectionWords = searchable.split(' ');
+            return terms.every((term) => sectionWords.some((word) => searchWordMatches(word, term)))
+                || SETTINGS_SEARCH_ROWS[s.id]?.some((item) => searchItemMatches(item, terms));
+        });
     }, [sections, query]);
 
     // ─── Subpage view ─────────────────────────────────────────────
 
     if (subpageId) {
-        const section = sections.find((s) => s.id === subpageId);
+        const section = sections.find((s) => s.id === subpageId && s.visible !== false);
         if (section && section.kind === 'internal-drill' && section.Component) {
             const SectionComponent = section.Component;
             const subpageHeader = (
                 <PageHeader
-                    onBack={() => setSubpageId(null)}
+                    onBack={closeSubpage}
+                    backDisabled={section.id === 'this-wallet' && walletManagementBusy}
                     backLabel="Back to settings"
                     title={section.title}
+                    trailing={section.id === 'backup' && onOpenBackupInTab ? (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            icon={<Icon.ExternalLinkIcon />}
+                            onClick={onOpenBackupInTab}
+                            aria-label="Open in tab"
+                            title="Open in tab"
+                        />
+                    ) : null}
                 />
             );
             return (
-                <Screen variant={variant} header={subpageHeader}>
-                    <div className={styles.listPopup}>
-                        <SectionComponent {...(section.props || {})} />
-                    </div>
+                <Screen
+                    variant={variant}
+                    header={subpageHeader}
+                    scrollKey={section.id}
+                    restoreScroll={false}
+                >
+                    <SettingsPageTemplate view="subpage">
+                        <SettingsSearchHighlight target={searchTarget}>
+                            <SectionComponent
+                                key={section.id === 'this-wallet' ? activeWallet?.id || 'none' : section.id}
+                                {...(section.props || {})}
+                            />
+                        </SettingsSearchHighlight>
+                    </SettingsPageTemplate>
                 </Screen>
             );
         }
@@ -348,43 +609,37 @@ export function Settings({
     const header = <PageHeader onBack={onBack} title="Settings" />;
 
     return (
-        <Screen variant={variant} header={header}>
-            <div className={styles.listPopup}>
-                <input
-                    type="search"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search settings…"
-                    aria-label="Search settings"
-                    style={{
-                        width: '100%',
-                        padding: 'var(--xc-space-2) var(--xc-space-3)',
-                        background: 'var(--xc-surface-raised)',
-                        border: '1px solid var(--xc-border)',
-                        borderRadius: 'var(--xc-radius-md)',
-                        color: 'var(--xc-text)',
-                        fontSize: 'var(--xc-text-md)',
-                        marginBottom: 'var(--xc-space-3)',
-                    }}
-                />
-                {filtered.length === 0 ? (
-                    <div style={{
-                        padding: 'var(--xc-space-4)',
-                        textAlign: 'center',
-                        color: 'var(--xc-text-muted)',
-                        fontSize: 'var(--xc-text-sm)',
-                    }}>
-                        No settings match "{query}".
+        <Screen variant={variant} header={header} scrollKey="list">
+            <SettingsPageTemplate
+                view="list"
+                toolbar={(
+                    <div className={settingsStyles.searchField}>
+                        <Input
+                            type="search"
+                            enterKeyHint="search"
+                            autoCapitalize="off"
+                            autoCorrect="off"
+                            spellCheck={false}
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                            placeholder="Search settings…"
+                            aria-label="Search settings"
+                        />
                     </div>
+                )}
+            >
+                {filtered.length === 0 ? (
+                    <EmptyState title="No matching settings" body={`No settings match "${query}".`} />
                 ) : null}
                 {filtered.map((section) => {
+                    const matchedRow = findMatchingSearchRow(section.id, query);
                     if (section.kind === 'external-drill') {
                         if (section.visible === false) return null;
                         return (
                             <DrillRow
                                 key={section.id}
                                 title={section.title}
-                                summary={section.summary}
+                                summary={matchedRow?.title || section.summary}
                                 onClick={section.onOpen}
                             />
                         );
@@ -394,8 +649,15 @@ export function Settings({
                             <DrillRow
                                 key={section.id}
                                 title={section.title}
-                                summary={section.summary}
-                                onClick={() => setSubpageId(section.id)}
+                                summary={matchedRow?.title || section.summary}
+                                onClick={() => {
+                                    setSearchTarget(matchedRow?.target || query.trim() || null);
+                                    setSubpageId(section.id);
+                                }}
+                                buttonRef={(node) => {
+                                    if (node) sectionOpenerRefs.current.set(section.id, node);
+                                    else sectionOpenerRefs.current.delete(section.id);
+                                }}
                             />
                         );
                     }
@@ -408,7 +670,9 @@ export function Settings({
                                 title={section.title}
                                 description={section.description}
                             >
-                                <Component {...panelProps} />
+                                <SettingsSearchHighlight target={matchedRow?.target || null}>
+                                    <Component {...panelProps} />
+                                </SettingsSearchHighlight>
                             </PanelBlock>
                         );
                     }
@@ -422,8 +686,21 @@ export function Settings({
                         </PanelBlock>
                     );
                 })}
-            </div>
+            </SettingsPageTemplate>
         </Screen>
+    );
+}
+
+function SettingsPageTemplate({ view, children, ...props }) {
+    return (
+        <ListPage
+            className={settingsStyles.page}
+            data-settings-layout="responsive"
+            data-settings-page-template={view}
+            {...props}
+        >
+            {children}
+        </ListPage>
     );
 }
 
@@ -433,12 +710,88 @@ function reloadPage() {
     }
 }
 
+function normalizeSearchText(value) {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+}
+
+function searchItemMatches(item, terms) {
+    const words = normalizeSearchText(`${item.title} ${item.terms}`).split(' ');
+    return terms.every((term) => words.some((word) => searchWordMatches(word, term)));
+}
+
+function searchWordMatches(word, term) {
+    return word === term || word === `${term}s` || `${word}s` === term;
+}
+
+export function findMatchingSearchRow(sectionId, query) {
+    const terms = normalizeSearchText(query).split(' ').filter(Boolean);
+    if (terms.length === 0) return null;
+    const rows = SETTINGS_SEARCH_ROWS[sectionId] || [];
+    const normalizedQuery = terms.join(' ');
+    return rows.find((item) => normalizeSearchText(item.title) === normalizedQuery)
+        || rows.find((item) => searchItemMatches(item, terms))
+        || null;
+}
+
+function SettingsSearchHighlight({ target, children }) {
+    const scopeRef = useRef(null);
+
+    useEffect(() => {
+        const scope = scopeRef.current;
+        if (!scope || !target) return undefined;
+        let highlighted = null;
+        let matchedLabel = null;
+        const markMatch = () => {
+            const needle = normalizeSearchText(target);
+            const candidates = scope.querySelectorAll('label, legend, h2, h3, h4, span, button');
+            const match = [...candidates].find((element) => {
+                const text = normalizeSearchText(element.textContent);
+                return text === needle || text.startsWith(`${needle} `);
+            });
+            if (!match) return false;
+            let container = match;
+            for (let node = match.parentElement; node && node !== scope; node = node.parentElement) {
+                const style = globalThis.getComputedStyle?.(node);
+                if (node.matches('section, form') || (style && style.borderTopStyle !== 'none')) {
+                    container = node;
+                    break;
+                }
+            }
+            highlighted = container;
+            matchedLabel = match;
+            highlighted.setAttribute('data-settings-search-highlight', 'true');
+            matchedLabel.setAttribute('data-settings-search-match', 'true');
+            highlighted.scrollIntoView?.({ block: 'center' });
+            return true;
+        };
+        const clear = () => {
+            highlighted?.removeAttribute('data-settings-search-highlight');
+            matchedLabel?.removeAttribute('data-settings-search-match');
+        };
+        if (markMatch()) return clear;
+        const observer = new MutationObserver(() => {
+            if (markMatch()) observer.disconnect();
+        });
+        observer.observe(scope, { childList: true, subtree: true });
+        return () => {
+            observer.disconnect();
+            clear();
+        };
+    }, [target]);
+
+    return <div ref={scopeRef} className={settingsStyles.searchHighlightScope}>{children}</div>;
+}
+
 /**
  * @typedef {{
  *   id: string,
  *   title: string,
  *   description: string,
  *   keywords: string,
+ *   searchTerms?: string,
  *   kind: 'external-drill' | 'internal-drill' | 'panel' | 'stub',
  *   visible?: boolean,
  *   summary?: string,
@@ -448,11 +801,13 @@ function reloadPage() {
  * }} SectionDef
  */
 
-function DrillRow({ title, summary, onClick }) {
+function DrillRow({ title, summary, onClick, buttonRef }) {
     return (
+        // Keep the native button because the complete drill row is the list action target.
         <button
+            ref={buttonRef}
             type="button"
-            className={styles.entry}
+            className={`${actionStyles.entry} ${settingsStyles.drillRow}`}
             style={{
                 width: '100%',
                 flexDirection: 'row',
@@ -462,8 +817,8 @@ function DrillRow({ title, summary, onClick }) {
             }}
             onClick={onClick}
         >
-            <span className={styles.entryLabel} style={{ flexShrink: 0 }}>{title}</span>
-            <span style={{
+            <span className={`${actionStyles.entryLabel} ${settingsStyles.drillLabel}`}>{title}</span>
+            <span className={settingsStyles.drillSummary} style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: 'var(--xc-space-2)',
@@ -491,25 +846,98 @@ function DrillRow({ title, summary, onClick }) {
     );
 }
 
+/**
+ * The desktop shell's updater bridge, or null in every other shell.
+ * @returns {{ onEvent: (cb: (e: any) => void) => (() => void), install: (action?: string) => Promise<any> } | null}
+ */
+function desktopUpdaterBridge() {
+    const bridge = typeof window === 'undefined' ? null : window.xchainWalletUpdater;
+    return bridge && typeof bridge.install === 'function' && typeof bridge.onEvent === 'function'
+        ? bridge
+        : null;
+}
+
+const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+
+/**
+ * Check for updates. Runs the same visible check as the app menu item (main's
+ * 'check' action) and shows its outcome. Every sentence is a constant; the
+ * only feed-derived value shown is a version that parses as plain semver.
+ */
+function UpdateCheckPanel() {
+    // 'idle' | 'checking' | 'current' | 'available' | 'error'
+    const [state, setState] = useState('idle');
+    const [version, setVersion] = useState(/** @type {string | null} */ (null));
+    const pending = useRef(false);
+
+    useEffect(() => {
+        const bridge = desktopUpdaterBridge();
+        if (!bridge) return undefined;
+        const unsubscribe = bridge.onEvent((event) => {
+            if (!pending.current) return;
+            const type = event?.type;
+            if (type === 'not-available' && event?.userInitiated) {
+                pending.current = false;
+                setState('current');
+            } else if (type === 'available') {
+                const next = String(event?.info?.version ?? '');
+                pending.current = false;
+                setVersion(SEMVER.test(next) ? next : null);
+                setState('available');
+            } else if (type === 'error' && event?.userInitiated) {
+                pending.current = false;
+                setState('error');
+            }
+        });
+        return () => { unsubscribe?.(); };
+    }, []);
+
+    const check = useCallback(() => {
+        const bridge = desktopUpdaterBridge();
+        if (!bridge || pending.current) return;
+        pending.current = true;
+        setState('checking');
+        Promise.resolve(bridge.install('check'))
+            .then((result) => {
+                // Events normally settle the state first; a refusal never emits one.
+                if (result && result.ok === false && pending.current) {
+                    pending.current = false;
+                    setState('error');
+                }
+            })
+            .catch(() => {
+                pending.current = false;
+                setState('error');
+            });
+    }, []);
+
+    const message = {
+        checking: 'Checking for updates…',
+        current: 'You are up to date.',
+        available: version ? `Version ${version} is available.` : 'A new version is available.',
+        error: 'Could not check for updates. Try again later.',
+    }[state];
+
+    return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-3)' }}>
+            <Button variant="ghost" size="sm" onClick={check} disabled={state === 'checking'}>
+                Check for updates
+            </Button>
+            <span role="status" aria-live="polite" style={{ fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)' }}>
+                {message || ''}
+            </span>
+        </div>
+    );
+}
+
 function PanelBlock({ title, description, children }) {
     return (
-        <div style={{ marginBottom: 'var(--xc-space-3)' }}>
-            <div style={{
-                fontSize: 'var(--xc-text-xs)',
-                fontWeight: 700,
-                textTransform: 'uppercase',
-                letterSpacing: '0.06em',
-                color: 'var(--xc-text-muted)',
-                marginBottom: 'var(--xc-space-1)',
-            }}>{title}</div>
-            {description ? (
-                <div style={{
-                    fontSize: 'var(--xc-text-xs)',
-                    color: 'var(--xc-text-muted)',
-                    marginBottom: 'var(--xc-space-2)',
-                    lineHeight: 1.4,
-                }}>{description}</div>
-            ) : null}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-settings-row-gap)' }}>
+            <SectionHeader
+                className={settingsStyles.sectionHeader}
+                title={title}
+                description={description}
+            />
             {children}
         </div>
     );
@@ -536,9 +964,15 @@ function ComingSoon() {
 function privacySummary(settings) {
     if (!settings) return '-';
     const p = settings.privacy || {};
-    const flags = ['torRouting', 'changeAddressRotation', 'hideSmallBalances', 'blurOnBlur', 'labelsSurviveRestore'];
-    const onCount = flags.filter((k) => Boolean(p[k])).length;
-    return `${onCount} of ${flags.length} on`;
+    // Mirrors the switches PrivacySection renders. Tor routing is counted
+    // only where the shell can proxy; elsewhere its switch is inert.
+    // Switches that default on read as on until stored false.
+    const offByDefault = ['changeAddressRotation', 'blurOnBlur', 'labelsSurviveRestore', 'alwaysRequireHwExplicitConfirm'];
+    const onByDefault = ['hapticsEnabled', 'priceDataEnabled', 'metadataFetchEnabled'];
+    if (shellCapabilities().socksProxy) offByDefault.unshift('torRouting');
+    const onCount = offByDefault.filter((k) => p[k] === true).length
+        + onByDefault.filter((k) => p[k] !== false).length;
+    return `${onCount} of ${offByDefault.length + onByDefault.length} on`;
 }
 
 function safetySummary(settings) {
@@ -552,23 +986,30 @@ function displaySummary(settings) {
     if (!settings) return '-';
     const pinned = Array.isArray(settings.pinnedTokens) ? settings.pinnedTokens.length : 0;
     const hidden = Array.isArray(settings.hiddenTokens) ? settings.hiddenTokens.length : 0;
-    if (pinned === 0 && hidden === 0) return 'No customization';
     const parts = [];
     if (pinned > 0) parts.push(`${pinned} pinned`);
     if (hidden > 0) parts.push(`${hidden} hidden`);
+    if (settings.privacy?.hideSmallBalances === true) {
+        const threshold = settings.smallBalanceThreshold || SMALL_BALANCE_THRESHOLD_DEFAULT;
+        parts.push(threshold === 'dust' ? 'Dust hidden' : `<${threshold} hidden`);
+    }
+    if ((settings.numberFormat || NUMBER_FORMAT_DEFAULT) !== NUMBER_FORMAT_DEFAULT) {
+        parts.push(settings.numberFormat === 'trim' ? 'Trimmed numbers' : 'Plain numbers');
+    }
+    if (parts.length === 0) return 'No customization';
     return parts.join(' · ');
 }
 
 function keyboardSummary(settings) {
     if (!settings) return '-';
-    const n = Object.keys(settings.keyboard?.bindings || {}).length;
+    const n = resolveBindings(settings.keyboard?.bindings).filter((shortcut) => shortcut.overridden).length;
     return n === 0 ? 'Defaults' : `${n} custom`;
 }
 
 function walletModeSummary(settings) {
     if (!settings) return '-';
     const mode = settings.walletMode || WALLET_MODE_DEFAULT;
-    if (mode === 'full') return 'Full';
+    if (mode === 'full') return 'Normal';
     if (mode === 'watcher') return 'Watcher (watch-only)';
     if (mode === 'signer') return 'Signer (air-gapped)';
     return mode;

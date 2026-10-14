@@ -9,9 +9,17 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { CopyButton, StatusMessage } from '@xchain-wallet/core/ui';
+import {
+    CopyButton,
+    FormPage,
+    FormSection,
+    StatusMessage,
+} from '@xchain-wallet/core/ui';
+import { t } from '../../i18n/index.js';
+import { KeyQR } from '../components/KeyQR.jsx';
 import { useMessaging } from '../useMessaging.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { xpubForNetwork } from '../utils/multisigXpub.js';
 import styles from './IssueTokenForm.module.css';
 
 /**
@@ -24,18 +32,39 @@ import styles from './IssueTokenForm.module.css';
  *
  * @param {object} props
  * @param {string} props.walletId
- * @param {Array<{ id: string, address: string, label?: string }>} props.addresses   this wallet's addresses on the multisig network
+ * @param {Array<{ id: string, address: string, label?: string, source?: string }>} props.addresses   this wallet's addresses on the multisig network
+ * @param {'mainnet' | 'testnet' | 'regtest'} [props.networkKind]
  */
-export function MultisigCosignerShare({ walletId, addresses }) {
+export function MultisigCosignerShare({ walletId, addresses, networkKind }) {
     const { messaging } = useMessaging();
     const [addressId, setAddressId] = useState('');
     const [info, setInfo] = useState(/** @type {any} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    const selectedAddress = addresses.find((address) => address.id === addressId) || null;
+    const selectedInfo = info?.walletId === walletId && info?.addressId === addressId
+        ? info.value
+        : null;
+    const sharePayload = selectedInfo
+        ? buildSharePayload({ info: selectedInfo, address: selectedAddress, networkKind })
+        : null;
+
+    useEffect(() => {
+        if (addressId && !addresses.some((address) => address.id === addressId)) {
+            setAddressId('');
+            setInfo(null);
+            setError(null);
+        }
+    }, [addressId, addresses]);
 
     useEffect(() => {
         setInfo(null);
         setError(null);
         if (!addressId) return undefined;
+        const requestedAddress = addresses.find((address) => address.id === addressId);
+        if (!requestedAddress) {
+            setError('Select an address from this wallet.');
+            return undefined;
+        }
         // A shell without the route keeps the manual path rather than crashing.
         if (typeof messaging.getMultisigCosignerInfo !== 'function') {
             setError('Sharing cosigner keys is not available in this shell.');
@@ -43,48 +72,106 @@ export function MultisigCosignerShare({ walletId, addresses }) {
         }
         let cancelled = false;
         messaging.getMultisigCosignerInfo({ walletId, addressId })
-            .then((r) => { if (!cancelled) setInfo(r); })
+            .then((r) => {
+                if (cancelled) return;
+                if ((r?.addressId && r.addressId !== addressId)
+                    || (r?.address && r.address !== requestedAddress.address)) {
+                    setError('The wallet returned cosigner keys for a different address. Select the address again.');
+                    return;
+                }
+                setInfo({ walletId, addressId, value: r });
+            })
             .catch((err) => {
                 if (!cancelled) setError(userFacingMessage(err, 'Could not read this wallet\'s cosigner keys.'));
             });
         return () => { cancelled = true; };
-    }, [walletId, addressId, messaging]);
+    }, [walletId, addressId, addresses, messaging]);
 
     return (
-        <details style={{ margin: '0 0 var(--xc-space-3) 0' }}>
-            <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Share this wallet as a cosigner</summary>
+        <FormPage as="div" sectioned label={t('multisig.share.title')}>
+            <FormSection title={t('multisig.share.title')}>
+                <details style={{ margin: '0 0 var(--xc-space-3) 0' }}>
+                    <summary style={{ cursor: 'pointer', fontWeight: 600 }}>{t('multisig.share.title')}</summary>
             <p className={styles.hint} style={{ textAlign: 'left', margin: 'var(--xc-space-2) 0' }}>
-                Give these values to the person creating the multisig. In their
-                wallet they add a cosigner with origin "External xpub" and paste
-                each one into the field of the same name. They are public keys:
-                they show the shared address but cannot spend from it.
+                {t('multisig.share.instructions')}
+            </p>
+            <p className={styles.hint} style={{ textAlign: 'left', margin: 'var(--xc-space-2) 0' }}>
+                {t('multisig.share.availability')}
             </p>
             <label className={styles.pickerLabel}>
-                <span>Address to share</span>
+                <span>{t('multisig.share.address')}</span>
                 <select
                     className={styles.picker}
                     value={addressId}
                     onChange={(e) => setAddressId(e.target.value)}
                 >
-                    <option value="">Select address</option>
+                    <option value="">{t('multisig.share.selectAddress')}</option>
                     {addresses.map((a) => (
-                        <option key={a.id} value={a.id}>
-                            {a.address} {a.label ? `· ${a.label}` : ''}
+                        <option key={a.id} value={a.id} disabled={!canShareAddress(a)}>
+                            {a.address} {a.label ? `· ${a.label}` : ''}{unavailableAddressLabel(a)}
                         </option>
                     ))}
                 </select>
             </label>
             {error ? <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage> : null}
-            {info ? (
-                <dl className={styles.detailsList}>
-                    <ShareRow label="xpub" value={info.xpub} hint={info.accountPath ? `Account ${info.accountPath}` : null} />
-                    <ShareRow label="Public key" value={info.pubkey} />
-                    <ShareRow label="Master fingerprint" value={info.fingerprint} />
-                    <ShareRow label="Derivation path" value={info.derivationPath} />
-                </dl>
+            {selectedInfo ? (
+                <>
+                    <div style={payloadStyle}>
+                        <strong>{t('multisig.share.payload')}</strong>
+                        <p className={styles.hint} style={{ textAlign: 'left', margin: 0 }}>
+                            {t('multisig.share.payloadHint')}
+                        </p>
+                        <KeyQR
+                            value={sharePayload}
+                            size={256}
+                            alt={t('multisig.share.qrAlt')}
+                        />
+                        <CopyButton
+                            value={sharePayload}
+                            label={t('multisig.share.copyPayload')}
+                        />
+                    </div>
+                    <dl className={styles.detailsList}>
+                        <ShareRow label={t('multisig.share.xpub')} value={xpubForNetwork(selectedInfo.xpub, networkKind)} hint={selectedInfo.accountPath ? t('multisig.share.account', { path: selectedInfo.accountPath }) : null} />
+                        <ShareRow label={t('multisig.share.publicKey')} value={selectedInfo.pubkey} />
+                        <ShareRow label={t('multisig.share.masterFingerprint')} value={selectedInfo.fingerprint} />
+                        <ShareRow label={t('multisig.share.derivationPath')} value={selectedInfo.derivationPath} />
+                    </dl>
+                    <p role="note" className={styles.hint} style={{ textAlign: 'left' }}>
+                        {t('multisig.share.identityCheck')}
+                    </p>
+                </>
             ) : null}
-        </details>
+                </details>
+            </FormSection>
+        </FormPage>
     );
+}
+
+function buildSharePayload({ info, address, networkKind }) {
+    return JSON.stringify({
+        type: 'xchain-multisig-cosigner',
+        version: 1,
+        network: networkKind || null,
+        address: address?.address || null,
+        xpub: xpubForNetwork(info.xpub, networkKind) || null,
+        pubkey: info.pubkey || null,
+        fingerprint: info.fingerprint || null,
+        derivationPath: info.derivationPath || null,
+    }, null, 2);
+}
+
+function canShareAddress(address) {
+    return !address?.source || address.source === 'hd';
+}
+
+function unavailableAddressLabel(address) {
+    if (address?.source === 'watch-only') return ' (watch-only, unavailable)';
+    if (address?.source === 'trezor' || address?.source === 'ledger') {
+        return ' (hardware, export on device)';
+    }
+    if (address?.source === 'imported-wif') return ' (imported key, unavailable)';
+    return '';
 }
 
 function ShareRow({ label, value, hint = null }) {
@@ -96,9 +183,9 @@ function ShareRow({ label, value, hint = null }) {
                     <>
                         <code style={monoStyle} data-testid={`cosigner-share-${label.toLowerCase().replace(/\s+/g, '-')}`}>{value}</code>
                         {hint ? <span style={{ display: 'block', color: 'var(--xc-text-muted)' }}>{hint}</span> : null}
-                        <CopyButton value={value} ariaLabel={`Copy ${label}`} />
+                        <CopyButton value={value} ariaLabel={t('multisig.share.copyField', { label })} />
                     </>
-                ) : 'Not available from this signer'}
+                ) : t('multisig.share.unavailable')}
             </dd>
         </>
     );
@@ -107,5 +194,14 @@ function ShareRow({ label, value, hint = null }) {
 const monoStyle = {
     display: 'block',
     fontFamily: 'var(--xc-font-mono)',
-    wordBreak: 'break-all',
+    overflowWrap: 'anywhere',
+    wordBreak: 'break-word',
+};
+
+const payloadStyle = {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 'var(--xc-space-2)',
+    margin: 'var(--xc-space-3) 0',
 };

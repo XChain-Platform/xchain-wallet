@@ -60,11 +60,11 @@ assert.match(
 
 const formIdx = sendSrc.indexOf('<AddressCombobox');
 assert.notEqual(formIdx, -1, 'AddressCombobox renders in the form');
-const formBlock = sendSrc.slice(formIdx, formIdx + 800);
+const formBlock = sendSrc.slice(formIdx, formIdx + 1200);
 // The To label is now dynamic: the matched contact's name when the typed
 // address resolves to a contact, otherwise the plain "To" default.
 assert.match(formBlock, /label=\{matchedContact/, 'To field uses a dynamic label');
-assert.match(formBlock, /:\s*'To'/, 'To label preserved as the default');
+assert.match(formBlock, /:\s*t\('send\.fields\.to'\)/, 'To label preserved as the default');
 assert.match(formBlock, /value=\{toAddress\}/);
 assert.match(formBlock, /onPaste=\{onAddressPaste\}/, 'paste handler wired');
 assert.match(formBlock, /suggestions=\{suggestions\}/);

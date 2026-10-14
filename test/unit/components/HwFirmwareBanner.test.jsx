@@ -91,6 +91,7 @@ describe('HwFirmwareBanner verdicts', () => {
         setVerdict('vulnerable', {
             detail: 'This firmware has a known signing vulnerability.',
             updateUrl: 'https://vendor.example/update',
+            recommended: '2.2.3',
         });
         renderBanner(SIGNER_INFO);
 
@@ -98,9 +99,23 @@ describe('HwFirmwareBanner verdicts', () => {
         const detail = banner.querySelector('p');
         const link = screen.getByRole('link', { name: /Open vendor update tool/ });
         expect(detail?.textContent).toBe('This firmware has a known signing vulnerability.');
+        expect(banner).toHaveTextContent(
+            'Do not sign yet. Install version 2.2.3 or newer with the vendor update tool, then reconnect and unlock the device.',
+        );
         expect(link).toHaveTextContent('Open vendor update tool');
         expect(link).toHaveAttribute('href', 'https://vendor.example/update');
         expect(link).toHaveAttribute('target', '_blank');
         expect(link).toHaveAttribute('rel', 'noopener noreferrer');
     });
+
+    it.each(['javascript:alert(1)', 'data:text/html,<script>alert(1)</script>'])(
+        'does not link an unsafe vendor update URL: %s',
+        (updateUrl) => {
+            setVerdict('vulnerable', { updateUrl });
+            renderBanner(SIGNER_INFO);
+
+            expect(screen.getByRole('alert')).toBeInTheDocument();
+            expect(screen.queryByRole('link')).toBeNull();
+        },
+    );
 });

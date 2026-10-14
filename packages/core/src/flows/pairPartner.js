@@ -63,6 +63,7 @@
 // against a corrupted key set.
 
 import { sha256 } from '@noble/hashes/sha2';
+import { t } from '../i18n/index.js';
 
 export const PARTNER_PAIRING_VERSION = 1;
 export const PARTNER_PAIRING_KIND = 'xcw-partner-pairing';
@@ -121,10 +122,14 @@ export function describePairingLane(walletMode) {
             partnerMode: null,
             cta: null,
             title: null,
-            help: 'Pairing applies to Watcher and Signer wallets. Pick one of those modes first, then pair this wallet with its other half.',
+            help: t('flows.pairPartner.unavailableHelp'),
         };
     }
-    const cta = partnerMode === 'signer' ? 'Pair a signer' : 'Pair a watcher';
+    // The locale values remain 'Pair a signer' and 'Pair a watcher', the
+    // pairing lane's user-visible contract.
+    const cta = partnerMode === 'signer'
+        ? t('flows.pairPartner.pairSigner')
+        : t('flows.pairPartner.pairWatcher');
     return {
         available: true,
         walletMode: /** @type {string} */ (walletMode),
@@ -132,8 +137,8 @@ export function describePairingLane(walletMode) {
         cta,
         title: cta,
         help: partnerMode === 'signer'
-            ? 'This wallet watches your coins and builds unsigned transactions. Pair it with the offline wallet that holds the same recovery phrase and signs them.'
-            : 'This wallet signs transactions offline. Pair it with the online wallet that holds the same recovery phrase and watches your coins.',
+            ? t('flows.pairPartner.watcherHelp')
+            : t('flows.pairPartner.signerHelp'),
     };
 }
 
@@ -461,7 +466,11 @@ export function verifyPartnerPairing({ local, partner }) {
             ...base,
             ok: false,
             reason: 'mode-mismatch',
-            message: `This wallet is in ${l.walletMode} mode, so its partner must be in ${expectedPartnerMode} mode. The wallet you scanned is in ${p.walletMode} mode.`,
+            message: t('flows.pairPartner.modeMismatch', {
+                localMode: l.walletMode,
+                partnerMode: expectedPartnerMode,
+                scannedMode: p.walletMode,
+            }),
         };
     }
 
@@ -485,7 +494,7 @@ export function verifyPartnerPairing({ local, partner }) {
             ...base,
             ok: false,
             reason: 'no-shared-chains',
-            message: 'The two wallets have no chain in common, so there is nothing to compare. Switch on at least one matching chain in both wallets and try again.',
+            message: t('flows.pairPartner.noSharedChains'),
         };
     }
     if (mismatched.length > 0) {
@@ -495,7 +504,7 @@ export function verifyPartnerPairing({ local, partner }) {
             reason: 'seed-mismatch',
             sharedChainIds: shared,
             mismatchedChainIds: mismatched,
-            message: `These two wallets were made from different recovery phrases (${mismatched.join(', ')} does not match). Restore both halves from the same phrase and pair again.`,
+            message: t('flows.pairPartner.seedMismatch', { chains: mismatched.join(', ') }),
         };
     }
     return {
@@ -504,7 +513,7 @@ export function verifyPartnerPairing({ local, partner }) {
         reason: null,
         sharedChainIds: shared,
         mismatchedChainIds: [],
-        message: `Paired. Both wallets come from the same recovery phrase and agree on ${shared.length} chain${shared.length === 1 ? '' : 's'}.`,
+        message: t('flows.pairPartner.paired', { count: shared.length }),
     };
 }
 

@@ -22,9 +22,9 @@
 // Design choices:
 //   - Every mutation auto-saves. Shells that want batching can set
 //     autoSave: false and call vault.save() explicitly.
-//   - Reads migrate records forward via the schema migration harness.
-//     Migrations run lazily; the on-disk record stays at its stored
-//     version until the next write.
+//   - Reads migrate records forward via the schema migration harness and
+//     cache the result. The on-disk record stays at its stored version until
+//     the next write.
 //   - AAD is optional; when supplied it's passed through to AEAD
 //     unchanged on both save and load.
 
@@ -72,6 +72,83 @@ import { validateAutopayLease } from '../schemas/autopayLease.js';
 import { validatePriceAlert } from '../schemas/priceAlert.js';
 import { logConsole } from '../shared/utils/logConsole.js';
 
+export const STORAGE_QUOTA_MESSAGE = 'Storage is full. Free some space, then try again.';
+
+/** A critical storage write still has no room after disposable caches are removed. */
+export class StorageQuotaError extends Error {
+    /** @param {unknown} [cause] */
+    constructor(cause) {
+        super(STORAGE_QUOTA_MESSAGE);
+        this.name = 'StorageQuotaError';
+        if (cause !== undefined) this.cause = cause;
+    }
+}
+
+/** @param {unknown} err */
+function isStorageQuotaError(err) {
+    if (!err || typeof err !== 'object') return false;
+    const value = /** @type {{ name?: unknown, code?: unknown, message?: unknown }} */ (err);
+    if (value.name === 'QuotaExceededError' || value.name === 'StorageQuotaError') return true;
+    if (value.code === 22 || value.code === 1014) return true;
+    if (['ENOSPC', 'EDQUOT', 'QUOTA_BYTES'].includes(String(value.code || '').toUpperCase())) return true;
+    return /(?:quota(?:_bytes)?(?:\s+quota)? exceeded|storage (?:is )?full|disk full|no space left)/i
+        .test(String(value.message || ''));
+}
+
+const DISPOSABLE_LOCAL_KEYS = new Set([
+    'xchain-wallet:fiat-rates:v1',
+    'xchain.logConsole',
+]);
+const DISPOSABLE_LOCAL_PREFIXES = [
+    'xc:balanceCache:',
+    'xc:historyCache:v1:',
+];
+const DISPOSABLE_CHROME_KEYS = ['xchain.logConsole'];
+
+/** Remove derived display data while retaining preferences, security state, and queued transactions. */
+async function trimNonEssentialStorageCaches() {
+    try {
+        const local = /** @type {Storage | undefined} */ (globalThis.localStorage);
+        if (local) {
+            const keys = [];
+            for (let i = 0; i < local.length; i += 1) keys.push(local.key(i));
+            for (const key of keys) {
+                if (key && (DISPOSABLE_LOCAL_KEYS.has(key)
+                    || DISPOSABLE_LOCAL_PREFIXES.some((prefix) => key.startsWith(prefix)))) {
+                    local.removeItem(key);
+                }
+            }
+        }
+    } catch {
+        // A disabled localStorage must not mask the original quota failure.
+    }
+
+    try {
+        const chromeLocal = /** @type {any} */ (globalThis.chrome?.storage?.local);
+        if (chromeLocal?.remove) await chromeLocal.remove(DISPOSABLE_CHROME_KEYS);
+    } catch {
+        // Cache cleanup is best-effort; the retry below decides the write result.
+    }
+}
+
+/** Retry a critical write after reclaiming disposable storage. */
+export async function persistWithQuotaRecovery(write) {
+    try {
+        return await write();
+    } catch (err) {
+        if (!isStorageQuotaError(err)) throw err;
+    }
+
+    await trimNonEssentialStorageCaches();
+
+    try {
+        return await write();
+    } catch (err) {
+        if (isStorageQuotaError(err)) throw new StorageQuotaError(err);
+        throw err;
+    }
+}
+
 export class VaultStateError extends Error {
     constructor(msg) {
         super(msg);
@@ -85,6 +162,16 @@ export class VaultValidationError extends Error {
         this.name = 'VaultValidationError';
         this.collection = collection;
         this.errors = errors;
+    }
+}
+
+/** A guarded write found the records it was prepared from already replaced. */
+export class VaultConflictError extends Error {
+    /** @param {string} collection */
+    constructor(collection) {
+        super(`Vault: ${collection} changed while this write was being prepared`);
+        this.name = 'VaultConflictError';
+        this.collection = collection;
     }
 }
 
@@ -110,6 +197,11 @@ export class Vault {
         /** @type {import('./codec.js').VaultDocument | null} */
         this._doc = null;
         this._opened = false;
+        /** @type {Promise<void> | null} */
+        this._opening = null;
+        // Every document write runs in invocation order. A rejected write is
+        // absorbed only by the tail so later operations can still proceed.
+        this._writeTail = Promise.resolve();
 
         this.wallets = makeCollection(this, 'wallets', migrateWallet, validateWallet);
         this.accounts = makeCollection(this, 'accounts', migrateAccount, validateAccount);
@@ -211,23 +303,37 @@ export class Vault {
      */
     async open() {
         if (this._opened) return;
-        const blob = await this._backend.load();
-        this._doc = blob
-            ? await decodeDocument(this._masterKey, blob, this._aad)
-            : emptyDocument();
-        this._opened = true;
-        logConsole.record({
-            source: 'vault',
-            level: 'info',
-            message: blob ? 'open (existing)' : 'open (empty)',
-        });
+        if (!this._opening) {
+            this._opening = (async () => {
+                const blob = await this._backend.load();
+                this._doc = blob
+                    ? await decodeDocument(this._masterKey, blob, this._aad)
+                    : emptyDocument();
+                this._opened = true;
+                logConsole.record({
+                    source: 'vault',
+                    level: 'info',
+                    message: blob ? 'open (existing)' : 'open (empty)',
+                });
+            })();
+        }
+        try {
+            await this._opening;
+        } finally {
+            this._opening = null;
+        }
     }
 
     /** Flush the current document to the backend. */
     async save() {
         this._assertOpen();
+        return this._enqueueWrite(() => this._saveNow());
+    }
+
+    async _saveNow() {
+        this._assertOpen();
         const blob = await encodeDocument(this._masterKey, this._doc, this._aad);
-        await this._backend.save(blob);
+        await persistWithQuotaRecovery(() => this._backend.save(blob));
     }
 
     /**
@@ -235,10 +341,119 @@ export class Vault {
      * the vault in a closed state. Callers must `open()` again.
      */
     async clear() {
-        await this._backend.clear();
-        this._doc = null;
-        this._opened = false;
-        logConsole.record({ source: 'vault', level: 'info', message: 'clear' });
+        return this._enqueueWrite(async () => {
+            await this._backend.clear();
+            this._doc = null;
+            this._opened = false;
+            logConsole.record({ source: 'vault', level: 'info', message: 'clear' });
+        });
+    }
+
+    /**
+     * Whether `candidate` is the key this vault is sealed under, compared in
+     * constant time. Lets a password change ask "does the old password open
+     * the vault?" without decrypting the blob a second time.
+     *
+     * @param {Uint8Array} candidate
+     * @returns {boolean}
+     */
+    keyMatches(candidate) {
+        this._assertOpen();
+        if (!(candidate instanceof Uint8Array) || candidate.length !== this._masterKey.length) return false;
+        let diff = 0;
+        for (let i = 0; i < candidate.length; i += 1) diff |= candidate[i] ^ this._masterKey[i];
+        return diff === 0;
+    }
+
+    /**
+     * Replace wallet records and, when `masterKey` is given, the key the
+     * document is sealed under, in ONE blob write.
+     *
+     * A password change has to move the document key and every wallet seal
+     * the old password made together: a crash or a failed write between two
+     * separate writes leaves the vault openable by one password and the
+     * wallets by the other. So the replacement document is encoded under the
+     * new key and saved once, and the in-memory document and key change only
+     * after that save returns. A failure leaves both exactly as they were, and
+     * the backend's own write is the atomic step (an object-store put, a
+     * temp-file rename, the native store's generation swap).
+     *
+     * The caller keeps ownership of `masterKey`; the vault takes a copy.
+     *
+     * The replacements are prepared from records read seconds earlier (an
+     * Argon2id derivation per wallet). Any wallet write that lands in that
+     * window (a rename, an imported key, a passphrase capture, a new wallet)
+     * would be overwritten here, or would leave a record still sealed under
+     * the old password beside a vault sealed under the new one. `readWallets`
+     * is the list the caller prepared from; the write refuses with
+     * VaultConflictError unless the stored wallets are still exactly those
+     * records. Reads keep record identity (migration returns a current record
+     * as is), so an identity comparison is exact.
+     *
+     * @param {Object} opts
+     * @param {Uint8Array} [opts.masterKey]   the new 32-byte key; omitted keeps the current one
+     * @param {Array<import('../schemas/wallet.js').Wallet>} [opts.wallets]   replacements for existing records, matched by id
+     * @param {Array<import('../schemas/wallet.js').Wallet>} [opts.readWallets]   the records the replacements were prepared from, as `wallets.list()` returned them
+     * @returns {Promise<boolean>}   true when the open vault now holds the write; false when a
+     *   close (a lock) landed while the blob was saving, so the blob changed but this handle is
+     *   closed and the caller must not re-arm any session state from it
+     */
+    async rekey({ masterKey, wallets = [], readWallets } = {}) {
+        this._assertOpen();
+        if (masterKey !== undefined && (!(masterKey instanceof Uint8Array) || masterKey.length !== 32)) {
+            throw new Error('Vault.rekey: masterKey must be a 32-byte Uint8Array');
+        }
+        for (const record of wallets) {
+            if (!record || typeof record.id !== 'string' || !record.id) {
+                throw new VaultValidationError('wallets', ['record.id is required']);
+            }
+            const result = validateWallet(record);
+            if (!result.ok) throw new VaultValidationError('wallets', result.errors);
+        }
+        return this._enqueueWrite(async () => {
+            this._assertOpen();
+            const previous = this._doc;
+            if (readWallets !== undefined && (
+                !Array.isArray(readWallets)
+                || readWallets.length !== previous.wallets.length
+                || previous.wallets.some((stored, i) => stored !== readWallets[i])
+            )) {
+                throw new VaultConflictError('wallets');
+            }
+            const arr = [...previous.wallets];
+            for (const record of wallets) {
+                const idx = arr.findIndex((r) => r.id === record.id);
+                if (idx < 0) throw new Error(`Vault.rekey: no wallet with id "${record.id}"`);
+                arr[idx] = record;
+            }
+            const next = { ...previous, wallets: arr };
+            const nextKey = masterKey ? new Uint8Array(masterKey) : null;
+            try {
+                const blob = await encodeDocument(nextKey ?? this._masterKey, next, this._aad);
+                await persistWithQuotaRecovery(() => this._backend.save(blob));
+            } catch (err) {
+                if (nextKey) nextKey.fill(0);
+                throw err;
+            }
+            // A close or clear that landed while the backend settled owns the
+            // state now; the blob is written, so only the in-memory copy is skipped.
+            if (this._doc !== previous || !this._masterKey) {
+                if (nextKey) nextKey.fill(0);
+                return false;
+            }
+            if (nextKey) {
+                this._masterKey.fill(0);
+                this._masterKey = nextKey;
+            }
+            this._doc = next;
+            logConsole.record({ source: 'vault', level: 'info', message: nextKey ? 'rekey' : 'reseal wallets' });
+            return true;
+        });
+    }
+
+    /** Whether this handle is open: false once close() or clear() has run, or before open(). */
+    get isOpen() {
+        return this._opened && Boolean(this._doc) && Boolean(this._masterKey);
     }
 
     /** Zero the cached master key and close. Safe to call multiple times. */
@@ -263,8 +478,29 @@ export class Vault {
         }
     }
 
-    async _maybeAutoSave() {
-        if (this._autoSave) await this.save();
+    _enqueueWrite(operation) {
+        const result = this._writeTail.then(operation);
+        this._writeTail = result.catch(() => {});
+        return result;
+    }
+
+    async _mutate(buildNext) {
+        this._assertOpen();
+        return this._enqueueWrite(async () => {
+            this._assertOpen();
+            const previous = this._doc;
+            const { document, result, persist = true } = buildNext(previous);
+            this._doc = document;
+            try {
+                if (this._autoSave && persist) await this._saveNow();
+                return result;
+            } catch (err) {
+                // A close or clear may replace the document while the backend
+                // settles. Restore only the state owned by this operation.
+                if (this._doc === document) this._doc = previous;
+                throw err;
+            }
+        });
     }
 }
 
@@ -279,13 +515,21 @@ function makeCollection(vault, collection, migrate, validate) {
     return {
         async get(id) {
             vault._assertOpen();
-            const found = vault._doc[collection].find((r) => r.id === id);
-            return found ? migrate(found) : null;
+            const arr = vault._doc[collection];
+            const idx = arr.findIndex((r) => r.id === id);
+            if (idx < 0) return null;
+            const migrated = migrate(arr[idx]);
+            arr[idx] = migrated;
+            return migrated;
         },
 
         async list() {
             vault._assertOpen();
-            return vault._doc[collection].map((r) => migrate(r));
+            return vault._doc[collection].map((r, idx, arr) => {
+                const migrated = migrate(r);
+                arr[idx] = migrated;
+                return migrated;
+            });
         },
 
         async put(record) {
@@ -297,21 +541,24 @@ function makeCollection(vault, collection, migrate, validate) {
             if (!result.ok) {
                 throw new VaultValidationError(collection, result.errors);
             }
-            const arr = vault._doc[collection];
-            const idx = arr.findIndex((r) => r.id === record.id);
-            if (idx >= 0) arr[idx] = record;
-            else arr.push(record);
-            await vault._maybeAutoSave();
+            await vault._mutate((document) => {
+                const arr = [...document[collection]];
+                const idx = arr.findIndex((r) => r.id === record.id);
+                if (idx >= 0) arr[idx] = record;
+                else arr.push(record);
+                return { document: { ...document, [collection]: arr } };
+            });
         },
 
         async delete(id) {
             vault._assertOpen();
-            const arr = vault._doc[collection];
-            const idx = arr.findIndex((r) => r.id === id);
-            if (idx < 0) return false;
-            arr.splice(idx, 1);
-            await vault._maybeAutoSave();
-            return true;
+            return vault._mutate((document) => {
+                const arr = [...document[collection]];
+                const idx = arr.findIndex((r) => r.id === id);
+                if (idx < 0) return { document, result: false, persist: false };
+                arr.splice(idx, 1);
+                return { document: { ...document, [collection]: arr }, result: true };
+            });
         },
 
         async count() {
@@ -321,9 +568,15 @@ function makeCollection(vault, collection, migrate, validate) {
 
         async findBy(field, value) {
             vault._assertOpen();
-            return vault._doc[collection]
-                .filter((r) => r[field] === value)
-                .map((r) => migrate(r));
+            const arr = vault._doc[collection];
+            const found = [];
+            arr.forEach((r, idx) => {
+                if (r[field] !== value) return;
+                const migrated = migrate(r);
+                arr[idx] = migrated;
+                found.push(migrated);
+            });
+            return found;
         },
     };
 }
@@ -343,6 +596,7 @@ function makeSingleton(vault, key, migrate, validate, { inflate, deflate } = {})
             const r = vault._doc[key];
             if (!r) return null;
             const migrated = migrate(r);
+            vault._doc[key] = migrated;
             return inflate ? inflate(migrated) : migrated;
         },
 
@@ -354,14 +608,19 @@ function makeSingleton(vault, key, migrate, validate, { inflate, deflate } = {})
             if (!result.ok) {
                 throw new VaultValidationError(key, result.errors);
             }
-            vault._doc[key] = deflate ? deflate(record) : record;
-            await vault._maybeAutoSave();
+            await vault._mutate((document) => ({
+                document: {
+                    ...document,
+                    [key]: deflate ? deflate(record) : record,
+                },
+            }));
         },
 
         async clear() {
             vault._assertOpen();
-            vault._doc[key] = null;
-            await vault._maybeAutoSave();
+            await vault._mutate((document) => ({
+                document: { ...document, [key]: null },
+            }));
         },
     };
 }

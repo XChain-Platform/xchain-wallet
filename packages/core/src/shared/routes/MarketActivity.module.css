@@ -7,7 +7,6 @@
     gap: var(--xc-space-3);
     width: 100%;
     padding: var(--xc-space-3);
-    margin-bottom: var(--xc-space-4);
     background: var(--xc-surface-raised);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-md);
@@ -20,6 +19,14 @@
 .marketSelector:hover {
     background: var(--xc-bg-muted);
     border-color: var(--xc-accent-primary);
+}
+
+.marketSelectorContent {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--xc-space-3);
+    width: 100%;
 }
 
 .marketSelectorText {
@@ -47,16 +54,8 @@
     color: var(--xc-text-muted);
 }
 
-.error {
-    color: var(--xc-status-error, var(--xc-danger, #DC2626));
-    font-size: var(--xc-text-sm);
-}
-
-.empty {
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-sm);
-    text-align: center;
-    padding: var(--xc-space-4);
+:global([dir='rtl']) .marketSelectorChevron {
+    transform: scaleX(-1);
 }
 
 .section {
@@ -65,23 +64,6 @@
 
 .section + .section {
     margin-top: var(--xc-space-6);
-}
-
-.sectionHeader {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: var(--xc-space-2);
-    margin-bottom: var(--xc-space-2);
-}
-
-.sectionTitle {
-    margin: 0;
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-    color: var(--xc-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
 }
 
 .count {
@@ -112,32 +94,16 @@
     color: var(--xc-text);
     font-family: inherit;
     text-align: start;
-    cursor: pointer;
+    cursor: default;
 }
 
-.row:disabled {
-    cursor: default;
+button.row {
+    cursor: pointer;
+    /* Only the tappable rows are buttons; keep them at the tap floor even if the padding shrinks. */
+    min-height: var(--xc-tap-min);
 }
 
 button.row:hover:not(:disabled) {
     background: var(--xc-bg-muted);
     border-color: var(--xc-accent-primary);
-}
-
-.rowText {
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 auto;
-    min-width: 0;
-    gap: 2px;
-}
-
-.rowTitle {
-    font-size: var(--xc-text-md);
-    font-weight: 600;
-}
-
-.rowSub {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
 }

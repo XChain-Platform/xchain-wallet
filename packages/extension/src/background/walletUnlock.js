@@ -197,6 +197,12 @@ async function performWalletUnlock(request, deps) {
                         bip39Passphrase,
                         chainRegistry: deps.chainRegistry,
                         sdkRegistry: deps.sdkRegistry,
+                        // A wallet sealed under the vault's own params (the
+                        // onboarding wallet) opens with this key instead of a
+                        // second Argon2id round; the pool never keeps it, and
+                        // the outer finally zeroes it.
+                        masterKey,
+                        masterKeyKdfParams: meta.kdfParams,
                     });
                 } catch {
                     // Best-effort: a pool populate failure shouldn't

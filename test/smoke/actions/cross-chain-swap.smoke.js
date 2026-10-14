@@ -94,11 +94,10 @@ assert.ok(/Network fee/.test(src),
 // Header title switches on stage.
 assert.ok(/Review swap/.test(src),
     'CrossChainSwapForm header title says "Review swap" in review/submitting stage');
-// Form-stage primary button label: the action verb on the confirm lane,
-// "Review" only on the watcher lane that still has a review stage. The
-// same shape SwapForm carries, which is the point of migrating this form.
-assert.ok(/singleEncode \? 'Swap' : 'Review'/.test(src),
-    'CrossChainSwapForm labels its primary button "Swap" on the confirm lane');
+// The primary action names the review step on every lane. The confirm lane
+// still composes once and signs only after Approve.
+assert.ok(/Preparing review…'[\s\S]{0,80}: 'Review'/.test(src),
+    'CrossChainSwapForm labels its primary button "Review"');
 
 // §5.6 confirm lane: the cross-chain GET_ADDRESS is a destination on ANOTHER
 // chain, and the confirm page's output-set cross-check is the only thing

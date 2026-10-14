@@ -22,12 +22,20 @@
 //     burning explorer bandwidth for off-screen tabs. WS push is
 //     Phase 4+ work once the explorer exposes a stream.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../useMessaging.js';
 import { normalizeOrderbook } from '../../market/orderbook.js';
 import { sampleOrderbookFor } from '../../market/sampleMarketData.js';
-import { divideDecimalStrings } from '../utils/amountFormat.js';
+import {
+    divideDecimalStrings,
+    formatWithThousands,
+    trimAmountTail,
+} from '../utils/amountFormat.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
+import tableStyles from './DataTable.module.css';
+import { startVisibleInterval } from '../utils/visibleInterval.js';
+import styles from './MarketTrading.module.css';
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -42,24 +50,22 @@ const POLL_INTERVAL_MS = 5000;
 export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPrice }) {
     const { messaging } = useMessaging();
     const [book, setBook] = useState(/** @type {any} */ ({ bids: [], asks: [], maxCumulative: '0' }));
+    const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
-    const [lastRefreshed, setLastRefreshed] = useState(0);
-    const mountedRef = useRef(true);
-
-    useEffect(() => {
-        mountedRef.current = true;
-        return () => { mountedRef.current = false; };
-    }, []);
+    const [retryKey, setRetryKey] = useState(0);
 
     useEffect(() => {
         let cancelled = false;
+        let requestId = 0;
+        setBook({ bids: [], asks: [], maxCumulative: '0' });
+        setLoadError(null);
+        setLoading(true);
         const tick = async () => {
             if (cancelled) return;
-            if (typeof document !== 'undefined'
-                && document.visibilityState === 'hidden') return;
+            const currentRequest = ++requestId;
             try {
                 const resp = await messaging.getOrderbook({ chainId, tick1, tick2 });
-                if (cancelled) return;
+                if (cancelled || currentRequest !== requestId) return;
                 let normalized = normalizeOrderbook(resp);
                 // Demo wallets render a sample book when the explorer has
                 // no live orders yet; real wallets keep the empty book and
@@ -69,95 +75,114 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
                 }
                 setBook(normalized);
                 setLoadError(null);
-                setLastRefreshed(Date.now());
+                setLoading(false);
             } catch (err) {
-                if (cancelled) return;
+                if (cancelled || currentRequest !== requestId) return;
                 // Demo wallets keep the UI populated through dev/CORS
                 // outages; real wallets surface the error instead of
                 // showing fabricated prices.
                 if (demo) setBook(normalizeOrderbook(sampleOrderbookFor(tick1, tick2)));
                 setLoadError(readFailureMessage(err, 'load the order book'));
+                setLoading(false);
             }
         };
-        tick();
-        const handle = setInterval(tick, POLL_INTERVAL_MS);
+        if (typeof document === 'undefined' || document.visibilityState !== 'hidden') tick();
+        const stopPollInterval = startVisibleInterval(tick, POLL_INTERVAL_MS);
         return () => {
             cancelled = true;
-            clearInterval(handle);
+            stopPollInterval();
         };
-    }, [messaging, chainId, tick1, tick2, demo]);
+    }, [messaging, chainId, tick1, tick2, demo, retryKey]);
+
+    const hasLevels = book.bids.length > 0 || book.asks.length > 0;
 
     return (
-        <div
+        <section
+            aria-label="Order book"
+            aria-busy={loading || undefined}
             style={{
                 border: '1px solid var(--xc-border)',
                 borderRadius: '4px',
                 padding: '0.5rem',
             }}
         >
-            <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>Orderbook</p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                <LevelsColumn
-                    title="Bids"
-                    side="bid"
-                    levels={book.bids}
-                    maxCumulative={book.maxCumulative}
-                    onPickPrice={onPickPrice}
-                    tick2={tick2}
-                    tick1={tick1}
-                />
-                <LevelsColumn
-                    title="Asks"
-                    side="ask"
-                    levels={book.asks}
-                    maxCumulative={book.maxCumulative}
-                    onPickPrice={onPickPrice}
-                    tick2={tick2}
-                    tick1={tick1}
-                />
-            </div>
-            {loadError ? (
-                <p style={{ margin: '0.25rem 0 0', color: 'var(--xc-fg-muted)', fontSize: '0.75rem' }}>
-                    {loadError}
-                </p>
+            <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>Order book</p>
+            {hasLevels ? (
+                <div className={styles.orderBookGrid}>
+                    <LevelsColumn
+                        title="Buy bids"
+                        side="bid"
+                        levels={book.bids}
+                        maxCumulative={book.maxCumulative}
+                        onPickPrice={onPickPrice}
+                        tick2={tick2}
+                        tick1={tick1}
+                    />
+                    <LevelsColumn
+                        title="Sell asks"
+                        side="ask"
+                        levels={book.asks}
+                        maxCumulative={book.maxCumulative}
+                        onPickPrice={onPickPrice}
+                        tick2={tick2}
+                        tick1={tick1}
+                    />
+                </div>
             ) : null}
-            {!loadError && book.bids.length === 0 && book.asks.length === 0 ? (
-                <p style={{ margin: '0.25rem 0 0', color: 'var(--xc-fg-muted)', fontSize: '0.75rem' }}>
+            {loading ? (
+                <StatusMessage variant="status">Loading order book…</StatusMessage>
+            ) : null}
+            {loadError ? (
+                <StatusMessage
+                    variant="error"
+                    recovery={{
+                        label: 'Try again',
+                        onAction: () => setRetryKey((key) => key + 1),
+                    }}
+                >
+                    {loadError}
+                </StatusMessage>
+            ) : null}
+            {!loading && !loadError && book.bids.length === 0 && book.asks.length === 0 ? (
+                <p style={{ margin: '0.25rem 0 0', color: 'var(--xc-text-muted)', fontSize: '0.75rem' }}>
                     No open orders on this market.
                 </p>
             ) : null}
-        </div>
+        </section>
     );
 }
 
 function LevelsColumn({ title, side, levels, maxCumulative, onPickPrice, tick1, tick2 }) {
     return (
-        <div>
-            <div
-                style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr 1fr',
-                    gap: '0.25rem',
-                    fontSize: '0.75rem',
-                    color: 'var(--xc-fg-muted)',
-                    padding: '0 0.25rem 0.25rem',
-                }}
-            >
-                <span>{title} ({tick2})</span>
-                <span>Size ({tick1})</span>
-                <span>Total</span>
+        <div
+            className={styles.levelsScroller}
+            role="region"
+            aria-label={`${title} order book levels`}
+            tabIndex={0}
+        >
+            <div className={styles.levelsTable}>
+                <table className={tableStyles.table}>
+                    <caption className={`${tableStyles.caption} ${tableStyles.compactCaption}`}>{title}</caption>
+                    <thead>
+                        <tr>
+                            <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Price ({tick2})</th>
+                            <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Size ({tick1})</th>
+                            <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">Total ({tick1})</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {levels.map((level, index) => (
+                        <LevelRow
+                            key={`${side}-${level.displayPrice}-${index}`}
+                            level={level}
+                            maxCumulative={maxCumulative}
+                            side={side}
+                            onPick={onPickPrice ? () => onPickPrice(level.displayPrice) : null}
+                        />
+                    ))}
+                    </tbody>
+                </table>
             </div>
-            <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                {levels.map((level) => (
-                    <LevelRow
-                        key={`${side}-${level.displayPrice}`}
-                        level={level}
-                        maxCumulative={maxCumulative}
-                        side={side}
-                        onPick={onPickPrice ? () => onPickPrice(level.displayPrice) : null}
-                    />
-                ))}
-            </ul>
         </div>
     );
 }
@@ -170,58 +195,44 @@ function LevelRow({ level, maxCumulative, side, onPick }) {
     const depthColor = side === 'bid'
         ? 'rgba(38, 166, 154, 0.18)'
         : 'rgba(239, 83, 80, 0.18)';
-    const content = (
-        <div
+    return (
+        <tr
             style={{
-                position: 'relative',
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr 1fr',
-                gap: '0.25rem',
-                padding: '0.15rem 0.25rem',
-                fontSize: '0.8rem',
+                background: `linear-gradient(to ${side === 'bid' ? 'left' : 'right'}, ${depthColor} ${depthPct}%, transparent ${depthPct}%)`,
             }}
         >
-            <span
-                aria-hidden="true"
-                style={{
-                    position: 'absolute',
-                    top: 0, bottom: 0,
-                    [side === 'bid' ? 'right' : 'left']: 0,
-                    width: `${depthPct}%`,
-                    background: depthColor,
-                    pointerEvents: 'none',
-                }}
-            />
-            <span style={{ position: 'relative', color: side === 'bid' ? '#26a69a' : '#ef5350' }}>
-                {level.displayPrice}
-            </span>
-            <span style={{ position: 'relative' }}>{level.displaySize}</span>
-            <span style={{ position: 'relative', color: 'var(--xc-fg-muted)' }}>
-                {level.cumulative.toString()}
-            </span>
-        </div>
-    );
-    if (!onPick) {
-        return <li>{content}</li>;
-    }
-    return (
-        <li>
-            <button
-                type="button"
-                onClick={onPick}
-                aria-label={`Pick price ${level.displayPrice}`}
-                style={{
-                    display: 'block',
-                    width: '100%',
-                    background: 'none',
-                    border: 'none',
-                    padding: 0,
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                }}
+            <td
+                className={`${tableStyles.cell} ${tableStyles.numeric}`}
+                data-label="Price"
+                title={level.displayPrice}
+                style={{ color: side === 'bid' ? 'var(--xc-success)' : 'var(--xc-danger)' }}
             >
-                {content}
-            </button>
-        </li>
+                {onPick ? (
+                    <button
+                        type="button"
+                        onClick={onPick}
+                        aria-label={`Pick ${side === 'bid' ? 'buy bid' : 'sell ask'} price ${level.displayPrice}`}
+                        className={tableStyles.cellButton}
+                    >
+                        {formatBookNumber(level.displayPrice)}
+                    </button>
+                ) : formatBookNumber(level.displayPrice)}
+            </td>
+            <td className={`${tableStyles.cell} ${tableStyles.numeric}`} data-label="Size" title={level.displaySize}>
+                {formatBookNumber(level.displaySize)}
+            </td>
+            <td
+                className={`${tableStyles.cell} ${tableStyles.numeric}`}
+                data-label="Total"
+                title={level.cumulative}
+                style={{ color: 'var(--xc-text-muted)' }}
+            >
+                {formatBookNumber(level.cumulative)}
+            </td>
+        </tr>
     );
+}
+
+function formatBookNumber(value) {
+    return formatWithThousands(trimAmountTail(value));
 }

@@ -48,6 +48,8 @@ import {
     compareDecimalStrings,
     decimalQuotientFloor,
 } from '../shared/utils/amountFormat.js';
+import { taggedLogger } from './taggedLogger.js';
+import { ActiveAddressPoll, isVaultLockedError } from './activeAddressPoll.js';
 
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000;
 /** Warn at or below this many remaining dispenses. */
@@ -55,15 +57,13 @@ const DEFAULT_LOW_DISPENSES = 3;
 const SEEN_CAP_PER_CHAIN = 500;
 const MAX_DETAIL_READS_PER_TICK = 25;
 
-const NOOP_LOGGER = { debug() {}, warn() {}, error() {} };
-
 export class DispenserEscrowWatcher {
     /**
      * @param {Object} deps
      * @param {() => Promise<import('./getActiveAddresses.js').ActiveAddress[]>} deps.getActiveAddresses
      * @param {(chainId: string) => import('../sdk/SDKRegistry.js').XChainSDKLike} deps.getSdkForChain
      * @param {() => Promise<import('../schemas/settings.js').Settings>} deps.getSettings
-     * @param {(n: { kind: string, title: string, body: string, data?: object }) => (void | Promise<void>)} deps.notify
+     * @param {(n: { kind: string, title: string, body: string, data?: object }) => (void | boolean | Promise<void | boolean>)} deps.notify
      * @param {() => Promise<object | null>} [deps.loadSeen]
      * @param {(seen: object) => (void | Promise<void>)} [deps.saveSeen]
      * @param {number} [deps.intervalMs]
@@ -95,13 +95,20 @@ export class DispenserEscrowWatcher {
         this._intervalMs = Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : DEFAULT_INTERVAL_MS;
         this._lowDispenses = Number.isFinite(lowDispenses) && lowDispenses >= 0
             ? lowDispenses : DEFAULT_LOW_DISPENSES;
-        this._log = logger || NOOP_LOGGER;
+        this._log = taggedLogger(logger, 'dispenser');
+        this._addressPoll = new ActiveAddressPoll({
+            getActiveAddresses: this._getActiveAddresses,
+            intervalMs: this._intervalMs,
+            logger: this._log,
+            owner: 'DispenserEscrowWatcher',
+        });
 
         this._timer = null;
         this._ticking = false;
         /** @type {Map<string, Set<string>>} chainId -> announced `actionIndex:bucket` keys */
         this._seen = new Map();
         this._seenLoaded = false;
+        this._seenDirty = false;
     }
 
     /** Begin polling. Fires an immediate tick, then every intervalMs. Idempotent. */
@@ -123,6 +130,8 @@ export class DispenserEscrowWatcher {
         }
         this._seen.clear();
         this._seenLoaded = false;
+        this._seenDirty = false;
+        this._addressPoll.reset();
     }
 
     /** One poll cycle. Public so shells/tests can drive it deterministically. */
@@ -134,6 +143,10 @@ export class DispenserEscrowWatcher {
             try {
                 settings = await this._getSettings();
             } catch (e) {
+                if (isVaultLockedError(e)) {
+                    this._addressPoll.reset();
+                    return;
+                }
                 this._log.error('DispenserEscrowWatcher: getSettings failed', e);
                 return;
             }
@@ -141,6 +154,9 @@ export class DispenserEscrowWatcher {
             const featureOn = !settings || !settings.notifications
                 || settings.notifications.dispenserEscrow !== false;
             if (!featureOn) return;
+
+            const addresses = await this._addressPoll.read();
+            if (!addresses || addresses.length === 0) return;
 
             if (!this._seenLoaded) {
                 this._seenLoaded = true;
@@ -158,15 +174,6 @@ export class DispenserEscrowWatcher {
                 }
             }
 
-            let addresses;
-            try {
-                addresses = (await this._getActiveAddresses()) || [];
-            } catch (e) {
-                this._log.error('DispenserEscrowWatcher: getActiveAddresses failed', e);
-                return;
-            }
-            if (addresses.length === 0) return;
-
             const byChain = new Map();
             for (const a of addresses) {
                 if (!a || !a.chainId || !a.address) continue;
@@ -182,11 +189,13 @@ export class DispenserEscrowWatcher {
                     this._log.warn(`DispenserEscrowWatcher: chain ${chainId} tick failed`, e);
                 }
             }
-            if (changed && this._saveSeen) {
+            if (changed && this._saveSeen) this._seenDirty = true;
+            if (this._seenDirty && this._saveSeen) {
                 try {
                     const out = {};
                     for (const [chainId, ids] of this._seen.entries()) out[chainId] = Array.from(ids);
                     await this._saveSeen(out);
+                    this._seenDirty = false;
                 } catch (e) {
                     this._log.warn('DispenserEscrowWatcher: saveSeen failed', e);
                 }
@@ -271,22 +280,18 @@ export class DispenserEscrowWatcher {
         }
 
         const fresh = low.filter((d) => !seen.has(`${d.actionIndex}:${d.bucket}`));
-        for (const d of fresh) {
-            if (seen.size >= SEEN_CAP_PER_CHAIN) break;
-            seen.add(`${d.actionIndex}:${d.bucket}`);
-            changed = true;
-        }
         this._seen.set(chainId, seen);
 
         for (const d of fresh) {
+            if (seen.size >= SEEN_CAP_PER_CHAIN) break;
             const empty = d.bucket === 'empty';
             try {
-                await this._notify({
+                const delivered = await this._notify({
                     kind: 'dispenser-escrow',
-                    title: empty ? 'Your dispenser is empty' : 'Your dispenser is running low',
+                    title: empty ? `${d.giveTick} dispenser is empty` : `${d.giveTick} dispenser is running low`,
                     body: empty
-                        ? `Dispenser #${d.actionIndex} on ${chainLabel} has run out of ${d.giveTick} and is turning buyers away. Top it up to start serving again.`
-                        : `Dispenser #${d.actionIndex} on ${chainLabel} can serve ${d.dispensesLeft} more buyer${d.dispensesLeft === 1 ? '' : 's'} before it runs out of ${d.giveTick}.`,
+                        ? `Dispenser #${d.actionIndex} on ${chainLabel} has no ${d.giveTick} left and is turning buyers away. Top it up to resume sales.`
+                        : `Dispenser #${d.actionIndex} on ${chainLabel} has enough ${d.giveTick} for ${d.dispensesLeft} more buyer${d.dispensesLeft === 1 ? '' : 's'}.`,
                     data: {
                         chainId,
                         actionIndex: d.actionIndex,
@@ -299,6 +304,10 @@ export class DispenserEscrowWatcher {
                         intent: 'refill',
                     },
                 });
+                if (delivered !== false) {
+                    seen.add(`${d.actionIndex}:${d.bucket}`);
+                    changed = true;
+                }
             } catch (e) {
                 this._log.error('DispenserEscrowWatcher: notify failed', e);
             }

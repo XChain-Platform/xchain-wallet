@@ -9,9 +9,12 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef, useState } from 'react';
-import { Screen, Input, Icon, PageHeader } from '@xchain-wallet/core/ui';
+import { Button, FormPage, Screen, Input, Icon, PageHeader } from '@xchain-wallet/core/ui';
+import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import styles from './CreateWallet.module.css';
+
+const NAME_MAX_LENGTH = 64;
+const nameLength = (value) => Array.from(value).length;
 
 /**
  * RenameWalletForm: change a Wallet record's `name` field. No
@@ -25,14 +28,15 @@ import styles from './CreateWallet.module.css';
  * @param {string} props.walletId
  * @param {string} [props.initialName]   pre-fill the input with the current name
  * @param {() => void} props.onBack
- * @param {() => void} props.onRenamed   refresh callers and return to the previous screen
+ * @param {(wallet: any) => void} props.onRenamed   refresh callers and return to the previous screen
  */
 export function RenameWalletForm({ walletId, initialName = '', onBack, onRenamed }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [name, setName] = useState(initialName);
+    const [wallets, setWallets] = useState(/** @type {any[] | null} */ (null));
+    const [walletLoadError, setWalletLoadError] = useState(/** @type {string | null} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [busy, setBusy] = useState(false);
     const nameRef = useRef(/** @type {HTMLInputElement | null} */ (null));
@@ -45,14 +49,46 @@ export function RenameWalletForm({ walletId, initialName = '', onBack, onRenamed
         }, 0);
     }, []);
 
+    useEffect(() => {
+        let cancelled = false;
+        if (typeof messaging.listWallets !== 'function') {
+            setWalletLoadError('Wallet names could not be checked.');
+            return undefined;
+        }
+        messaging.listWallets()
+            .then((list) => {
+                if (!cancelled) setWallets(Array.isArray(list) ? list : []);
+            })
+            .catch(() => {
+                if (!cancelled) setWalletLoadError('Wallet names could not be checked.');
+            });
+        return () => { cancelled = true; };
+    }, [messaging]);
+
     async function handleSubmit(event) {
         if (event && typeof event.preventDefault === 'function') event.preventDefault();
+        // Ignore a second submit while the first rename is still in flight.
         if (busy) return;
         const trimmed = name.trim();
+        // Require a visible wallet name after surrounding whitespace is removed.
         if (trimmed.length === 0) {
             setError('Wallet name is required.');
             return;
         }
+        if (nameLength(trimmed) > NAME_MAX_LENGTH) {
+            setError(`Wallet name must be ${NAME_MAX_LENGTH} characters or fewer.`);
+            return;
+        }
+        if (wallets === null) {
+            setError('Wallet names could not be checked.');
+            return;
+        }
+        if (wallets.some((wallet) => wallet?.id !== walletId
+            && wallet?.name?.trim().toLocaleLowerCase() === trimmed.toLocaleLowerCase())) {
+            setError(`A wallet named "${trimmed}" already exists.`);
+            return;
+        }
+        // Refuse submission when this shell cannot persist the new name.
         if (typeof messaging.renameWallet !== 'function') {
             setError('messaging.renameWallet is not available in this shell.');
             return;
@@ -60,51 +96,63 @@ export function RenameWalletForm({ walletId, initialName = '', onBack, onRenamed
         setError(null);
         setBusy(true);
         try {
-            await messaging.renameWallet({ walletId, name: trimmed });
-            onRenamed();
+            const result = await messaging.renameWallet({ walletId, name: trimmed });
+            onRenamed(result?.wallet || result);
         } catch (err) {
             setError(err?.message || 'Failed to rename wallet.');
             setBusy(false);
         }
     }
 
-    const saveDisabled = busy || name.trim().length === 0;
+    const saveDisabled = busy || wallets === null || name.trim().length === 0
+        || nameLength(name.trim()) > NAME_MAX_LENGTH;
 
     const header = (
         <PageHeader
             onBack={onBack}
             backDisabled={busy}
-            title="Rename wallet"
+            title={t('renameWallet.title')}
             trailing={(
-                <button
+                <Button
                     type="button"
+                    variant="ghost"
+                    size="sm"
+                    icon={null}
                     onClick={() => handleSubmit()}
-                    aria-label="Save"
-                    title="Save"
+                    aria-label={t('history.contact.save')}
+                    title={t('history.contact.save')}
                     disabled={saveDisabled}
+                    aria-busy={busy ? 'true' : undefined}
                 >
                     <Icon.CheckIcon />
-                </button>
+                </Button>
             )}
         />
     );
 
     const formBody = (
-        <form ref={formRef} onSubmit={handleSubmit} noValidate>
+        <FormPage ref={formRef} label={t('renameWallet.title')} onSubmit={handleSubmit}>
             <Input
                 ref={nameRef}
-                label="Wallet name"
+                label={t('renameWallet.name')}
                 value={name}
-                onChange={(e) => { setName(e.target.value); if (error) setError(null); }}
+                onChange={(e) => {
+                    const nextName = e.target.value;
+                    setName(nextName);
+                    setError(nameLength(nextName.trim()) > NAME_MAX_LENGTH
+                        ? `Wallet name must be ${NAME_MAX_LENGTH} characters or fewer.`
+                        : null);
+                }}
                 autoComplete="off"
-                error={error || undefined}
+                disabled={busy || Boolean(walletLoadError)}
+                error={error || walletLoadError || undefined}
             />
-        </form>
+        </FormPage>
     );
 
     return (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{formBody}</div> : formBody}
+            {formBody}
         </Screen>
     );
 }

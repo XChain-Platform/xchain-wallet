@@ -13,21 +13,25 @@
 // COINPAY_EXPIRATION), NOT a block height; a COINPAY confirming after
 // it loses the buyer's native coin, so it must render as a real time.
 
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { coinpayExpiryText } from '../../../packages/core/src/market/coinpayExpiry.js';
 
+afterEach(() => vi.restoreAllMocks());
+
 describe('market/coinpayExpiry coinpayExpiryText', () => {
-    it('renders a UNIX-seconds timestamp as an absolute UTC time', () => {
-        // 1751983200 = Tue, 08 Jul 2026 14:00:00 GMT
+    it('renders a UNIX-seconds timestamp in the viewer local time zone', () => {
+        const locale = vi.spyOn(Date.prototype, 'toLocaleString').mockReturnValue('Jul 8, 2025, 7:00 AM PDT');
         const out = coinpayExpiryText(1751983200);
-        expect(out).toBe(new Date(1751983200 * 1000).toUTCString());
-        expect(out).toMatch(/GMT$/);
+        expect(out).toBe('Jul 8, 2025, 7:00 AM PDT');
+        expect(locale).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ timeZoneName: 'short' }));
         // Must NOT be interpreted as (or look like) a bare block height.
         expect(out).not.toMatch(/^\d+$/);
+        expect(out).not.toMatch(/^\d{4}-\d{2}-\d{2}T/);
     });
 
     it('accepts a numeric string', () => {
-        expect(coinpayExpiryText('1751983200')).toBe(new Date(1751983200 * 1000).toUTCString());
+        vi.spyOn(Date.prototype, 'toLocaleString').mockReturnValue('local deadline');
+        expect(coinpayExpiryText('1751983200')).toBe('local deadline');
     });
 
     it('returns null for missing / non-positive / non-finite values', () => {
@@ -40,6 +44,7 @@ describe('market/coinpayExpiry coinpayExpiryText', () => {
     });
 
     it('rejects an out-of-range value (guards against a ms value or garbage)', () => {
+        expect(coinpayExpiryText(Date.now())).toBeNull();
         expect(coinpayExpiryText(1e14)).toBeNull();
     });
 });

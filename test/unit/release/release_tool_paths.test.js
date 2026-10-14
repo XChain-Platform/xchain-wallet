@@ -8,8 +8,10 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
@@ -52,5 +54,42 @@ describe('public release tool paths', () => {
 
         expect(sign).toContain('fingerprint and current publication status are documented in SECURITY.md');
         expect(sign).not.toMatch(/SPEC_GAPS\.md/i);
+    });
+
+    it('hashes every artifact in one process without splitting spaced names', () => {
+        const work = mkdtempSync(join(tmpdir(), 'xchain-release-hash-'));
+        const checksum = join(work, 'checksum');
+        const calls = join(work, 'calls');
+        const lib = releaseFile('lib.sh');
+        writeFileSync(checksum, [
+            '#!/usr/bin/env bash',
+            `printf '%s\\n' "$#:$*" >> ${JSON.stringify(calls)}`,
+            'for artifact in "$@"; do',
+            `  printf '%064d  %s\\n' 0 "$artifact"`,
+            'done',
+            '',
+        ].join('\n'));
+        chmodSync(checksum, 0o755);
+        writeFileSync(join(work, 'first.bin'), 'first');
+        writeFileSync(join(work, 'name with spaces.bin'), 'second');
+        writeFileSync(join(work, 'run.sh'), [
+            '#!/usr/bin/env bash',
+            `source ${JSON.stringify(lib)}`,
+            `xr_sha256_cmd() { printf '%s\\n' ${JSON.stringify(checksum)}; }`,
+            `xr_list_artifacts() { printf '%s\\n' './first.bin' './name with spaces.bin'; }`,
+            `xr_profile_for() { printf '%s\\n' default; }`,
+            `xr_write_manifest ${JSON.stringify(work)} v1.2.3 ${'a'.repeat(40)} `
+                + '2026-10-13T00:00:00Z enforced fixture',
+            '',
+        ].join('\n'));
+
+        try {
+            execFileSync('bash', [join(work, 'run.sh')], { stdio: 'pipe' });
+            expect(readFileSync(calls, 'utf8')).toBe('2:./first.bin ./name with spaces.bin\n');
+            expect(readFileSync(join(work, 'RELEASE_HASHES.txt'), 'utf8'))
+                .toContain(`${'0'.repeat(64)}  ./name with spaces.bin`);
+        } finally {
+            rmSync(work, { recursive: true, force: true });
+        }
     });
 });

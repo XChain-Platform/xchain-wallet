@@ -20,14 +20,13 @@
     - com.apple.security.cs.allow-unsigned-executable-memory: false, and
       it stays false. It is the wider entitlement of the pair and the
       launch above was proven with allow-jit alone.
-    - com.apple.security.device.usb: required for WebHID on macOS -
-      @ledgerhq/hw-transport-webhid opens the Ledger HID interface via
-      IOKit, which the hardened runtime gates behind this entitlement.
-      Same mechanism Trezor Bridge uses when its own HID handoff fires.
-    - com.apple.security.network.client: required for xchain-sdk calls
-      (REST/JSON-RPC to xchain-explorer / xchain-encoder) + electron-updater
-      update manifest fetches + Trezor Connect iframe loading
-      connect.trezor.io.
+    - com.apple.security.device.camera: required by the shared QrScanner,
+      which opens a video stream through getUserMedia. The matching usage
+      description lives in electron-builder.config.cjs.
+    - Network client and USB device keys belong to the App Sandbox. This
+      direct-download build is not sandboxed, so granting them here does not
+      enable its HTTPS or WebHID features and needlessly broadens the signed
+      entitlement set.
     - com.apple.security.files.user-selected.read-write: NOT currently
       needed - we use app.getPath('userData') for all storage. If we
       add an "export PSBT" feature that writes to a user-chosen path,
@@ -39,9 +38,7 @@
     <false/>
     <key>com.apple.security.cs.allow-jit</key>
     <true/>
-    <key>com.apple.security.device.usb</key>
-    <true/>
-    <key>com.apple.security.network.client</key>
+    <key>com.apple.security.device.camera</key>
     <true/>
 </dict>
 </plist>

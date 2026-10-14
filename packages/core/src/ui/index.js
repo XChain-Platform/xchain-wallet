@@ -15,8 +15,24 @@
 
 export { Screen } from './Screen.jsx';
 export { PageHeader } from './PageHeader.jsx';
+// Page templates: every routed screen's body is one of these (STYLE_GUIDE.md).
+export { FormPage } from './FormPage.jsx';
+export { FormErrorSummary } from './FormErrorSummary.jsx';
+export { FormSection } from './FormSection.jsx';
+export { ListPage } from './ListPage.jsx';
+export { ListRow } from './ListRow.jsx';
+export { EmptyState } from './EmptyState.jsx';
+export { SectionHeader } from './SectionHeader.jsx';
 export { StatusMessage } from './StatusMessage.jsx';
 export { Button } from './Button.jsx';
+export { Spinner } from './Button.jsx';
+export { Checkbox } from './Checkbox.jsx';
+export { ChoiceControl } from './ChoiceControl.jsx';
+export { Switch } from './Switch.jsx';
+export { Chip } from './Chip.jsx';
+export { Tabs } from './Tabs.jsx';
+export { SegmentedControl } from './SegmentedControl.jsx';
+export { RadioGroup } from './RadioGroup.jsx';
 export { Input } from './Input.jsx';
 export { Select } from './Select.jsx';
 export { Textarea } from './Textarea.jsx';
@@ -42,7 +58,5 @@ export * as Icon from './icons/index.jsx';
 export {
     useReducedMotion,
     resolveReducedMotion,
-    subscribeReducedMotion,
-    osPrefersReducedMotion,
     REDUCED_MOTION_ATTR,
 } from './reducedMotion.js';

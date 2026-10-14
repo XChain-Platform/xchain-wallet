@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { EmptyState, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './IssueTokenForm.module.css';
 
@@ -70,6 +70,7 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack }) {
 
     const [record, setRecord] = useState(/** @type {any} */ (null));
     const [markets, setMarkets] = useState(/** @type {any[] | null} */ (null));
+    const [marketsError, setMarketsError] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
 
     useEffect(() => {
@@ -91,15 +92,24 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack }) {
     useEffect(() => {
         let cancelled = false;
         setMarkets(null);
+        setMarketsError(false);
         if (typeof messaging.betFeeds !== 'function') { setMarkets([]); return undefined; }
         messaging.betFeeds({ chainId, query: address, type: 'source', opts: { limit: 50 } })
             .then((resp) => { if (!cancelled) setMarkets(extractRows(resp)); })
-            .catch(() => { if (!cancelled) setMarkets([]); });
+            .catch(() => {
+                if (cancelled) return;
+                setMarkets([]);
+                setMarketsError(true);
+            });
         return () => { cancelled = true; };
     }, [chainId, address, messaging]);
 
     const header = <PageHeader onBack={onBack} title="Oracle record" />;
-    const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
+    const wrap = (children) => (
+        <Screen variant={variant} header={header}>
+            <ListPage>{children}</ListPage>
+        </Screen>
+    );
 
     if (error) {
         return wrap(
@@ -120,7 +130,7 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack }) {
     const fees = Array.isArray(record.fees_earned) ? record.fees_earned : [];
 
     const line = (label, value, hint) => (
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
             <span>{label}{hint ? <span className={styles.hint}> {hint}</span> : null}</span>
             <strong>{value}</strong>
         </div>
@@ -130,7 +140,7 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack }) {
         <>
             <p className={styles.hint} style={{ wordBreak: 'break-all' }}>{address}</p>
 
-            <div className={styles.card}>
+            <div className={styles.listCard}>
                 {line('Markets opened', total)}
                 {line('Still running', active)}
                 {line('Settled with a result', settled)}
@@ -141,13 +151,17 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack }) {
                 {line('Left to expire with no result', expired, '(everyone refunded)')}
             </div>
 
-            <h4>Fees earned</h4>
+            <SectionHeader title="Fees earned" />
             {fees.length === 0 ? (
-                <p className={styles.hint}>This address has never been paid a fee for settling a market.</p>
+                <EmptyState
+                    title="No settlement fees yet"
+                    body="Fees paid to this address for settling markets appear here."
+                    titleAs="p"
+                />
             ) : (
-                <div className={styles.card}>
+                <div className={styles.listCard}>
                     {fees.map((f, i) => (
-                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}>
+                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap', overflowWrap: 'anywhere' }}>
                             <span>{f.tick || 'unknown token'}</span>
                             <strong>{String(f.amount)}</strong>
                         </div>
@@ -160,7 +174,7 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack }) {
             )}
 
             {/* Required by the spec's trust model, not optional decoration. */}
-            <div role="note" className={styles.card}>
+            <div role="note" className={styles.listCard}>
                 <strong>This record is not a guarantee.</strong>
                 <p className={styles.hint}>
                     Nothing is staked behind a betting market. This history belongs to one address, and
@@ -171,10 +185,14 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack }) {
                 </p>
             </div>
 
-            <h4>Their markets</h4>
+            <SectionHeader title="Their markets" />
             {!markets ? <p className={styles.hint}>Loading markets…</p> : null}
-            {markets && markets.length === 0 ? (
-                <p className={styles.hint}>No markets from this address on this chain.</p>
+            {marketsError ? (
+                <StatusMessage variant="error" className={styles.error}>
+                    Could not load this address&apos;s markets.
+                </StatusMessage>
+            ) : markets && markets.length === 0 ? (
+                <EmptyState title="No markets yet" body="Markets created by this address on this chain appear here." titleAs="p" />
             ) : null}
             {markets && markets.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
@@ -188,17 +206,18 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack }) {
                             </>
                         );
                         return onOpenMarket ? (
+                            // A raw button keeps the entire list card as one clickable row.
                             <button
                                 key={String(m.action_index)}
                                 type="button"
                                 onClick={() => onOpenMarket(chainId, m.action_index)}
-                                className={styles.card}
+                                className={styles.listCard}
                                 style={{ textAlign: 'left', cursor: 'pointer', width: '100%' }}
                             >
                                 {body}
                             </button>
                         ) : (
-                            <div key={String(m.action_index)} className={styles.card}>{body}</div>
+                            <div key={String(m.action_index)} className={styles.listCard}>{body}</div>
                         );
                     })}
                 </div>

@@ -68,13 +68,15 @@ assert.ok(
     'TotalBalanceHero imports StalenessLabel',
 );
 assert.ok(
-    /<StalenessLabel\s+lastSyncedAt=\{lastSyncedAt\}/.test(heroSrc),
-    'TotalBalanceHero renders <StalenessLabel> bound to lastSyncedAt',
+    /<StalenessLabel\s+lastSyncedAt=\{portfolioUpdatedAt\}/.test(heroSrc),
+    'TotalBalanceHero renders one <StalenessLabel> for balance and price freshness',
 );
 assert.ok(
-    /const hasSync = typeof lastSyncedAt === 'number' && lastSyncedAt > 0/.test(heroSrc)
-        && /hasSync \?/.test(heroSrc),
-    'TotalBalanceHero only renders the staleness label after a successful fetch (hasSync gate)',
+    /oldestFreshnessTimestamp\(\s*lastSyncedAt,\s*pricesFetchedAt,\s*stalePriceAsOf,?\s*\)/.test(heroSrc)
+        // Test networks show no prices, so only the balance age counts there.
+        && /testCoinsOnly\s*\?\s*oldestFreshnessTimestamp\(lastSyncedAt\)/.test(heroSrc)
+        && /hasUpdate \?/.test(heroSrc),
+    'TotalBalanceHero uses the oldest successful balance or price update',
 );
 
 // --- 3. History.jsx tracks historyFetchedAt -----------------------------

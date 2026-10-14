@@ -21,8 +21,8 @@ const STORAGE_KEY = 'xc:portfolioChartVisible';
 const EVENT = 'xc:portfolio-chart-visible-change';
 
 function readPersistedVisible() {
-    if (typeof globalThis === 'undefined' || !globalThis.localStorage) return true;
     try {
+        if (typeof globalThis === 'undefined' || !globalThis.localStorage) return true;
         const raw = globalThis.localStorage.getItem(STORAGE_KEY);
         if (raw === null) return true;
         return raw === '1';

@@ -147,11 +147,13 @@ assert.ok(
 assert.match(safetySrc, /import \{ PanicModeRow \}/, 'SafetySection imports PanicModeRow');
 assert.match(safetySrc, /<PanicModeRow \/>/, 'SafetySection renders PanicModeRow');
 
-// The toggle's role changed from "Panic mode" enable to "Auto-arm".
-assert.match(
+// The "Auto-arm panic mode" toggle was a saved preference no code reads
+// (panic mode cannot arm itself), so Settings no longer shows it. The
+// Activate row is the only control; the schema slot panicMode.enabled stays.
+assert.doesNotMatch(
     safetySrc,
-    /Auto-arm panic mode/,
-    'toggle relabelled as Auto-arm reservation',
+    /Auto-arm panic mode|panicMode:\s*\{\s*enabled/,
+    'no auto-arm toggle is shown for a behaviour that does not exist',
 );
 
 // PanicModeRow must NOT be gated on settings.panicMode.enabled;

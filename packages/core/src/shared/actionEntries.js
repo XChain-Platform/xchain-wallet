@@ -302,6 +302,54 @@ export const ACTION_ENTRY_DEFS = Object.freeze([
     },
 ]);
 
+/**
+ * Stable sections for the full-page action catalogue. Each entry belongs to
+ * exactly one section, and the array order is the visual and reading order.
+ */
+export const ACTION_GROUPS = Object.freeze([
+    {
+        id: 'tokens',
+        label: 'Tokens',
+        entryIds: Object.freeze([
+            'issue', 'mint', 'destroy', 'sweep', 'lock', 'description',
+            'transfer', 'broadcast', 'oracle', 'dispenser', 'dispensers-list',
+            'dispenser-explorer', 'dividend', 'airdrop',
+        ]),
+    },
+    {
+        id: 'markets',
+        label: 'Markets',
+        entryIds: Object.freeze([
+            'coinpay', 'swap', 'create-order', 'my-orders', 'my-swaps',
+        ]),
+    },
+    {
+        id: 'workflows',
+        label: 'Publishing and multi-chain',
+        entryIds: Object.freeze([
+            'publish-file', 'link', 'parallel', 'batch', 'cross-chain-swap',
+            'cross-chain-order', 'cross-chain-templates', 'bridge-move',
+            'bridge-settings',
+        ]),
+    },
+    {
+        id: 'shared-control',
+        label: 'Communities and shared wallets',
+        entryIds: Object.freeze([
+            'multisig-create', 'multisig-sign', 'governance-polls',
+            'bet-markets', 'cosigner-accounts',
+        ]),
+    },
+    {
+        id: 'wallet-tools',
+        label: 'Wallet tools',
+        entryIds: Object.freeze([
+            'contacts', 'sign-message', 'verify-signature', 'sign-psbt',
+            'advanced', 'lock-address', 'pair-signer',
+        ]),
+    },
+]);
+
 // The one line whose wording is a capability statement rather than copy.
 //
 // Trezor is genuinely absent from the MV3 extension (no factory is
@@ -325,17 +373,25 @@ const PAIR_SIGNER_LEDGER_ONLY = 'Add a Ledger to this wallet. Trezor pairing is 
  *   the menu instead of rendering a button that does nothing.
  * @param {{ pairsTrezor?: boolean }} [capabilities]
  *   What this host can do, where a capability changes the copy.
- * @returns {{ id: string, label: string, description: string, onSelect: () => void }[]}
+ * @returns {{ id: string, label: string, description: string, group: string, groupLabel: string, onSelect: () => void }[]}
  */
 export function buildActionEntries(handlers = {}, capabilities = {}) {
     const { pairsTrezor = false } = capabilities;
-    return ACTION_ENTRY_DEFS
-        .map((def) => ({
+    const definitions = new Map(ACTION_ENTRY_DEFS.map((def) => [def.id, def]));
+    return ACTION_GROUPS
+        .flatMap((group) => group.entryIds.map((id) => ({
+            def: definitions.get(id),
+            group,
+        })))
+        .filter(({ def }) => def)
+        .map(({ def, group }) => ({
             id: def.id,
             label: def.label,
             description: def.id === 'pair-signer' && !pairsTrezor
                 ? PAIR_SIGNER_LEDGER_ONLY
                 : def.description,
+            group: group.id,
+            groupLabel: group.label,
             onSelect: handlers[def.handler],
         }))
         .filter((e) => typeof e.onSelect === 'function');

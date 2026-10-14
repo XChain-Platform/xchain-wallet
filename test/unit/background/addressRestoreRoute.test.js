@@ -186,3 +186,26 @@ describe('addresses.restore rejects malformed requests', () => {
         expect(await h.vault.addresses.list()).toEqual([]);
     });
 });
+
+describe('addresses.setHidden updates address visibility', () => {
+    it('persists both hide and unhide operations without removing the record', async () => {
+        const rec = addressRecord();
+        const h = makeHost({ addresses: [rec] });
+
+        expect((await h.call('addresses.setHidden', { id: rec.id, hidden: true })).result)
+            .toEqual({ ok: true });
+        expect((await h.vault.addresses.get(rec.id)).hidden).toBe(true);
+
+        await h.call('addresses.setHidden', { id: rec.id, hidden: false });
+        expect((await h.vault.addresses.get(rec.id)).hidden).toBe(false);
+    });
+
+    it('rejects a non-boolean visibility value', async () => {
+        const rec = addressRecord();
+        const h = makeHost({ addresses: [rec] });
+        const res = await h.call('addresses.setHidden', { id: rec.id, hidden: 'yes' });
+
+        expect(res.ok).toBe(false);
+        expect((await h.vault.addresses.get(rec.id)).hidden).toBe(false);
+    });
+});

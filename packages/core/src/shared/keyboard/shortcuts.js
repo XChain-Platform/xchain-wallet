@@ -17,8 +17,8 @@
 //
 // A binding string is either:
 //   'mod+k'   a modifier combo: `mod` = Cmd on macOS / Ctrl elsewhere, then a
-//             single key. Combos fire regardless of focus (they're
-//             unambiguous), except the browser-owned ones we deliberately skip.
+//             single key. Global combos stay inactive while the user types in
+//             an editable field.
 //   '?'       a single key: only fires when no editable element has focus.
 //   'g h'     a leader sequence: press `g`, then the next key. Editable-gated
 //             like single keys.
@@ -35,12 +35,12 @@ export const SHORTCUTS = /** @type {const} */ ([
     { id: 'settings', binding: 'mod+,', label: 'Open settings', action: 'nav:settings', group: 'General', dispatch: true },
     { id: 'new-send', binding: 'mod+n', label: 'New send', action: 'nav:send', group: 'General', dispatch: true },
     // Go to (g-leader)
-    { id: 'go-balances', binding: 'g b', label: 'Go to Balances', action: 'nav:home', group: 'Go to', dispatch: true },
-    { id: 'go-history', binding: 'g h', label: 'Go to History', action: 'nav:history', group: 'Go to', dispatch: true },
-    { id: 'go-send', binding: 'g s', label: 'Go to Send', action: 'nav:send', group: 'Go to', dispatch: true },
-    { id: 'go-receive', binding: 'g r', label: 'Go to Receive', action: 'nav:receive', group: 'Go to', dispatch: true },
+    { id: 'go-balances', binding: 'g b', label: 'Go to balances', action: 'nav:home', group: 'Go to', dispatch: true },
+    { id: 'go-history', binding: 'g h', label: 'Go to history', action: 'nav:history', group: 'Go to', dispatch: true },
+    { id: 'go-send', binding: 'g s', label: 'Go to send', action: 'nav:send', group: 'Go to', dispatch: true },
+    { id: 'go-receive', binding: 'g r', label: 'Go to receive', action: 'nav:receive', group: 'Go to', dispatch: true },
     { id: 'go-dex', binding: 'g d', label: 'Go to DEX', action: 'nav:markets', group: 'Go to', dispatch: true },
-    { id: 'go-contacts', binding: 'g c', label: 'Go to Contacts', action: 'nav:contacts', group: 'Go to', dispatch: true },
+    { id: 'go-contacts', binding: 'g c', label: 'Go to contacts', action: 'nav:contacts', group: 'Go to', dispatch: true },
     // §34.2 context-sensitive shortcuts. dispatch: false - each lives in its
     // route component (via useScreenShortcuts), listed here so the help modal
     // and rebinding UI stay the single catalogue. `rebindable: false`: the
@@ -132,8 +132,8 @@ export function findBindingConflict(id, binding, overrides) {
 }
 
 /**
- * True when the element should swallow single-key / leader shortcuts (the user
- * is typing). Modifier combos are allowed to fire even here.
+ * True when the element should swallow global shortcuts because the user is
+ * typing. Every binding family stays inactive here.
  *
  * @param {EventTarget | null} el
  * @returns {boolean}
@@ -161,8 +161,8 @@ export function parseBinding(binding) {
 }
 
 /**
- * Human-readable rendering of a binding for the help modal. `mac` picks ⌘/⌥
- * glyphs vs "Ctrl".
+ * Human-readable rendering of a binding for the help modal. `mac` selects
+ * the platform modifier name.
  * @param {string} binding
  * @param {boolean} [mac]
  * @returns {string}
@@ -170,13 +170,13 @@ export function parseBinding(binding) {
 export function formatBinding(binding, mac = false) {
     const parsed = parseBinding(binding);
     if (parsed.kind === 'combo') {
-        const mod = mac ? '⌘' : 'Ctrl';
+        const mod = mac ? 'Cmd' : 'Ctrl';
         // Single chars render uppercase ('K'); named keys ('enter') render
         // capitalized ('Enter') so Ctrl+Enter doesn't shout.
         const key = parsed.key.length === 1
             ? (parsed.key === ',' ? ',' : parsed.key.toUpperCase())
             : parsed.key[0].toUpperCase() + parsed.key.slice(1);
-        return mac ? `${mod}${key}` : `${mod}+${key}`;
+        return `${mod}+${key}`;
     }
     if (parsed.kind === 'leader') return `${parsed.lead.toUpperCase()} then ${parsed.key.toUpperCase()}`;
     return parsed.key; // single key like '?'

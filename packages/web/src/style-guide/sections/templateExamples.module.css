@@ -1,0 +1,76 @@
+/* Sample content for the page-template examples. Doc chrome only: real
+   routes style their own rows, but the list here follows the same rule
+   (full width, bordered rows) so the frames show a faithful screen. */
+
+.search,
+.select {
+    box-sizing: border-box;
+    min-height: 36px;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    font-family: var(--xc-font-sans);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-md);
+}
+
+.search:focus-visible,
+.select:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 1px;
+}
+
+.list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    overflow: hidden;
+}
+
+.row {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-3);
+    padding: var(--xc-space-3) var(--xc-space-4);
+}
+
+.row + .row {
+    border-top: 1px solid var(--xc-border);
+}
+
+.rowMain {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.rowTitle {
+    font-size: var(--xc-text-md);
+    color: var(--xc-text);
+}
+
+.rowSub,
+.rowDue {
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+    overflow-wrap: anywhere;
+}
+
+.rowDue {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+.check {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-height: var(--xc-tap-min);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+}

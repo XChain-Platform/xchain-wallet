@@ -25,7 +25,7 @@
 // and one failed round-trip that is not by itself proof of being offline.
 
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, render, screen, waitFor, act } from '@testing-library/react';
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
 import { useReachability } from '../../../packages/core/src/shared/hooks/useReachability.js';
@@ -126,6 +126,14 @@ function deferred() {
     return { promise, resolve, reject };
 }
 
+function setNavigatorOnline(online) {
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: online });
+}
+
+afterEach(() => {
+    delete navigator.onLine;
+});
+
 describe('useReachability', () => {
     beforeEach(() => { vi.clearAllMocks(); });
 
@@ -142,6 +150,29 @@ describe('useReachability', () => {
         expect(check).not.toHaveBeenCalled();
         expect(result.current.overall).toBe('unknown');
         expect(result.current.perChain).toEqual([]);
+    });
+
+    it('publishes the browser offline signal without a fetch and retries as soon as online returns', async () => {
+        setNavigatorOnline(false);
+        const check = vi.fn(async ({ chainIds }) => healthy(chainIds));
+        const messaging = {
+            shell: 'web',
+            getSettings: vi.fn(async () => unlockedSettings()),
+            checkReachabilityRequest: check,
+        };
+        const { result } = renderHook(
+            () => useReachability({ intervalMs: 0, startupGraceMs: 0 }),
+            { wrapper: wrapperFor(messaging) },
+        );
+
+        await waitFor(() => expect(result.current.overall).toBe('offline'));
+        expect(check).not.toHaveBeenCalled();
+
+        setNavigatorOnline(true);
+        act(() => { window.dispatchEvent(new Event('online')); });
+
+        await waitFor(() => expect(result.current.overall).toBe('normal'));
+        expect(check).toHaveBeenCalledTimes(1);
     });
 
     it('probes for real, once, as soon as the vault hands over the chain set', async () => {
@@ -320,7 +351,7 @@ describe('ReachabilityBanner', () => {
 
         await waitFor(() => expect(messaging.getSettings).toHaveBeenCalled());
         expect(screen.queryByRole('status')).toBeNull();
-        expect(screen.queryByText(/You're offline/)).toBeNull();
+        expect(screen.queryByText(/Wallet offline/)).toBeNull();
         expect(check).not.toHaveBeenCalled();
     });
 
@@ -333,12 +364,10 @@ describe('ReachabilityBanner', () => {
             </MessagingContext.Provider>,
         );
 
-        await waitFor(() => expect(screen.getByText(/You're offline/)).toBeTruthy());
+        await waitFor(() => expect(screen.getByText('Some balances may be out of date')).toBeTruthy());
     });
 
-    it('names what the user actually loses, not which of our services fell over', async () => {
-        // "some features may not work" is what a first-time user was told on
-        // 2026-09-02 while the thing blocking them was the fee price.
+    it('discloses affected coin identities without service or network names', async () => {
         const check = vi.fn(async ({ chainIds }) => oneServiceDown(chainIds));
         const messaging = { shell: 'web', getSettings: vi.fn(async () => unlockedSettings()), checkReachabilityRequest: check };
         render(
@@ -347,8 +376,12 @@ describe('ReachabilityBanner', () => {
             </MessagingContext.Provider>,
         );
 
-        await waitFor(() => expect(screen.getByText(/fee prices are unavailable/)).toBeTruthy());
-        // Our vocabulary stays ours: no service names, no raw chain ids.
+        await waitFor(() => expect(screen.getByText('Some balances may be out of date')).toBeTruthy());
+        act(() => { screen.getByText('Details').click(); });
+        const affected = screen.getByRole('list', { name: 'Affected coins' });
+        expect(affected).toHaveTextContent('Bitcoin');
+        expect(affected).toHaveTextContent('Litecoin');
+        expect(affected).not.toHaveTextContent(/regtest|testnet/i);
         expect(screen.queryByText(/hub|encoder|explorer/i)).toBeNull();
         expect(screen.queryByText(/bitcoin-regtest|litecoin-regtest/)).toBeNull();
     });

@@ -30,12 +30,13 @@
 import { BROADCAST_QUEUE_STORAGE_KEY } from '@xchain-wallet/core/shared/utils/wipeWalletStorage.js';
 
 const STORAGE_KEY = BROADCAST_QUEUE_STORAGE_KEY;
+export const BROADCAST_QUEUE_STORAGE_VERSION = 1;
 
 /**
  * Internal entry shape (mirrors what createBackgroundHost pushes). The optional
  * `pendingTxId`, `resumedClaim` and `adsCommit` tie an entry to its vault record and
  * its ADS verdict, so `coerceSnapshot` must keep them.
- * @typedef {{ id: string, chainId: string, signedTxHex: string, summary: string, signedAt: number, txid?: string, pendingTxId?: string, resumedClaim?: boolean, commitLanded?: true, commitTxid?: string, adsCommit?: { chainId: string, donationIncluded: boolean } }} QueueEntry
+ * @typedef {{ id: string, chainId: string, signedTxHex: string, summary: string, signedAt: number, txid?: string, pendingTxId?: string, resumedClaim?: boolean, commitLanded?: true, commitTxid?: string, retryAttempt?: number, nextRetryAt?: number, adsCommit?: { chainId: string, donationIncluded: boolean } }} QueueEntry
  */
 
 /**
@@ -123,7 +124,11 @@ function envelopeAdapter(io) {
     // Count clears, so a read that started before one cannot refill the cache it emptied.
     let generation = 0;
     async function persist() {
-        await io.write({ queues: cached.queues, settlements: cached.settlements });
+        await io.write({
+            storageVersion: BROADCAST_QUEUE_STORAGE_VERSION,
+            queues: cached.queues,
+            settlements: cached.settlements,
+        });
     }
     return {
         async load() {
@@ -131,7 +136,13 @@ function envelopeAdapter(io) {
             const read = await io.read();
             // A read that straddled `clear()` holds the pre-wipe blob; report it unreadable.
             if (!read.ok || started !== generation) return null;
-            cached = splitBlob(read.blob);
+            const normalized = splitBlob(read.blob);
+            cached = { queues: normalized.queues, settlements: normalized.settlements };
+            if (normalized.needsMigration) {
+                // Reading legacy data must not depend on the upgrade write. A
+                // refused write leaves the source value available for retry.
+                try { await persist(); } catch (_e) { /* retry on the next load */ }
+            }
             return cached.queues;
         },
         async loadSettlements() {
@@ -227,7 +238,7 @@ function localStorageAdapter() {
                 // in it, so report the failure instead of an empty queue.
                 return { ok: false };
             }
-            if (typeof raw !== 'string' || !raw) return { ok: true, blob: {} };
+            if (typeof raw !== 'string' || !raw) return { ok: true, blob: undefined };
             try {
                 return { ok: true, blob: JSON.parse(raw) };
             } catch (_e) {
@@ -248,12 +259,11 @@ function localStorageAdapter() {
 }
 
 /**
- * Split a stored blob into its two halves. A blob written before the journal
- * existed carries the wallet queues at the top level, so anything without an
- * envelope `queues` object reads as queues alone.
+ * Split a stored blob into its two halves. Recognized unversioned shapes
+ * normalize to the current envelope and request a best-effort rewrite.
  *
  * @param {unknown} blob
- * @returns {{ queues: QueueSnapshot, settlements: OwedSettlement[] }}
+ * @returns {{ queues: QueueSnapshot, settlements: OwedSettlement[], needsMigration: boolean }}
  */
 function splitBlob(blob) {
     const isEnvelope = !!blob
@@ -262,9 +272,23 @@ function splitBlob(blob) {
         && !!(/** @type {any} */ (blob).queues)
         && typeof (/** @type {any} */ (blob).queues) === 'object'
         && !Array.isArray(/** @type {any} */ (blob).queues);
-    if (!isEnvelope) return { queues: coerceSnapshot(blob), settlements: [] };
+    if (!isEnvelope) {
+        const queues = coerceSnapshot(blob);
+        return {
+            queues,
+            settlements: [],
+            needsMigration: Object.keys(queues).length > 0,
+        };
+    }
     const env = /** @type {any} */ (blob);
-    return { queues: coerceSnapshot(env.queues), settlements: coerceSettlements(env.settlements) };
+    const hasVersion = Object.prototype.hasOwnProperty.call(env, 'storageVersion');
+    return {
+        queues: coerceSnapshot(env.queues),
+        settlements: coerceSettlements(env.settlements),
+        // Unknown version values stay untouched so this build never rewrites
+        // data owned by a newer or malformed format.
+        needsMigration: !hasVersion,
+    };
 }
 
 /**

@@ -30,6 +30,7 @@ import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ROUTE_NAV_GROUPS } from '../../../packages/core/src/shared/routeRegistry.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -63,13 +64,17 @@ assert.ok(/label:\s*'Contacts'/.test(navSrc),
     'LeftNav secondary list includes Contacts row');
 
 // View → nav-item mappings keep the active highlight on drilldown views.
-assert.ok(/'token-detail'/.test(navSrc) && /'addresses'/.test(navSrc),
+assert.ok(['token-detail', 'addresses'].every((route) => ROUTE_NAV_GROUPS.home.includes(route)),
     'LeftNav home group covers token-detail + addresses drilldowns');
-assert.ok(/'compose-message'/.test(navSrc),
+assert.ok(ROUTE_NAV_GROUPS.messaging.includes('compose-message'),
     'LeftNav messaging group covers compose-message drilldown');
-assert.ok(/'dispenser-detail'/.test(navSrc) && /'dispenser-explorer'/.test(navSrc),
+assert.ok(['dispenser-detail', 'dispenser-explorer'].every(
+    (route) => ROUTE_NAV_GROUPS['dispensers-list'].includes(route),
+),
     'LeftNav dispensers group covers dispenser-detail + dispenser-explorer');
-assert.ok(/'staking-dashboard'/.test(navSrc) && /'contract-deploy'/.test(navSrc),
+assert.ok(['staking-dashboard', 'contract-deploy'].every(
+    (route) => ROUTE_NAV_GROUPS['contracts-list'].includes(route),
+),
     'LeftNav contracts group covers staking + contract drilldowns');
 
 // --- 3. hasVmAddress gate + aria-current ---------------------------------
@@ -84,8 +89,8 @@ assert.ok(/aria-current=\{active \? 'page' : undefined\}/.test(navSrc),
 // Footer rows.
 assert.ok(/onLock\s*\?[\s\S]*?Lock/.test(navSrc),
     'LeftNav footer renders Lock when onLock is provided');
-assert.ok(/onOpenWalletPicker[\s\S]*?walletSwitcher/.test(navSrc),
-    'LeftNav footer renders the wallet switcher when onOpenWalletPicker is provided');
+assert.ok(!/walletSwitcher|walletName/.test(navSrc),
+    'LeftNav leaves the wallet name to the app header');
 
 // --- 4. CSS module: sidebar width + breakpoint ---------------------------
 
@@ -126,13 +131,13 @@ for (const [label, src] of [['web', webApp], ['desktop', desktopApp]]) {
         `${label} App wraps the unlocked-route tree in <FullLayoutWithNav>`);
     assert.ok(/<LeftNav\b[\s\S]*?currentView=\{unlockedView\}/.test(src),
         `${label} App passes the active unlockedView into LeftNav`);
-    // onLock is wired through a small handler that calls lockWallet();
-    // accept either the inline arrow form (Step 1 ship) or the named
-    // handler form (Step 2 ship; both LeftNav and BottomTabBar share
-    // the lock callback).
+    // LeftNav and BottomTabBar share the shell's immediate lock callback.
     assert.ok(
         /onLock=\{\(\)\s*=>\s*\{[\s\S]*?lockWallet\(\)/.test(src)
             || (/const handleNavLock = \(\)\s*=>\s*\{[\s\S]*?lockWallet\(\)/.test(src)
+                && /onLock=\{handleNavLock\}/.test(src))
+            || (/const handleNavLock = handleLock;/.test(src)
+                && /function handleLock\(\)[\s\S]{0,120}?lockImmediately\(\{/.test(src)
                 && /onLock=\{handleNavLock\}/.test(src)),
         `${label} App wires LeftNav.onLock through lockWallet()`,
     );
@@ -146,8 +151,12 @@ for (const [label, src] of [['web', webApp], ['desktop', desktopApp]]) {
         `${label} App no longer passes hasBtcAddress into a nav rail`);
 }
 
-assert.ok(!/LeftNav/.test(popupApp),
-    'Extension popup intentionally does NOT mount LeftNav (always compact per §24.1)');
+assert.ok(!/<LeftNav[\s>\/]/.test(popupApp),
+    'Extension popup intentionally does NOT mount LeftNav directly (always compact per §24.1)');
+assert.ok(/<FullLayoutWithNav[\s\S]*?bottomBar=\{\(\s*<BottomTabBar/.test(popupApp),
+    'Extension popup navigates through FullLayoutWithNav with a BottomTabBar only');
+assert.ok(/<BottomTabBar[\s\S]*?hasVmAddress=\{hasVmAddress\}/.test(popupApp),
+    'Extension popup BottomTabBar takes the registry VM gate');
 
 console.log(
     'OK: left-nav smoke (§24.2 / G053 LeftNav + FullLayoutWithNav exports; primary list Home/History/Send/Receive/Scan/DEX/Dispensers/Contracts/Messaging + Contacts secondary; Contracts gated on hasVmAddress; active row aria-current="page"; 220px sidebar, 64px rail tier, collapsed on compact; web + desktop App.jsx wrap unlocked tree, popup left compact)',

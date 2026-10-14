@@ -9,44 +9,66 @@
 // contact legal@dankest.llc.
 
 import { useMemo } from 'react';
+import { percentChangeDisplay } from '../utils/percentFormat.js';
 
 /**
- * Pure-SVG sparkline. Renders the series as a single polyline scaled
- * to a 100×100 viewBox; min/max are computed from the series so the
- * line uses the full vertical extent. Stroke color flips green/red
- * based on whether the last point is above or below the first.
+ * Pure-SVG sparkline. Renders finite samples as a polyline inside a
+ * padded 100×100 viewBox so endpoint strokes remain visible. Rising,
+ * falling, and unchanged series use their semantic theme tokens.
  *
  * @param {object} props
  * @param {number[] | null | undefined} props.series
  * @param {number} [props.height=80]
  * @param {number} [props.strokeWidth=1.5]
+ * @param {string} [props.label='Price trend']
+ * @param {string} [props.rangeLabel]
+ * @param {(value: number) => string} [props.formatValue]
  */
-export function Sparkline({ series, height = 80, strokeWidth = 1.5 }) {
+export function Sparkline({
+    series,
+    height = 80,
+    strokeWidth = 1.5,
+    label = 'Price trend',
+    rangeLabel,
+    formatValue,
+}) {
+    const values = useMemo(
+        () => Array.isArray(series) ? series.filter(Number.isFinite) : [],
+        [series],
+    );
     const points = useMemo(() => {
-        if (!Array.isArray(series) || series.length < 2) return null;
-        const min = Math.min(...series);
-        const max = Math.max(...series);
-        const range = max - min || 1;
-        const xStep = 100 / (series.length - 1);
-        return series
+        if (values.length === 0) return null;
+        if (values.length === 1) return '48.00,50.00 52.00,50.00';
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+        const flat = max === min;
+        const range = max - min;
+        const xStep = 98 / (values.length - 1);
+        return values
             .map((v, i) => {
-                const x = i * xStep;
-                const y = 100 - ((v - min) / range) * 100;
+                const x = 1 + i * xStep;
+                const y = flat ? 50 : 99 - ((v - min) / range) * 98;
                 return `${x.toFixed(2)},${y.toFixed(2)}`;
             })
             .join(' ');
-    }, [series]);
+    }, [values]);
     if (!points) return null;
-    const tone = series[series.length - 1] >= series[0] ? 'positive' : 'negative';
-    const stroke = tone === 'positive' ? 'var(--xc-success, #14b86c)' : 'var(--xc-danger, #d93838)';
+    const first = values[0];
+    const last = values[values.length - 1];
+    const tone = last > first ? 'up' : last < first ? 'down' : 'unchanged';
+    const stroke = tone === 'up'
+        ? 'var(--xc-success)'
+        : tone === 'down' ? 'var(--xc-danger)' : 'var(--xc-text-muted)';
+    const summary = describeChartSeries(values, { label, rangeLabel, formatValue });
     return (
         <svg
             viewBox="0 0 100 100"
             preserveAspectRatio="none"
             style={{ display: 'block', width: '100%', height }}
             role="img"
-            aria-label="Price trend"
+            aria-label={summary}
         >
+            <title>{summary}</title>
             <polyline
                 fill="none"
                 stroke={stroke}
@@ -56,6 +78,38 @@ export function Sparkline({ series, height = 80, strokeWidth = 1.5 }) {
             />
         </svg>
     );
+}
+
+/**
+ * Builds a concise text alternative for a numeric chart series.
+ *
+ * @param {number[]} series
+ * @param {{ label?: string, rangeLabel?: string, formatValue?: (value: number) => string }} [options]
+ * @returns {string}
+ */
+export function describeChartSeries(series, options = {}) {
+    const {
+        label = 'Price trend',
+        rangeLabel,
+        formatValue = formatChartValue,
+    } = options;
+    const values = Array.isArray(series) ? series.filter(Number.isFinite) : [];
+    if (values.length === 0) return `${label}. No data.`;
+
+    const start = values[0];
+    const end = values[values.length - 1];
+    const low = Math.min(...values);
+    const high = Math.max(...values);
+    const delta = end - start;
+    const change = `${delta > 0 ? '+' : delta < 0 ? '-' : ''}${formatValue(Math.abs(delta))}`;
+    const pctDisplay = start !== 0 ? percentChangeDisplay((delta / start) * 100) : null;
+    const percentage = pctDisplay ? ` (${pctDisplay.text})` : '';
+    const selectedRange = rangeLabel ? ` Range ${rangeLabel}.` : '';
+    return `${label}.${selectedRange} Values range from ${formatValue(low)} to ${formatValue(high)}. Start ${formatValue(start)}. End ${formatValue(end)}. Change ${change}${percentage}.`;
+}
+
+function formatChartValue(value) {
+    return new Intl.NumberFormat('en-US', { maximumSignificantDigits: 8 }).format(value);
 }
 
 // FNV-1a hash of a string → uint32. Used as the seed for the

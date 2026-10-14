@@ -24,16 +24,20 @@ import { isValidCounterwalletMnemonic } from '../crypto/counterwallet.js';
 import { parseBip21Uri } from './bip21.js';
 import { parseXcwChunk, XCW_PREFIX } from './psbtQr.js';
 import { looksLikeBackupPointer, parseBackupPointer } from './backupPointer.js';
+import { parseRawTx } from '../signers/verifySignedTx.js';
 
 export const PSBT_HEX_PREFIX = '70736274ff';
+export const PARTNER_PAIRING_PREFIX = 'XCW-PAIR:';
 
 /**
  * @typedef {(
  *   | { type: 'bip21', scheme: string, address: string, parts: import('./bip21.js').Bip21Parts }
  *   | { type: 'xchain-uri', parts: import('./bip21.js').Bip21Parts }
  *   | { type: 'psbt-hex', psbtHex: string }
+ *   | { type: 'transaction-hex', txHex: string }
  *   | { type: 'xcw-chunk', n: number, total: number, content: Uint8Array }
  *   | { type: 'backup-pointer', pointer: import('./backupPointer.js').BackupPointer }
+ *   | { type: 'pairing-code', pairingCode: string }
  *   | { type: 'wif', wif: string, decoded: ReturnType<typeof decodeWif> }
  *   | { type: 'mnemonic-bip39', mnemonic: string }
  *   | { type: 'mnemonic-counterwallet', mnemonic: string }
@@ -56,6 +60,12 @@ export function detectQrContent(input, opts = {}) {
     if (typeof input !== 'string') return { type: 'unknown' };
     const raw = input.trim();
     if (raw.length === 0) return { type: 'unknown' };
+
+    // Pairing codes have a URI-shaped prefix, so claim them before the
+    // generic scheme branch can mistake one for a payment URI.
+    if (raw.startsWith(PARTNER_PAIRING_PREFIX)) {
+        return { type: 'pairing-code', pairingCode: raw };
+    }
 
     // --- Step 0: XCW chunked PSBT-over-QR (§20.3) ---
     // Matched before generic URI detection because `XCW:` with a BIP21
@@ -135,6 +145,18 @@ export function detectQrContent(input, opts = {}) {
     // --- Step 2: PSBT hex ---
     if (isHex(raw) && raw.toLowerCase().startsWith(PSBT_HEX_PREFIX)) {
         return { type: 'psbt-hex', psbtHex: raw.toLowerCase() };
+    }
+
+    // A complete raw transaction is useful information, but it is not a PSBT
+    // and must never enter the signing lane. Structural parsing avoids calling
+    // arbitrary long hex strings transactions.
+    if (isHex(raw)) {
+        try {
+            parseRawTx(raw);
+            return { type: 'transaction-hex', txHex: raw.toLowerCase() };
+        } catch {
+            // not a complete raw transaction
+        }
     }
 
     // --- Step 3: WIF (base58check-decodable with 33- or 34-byte payload) ---

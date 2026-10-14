@@ -76,17 +76,81 @@ async function driveToCustomDetails() {
     fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1000' } });
 }
 
+async function driveToEditionDetails() {
+    fireEvent.click(await screen.findByText('Limited edition'));
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
+        target: { value: 'EDITION' },
+    });
+    fireEvent.change(screen.getByLabelText('Edition size'), { target: { value: '1000' } });
+    fireEvent.change(screen.getByLabelText('Copies per mint'), { target: { value: '10' } });
+}
+
 function openAdvanced() {
     fireEvent.click(screen.getByRole('button', { name: /Advanced settings/i }));
 }
 
 function submit() {
-    fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Review token' }));
+    const confirm = screen.queryByRole('button', { name: 'Continue to confirmation' });
+    if (confirm) fireEvent.click(confirm);
 }
 
 afterEach(() => cleanup());
 
 describe('TokenWizard advanced disclosure (PC-06)', () => {
+    it('rejects malformed supply text before composing', async () => {
+        mountWizard();
+        await driveToCustomDetails();
+        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1,000' } });
+
+        submit();
+        expect(await screen.findByRole('alert')).toHaveTextContent('Supply must be a positive number.');
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        ['Copies per mint', 'Infinity', 'Copies per mint must be a positive number.'],
+        ['Limit per address (optional)', 'many', 'Limit per address must be a positive number'],
+        ['Minting opens at block (optional)', '10.5', 'Minting start must be a whole block number.'],
+        ['Minting closes at block (optional)', 'later', 'Minting close must be a whole block number.'],
+    ])('rejects malformed edition text in %s', async (label, value, message) => {
+        mountWizard();
+        await driveToEditionDetails();
+        fireEvent.change(screen.getByLabelText(label), { target: { value } });
+
+        submit();
+        expect(await screen.findByRole('alert')).toHaveTextContent(message);
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('rejects an edition address limit below its per-mint amount', async () => {
+        mountWizard();
+        await driveToEditionDetails();
+        fireEvent.change(screen.getByLabelText('Limit per address (optional)'), {
+            target: { value: '5' },
+        });
+
+        submit();
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Limit per address must be at least the copies per mint.',
+        );
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        'Transfer ownership to (optional)',
+        'Send the initial mint to (optional)',
+    ])('rejects an invalid %s address before composing', async (label) => {
+        mountWizard();
+        await driveToCustomDetails();
+        fireEvent.change(screen.getByLabelText(label), { target: { value: 'not-an-address' } });
+
+        submit();
+        expect(await screen.findByRole('alert')).toHaveTextContent(/not valid for Bitcoin/i);
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+
     it('is collapsed by default and absent from the preset templates', async () => {
         mountWizard();
         fireEvent.click(await screen.findByText('Meme token'));
@@ -107,7 +171,7 @@ describe('TokenWizard advanced disclosure (PC-06)', () => {
         openAdvanced();
         // Wait for the tip so the future-block rail has something to
         // compare against (the form must not block while it is null).
-        await waitFor(() => expect(screen.getByText(/Current block on/)).toBeTruthy());
+        await waitFor(() => expect(screen.getByText(/Current block:/)).toBeTruthy());
 
         // Exact match: "Description (optional)" is the free-text field,
         // "Description" on its own is the lock-matrix row.
@@ -146,7 +210,7 @@ describe('TokenWizard advanced disclosure (PC-06)', () => {
         mountWizard({ divisibility: 8 });
         await driveToCustomDetails();
         openAdvanced();
-        await waitFor(() => expect(screen.getByText(/Current block on/)).toBeTruthy());
+        await waitFor(() => expect(screen.getByText(/Current block:/)).toBeTruthy());
 
         fireEvent.change(screen.getByLabelText('Callback token (optional)'), {
             target: { value: 'XCHAIN' },
@@ -181,7 +245,7 @@ describe('TokenWizard advanced disclosure (PC-06)', () => {
         mountWizard({ divisibility: null });
         await driveToCustomDetails();
         openAdvanced();
-        await waitFor(() => expect(screen.getByText(/Current block on/)).toBeTruthy());
+        await waitFor(() => expect(screen.getByText(/Current block:/)).toBeTruthy());
 
         fireEvent.change(screen.getByLabelText('Callback token (optional)'), {
             target: { value: 'GHOST' },

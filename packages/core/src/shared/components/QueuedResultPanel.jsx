@@ -49,9 +49,8 @@ import styles from './QueuedResultPanel.module.css';
  */
 export function QueuedResultPanel({ onDone, title = SIGNED_NOT_BROADCAST_TITLE, what, unsaved }) {
     const noun = what ? `Your ${what}` : 'Your transaction';
-    const [showUnsaved] = useState(() => (unsaved === undefined
-        ? readQueuedResultHandoff()?.unsaved === true
-        : unsaved === true));
+    const [handoffUnsaved] = useState(() => readQueuedResultHandoff()?.unsaved === true);
+    const showUnsaved = unsaved === undefined ? handoffUnsaved : unsaved === true;
     const handleDone = () => {
         clearQueuedResultHandoff();
         onDone();
@@ -60,6 +59,7 @@ export function QueuedResultPanel({ onDone, title = SIGNED_NOT_BROADCAST_TITLE, 
         <>
             <div className={styles.queuedCard} role="status" aria-live="polite">
                 <div className={styles.queuedIcon} aria-hidden="true">⏳</div>
+                <p className={styles.queuedStage}>Current stage: Waiting to broadcast</p>
                 <h2 className={styles.queuedTitle}>{title}</h2>
                 {showUnsaved ? (
                     <p className={styles.unsavedWarning} role="alert">

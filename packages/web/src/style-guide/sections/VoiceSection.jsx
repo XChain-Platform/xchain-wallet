@@ -24,7 +24,7 @@ function Compare({ good, bad, note }) {
                 <div style={{ fontSize: 14 }}>{good}</div>
             </div>
             <div>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--xc-danger)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>✗ Avoid</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--xc-danger-fg)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>✗ Avoid</div>
                 <div style={{ fontSize: 14, color: 'var(--xc-text-muted)' }}>{bad}</div>
             </div>
             {note ? <div style={{ gridColumn: '1 / -1', fontSize: 12, color: 'var(--xc-text-muted)', fontStyle: 'italic' }}>{note}</div> : null}
@@ -54,8 +54,8 @@ export function VoiceSection() {
                 />
                 <Compare
                     good="Generate a new address"
-                    bad="Click here to make a new address"
-                    note="Button labels are imperatives. Drop 'Click here': the button IS the click."
+                    bad="Use this button to make a new address"
+                    note="Button labels are imperatives. Drop instructions that merely describe the control."
                 />
             </LiveExample>
 

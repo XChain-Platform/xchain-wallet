@@ -56,6 +56,8 @@ import {
  * @property {number} [fee]
  * @property {number} [feePerKb]
  * @property {boolean} [rbf]
+ * @property {string} [change]                 explicit wallet-owned change address
+ * @property {unknown[]} [utxos]               hand-selected funding outputs
  */
 
 /**
@@ -150,12 +152,12 @@ export async function buildSendPsbt(opts) {
         //  - `sourceAddress` (SDK-side only, not on the wire) makes the SDK select
         //    UTXOs BY ADDRESS; without it the encoder selects by `pubkey`, which the
         //    utxo-tracker cannot resolve to a script ("has no matching Script").
-        //  - `change` is the address the leftover value returns to. The wallet's
-        //    own source address is the change sink for a self-send; without it the
-        //    encoder refuses to build ("CHANGE_ADDRESS_REQUIRED": it will not burn
-        //    the change as fee).
+        //  - `change` is the wallet address the leftover value returns to. It
+        //    defaults to the source unless the user chooses another owned address;
+        //    without it the encoder refuses rather than burn the change as fee.
         sourceAddress: source.address,
-        change: source.address,
+        change: opts.change || source.address,
+        ...(Array.isArray(opts.utxos) && opts.utxos.length > 0 ? { utxos: opts.utxos } : {}),
         ...(nativeOut ? { customOutputs: [nativeOut] } : {}),
         ...(opts.fee !== undefined && { fee: opts.fee }),
         ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),

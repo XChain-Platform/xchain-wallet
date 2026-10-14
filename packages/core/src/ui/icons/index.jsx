@@ -16,8 +16,8 @@
 // pick up the swap transparently.
 //
 // Lucide defaults: 24×24 viewBox, 2px stroke, currentColor, round
-// caps/joins (matches STROKE_PROPS exactly). Each migrated icon below
-// passes `size={18}` to land on the wallet's 18×18 render size.
+// caps/joins (matches STROKE_PROPS exactly). The shared size variable
+// lets each control select a named icon size without overriding SVGs.
 import {
     QrCode as LucideQrCode,
     Menu as LucideMenu,
@@ -36,9 +36,15 @@ import {
     ThumbsDown as LucideThumbsDown,
 } from 'lucide-react';
 
+// The rendered size comes from the svg[data-xc-icon] rule in tokens.css
+// (--xc-icon-size, default --xc-icon-md). The attributes carry only a plain
+// pixel fallback: Android WebView 102 cannot resolve var() in SVG width and
+// height attributes and draws such icons at 300px.
+const ICON_SIZE = 18;
+
 const STROKE_PROPS = {
-    width: 18,
-    height: 18,
+    width: ICON_SIZE,
+    height: ICON_SIZE,
     viewBox: '0 0 24 24',
     fill: 'none',
     stroke: 'currentColor',
@@ -46,14 +52,24 @@ const STROKE_PROPS = {
     strokeLinecap: 'round',
     strokeLinejoin: 'round',
     'aria-hidden': 'true',
+    focusable: 'false',
+    'data-xc-icon': '',
+    style: { display: 'block' },
 };
 
-// Lucide wrapper. Matches the hand-rolled icons' 18×18 render + 2px
-// stroke so swapping a single icon doesn't disturb surrounding layout.
+// Lucide wrapper follows the same shared dimensions and stroke contract.
 const LUCIDE_PROPS = {
-    size: 18,
+    size: ICON_SIZE,
     strokeWidth: 2,
     'aria-hidden': 'true',
+    focusable: 'false',
+    'data-xc-icon': '',
+    style: { display: 'block' },
+};
+
+const DIRECTIONAL_STROKE_PROPS = {
+    ...STROKE_PROPS,
+    'data-xc-directional': '',
 };
 
 export function PlusIcon() {
@@ -61,6 +77,28 @@ export function PlusIcon() {
         <svg {...STROKE_PROPS}>
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+    );
+}
+
+export function MintIcon() {
+    return (
+        <svg {...STROKE_PROPS}>
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 8v8" />
+            <path d="M8 12h8" />
+        </svg>
+    );
+}
+
+export function SweepIcon() {
+    return (
+        <svg {...STROKE_PROPS}>
+            <path d="M12 3v10" />
+            <path d="M7 13h10l3 8H4l3-8Z" />
+            <path d="M8 17v4" />
+            <path d="M12 17v4" />
+            <path d="M16 17v4" />
         </svg>
     );
 }
@@ -78,7 +116,7 @@ export function KeyIcon() {
 
 export function MigrateIcon() {
     return (
-        <svg {...STROKE_PROPS}>
+        <svg {...DIRECTIONAL_STROKE_PROPS}>
             <path d="M3 12h13" />
             <path d="m13 6 7 6-7 6" />
         </svg>
@@ -87,8 +125,16 @@ export function MigrateIcon() {
 
 export function BackIcon() {
     return (
-        <svg {...STROKE_PROPS}>
+        <svg {...DIRECTIONAL_STROKE_PROPS}>
             <path d="m15 6-6 6 6 6" />
+        </svg>
+    );
+}
+
+export function ChevronDownIcon({ style } = {}) {
+    return (
+        <svg {...STROKE_PROPS} style={{ ...STROKE_PROPS.style, ...style }}>
+            <path d="m6 9 6 6 6-6" />
         </svg>
     );
 }
@@ -290,9 +336,10 @@ const LABEL_MAP = [
     [/^save\b/, SaveIcon],
     [/^submit\b|^confirm\b|^done\b|^ok\b|^apply\b|^accept\b|^approve\b|^yes\b|^validat/, CheckIcon],
     [/^cancel\b|^close\b|^dismiss\b|^skip\b|^not now\b|^nevermind\b|^reject\b|^deny\b|^no\b/, XIcon],
-    [/^delete\b|^remove\b|^discard\b|^destroy\b|^revoke\b|^clear\b|^burn\b|^sweep\b/, TrashIcon],
+    [/^delete\b|^remove\b|^discard\b|^destroy\b|^revoke\b|^clear\b|^burn\b/, TrashIcon],
     [/^edit\b|^rename\b|^modify\b|^update\b|^compose\b|^write\b|^draft\b/, PencilIcon],
-    [/^mint\b/, PrinterIcon],
+    [/^mint\b/, MintIcon],
+    [/^sweep\b/, SweepIcon],
     [/^transfer\b/, HandshakeIcon],
     [/^new\b|^add\b|^create\b|^generate\b|^issue\b/, PlusIcon],
     [/^refresh\b|^reload\b|^sync\b|^retry\b|^reconnect\b/, RefreshIcon],
@@ -374,7 +421,7 @@ export function RefreshIcon() {
 
 export function ForwardIcon() {
     return (
-        <svg {...STROKE_PROPS}>
+        <svg {...DIRECTIONAL_STROKE_PROPS}>
             <path d="m9 18 6-6-6-6" />
         </svg>
     );
@@ -482,10 +529,13 @@ export function FileTypeIcon({ type }) {
     const fontSize = label.length >= 4 ? 4 : 5;
     return (
         <svg
-            width="20"
-            height="20"
+            width={ICON_SIZE}
+            height={ICON_SIZE}
             viewBox="0 0 24 24"
             aria-hidden="true"
+            focusable="false"
+            data-xc-icon=""
+            style={{ display: 'block' }}
         >
             <path
                 d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"

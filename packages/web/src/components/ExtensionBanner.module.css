@@ -15,7 +15,7 @@
 }
 
 .error {
-    color: var(--xc-danger, #c0392b);
+    color: var(--xc-danger-fg, #c0392b);
 }
 
 .actions {

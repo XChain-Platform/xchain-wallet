@@ -10,8 +10,8 @@
 }
 
 .heading {
-    font-size: var(--xc-text-xs);
-    font-weight: 600;
+    font-size: var(--xc-type-card-title-size);
+    font-weight: var(--xc-type-card-title-weight);
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: var(--xc-text-muted);
@@ -63,6 +63,8 @@
     font-family: var(--xc-font-mono);
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
+    direction: ltr;
+    unicode-bidi: isolate;
     word-break: break-all;
 }
 
@@ -81,7 +83,7 @@
 }
 
 .row[data-direction="down"] .after {
-    color: var(--xc-danger, #c0392b);
+    color: var(--xc-danger-fg, #c0392b);
 }
 
 .row[data-direction="up"] .after {

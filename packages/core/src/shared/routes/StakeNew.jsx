@@ -10,12 +10,15 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
+    ListPage,
     Screen,
     PageHeader,
     Icon,
+    StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
+import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './ActionsMenu.module.css';
 import local from './StakeNew.module.css';
@@ -45,7 +48,6 @@ const STAKING_COIN = 'bitcoin';
 export function StakeNew({ walletId, onPickValidator, onPickContract, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const btcChainIds = useMemo(
         () => chainRegistry.byCoin(STAKING_COIN).map((d) => d.id),
@@ -55,15 +57,22 @@ export function StakeNew({ walletId, onPickValidator, onPickContract, onBack }) 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
+    const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     // 'options' shows the two cards; 'chain' is the inline network
     // step for the validator arm when >1 Bitcoin chain qualifies.
     const [step, setStep] = useState(/** @type {'options' | 'chain'} */ ('options'));
 
     useEffect(() => {
         let cancelled = false;
+        setAddressesByChain(null);
+        setLoadError(null);
         messaging.getAddressesByChain(walletId)
             .then((byChain) => { if (!cancelled) setAddressesByChain(byChain || {}); })
-            .catch(() => { if (!cancelled) setAddressesByChain({}); });
+            .catch((err) => {
+                if (cancelled) return;
+                setLoadError(err?.message || 'Failed to load staking networks.');
+                setAddressesByChain({});
+            });
         return () => { cancelled = true; };
     }, [walletId, messaging]);
 
@@ -77,28 +86,33 @@ export function StakeNew({ walletId, onPickValidator, onPickContract, onBack }) 
     const header = (
         <PageHeader
             onBack={step === 'chain' ? () => setStep('options') : onBack}
-            backLabel={step === 'chain' ? 'Back' : 'Back to staking'}
+            backLabel={step === 'chain' ? t('common.back') : t('stakeNew.backToStaking')}
             titleIcon={<Icon.StakeIcon />}
-            title="New stake"
+            title={t('stakeNew.title')}
         />
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            <div className={isFull ? local.wrapFull : local.wrapPopup}>
+            <ListPage>
                 {children}
-            </div>
+            </ListPage>
         </Screen>
     );
 
+    if (loadError) {
+        return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
+    }
+
     if (!addressesByChain) {
-        return wrap(<p className={styles.entryDescription}>Loading…</p>);
+        return wrap(<p className={styles.entryDescription}>{t('common.loading')}</p>);
     }
 
     if (step === 'chain') {
         return wrap(
             <>
-                <p className={local.lede}>Choose the network to stake on.</p>
+                <p className={local.lede}>{t('stakeNew.chooseNetwork')}</p>
                 <div className={local.chainList}>
+                    {/* Network entries stay native buttons because each control is the complete clickable row. */}
                     {stakingChains.map((cid) => {
                         const d = chainRegistry.get(cid);
                         const iconUrl = branding.chainIconSmallUrl(cid);
@@ -106,13 +120,13 @@ export function StakeNew({ walletId, onPickValidator, onPickContract, onBack }) 
                             <button
                                 key={cid}
                                 type="button"
-                                className={local.chainBtn}
+                                className={styles.entry}
                                 onClick={() => onPickValidator(cid)}
                             >
                                 {iconUrl ? (
                                     <img src={iconUrl} alt="" aria-hidden="true" className={local.chainIcon} />
                                 ) : null}
-                                <span>{d?.displayName || cid}</span>
+                                <span className={local.chainLabel}>{d?.displayName || cid}</span>
                             </button>
                         );
                     })}
@@ -125,17 +139,16 @@ export function StakeNew({ walletId, onPickValidator, onPickContract, onBack }) 
 
     return wrap(
         <>
-            <p className={local.lede}>What would you like to stake?</p>
             {noStakingChain ? (
                 <p className={styles.entryDescription}>
-                    Staking is available on Bitcoin only at launch. Use Receive
-                    on a Bitcoin network to generate an address first.
+                    {t('stakeNew.bitcoinOnly')}
                 </p>
             ) : null}
             <div className={local.options}>
+                {/* Staking choices stay native buttons because each control is the complete clickable row. */}
                 <button
                     type="button"
-                    className={local.option}
+                    className={styles.entry}
                     disabled={noStakingChain}
                     onClick={() => {
                         if (stakingChains.length === 1) onPickValidator(stakingChains[0]);
@@ -144,23 +157,23 @@ export function StakeNew({ walletId, onPickValidator, onPickContract, onBack }) 
                 >
                     <span className={local.optionIcon} aria-hidden="true"><Icon.StakeIcon /></span>
                     <span className={local.optionBody}>
-                        <span className={local.optionTitle}>Validator staking</span>
+                        <span className={local.optionTitle}>{t('stakeNew.validatorTitle')}</span>
                         <span className={local.optionDesc}>
-                            Stake XCHAIN to help secure the network and earn rewards.
+                            {t('stakeNew.validatorDescription')}
                         </span>
                     </span>
                 </button>
                 <button
                     type="button"
-                    className={local.option}
+                    className={styles.entry}
                     disabled={noStakingChain}
                     onClick={() => onPickContract()}
                 >
                     <span className={local.optionIcon} aria-hidden="true"><Icon.ContractIcon /></span>
                     <span className={local.optionBody}>
-                        <span className={local.optionTitle}>Contract staking</span>
+                        <span className={local.optionTitle}>{t('stakeNew.contractTitle')}</span>
                         <span className={local.optionDesc}>
-                            Stake tokens into a contract. You'll pick the contract next.
+                            {t('stakeNew.contractDescription')}
                         </span>
                     </span>
                 </button>

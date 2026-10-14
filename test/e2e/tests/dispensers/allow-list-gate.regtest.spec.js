@@ -205,7 +205,7 @@ async function approveAndGetTxid(page) {
  */
 async function addWalletAndReadAddress(page, name) {
     await gotoPalette(page, 'Switch wallet');
-    await page.getByRole('button', { name: 'Add Wallet' }).click();
+    await page.getByRole('button', { name: 'Add wallet' }).click();
     await createWallet(page, { password: PASSWORD, name, navigate: false });
     await gotoPalette(page, 'Switch wallet');
     await page.getByRole('button', { name: new RegExp(name) }).first().click();

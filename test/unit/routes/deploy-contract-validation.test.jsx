@@ -8,11 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { describe, it, expect } from 'vitest';
-import { render, act as domAct, fireEvent } from '@testing-library/react';
+import { afterEach, describe, it, expect } from 'vitest';
+import { render, act as domAct, cleanup, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DeployContractForm } from '../../../packages/core/src/shared/routes/DeployContractForm.jsx';
+import contractStyles from '../../../packages/core/src/shared/routes/ContractScreens.module.css';
 
 const CHAIN = 'bitcoin-mainnet';
 const SOURCE = [
@@ -32,7 +33,7 @@ const ADDRESS = Object.freeze({
     signerId: 'signer-1',
 });
 
-function messagingWithValidation(result) {
+function messagingWithValidation(result, overrides = {}) {
     const fallback = () => Promise.resolve({});
     const target = {
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: [ADDRESS] }),
@@ -45,6 +46,7 @@ function messagingWithValidation(result) {
         planDeploy: () => Promise.resolve({ single: true, totalChunks: 0, codeHash: 'ab' }),
         getContractExportedMeta: () => Promise.resolve(null),
         validateContractCode: () => Promise.resolve(result),
+        ...overrides,
     };
     return new Proxy(target, {
         get(object, property) {
@@ -52,6 +54,8 @@ function messagingWithValidation(result) {
         },
     });
 }
+
+afterEach(() => cleanup());
 
 async function drain(rounds = 16) {
     for (let i = 0; i < rounds; i += 1) await Promise.resolve();
@@ -79,6 +83,33 @@ async function renderAndValidate(result) {
 }
 
 describe('DeployContractForm validation diagnostics', () => {
+    it.each([320, 360])('keeps source and tool controls inside the %ipx form', async (viewportWidth) => {
+        const widthDescriptor = Object.getOwnPropertyDescriptor(window, 'innerWidth');
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: viewportWidth });
+        let utils;
+
+        try {
+            await domAct(async () => {
+                utils = render(
+                    <MessagingProvider shell="web" messaging={messagingWithValidation({ valid: true })}>
+                        <DeployContractForm walletId="w" onBack={() => {}} />
+                    </MessagingProvider>,
+                );
+                await drain();
+            });
+
+            const source = utils.getByLabelText('Code source');
+            const tools = utils.getByRole('button', { name: 'Validate code' }).parentElement;
+            expect(source).toHaveClass(contractStyles.codeSource);
+            expect(source).toHaveAttribute('wrap', 'off');
+            expect(tools).toHaveClass(contractStyles.toolActions);
+            expect(utils.getByRole('button', { name: 'Estimate size' })).toBeInTheDocument();
+            expect(utils.getByRole('button', { name: 'Suggest gas' })).toBeInTheDocument();
+        } finally {
+            if (widthDescriptor) Object.defineProperty(window, 'innerWidth', widthDescriptor);
+        }
+    });
+
     it('shows every structured warning with its location and rule, and jumps to its line', async () => {
         const utils = await renderAndValidate({
             valid: true,
@@ -156,4 +187,117 @@ describe('DeployContractForm validation diagnostics', () => {
         expect(utils.getByText(/The parser stopped at: Unexpected token \(3:9\)/)).toBeTruthy();
         expect(utils.getByText(/Line 3.*Column 9/)).toBeTruthy();
     });
+
+    it('rejects multiple constructor arguments when staking makes the wire field scalar', async () => {
+        let utils;
+        await domAct(async () => {
+            utils = render(
+                <MessagingProvider shell="web" messaging={messagingWithValidation({ valid: true })}>
+                    <DeployContractForm walletId="w" onBack={() => {}} />
+                </MessagingProvider>,
+            );
+            await drain();
+        });
+
+        fireEvent.change(utils.getByLabelText('Code source'), { target: { value: SOURCE } });
+        fireEvent.change(utils.getByLabelText('Gas limit'), { target: { value: '100000' } });
+        fireEvent.change(utils.getByLabelText('Constructor params (optional)'), { target: { value: 'first|second' } });
+        fireEvent.change(utils.getByLabelText('Cooldown blocks (optional)'), { target: { value: '10' } });
+        fireEvent.click(utils.getByRole('button', { name: 'Publish' }));
+
+        expect(await utils.findByRole('alert')).toHaveTextContent(
+            'A stake-enabled contract accepts one constructor argument.',
+        );
+    });
+
+    it('rejects exponent notation for the integer gas limit', async () => {
+        let utils;
+        await domAct(async () => {
+            utils = render(
+                <MessagingProvider shell="web" messaging={messagingWithValidation({ valid: true })}>
+                    <DeployContractForm walletId="w" onBack={() => {}} />
+                </MessagingProvider>,
+            );
+            await drain();
+        });
+
+        fireEvent.change(utils.getByLabelText('Code source'), { target: { value: SOURCE } });
+        fireEvent.change(utils.getByLabelText('Gas limit'), { target: { value: '1e5' } });
+        fireEvent.click(utils.getByRole('button', { name: 'Publish' }));
+
+        expect(await utils.findByRole('alert')).toHaveTextContent('Gas limit must be a positive whole number.');
+    });
+
+    it('shows the required source message before review', async () => {
+        let utils;
+        await domAct(async () => {
+            utils = render(
+                <MessagingProvider shell="web" messaging={messagingWithValidation({ valid: true })}>
+                    <DeployContractForm walletId="w" onBack={() => {}} />
+                </MessagingProvider>,
+            );
+            await drain();
+        });
+
+        const submit = utils.getByRole('button', { name: 'Publish' });
+        expect(submit).toBeEnabled();
+        fireEvent.click(submit);
+        expect(await utils.findByRole('alert')).toHaveTextContent('Contract source is required.');
+    });
+
+    it('rejects a malformed slash destination before review', async () => {
+        let utils;
+        await domAct(async () => {
+            utils = render(
+                <MessagingProvider shell="web" messaging={messagingWithValidation({ valid: true })}>
+                    <DeployContractForm walletId="w" onBack={() => {}} />
+                </MessagingProvider>,
+            );
+            await drain();
+        });
+        fireEvent.change(utils.getByLabelText('Code source'), { target: { value: SOURCE } });
+        fireEvent.change(utils.getByLabelText('Gas limit'), { target: { value: '100000' } });
+        fireEvent.change(utils.getByLabelText('Cooldown blocks (optional)'), { target: { value: '10' } });
+        fireEvent.change(utils.getByLabelText('Slash destination (optional)'), {
+            target: { value: 'not-an-address' },
+        });
+        fireEvent.click(utils.getByRole('button', { name: 'Publish' }));
+
+        expect(await utils.findByRole('alert'))
+            .toHaveTextContent('Slash destination must be BURN or a valid address for Bitcoin.');
+    });
+
+    it('review display matches the build for multi-value constructor parameters', async () => {
+        let utils;
+        await domAct(async () => {
+            utils = render(
+                <MessagingProvider
+                    shell="web"
+                    messaging={messagingWithValidation({ valid: true }, {
+                        getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+                    })}
+                >
+                    <DeployContractForm walletId="w" onBack={() => {}} />
+                </MessagingProvider>,
+            );
+            await drain();
+        });
+        fireEvent.change(utils.getByLabelText('Code source'), { target: { value: SOURCE } });
+        fireEvent.change(utils.getByLabelText('Gas limit'), { target: { value: '100000' } });
+        fireEvent.change(utils.getByLabelText('Constructor params (optional)'), {
+            target: { value: 'first|second' },
+        });
+        fireEvent.click(utils.getByRole('button', { name: 'Preview' }));
+
+        expect(await utils.findByRole('heading', { name: 'Review publish' })).toBeInTheDocument();
+        const constructorRow = utils.getByText('Constructor').nextElementSibling;
+        expect(Array.from(constructorRow.querySelectorAll('li')).map((node) => node.textContent))
+            .toEqual(['first', 'second']);
+        expect(constructorRow).not.toHaveTextContent('first,second');
+
+        fireEvent.click(utils.getByRole('button', { name: 'Back to previous screen' }));
+        expect(await utils.findByLabelText('Constructor params (optional)')).toHaveValue('first|second');
+        expect(utils.getByLabelText('Gas limit')).toHaveValue('100000');
+    });
+
 });

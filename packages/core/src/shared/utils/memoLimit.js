@@ -13,8 +13,7 @@
 // by the indexer after the fee is spent.
 
 /**
- * Longest MEMO the indexer accepts, in JavaScript string length (UTF-16 code
- * units), which is what the indexer measures too. Copied from xchain-indexer
+ * Longest MEMO the indexer accepts, in UTF-8 bytes. Copied from xchain-indexer
  * src/config/token_limits.js (`config['MAX_MEMO_LENGTH'] = 250`); every action
  * handler there refuses a longer one with `invalid: MEMO (length)`, for
  * example src/actions/list.js validateFields. Change both together.
@@ -29,15 +28,25 @@ export const MAX_MEMO_LENGTH = 250;
 export const MEMO_HINT = 'A public note saved on the blockchain with this action. It cannot contain | or ;.';
 
 /**
+ * Size of text after the UTF-8 encoding used for transaction data.
+ *
+ * @param {string | null | undefined} value
+ * @returns {number}
+ */
+export function utf8ByteLength(value) {
+    return new TextEncoder().encode(String(value ?? '')).byteLength;
+}
+
+/**
  * The form error for a memo the chain would refuse as too long, or null when
  * it fits. Pass the memo exactly as it goes on the wire (the forms trim it),
- * since that is the string the indexer measures.
+ * since that is the text the indexer measures after UTF-8 encoding.
  *
  * @param {string | null | undefined} memo
  * @returns {string | null}
  */
 export function memoLengthError(memo) {
-    const length = String(memo ?? '').length;
-    if (length <= MAX_MEMO_LENGTH) return null;
-    return `Memo is ${length} characters; the network accepts at most ${MAX_MEMO_LENGTH}.`;
+    const bytes = utf8ByteLength(memo);
+    if (bytes <= MAX_MEMO_LENGTH) return null;
+    return `Memo is ${bytes} bytes; the network accepts at most ${MAX_MEMO_LENGTH} bytes.`;
 }

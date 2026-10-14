@@ -144,6 +144,13 @@ export function restoreFailureMessage(reason, { mode = 'fresh' } = {}) {
         return 'The wallet inside this backup file is missing the details needed to unlock it, so '
             + 'no password can open it. Restore from a different backup file.';
     }
+    // The contents are not a backup envelope at all (pasted text, another
+    // app's file, a truncated copy). Core's wording ("unexpected magic
+    // \"undefined\"") names its own field names, and no password is at fault.
+    if (/file is not valid json|input must be a json|envelope must be an object|unexpected magic|unsupported formatversion|encryption\.(?:algorithm|kdf|iv)|payload must be a base64/.test(hay)) {
+        return 'That is not a wallet backup file this app can read. Choose the backup file you '
+            + 'exported, or paste its whole contents.';
+    }
     // "Required" failures, from core (which words them with the fresh-install
     // labels, having no idea which mode is restoring) or from a shell guard
     // (which still words them as parameter names). Re-worded here so an 'add'
@@ -199,10 +206,12 @@ function isRequiredFailure(hay, role) {
     }
     if (role === 'device') {
         return /devicepassword is required/.test(hay)
+            || /password is required.*this device (?:will )?unlock/.test(hay)
             || hay.includes(RESTORE_PASSWORD_LABELS.device.fresh.toLowerCase())
             || hay.includes(RESTORE_PASSWORD_LABELS.device.add.toLowerCase());
     }
     return /backuppassword is required/.test(hay)
+        || /(?:importbackupfile|restorefrombackuppointer): password is required/.test(hay)
         || hay.includes(RESTORE_PASSWORD_LABELS.file.toLowerCase());
 }
 

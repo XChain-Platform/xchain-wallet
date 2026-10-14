@@ -92,7 +92,7 @@ assert.ok(
 // --- 2. BiometricRow --------------------------------------------------
 
 assert.ok(
-    /import \{ StatusMessage \} from '@xchain-wallet\/core\/ui'/.test(biometricSrc),
+    /import \{[^}]*StatusMessage[^}]*\} from '@xchain-wallet\/core\/ui'/.test(biometricSrc),
     'BiometricRow imports StatusMessage',
 );
 assert.equal(
@@ -112,7 +112,7 @@ assert.ok(
 // --- 3. DuressPassphraseRow ------------------------------------------
 
 assert.ok(
-    /import \{ StatusMessage \} from '@xchain-wallet\/core\/ui'/.test(duressSrc),
+    /import \{[^}]*StatusMessage[^}]*\} from '@xchain-wallet\/core\/ui'/.test(duressSrc),
     'DuressPassphraseRow imports StatusMessage',
 );
 // The docstring still mentions role="alert" as documentation; assert there is

@@ -6,12 +6,14 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-import { fireEvent, render, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { PlaceOrderPanel } from '../../../packages/core/src/shared/components/PlaceOrderPanel.jsx';
 import { AirdropForm } from '../../../packages/core/src/shared/routes/AirdropForm.jsx';
+import { CreateOrderForm } from '../../../packages/core/src/shared/routes/CreateOrderForm.jsx';
+import { CrossChainOrderForm } from '../../../packages/core/src/shared/routes/CrossChainOrderForm.jsx';
 import { CrossChainSwapForm } from '../../../packages/core/src/shared/routes/CrossChainSwapForm.jsx';
 import { SellOwnershipForm } from '../../../packages/core/src/shared/routes/SellOwnershipForm.jsx';
 import { SwapForm } from '../../../packages/core/src/shared/routes/SwapForm.jsx';
@@ -70,7 +72,8 @@ function mount(node, addressesByChain = { [BTC]: [BTC_ADDRESS] }) {
 async function submitAndExpect(container, message) {
     let submit;
     await waitFor(() => {
-        submit = container.querySelector('button[type="submit"]');
+        submit = within(container).getAllByRole('button')
+            .find((button) => button.type === 'submit');
         expect(submit).toBeTruthy();
         expect(submit.disabled).toBe(false);
     });
@@ -92,7 +95,7 @@ describe('primary actions explain missing form input', () => {
 
     it('SwapForm explains that both swap legs are required', async () => {
         const { container } = mount(<SwapForm walletId="w" onBack={() => {}} />);
-        await submitAndExpect(container, 'Fill the give/get tickers and amounts before reviewing.');
+        await submitAndExpect(container, 'Enter the give and get tickers and amounts before reviewing.');
     });
 
     it('CrossChainSwapForm explains that both swap legs are required', async () => {
@@ -102,8 +105,21 @@ describe('primary actions explain missing form input', () => {
         );
         await submitAndExpect(
             container,
-            'Fill give/get tickers and amounts (or select ownership) before reviewing.',
+            'Enter the give and get tickers and amounts, or select ownership, before reviewing.',
         );
+    });
+
+    it('CreateOrderForm uses give terminology for the first order leg', async () => {
+        const { container } = mount(<CreateOrderForm walletId="w" onBack={() => {}} />);
+        await submitAndExpect(container, 'Enter the ticker to give.');
+    });
+
+    it('CrossChainOrderForm uses give terminology for the first order leg', async () => {
+        const { container } = mount(
+            <CrossChainOrderForm walletId="w" onBack={() => {}} />,
+            { [BTC]: [BTC_ADDRESS], [LTC]: [LTC_ADDRESS] },
+        );
+        await submitAndExpect(container, 'Enter the ticker to give.');
     });
 
     it('SellOwnershipForm explains that its price is required', async () => {
@@ -111,6 +127,36 @@ describe('primary actions explain missing form input', () => {
             <SellOwnershipForm walletId="w" chainId={BTC} tick="ALPHA" onBack={() => {}} />,
         );
         await submitAndExpect(container, 'Enter what you want in return and a price greater than 0.');
+    });
+
+    it('SellOwnershipForm keeps one tab stop in each segmented choice', async () => {
+        mount(<SellOwnershipForm walletId="w" chainId={BTC} tick="ALPHA" onBack={() => {}} />);
+        const openOrder = await screen.findByRole('tab', { name: 'Open order' });
+        const instantBuy = screen.getByRole('tab', { name: 'Instant buy' });
+        const nativeCoin = screen.getByRole('tab', { name: /Native coin/ });
+        const anotherToken = screen.getByRole('tab', { name: 'Another token' });
+
+        expect(openOrder).toHaveAttribute('tabindex', '0');
+        expect(instantBuy).toHaveAttribute('tabindex', '-1');
+        expect(nativeCoin).toHaveAttribute('tabindex', '0');
+        expect(anotherToken).toHaveAttribute('tabindex', '-1');
+
+        fireEvent.click(instantBuy);
+        fireEvent.click(anotherToken);
+
+        expect(openOrder).toHaveAttribute('tabindex', '-1');
+        expect(instantBuy).toHaveAttribute('tabindex', '0');
+        expect(nativeCoin).toHaveAttribute('tabindex', '-1');
+        expect(anotherToken).toHaveAttribute('tabindex', '0');
+    });
+
+    it('SellOwnershipForm rejects native-coin prices below the coin scale', async () => {
+        const { container, getByLabelText } = mount(
+            <SellOwnershipForm walletId="w" chainId={BTC} tick="ALPHA" onBack={() => {}} />,
+        );
+        const field = await waitFor(() => getByLabelText(/^Price/));
+        fireEvent.change(field, { target: { value: '0.000000001' } });
+        await submitAndExpect(container, 'Price can have at most 8 decimal places for BTC.');
     });
 
     it('AirdropForm explains that its token is required', async () => {

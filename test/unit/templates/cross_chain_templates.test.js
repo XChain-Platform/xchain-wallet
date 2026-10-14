@@ -14,6 +14,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { validateCrossChainTemplate } from '../../../packages/core/src/templates/cross-chain/validate.js';
 
 const require = createRequire(import.meta.url);
 const { XChainSDK } = require('xchain-sdk');
@@ -46,6 +47,36 @@ function fillPlaceholders(params) {
         return [field, sample];
     }));
 }
+
+const VALID_TEMPLATE = {
+    id: 'valid-template',
+    name: 'Valid template',
+    description: 'A valid template',
+    personas: ['Jin'],
+    actions: [{
+        chainHint: 'primary',
+        action: 'SEND',
+        params: { VERSION: '0' },
+        note: 'Review before signing.',
+    }],
+};
+
+describe('cross-chain template validation', () => {
+    it.each([
+        ['whitespace-only identity fields', { ...VALID_TEMPLATE, id: '  ' }],
+        ['non-string personas', { ...VALID_TEMPLATE, personas: ['Jin', 7] }],
+        ['non-string params', {
+            ...VALID_TEMPLATE,
+            actions: [{ ...VALID_TEMPLATE.actions[0], params: { VERSION: 0 } }],
+        }],
+        ['non-string notes', {
+            ...VALID_TEMPLATE,
+            actions: [{ ...VALID_TEMPLATE.actions[0], note: false }],
+        }],
+    ])('rejects %s', (_label, template) => {
+        expect(validateCrossChainTemplate(template).ok).toBe(false);
+    });
+});
 
 describe('bundled cross-chain templates', () => {
     for (const template of templates) {

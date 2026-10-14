@@ -268,7 +268,8 @@ test.describe(`collectible 1-of-1 on ${REGTEST_CHAIN_LABEL}`, () => {
                 'the Collectible template offered a Supply field, so its 1-of-1 is no longer fixed '
                 + 'by the composer')
                 .toBe(0);
-            await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+            await main.getByRole('button', { name: 'Review token', exact: true }).click();
+            await main.getByRole('button', { name: 'Continue to confirmation', exact: true }).click();
 
             await expectConfirmScreen(page);
             const action = await waitForIndexedAction(await approveAndGetTxid(page));

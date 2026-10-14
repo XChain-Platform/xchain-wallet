@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -17,8 +17,9 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
-import { TokenField } from '../components/TokenField.jsx';
+import { TickerIcon } from '../components/TickerIcon.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
+import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import {
     estimateNativeSendFee,
@@ -35,6 +36,7 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { tokenAmountPrecisionError } from '../utils/amountFormat.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -71,7 +73,6 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -97,6 +98,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const [hwStatus, setHwStatus] = useState('idle');
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const submitPendingRef = useRef(false);
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
     useEffect(() => {
@@ -175,6 +177,11 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
 
     const priceReady = /^[0-9]+(\.[0-9]+)?$/.test(price.trim()) && Number(price.trim()) > 0;
     const getTickReady = getMode === 'coin' || getTick.trim().length > 0;
+    const priceTokenInfo = useTokenInfo({
+        chainId,
+        tick: getTick.trim().toUpperCase(),
+        skip: getMode !== 'token' || !getTick.trim(),
+    });
 
     // Network fee: Low / Normal / Fast / Custom, editable via FeeSelector on
     // the form stage. `feeEstimate` backs the slider readout and the review
@@ -285,6 +292,8 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                 mandatory: nativeFee.mandatory,
                 fallback: err?.message || 'Sign failed.',
             }));
+        } finally {
+            submitPendingRef.current = false;
         }
     }
 
@@ -301,18 +310,34 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
             setFormError(`Enter what you want in return and a price greater than 0.`);
             return;
         }
+        // Keep the sale price within the payment asset's on-chain decimal scale.
+        const precisionError = tokenAmountPrecisionError(price, {
+            divisibility: getMode === 'coin' ? 8 : priceTokenInfo?.divisibility,
+            tick: getMode === 'coin' ? coinTicker : getTick,
+            noun: 'Price',
+        });
+        if (precisionError) {
+            setFormError(precisionError);
+            return;
+        }
         setFormError(null);
-        if (singleEncode) { openConfirmScreen(); return; }
+        if (singleEncode) {
+            if (submitPendingRef.current) return;
+            submitPendingRef.current = true;
+            void openConfirmScreen();
+            return;
+        }
         setStage('review');
     }
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
+        if (stage === 'submitting' || submitPendingRef.current) return;
         if (!fromAddress || !chainId) return;
         if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && hw && hwStatus !== 'available') return;
 
+        submitPendingRef.current = true;
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -380,6 +405,8 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
             }
+        } finally {
+            submitPendingRef.current = false;
         }
     }
 
@@ -394,26 +421,36 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
         ? 'Review sale'
         : `Sell ${tokenUpper} name`;
     const header = (
-        <PageHeader onBack={onBack} title={headerTitle} />
+        <PageHeader
+            onBack={stage === 'review'
+                ? () => { setSubmitError(null); setStage('form'); }
+                : onBack}
+            backDisabled={stage === 'submitting'}
+            title={headerTitle}
+        />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+        <Screen
+            variant={variant}
+            header={header}
+            restoreScroll={!(stage === 'review' || stage === 'submitting')}
+        >
+            {children}
         </Screen>
     );
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+        return wrap(<ListPage><StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage></ListPage>);
     }
     if (!addressesByChain) {
-        return wrap(<p className={styles.hint}>Loading wallet…</p>);
+        return wrap(<ListPage><p className={styles.hint}>Loading wallet…</p></ListPage>);
     }
 
     if (stage === 'done') {
         const txid = result?.txid;
         if (result?.psbtHex && !txid) {
             return wrap(
-                <WatcherResultPanel result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />,
+                <ListPage><WatcherResultPanel result={result} onBuildAnother={handleBuildAnother} onDone={onBack} /></ListPage>,
             );
         }
         // A queued result is SIGNED and not broadcast: the confirm lane
@@ -422,11 +459,11 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
         // is not.
         if (result?.queued) {
             return wrap(
-                <QueuedResultPanel onDone={onBack} what="ownership sale" unsaved={result.unsaved} />,
+                <ListPage><QueuedResultPanel onDone={onBack} what="ownership sale" unsaved={result.unsaved} /></ListPage>,
             );
         }
         return wrap(
-            <>
+            <ListPage>
                 <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>Name listed for sale</p>
                 {txid ? <p style={{ margin: '0 0 0.5rem' }}>Transaction: <code>{txid}</code></p> : null}
                 <p className={styles.hint}>
@@ -438,7 +475,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onBack}>Done</Button>
                 </div>
-            </>,
+            </ListPage>,
         );
     }
 
@@ -450,12 +487,38 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
             : 'Estimate unavailable';
 
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
+            <FormPage
+                label="Review ownership sale"
+                onSubmit={handleSubmit}
+                status={(isWatcherMode || hw) && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={stage === 'submitting'}
+                        disabled={
+                            isWatcherMode
+                                ? false
+                                : hw
+                                    ? hwStatus !== 'available'
+                                    : (!signerReady && password.length === 0)
+                        }
+                    >
+                        {isWatcherMode
+                            ? 'Create unsigned transaction: list name for sale'
+                            : hw
+                                ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}: list name for sale`
+                                : 'List name for sale'}
+                    </Button>
+                )}
+            >
                 <p className={styles.summary}>
                     Sell ownership of {tokenUpper} for {priceLabel} via {mechanismLabel}.
                 </p>
                 <dl className={styles.detailsList}>
-                    <DetailRow label="Chain" value={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId} />
+                    {descriptor ? <DetailRow label="Chain" value={<ChainBadge descriptor={descriptor} size="sm" showName={false} />} /> : null}
                     <DetailRow label="From" value={<AddressText address={fromAddress.address} />} />
                     <DetailRow label="Selling" value={`${tokenUpper} (ownership)`} />
                     <DetailRow label="Mechanism" value={mechanismLabel} />
@@ -490,31 +553,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                         signerInfo={hwSignerInfo}
                     />
                 )}
-                {(isWatcherMode || hw) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
-                ) : null}
-
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={
-                            isWatcherMode
-                                ? false
-                                : hw
-                                    ? hwStatus !== 'available'
-                                    : (!signerReady && password.length === 0)
-                        }
-                    >
-                        {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : hw
-                                ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : 'List name for sale'}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -558,8 +597,43 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
     }
 
     return wrap(
-        <form onSubmit={handleReview} noValidate>
-            <NetworkField value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]} chainRegistry={chainRegistry} />
+        <FormPage
+            label={`Sell ${tokenUpper} name`}
+            onSubmit={handleReview}
+            inert={actionConfirm.composing ? '' : undefined}
+            aria-busy={actionConfirm.composing ? 'true' : undefined}
+            onChangeCapture={() => { if (formError) setFormError(null); }}
+            status={validationError || formError ? (
+                <>
+                    {validationError ? (
+                        <StatusMessage variant="error" className={styles.error}>{validationError}</StatusMessage>
+                    ) : null}
+                    {formError ? (
+                        <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                    ) : null}
+                </>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={actionConfirm.composing}
+                    disabled={actionConfirm.composing}
+                >
+                    {actionConfirm.composing
+                        ? 'Preparing review…'
+                        : (singleEncode ? 'List name for sale' : 'Review')}
+                </Button>
+            )}
+        >
+            <ChainPicker
+                label="Network"
+                value={chainId}
+                onChange={(cid) => { setChainId(cid); setFromAddressId(null); }}
+                chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]}
+                chainRegistry={chainRegistry}
+                hideNetworkKind
+            />
 
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>Selling the name</dt>
@@ -572,10 +646,6 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                 ) : null}
             </dl>
 
-            <p className={styles.hint} style={{ marginTop: 0 }}>
-                You're selling the entire ownership of {tokenUpper}. Single sale, no partial fills.
-            </p>
-
             <div
                 className={receivePickerStyles.kindSegments}
                 role="tablist"
@@ -586,17 +656,19 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                     { id: 'order', label: 'Open order' },
                     { id: 'dispenser', label: 'Instant buy' },
                 ].map((opt) => (
-                    <button
+                    <Button
                         key={opt.id}
                         type="button"
+                        icon={null}
                         role="tab"
+                        tabIndex={mechanism === opt.id ? 0 : -1}
                         aria-selected={mechanism === opt.id}
                         className={`${receivePickerStyles.kindSegment} ${mechanism === opt.id ? receivePickerStyles.kindSegmentActive : ''}`}
                         style={{ flex: 1 }}
                         onClick={() => setMechanism(/** @type {'order' | 'dispenser'} */ (opt.id))}
                     >
                         {opt.label}
-                    </button>
+                    </Button>
                 ))}
             </div>
             <p className={styles.hint} style={{ marginTop: 0 }}>
@@ -615,25 +687,31 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                     { id: 'coin', label: `Native coin (${coinTicker || 'coin'})` },
                     { id: 'token', label: 'Another token' },
                 ].map((opt) => (
-                    <button
+                    <Button
                         key={opt.id}
                         type="button"
+                        icon={null}
                         role="tab"
+                        tabIndex={getMode === opt.id ? 0 : -1}
                         aria-selected={getMode === opt.id}
                         className={`${receivePickerStyles.kindSegment} ${getMode === opt.id ? receivePickerStyles.kindSegmentActive : ''}`}
                         style={{ flex: 1 }}
                         onClick={() => setGetMode(/** @type {'coin' | 'token'} */ (opt.id))}
                     >
                         {opt.label}
-                    </button>
+                    </Button>
                 ))}
             </div>
 
             {getMode === 'token' ? (
-                <TokenField
-                    label="Price token"
-                    value={getTick && chainId ? { chainId, tick: getTick } : null}
-                    onOpenPicker={() => setTokenPickerOpen(true)}
+                <Button
+                    type="button"
+                    variant="ghost"
+                    icon={getTick && chainId
+                        ? <TickerIcon chainId={chainId} tick={getTick} size={40} />
+                        : <Icon.TokenIcon />}
+                    aria-label={getTick ? `Price token: ${getTick}. Change asset` : 'Choose price token'}
+                    onClick={() => setTokenPickerOpen(true)}
                 />
             ) : null}
 
@@ -650,7 +728,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
             />
 
             <Input
-                label="Expires after (blocks, optional)"
+                label="Expires after (blocks) (optional)"
                 hint="Leave blank for no expiry. The order stays open until matched or cancelled."
                 type="text"
                 inputMode="numeric"
@@ -682,27 +760,7 @@ export function SellOwnershipForm({ walletId, onBack, chainId: initialChainId, t
                 />
             ) : null}
 
-            {validationError ? (
-                <p role="alert" className={styles.error} style={{ marginTop: '0.5rem' }}>{validationError}</p>
-            ) : null}
-
-            {formError ? (
-                <p role="alert" className={styles.error} style={{ marginTop: '0.5rem' }}>{formError}</p>
-            ) : null}
-
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    loading={actionConfirm.composing}
-                    disabled={actionConfirm.composing}
-                >
-                    {actionConfirm.composing
-                        ? 'Preparing review…'
-                        : (singleEncode ? 'List name for sale' : 'Review')}
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }
 

@@ -8,11 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     AddressText,
     Button,
     ChainBadge,
+    FormPage,
     Input,
     PageHeader,
     Screen,
@@ -21,6 +22,7 @@ import {
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
@@ -38,6 +40,7 @@ import { findListOwner } from '../../flows/listMembership.js';
 import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
+import { explorerReadFailure } from '../../sdk/explorerErrors.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -80,12 +83,18 @@ function metaFieldError(field, value) {
     return code ? META_ERROR_TEXT[code] : null;
 }
 
-export function ListRenameForm({ walletId, listRef, onBack, onDone = onBack }) {
+export function ListRenameForm(props) {
+    const { walletId, listRef } = props;
+    const formKey = `${walletId}:${listRef.chainId}:${String(listRef.actionIndex)}`;
+    return <ListRenameFormScreen key={formKey} {...props} />;
+}
+
+function ListRenameFormScreen({ walletId, listRef, onBack, onDone = onBack }) {
     const chainId = listRef.chainId;
     const listActionIndex = String(listRef.actionIndex);
+    const listActionIndexValid = /^[1-9][0-9]*$/.test(listActionIndex);
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
     const descriptor = chainRegistry.get(chainId);
     const coinTicker = TICKER_BY_COIN[descriptor?.coin] || '';
     const signerReady = useSignerReady(walletId);
@@ -108,6 +117,7 @@ export function ListRenameForm({ walletId, listRef, onBack, onDone = onBack }) {
     const [memo, setMemo] = useState('');
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
+    const submitInFlightRef = useRef(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -146,7 +156,10 @@ export function ListRenameForm({ walletId, listRef, onBack, onDone = onBack }) {
             setSharedRows(rowsFromSharedLists(shared));
             setOwner(nextOwner);
         }).catch((err) => {
-            if (!cancelled) setLoadError(err?.message || `Failed to load list #${listActionIndex}.`);
+            if (!cancelled) setLoadError(
+                explorerReadFailure(err, `load list #${listActionIndex}`)?.message
+                || `Couldn't load list #${listActionIndex}. Try again.`,
+            );
         });
         return () => { cancelled = true; };
     }, [chainId, listActionIndex, messaging]);
@@ -209,6 +222,7 @@ export function ListRenameForm({ walletId, listRef, onBack, onDone = onBack }) {
     });
 
     function validate() {
+        if (!listActionIndexValid) { setFormError('List reference must be a positive whole number.'); return false; }
         if (sdkSupported !== true) { setFormError(SDK_REASON); return false; }
         if (!fromAddress) { setFormError('No signing address available on this chain.'); return false; }
         if (nameError || descriptionError) {
@@ -230,7 +244,9 @@ export function ListRenameForm({ walletId, listRef, onBack, onDone = onBack }) {
 
     async function handleReview(event) {
         event.preventDefault();
+        if (submitInFlightRef.current) return;
         if (!validate()) return;
+        submitInFlightRef.current = true;
         setFormError(null);
         const params = {
             VERSION: '5',
@@ -254,14 +270,14 @@ export function ListRenameForm({ walletId, listRef, onBack, onDone = onBack }) {
                 mandatory: nativeFee.mandatory,
                 fallback: err?.message || 'List rename failed.',
             }));
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 
     const header = <PageHeader onBack={onBack} title="Rename list" />;
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
-        </Screen>
+        <Screen variant={variant} header={header}>{children}</Screen>
     );
 
     if (lane.open) {
@@ -270,7 +286,7 @@ export function ListRenameForm({ walletId, listRef, onBack, onDone = onBack }) {
                 {...lane.confirmProps}
                 walletId={walletId}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={null}
                 chainId={chainId}
                 coinTicker={coinTicker}
                 signerReady={signerReady}
@@ -288,6 +304,15 @@ export function ListRenameForm({ walletId, listRef, onBack, onDone = onBack }) {
     }
 
     if (result) {
+        if (result.psbtHex && !result.txid) {
+            return wrap(
+                <WatcherResultPanel
+                    result={result}
+                    onBuildAnother={() => setResult(null)}
+                    onDone={onDone}
+                />,
+            );
+        }
         return wrap(
             <>
                 <StatusMessage variant="success">
@@ -304,7 +329,26 @@ export function ListRenameForm({ walletId, listRef, onBack, onDone = onBack }) {
     const missingOwner = owner && !ownerRecord;
     const formDisabled = sdkSupported !== true;
     return wrap(
-        <form onSubmit={handleReview} noValidate>
+        <FormPage
+            label="Rename list"
+            onSubmit={handleReview}
+            status={(sdkSupported === false || formError) ? (
+                <>
+                    {sdkSupported === false ? <StatusMessage variant="error">{SDK_REASON}</StatusMessage> : null}
+                    {formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
+                </>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={lane.composing}
+                    disabled={formDisabled || !fromAddress || lane.composing}
+                >
+                    {lane.isWatcherMode ? 'Create unsigned transaction' : 'Review'}
+                </Button>
+            )}
+        >
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>List</dt>
                 <dd className={styles.detailsValue}>#{listActionIndex}</dd>
@@ -318,7 +362,7 @@ export function ListRenameForm({ walletId, listRef, onBack, onDone = onBack }) {
                 </dd>
                 <dt className={styles.detailsLabel}>Chain</dt>
                 <dd className={styles.detailsValue}>
-                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
+                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected chain'}
                 </dd>
                 <dt className={styles.detailsLabel}>From</dt>
                 <dd className={styles.detailsValue}>
@@ -392,19 +436,6 @@ export function ListRenameForm({ walletId, listRef, onBack, onDone = onBack }) {
                 disabled={formDisabled}
             />
 
-            {sdkSupported === false ? <StatusMessage variant="error">{SDK_REASON}</StatusMessage> : null}
-            {formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    block
-                    loading={lane.composing}
-                    disabled={formDisabled || !fromAddress || lane.composing}
-                >
-                    Review
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }

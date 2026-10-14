@@ -42,6 +42,24 @@ async function runWith(rejection) {
 }
 
 describe('BackupSection dry-run error copy', () => {
+    it('rejects a fractional address count before starting the dry run', () => {
+        const messaging = { dryRunRestoreRequest: vi.fn() };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <BackupSection activeWallet={{ id: 'wallet-1', name: 'Wallet' }} />
+            </MessagingProvider>,
+        );
+        fireEvent.click(screen.getByRole('button', { name: 'Test…' }));
+        fireEvent.change(screen.getByLabelText('Recovery phrase to test'), {
+            target: { value: 'abandon abandon abandon' },
+        });
+        fireEvent.change(screen.getByLabelText('Addresses to check'), { target: { value: '2.5' } });
+
+        expect(screen.getByText(/whole number from 1 to 100/)).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Run test' })).toBeDisabled();
+        expect(messaging.dryRunRestoreRequest).not.toHaveBeenCalled();
+    });
+
     it('tells the user to check the phrase when it fails validation', async () => {
         const messaging = await runWith(hydrated(
             'InvalidMnemonicError',

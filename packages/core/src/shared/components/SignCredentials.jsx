@@ -33,6 +33,7 @@
 //       getSignerStatus={messaging.getSignerStatus}
 //   />
 
+import { useCallback } from 'react';
 import { Input, StatusMessage } from '../../ui/index.js';
 import { HwSignBlock } from './HwSignBlock.jsx';
 import { SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
@@ -71,7 +72,12 @@ export function SignCredentials({
     onConfirmedChange,
 }) {
     const src = fromAddress?.source;
+    const signerId = fromAddress?.signerId;
     const isHw = src === 'trezor' || src === 'ledger';
+    const getHwStatus = useCallback((opts) => getSignerStatus?.({
+        signerId,
+        chainId: opts?.chainId ?? chainId,
+    }), [getSignerStatus, signerId, chainId]);
     if (isHw) {
         const signerKind = /** @type {'trezor'|'ledger'} */ (src);
         return (
@@ -81,11 +87,8 @@ export function SignCredentials({
                 path={fromAddress.derivationPath || ''}
                 address={fromAddress.address}
                 chainId={chainId}
-                getStatus={getSignerStatus && fromAddress.signerId
-                    ? (opts) => getSignerStatus({
-                        signerId: fromAddress.signerId,
-                        chainId: opts?.chainId ?? chainId,
-                    })
+                getStatus={getSignerStatus && signerId
+                    ? getHwStatus
                     : null}
                 onStatusChange={onStatusChange}
                 signerInfo={signerInfo}

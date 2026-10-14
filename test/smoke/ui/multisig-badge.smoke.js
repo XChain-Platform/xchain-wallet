@@ -73,7 +73,7 @@ assert.ok(/<MultisigBadge[\s\S]*?multisig\.threshold[\s\S]*?multisig\.cosignerCo
 const history = readFileSync(join(sharedRoutes, 'History.jsx'), 'utf8');
 assert.ok(/multisigOnly/.test(history),
     'History tracks a multisigOnly filter state');
-assert.ok(/Multisig only/.test(history),
+assert.ok(/t\('history\.filters\.multisigOnly'\)/.test(history),
     'History renders a "Multisig only" filter chip per §22');
 assert.ok(/getMultisigReceiveAddress/.test(history),
     'History resolves the wallet\'s multisig address up-front for the filter');

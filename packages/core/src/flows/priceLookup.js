@@ -20,18 +20,22 @@
 // Split contract:
 //   - `refreshFiatRates(...)` is async and does the network work,
 //     populating an in-process rate cache.
-//   - `getFiatRate(...)` stays synchronous and reads the cache, so
-//     existing render-path callers keep their shape.
+//   - `getFiatRate(...)` stays synchronous and reads the memory cache,
+//     hydrating the last persisted observation on its first read.
 //   - `subscribeFiatRates(fn)` notifies UI code when the cache
 //     changes (used by the `useFiatRate` hook).
 //
-// The returned shape `{ rate, source, fiatCurrency, fetchedAt }` is
-// unchanged from the placeholder era; only `source` values moved from
-// 'static-placeholder' to 'oracle' / 'coingecko'.
+// The core returned shape remains `{ rate, source, fiatCurrency, fetchedAt }`;
+// token market rates can also carry their published 24-hour change.
 
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { defaultRegistry } from '../registry/index.js';
-import { divideDecimalStrings } from '../shared/utils/amountFormat.js';
+import { COINGECKO_API_BASE } from '../branding/branding.js';
+import {
+    divideDecimalStrings,
+    multiplyDecimalStrings,
+} from '../shared/utils/amountFormat.js';
+import { fetchWithRetry } from '../shared/utils/fetchWithRetry.js';
 
 // Oracle rounds finalize every ~10 minutes (ORACLE_ROUND_INTERVAL
 // 600s on the hub). A snapshot older than three missed rounds means
@@ -42,9 +46,13 @@ const ORACLE_STALE_MS = 30 * 60 * 1000;
 // than this. Mirrors priceOracle.js's spot TTL.
 const REFRESH_TTL_MS = 5 * 60 * 1000;
 
-const FETCH_TIMEOUT_MS = 8000;
+function isFreshRate(fetchedAtMs, nowMs) {
+    const ageMs = nowMs - fetchedAtMs;
+    return ageMs >= 0 && ageMs <= REFRESH_TTL_MS;
+}
 
-const COINGECKO_BASE = 'https://api.coingecko.com/api/v3';
+export const NATIVE_RATE_CACHE_MAX = 32;
+export const TOKEN_RATE_CACHE_MAX = 256;
 
 // CoinGecko id per coin family. For the launch coins the id happens to
 // equal the family name; the map keeps that an implementation detail.
@@ -62,7 +70,11 @@ const COINGECKO_ID_BY_COIN = {
  * @property {string} fiatCurrency   ISO-style currency code (USD, EUR, …)
  * @property {'oracle' | 'coingecko' | 'market'} source
  * @property {string} fetchedAt      ISO timestamp of when the rate was obtained
+ * @property {boolean} stale         true when the observation is older than the refresh TTL
+ * @property {number | null} [change24hPct] signed 24-hour change when the source provides it
  */
+
+const PERSISTED_RATES_KEY = 'xchain-wallet:fiat-rates:v1';
 
 // Each entry holds a frozen public FiatRate object plus its ms
 // timestamp. The public object is created once per refresh so
@@ -71,8 +83,102 @@ const COINGECKO_ID_BY_COIN = {
 /** @type {Map<string, { rate: FiatRate, fetchedAtMs: number }>} */
 const rateCache = new Map();
 
+// Browser-backed shells retain public price observations across process
+// starts. Hydration stays lazy so importing this module remains safe in Node
+// and service-worker contexts without localStorage.
+let persistedRatesHydrated = false;
+
+// When each coin's last refresh resolved nothing (a 429 or outage on the
+// explorer with the fallback off or failing too). Home re-asks on every
+// balance poll, so without this a rate-limited explorer would take three
+// more requests every poll for as long as it keeps refusing.
+/** @type {Map<string, number>} */
+const coinMissAt = new Map();
+
+// A mounted route and the Home summary can ask for the same rate before the
+// first request fills the cache. Each key owns one refresh promise so those
+// consumers share the request instead of racing identical network work.
+/** @type {Map<string, SharedRefresh>} */
+const coinRefreshes = new Map();
+
+/**
+ * A refresh several callers share. Its own controller cancels the network
+ * work, and it fires only when every caller that joined has aborted, so one
+ * unmounting screen cannot cancel the request another screen still waits on.
+ * @typedef {{ controller: AbortController, live: number, promise: Promise<any> }} SharedRefresh
+ */
+
+function abortError() {
+    if (typeof DOMException === 'function') return new DOMException('The request was cancelled.', 'AbortError');
+    return Object.assign(new Error('The request was cancelled.'), { name: 'AbortError' });
+}
+
+/** @param {(signal: AbortSignal) => Promise<any>} run @returns {SharedRefresh} */
+function startSharedRefresh(run) {
+    const controller = new AbortController();
+    return { controller, live: 0, promise: run(controller.signal) };
+}
+
+/**
+ * Join a shared refresh. The returned promise settles with the shared result
+ * or rejects with an AbortError as soon as this caller's own signal aborts.
+ * @param {SharedRefresh} entry
+ * @param {AbortSignal} [signal]
+ */
+function joinSharedRefresh(entry, signal) {
+    entry.live += 1;
+    // A caller with no signal can never cancel, so the work always runs on.
+    if (!signal) return entry.promise;
+    let released = false;
+    const release = () => {
+        if (released) return;
+        released = true;
+        entry.live -= 1;
+        if (entry.live === 0) entry.controller.abort();
+    };
+    if (signal.aborted) {
+        release();
+        return Promise.reject(abortError());
+    }
+    return new Promise((resolve, reject) => {
+        const onAbort = () => {
+            release();
+            reject(abortError());
+        };
+        signal.addEventListener('abort', onAbort, { once: true });
+        entry.promise.then(
+            (value) => { signal.removeEventListener('abort', onAbort); resolve(value); },
+            (err) => { signal.removeEventListener('abort', onAbort); reject(err); },
+        );
+    });
+}
+
 /** @type {Set<() => void>} */
 const listeners = new Set();
+
+function readCacheEntry(cache, key) {
+    const entry = cache.get(key);
+    if (entry === undefined) return undefined;
+    cache.delete(key);
+    cache.set(key, entry);
+    return entry;
+}
+
+function writeCacheEntry(cache, key, entry, maxSize) {
+    cache.delete(key);
+    cache.set(key, entry);
+    while (cache.size > maxSize) cache.delete(cache.keys().next().value);
+}
+
+function markCachedRateStale(cache, key, nowMs, maxSize) {
+    const entry = readCacheEntry(cache, key);
+    if (!entry?.rate || entry.rate.stale || isFreshRate(entry.fetchedAtMs, nowMs)) return false;
+    writeCacheEntry(cache, key, {
+        ...entry,
+        rate: Object.freeze({ ...entry.rate, stale: true }),
+    }, maxSize);
+    return true;
+}
 
 // Injectable deps so tests (and shells with their own fetch policy)
 // can rewire the module without touching the network.
@@ -86,6 +192,81 @@ let deps = {
 
 function cacheKey(chainCoin, fiatCurrency) {
     return `${chainCoin}|${fiatCurrency}`;
+}
+
+function localRateStorage() {
+    try {
+        const storage = globalThis.localStorage;
+        return storage && typeof storage.getItem === 'function' ? storage : null;
+    } catch {
+        return null;
+    }
+}
+
+function persistedRate(value) {
+    if (!value || typeof value !== 'object') return null;
+    const rate = Number(value.rate);
+    const chainCoin = typeof value.chainCoin === 'string' ? value.chainCoin : '';
+    const fiatCurrency = typeof value.fiatCurrency === 'string' ? value.fiatCurrency : '';
+    const fetchedAtMs = Date.parse(value.fetchedAt);
+    const source = value.source;
+    if (!Number.isFinite(rate) || rate <= 0 || !chainCoin || !fiatCurrency) return null;
+    if (!Number.isFinite(fetchedAtMs) || fetchedAtMs <= 0) return null;
+    if (!['oracle', 'coingecko', 'market'].includes(source)) return null;
+    const tick = value.tick == null ? null : normalizeTick(value.tick);
+    if (value.tick != null && !tick) return null;
+    return {
+        rate: Object.freeze({
+            rate,
+            chainCoin,
+            ...(tick ? { tick } : {}),
+            fiatCurrency,
+            source,
+            fetchedAt: new Date(fetchedAtMs).toISOString(),
+            stale: true,
+        }),
+        fetchedAtMs,
+    };
+}
+
+function hydratePersistedRates() {
+    if (persistedRatesHydrated) return;
+    persistedRatesHydrated = true;
+    const storage = localRateStorage();
+    if (!storage) return;
+    try {
+        const parsed = JSON.parse(storage.getItem(PERSISTED_RATES_KEY) || 'null');
+        if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.rates)) return;
+        for (const value of parsed.rates) {
+            const entry = persistedRate(value);
+            if (!entry) continue;
+            if (entry.rate.tick) {
+                writeCacheEntry(tokenRateCache, tokenCacheKey(
+                    entry.rate.chainCoin,
+                    entry.rate.tick,
+                    entry.rate.fiatCurrency,
+                ), entry, TOKEN_RATE_CACHE_MAX);
+            } else {
+                writeCacheEntry(rateCache, cacheKey(entry.rate.chainCoin, entry.rate.fiatCurrency), entry, NATIVE_RATE_CACHE_MAX);
+            }
+        }
+    } catch {
+        // A corrupt or unavailable convenience cache never blocks pricing.
+    }
+}
+
+function persistRates() {
+    const storage = localRateStorage();
+    if (!storage) return;
+    const rates = [
+        ...Array.from(rateCache.values(), (entry) => entry.rate),
+        ...Array.from(tokenRateCache.values(), (entry) => entry.rate).filter(Boolean),
+    ];
+    try {
+        storage.setItem(PERSISTED_RATES_KEY, JSON.stringify({ version: 1, rates }));
+    } catch {
+        // Storage quota and private-mode failures do not affect the live cache.
+    }
 }
 
 function notifyListeners() {
@@ -126,11 +307,8 @@ function explorerUrlForCoin(chainCoin) {
     return stripTrailingSlashes(raw) + '/' + tickerForCoin(chainCoin);
 }
 
-async function fetchJson(fetchImpl, url) {
-    const opts = typeof AbortSignal !== 'undefined' && AbortSignal.timeout
-        ? { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }
-        : {};
-    const resp = await fetchImpl(url, opts);
+async function fetchJson(fetchImpl, url, signal) {
+    const resp = await fetchWithRetry(fetchImpl, url, { signal });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     return resp.json();
 }
@@ -149,10 +327,10 @@ async function fetchJson(fetchImpl, url) {
  * the same feed carries token pairs (XCHAIN/USD, published by the
  * hub's derived price source) beside the coin ones.
  */
-async function fetchOracleSnapshotRate(fetchImpl, chainCoin, pair, nowMs) {
+async function fetchOracleSnapshotRate(fetchImpl, chainCoin, pair, nowMs, signal) {
     const base = explorerUrlForCoin(chainCoin);
     if (!base) return null;
-    const json = await fetchJson(fetchImpl, `${base}/api/price_snapshots/FINALIZED/status?limit=25`);
+    const json = await fetchJson(fetchImpl, `${base}/api/price_snapshots/FINALIZED/status?limit=25`, signal);
     const rows = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
     const row = rows.find((r) => r && r.coin_pair === pair);
     if (!row) return null;
@@ -172,8 +350,8 @@ async function fetchOracleSnapshotRate(fetchImpl, chainCoin, pair, nowMs) {
 }
 
 /** The coin's own `SYM/USD` oracle rate. */
-function fetchOracleRate(fetchImpl, chainCoin, nowMs) {
-    return fetchOracleSnapshotRate(fetchImpl, chainCoin, `${tickerForCoin(chainCoin)}/USD`, nowMs);
+function fetchOracleRate(fetchImpl, chainCoin, nowMs, signal) {
+    return fetchOracleSnapshotRate(fetchImpl, chainCoin, `${tickerForCoin(chainCoin)}/USD`, nowMs, signal);
 }
 
 /**
@@ -181,14 +359,14 @@ function fetchOracleRate(fetchImpl, chainCoin, nowMs) {
  * the oracle couldn't serve. Returns `{ coin: rate }` for the coins
  * it could price. Throws on transport errors.
  */
-async function fetchCoingeckoRates(fetchImpl, chainCoins, fiatCurrency) {
+async function fetchCoingeckoRates(fetchImpl, chainCoins, fiatCurrency, signal) {
     const vs = String(fiatCurrency).toLowerCase();
     const ids = chainCoins
         .map((c) => COINGECKO_ID_BY_COIN[c])
         .filter(Boolean);
     if (ids.length === 0) return {};
-    const url = `${COINGECKO_BASE}/simple/price?ids=${encodeURIComponent(ids.join(','))}&vs_currencies=${encodeURIComponent(vs)}`;
-    const json = await fetchJson(fetchImpl, url);
+    const url = `${COINGECKO_API_BASE}/simple/price?ids=${encodeURIComponent(ids.join(','))}&vs_currencies=${encodeURIComponent(vs)}`;
+    const json = await fetchJson(fetchImpl, url, signal);
     /** @type {Record<string, number>} */
     const out = {};
     for (const coin of chainCoins) {
@@ -197,6 +375,43 @@ async function fetchCoingeckoRates(fetchImpl, chainCoins, fiatCurrency) {
         if (Number.isFinite(rate) && rate > 0) out[coin] = rate;
     }
     return out;
+}
+
+/**
+ * True for exactly the URLs this module requests: CoinGecko's simple-price
+ * endpoint, and the oracle snapshot and DEX market routes under a launch
+ * coin's mainnet explorer. A shell whose page cannot fetch (the desktop
+ * renderer pins connect-src 'self') forwards price requests to its host
+ * process, and the host fetches only what this accepts, so the forwarder
+ * is never a general-purpose fetch.
+ *
+ * @param {string} url
+ * @returns {boolean}
+ */
+export function isFiatRateSourceUrl(url) {
+    let u;
+    try {
+        u = new URL(String(url));
+    } catch {
+        return false;
+    }
+    if (u.protocol !== 'https:' || u.username || u.password || u.port) return false;
+    if (u.origin + u.pathname === `${COINGECKO_API_BASE}/simple/price`) return true;
+    for (const coin of Object.keys(COINGECKO_ID_BY_COIN)) {
+        const base = explorerUrlForCoin(coin);
+        if (!base) continue;
+        let b;
+        try {
+            b = new URL(base);
+        } catch {
+            continue;
+        }
+        if (u.origin !== b.origin || !u.pathname.startsWith(`${b.pathname}/api/`)) continue;
+        const rest = u.pathname.slice(b.pathname.length);
+        if (rest === '/api/price_snapshots/FINALIZED/status') return true;
+        if (/^\/api\/market\/[^/]+\/[^/]+$/.test(rest)) return true;
+    }
+    return false;
 }
 
 /**
@@ -231,6 +446,7 @@ export function configureFiatRateSource(next = {}) {
  * @param {string} [opts.fiatCurrency]              default 'USD'
  * @param {boolean} [opts.allowCoingeckoFallback]   default true
  * @param {boolean} [opts.force]                    default false
+ * @param {AbortSignal} [opts.signal]                cancels in-flight requests and backoff
  * @returns {Promise<{ updated: string[] }>}        coins whose rate changed
  */
 export async function refreshFiatRates({
@@ -238,33 +454,82 @@ export async function refreshFiatRates({
     fiatCurrency = 'USD',
     allowCoingeckoFallback = true,
     force = false,
+    signal,
 } = {}) {
     if (!Array.isArray(chainCoins) || chainCoins.length === 0) return { updated: [] };
+    hydratePersistedRates();
     const fetchImpl = resolveFetch();
     if (!fetchImpl) return { updated: [] };
     const nowMs = deps.now();
 
-    const wanted = chainCoins.filter((coin) => {
+    const wanted = Array.from(new Set(chainCoins)).filter((coin) => {
         if (typeof coin !== 'string' || coin.length === 0) return false;
         if (force) return true;
-        const hit = rateCache.get(cacheKey(coin, fiatCurrency));
-        return !hit || nowMs - hit.fetchedAtMs > REFRESH_TTL_MS;
+        const missAt = readCacheEntry(coinMissAt, cacheKey(coin, fiatCurrency));
+        if (missAt != null && nowMs - missAt <= MISS_TTL_MS) return false;
+        const hit = readCacheEntry(rateCache, cacheKey(coin, fiatCurrency));
+        return !hit || hit.rate.stale || !isFreshRate(hit.fetchedAtMs, nowMs);
     });
     if (wanted.length === 0) return { updated: [] };
+
+    const refreshKey = (coin) => `${cacheKey(coin, fiatCurrency)}|fallback:${allowCoingeckoFallback}`;
+    if (signal?.aborted) throw abortError();
+    const owned = [];
+    const joined = new Set();
+    for (const coin of wanted) {
+        const active = coinRefreshes.get(refreshKey(coin));
+        if (active) joined.add(active);
+        else owned.push(coin);
+    }
+
+    if (owned.length > 0) {
+        /** @type {SharedRefresh} */
+        const refresh = startSharedRefresh((sharedSignal) => refreshFiatRateBatch({
+            wanted: owned,
+            fiatCurrency,
+            allowCoingeckoFallback,
+            fetchImpl,
+            nowMs,
+            signal: sharedSignal,
+        }).finally(() => {
+            for (const coin of owned) {
+                const key = refreshKey(coin);
+                if (coinRefreshes.get(key) === refresh) coinRefreshes.delete(key);
+            }
+        }));
+        for (const coin of owned) coinRefreshes.set(refreshKey(coin), refresh);
+        joined.add(refresh);
+    }
+
+    const results = await Promise.all([...joined].map((entry) => joinSharedRefresh(entry, signal)));
+    const updated = new Set(results.flatMap((result) => result.updated));
+    return { updated: wanted.filter((coin) => updated.has(coin)) };
+}
+
+async function refreshFiatRateBatch({
+    wanted,
+    fiatCurrency,
+    allowCoingeckoFallback,
+    fetchImpl,
+    nowMs,
+    signal,
+}) {
 
     /** @type {string[]} */
     const updated = [];
     const put = (coin, rate, source) => {
-        rateCache.set(cacheKey(coin, fiatCurrency), {
+        writeCacheEntry(rateCache, cacheKey(coin, fiatCurrency), {
             rate: Object.freeze({
                 rate,
                 chainCoin: coin,
                 fiatCurrency,
                 source,
                 fetchedAt: new Date(nowMs).toISOString(),
+                stale: false,
             }),
             fetchedAtMs: nowMs,
-        });
+        }, NATIVE_RATE_CACHE_MAX);
+        coinMissAt.delete(cacheKey(coin, fiatCurrency));
         updated.push(coin);
     };
 
@@ -274,10 +539,11 @@ export async function refreshFiatRates({
     for (const coin of wanted) {
         if (fiatCurrency !== 'USD') { unresolved.push(coin); continue; }
         try {
-            const rate = await fetchOracleRate(fetchImpl, coin, nowMs);
+            const rate = await fetchOracleRate(fetchImpl, coin, nowMs, signal);
             if (rate != null) put(coin, rate, 'oracle');
             else unresolved.push(coin);
-        } catch {
+        } catch (err) {
+            if (signal?.aborted) throw err;
             unresolved.push(coin);
         }
     }
@@ -286,20 +552,37 @@ export async function refreshFiatRates({
     // couldn't serve.
     if (unresolved.length > 0 && allowCoingeckoFallback) {
         try {
-            const rates = await fetchCoingeckoRates(fetchImpl, unresolved, fiatCurrency);
+            const rates = await fetchCoingeckoRates(fetchImpl, unresolved, fiatCurrency, signal);
             for (const [coin, rate] of Object.entries(rates)) put(coin, rate, 'coingecko');
-        } catch { /* keep whatever the cache already holds */ }
+        } catch (err) {
+            if (signal?.aborted) throw err;
+            // Keep whatever the cache already holds.
+        }
     }
 
-    if (updated.length > 0) notifyListeners();
+    let staleChanged = false;
+    for (const coin of wanted) {
+        if (!updated.includes(coin)) {
+            writeCacheEntry(coinMissAt, cacheKey(coin, fiatCurrency), nowMs, NATIVE_RATE_CACHE_MAX);
+            staleChanged = markCachedRateStale(
+                rateCache,
+                cacheKey(coin, fiatCurrency),
+                nowMs,
+                NATIVE_RATE_CACHE_MAX,
+            ) || staleChanged;
+        }
+    }
+
+    if (updated.length > 0) persistRates();
+    if (updated.length > 0 || staleChanged) notifyListeners();
     return { updated };
 }
 
 /**
- * Look up a fiat rate for the chain's native coin from the in-process
- * cache. Synchronous; returns null until `refreshFiatRates` has
- * populated a rate for the coin/currency (§45.4: no data means no
- * number, never a fabricated one).
+ * Look up a fiat rate for the chain's native coin. Synchronously hydrates
+ * a persisted observation when available and marks it stale until
+ * `refreshFiatRates` replaces it. Returns null when neither memory nor
+ * persisted storage has a valid rate (§45.4: no data means no number).
  *
  * @param {object} opts
  * @param {string} opts.chainCoin
@@ -308,7 +591,10 @@ export async function refreshFiatRates({
  */
 export function getFiatRate({ chainCoin, fiatCurrency = 'USD' } = {}) {
     if (typeof chainCoin !== 'string' || chainCoin.length === 0) return null;
-    const hit = rateCache.get(cacheKey(chainCoin, fiatCurrency));
+    hydratePersistedRates();
+    const key = cacheKey(chainCoin, fiatCurrency);
+    markCachedRateStale(rateCache, key, deps.now(), NATIVE_RATE_CACHE_MAX);
+    const hit = readCacheEntry(rateCache, key);
     return hit ? hit.rate : null;
 }
 
@@ -353,8 +639,11 @@ const MARKET_STALE_MS = 7 * 24 * 60 * 60 * 1000;
 // TTL: a market appearing is news we want reasonably soon.
 const MISS_TTL_MS = 60 * 1000;
 
-/** @type {Map<string, { rate: FiatRate | null, fetchedAtMs: number }>} */
+/** @type {Map<string, { rate: FiatRate | null, fetchedAtMs: number, missAtMs?: number }>} */
 const tokenRateCache = new Map();
+
+/** @type {Map<string, SharedRefresh>} */
+const tokenRefreshes = new Map();
 
 function tokenCacheKey(chainCoin, tick, fiatCurrency) {
     return `${chainCoin}|${tick}|${fiatCurrency}`;
@@ -379,16 +668,29 @@ function marketPriceOf(row, tick, quote) {
     return NaN;
 }
 
+function marketChange24hOf(row, tick, quote) {
+    const t1 = normalizeTick(row?.tick1);
+    const t2 = normalizeTick(row?.tick2);
+    const raw = t1 === tick && t2 === quote
+        ? (row?.tick1_24hr_change ?? row?.change_24h ?? row?.change24h)
+        : t2 === tick && t1 === quote
+            ? (row?.tick2_24hr_change ?? row?.change_24h ?? row?.change24h)
+            : null;
+    if (raw === null || raw === undefined || String(raw).trim() === '') return null;
+    const value = Number(String(raw).replace('%', '').trim());
+    return Number.isFinite(value) ? value : null;
+}
+
 /**
  * Secondary source: the token's last DEX fill price against the native
- * coin. Returns coin units per 1 token, or null when the market has no
- * usable price. Throws on transport errors (caller gives up).
+ * coin. Returns the coin price and optional 24-hour change, or null when
+ * the market has no usable price. Throws on transport errors (caller gives up).
  */
-async function fetchMarketPriceInCoin(fetchImpl, chainCoin, tick, nativeTicker, nowMs) {
+async function fetchMarketPriceInCoin(fetchImpl, chainCoin, tick, nativeTicker, nowMs, signal) {
     const base = explorerUrlForCoin(chainCoin);
     if (!base) return null;
     const url = `${base}/api/market/${encodeURIComponent(tick)}/${encodeURIComponent(nativeTicker)}`;
-    const json = await fetchJson(fetchImpl, url);
+    const json = await fetchJson(fetchImpl, url, signal);
     const rows = Array.isArray(json?.data) ? json.data
         : Array.isArray(json) ? json
             : json?.data ? [json.data] : [];
@@ -401,7 +703,7 @@ async function fetchMarketPriceInCoin(fetchImpl, chainCoin, tick, nativeTicker, 
         // still the only freshness signal this endpoint gives us.
         const tsMs = Number(row.last_updated) * 1000;
         if (Number.isFinite(tsMs) && tsMs > 0 && nowMs - tsMs > MARKET_STALE_MS) continue;
-        return price;
+        return { price, change24hPct: marketChange24hOf(row, tick, nativeTicker) };
     }
     return null;
 }
@@ -418,6 +720,7 @@ async function fetchMarketPriceInCoin(fetchImpl, chainCoin, tick, nativeTicker, 
  * @param {string} [opts.fiatCurrency]             default 'USD'
  * @param {boolean} [opts.allowCoingeckoFallback]  default true
  * @param {boolean} [opts.force]                   default false
+ * @param {AbortSignal} [opts.signal]               cancels in-flight requests and backoff
  * @returns {Promise<{ updated: boolean }>}
  */
 export async function refreshTokenFiatRate({
@@ -427,6 +730,7 @@ export async function refreshTokenFiatRate({
     fiatCurrency = 'USD',
     allowCoingeckoFallback = true,
     force = false,
+    signal,
 } = {}) {
     const t = normalizeTick(tick);
     const n = normalizeTick(nativeTicker);
@@ -438,27 +742,73 @@ export async function refreshTokenFiatRate({
     // explorer's path-segment routing.
     if (/[/?#\\]/.test(t)) return { updated: false };
 
+    hydratePersistedRates();
+
     const fetchImpl = resolveFetch();
     if (!fetchImpl) return { updated: false };
     const nowMs = deps.now();
 
     const key = tokenCacheKey(chainCoin, t, fiatCurrency);
-    const hit = tokenRateCache.get(key);
+    const hit = readCacheEntry(tokenRateCache, key);
     if (!force && hit) {
-        const ttl = hit.rate ? REFRESH_TTL_MS : MISS_TTL_MS;
-        if (nowMs - hit.fetchedAtMs <= ttl) return { updated: false };
+        if (hit.rate && !hit.rate.stale && isFreshRate(hit.fetchedAtMs, nowMs)) return { updated: false };
+        const missAtMs = hit.missAtMs ?? (hit.rate ? null : hit.fetchedAtMs);
+        if (missAtMs != null && nowMs - missAtMs >= 0 && nowMs - missAtMs <= MISS_TTL_MS) {
+            return { updated: false };
+        }
     }
+    const refreshKey = `${key}|fallback:${allowCoingeckoFallback}`;
+    if (signal?.aborted) throw abortError();
+    const active = tokenRefreshes.get(refreshKey);
+    if (active) return joinSharedRefresh(active, signal);
+
+    /** @type {SharedRefresh} */
+    const refresh = startSharedRefresh((sharedSignal) => refreshTokenFiatRateUncached({
+        chainCoin,
+        tick: t,
+        nativeTicker: n,
+        fiatCurrency,
+        allowCoingeckoFallback,
+        fetchImpl,
+        nowMs,
+        key,
+        hit,
+        signal: sharedSignal,
+    }).finally(() => {
+        if (tokenRefreshes.get(refreshKey) === refresh) tokenRefreshes.delete(refreshKey);
+    }));
+    tokenRefreshes.set(refreshKey, refresh);
+    return joinSharedRefresh(refresh, signal);
+}
+
+async function refreshTokenFiatRateUncached({
+    chainCoin,
+    tick: t,
+    nativeTicker: n,
+    fiatCurrency,
+    allowCoingeckoFallback,
+    fetchImpl,
+    nowMs,
+    key,
+    hit,
+    signal,
+}) {
     // A refresh that resolved nothing keeps whatever the cache already
-    // holds, exactly as the coin path does: a price from five minutes ago
-    // is a better answer mid-session than a field that suddenly goes
-    // blank because one request timed out. Stamping the time either way
-    // is what stops a miss being re-asked on every render.
+    // holds, exactly as the coin path does. Its observation timestamp stays
+    // unchanged so freshness remains honest, while missAtMs throttles retries.
     const miss = () => {
-        tokenRateCache.set(key, { rate: hit?.rate ?? null, fetchedAtMs: nowMs });
+        if (hit?.rate) {
+            markCachedRateStale(tokenRateCache, key, nowMs, TOKEN_RATE_CACHE_MAX);
+            const retained = readCacheEntry(tokenRateCache, key);
+            writeCacheEntry(tokenRateCache, key, { ...retained, missAtMs: nowMs }, TOKEN_RATE_CACHE_MAX);
+            if (retained?.rate?.stale && !hit.rate.stale) notifyListeners();
+        } else {
+            writeCacheEntry(tokenRateCache, key, { rate: null, fetchedAtMs: nowMs, missAtMs: nowMs }, TOKEN_RATE_CACHE_MAX);
+        }
         return { updated: false };
     };
-    const put = (rate, source) => {
-        tokenRateCache.set(key, {
+    const put = (rate, source, change24hPct = null) => {
+        writeCacheEntry(tokenRateCache, key, {
             rate: Object.freeze({
                 rate,
                 chainCoin,
@@ -466,9 +816,12 @@ export async function refreshTokenFiatRate({
                 fiatCurrency,
                 source,
                 fetchedAt: new Date(nowMs).toISOString(),
+                stale: false,
+                change24hPct,
             }),
             fetchedAtMs: nowMs,
-        });
+        }, TOKEN_RATE_CACHE_MAX);
+        persistRates();
         notifyListeners();
         return { updated: true };
     };
@@ -476,31 +829,43 @@ export async function refreshTokenFiatRate({
     // 1. The token's own oracle pair. The feed publishes USD pairs only.
     if (fiatCurrency === 'USD') {
         try {
-            const rate = await fetchOracleSnapshotRate(fetchImpl, chainCoin, `${t}/USD`, nowMs);
+            const rate = await fetchOracleSnapshotRate(fetchImpl, chainCoin, `${t}/USD`, nowMs, signal);
             if (rate != null) return put(rate, 'oracle');
-        } catch { /* fall through to the market */ }
+        } catch (err) {
+            if (signal?.aborted) throw err;
+            // Fall through to the market.
+        }
     }
 
     // 2. The DEX market, converted through the coin's own rate. Without
     //    that rate the market price is only a coin-denominated number,
     //    which is not what the caller asked for.
-    await refreshFiatRates({ chainCoins: [chainCoin], fiatCurrency, allowCoingeckoFallback })
-        .catch(() => { /* the cache read below decides */ });
+    await refreshFiatRates({ chainCoins: [chainCoin], fiatCurrency, allowCoingeckoFallback, signal })
+        .catch((err) => {
+            if (signal?.aborted) throw err;
+            // The cache read below decides.
+        });
     const coinRate = getFiatRate({ chainCoin, fiatCurrency });
     if (!coinRate) return miss();
     try {
-        const inCoin = await fetchMarketPriceInCoin(fetchImpl, chainCoin, t, n, nowMs);
-        const fiat = inCoin == null ? null : inCoin * coinRate.rate;
-        if (fiat != null && Number.isFinite(fiat) && fiat > 0) return put(fiat, 'market');
-    } catch { /* keep whatever the cache already holds */ }
+        const market = await fetchMarketPriceInCoin(fetchImpl, chainCoin, t, n, nowMs, signal);
+        const fiat = market == null ? null : market.price * coinRate.rate;
+        if (fiat != null && Number.isFinite(fiat) && fiat > 0) {
+            return put(fiat, 'market', market.change24hPct);
+        }
+    } catch (err) {
+        if (signal?.aborted) throw err;
+        // Keep whatever the cache already holds.
+    }
     return miss();
 }
 
 /**
- * Look up a token's fiat rate from the in-process cache. Synchronous,
- * and null until `refreshTokenFiatRate` has landed one. The returned
- * object is reference-stable per refresh, so it can back a
- * useSyncExternalStore snapshot.
+ * Look up a token's fiat rate. Synchronously hydrates a persisted
+ * observation when available and otherwise returns null until
+ * `refreshTokenFiatRate` lands one. The returned object is
+ * reference-stable per refresh, so it can back a useSyncExternalStore
+ * snapshot.
  *
  * @param {object} opts
  * @param {string} opts.chainCoin
@@ -510,17 +875,27 @@ export async function refreshTokenFiatRate({
  */
 export function getTokenFiatRate({ chainCoin, tick, fiatCurrency = 'USD' } = {}) {
     if (typeof chainCoin !== 'string' || chainCoin.length === 0) return null;
+    hydratePersistedRates();
     const t = normalizeTick(tick);
     if (t.length === 0) return null;
-    const hit = tokenRateCache.get(tokenCacheKey(chainCoin, t, fiatCurrency));
+    const key = tokenCacheKey(chainCoin, t, fiatCurrency);
+    markCachedRateStale(tokenRateCache, key, deps.now(), TOKEN_RATE_CACHE_MAX);
+    const hit = readCacheEntry(tokenRateCache, key);
     return hit && hit.rate ? hit.rate : null;
 }
 
 /** Test-only: clear the cache and injected deps. */
-export function _resetPriceLookupForTests() {
+export function _resetPriceLookupForTests({ preservePersistent = false } = {}) {
     rateCache.clear();
+    coinMissAt.clear();
+    coinRefreshes.clear();
     tokenRateCache.clear();
+    tokenRefreshes.clear();
     listeners.clear();
+    persistedRatesHydrated = false;
+    if (!preservePersistent) {
+        try { localRateStorage()?.removeItem(PERSISTED_RATES_KEY); } catch { /* tolerate */ }
+    }
     deps = { fetch: null, now: () => Date.now(), explorerUrlByCoin: null };
 }
 
@@ -533,10 +908,40 @@ export function _resetPriceLookupForTests() {
  * @returns {number | null}            null when conversion fails
  */
 export function coinToFiat(coinAmount, rate) {
-    if (!rate || typeof rate.rate !== 'number') return null;
-    const n = typeof coinAmount === 'number' ? coinAmount : parseFloat(coinAmount);
-    if (!Number.isFinite(n)) return null;
-    return n * rate.rate;
+    const exact = coinToFiatExact(coinAmount, rate);
+    if (exact === null) return null;
+    const converted = Number(exact);
+    return Number.isFinite(converted) ? converted : null;
+}
+
+function plainDecimalNumber(value) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+    const raw = String(value);
+    if (!/[eE]/.test(raw)) return raw;
+
+    const match = /^([+-]?)(\d+)(?:\.(\d+))?[eE]([+-]?\d+)$/.exec(raw);
+    if (!match) return null;
+    const sign = match[1];
+    const integer = match[2];
+    const fraction = match[3] || '';
+    const digits = `${integer}${fraction}`;
+    const decimalIndex = integer.length + Number(match[4]);
+    if (decimalIndex <= 0) return `${sign}0.${'0'.repeat(-decimalIndex)}${digits}`;
+    if (decimalIndex >= digits.length) {
+        return `${sign}${digits}${'0'.repeat(decimalIndex - digits.length)}`;
+    }
+    return `${sign}${digits.slice(0, decimalIndex)}.${digits.slice(decimalIndex)}`;
+}
+
+/** Convert a coin amount to an exact decimal string for display and form state. */
+export function coinToFiatExact(coinAmount, rate) {
+    const rateDecimal = plainDecimalNumber(rate?.rate);
+    if (rateDecimal === null || rate.rate <= 0) return null;
+    const amountDecimal = typeof coinAmount === 'number'
+        ? plainDecimalNumber(coinAmount)
+        : String(coinAmount);
+    if (amountDecimal === null) return null;
+    return multiplyDecimalStrings(amountDecimal, rateDecimal);
 }
 
 /**
@@ -550,7 +955,11 @@ export function coinToFiat(coinAmount, rate) {
  * @returns {string | null}
  */
 export function fiatToCoin(fiatAmount, rate, decimals = 8) {
-    if (!rate || typeof rate.rate !== 'number' || rate.rate === 0) return null;
-    if (!/^\d+(\.\d+)?$/.test(String(fiatAmount).trim())) return null;
-    return divideDecimalStrings(fiatAmount, String(rate.rate), decimals);
+    const rateDecimal = plainDecimalNumber(rate?.rate);
+    if (rateDecimal === null || rate.rate <= 0) return null;
+    const amountDecimal = typeof fiatAmount === 'number'
+        ? plainDecimalNumber(fiatAmount)
+        : String(fiatAmount).trim();
+    if (amountDecimal === null || !/^\d+(\.\d+)?$/.test(amountDecimal)) return null;
+    return divideDecimalStrings(amountDecimal, rateDecimal, decimals);
 }

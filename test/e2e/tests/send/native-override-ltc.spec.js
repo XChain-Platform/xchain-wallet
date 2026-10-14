@@ -34,7 +34,7 @@ test('an unaffordable Litecoin token send offers Sign anyway behind the same war
     await gotoSection(page, 'Send');
     await page.getByRole('button', { name: /Change asset/ }).click();
     await page.getByLabel('Search coins or tokens').fill('LITEGEM');
-    await page.getByLabel(/Open Lite Gem details/i).first().click();
+    await page.getByRole('button', { name: /^Select Lite Gem/ }).first().click();
     const main = page.getByRole('main');
     await expect(main.getByRole('textbox', { name: /^Amount \(LITEGEM\)/ })).toBeVisible();
 

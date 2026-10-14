@@ -71,9 +71,10 @@ assert.equal((src.match(/prebuiltPsbt,/g) || []).length, 4,
 assert.ok(!/await messaging\.(fileAction|linkAction|issueToken)/.test(src),
     'no AttachContentForm leg still broadcasts straight from its review stage');
 
-// The on-chain push ceiling is enforced in the picker, not after the
-// user signed.
-assert.ok(/MAX_FILE_BYTES/.test(src), 'form caps the file size pre-sign');
+// The exact metadata-aware on-chain push ceiling is enforced in the picker
+// and rechecked at review, before the user signs.
+assert.ok(/maxPublicFileBytes/.test(src), 'form computes the encoding-aware file cap');
+assert.ok(/Shorten the title or memo/.test(src), 'form rechecks the cap after metadata edits');
 
 // The LINK is only honoured from the token's owner; the form must
 // surface a mismatch instead of failing silently after two signs.

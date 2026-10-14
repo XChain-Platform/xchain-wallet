@@ -6,43 +6,66 @@
 
 .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(9rem, 100%), 1fr));
     gap: var(--xc-space-3);
     align-items: stretch;
 }
 
 .card {
+    position: relative;
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-card-radius);
+    height: 100%;
+    min-height: var(--xc-tap-min);
+    box-sizing: border-box;
+    min-width: 0;
+}
+
+.cardContent {
+    appearance: none;
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
-    padding: var(--xc-space-2);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+    padding: var(--xc-card-pad);
+    border: 0;
+    border-radius: inherit;
+    background: transparent;
+    box-sizing: border-box;
     text-align: start;
     color: inherit;
     font: inherit;
-    height: 100%;
-    box-sizing: border-box;
 }
 
 .cardClickable {
     cursor: pointer;
 }
 
-.cardClickable:hover {
-    background: var(--xc-bg-muted);
-    border-color: var(--xc-border-strong);
+@media (hover: hover) and (pointer: fine) {
+    .cardClickable:hover {
+        background: var(--xc-control-bg-hover);
+        border-color: var(--xc-control-border-hover);
+    }
 }
 
-.cardClickable:focus-visible {
+.cardClickable:active {
+    background: var(--xc-control-bg-hover);
+    border-color: var(--xc-control-border-hover);
+    box-shadow: var(--xc-shadow-selected-ring);
+}
+
+.cardClickable .cardContent:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
+    /* The two-pixel inset keeps the focus ring inside the clipped card edge. */
     outline-offset: -2px;
 }
 
 .cardPinned {
-    border-color: var(--xc-accent-primary, var(--xc-border-strong));
-    box-shadow: 0 0 0 1px var(--xc-accent-primary, var(--xc-border-strong));
+    border-color: var(--xc-control-selected);
+    box-shadow: var(--xc-shadow-accent-ring);
 }
 
 .cardHidden {
@@ -71,57 +94,49 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #FFFFFF;
+    color: var(--xc-on-accent);
     font-family: var(--xc-font-sans);
     font-weight: 700;
-    font-size: 28px;
+    font-size: var(--xc-text-2xl);
     letter-spacing: 0.05em;
 }
 
 .chainOverlay {
     position: absolute;
-    bottom: 6px;
-    inset-inline-end: 6px;
-    width: 20px;
-    height: 20px;
+    bottom: var(--xc-space-2);
+    inset-inline-end: var(--xc-space-2);
+    width: var(--xc-icon-lg);
+    height: var(--xc-icon-lg);
     border-radius: 50%;
+    /* raw-color-ok: fixed white preserves transparent chain artwork. */
     background: #FFFFFF;
-    box-shadow: 0 0 0 1.5px var(--xc-surface);
+    box-shadow: var(--xc-shadow-surface-ring);
     object-fit: cover;
 }
 
-.pinBtn,
-.hideBtn {
+/* Positions the kit pin and hide Buttons over the card art; the kit owns their
+   look. The .card scope outranks the kit .btn position: relative. */
+.card .pinBtn,
+.card .hideBtn {
     position: absolute;
-    top: 6px;
-    width: 24px;
-    height: 24px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 16px;
-    color: #FFFFFF;
-    background: rgba(0, 0, 0, 0.4);
-    border-radius: 50%;
-    cursor: pointer;
-    user-select: none;
-    line-height: 1;
+    top: var(--xc-space-4);
+    width: var(--xc-control-h-sm);
+    height: var(--xc-control-h-sm);
 }
 
-.pinBtn { right: 6px; }
-.hideBtn { right: 36px; }
-
-.pinBtn:hover,
-.hideBtn:hover {
-    background: rgba(0, 0, 0, 0.7);
+/* The ring sits over card artwork, so it uses the on-accent colour. */
+.card .pinBtn:focus-visible,
+.card .hideBtn:focus-visible {
+    outline: 2px solid var(--xc-on-accent);
+    /* The two-pixel focus separation has no spacing-token equivalent. */
+    outline-offset: 2px;
 }
 
-.pinBtnActive {
-    color: var(--xc-accent-primary, #f5b400);
-}
-
-.hideBtnActive {
-    color: var(--xc-accent-primary, #f5b400);
+.card .pinBtn { inset-inline-end: var(--xc-space-4); }
+.card .hideBtn {
+    inset-inline-end: calc(
+        var(--xc-space-4) + var(--xc-control-h-sm) + var(--xc-space-2)
+    );
 }
 
 .meta {
@@ -132,9 +147,11 @@
 .name {
     font-weight: 600;
     color: var(--xc-text);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    display: block;
+    min-height: 2.4em;
+    overflow-wrap: break-word;
+    word-break: normal;
+    line-height: 1.2;
 }
 
 .subtitle {
@@ -160,4 +177,10 @@
 .hiddenToggle:hover {
     color: var(--xc-text);
     background: var(--xc-bg-muted);
+}
+
+@media (min-width: 48rem) {
+    .grid {
+        grid-template-columns: repeat(auto-fill, minmax(10rem, 12rem));
+    }
 }

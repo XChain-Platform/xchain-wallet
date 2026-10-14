@@ -9,11 +9,22 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useState } from 'react';
-import { Screen } from '@xchain-wallet/core/ui';
+import { i18n } from '@xchain-wallet/core';
+import { ListPage, Screen } from '@xchain-wallet/core/ui';
+import { RouteErrorBoundary } from '@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx';
 import { fetchApproval, resolveApproval } from './messaging.js';
 import { ConnectApproval } from './kinds/ConnectApproval.jsx';
 import { SignApproval } from './kinds/SignApproval.jsx';
 import styles from './approval.module.css';
+
+const { t } = i18n;
+const SIGN_APPROVAL_KINDS = new Set([
+    'signMessage',
+    'signPsbt',
+    'signAction',
+    'coSign',
+    'signIn',
+]);
 
 function getRequestId() {
     const params = new URLSearchParams(window.location.search);
@@ -29,6 +40,14 @@ function getRequestId() {
  * arrives via a different path).
  */
 export function Router() {
+    return (
+        <RouteErrorBoundary>
+            <ApprovalRoute />
+        </RouteErrorBoundary>
+    );
+}
+
+function ApprovalRoute() {
     const id = getRequestId();
     const [data, setData] = useState(
         /** @type {{ id: string, kind: string, payload: any } | null} */ (null),
@@ -36,13 +55,27 @@ export function Router() {
     const [error, setError] = useState(/** @type {string | null} */ (null));
 
     useEffect(() => {
+        setData(null);
+        setError(null);
         if (!id) {
             setError('Missing approval id in URL.');
             return;
         }
+        let cancelled = false;
         fetchApproval(id)
-            .then(setData)
-            .catch((err) => setError(err?.message || 'Failed to load request.'));
+            .then((request) => {
+                if (cancelled) return;
+                if (!request || typeof request !== 'object'
+                    || request.id !== id || typeof request.kind !== 'string'
+                    || !Object.prototype.hasOwnProperty.call(request, 'payload')) {
+                    throw new Error('Approval response did not match this request.');
+                }
+                setData(request);
+            })
+            .catch((err) => {
+                if (!cancelled) setError(err?.message || 'Failed to load request.');
+            });
+        return () => { cancelled = true; };
     }, [id]);
 
     const reject = useCallback(async () => {
@@ -54,23 +87,55 @@ export function Router() {
         window.close();
     }, [id]);
 
+    useEffect(() => {
+        if (!data) return undefined;
+
+        // The footer puts Reject first, so keyboard entry starts on the safe
+        // decision for every approval kind without stealing focus again.
+        document.querySelector('footer button')?.focus();
+
+        function handleKeyDown(event) {
+            if (event.key !== 'Escape' || event.defaultPrevented) return;
+            event.preventDefault();
+            void reject();
+        }
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [data, reject]);
+
     if (error) {
         return (
-            <Screen variant="popup">
-                <div role="alert" className={styles.error}>{error}</div>
+            <Screen variant="small">
+                <ListPage>
+                    <div role="alert" className={styles.error}>{error}</div>
+                </ListPage>
             </Screen>
         );
     }
     if (!data) {
         return (
-            <Screen variant="popup">
-                <p aria-live="polite">Loading approval request…</p>
+            <Screen variant="small">
+                <ListPage>
+                    <p aria-live="polite">{t('extension.approval.loading')}</p>
+                </ListPage>
             </Screen>
         );
     }
 
     if (data.kind === 'connect') {
         return <ConnectApproval id={id} payload={data.payload} onReject={reject} />;
+    }
+    if (!SIGN_APPROVAL_KINDS.has(data.kind)) {
+        return (
+            <Screen variant="popup">
+                <ListPage>
+                    <div role="alert" className={styles.error}>
+                        {t('extension.approval.unsupported')}
+                    </div>
+                </ListPage>
+            </Screen>
+        );
     }
     return (
         <SignApproval

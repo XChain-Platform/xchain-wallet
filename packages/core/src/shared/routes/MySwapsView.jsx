@@ -18,13 +18,29 @@
 // getAction(...).state.status does NOT promptly reflect a cancel, so
 // "cancelled" is read from the authoritative + immediate swap_cancels
 // table (getSwapCancelsForAddress). The list feed carries lifecycle inline
-// as `swap_status`, while action detail carries edited expiration. A failed
-// or older detail read falls back to the creation expiration. Cancel/edit
-// are offered only while open.
+// as `swap_status`, while action detail carries edited expiration and the
+// chain-clock expiry classification. A failed or older detail read falls
+// back to the creation expiration. Cancel/edit are offered only while open.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AddressText, Button, ChainBadge, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+    AddressText,
+    Button,
+    ChainBadge,
+    EmptyState,
+    FormPage,
+    Icon,
+    Input,
+    ListPage,
+    PageHeader,
+    Screen,
+    SectionHeader,
+    Skeleton,
+    StatusMessage,
+} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
+import { countdownText } from '../../market/obligationStatus.js';
+import { formatLocalDateTime } from '../utils/dateTime.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
 import { MarketLifecycleTimeline } from '../components/MarketLifecycleTimeline.jsx';
@@ -38,9 +54,11 @@ import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { boundListIndex } from '../../flows/accessListSlots.js';
 import { isListEditRemoveActive } from '../../flows/protocolActivations.js';
-import { explorerCoinCode } from '../../registry/coinTicker.js';
+import { useSettings } from '../hooks/useSettings.js';
+import { explorerPageUrl } from '../utils/explorerLinks.js';
 import L from './ObligationsView.module.css';
 import F from './IssueTokenForm.module.css';
+import S from './MySwapsView.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -68,10 +86,16 @@ const CLOSED_LABELS = Object.freeze({
 
 const STATE_READ_CONCURRENCY = 6;
 
-export function swapStateOf(detail) {
+const isPositiveActionIndex = (value) => /^[1-9][0-9]*$/.test(String(value ?? ''));
+
+function swapStateOf(detail) {
     const state = detail?.state || detail?.data?.state;
     if (!state || typeof state !== 'object') return null;
-    return { status: String(state.status || ''), expiration: state.expiration ?? null };
+    return {
+        status: String(state.status || ''),
+        expiration: state.expiration ?? null,
+        ...(state.expiry_status != null ? { expiryStatus: state.expiry_status } : {}),
+    };
 }
 
 async function readSwapStates(messaging, candidates) {
@@ -94,10 +118,12 @@ async function readSwapStates(messaging, candidates) {
 export function deriveStatus(item, cancelledKeys, nowSec) {
     if (cancelledKeys.has(item.key)) return 'cancelled';
     if (String(item.row.status || 'valid') !== 'valid') return 'invalid';
-    const swapStatus = String(item.row.swap_status || item.live?.status || '').toLowerCase().trim();
-    if (swapStatus === 'complete') return 'settled';
+    const swapStatus = String(item.live?.status || item.row.swap_status || '').toLowerCase().trim();
+    if (swapStatus === 'complete' || swapStatus === 'filled' || swapStatus === 'settled') return 'settled';
     if (swapStatus === 'cancelled') return 'cancelled';
     if (swapStatus === 'expired') return 'expired';
+    if (item.live?.expiryStatus === 'expired') return 'expired';
+    if (item.live?.expiryStatus != null) return 'open';
     const exp = Number(item.live?.expiration ?? item.row.expiration);
     if (Number.isFinite(exp) && exp > 0 && exp <= nowSec) return 'expired';
     return 'open';
@@ -120,8 +146,23 @@ export function collectCancelledKeys(results) {
 
 function fmtDate(unixSec) {
     const n = Number(unixSec);
-    if (!Number.isFinite(n) || n <= 0) return null;
-    try { return new Date(n * 1000).toLocaleString(); } catch { return null; }
+    // Protocol expirations are Unix seconds. A current millisecond timestamp
+    // otherwise renders as a plausible date tens of thousands of years away.
+    if (!Number.isFinite(n) || n <= 0 || n >= 10_000_000_000) return null;
+    return formatLocalDateTime(n);
+}
+
+export function swapExpiryLabel(unixSec, nowSec) {
+    const absolute = fmtDate(unixSec);
+    if (!absolute) return null;
+    const secondsLeft = Math.floor(Number(unixSec) - Number(nowSec));
+    if (!Number.isFinite(secondsLeft)) return `Expires ${absolute}`;
+    if (secondsLeft <= 0) return `Expired ${absolute}`;
+    const days = Math.floor(secondsLeft / 86400);
+    const countdown = days > 0
+        ? `${days}d ${Math.floor((secondsLeft % 86400) / 3600)}h`
+        : countdownText(secondsLeft);
+    return countdown ? `Expires ${absolute} (${countdown} left)` : `Expires ${absolute}`;
 }
 
 function withFormattedExpiration(confirmAction) {
@@ -149,13 +190,6 @@ function withFormattedExpiration(confirmAction) {
     };
 }
 
-function explorerTxUrl(descriptor, txid) {
-    const base = descriptor?.explorer?.defaultUrl;
-    if (!base || !txid) return null;
-    const code = explorerCoinCode(descriptor);
-    return `${base.replace(/\/$/, '')}${code ? `/${code}` : ''}/tx/${txid}`;
-}
-
 /**
  * @param {object} props
  * @param {string} props.walletId
@@ -166,7 +200,6 @@ function explorerTxUrl(descriptor, txid) {
 export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [items, setItems] = useState(/** @type {any[] | null} */ (null));
     const [byChain, setByChain] = useState(/** @type {Record<string, any[]>} */ ({}));
@@ -175,6 +208,7 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
     // PC-21: which swap's lifecycle timeline is expanded inline (by row key).
     const [timelineKey, setTimelineKey] = useState(/** @type {string | null} */ (null));
     const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000));
+    const loadRequestId = useRef(0);
 
     useEffect(() => {
         const t = setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 30000);
@@ -182,23 +216,28 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
     }, []);
 
     const load = useCallback(async () => {
+        const requestId = ++loadRequestId.current;
         if (typeof messaging?.getAddressesByChain !== 'function'
             || typeof messaging?.getSwapsForAddress !== 'function') {
             setItems([]); return;
         }
+        setItems(null);
+        setLoadError(null);
         try {
             const chains = (await messaging.getAddressesByChain(walletId, accountId)) || {};
+            if (requestId !== loadRequestId.current) return;
             setByChain(chains);
             const pairs = [];
             for (const [chainId, addrs] of Object.entries(chains)) {
                 for (const a of addrs || []) pairs.push({ chainId, owner: a });
             }
             const results = await Promise.all(pairs.map((p) => Promise.all([
-                messaging.getSwapsForAddress({ chainId: p.chainId, address: p.owner.address }).catch(() => null),
+                messaging.getSwapsForAddress({ chainId: p.chainId, address: p.owner.address }),
                 (typeof messaging.getSwapCancelsForAddress === 'function'
-                    ? messaging.getSwapCancelsForAddress({ chainId: p.chainId, address: p.owner.address }).catch(() => null)
+                    ? messaging.getSwapCancelsForAddress({ chainId: p.chainId, address: p.owner.address })
                     : Promise.resolve(null)),
             ]).then(([s, c]) => ({ p, swaps: extractRows(s), cancels: extractRows(c) }))));
+            if (requestId !== loadRequestId.current) return;
 
             const cancelledKeys = collectCancelledKeys(results);
             const seen = new Set();
@@ -216,26 +255,40 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
             const candidates = all.filter((it) => !cancelledKeys.has(it.key)
                 && String(it.row.status || 'valid') === 'valid');
             const states = await readSwapStates(messaging, candidates);
+            if (requestId !== loadRequestId.current) return;
             setItems(all.map((it) => ({ ...it, cancelledKeys, live: states.get(it.key) || null })));
             setLoadError(null);
-        } catch (err) {
-            setLoadError(err?.message || 'Failed to load swaps.');
+        } catch {
+            if (requestId !== loadRequestId.current) return;
+            setLoadError('Could not load your swaps. Try again.');
             setItems([]);
         }
     }, [messaging, walletId, accountId]);
 
-    useEffect(() => { load(); }, [load]);
+    useEffect(() => {
+        load();
+        return () => { loadRequestId.current += 1; };
+    }, [load]);
 
     const header = (
         <PageHeader
             onBack={onBack}
             title="My swaps"
-            action={onCreateSwap ? <Button variant="secondary" size="sm" onClick={onCreateSwap}>New swap</Button> : undefined}
+            trailing={onCreateSwap ? (
+                <Button
+                    variant="secondary"
+                    size="sm"
+                    icon={<Icon.PlusIcon />}
+                    onClick={onCreateSwap}
+                    aria-label="New swap"
+                    title="New swap"
+                />
+            ) : undefined}
         />
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            <div className={isFull ? L.wrapFull : L.wrapPopup}>{children}</div>
+            <ListPage>{children}</ListPage>
         </Screen>
     );
 
@@ -254,15 +307,32 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
         );
     }
 
-    if (items === null) return wrap(<p className={L.hint}>Loading your swaps…</p>);
-    if (loadError) return wrap(<StatusMessage variant="error" className={L.hint}>{loadError}</StatusMessage>);
+    if (items === null) {
+        return wrap(
+            <div role="status" aria-label="Loading swaps">
+                <Skeleton.List rows={5} />
+            </div>,
+        );
+    }
+    if (loadError) {
+        return wrap(
+            <StatusMessage
+                variant="error"
+                className={L.hint}
+                recovery={{ label: 'Try again', onAction: load }}
+            >
+                {loadError}
+            </StatusMessage>,
+        );
+    }
     if (items.length === 0) {
         return wrap(
-            <div className={L.empty}>
-                <p className={L.emptyTitle}>No swaps yet</p>
-                <p className={L.hint}>Atomic token swaps you offer show up here across every pair.</p>
-                {onCreateSwap ? <div className={F.actions}><Button variant="primary" onClick={onCreateSwap}>Create a swap</Button></div> : null}
-            </div>,
+            <EmptyState
+                title="No swaps yet"
+                body="Atomic token swaps you offer show up here across every pair."
+                actionLabel={onCreateSwap ? 'Create a swap' : undefined}
+                onAction={onCreateSwap}
+            />,
         );
     }
 
@@ -274,30 +344,43 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
         const descriptor = chainRegistry.get(it.chainId);
         const give = sideLabel(it.row.give_tick, it.row.give_coin, it.row.give_amount, it.row.give_ownership);
         const get = sideLabel(it.row.get_tick, it.row.get_coin, it.row.get_amount, it.row.get_ownership);
-        const expText = fmtDate(it.live?.expiration ?? it.row.expiration);
+        const expText = swapExpiryLabel(it.live?.expiration ?? it.row.expiration, nowSec);
         const allowList = boundListIndex(it.row.allow_list ?? it.row.allowList);
         const blockList = boundListIndex(it.row.block_list ?? it.row.blockList);
-        const chip = status === 'open'
-            ? <span className={`${L.chip} ${L.chipOpen}`}>Open</span>
-            : <span className={`${L.chip} ${L.chipExpired}`}>{CLOSED_LABELS[status] || 'Invalid'}</span>;
+        const statusLabel = status === 'open' ? 'Open' : (CLOSED_LABELS[status] || 'Invalid');
+        const chip = (
+            <span
+                className={`${L.chip} ${status === 'open' ? L.chipOpen : L.chipExpired} ${S.statusBadge}`}
+                aria-label={`Status: ${statusLabel}`}
+            >
+                {statusLabel}
+            </span>
+        );
         return (
             <li key={it.key} className={L.row}>
                 <div className={L.rowMain}>
-                    <div className={L.rowHead}>
-                        <span className={L.rowTitle}>Give {give} → get {get}</span>
+                    <div className={`${L.rowHead} ${S.rowHead}`}>
+                        <span className={`${L.rowTitle} ${S.amounts}`} aria-label={`Give ${give}; get ${get}`}>
+                            <span className={S.side}><span className={S.sideLabel}>Give</span> {give}</span>
+                            <span className={S.side}><span className={S.sideLabel}>Get</span> {get}</span>
+                        </span>
                         {chip}
                     </div>
-                    <div className={L.rowMeta}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : it.chainId}
-                        {' · #'}{it.row.action_index}
-                        {' · '}<AddressText address={it.owner.address} />
+                    <div className={`${L.rowMeta} ${S.rowMeta}`}>
+                        {descriptor ? (
+                            <span className={S.metaItem}>
+                                <ChainBadge descriptor={descriptor} size="sm" showName={false} />
+                            </span>
+                        ) : null}
+                        <span className={S.metaItem}>#{it.row.action_index}</span>
+                        <span className={S.metaItem}><AddressText address={it.owner.address} /></span>
                     </div>
-                    {expText ? <div className={L.rowDetail}>Expires {expText}</div> : null}
+                    {expText ? <div className={L.rowDetail}>{expText}</div> : null}
                     <div className={L.rowDetail}>
                         Allow list {allowList ? `#${allowList}` : 'none'} · Block list {blockList ? `#${blockList}` : 'none'}
                     </div>
                 </div>
-                <div className={L.rowActions}>
+                <div className={`${L.rowActions} ${S.rowActions}`}>
                     <Button
                         variant="secondary"
                         size="sm"
@@ -330,13 +413,18 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
     return wrap(
         <>
             {openItems.length > 0 ? (
-                <ul className={L.list} role="list" aria-label="Open swaps">{openItems.map(renderRow)}</ul>
-            ) : <p className={L.hint}>No open swaps.</p>}
+                <section>
+                    <SectionHeader title="Open" />
+                    {/* Safari needs an explicit list role because this class removes list styling. */}
+                    <ul className={L.list} role="list" aria-label="Open swaps">{openItems.map(renderRow)}</ul>
+                </section>
+            ) : <EmptyState title="No open swaps" body="Open atomic swaps appear here." titleAs="p" />}
             {closedItems.length > 0 ? (
-                <>
-                    <p className={L.sectionLabel}>Closed</p>
+                <section>
+                    <SectionHeader title="Closed" />
+                    {/* Safari needs an explicit list role because this class removes list styling. */}
                     <ul className={L.list} role="list" aria-label="Closed swaps">{closedItems.map(renderRow)}</ul>
-                </>
+                </section>
             ) : null}
         </>,
     );
@@ -351,6 +439,7 @@ export function MySwapsView({ walletId, accountId, onBack, onCreateSwap }) {
  */
 function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messaging, onDone, onBack }) {
     const { chainId, owner, row } = item;
+    const { settings } = useSettings();
     const descriptor = chainRegistry.get(chainId);
     const isCancel = type === 'cancel';
     const currentAllowList = boundListIndex(row.allow_list ?? row.allowList);
@@ -387,10 +476,32 @@ function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messag
     }, [expInput, allowListIdx, blockListIdx]);
 
     const editHasChange = Object.keys(editParams).length > 0;
+    const actionIndexError = isPositiveActionIndex(row.action_index)
+        ? null
+        : 'This swap has an invalid action ID and cannot be changed.';
+    const editValidationError = useMemo(() => {
+        if (isCancel) return null;
+        if (expInput.trim()) {
+            const ms = Date.parse(expInput.trim());
+            if (!Number.isFinite(ms)) return 'Expiration must be a valid date and time.';
+            if (Math.floor(ms / 1000) <= Math.floor(Date.now() / 1000)) {
+                return 'Expiration must be a future date and time.';
+            }
+        }
+        if (allowListIdx && allowListIdx !== '0' && !isPositiveActionIndex(allowListIdx)) {
+            return 'Allow-list ID must be a positive whole number.';
+        }
+        if (blockListIdx && blockListIdx !== '0' && !isPositiveActionIndex(blockListIdx)) {
+            return 'Block-list ID must be a positive whole number.';
+        }
+        return null;
+    }, [isCancel, expInput, allowListIdx, blockListIdx]);
+    const validationError = actionIndexError || editValidationError;
 
     async function submit(event) {
         event.preventDefault();
         if (submitting || lane.composing) return;
+        if (validationError) { setError(validationError); return; }
         if (type === 'edit') {
             if (!editHasChange) { setError('Change at least one field (expiration, allow-list, or block-list).'); return; }
             if (editParams.EXPIRATION && Number(editParams.EXPIRATION) <= Math.floor(Date.now() / 1000)) {
@@ -404,6 +515,44 @@ function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messag
             ? { VERSION: '1', SWAP_ACTION_INDEX: idx }
             : { VERSION: '2', SWAP_ACTION_INDEX: idx, ...editParams };
         try {
+            let freshCancelledKeys = item.cancelledKeys || new Set();
+            if (typeof messaging.getSwapCancelsForAddress === 'function') {
+                try {
+                    const response = await messaging.getSwapCancelsForAddress({ chainId, address: owner.address });
+                    freshCancelledKeys = collectCancelledKeys([{
+                        p: { chainId, owner },
+                        cancels: extractRows(response),
+                    }]);
+                } catch {
+                    setError('Could not refresh this swap. Try again.');
+                    return;
+                }
+            }
+            if (typeof messaging.getSwapDetail === 'function') {
+                let freshDetail;
+                try {
+                    freshDetail = await messaging.getSwapDetail({ chainId, actionIndex: idx });
+                } catch {
+                    setError('Could not refresh this swap. Try again.');
+                    return;
+                }
+                const freshState = swapStateOf(freshDetail);
+                if (freshState) {
+                    const status = deriveStatus(
+                        { ...item, live: freshState },
+                        freshCancelledKeys,
+                        Math.floor(Date.now() / 1000),
+                    );
+                    if (status !== 'open') {
+                        setError('This swap is no longer open. Refresh My swaps and try again.');
+                        return;
+                    }
+                }
+            }
+            if (freshCancelledKeys.has(item.key)) {
+                setError('This swap is no longer open. Refresh My swaps and try again.');
+                return;
+            }
             const res = await lane.run({
                 actionData: { action: 'SWAP', params },
                 encoderOpts: nativeFee.flag ? { payFeeInNativeCoin: true } : {},
@@ -424,10 +573,9 @@ function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messag
     }
 
     const header = <PageHeader onBack={done ? onDone : onBack} title={isCancel ? 'Cancel swap' : 'Edit swap'} />;
-    const isFull = variant === 'full';
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={F.card}>{children}</div> : children}
+            {children}
         </Screen>
     );
 
@@ -464,7 +612,12 @@ function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messag
 
     if (done) {
         const txid = result.txid || result.broadcast?.txid;
-        const explorerUrl = explorerTxUrl(descriptor, txid);
+        const explorerUrl = explorerPageUrl({
+            chainId,
+            kind: 'transaction',
+            value: txid,
+            settings,
+        });
         // Signed but not broadcast yet: nothing changed on chain, so no success copy.
         if (result.queued) {
             return wrap(
@@ -503,14 +656,40 @@ function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messag
     }
 
     return wrap(
-        <form onSubmit={submit} noValidate>
-            <p className={F.summary}>
-                Give {sideLabel(row.give_tick, row.give_coin, row.give_amount, row.give_ownership)} → get{' '}
-                {sideLabel(row.get_tick, row.get_coin, row.get_amount, row.get_ownership)}
+        <FormPage
+            label={isCancel ? 'Cancel swap' : 'Edit swap'}
+            onSubmit={submit}
+            status={validationError || error ? (
+                <StatusMessage variant="error" className={F.error}>{validationError || error}</StatusMessage>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant={isCancel ? 'danger' : 'primary'}
+                    loading={submitting || lane.composing}
+                    disabled={submitting || lane.composing || !!validationError || (type === 'edit' && !editHasChange)}
+                >
+                    {lane.isWatcherMode ? 'Create unsigned transaction' : (isCancel ? 'Cancel swap' : 'Edit swap')}
+                </Button>
+            )}
+        >
+            <p className={`${F.summary} ${S.detailAmounts}`} aria-label="Swap amounts">
+                <span className={S.side}>
+                    <span className={S.sideLabel}>Give</span>{' '}
+                    {sideLabel(row.give_tick, row.give_coin, row.give_amount, row.give_ownership)}
+                </span>
+                <span className={S.side}>
+                    <span className={S.sideLabel}>Get</span>{' '}
+                    {sideLabel(row.get_tick, row.get_coin, row.get_amount, row.get_ownership)}
+                </span>
             </p>
             <dl className={F.detailsList}>
-                <dt className={F.detailsLabel}>Chain</dt>
-                <dd className={F.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
+                {descriptor ? (
+                    <>
+                        <dt className={F.detailsLabel}>Chain</dt>
+                        <dd className={F.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
+                    </>
+                ) : null}
                 <dt className={F.detailsLabel}>Swap</dt>
                 <dd className={F.detailsValue}>#{row.action_index}</dd>
                 <dt className={F.detailsLabel}>From</dt>
@@ -556,18 +735,6 @@ function SwapActionPanel({ type, item, chainAddresses, variant, walletId, messag
                     Signer-mode wallet, then broadcast from a Full-mode wallet.
                 </p>
             ) : null}
-            {error ? <StatusMessage variant="error" className={F.error}>{error}</StatusMessage> : null}
-
-            <div className={F.actions}>
-                <Button
-                    type="submit"
-                    variant={isCancel ? 'danger' : 'primary'}
-                    loading={submitting || lane.composing}
-                    disabled={submitting || lane.composing || (type === 'edit' && !editHasChange)}
-                >
-                    {lane.isWatcherMode ? 'Create unsigned transaction' : (isCancel ? 'Cancel swap' : 'Edit swap')}
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }

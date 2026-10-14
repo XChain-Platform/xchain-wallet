@@ -20,14 +20,15 @@
 // action-VALIDITY status, and a single order's getAction(...).state.status
 // does NOT promptly reflect a cancel, so "cancelled" is read from the
 // authoritative + immediate order_cancels table (getOrderCancelsForAddress)
-// and "expired" from the order's own EXPIRATION vs wall clock. Neither
-// feed carries fills, so every order those two leave open is read once
+// and "expired" from the order's own EXPIRATION vs the current indexed
+// chain clock. Neither feed carries fills, so every order those two leave
+// open is read once
 // through orders.detail, whose `state` block nets settled matches out of
-// give_remaining and reports `complete` once the order is fully filled.
+// give_remaining and reports `complete` or `filled` once the order is fully filled.
 // Cancel/edit are offered only while an order is open.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AddressText, Button, ChainBadge, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AddressText, Button, ChainBadge, EmptyState, FormPage, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
@@ -43,11 +44,16 @@ import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { boundListIndex } from '../../flows/accessListSlots.js';
 import { isListEditRemoveActive } from '../../flows/protocolActivations.js';
-import { explorerCoinCode } from '../../registry/coinTicker.js';
+import { useSettings } from '../hooks/useSettings.js';
+import { explorerPageUrl } from '../utils/explorerLinks.js';
+import { formatLocalDateTime } from '../utils/dateTime.js';
 import L from './ObligationsView.module.css';
 import F from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const isCanonicalActionIndex = (value, { allowZero = false } = {}) => (
+    allowZero ? /^(?:0|[1-9]\d*)$/ : /^[1-9]\d*$/
+).test(String(value ?? '').trim());
 
 function extractRows(resp) {
     if (!resp) return [];
@@ -61,9 +67,16 @@ function extractRows(resp) {
 // A side's human label: ownership, a token amount, or a native-coin amount
 // (empty tick = the chain's native coin).
 function sideLabel(tick, coin, amount, ownership) {
-    if (Number(ownership) === 1) return `ownership of ${tick || '?'}`;
-    const unit = tick || coin || '';
-    return `${amount ?? ''} ${unit}`.trim();
+    if (Number(ownership) === 1) return `ownership of ${detailText(tick)}`;
+    const amountText = detailText(amount);
+    const unitText = detailText(tick || coin);
+    return amountText === '-' && unitText === '-' ? '-' : `${amountText} ${unitText}`;
+}
+
+function detailText(value) {
+    if (value == null || value === '' || (typeof value === 'number' && !Number.isFinite(value))) return '-';
+    const text = String(value).trim();
+    return !text || /^(?:undefined|null|nan)$/i.test(text) ? '-' : text;
 }
 
 function isNativeGive(row) {
@@ -76,16 +89,19 @@ const FILL_READ_CONCURRENCY = 6;
 
 const CLOSED_LABELS = Object.freeze({
     filled: 'Filled',
+    cancelling: 'Cancelling',
     cancelled: 'Cancelled',
+    expiring: 'Expiring',
     expired: 'Expired',
     invalid: 'Invalid',
 });
 
 // The lifecycle half of an order detail. `state.status` is the indexer's
 // latest order status (open / cancelling / cancelled / expiring / expired /
-// complete) and `state.give_remaining` is the give amount net of settled
+// complete / filled) and `state.give_remaining` is the give amount net of settled
 // matches, zeroed once the order is terminal. Null when the detail lacks
-// the block, so the caller falls back to the feeds alone.
+// the block, so the caller falls back to the feeds alone. The optional
+// expiry_status records the chain-clock classification from the query flow.
 export function fillStateOf(detail) {
     const state = detail && typeof detail === 'object' ? detail.state : null;
     if (!state || typeof state !== 'object') return null;
@@ -93,6 +109,7 @@ export function fillStateOf(detail) {
         status: String(state.status || ''),
         giveRemaining: state.give_remaining ?? null,
         expiration: state.expiration ?? null,
+        ...(state.expiry_status != null ? { expiryStatus: state.expiry_status } : {}),
     };
 }
 
@@ -101,11 +118,15 @@ export function deriveStatus(item, cancelledKeys, nowSec) {
     if (String(item.row.status || 'valid') !== 'valid') return 'invalid';
     const fill = item.fill;
     if (fill) {
-        if (fill.status === 'complete') return 'filled';
+        if (fill.status === 'complete' || fill.status === 'filled') return 'filled';
+        if (fill.status === 'cancelling') return 'cancelling';
         if (fill.status === 'cancelled') return 'cancelled';
+        if (fill.status === 'expiring') return 'expiring';
         if (fill.status === 'expired') return 'expired';
         const remaining = compareDecimalStrings(fill.giveRemaining, '0');
         if (fill.status === 'open' && remaining !== null && remaining <= 0) return 'filled';
+        if (fill.expiryStatus === 'expired') return 'expired';
+        if (fill.expiryStatus != null) return 'open';
     }
     const exp = Number(fill?.expiration ?? item.row.expiration);
     if (Number.isFinite(exp) && exp > 0 && exp <= nowSec) return 'expired';
@@ -144,8 +165,10 @@ async function readFillStates(messaging, candidates) {
 
 function fmtDate(unixSec) {
     const n = Number(unixSec);
-    if (!Number.isFinite(n) || n <= 0) return null;
-    try { return new Date(n * 1000).toLocaleString(); } catch { return null; }
+    // Protocol expirations are Unix seconds. A current millisecond timestamp
+    // otherwise renders as a plausible date tens of thousands of years away.
+    if (!Number.isFinite(n) || n <= 0 || n >= 10_000_000_000) return null;
+    return formatLocalDateTime(n);
 }
 
 function withFormattedExpiration(confirmAction) {
@@ -173,13 +196,6 @@ function withFormattedExpiration(confirmAction) {
     };
 }
 
-function explorerTxUrl(descriptor, txid) {
-    const base = descriptor?.explorer?.defaultUrl;
-    if (!base || !txid) return null;
-    const code = explorerCoinCode(descriptor);
-    return `${base.replace(/\/$/, '')}${code ? `/${code}` : ''}/tx/${txid}`;
-}
-
 /**
  * @param {object} props
  * @param {string} props.walletId
@@ -190,40 +206,57 @@ function explorerTxUrl(descriptor, txid) {
 export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [items, setItems] = useState(/** @type {any[] | null} */ (null));
     const [byChain, setByChain] = useState(/** @type {Record<string, any[]>} */ ({}));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [autopayByKey, setAutopayByKey] = useState(/** @type {Map<string, any>} */ (new Map()));
     const [activeAction, setActiveAction] = useState(/** @type {{ type: 'cancel' | 'edit', item: any } | null} */ (null));
+    const [cancellingKeys, setCancellingKeys] = useState(/** @type {Set<string>} */ (new Set()));
     // PC-21: which order's lifecycle timeline is expanded inline (by row key).
     const [timelineKey, setTimelineKey] = useState(/** @type {string | null} */ (null));
     const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000));
+    const loadRequestId = useRef(0);
+    const autopayRequestId = useRef(0);
 
     useEffect(() => {
-        const t = setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 30000);
+        const current = Math.floor(Date.now() / 1000);
+        setNowSec(current);
+        const hasLiveExpiration = () => (items || []).some((item) => {
+            const expiration = Number(item.fill?.expiration ?? item.row?.expiration);
+            return Number.isFinite(expiration) && expiration > Math.floor(Date.now() / 1000);
+        });
+        if (!hasLiveExpiration()) return undefined;
+        const t = setInterval(() => {
+            setNowSec(Math.floor(Date.now() / 1000));
+            if (!hasLiveExpiration()) clearInterval(t);
+        }, 30000);
         return () => clearInterval(t);
-    }, []);
+    }, [items]);
 
     const load = useCallback(async () => {
+        const requestId = ++loadRequestId.current;
         if (typeof messaging?.getAddressesByChain !== 'function'
             || typeof messaging?.getOrdersForAddress !== 'function') {
             setItems([]); return;
         }
+        setItems(null);
+        setLoadError(null);
         try {
             const chains = (await messaging.getAddressesByChain(walletId, accountId)) || {};
+            if (requestId !== loadRequestId.current) return;
             setByChain(chains);
             const pairs = [];
             for (const [chainId, addrs] of Object.entries(chains)) {
                 for (const a of addrs || []) pairs.push({ chainId, owner: a });
             }
             const results = await Promise.all(pairs.map((p) => Promise.all([
-                messaging.getOrdersForAddress({ chainId: p.chainId, address: p.owner.address }).catch(() => null),
+                messaging.getOrdersForAddress({ chainId: p.chainId, address: p.owner.address }),
                 (typeof messaging.getOrderCancelsForAddress === 'function'
-                    ? messaging.getOrderCancelsForAddress({ chainId: p.chainId, address: p.owner.address }).catch(() => null)
+                    ? messaging.getOrderCancelsForAddress({ chainId: p.chainId, address: p.owner.address })
                     : Promise.resolve(null)),
             ]).then(([o, c]) => ({ p, orders: extractRows(o), cancels: extractRows(c) }))));
+            if (requestId !== loadRequestId.current) return;
 
             // The cancels feed also lists rejected ORDER_CANCEL attempts (a
             // cancel sent against a filled order is recorded as invalid), and
@@ -255,21 +288,25 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
             const candidates = all.filter((it) => !cancelledKeys.has(it.key)
                 && String(it.row.status || 'valid') === 'valid');
             const fills = await readFillStates(messaging, candidates);
+            if (requestId !== loadRequestId.current) return;
             setItems(all.map((it) => ({ ...it, cancelledKeys, fill: fills.get(it.key) || null })));
             setLoadError(null);
-        } catch (err) {
-            setLoadError(err?.message || 'Failed to load orders.');
+        } catch {
+            if (requestId !== loadRequestId.current) return;
+            setLoadError('Could not load your orders. Try again.');
             setItems([]);
         }
     }, [messaging, walletId, accountId]);
 
     const loadAutopay = useCallback(async () => {
+        const requestId = ++autopayRequestId.current;
         if (typeof messaging?.listAutopayOrders !== 'function') return;
         try {
             if (typeof messaging.resolveAutopayIndexes === 'function') {
                 await messaging.resolveAutopayIndexes({ walletId }).catch(() => {});
             }
             const records = await messaging.listAutopayOrders({ walletId });
+            if (requestId !== autopayRequestId.current) return;
             const map = new Map();
             for (const rec of records || []) {
                 if (rec?.orderActionIndex != null) {
@@ -280,7 +317,14 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
         } catch { /* toggle is best-effort UI */ }
     }, [messaging, walletId]);
 
-    useEffect(() => { load(); loadAutopay(); }, [load, loadAutopay]);
+    useEffect(() => {
+        load();
+        loadAutopay();
+        return () => {
+            loadRequestId.current += 1;
+            autopayRequestId.current += 1;
+        };
+    }, [load, loadAutopay]);
 
     async function handleAutopayToggle(record) {
         if (typeof messaging?.setAutopayEnabled !== 'function') return;
@@ -292,12 +336,21 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
         <PageHeader
             onBack={onBack}
             title="My orders"
-            action={onCreateOrder ? <Button variant="secondary" size="sm" onClick={onCreateOrder}>New order</Button> : undefined}
+            trailing={onCreateOrder ? (
+                <Button
+                    variant="secondary"
+                    size="sm"
+                    icon={<Icon.PlusIcon />}
+                    onClick={onCreateOrder}
+                    aria-label="New order"
+                    title="New order"
+                />
+            ) : undefined}
         />
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            <div className={isFull ? L.wrapFull : L.wrapPopup}>{children}</div>
+            <ListPage>{children}</ListPage>
         </Screen>
     );
 
@@ -311,28 +364,54 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
                 walletId={walletId}
                 messaging={messaging}
                 onDone={() => { setActiveAction(null); load(); loadAutopay(); }}
+                onCancelBroadcast={() => setCancellingKeys((current) => {
+                    const next = new Set(current);
+                    next.add(activeAction.item.key);
+                    return next;
+                })}
                 onBack={() => setActiveAction(null)}
             />
         );
     }
 
-    if (items === null) return wrap(<p className={L.hint}>Loading your orders…</p>);
-    if (loadError) return wrap(<StatusMessage variant="error" className={L.hint}>{loadError}</StatusMessage>);
-    if (items.length === 0) {
+    if (items === null) {
         return wrap(
-            <div className={L.empty}>
-                <p className={L.emptyTitle}>No orders yet</p>
-                <p className={L.hint}>Orders you place on the DEX show up here across every pair.</p>
-                {onCreateOrder ? <div className={F.actions}><Button variant="primary" onClick={onCreateOrder}>Create an order</Button></div> : null}
+            <div role="status" aria-label="Loading orders">
+                <Skeleton.List rows={5} />
             </div>,
         );
     }
+    if (loadError) {
+        return wrap(
+            <StatusMessage
+                variant="error"
+                className={L.hint}
+                recovery={{ label: 'Try again', onAction: load }}
+            >
+                {loadError}
+            </StatusMessage>,
+        );
+    }
+    if (items.length === 0) {
+        return wrap(
+            <EmptyState
+                title="No orders yet"
+                body="Orders you place on the DEX show up here across every pair."
+                actionLabel={onCreateOrder ? 'Create an order' : undefined}
+                onAction={onCreateOrder}
+            />,
+        );
+    }
 
-    const openItems = items.filter((it) => deriveStatus(it, it.cancelledKeys, nowSec) === 'open');
-    const closedItems = items.filter((it) => deriveStatus(it, it.cancelledKeys, nowSec) !== 'open');
+    const statusOf = (it) => {
+        const status = deriveStatus(it, it.cancelledKeys, nowSec);
+        return status === 'open' && cancellingKeys.has(it.key) ? 'cancelling' : status;
+    };
+    const openItems = items.filter((it) => statusOf(it) === 'open');
+    const closedItems = items.filter((it) => statusOf(it) !== 'open');
 
     const renderRow = (it) => {
-        const status = deriveStatus(it, it.cancelledKeys, nowSec);
+        const status = statusOf(it);
         const descriptor = chainRegistry.get(it.chainId);
         const give = sideLabel(it.row.give_tick, it.row.give_coin, it.row.give_amount, it.row.give_ownership);
         const get = sideLabel(it.row.get_tick, it.row.get_coin, it.row.get_amount, it.row.get_ownership);
@@ -352,8 +431,10 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
                         {chip}
                     </div>
                     <div className={L.rowMeta}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : it.chainId}
-                        {' · #'}{it.row.action_index}
+                        {descriptor ? (
+                            <><ChainBadge descriptor={descriptor} size="sm" showName={false} /> {'· '}</>
+                        ) : null}
+                        {'#'}{detailText(it.row.action_index)}
                         {' · '}<AddressText address={it.owner.address} />
                     </div>
                     {remaining ? <div className={L.rowDetail}>Remaining {remaining} of {give}</div> : null}
@@ -362,10 +443,11 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
                         Allow list {allowList ? `#${allowList}` : 'none'} · Block list {blockList ? `#${blockList}` : 'none'}
                     </div>
                     {consent && isNativeGive(it.row) ? (
-                        <label className={F.checkRow}>
-                            <input type="checkbox" checked={consent.autopay === true} onChange={() => handleAutopayToggle(consent)} />
-                            {' '}CoinPay auto-pay {consent.autopay === true ? 'on' : 'off (notify-only)'}
-                        </label>
+                        <Switch
+                            label={`CoinPay auto-pay ${consent.autopay === true ? 'on' : 'off (notify-only)'}`}
+                            checked={consent.autopay === true}
+                            onChange={() => handleAutopayToggle(consent)}
+                        />
                     ) : null}
                 </div>
                 <div className={L.rowActions}>
@@ -400,12 +482,15 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
 
     return wrap(
         <>
+            <SectionHeader title="Open" />
             {openItems.length > 0 ? (
+                /* Safari needs an explicit list role because this class removes list styling. */
                 <ul className={L.list} role="list" aria-label="Open orders">{openItems.map(renderRow)}</ul>
-            ) : <p className={L.hint}>No open orders.</p>}
+            ) : <EmptyState title="No open orders" body="Open DEX orders appear here." titleAs="p" />}
             {closedItems.length > 0 ? (
                 <>
-                    <p className={L.sectionLabel}>Closed</p>
+                    <SectionHeader title="Closed" />
+                    {/* Safari needs an explicit list role because this class removes list styling. */}
                     <ul className={L.list} role="list" aria-label="Closed orders">{closedItems.map(renderRow)}</ul>
                 </>
             ) : null}
@@ -419,8 +504,11 @@ export function MyOrdersView({ walletId, accountId, onBack, onCreateOrder }) {
  * confirm page with its network pre-flight, or, in watcher mode, the form
  * builds an unsigned transaction.
  */
-function OrderActionPanel({ type, item, chainAddresses, variant, walletId, messaging, onDone, onBack }) {
+function OrderActionPanel({
+    type, item, chainAddresses, variant, walletId, messaging, onDone, onCancelBroadcast, onBack,
+}) {
     const { chainId, owner, row } = item;
+    const { settings } = useSettings();
     const descriptor = chainRegistry.get(chainId);
     const isCancel = type === 'cancel';
     const currentAllowList = boundListIndex(row.allow_list ?? row.allowList);
@@ -467,15 +555,24 @@ function OrderActionPanel({ type, item, chainAddresses, variant, walletId, messa
     async function submit(event) {
         event.preventDefault();
         if (submitting || lane.composing) return;
+        const orderActionIndex = String(row.action_index ?? '').trim();
+        if (!isCanonicalActionIndex(orderActionIndex)) {
+            setError('Order ID must be a positive whole number.'); return;
+        }
         if (type === 'edit') {
             if (!editHasChange) { setError('Change at least one field (expiration, allow-list, or block-list).'); return; }
             if (editParams.EXPIRATION && Number(editParams.EXPIRATION) <= Math.floor(Date.now() / 1000)) {
                 setError('Expiration must be a future date and time.'); return;
             }
+            if (allowListIdx && !isCanonicalActionIndex(allowListIdx, { allowZero: true })) {
+                setError('Allow-list ID must be a whole number.'); return;
+            }
+            if (blockListIdx && !isCanonicalActionIndex(blockListIdx, { allowZero: true })) {
+                setError('Block-list ID must be a whole number.'); return;
+            }
         }
         setSubmitting(true);
         setError(null);
-        const orderActionIndex = String(row.action_index);
         // The wire params the confirm page composes and previews; the signing
         // flow rebuilds the same set from `orderActionIndex` and `params`.
         const params = isCancel
@@ -487,13 +584,15 @@ function OrderActionPanel({ type, item, chainAddresses, variant, walletId, messa
                 encoderOpts: nativeFee.flag ? { payFeeInNativeCoin: true } : {},
                 submitExtra: isCancel ? { orderActionIndex } : { orderActionIndex, params: editParams },
             });
+            const txid = res?.txid || res?.broadcast?.txid;
+            if (isCancel && txid && typeof onCancelBroadcast === 'function') onCancelBroadcast();
             setResult(res || {});
         } catch (err) {
             if (!isUserRejection(err)) {
                 setError(err?.name === 'InvalidPasswordError' ? 'Incorrect password.' : submitFailureMessage(err, {
                     chainId,
                     mandatory: nativeFee.mandatory,
-                    fallback: err?.message || `${isCancel ? 'Cancel' : 'Edit'} failed.`,
+                    fallback: `Could not ${isCancel ? 'cancel' : 'edit'} the order. Try again.`,
                 }));
             }
         } finally {
@@ -502,10 +601,9 @@ function OrderActionPanel({ type, item, chainAddresses, variant, walletId, messa
     }
 
     const header = <PageHeader onBack={done ? onDone : onBack} title={isCancel ? 'Cancel order' : 'Edit order'} />;
-    const isFull = variant === 'full';
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={F.card}>{children}</div> : children}
+            {children}
         </Screen>
     );
 
@@ -533,7 +631,7 @@ function OrderActionPanel({ type, item, chainAddresses, variant, walletId, messa
                 {...lane.confirmProps}
                 confirmAction={withFormattedExpiration(lane.confirmProps.confirmAction)}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={null}
                 signerReady={signerReady}
                 hintClassName={F.hint}
             />
@@ -542,7 +640,12 @@ function OrderActionPanel({ type, item, chainAddresses, variant, walletId, messa
 
     if (done) {
         const txid = result.txid || result.broadcast?.txid;
-        const explorerUrl = explorerTxUrl(descriptor, txid);
+        const explorerUrl = explorerPageUrl({
+            chainId,
+            kind: 'transaction',
+            value: txid,
+            settings,
+        });
         // Signed but not broadcast yet: nothing changed on chain, so no success copy.
         if (result.queued) {
             return wrap(
@@ -581,16 +684,29 @@ function OrderActionPanel({ type, item, chainAddresses, variant, walletId, messa
     }
 
     return wrap(
-        <form onSubmit={submit} noValidate>
+        <FormPage
+            label={isCancel ? 'Cancel order' : 'Edit order'}
+            onSubmit={submit}
+            actions={(
+                <Button
+                    type="submit"
+                    variant={isCancel ? 'danger' : 'primary'}
+                    loading={submitting || lane.composing}
+                    disabled={submitting || lane.composing}
+                >
+                    {lane.isWatcherMode ? 'Create unsigned transaction' : (isCancel ? 'Cancel order' : 'Edit order')}
+                </Button>
+            )}
+        >
             <p className={F.summary}>
                 Give {sideLabel(row.give_tick, row.give_coin, row.give_amount, row.give_ownership)} → get{' '}
                 {sideLabel(row.get_tick, row.get_coin, row.get_amount, row.get_ownership)}
             </p>
             <dl className={F.detailsList}>
                 <dt className={F.detailsLabel}>Chain</dt>
-                <dd className={F.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
+                <dd className={F.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected chain'}</dd>
                 <dt className={F.detailsLabel}>Order</dt>
-                <dd className={F.detailsValue}>#{row.action_index}</dd>
+                <dd className={F.detailsValue}>#{detailText(row.action_index)}</dd>
                 <dt className={F.detailsLabel}>From</dt>
                 <dd className={F.detailsValue}><AddressText address={owner.address} /></dd>
             </dl>
@@ -640,16 +756,6 @@ function OrderActionPanel({ type, item, chainAddresses, variant, walletId, messa
             ) : null}
             {error ? <StatusMessage variant="error" className={F.error}>{error}</StatusMessage> : null}
 
-            <div className={F.actions}>
-                <Button
-                    type="submit"
-                    variant={isCancel ? 'danger' : 'primary'}
-                    loading={submitting || lane.composing}
-                    disabled={submitting || lane.composing || (type === 'edit' && !editHasChange)}
-                >
-                    {lane.isWatcherMode ? 'Create unsigned transaction' : (isCancel ? 'Cancel order' : 'Edit order')}
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }

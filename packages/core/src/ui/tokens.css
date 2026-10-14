@@ -10,6 +10,25 @@
  *     import '@xchain-wallet/core/ui/tokens.css';
  */
 
+/* The fallback paints immediately while Inter loads. Its overrides align
+ * Arial's line box with Inter so the swap does not move surrounding UI. */
+@font-face {
+    font-family: 'XChain Sans';
+    src: url('./fonts/InterVariable.woff2') format('woff2');
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'XChain Sans Fallback';
+    src: local('Arial');
+    size-adjust: 107.4%;
+    ascent-override: 90.2%;
+    descent-override: 22.48%;
+    line-gap-override: 0%;
+}
+
 :root {
     /* Spacing - 4px grid */
     --xc-space-1: 4px;
@@ -20,15 +39,73 @@
     --xc-space-6: 24px;
     --xc-space-8: 32px;
 
-    /* Typography - system fonts by default per §5.4 */
-    --xc-font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    /* One vertical rhythm shared by form and list templates: sibling fields,
+       sections, section headers, and list rows. */
+    --xc-form-gap: var(--xc-space-4);
+    --xc-label-gap: var(--xc-space-1);
+    --xc-help-gap: var(--xc-space-1);
+    --xc-section-gap: var(--xc-space-4);
+    --xc-settings-row-gap: var(--xc-space-2);
+    --xc-section-header-gap: var(--xc-space-2);
+    --xc-list-row-padding: var(--xc-space-3);
+
+    /* Screen owns page-edge spacing so route content stays geometry-free. */
+    --xc-page-gutter: var(--xc-space-3);
+    --xc-page-top: var(--xc-space-3);
+
+    /* Card interiors share one inset and radius across content types. */
+    --xc-card-pad: var(--xc-space-4);
+    --xc-card-radius: var(--xc-radius-md);
+
+    /* Data and key-value tables share cell rhythm and column geometry. */
+    --xc-table-cell-padding-block: var(--xc-space-2);
+    --xc-table-cell-padding-inline: var(--xc-space-2);
+    --xc-table-label-width: 40%;
+    --xc-table-label-column: minmax(6.5rem, var(--xc-table-label-width));
+    --xc-table-row-divider: 1px solid var(--xc-border);
+
+    /* Typography - platform fonts remain available when the web font fails. */
+    --xc-font-sans: 'XChain Sans', 'XChain Sans Fallback', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     --xc-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
-    --xc-text-xs: 11px;
-    --xc-text-sm: 13px;
-    --xc-text-md: 14px;
-    --xc-text-lg: 16px;
-    --xc-text-xl: 20px;
-    --xc-text-2xl: 24px;
+    --xc-text-xs: 0.6875rem;
+    --xc-text-sm: 0.8125rem;
+    --xc-text-md: 0.875rem;
+    --xc-text-lg: 1rem;
+    --xc-text-xl: 1.25rem;
+    --xc-text-2xl: 1.5rem;
+
+    /* Semantic type roles keep headings consistent across page templates,
+     * cards, and empty states without coupling components to raw tiers. */
+    --xc-type-page-title-size: var(--xc-text-lg);
+    --xc-type-page-title-weight: 700;
+    --xc-type-section-title-size: var(--xc-text-md);
+    --xc-type-section-title-weight: 700;
+    --xc-type-card-title-size: var(--xc-text-md);
+    --xc-type-card-title-weight: 600;
+    --xc-type-body-size: var(--xc-text-sm);
+    --xc-type-body-weight: 400;
+
+    /* Prose stays readable while its surrounding surface remains fluid. */
+    --xc-prose-max-width: 70ch;
+
+    /* Icon sizes use one named scale across controls and navigation rows. */
+    --xc-icon-xs: 14px;
+    --xc-icon-sm: 16px;
+    --xc-icon-md: 18px;
+    --xc-icon-lg: 20px;
+    --xc-icon-xl: 24px;
+
+    /* Identity and asset artwork use one size in each visual context. */
+    --xc-avatar-size-header: 28px;
+    --xc-avatar-size-list: 40px;
+    --xc-avatar-size-hero: 88px;
+    --xc-avatar-pip-header: 14px;
+    --xc-avatar-pip-list: 20px;
+    --xc-avatar-pip-hero: 32px;
+    --xc-avatar-initials-header: var(--xc-text-xs);
+    --xc-avatar-initials-list: var(--xc-text-md);
+    --xc-avatar-initials-hero: 36px;
+    --xc-avatar-shape: var(--xc-radius-pill);
 
     /* Minimum interactive target (responsive-first, slice 2).
      *
@@ -46,13 +123,78 @@
     --xc-tap-min: 24px;
 
     /* Radii */
+    --xc-radius-xs: 2px;
     --xc-radius-sm: 4px;
     --xc-radius-md: 8px;
+    --xc-radius-control: var(--xc-control-radius);
     --xc-radius-lg: 12px;
     --xc-radius-pill: 9999px;
 
-    /* Motion - §5.4 transitions ≤ 200ms, no bouncy springs */
-    --xc-transition: 160ms cubic-bezier(0.2, 0, 0.2, 1);
+    /* Badges use one geometry scale regardless of semantic tone or theme. */
+    --xc-badge-height-sm: 24px;
+    --xc-badge-height-md: 32px;
+    --xc-badge-radius: var(--xc-radius-pill);
+    --xc-badge-font-size-sm: var(--xc-text-xs);
+    --xc-badge-font-size-md: var(--xc-text-sm);
+    --xc-badge-font-weight: 700;
+    --xc-badge-icon-size-sm: var(--xc-icon-sm);
+    --xc-badge-icon-size-md: var(--xc-icon-xl);
+    --xc-badge-gap: var(--xc-space-1);
+    --xc-badge-padding-inline-sm: var(--xc-space-2);
+    --xc-badge-padding-inline-md: var(--xc-space-3);
+
+    /* Controls share one measured scale across native and custom fields. */
+    --xc-control-h-sm: 28px;
+    --xc-control-h-md: 36px;
+    --xc-control-h-lg: 44px;
+    --xc-control-font-sm: 13px;
+    --xc-control-font-md: 14px;
+    --xc-control-font-lg: 16px;
+    --xc-control-pad-x-sm: 8px;
+    --xc-control-pad-x-md: 12px;
+    --xc-control-pad-x-lg: 16px;
+    --xc-button-pad-x-sm: 12px;
+    --xc-button-pad-x-md: 16px;
+    --xc-button-pad-x-lg: 20px;
+    --xc-control-icon-sm: 16px;
+    --xc-control-icon-md: 20px;
+    --xc-control-icon-lg: 24px;
+    --xc-control-line: 1.25;
+    --xc-control-radius: 8px;
+    --xc-control-hit-min: 24px;
+    --xc-control-font: var(--xc-control-font-md);
+    --xc-control-pad-x: var(--xc-control-pad-x-md);
+
+    /* Menus use one row measure across popovers, overflow actions, and
+     * navigation sheets. Content can wrap and grow beyond this minimum. */
+    --xc-menu-item-h: var(--xc-control-h-md);
+    --xc-menu-item-icon: var(--xc-icon-md);
+    --xc-menu-item-pad-block: var(--xc-space-2);
+    --xc-menu-item-pad-inline: var(--xc-control-pad-x);
+
+    /* Shared stacking contexts stay ordered across every shell. */
+    --xc-z-base: 1;
+    --xc-z-sticky: 20;
+    --xc-z-dropdown: 50;
+    --xc-z-overlay: 60;
+    --xc-z-modal: 1000;
+    --xc-z-toast: 9999;
+
+    /* Motion - §5.4 transitions stay at or below 200ms and avoid springs. */
+    --xc-motion-duration-fast: 120ms;
+    --xc-motion-duration-standard: 160ms;
+    --xc-motion-duration-ambient: 1400ms;
+    --xc-motion-ease-standard: cubic-bezier(0.2, 0, 0.2, 1);
+    --xc-motion-ease-enter: cubic-bezier(0, 0, 0.2, 1);
+    --xc-motion-ease-ambient: ease-in-out;
+    --xc-transition: var(--xc-motion-duration-standard) var(--xc-motion-ease-standard);
+
+    /* Expensive paint effects stay tokenized so accessibility preferences and
+     * low-power shells can replace them without changing desktop styling. */
+    --xc-backdrop-filter: blur(2px);
+    --xc-list-shadow: var(--xc-shadow-md);
+    --xc-privacy-filter: blur(12px);
+    --xc-privacy-opacity: 1;
 
     /* Brand accent (sampled from branding/images/xchain-color-750.png).
      * Darkened one step from the sampled brand value to clear
@@ -63,40 +205,97 @@
     --xc-accent-primary: #1A7BAC;
     --xc-accent-primary-hover: #156690;
     --xc-accent-secondary: #7B2C8F;
+    /* Accent and danger text stay close to their fill colours while clearing
+     * AA on the muted surface. The dark palette lifts them further because
+     * the fill shades fail AA as text on a dark card. Use these for `color:`,
+     * and use the plain tokens for backgrounds and borders. */
+    --xc-accent-text: #1A77AA;
+    --xc-danger-fg: #DA2525;
 
     /* Light theme - default */
     --xc-bg: #FFFFFF;
     --xc-bg-muted: #F5F6F8;
     --xc-surface: #FFFFFF;
     --xc-surface-raised: #FFFFFF;
-    --xc-border: #E4E7EB;
-    --xc-border-strong: #C7CCD4;
+    /* Borders identify controls and regions against every theme surface. */
+    --xc-border: #818B9B;
+    --xc-border-strong: var(--xc-border);
     --xc-text: #0F172A;
     /* Darkened from #64748B (4.40:1 on --xc-bg-muted) to clear AA. */
     --xc-text-muted: #5F7086;
     --xc-text-inverted: #FFFFFF;
 
-    /* Labels sitting on an accent or danger fill. In the normal palettes both
-     * are white; the forced-colors block re-pairs them with the system color
-     * of the fill they sit on (Canvas on LinkText, MarkText on Mark), which is
-     * what keeps button labels readable in Windows high-contrast mode. */
+    /* Labels sitting on semantic fills. Accent and danger use white; success
+     * uses dark text when its dark-theme fill is bright. The forced-colors
+     * block re-pairs accent and danger with the system color of their fills
+     * (Canvas on LinkText, MarkText on Mark). */
     --xc-on-accent: #FFFFFF;
     --xc-on-danger: #FFFFFF;
+    --xc-on-success: #FFFFFF;
     --xc-danger: #DC2626;
     --xc-danger-bg: rgba(220, 38, 38, 0.10);
     --xc-danger-text: #7F1D1D;
+    --xc-info: #1A7BAC;
+    --xc-info-bg: rgba(26, 123, 172, 0.10);
+    --xc-info-text: #134B6E;
     /* Darkened from #D97706 (2.74:1 on its own badge bg) to clear AA. */
     --xc-warning: #A8500A;
     --xc-warning-bg: rgba(217, 119, 6, 0.10);
+    --xc-success-bg: rgba(20, 111, 52, 0.10);
     --xc-warning-text: #6E520A;
     /* Darkened from #16A34A (2.81:1 on its own badge bg) to clear AA.
      * #157A3A measured 4.44:1 against a real composited badge bg
      * (--xc-success-bg over --xc-bg-muted, not pure white), just under
      * 4.5:1, so it is darkened one more step here. */
     --xc-success: #146F34;
-    --xc-focus-ring: rgba(26, 123, 172, 0.45);
+    --xc-success-fill: #146F34;
+    --xc-badge-multisig-classic-bg: #FEF3C7;
+    --xc-badge-multisig-classic-fg: #78350F;
+    --xc-badge-multisig-classic-border: #D97706;
+    --xc-badge-multisig-segwit-bg: #DBEAFE;
+    --xc-badge-multisig-segwit-fg: #1E3A8A;
+    --xc-badge-multisig-segwit-border: #3B82F6;
+    --xc-badge-multisig-taproot-bg: #EDE9FE;
+    --xc-badge-multisig-taproot-fg: #4C1D95;
+    --xc-badge-multisig-taproot-border: #8B5CF6;
+    --xc-focus-ring: #0F172A;
+    /* Saturation communicates inactivity without alpha-compositing control
+     * borders below the non-text contrast floor. */
+    --xc-disabled-opacity: 1;
+    --xc-disabled-saturation: 0.35;
+
+    /* Interactive primitives share semantic state colors so every theme can
+     * preserve the same border, selection, focus and disabled contracts. */
+    --xc-control-bg: var(--xc-bg);
+    --xc-control-bg-hover: var(--xc-bg-muted);
+    --xc-control-border: var(--xc-border);
+    --xc-control-border-hover: var(--xc-border-strong);
+    --xc-control-selected: var(--xc-accent-primary);
+    --xc-control-selected-text: var(--xc-on-accent);
+    --xc-control-focus-ring: var(--xc-focus-ring);
+    --xc-control-disabled-bg: var(--xc-bg-muted);
+    --xc-control-disabled-border: var(--xc-border-strong);
+    --xc-control-disabled-text: var(--xc-text-muted);
+    /* Three elevation levels cover cards, floating controls, and overlays. */
     --xc-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
     --xc-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
+    --xc-shadow-modal: 0 16px 40px rgba(0, 0, 0, 0.35);
+    /* Semantic aliases keep surface intent readable while sharing recipes. */
+    --xc-shadow-header-menu: var(--xc-shadow-md);
+    --xc-shadow-toast: var(--xc-shadow-md);
+    --xc-shadow-popover: var(--xc-shadow-md);
+    --xc-shadow-side-panel: var(--xc-shadow-modal);
+    --xc-shadow-bottom-sheet: var(--xc-shadow-modal);
+    --xc-shadow-surface-ring: 0 0 0 1.5px var(--xc-surface);
+    --xc-shadow-accent-ring: 0 0 0 1px var(--xc-accent-primary, var(--xc-border-strong));
+    --xc-shadow-selected-ring: inset 0 0 0 1px var(--xc-control-selected);
+    --xc-shadow-focus-ring: 0 0 0 3px var(--xc-focus-ring);
+    --xc-shadow-danger-focus-ring: 0 0 0 3px rgba(220, 38, 38, 0.2);
+    --xc-shadow-nav-indicator: inset 3px 0 0 var(--xc-accent-primary, var(--xc-text));
+    /* currentColor resolves on the element using the token, so the halo and
+       ring follow that element's own text color. */
+    --xc-shadow-status-halo: 0 0 0 3px color-mix(in srgb, currentColor 18%, transparent);
+    --xc-shadow-identity-ring: 0 0 0 2px var(--xc-surface), 0 0 0 4px currentColor;
 
     /* How tall the app shell may be. NOT plain 100dvh, because
      * `body` below pads itself by the top safe-area inset, so a shell that
@@ -116,7 +315,112 @@
      * padding (see below), and the left/right insets reduce the shell's
      * width, which needs no height math. */
     --xc-viewport-h: calc(100vh - env(safe-area-inset-top, 0px));
-    --xc-viewport-h: calc(100dvh - env(safe-area-inset-top, 0px));
+}
+
+/* Semantic menus and menu-like navigation lists share one row contract.
+ * Feature styles continue to own popup placement and surface geometry. */
+:root [role="menu"],
+:root [data-xc-menu-list="rows"] {
+    gap: 0;
+}
+
+:root [role="menu"] [role="menuitem"],
+:root [role="menu"] [role="menuitemradio"],
+:root [role="menu"] [role="menuitemcheckbox"],
+:root [data-xc-menu-list] [data-xc-menu-item] {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: var(--xc-menu-item-h);
+    padding: var(--xc-menu-item-pad-block) var(--xc-menu-item-pad-inline);
+    gap: var(--xc-space-2);
+    justify-content: flex-start;
+    color: var(--xc-text);
+    text-align: start;
+}
+
+:root [role="menu"] [role="menuitem"],
+:root [role="menu"] [role="menuitemradio"],
+:root [role="menu"] [role="menuitemcheckbox"],
+:root [data-xc-menu-list="rows"] [data-xc-menu-item] {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+}
+
+:root [role="menu"] [role="menuitem"] > [aria-hidden="true"]:first-child,
+:root [role="menu"] [role="menuitemradio"] > [aria-hidden="true"]:first-child,
+:root [role="menu"] [role="menuitemcheckbox"] > [aria-hidden="true"]:first-child,
+:root [data-xc-menu-list] [data-xc-menu-item] > [aria-hidden="true"]:first-child {
+    flex: 0 0 var(--xc-menu-item-icon);
+    width: var(--xc-menu-item-icon);
+    height: var(--xc-menu-item-icon);
+}
+
+:root [role="menu"] [role="menuitem"] svg,
+:root [role="menu"] [role="menuitemradio"] svg,
+:root [role="menu"] [role="menuitemcheckbox"] svg,
+:root [data-xc-menu-list] [data-xc-menu-item] svg {
+    width: var(--xc-menu-item-icon);
+    height: var(--xc-menu-item-icon);
+}
+
+:root [role="menu"] > [role="menuitem"] + [role="menuitem"],
+:root [role="menu"] > li + li,
+:root [data-xc-menu-list="rows"] > li + li {
+    border-top: 1px solid var(--xc-border);
+}
+
+:root [role="menu"] [role="menuitem"]:not(:disabled, [aria-disabled="true"]):hover,
+:root [role="menu"] [role="menuitemradio"]:not(:disabled, [aria-disabled="true"]):hover,
+:root [role="menu"] [role="menuitemcheckbox"]:not(:disabled, [aria-disabled="true"]):hover,
+:root [data-xc-menu-list] [data-xc-menu-item]:not(:disabled, [aria-disabled="true"]):hover {
+    background: var(--xc-bg-muted);
+}
+
+:root [role="menu"] :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"]):is([aria-current], [aria-checked="true"], [aria-selected="true"]),
+:root [data-xc-menu-list] [data-xc-menu-item][aria-current] {
+    background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
+    color: var(--xc-accent-text);
+    font-weight: 600;
+}
+
+:root [role="menu"] [role="menuitem"]:focus-visible,
+:root [role="menu"] [role="menuitemradio"]:focus-visible,
+:root [role="menu"] [role="menuitemcheckbox"]:focus-visible,
+:root [data-xc-menu-list] [data-xc-menu-item]:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: -2px;
+}
+
+:root :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [data-xc-menu-item])[data-destructive="true"] {
+    color: var(--xc-danger-fg);
+}
+
+:root :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [data-xc-menu-item])[data-destructive="true"]:not(:disabled, [aria-disabled="true"]):hover {
+    background: var(--xc-danger-bg);
+}
+
+:root :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [data-xc-menu-item])[data-destructive="true"] svg {
+    color: currentColor;
+}
+
+/* The dvh form, only where the engine HAS dvh. It cannot sit in :root as a
+ * second declaration the way a fallback pair normally would: a custom
+ * property accepts any tokens, so the later declaration always wins the
+ * cascade, and an engine without dvh (Chromium below 108) then finds the
+ * value invalid at the point of USE and drops the height it was meant to
+ * set. Measured on an LG K51's stock WebView 102 (2026-10-12): the shell lost
+ * its height and the bottom tab bar floated mid-screen under short pages. */
+@supports (height: 100dvh) {
+    :root {
+        --xc-viewport-h: calc(100dvh - env(safe-area-inset-top, 0px));
+    }
+}
+
+@media (max-width: 480px) {
+    :root {
+        --xc-card-pad: var(--xc-space-3);
+    }
 }
 
 /* Dark palette. Two triggers, one payload.
@@ -137,18 +441,37 @@
         --xc-bg-muted: #121824;
         --xc-surface: #151B28;
         --xc-surface-raised: #1B2231;
-        --xc-border: #243044;
-        --xc-border-strong: #364257;
+        --xc-border: #5F6D83;
         --xc-text: #E5EAF2;
         --xc-text-muted: #94A3B8;
         --xc-text-inverted: #0B0F17;
+        --xc-on-success: #0B0F17;
         --xc-danger-bg: rgba(252, 165, 165, 0.14);
         --xc-danger-text: #FCA5A5;
+        --xc-info: #4AA8D8;
+        --xc-info-bg: rgba(74, 168, 216, 0.14);
+        --xc-info-text: #7DD3FC;
         --xc-warning-bg: rgba(252, 211, 77, 0.14);
         --xc-warning-text: #FCD34D;
-        --xc-focus-ring: rgba(30, 144, 199, 0.6);
+        --xc-success-bg: rgba(74, 222, 128, 0.14);
+        --xc-accent-text: #4AA8D8;
+        --xc-danger-fg: #F87171;
+        --xc-warning: #F59E0B;
+        --xc-success: #4ADE80;
+        --xc-success-fill: #4ADE80;
+        --xc-badge-multisig-classic-bg: #3A260B;
+        --xc-badge-multisig-classic-fg: #FDE68A;
+        --xc-badge-multisig-classic-border: #F59E0B;
+        --xc-badge-multisig-segwit-bg: #0D2A4A;
+        --xc-badge-multisig-segwit-fg: #BFDBFE;
+        --xc-badge-multisig-segwit-border: #60A5FA;
+        --xc-badge-multisig-taproot-bg: #2E2350;
+        --xc-badge-multisig-taproot-fg: #DDD6FE;
+        --xc-badge-multisig-taproot-border: #A78BFA;
+        --xc-focus-ring: #FFFFFF;
         --xc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
         --xc-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+        --xc-shadow-modal: 0 16px 40px rgba(0, 0, 0, 0.6);
     }
 }
 
@@ -157,23 +480,48 @@
     --xc-bg-muted: #121824;
     --xc-surface: #151B28;
     --xc-surface-raised: #1B2231;
-    --xc-border: #243044;
-    --xc-border-strong: #364257;
+    --xc-border: #5F6D83;
     --xc-text: #E5EAF2;
     --xc-text-muted: #94A3B8;
     --xc-text-inverted: #0B0F17;
+    --xc-on-success: #0B0F17;
     --xc-danger-bg: rgba(252, 165, 165, 0.14);
     --xc-danger-text: #FCA5A5;
+    --xc-info: #4AA8D8;
+    --xc-info-bg: rgba(74, 168, 216, 0.14);
+    --xc-info-text: #7DD3FC;
     --xc-warning-bg: rgba(252, 211, 77, 0.14);
     --xc-warning-text: #FCD34D;
-    --xc-focus-ring: rgba(30, 144, 199, 0.6);
+    --xc-success-bg: rgba(74, 222, 128, 0.14);
+    --xc-accent-text: #4AA8D8;
+    --xc-danger-fg: #F87171;
+    --xc-warning: #F59E0B;
+    --xc-success: #4ADE80;
+    --xc-success-fill: #4ADE80;
+    --xc-badge-multisig-classic-bg: #3A260B;
+    --xc-badge-multisig-classic-fg: #FDE68A;
+    --xc-badge-multisig-classic-border: #F59E0B;
+    --xc-badge-multisig-segwit-bg: #0D2A4A;
+    --xc-badge-multisig-segwit-fg: #BFDBFE;
+    --xc-badge-multisig-segwit-border: #60A5FA;
+    --xc-badge-multisig-taproot-bg: #2E2350;
+    --xc-badge-multisig-taproot-fg: #DDD6FE;
+    --xc-badge-multisig-taproot-border: #A78BFA;
+    --xc-focus-ring: #FFFFFF;
     --xc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
     --xc-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+    --xc-shadow-modal: 0 16px 40px rgba(0, 0, 0, 0.6);
 }
 
 /* Tell the browser which palette its own widgets (scrollbars, native
  * selects, form controls) should paint in, so an explicit Light choice on a
  * dark OS does not leave black scrollbars framing a white app. */
+/* The OS-dark trigger needs the same hint: without it a dark OS with no
+ * explicit choice left native widgets (range sliders, unstyled buttons) in
+ * their light paint inside the dark app. */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-xc-theme="light"]) { color-scheme: dark; }
+}
 :root[data-xc-theme="light"] { color-scheme: light; }
 :root[data-xc-theme="dark"] { color-scheme: dark; }
 
@@ -184,28 +532,91 @@
  * back out of an OS preference the user does not want honoured here. */
 @media (prefers-reduced-motion: reduce) {
     :root:not([data-xc-reduced-motion="no-preference"]) {
+        --xc-motion-duration-fast: 0.01ms;
+        --xc-motion-duration-standard: 0.01ms;
+        --xc-motion-duration-ambient: 0.01ms;
         --xc-transition: 0ms;
+        --xc-backdrop-filter: none;
+        --xc-list-shadow: none;
+        --xc-privacy-filter: none;
+        --xc-privacy-opacity: 0;
+    }
+
+    :root:not([data-xc-reduced-motion="no-preference"]),
+    :root:not([data-xc-reduced-motion="no-preference"]) *,
+    :root:not([data-xc-reduced-motion="no-preference"]) *::before,
+    :root:not([data-xc-reduced-motion="no-preference"]) *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
     }
 }
 
 :root[data-xc-reduced-motion="reduce"] {
+    --xc-motion-duration-fast: 0.01ms;
+    --xc-motion-duration-standard: 0.01ms;
+    --xc-motion-duration-ambient: 0.01ms;
     --xc-transition: 0ms;
+    --xc-backdrop-filter: none;
+    --xc-list-shadow: none;
+    --xc-privacy-filter: none;
+    --xc-privacy-opacity: 0;
 }
 
-/* The token only covers transitions declared through it. Component CSS
- * modules carry their own keyframe animations behind
- * `@media (prefers-reduced-motion: reduce)` blocks, which an in-app override
- * cannot reach, so the forced case suppresses animation globally instead of
- * asking ~15 modules to each learn about the attribute. Durations are near
- * zero rather than zero so animation/transition end events still fire and
- * nothing that waits on them hangs. */
+/* Native shells set this attribute when sustained GPU effects are too costly.
+ * It reduces the same paint and motion work without changing user settings. */
+:root[data-xc-low-power="true"] {
+    --xc-motion-duration-fast: 0.01ms;
+    --xc-motion-duration-standard: 0.01ms;
+    --xc-motion-duration-ambient: 0.01ms;
+    --xc-transition: 0ms;
+    --xc-backdrop-filter: none;
+    --xc-list-shadow: none;
+    --xc-privacy-filter: none;
+    --xc-privacy-opacity: 0;
+}
+
+/* The global selectors cover component styles and inline transitions that do
+ * not use the token. Durations are near zero rather than zero so motion-end
+ * events still fire and nothing that waits on them hangs. */
+:root[data-xc-reduced-motion="reduce"],
 :root[data-xc-reduced-motion="reduce"] *,
 :root[data-xc-reduced-motion="reduce"] *::before,
-:root[data-xc-reduced-motion="reduce"] *::after {
+:root[data-xc-reduced-motion="reduce"] *::after,
+:root[data-xc-low-power="true"],
+:root[data-xc-low-power="true"] *,
+:root[data-xc-low-power="true"] *::before,
+:root[data-xc-low-power="true"] *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+}
+
+/* Scrolling popovers and sheets avoid large composited shadows when reduced
+ * effects are active. Focus shadows remain intact on their controls. */
+@media (prefers-reduced-motion: reduce) {
+    :root:not([data-xc-reduced-motion="no-preference"]) :where(
+        [role="listbox"],
+        [role="dialog"],
+        [role="dialog"] > [role="presentation"]
+    ) {
+        box-shadow: none !important;
+    }
+}
+
+:root[data-xc-reduced-motion="reduce"] :where(
+    [role="listbox"],
+    [role="dialog"],
+    [role="dialog"] > [role="presentation"]
+),
+:root[data-xc-low-power="true"] :where(
+    [role="listbox"],
+    [role="dialog"],
+    [role="dialog"] > [role="presentation"]
+) {
+    box-shadow: none !important;
 }
 
 /* §53.4 / G170 - high-contrast variant. Triggered by `prefers-contrast: more`
@@ -220,12 +631,14 @@
         --xc-surface: #FFFFFF;
         --xc-surface-raised: #FFFFFF;
         --xc-border: #1F2937;
-        --xc-border-strong: #0F172A;
         --xc-text: #000000;
         --xc-text-muted: #1F2937;
         --xc-danger: #B91C1C;
+        --xc-info: #134B6E;
+        --xc-info-text: #134B6E;
         --xc-warning: #92400E;
         --xc-success: #166534;
+        --xc-success-fill: #166534;
         --xc-accent-primary: #134B6E;
         --xc-accent-primary-hover: #0B304A;
         --xc-focus-ring: rgba(15, 23, 42, 0.85);
@@ -240,13 +653,17 @@
             --xc-surface: #050810;
             --xc-surface-raised: #0B0F17;
             --xc-border: #E5EAF2;
-            --xc-border-strong: #FFFFFF;
             --xc-text: #FFFFFF;
             --xc-text-muted: #E5EAF2;
             --xc-danger: #FCA5A5;
+            --xc-info: #93C5FD;
+            --xc-info-text: #93C5FD;
             --xc-warning: #FCD34D;
             --xc-success: #86EFAC;
+            --xc-success-fill: #166534;
             --xc-accent-primary: #93C5FD;
+            --xc-accent-text: #93C5FD;
+            --xc-danger-fg: #FCA5A5;
             --xc-accent-primary-hover: #BFDBFE;
             --xc-focus-ring: rgba(255, 255, 255, 0.85);
         }
@@ -261,13 +678,17 @@
         --xc-surface: #050810;
         --xc-surface-raised: #0B0F17;
         --xc-border: #E5EAF2;
-        --xc-border-strong: #FFFFFF;
         --xc-text: #FFFFFF;
         --xc-text-muted: #E5EAF2;
         --xc-danger: #FCA5A5;
+        --xc-info: #93C5FD;
+        --xc-info-text: #93C5FD;
         --xc-warning: #FCD34D;
         --xc-success: #86EFAC;
+        --xc-success-fill: #166534;
         --xc-accent-primary: #93C5FD;
+        --xc-accent-text: #93C5FD;
+        --xc-danger-fg: #FCA5A5;
         --xc-accent-primary-hover: #BFDBFE;
         --xc-focus-ring: rgba(255, 255, 255, 0.85);
     }
@@ -283,7 +704,6 @@
         --xc-surface: Canvas;
         --xc-surface-raised: Canvas;
         --xc-border: CanvasText;
-        --xc-border-strong: CanvasText;
         --xc-text: CanvasText;
         --xc-text-muted: GrayText;
         --xc-text-inverted: Canvas;
@@ -291,7 +711,21 @@
         --xc-accent-primary-hover: VisitedText;
         --xc-on-accent: Canvas;
         --xc-danger: Mark;
+        --xc-danger-bg: Canvas;
+        --xc-danger-text: Mark;
+        --xc-info: LinkText;
+        --xc-info-bg: Canvas;
+        --xc-info-text: LinkText;
+        --xc-warning: Mark;
+        --xc-warning-bg: Canvas;
+        --xc-warning-text: Mark;
+        --xc-success: LinkText;
+        --xc-success-bg: Canvas;
+        --xc-success-fill: LinkText;
+        --xc-accent-text: LinkText;
+        --xc-danger-fg: Mark;
         --xc-on-danger: MarkText;
+        --xc-on-success: Canvas;
         --xc-focus-ring: Highlight;
     }
 }
@@ -303,6 +737,9 @@ body {
     color: var(--xc-text);
     background: var(--xc-bg);
     -webkit-font-smoothing: antialiased;
+    /* Rotation must not inflate text independently of the responsive layout. */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
 
     /* Keep the app out from under the hardware. On an iPhone with a Dynamic
      * Island or a notch, the WebView is laid out edge to edge, so without this
@@ -328,7 +765,8 @@ body {
      * themselves by `env(safe-area-inset-bottom)`, and they are pinned to the
      * viewport rather than to body flow, so adding it here as well would open
      * a second gap under the tab bar on exactly the devices this is meant to
-     * fix. The bottom stays owned by the two components that render there. */
+     * fix. The bottom stays owned by what renders there: those two, or the
+     * Screen itself when neither does (Screen.module.css). */
     padding-top: env(safe-area-inset-top, 0);
     padding-left: env(safe-area-inset-left, 0);
     padding-right: env(safe-area-inset-right, 0);
@@ -338,6 +776,230 @@ body {
 *::before,
 *::after {
     box-sizing: border-box;
+}
+
+/* Paragraphs carry prose measure without narrowing their list, card, table,
+ * or form ancestors. Component rules can keep intentionally shorter copy. */
+:where(p) {
+    max-width: var(--xc-prose-max-width);
+}
+
+/* Controls and decorative glyphs behave as one touch target instead of
+ * contributing label or icon fragments to a long-press selection. Wallet
+ * data nested in a clickable row opts back into text selection in the
+ * component that renders it. */
+:where(button, [role='button'], [role='tab']),
+:where(svg, [aria-hidden='true']) {
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+/* Shared icons size from --xc-icon-size here, at zero specificity so a
+ * component rule still wins. The SVG attributes hold only a pixel fallback,
+ * since older Android WebViews ignore var() in width and height attributes. */
+:where(svg[data-xc-icon]) {
+    width: var(--xc-icon-size, var(--xc-icon-md));
+    height: var(--xc-icon-size, var(--xc-icon-md));
+}
+
+:where(svg[data-xc-directional]) {
+    transform-box: fill-box;
+    transform-origin: center;
+}
+
+:where([dir='rtl']) :where(svg[data-xc-directional]) {
+    transform: scaleX(-1);
+}
+
+:where(
+    input[type='number'],
+    input[inputmode='numeric'],
+    input[inputmode='decimal']
+) {
+    direction: ltr;
+}
+
+/* Machine-readable values remain directly selectable wherever they appear,
+ * including inside a control that opens a transaction detail view. */
+:where(code, samp, output, address) {
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+/* Taps activate controls immediately while pan and pinch gestures remain
+ * available to the page. ARIA roles cover tappable rows that are not native
+ * buttons, and :where() lets a component override this for a gesture surface. */
+:where(
+    button,
+    input[type='button'],
+    input[type='submit'],
+    input[type='reset'],
+    a[href],
+    [role='button'],
+    [role='link'],
+    [role='tab'],
+    [role='menuitem'],
+    [role='option'],
+    summary,
+    label
+) {
+    touch-action: manipulation;
+}
+
+/* Inline links stay identifiable without relying on theme color. Visited
+ * links keep the same semantic color so browser defaults cannot resemble a
+ * wallet status while the underline and shared focus ring remain present. */
+:where(a[href]) {
+    color: var(--xc-accent-text);
+    text-decoration: underline;
+    text-underline-offset: 0.15em;
+}
+
+:where(a[href]:visited) {
+    color: var(--xc-accent-text);
+}
+
+/* A dialog can place its scrollport on the panel, body, list, or viewer.
+ * Applying containment through the subtree keeps every such scroll boundary
+ * from chaining into the page behind it. */
+:where([role='dialog'], [role='dialog'] *) {
+    overscroll-behavior: contain;
+}
+
+/* A fieldset's UA default is `min-inline-size: min-content`, so it refuses
+ * to shrink below its widest child. One long <option> then pushes the whole
+ * group, and the form around it, past the screen edge: Create multisig's
+ * cosigner card ran 67px off a 411px phone (2026-10-12). Let fieldsets
+ * shrink like any other block. */
+fieldset {
+    min-inline-size: 0;
+    min-width: 0;
+}
+
+/* iOS WebKit zooms the page when a focused form control renders below 16px.
+ * Keep touch layouts at that floor at every viewport width without disabling
+ * pinch zoom or changing compact control sizes on pointer-based desktops.
+ * !important also covers module and inline font declarations on shared form
+ * controls. */
+@media (pointer: coarse), (hover: none) {
+    input:not([type='checkbox']):not([type='radio']):not([type='range']),
+    select,
+    textarea {
+        font-size: 1rem !important;
+        font-size: var(--xc-control-font-md) !important;
+    }
+}
+
+@media (pointer: coarse), (hover: none) {
+    :root {
+        --xc-control-h-sm: 36px;
+        --xc-control-h-md: 44px;
+        --xc-control-h-lg: 48px;
+        --xc-control-font-sm: 1rem;
+        --xc-control-font-md: 1rem;
+        --xc-control-font-lg: 1.0625rem;
+        --xc-control-hit-min: 44px;
+    }
+}
+
+/* About thirty dropdowns are bare <select>s with no class (settings rows,
+ * filters, pickers), and the UA default draws them as grey system widgets
+ * that match nothing else on the screen. Give every class-less select the
+ * Input field look. :where() keeps the specificity at zero, so a select's
+ * own inline style or a later rule still wins. */
+:where(select:not([class])) {
+    height: var(--xc-control-h-md, 36px);
+    padding-block: 0;
+    padding-inline: var(--xc-control-pad-x-md, 12px);
+    font-family: var(--xc-font-sans);
+    font-size: var(--xc-control-font-md, 14px);
+    line-height: var(--xc-control-line, 1.25);
+    color: var(--xc-text);
+    background-color: var(--xc-surface);
+    border: 1px solid var(--xc-control-border);
+    border-radius: var(--xc-control-radius, 8px);
+    max-width: 100%;
+}
+
+/* Keep one theme-aware keyboard indicator on native controls, links, and
+ * custom controls. The important declarations preserve this accessibility
+ * invariant when a component resets the browser outline, and draw the ring
+ * inward so rounded list and card containers cannot clip it. */
+:where(
+    a[href],
+    area[href],
+    audio[controls],
+    button,
+    input,
+    select,
+    textarea,
+    summary,
+    video[controls],
+    [role='button'],
+    [role='link'],
+    [role='menuitem'],
+    [role='option'],
+    [role='tab'],
+    [role='switch'],
+    [role='checkbox'],
+    [role='radio'],
+    [tabindex]:not([tabindex='-1']),
+    [contenteditable]:not([contenteditable='false'])
+):focus-visible {
+    outline: 2px solid var(--xc-focus-ring) !important;
+    outline-offset: -2px !important;
+}
+
+/* Engines without :focus-visible receive the same ring only while the shared
+ * focus utility reports keyboard modality. The class stays absent in modern
+ * engines, so native focus-visible heuristics remain authoritative. */
+html.xc-focus-visible-fallback :where(
+    a[href],
+    area[href],
+    audio[controls],
+    button,
+    input,
+    select,
+    textarea,
+    summary,
+    video[controls],
+    [role='button'],
+    [role='link'],
+    [role='menuitem'],
+    [role='option'],
+    [role='tab'],
+    [role='switch'],
+    [role='checkbox'],
+    [role='radio'],
+    [tabindex]:not([tabindex='-1']),
+    [contenteditable]:not([contenteditable='false'])
+):focus {
+    outline: 2px solid var(--xc-focus-ring) !important;
+    outline-offset: -2px !important;
+}
+
+/* Disabled controls retain the contrast of their semantic color pairs.
+ * Reduced saturation supplies the visual state without alpha compositing. */
+:where(input, select, textarea, button):disabled {
+    opacity: var(--xc-disabled-opacity) !important;
+    filter: saturate(var(--xc-disabled-saturation));
+}
+
+:where(select:not([class])):focus {
+    outline: none;
+    border-color: var(--xc-accent-primary);
+    box-shadow: 0 0 0 3px var(--xc-focus-ring);
+}
+
+@media (forced-colors: active) {
+    :where(input, select, textarea, button):disabled {
+        filter: none;
+    }
+
+    :where(select:not([class])):focus {
+        outline: 2px solid Highlight;
+        outline-offset: 2px;
+    }
 }
 
 .sr-only {
@@ -357,6 +1019,7 @@ body {
  * AND the wallet's host window has lost focus. The transition is
  * suppressed under prefers-reduced-motion via the --xc-transition token. */
 html[data-xc-privacy-blur="true"] body {
-    filter: blur(12px);
-    transition: filter var(--xc-transition);
+    filter: var(--xc-privacy-filter);
+    opacity: var(--xc-privacy-opacity);
+    transition: filter var(--xc-transition), opacity var(--xc-transition);
 }

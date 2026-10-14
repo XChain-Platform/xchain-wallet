@@ -107,6 +107,7 @@ export async function handleWalletLock(_request, deps) {
  * @property {() => { sessionBackend: unknown, signingSecretBackend: unknown }} lockDeps   built per attempt, since an attempt can be retried
  * @property {() => void} tearDownHost                     release host + vault, zero the SignerPool
  * @property {() => boolean} isUnlocked                     shell still holds a host AND a vault
+ * @property {() => boolean} [isRequestActive]              trusted UI work that must settle before locking
  * @property {() => Promise<unknown>} readAutoLockState
  * @property {() => Promise<void>} clearAutoLockState
  * @property {(state: unknown, now: number) => boolean} shouldAutoLock
@@ -162,6 +163,7 @@ export function createLockBackstop(deps) {
         // Already locked; nothing to do, unless a previous lock left a secret
         // behind and is waiting on this alarm to retry the clear.
         if (!deps.isUnlocked() && !cleanupPending) return 'skipped';
+        if (deps.isRequestActive?.()) return 'deferred';
         let state;
         try { state = await deps.readAutoLockState(); } catch { return 'skipped'; }
         if (!deps.shouldAutoLock(state, now())) return 'skipped';

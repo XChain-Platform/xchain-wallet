@@ -20,6 +20,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
 import { defaultRegistry, hydrateCustomChainsFromSettings } from '../../registry/index.js';
+import { normalizeDisplayCurrency } from '../utils/displayCurrency.js';
 
 // Each useSettings() instance loads its own snapshot, so a write made by
 // one component (e.g. the Settings panel) would leave another component's
@@ -43,6 +44,7 @@ const SESSION_CHANGED_EVENT = 'xc:session-changed';
  *   settings: import('../../schemas/settings.js').Settings | null,
  *   loading: boolean,
  *   error: Error | null,
+ *   unsupportedFiatCurrency: string | null,
  *   refresh: () => Promise<void>,
  *   update: (patch: Record<string, unknown>) => Promise<import('../../schemas/settings.js').Settings>,
  * }}
@@ -52,11 +54,16 @@ export function useSettings() {
     const [settings, setSettings] = useState(/** @type {any} */ (null));
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(/** @type {Error | null} */ (null));
+    const [unsupportedFiatCurrency, setUnsupportedFiatCurrency] = useState(/** @type {string | null} */ (null));
     const aliveRef = useRef(true);
+    const requestRef = useRef(0);
 
     const refresh = useCallback(async () => {
+        if (!aliveRef.current) return;
+        const request = requestRef.current + 1;
+        requestRef.current = request;
+        const isCurrent = () => aliveRef.current && requestRef.current === request;
         if (typeof messaging?.getSettings !== 'function') {
-            if (!aliveRef.current) return;
             setError(new Error('useSettings: messaging.getSettings is not available in this shell'));
             setLoading(false);
             return;
@@ -64,6 +71,7 @@ export function useSettings() {
         setLoading(true);
         try {
             const next = await messaging.getSettings();
+            if (!isCurrent()) return;
             // The record carries the user-added chains, and this realm's
             // registry may not know them yet: the host seeds only the
             // instance it holds, and the popup, approval and desktop
@@ -72,14 +80,15 @@ export function useSettings() {
             // is readable after unlock, so hydrating here reaches every shell
             // without a per-entry boot hook (§9.7 Developer Mode).
             try { hydrateCustomChainsFromSettings(defaultRegistry(), next); } catch { /* never fail a read */ }
-            if (!aliveRef.current) return;
-            setSettings(next);
+            const effective = normalizeDisplayCurrency(next);
+            setSettings(effective.settings);
+            setUnsupportedFiatCurrency(effective.unsupportedFiatCurrency);
             setError(null);
         } catch (err) {
-            if (!aliveRef.current) return;
+            if (!isCurrent()) return;
             setError(err instanceof Error ? err : new Error(String(err)));
         } finally {
-            if (aliveRef.current) setLoading(false);
+            if (isCurrent()) setLoading(false);
         }
     }, [messaging]);
 
@@ -88,13 +97,20 @@ export function useSettings() {
             throw new Error('messaging.updateSettings is not available in this shell');
         }
         const next = await messaging.updateSettings(patch);
-        if (aliveRef.current) setSettings(next);
+        const effective = normalizeDisplayCurrency(next);
+        if (aliveRef.current) {
+            requestRef.current += 1;
+            setSettings(effective.settings);
+            setUnsupportedFiatCurrency(effective.unsupportedFiatCurrency);
+            setError(null);
+            setLoading(false);
+        }
         if (typeof window !== 'undefined') {
             try {
                 window.dispatchEvent(new CustomEvent(SETTINGS_CHANGED_EVENT, { detail: next }));
             } catch { /* CustomEvent unsupported: non-fatal */ }
         }
-        return next;
+        return effective.settings;
     }, [messaging]);
 
     useEffect(() => {
@@ -105,7 +121,14 @@ export function useSettings() {
         if (typeof window !== 'undefined') {
             onChanged = (e) => {
                 const next = e?.detail;
-                if (next && aliveRef.current) setSettings(next);
+                if (next && aliveRef.current) {
+                    const effective = normalizeDisplayCurrency(next);
+                    requestRef.current += 1;
+                    setSettings(effective.settings);
+                    setUnsupportedFiatCurrency(effective.unsupportedFiatCurrency);
+                    setError(null);
+                    setLoading(false);
+                }
             };
             window.addEventListener(SETTINGS_CHANGED_EVENT, onChanged);
             // Re-read on unlock: the locked-state read failed, so pull the
@@ -115,10 +138,11 @@ export function useSettings() {
         }
         return () => {
             aliveRef.current = false;
+            requestRef.current += 1;
             if (onChanged) window.removeEventListener(SETTINGS_CHANGED_EVENT, onChanged);
             if (onSession) window.removeEventListener(SESSION_CHANGED_EVENT, onSession);
         };
     }, [refresh]);
 
-    return { settings, loading, error, refresh, update };
+    return { settings, loading, error, unsupportedFiatCurrency, refresh, update };
 }

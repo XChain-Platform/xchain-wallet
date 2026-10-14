@@ -31,12 +31,16 @@
 //     sniffed type, so a saved-then-reopened file never round-trips
 //     through a wallet-origin document either.
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, StatusMessage } from '@xchain-wallet/core/ui';
 import { sniffContent } from '../utils/sniffContent.js';
 import styles from './GatedFileViewer.module.css';
+import { useBackHandler } from '../../ui/backStack.js';
+import { useFocusTrap } from '../utils/focusTrap.js';
+import { formatDecimalAmount } from '../utils/amountFormat.js';
 
 const MAX_TEXT_CHARS = 200_000;
+const MAX_PREVIEW_BYTES = 5 * 1024 * 1024;
 
 function decodeBase64(plaintextBase64) {
     try {
@@ -93,25 +97,52 @@ function kindLabel(kind, mime) {
  * @param {() => void} props.onClose
  */
 export function GatedFileViewer({ name, declaredType, plaintextBase64, onClose }) {
+    // The system Back gesture closes this before it leaves the screen.
+    useBackHandler(onClose);
+    // Tab stays inside the dialog and focus returns to whatever opened it.
+    const dialogRef = useRef(null);
+    useFocusTrap(dialogRef, { active: true });
     const bytes = useMemo(() => decodeBase64(plaintextBase64), [plaintextBase64]);
     const sniffed = useMemo(() => sniffContent(bytes), [bytes]);
+    const previewTooLarge = Boolean(bytes && bytes.length > MAX_PREVIEW_BYTES);
+    const [loadedImageUrl, setLoadedImageUrl] = useState(null);
+    const [failedImageUrl, setFailedImageUrl] = useState(null);
+    const [imagePreview, setImagePreview] = useState(null);
+    const pendingDownloadsRef = useRef(new Set());
 
     // Inline-render blob URL, typed with the SNIFFED mime only. Created
     // solely for <img> consumption; never opened as a document.
-    const imageUrl = useMemo(() => {
-        if (!bytes) return null;
-        if (sniffed.kind !== 'image' && sniffed.kind !== 'svg') return null;
-        try {
-            return URL.createObjectURL(new Blob([bytes], { type: sniffed.mime }));
-        } catch (_e) {
-            return null;
-        }
-    }, [bytes, sniffed]);
-
     useEffect(() => {
-        if (!imageUrl) return undefined;
-        return () => URL.revokeObjectURL(imageUrl);
-    }, [imageUrl]);
+        if (!bytes || previewTooLarge
+            || (sniffed.kind !== 'image' && sniffed.kind !== 'svg')) {
+            setImagePreview(null);
+            return undefined;
+        }
+        let url;
+        try {
+            url = URL.createObjectURL(new Blob([bytes], { type: sniffed.mime }));
+        } catch (_e) {
+            setImagePreview(null);
+            return undefined;
+        }
+        setImagePreview({ bytes, url });
+        return () => URL.revokeObjectURL(url);
+    }, [bytes, previewTooLarge, sniffed.kind, sniffed.mime]);
+
+    const imageUrl = imagePreview?.bytes === bytes ? imagePreview.url : null;
+
+    // Download URLs remain alive long enough for the browser to consume
+    // them, while unmount still releases every pending URL and timer.
+    useEffect(() => {
+        const pendingDownloads = pendingDownloadsRef.current;
+        return () => {
+            for (const pending of pendingDownloads) {
+                clearTimeout(pending.timer);
+                URL.revokeObjectURL(pending.url);
+            }
+            pendingDownloads.clear();
+        };
+    }, []);
 
     useEffect(() => {
         const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -120,7 +151,7 @@ export function GatedFileViewer({ name, declaredType, plaintextBase64, onClose }
     }, [onClose]);
 
     const text = useMemo(() => {
-        if (!bytes || sniffed.kind !== 'text') return null;
+        if (!bytes || previewTooLarge || sniffed.kind !== 'text') return null;
         try {
             const decoded = typeof TextDecoder === 'function'
                 ? new TextDecoder('utf-8').decode(bytes)
@@ -131,7 +162,7 @@ export function GatedFileViewer({ name, declaredType, plaintextBase64, onClose }
         } catch (_e) {
             return null;
         }
-    }, [bytes, sniffed]);
+    }, [bytes, previewTooLarge, sniffed]);
 
     function handleDownload() {
         if (!bytes) return;
@@ -150,7 +181,14 @@ export function GatedFileViewer({ name, declaredType, plaintextBase64, onClose }
         } catch (_e) {
             // Nothing actionable; the button stays available for retry.
         } finally {
-            if (url) setTimeout(() => URL.revokeObjectURL(url), 60_000);
+            if (url) {
+                const pending = { url, timer: null };
+                pending.timer = setTimeout(() => {
+                    URL.revokeObjectURL(url);
+                    pendingDownloadsRef.current.delete(pending);
+                }, 60_000);
+                pendingDownloadsRef.current.add(pending);
+            }
         }
     }
 
@@ -164,9 +202,50 @@ export function GatedFileViewer({ name, declaredType, plaintextBase64, onClose }
 
     let body;
     if (!bytes) {
-        body = <p className={styles.notice}>Could not decode the unlocked bytes.</p>;
+        body = (
+            <StatusMessage variant="error" className={styles.notice}>
+                Could not decode the unlocked file. Try unlocking it again.
+            </StatusMessage>
+        );
+    } else if (previewTooLarge) {
+        body = (
+            <p className={styles.notice}>
+                This file is larger than 5 MB and can&apos;t be previewed safely.
+                Download it to view the full file.
+            </p>
+        );
+    } else if (imageUrl && failedImageUrl === imageUrl) {
+        body = (
+            <StatusMessage variant="error" className={styles.notice}>
+                Image preview failed to load. Download the file to view it.
+            </StatusMessage>
+        );
     } else if (imageUrl) {
-        body = <img className={styles.image} src={imageUrl} alt={name || 'Unlocked gated image'} />;
+        const imageLoading = loadedImageUrl !== imageUrl;
+        body = (
+            <>
+                {imageLoading ? (
+                    <StatusMessage variant="status" className={styles.notice}>
+                        Loading image preview…
+                    </StatusMessage>
+                ) : null}
+                <img className={styles.image} src={imageUrl}
+                    alt={name || 'Unlocked gated image'}
+                    loading="lazy"
+                    decoding="async"
+                    style={{ aspectRatio: '1 / 1', objectFit: 'contain' }}
+                    aria-busy={imageLoading}
+                    onLoad={() => setLoadedImageUrl(imageUrl)}
+                    onError={() => setFailedImageUrl(imageUrl)}
+                />
+            </>
+        );
+    } else if (sniffed.kind === 'image' || sniffed.kind === 'svg') {
+        body = (
+            <StatusMessage variant="error" className={styles.notice}>
+                Image preview is unavailable. Download the file to view it.
+            </StatusMessage>
+        );
     } else if (text !== null) {
         body = <pre className={styles.text}>{text}</pre>;
     } else if (sniffed.kind === 'pdf') {
@@ -187,17 +266,19 @@ export function GatedFileViewer({ name, declaredType, plaintextBase64, onClose }
 
     return (
         <div
+            ref={dialogRef}
             className={styles.overlay}
             role="dialog"
             aria-modal="true"
-            aria-label={`Unlocked file: ${name || 'gated file'}`}
+            aria-labelledby="xc-gated-file-title"
+            aria-describedby="xc-gated-file-meta"
             onClick={onClose}
             tabIndex={-1}
         >
             <div className={styles.panel} onClick={(e) => e.stopPropagation()} role="presentation" tabIndex={-1}>
-                <p className={styles.title}>{name || 'Unlocked file'}</p>
-                <p className={styles.meta}>
-                    {bytes ? `${bytes.length.toLocaleString()} bytes · ` : ''}
+                <p id="xc-gated-file-title" className={styles.title}>{name || 'Unlocked file'}</p>
+                <p id="xc-gated-file-meta" className={styles.meta}>
+                    {bytes ? `${formatDecimalAmount(bytes.length)} bytes · ` : ''}
                     detected: {kindLabel(sniffed.kind, sniffed.mime)}
                     {declared ? ` · published as: ${declared}` : ''}
                 </p>

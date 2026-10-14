@@ -233,7 +233,10 @@ describe('BetFeedDetail reports the outcome of a bet the market has outlived', (
     it('shows a failed submit even when the market has stopped taking bets', async () => {
         const { messaging } = harness({
             feedStatuses: ['open', 'closed'],
-            submitThrows: Object.assign(new Error('Broadcast refused by the node.'), { name: 'Error' }),
+            submitThrows: Object.assign(new Error('Encoder RPC error: Broadcast refused by the node.'), {
+                name: 'SDKEncoderError',
+                code: 'ENCODER_RPC_ERROR',
+            }),
         });
         let utils;
         await domAct(async () => {

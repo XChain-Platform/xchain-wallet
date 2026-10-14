@@ -54,17 +54,25 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
 
-skipUnlessDocs('extension listing-pack smoke');
-
 const PACK_PATH = 'components/wallet/release/extension/chrome-web-store.md';
 const POLICY_PATH = 'components/wallet/privacy/privacy-policy.md';
 const MANIFEST_PATH = 'packages/extension/manifest.json';
+const FREEZE_PATH = 'packages/extension/docs/manifest-freeze.json';
 const ASSET_DIR = 'packages/extension/docs/listing-assets';
 const CAPTURE_SCRIPT_PATH = 'packages/extension/scripts/capture-listing-screenshots.mjs';
 
 assert.ok(existsSync(join(root, MANIFEST_PATH)), `${MANIFEST_PATH} exists`);
 
 const manifest = JSON.parse(read(MANIFEST_PATH));
+const freeze = JSON.parse(read(FREEZE_PATH));
+assert.deepEqual(
+    [...(manifest.optional_permissions ?? [])].sort(),
+    [...(freeze.optional_permissions ?? [])].sort(),
+    'optional permissions match the frozen review surface',
+);
+
+skipUnlessDocs('extension listing-pack smoke');
+
 const captureScript = read(CAPTURE_SCRIPT_PATH);
 const packRaw = readFileSync(docsPath('release', 'extension', 'chrome-web-store.md'), 'utf8');
 const policyRaw = readFileSync(docsPath('privacy', 'privacy-policy.md'), 'utf8');
@@ -132,7 +140,10 @@ const boldTokens = (text) => [...text.matchAll(/\*\*`([A-Za-z_]+)`\*\*/g)].map((
 // `permissions[]`.
 const NON_PERMISSION_KEYS = new Set(['web_accessible_resources', 'host_permissions']);
 
-const declared = manifest.permissions ?? [];
+const declared = [
+    ...(manifest.permissions ?? []),
+    ...(manifest.optional_permissions ?? []),
+];
 assert.ok(declared.length >= 1, 'the manifest declares at least one permission');
 
 const packJustified = new Set(boldTokens(permsSection));
@@ -262,11 +273,11 @@ assert.equal(nameLine[1].trim(), manifest.name,
     + `"${manifest.name}". The store takes the listing title from the package, so these cannot differ.`);
 
 const platformLead = 'The wallet for the XChain Platform';
-const currentSupport = 'Currently supports BTC, DOGE &amp; LTC';
+const currentSupport = 'Current chains: Bitcoin, Litecoin &amp; Dogecoin';
 assert.ok(captureScript.includes(platformLead),
     `${CAPTURE_SCRIPT_PATH} promo tile must lead with "${platformLead}"`);
 assert.ok(captureScript.includes(currentSupport),
-    `${CAPTURE_SCRIPT_PATH} promo tile must describe BTC, DOGE, and LTC as current support`);
+    `${CAPTURE_SCRIPT_PATH} promo tile must name Bitcoin, Litecoin, and Dogecoin as current chain support`);
 assert.ok(!/Bitcoin, Dogecoin &(?:amp;)? Litecoin wallet/.test(captureScript),
     `${CAPTURE_SCRIPT_PATH} promo tile must not define the product as a three-coin wallet`);
 

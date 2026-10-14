@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { describe, expect, it, vi } from 'vitest';
+import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
 import {
     chainIdForCoinCode,
     coinCodeForChainId,
@@ -31,6 +32,19 @@ function makeRegistry() {
 }
 
 describe('coin code conversion', () => {
+    const bundledRegistry = defaultRegistry();
+    const bundledChains = bundledRegistry.supportedChains().filter(({ coin, networkKind }) => (
+        ['bitcoin', 'litecoin', 'dogecoin'].includes(coin)
+        && ['mainnet', 'testnet', 'regtest'].includes(networkKind)
+    ));
+
+    it.each(bundledChains)('round-trips bundled chain $id', ({ id }) => {
+        const code = coinCodeForChainId(id, bundledRegistry);
+
+        expect(isKnownCoinCode(code)).toBe(true);
+        expect(chainIdForCoinCode(code, bundledRegistry)).toBe(id);
+    });
+
     it('round-trips a known chain id through its short code', () => {
         const registry = makeRegistry();
 

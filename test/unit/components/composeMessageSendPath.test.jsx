@@ -174,6 +174,76 @@ describe('message validation is visible from the primary action', () => {
         fireEvent.click(action);
         expect(alertText(utils)).toMatch(/Write a message to send/);
     });
+
+    it.each([
+        ['', /greater than zero/i],
+        ['0', /greater than zero/i],
+        ['-1', /greater than zero/i],
+        ['1.123456789', /at most 8 decimal places/i],
+    ])('rejects custom fee rate %j before review', async (rate, expected) => {
+        const messaging = stubMessaging();
+        const utils = await openFilledForm(messaging);
+
+        fireEvent.change(utils.getByRole('slider', { name: 'Network fee' }), {
+            target: { value: '3' },
+        });
+        fireEvent.change(utils.getByLabelText(/Custom fee rate/), {
+            target: { value: rate },
+        });
+        fireEvent.click(sendButton(utils));
+
+        expect(alertText(utils)).toMatch(expected);
+        expect(messaging.composeMessageForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('shows an indexer lookup failure as plain copy and does not open review', async () => {
+        const failure = new Error('Explorer request timed out: /BTC/api/pubkey?address=secret');
+        failure.name = 'SDKExplorerError';
+        failure.code = 'EXPLORER_TIMEOUT';
+        const messaging = stubMessaging({
+            getRecipientPubkey: vi.fn(() => Promise.reject(failure)),
+        });
+        const utils = await openFilledForm(messaging);
+
+        expect(alertText(utils)).toMatch(/service that reads the chain did not answer in time/i);
+        expect(alertText(utils)).not.toMatch(/\/api\/pubkey|secret|SDKExplorerError/i);
+        fireEvent.click(sendButton(utils));
+        expect(messaging.composeMessageForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('review shows the built recipient and exact built fee, and Back keeps the draft', async () => {
+        const messaging = stubMessaging({
+            composeMessageForConfirm: vi.fn().mockResolvedValue({
+                psbt: 'aa00',
+                encoding: 'psbt',
+                actionString: `MESSAGE|2|BTC|${RECIPIENT}|ciphertext`,
+                action: 'MESSAGE',
+                version: 2,
+                chainId: CHAIN,
+                networkFeeSats: 321,
+                decoded: {
+                    summary: `Send encrypted message to ${RECIPIENT}`,
+                    details: [{ label: 'Recipient', value: RECIPIENT }],
+                    warnings: [],
+                },
+                simulation: { deltas: [], sideEffects: [], notes: [] },
+                tamperVerified: true,
+            }),
+        });
+        const utils = await openFilledForm(messaging);
+
+        await pressSend(utils);
+        expect(utils.getByTestId('confirm-modal')).toBeTruthy();
+        expect(utils.container.textContent).toContain(RECIPIENT);
+        expect(utils.container.textContent).toContain('Network fee: 0.00000321 BTC');
+
+        await domAct(async () => {
+            fireEvent.click(utils.getByTestId('confirm-reject'));
+            await drainMicrotasks();
+        });
+        expect(utils.getByLabelText('Address').value).toBe(RECIPIENT);
+        expect(utils.getByLabelText('Message').value).toBe('hello there');
+    });
 });
 
 describe('a failed compose is shown on the form stage (issue #12)', () => {

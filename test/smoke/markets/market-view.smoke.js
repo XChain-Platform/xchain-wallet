@@ -113,8 +113,8 @@ for (const [shell, appPath] of [
     const app = readFileSync(appPath, 'utf8')
         + (shell === 'web' ? readFileSync(WEB_DEX_SURFACE, 'utf8') : '');
     assert.ok(
-        /import \{ MarketView \}/.test(app),
-        `${shell} App imports MarketView`,
+        app.includes('shared/routes/MarketView.jsx'),
+        `${shell} App loads MarketView`,
     );
     assert.ok(
         /<MarketView\b/.test(app),

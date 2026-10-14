@@ -6,9 +6,10 @@
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-3);
-    max-width: 32rem;
-    margin: 0 auto;
-    padding: var(--xc-space-4);
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
 }
 
 .title {
@@ -25,6 +26,14 @@
     color: var(--xc-text);
 }
 
+.nextStep {
+    margin: 0;
+    font-size: var(--xc-text-sm);
+    line-height: 1.5;
+    color: var(--xc-text);
+    font-weight: 600;
+}
+
 /* Not styled as an error. It is the reassuring half of this screen, and
    painting it red would say the opposite of what it says. */
 .reassure {
@@ -37,33 +46,11 @@
     color: var(--xc-text);
 }
 
-.escapeLink {
-    align-self: center;
-    background: none;
-    border: none;
-    padding: var(--xc-space-2);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-    cursor: pointer;
-    text-decoration: underline;
-    text-underline-offset: 3px;
-    font-family: inherit;
-}
-
-.escapeLink:hover {
-    color: var(--xc-text);
-}
-
-.escapeLink:focus-visible {
-    outline: 2px solid var(--xc-focus-ring, var(--xc-accent-primary));
-    outline-offset: 2px;
-    border-radius: var(--xc-radius-sm);
-}
-
 .wipeConfirm {
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
+    min-width: 0;
 }
 
 .wipeWarning {
@@ -86,12 +73,5 @@
 .wipeError {
     margin: 0;
     font-size: var(--xc-text-xs);
-    color: var(--xc-danger);
-}
-
-.detail {
-    margin: 0;
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    word-break: break-word;
+    color: var(--xc-danger-fg);
 }

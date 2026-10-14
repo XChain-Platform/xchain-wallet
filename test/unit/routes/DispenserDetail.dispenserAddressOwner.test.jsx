@@ -95,7 +95,14 @@ function recordingMessaging({ addresses, dispenser }) {
         getActiveAddresses: () => Promise.resolve({}),
         getDispenses: () => Promise.resolve({ data: [] }),
         getDispenserLifecycle: () => Promise.resolve({ data: [] }),
-        getWalletBalances: () => Promise.resolve({}),
+        getWalletBalances: () => Promise.resolve({
+            [CHAIN]: [{
+                address: addresses.find((address) => (
+                    address.address === (dispenser.address || dispenser.get_address || dispenser.source)
+                ))?.address,
+                balances: { tokens: [{ tick: 'XCHAIN', quantity: '10000000000', divisibility: 8 }] },
+            }],
+        }),
         getSettings: () => Promise.resolve({ walletMode: 'full' }),
         signerReady: () => Promise.resolve({ ready: true }),
         getSignerStatus: () => Promise.resolve({ status: 'available' }),
@@ -178,6 +185,10 @@ describe('a wallet holding only the dispenser address', () => {
     it('refills from the dispenser address', async () => {
         const { utils, calls } = await mount({ addresses: [HOST_ADDRESS] });
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Refill' })));
+        expect(utils.queryByText(/Refill dispenser #4100/)).toBeNull();
+        expect(utils.getByLabelText(/^Refill amount/)).toHaveAccessibleDescription(
+            'Amount of XCHAIN to add to escrow.',
+        );
         await step(() => fireEvent.change(utils.getByLabelText(/^Refill amount/), { target: { value: '50' } }));
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Refill dispenser' })));
         const btn = approveButton(utils);
@@ -191,6 +202,8 @@ describe('a wallet holding only the dispenser address', () => {
     it('edits from the dispenser address', async () => {
         const { utils, calls } = await mount({ addresses: [HOST_ADDRESS] });
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Edit' })));
+        expect(utils.queryByText(/Edit dispenser #4100/)).toBeNull();
+        expect(utils.getByLabelText(/^Block list/)).toHaveAccessibleDescription(/leave blank to keep it/i);
         await step(() => fireEvent.change(utils.getByLabelText(/^Block list/), { target: { value: '2702' } }));
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Edit dispenser' })));
         const btn = approveButton(utils);

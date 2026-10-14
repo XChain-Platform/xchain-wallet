@@ -25,6 +25,7 @@
 import { useEffect, useState } from 'react';
 import S from './MarketLifecycleTimeline.module.css';
 import { StatusMessage } from '@xchain-wallet/core/ui';
+import { formatDecimalAmount } from '../utils/amountFormat.js';
 
 const LABEL = {
     created: 'Created',
@@ -67,16 +68,20 @@ export function MarketLifecycleTimeline({ messaging, kind, chainId, address, act
         let cancelled = false;
         const fetchLifecycle = kind === 'order' ? messaging?.getOrderLifecycle : messaging?.getSwapLifecycle;
         if (typeof fetchLifecycle !== 'function') {
-            setState({ loading: false, events: [], error: null });
+            setState({
+                loading: false,
+                events: [{ kind: 'created', row: { action_index: String(actionIndex), block_index: createdBlock } }],
+                error: 'Timeline is unavailable.',
+            });
             return undefined;
         }
         const idx = String(actionIndex);
         const parentKey = kind === 'order' ? 'order_action_index' : 'swap_action_index';
         setState({ loading: true, events: null, error: null });
 
-        const lane = (k, req) => fetchLifecycle({ chainId, kind: k, ...req })
-            .then((r) => ({ k, rows: extractRows(r) }))
-            .catch(() => ({ k, rows: [] }));
+        const lane = (k, req) => Promise.resolve()
+            .then(() => fetchLifecycle({ chainId, kind: k, ...req }))
+            .then((r) => ({ k, rows: extractRows(r), error: null }), (error) => ({ k, rows: [], error }));
 
         Promise.all([
             lane('edits', { query: address, type: 'address' }),
@@ -97,7 +102,14 @@ export function MarketLifecycleTimeline({ messaging, kind, chainId, address, act
                 }
             }
             events.sort((a, b) => sortKey(b.row) - sortKey(a.row));
-            setState({ loading: false, events, error: null });
+            // A failed lane is reported, never hidden, while the events that
+            // did load (and the known creation event) stay on screen.
+            const failed = results.find((r) => r.error);
+            setState({
+                loading: false,
+                events,
+                error: failed ? (failed.error?.message || 'Failed to load timeline.') : null,
+            });
         }).catch((err) => {
             if (!cancelled) setState({ loading: false, events: [], error: err?.message || 'Failed to load timeline.' });
         });
@@ -105,24 +117,31 @@ export function MarketLifecycleTimeline({ messaging, kind, chainId, address, act
         return () => { cancelled = true; };
     }, [messaging, kind, chainId, address, actionIndex, createdBlock]);
 
-    if (state.loading) return <div className={S.status}>Loading timeline…</div>;
-    if (state.error) return <StatusMessage variant="error" className={S.status}>{state.error}</StatusMessage>;
-    if (!state.events || state.events.length === 0) return <div className={S.status}>No lifecycle events yet.</div>;
+    if (state.loading) return <StatusMessage variant="status" className={S.status}>Loading timeline…</StatusMessage>;
+    const errorNotice = state.error
+        ? <StatusMessage variant="error" className={S.status}>{state.error}</StatusMessage>
+        : null;
+    if (!state.events || state.events.length === 0) {
+        return errorNotice || <div className={S.status}>No lifecycle events yet.</div>;
+    }
 
     return (
+        <>
+        {errorNotice}
         <ul className={S.timeline} aria-label="Trade lifecycle">
             {state.events.slice(0, 40).map((e, i) => (
-                <li key={`${e.kind}-${e.row.action_index ?? i}`} className={S.event}>
+                <li key={`${e.kind}-${e.row.action_index ?? 'unknown'}-${i}`} className={S.event}>
                     <span className={S.label}>{LABEL[e.kind] || e.kind}</span>
                     <span className={S.meta}>
                         {e.kind === 'matches' && e.row.give_amount != null
-                            ? `${e.row.give_amount} ${e.row.give_tick || e.row.give_coin || ''}`.trim()
+                            ? `${formatDecimalAmount(e.row.give_amount)} ${e.row.give_tick || e.row.give_coin || ''}`.trim()
                             : e.row.block_index != null
-                                ? `block ${e.row.block_index}`
-                                : (e.row.action_index != null ? `#${e.row.action_index}` : '')}
+                                ? `block ${formatDecimalAmount(e.row.block_index)}`
+                                : (e.row.action_index != null ? `#${formatDecimalAmount(e.row.action_index)}` : '')}
                     </span>
                 </li>
             ))}
         </ul>
+        </>
     );
 }

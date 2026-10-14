@@ -98,7 +98,7 @@ const shells = [
 for (const p of shells) {
     const src = read(...p);
     const label = p.join('/');
-    assert.match(src, /import \{ PublishFileForm \}/, `${label}: form imported`);
+    assert.match(src, /import \{ PublishFileForm \}|const PublishFileForm = lazyRoute\(\(\) => import\('@xchain-wallet\/core\/shared\/routes\/PublishFileForm\.jsx'\)/, `${label}: form imported`);
     assert.match(src, /'publish-file'/, `${label}: view id registered`);
     assert.match(src, /unlockedView === 'publish-file'/, `${label}: view dispatched`);
     assert.match(src, /onPublishFile/, `${label}: ActionsMenu entry wired`);

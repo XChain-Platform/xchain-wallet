@@ -63,16 +63,17 @@ import {
 } from '../flows/coinpayQueries.js';
 import { estimateNativeSendFeeTiers, displayRateToSettingsCustom } from '../flows/feeEstimate.js';
 import { baseUnitsToCoinText, obligationBaseUnits } from '../market/obligationStatus.js';
+import { tickerForCoin } from '../registry/coinTicker.js';
 import { randomUUID } from '../util/uuid.js';
+import { taggedLogger } from './taggedLogger.js';
 
 const DEFAULT_INTERVAL_MS = 60 * 1000;
+const NOTIFIED_CAP = 500;
 
 // Lease TTL: 3 unrenewed cycles (spec: a shut-down payer must never
 // block payment for long; with the 60s default this is a 3-minute
 // takeover window, inside the spec's 15-minute bound for 5-min cycles).
 const LEASE_CYCLES = 3;
-
-const NOOP_LOGGER = { debug() {}, warn() {}, error() {} };
 
 /** PendingTx statuses that mean "a payment may already be in flight". */
 const ATTEMPTED_STATUSES = new Set([
@@ -112,6 +113,9 @@ export class CoinpayAutopayWatcher {
      * @param {import('../registry/index.js').ChainRegistry} deps.chainRegistry
      * @param {(walletId: string) => (object | null)} deps.getSigner
      *   pre-unlocked SoftwareSigner lookup (SignerPool.get); null = cannot sign
+     * @param {() => Promise<import('../schemas/settings.js').Settings>} deps.getSettings
+     *   read live settings before delivery so the incoming-receipts toggle
+     *   gates every CoinPay status notification
      * @param {{ reserve: Function, release: Function }} [deps.reservationLedger]
      * the host-shared ledger; optional so tests / degraded shells run without it
      * @param {(n: { kind: string, title: string, body: string, data?: object }) => (void | Promise<void>)} deps.notify
@@ -120,12 +124,16 @@ export class CoinpayAutopayWatcher {
      * @param {() => number} [deps.now]
      * @param {{ debug: Function, warn: Function, error: Function }} [deps.logger]
      * @param {Function} [deps.coinpayAction]  injectable for tests
+     * @param {string} [deps.instanceId] stable shell identity when one process is the only payer
+     * @param {() => Promise<string[] | Set<string>>} [deps.loadNotified]
+     * @param {(keys: string[]) => (void | Promise<void>)} [deps.saveNotified]
      */
     constructor({
         vault,
         sdkRegistry,
         chainRegistry,
         getSigner,
+        getSettings,
         reservationLedger,
         notify,
         shellKind,
@@ -133,11 +141,15 @@ export class CoinpayAutopayWatcher {
         now,
         logger,
         coinpayAction,
+        instanceId,
+        loadNotified,
+        saveNotified,
     } = {}) {
         if (!vault) throw new Error('CoinpayAutopayWatcher: vault is required');
         if (!sdkRegistry) throw new Error('CoinpayAutopayWatcher: sdkRegistry is required');
         if (!chainRegistry) throw new Error('CoinpayAutopayWatcher: chainRegistry is required');
         if (typeof getSigner !== 'function') throw new Error('CoinpayAutopayWatcher: getSigner is required');
+        if (typeof getSettings !== 'function') throw new Error('CoinpayAutopayWatcher: getSettings is required');
         if (typeof notify !== 'function') throw new Error('CoinpayAutopayWatcher: notify is required');
         if (!['desktop', 'extension', 'web'].includes(shellKind)) {
             throw new Error('CoinpayAutopayWatcher: shellKind must be desktop | extension | web');
@@ -147,22 +159,27 @@ export class CoinpayAutopayWatcher {
         this._sdkRegistry = sdkRegistry;
         this._chainRegistry = chainRegistry;
         this._getSigner = getSigner;
+        this._getSettings = getSettings;
         this._ledger = reservationLedger || null;
         this._notify = notify;
         this._shellKind = shellKind;
         this._intervalMs = Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : DEFAULT_INTERVAL_MS;
         this._now = typeof now === 'function' ? now : () => Date.now();
-        this._log = logger || NOOP_LOGGER;
+        this._log = taggedLogger(logger, 'coinpay');
         this._coinpayAction = coinpayAction || defaultCoinpayAction;
 
-        this._instanceId = randomUUID();
+        this._instanceId = typeof instanceId === 'string' && instanceId ? instanceId : randomUUID();
+        this._loadNotified = typeof loadNotified === 'function' ? loadNotified : null;
+        this._saveNotified = typeof saveNotified === 'function' ? saveNotified : null;
         this._timer = null;
         this._ticking = false;
         this._unsubs = [];
         /** @type {Set<string>} matches this instance attempted (broadcast reached or unknown) */
         this._attempted = new Set();
-        /** @type {Set<string>} notification dedupe keys (`${matchIndex}:${reason}`) */
+        /** @type {Set<string>} notification dedupe keys (`${chainId}:${matchIndex}:${reason}`) */
         this._notified = new Set();
+        this._notifiedLoaded = false;
+        this._notifiedDirty = false;
         /** @type {Map<string, { reservationId: string, chainId: string }>} matchIndex -> hold */
         this._holds = new Map();
         /** @type {{ payer: boolean, armed: number, unsignable: string[] } | null} */
@@ -243,6 +260,8 @@ export class CoinpayAutopayWatcher {
     }
 
     async _cycle() {
+        await this._restoreNotified();
+        await this._restoreHolds();
         let consents;
         try {
             consents = (await listAutopayOrders({ vault: this._vault }))
@@ -292,6 +311,7 @@ export class CoinpayAutopayWatcher {
         }
 
         await this._releaseTerminalHolds(pendingTxs);
+        await this._persistNotified();
     }
 
     /**
@@ -374,6 +394,12 @@ export class CoinpayAutopayWatcher {
         if (status !== 'pending_coinpay') {
             this._terminalMatches = this._terminalMatches || new Set();
             this._terminalMatches.add(matchIndex);
+            for (const key of this._notified) {
+                if (key.includes(`:${matchIndex}:`)) {
+                    this._notified.delete(key);
+                    this._notifiedDirty = true;
+                }
+            }
             return;
         }
 
@@ -429,7 +455,7 @@ export class CoinpayAutopayWatcher {
             await this._notifyOnce(matchIndex, decision.reason, {
                 kind: 'coinpay-autopay-manual',
                 title: 'Payment needs attention',
-                body: this._manualBody(decision.reason, row, consent),
+                body: this._manualBody(decision.reason, row, consent, chainId),
                 data: {
                     chainId,
                     orderMatchActionIndex: matchIndex,
@@ -445,10 +471,11 @@ export class CoinpayAutopayWatcher {
 
         const signer = this._getSigner(consent.walletId);
         if (!signer) {
+            const payment = this._paymentText(row, chainId);
             await this._notifyOnce(matchIndex, 'locked', {
                 kind: 'coinpay-autopay-manual',
                 title: 'Auto-pay is disarmed',
-                body: 'A matched order needs payment but the wallet cannot sign right now. Unlock to arm auto-pay, or pay manually from Payments due.',
+                body: `${payment ? `${payment} is due` : 'Payment is due'} for order #${consent.orderActionIndex}. Unlock to use auto-pay, or open Payments due.`,
                 data: { chainId, orderMatchActionIndex: matchIndex, reason: 'locked', urgency: 'high' },
             });
             return;
@@ -470,7 +497,7 @@ export class CoinpayAutopayWatcher {
             await this._notifyOnce(matchIndex, 'unusable-amount', {
                 kind: 'coinpay-autopay-manual',
                 title: 'Payment needs attention',
-                body: 'A matched order needs payment but its amount could not be read. Pay manually from Payments due.',
+                body: `The amount due for order #${consent.orderActionIndex} could not be read. Open Payments due to review it.`,
                 data: { chainId, orderMatchActionIndex: matchIndex, reason: 'unusable-amount', urgency: 'high' },
             });
             return;
@@ -491,7 +518,7 @@ export class CoinpayAutopayWatcher {
             await this._notifyOnce(matchIndex, 'source-missing', {
                 kind: 'coinpay-autopay-manual',
                 title: 'Payment needs attention',
-                body: 'A matched order needs payment but its address is no longer in this wallet. Pay manually from Payments due.',
+                body: `${baseUnitsToCoinText(amountBase) ?? amountBase} ${tickerFor(this._chainRegistry, chainId)} is due for order #${consent.orderActionIndex}, but its address is no longer in this wallet. Open Payments due.`,
                 data: { chainId, orderMatchActionIndex: matchIndex, reason: 'source-missing', urgency: 'high' },
             });
             return;
@@ -565,7 +592,7 @@ export class CoinpayAutopayWatcher {
             }
             await this._notifyOnce(matchIndex, 'autopaid', {
                 kind: 'coinpay-autopaid',
-                title: 'Auto-paid a matched order',
+                title: 'Auto-pay complete',
                 body: `Paid ${baseUnitsToCoinText(amountBase) ?? amountBase} ${coinTicker} for order #${consent.orderActionIndex}.`,
                 data: { chainId, orderMatchActionIndex: matchIndex, txid },
             });
@@ -583,10 +610,10 @@ export class CoinpayAutopayWatcher {
                 || 'The wallet service returned no explanation').replace(/[.!?]+$/, '');
             await this._notifyOnce(matchIndex, short ? 'balance-short' : 'pay-failed', {
                 kind: 'coinpay-autopay-manual',
-                title: short ? 'Match found, balance short' : 'Auto-pay attempt failed',
+                title: short ? `Not enough ${coinTicker} for auto-pay` : 'Auto-pay failed',
                 body: short
-                    ? `A matched order needs ${baseUnitsToCoinText(amountBase) ?? amountBase} ${coinTicker} but the order's address cannot cover it. Fund the address or pay manually from Payments due.`
-                    : `An automatic payment attempt stopped: ${failureReason}. Check Payments due to pay manually before the deadline.`,
+                    ? `Order #${consent.orderActionIndex} needs ${baseUnitsToCoinText(amountBase) ?? amountBase} ${coinTicker}. Fund its address or open Payments due.`
+                    : `Could not pay ${baseUnitsToCoinText(amountBase) ?? amountBase} ${coinTicker} for order #${consent.orderActionIndex}: ${failureReason}. Open Payments due before the deadline.`,
                 data: { chainId, orderMatchActionIndex: matchIndex, reason: short ? 'balance-short' : 'pay-failed', urgency: 'high' },
             });
             this._log.error('CoinpayAutopayWatcher: payment failed', e);
@@ -602,6 +629,26 @@ export class CoinpayAutopayWatcher {
                 tx.status === 'indexed' && pendingTxReferencesMatch(tx, matchIndex));
             if (terminal.has(matchIndex) || paidAndIndexed) {
                 await this._releaseHold(matchIndex);
+            }
+        }
+    }
+
+    async _restoreHolds() {
+        if (!this._ledger || typeof this._ledger.all !== 'function') return;
+        let entries;
+        try {
+            entries = await this._ledger.all();
+        } catch (e) {
+            this._log.warn('CoinpayAutopayWatcher: hold restore failed', e);
+            return;
+        }
+        for (const entry of entries || []) {
+            if (!entry || typeof entry.id !== 'string' || typeof entry.chainId !== 'string') continue;
+            const prefix = `autopay:${entry.chainId}:`;
+            if (!entry.id.startsWith(prefix)) continue;
+            const matchIndex = entry.id.slice(prefix.length);
+            if (matchIndex) {
+                this._holds.set(matchIndex, { reservationId: entry.id, chainId: entry.chainId });
             }
         }
     }
@@ -622,30 +669,81 @@ export class CoinpayAutopayWatcher {
      * @param {string} reason
      * @param {object} row
      * @param {import('../schemas/autopayOrder.js').AutopayOrder} consent
+     * @param {string} chainId
      */
-    _manualBody(reason, row, consent) {
-        const amount = baseUnitsToCoinText(String(row.coin_amount ?? row.coinAmount ?? ''));
+    _manualBody(reason, row, consent, chainId) {
+        const payment = this._paymentText(row, chainId);
         const orderRef = consent.orderActionIndex ? `order #${consent.orderActionIndex}` : 'your order';
         switch (reason) {
             case 'past-arming-cutoff':
             case 'past-retry-cutoff':
-                return `A match on ${orderRef} is close to its payment deadline and auto-pay has stood down. Pay${amount ? ` ${amount}` : ''} manually from Payments due now.`;
+                return `${payment ? `Pay ${payment}` : 'Payment is due'} for ${orderRef} before the deadline. Auto-pay is off; open Payments due.`;
             case 'amounts-unavailable':
             case 'match-unavailable':
-                return `A match on ${orderRef} could not be verified with the service. Review and pay manually from Payments due.`;
+                return `Payment for ${orderRef} could not be verified. Open Payments due to review it.`;
             default:
-                return `A match on ${orderRef} needs a manual payment. Open Payments due to review it.`;
+                return `${payment ? `${payment} is due` : 'A manual payment is due'} for ${orderRef}. Open Payments due to review it.`;
         }
     }
 
+    _paymentText(row, chainId) {
+        const baseUnits = obligationBaseUnits(row.coin_amount ?? row.coinAmount);
+        const amount = baseUnits === null ? null : baseUnitsToCoinText(baseUnits.toString());
+        return amount ? `${amount} ${tickerFor(this._chainRegistry, chainId)}` : null;
+    }
+
     async _notifyOnce(matchIndex, reason, payload) {
-        const key = `${matchIndex}:${reason}`;
+        const chainId = typeof payload?.data?.chainId === 'string' ? payload.data.chainId : '';
+        const key = `${chainId}:${matchIndex}:${reason}`;
         if (this._notified.has(key)) return;
-        this._notified.add(key);
+        let settings;
         try {
-            await this._notify(payload);
+            settings = await this._getSettings();
+        } catch (e) {
+            this._log.error('CoinpayAutopayWatcher: getSettings failed', e);
+            return;
+        }
+        if (settings?.notifications?.incomingReceipts !== true) return;
+        try {
+            const delivered = await this._notify(payload);
+            if (delivered === false) {
+                this._notified.add(key);
+                return;
+            }
         } catch (e) {
             this._log.error('CoinpayAutopayWatcher: notify adapter threw', e);
+            this._notified.add(key);
+            return;
+        }
+        this._notified.add(key);
+        this._notifiedDirty = true;
+        await this._persistNotified();
+    }
+
+    async _restoreNotified() {
+        if (this._notifiedLoaded) return;
+        this._notifiedLoaded = true;
+        if (!this._loadNotified) return;
+        try {
+            const stored = await this._loadNotified();
+            for (const key of stored instanceof Set ? stored : (Array.isArray(stored) ? stored : [])) {
+                if (typeof key === 'string' && key) this._notified.add(key);
+            }
+        } catch (e) {
+            this._log.warn('CoinpayAutopayWatcher: loadNotified failed', e);
+        }
+    }
+
+    async _persistNotified() {
+        if (!this._notifiedDirty || !this._saveNotified) return;
+        while (this._notified.size > NOTIFIED_CAP) {
+            this._notified.delete(this._notified.values().next().value);
+        }
+        try {
+            await this._saveNotified(Array.from(this._notified));
+            this._notifiedDirty = false;
+        } catch (e) {
+            this._log.warn('CoinpayAutopayWatcher: saveNotified failed', e);
         }
     }
 }
@@ -655,8 +753,8 @@ function tickerFor(chainRegistry, chainId) {
     try {
         const desc = chainRegistry.get(chainId);
         const coin = desc?.coin ?? String(chainId).split('-')[0];
-        return String(coin).toUpperCase().slice(0, 12) || 'COIN';
+        return tickerForCoin(coin).slice(0, 12) || 'COIN';
     } catch {
-        return String(chainId).split('-')[0].toUpperCase() || 'COIN';
+        return tickerForCoin(String(chainId).split('-')[0]).slice(0, 12) || 'COIN';
     }
 }

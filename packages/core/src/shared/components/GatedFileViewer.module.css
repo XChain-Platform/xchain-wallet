@@ -1,27 +1,38 @@
 .overlay {
+    box-sizing: border-box;
     position: fixed;
     inset: 0;
-    z-index: 1000;
+    z-index: var(--xc-z-modal);
     background: rgba(15, 23, 42, 0.55);
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: var(--xc-space-4);
+    padding: calc(var(--xc-space-4) + env(safe-area-inset-top, 0))
+        calc(var(--xc-space-4) + env(safe-area-inset-right, 0))
+        calc(var(--xc-space-4) + env(safe-area-inset-bottom, 0))
+        calc(var(--xc-space-4) + env(safe-area-inset-left, 0));
 }
 
 .panel {
+    box-sizing: border-box;
     width: 100%;
+    /* Viewer width has no matching token and bounds long file content. */
     max-width: 520px;
     max-height: 85vh;
+    max-height: min(
+        85vh,
+        calc(var(--xc-viewport-h, 100vh) - var(--xc-space-4) - var(--xc-space-4))
+    );
+    min-height: 0;
     display: flex;
     flex-direction: column;
     background: var(--xc-surface);
     color: var(--xc-text);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-lg);
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+    box-shadow: var(--xc-shadow-modal);
     padding: var(--xc-space-4);
-    animation: pop 140ms ease-out;
+    animation: pop var(--xc-motion-duration-fast) var(--xc-motion-ease-enter);
 }
 
 @keyframes pop {
@@ -30,8 +41,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .panel { animation: none; }
+    :global(:root:not([data-xc-reduced-motion='no-preference'])) .panel { animation: none; }
 }
+
+:global(:root[data-xc-reduced-motion='reduce']) .panel { animation: none; }
 
 .title {
     margin: 0 0 var(--xc-space-1);
@@ -48,9 +61,11 @@
 }
 
 .body {
+    composes: scrollArea from '../../ui/Screen.module.css';
     flex: 1 1 auto;
     min-height: 0;
     overflow: auto;
+    overscroll-behavior: contain;
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-sm);
     background: var(--xc-bg-muted);
@@ -64,6 +79,10 @@
     /* Blob-backed <img>; pixelated upscaling beats blur for tiny
        on-chain images. */
     image-rendering: auto;
+}
+
+.image[aria-busy='true'] {
+    visibility: hidden;
 }
 
 .text {
@@ -99,4 +118,18 @@
     display: flex;
     gap: var(--xc-space-2);
     flex: 0 0 auto;
+}
+
+@media (max-width: 360px) {
+    .overlay {
+        padding: var(--xc-space-2);
+    }
+
+    .panel {
+        padding: var(--xc-space-3);
+    }
+
+    .actions {
+        flex-direction: column;
+    }
 }

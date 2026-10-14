@@ -86,12 +86,14 @@ describe('Home renders its coinpay resume cards from the shared scan', () => {
         const onResumeCoinpay = vi.fn();
         mountHome(messaging, { withProvider: true, onResumeCoinpay });
 
-        const card = await screen.findByText(/Payment due: pay 0\.5 to complete matched order #77/);
+        const card = await screen.findByRole('button', {
+            name: /Payment due: pay 0\.5 to complete matched order #77/,
+        });
         // Two addresses, ONE scan: the provider's. A Home that still scanned
         // for itself would have made four reads here.
         expect(messaging.getCoinpayObligationsForAddress).toHaveBeenCalledTimes(ADDRS.length);
 
-        act(() => { card.closest('button').click(); });
+        act(() => { card.click(); });
         expect(onResumeCoinpay).toHaveBeenCalledWith({
             chainId: CHAIN,
             address: ADDRS[0],

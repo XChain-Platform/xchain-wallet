@@ -132,11 +132,31 @@ describe('compareNativeFeeQuote', () => {
         expect(cmp.verdict).toBe('short');
     });
 
-    it('nothing attached means nothing to check', () => {
+    it('distinguishes no quote from a zero quote that remains free', () => {
         expect(compareNativeFeeQuote({ composed: null, fresh: quote({ requiredFeeSats: 4000000 }) }).verdict)
             .toBe('none');
-        expect(compareNativeFeeQuote({ composed: { requiredFeeSats: 0 }, fresh: null }).verdict)
-            .toBe('none');
+        expect(compareNativeFeeQuote({
+            composed: { requiredFeeSats: 0 },
+            fresh: quote({ requiredFeeSats: 0, minAcceptable: '0', maxAcceptable: '0' }),
+        }).verdict).toBe('ok');
+    });
+
+    it('refuses when a compose-time zero quote becomes a required fee', () => {
+        const cmp = compareNativeFeeQuote({
+            composed: { requiredFeeSats: 0 },
+            fresh: quote({ requiredFeeSats: 2000000, minAcceptable: '0.01900000', maxAcceptable: '0.02200000' }),
+        });
+        expect(cmp).toMatchObject({ verdict: 'short', paidSats: 0, expectedSats: 2000000 });
+        expect(isNativeFeeRefusal(cmp)).toBe(true);
+    });
+
+    it('refuses a fresh non-retryable invalid quote', () => {
+        const cmp = compareNativeFeeQuote({
+            composed: composedTwoHundredth,
+            fresh: quote({ requiredFeeSats: 0, valid: false, error: 'no usable current price' }),
+        });
+        expect(cmp).toMatchObject({ verdict: 'invalid', reason: 'no usable current price' });
+        expect(isNativeFeeRefusal(cmp)).toBe(true);
     });
 
     it('a static (verdict-free) quote is still judged: DEPLOY/EXECUTE price without a dry-run', () => {
@@ -155,7 +175,6 @@ describe('compareNativeFeeQuote', () => {
             ['offline / no answer', null],
             ['unsupported action', quote({ requiredFeeSats: 4000000, supported: false, error: 'not quotable' })],
             ['busy admission cap', quote({ requiredFeeSats: 0, valid: false, busy: true, retryable: true, error: 'fee quote busy' })],
-            ['stale oracle price', quote({ requiredFeeSats: 0, valid: false, error: 'no usable price' })],
             ['answer with no amount', quote({ requiredFeeSats: undefined })],
         ];
         for (const [label, fresh] of cases) {
@@ -230,6 +249,18 @@ describe('nativeFeeRequoteMessage', () => {
         expect(msg).toContain('0.01 LTC');
         expect(msg).not.toMatch(/would reject/i);
         expect(msg).toMatch(/nothing was signed or sent/i);
+    });
+
+    it('explains an expired quote without exposing the venue response', () => {
+        const invalid = compareNativeFeeQuote({
+            composed: composedTwoHundredth,
+            fresh: quote({ requiredFeeSats: 0, valid: false, error: 'oracle_round_stale' }),
+        });
+        const message = nativeFeeRequoteMessage(invalid);
+        expect(message).toMatch(/quote expired/i);
+        expect(message).toMatch(/nothing was signed or sent/i);
+        expect(message).toMatch(/get a current quote/i);
+        expect(message).not.toContain('oracle_round_stale');
     });
 
     it('carries the ticker from the quote, and an explicit one wins', () => {

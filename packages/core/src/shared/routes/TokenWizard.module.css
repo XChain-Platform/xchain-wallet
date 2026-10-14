@@ -1,13 +1,3 @@
-.card {
-    max-width: 640px;
-    margin: var(--xc-space-6) auto 0;
-    padding: var(--xc-space-6);
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-lg);
-    box-shadow: var(--xc-shadow-md);
-}
-
 .hint {
     font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
@@ -21,36 +11,28 @@
     margin: 0 0 var(--xc-space-3);
 }
 
+/* The step caption owns a full row above the step content, clear of the
+   cards below it. */
+.progress {
+    display: block;
+    flex: none;
+    width: 100%;
+    /* The fixed measure keeps the step label readable without a matching size token. */
+    max-width: 560px;
+    margin: var(--xc-space-3) auto var(--xc-space-3);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    text-align: center;
+}
+
 .error {
     font-size: var(--xc-text-sm);
-    color: var(--xc-danger);
+    color: var(--xc-danger-fg);
     background: color-mix(in srgb, var(--xc-danger) 8%, transparent);
     padding: var(--xc-space-2) var(--xc-space-3);
     border-radius: var(--xc-radius-sm);
     margin: var(--xc-space-2) 0;
-}
-
-.pickerLabel {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-1);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-    margin-bottom: var(--xc-space-3);
-}
-
-.picker {
-    padding: var(--xc-space-2) var(--xc-space-3);
-    font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-md);
-    color: var(--xc-text);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
-}
-
-.chainLine {
-    margin-bottom: var(--xc-space-3);
 }
 
 .fromLine {
@@ -64,14 +46,6 @@
     margin-bottom: var(--xc-space-3);
 }
 
-.fromLabel {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-}
-
 .templateGrid {
     list-style: none;
     padding: 0;
@@ -81,6 +55,10 @@
     gap: var(--xc-space-2);
 }
 
+.templateGrid > li {
+    display: flex;
+}
+
 @media (min-width: 480px) {
     .templateGrid {
         grid-template-columns: repeat(2, 1fr);
@@ -88,65 +66,9 @@
 }
 
 .templateCard {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--xc-space-1);
-    width: 100%;
-    text-align: start;
     padding: var(--xc-space-3);
     border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
     background: var(--xc-surface);
-    color: var(--xc-text);
-    cursor: pointer;
-    transition: background 0.15s;
-}
-
-.templateCard:hover:not(:disabled) {
-    background: var(--xc-bg-muted);
-}
-
-.templateCard:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-
-.templateCardDisabled {
-    cursor: not-allowed;
-    opacity: 0.55;
-    background: var(--xc-bg-muted);
-}
-
-.templateName {
-    font-weight: 700;
-    font-size: var(--xc-text-md);
-}
-
-.templateTag {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-    line-height: 1.3;
-}
-
-.templateSoon {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-accent-primary);
-    font-style: italic;
-}
-
-.checkRow {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--xc-space-2);
-    margin: var(--xc-space-2) 0 var(--xc-space-3);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    line-height: 1.4;
-}
-
-.checkRow input[type="checkbox"] {
-    margin-top: 3px;
 }
 
 .summary {
@@ -155,14 +77,16 @@
     color: var(--xc-text);
     margin: 0 0 var(--xc-space-3);
     line-height: 1.4;
+    overflow-wrap: anywhere;
 }
 
 .detailsList {
     display: grid;
-    grid-template-columns: auto 1fr;
-    gap: var(--xc-space-1) var(--xc-space-3);
+    grid-template-columns: var(--xc-table-label-column) minmax(0, 1fr);
+    gap: 0;
+    min-width: 0;
     margin: 0 0 var(--xc-space-4);
-    padding: var(--xc-space-3);
+    padding: var(--xc-space-1);
     background: var(--xc-bg-muted);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-md);
@@ -176,13 +100,29 @@
     letter-spacing: 0.04em;
     margin: 0;
     align-self: center;
+    padding: var(--xc-table-cell-padding-block) var(--xc-table-cell-padding-inline);
 }
 
 .detailsValue {
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
+    min-width: 0;
     margin: 0;
-    word-break: break-word;
+    overflow-wrap: anywhere;
+    padding: var(--xc-table-cell-padding-block) var(--xc-table-cell-padding-inline);
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+}
+
+.detailsLabel ~ .detailsLabel,
+.detailsValue ~ .detailsValue {
+    border-top: var(--xc-table-row-divider);
+}
+
+.detailsValue code,
+.txid {
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .warnings {
@@ -205,16 +145,29 @@
 
 .actions {
     display: flex;
+    flex-wrap: wrap;
     gap: var(--xc-space-2);
     justify-content: flex-end;
     margin-top: var(--xc-space-4);
 }
 
-.successTitle {
-    font-size: var(--xc-text-xl);
-    font-weight: 700;
-    margin: 0 0 var(--xc-space-3);
-    color: var(--xc-success);
+@media not all and (min-width: 400px) {
+    .detailsList {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .detailsValue {
+        padding-top: var(--xc-space-1);
+        text-align: start;
+    }
+
+    .detailsLabel {
+        padding-bottom: 0;
+    }
+
+    .detailsValue ~ .detailsValue {
+        border-top: 0;
+    }
 }
 
 .successLabel {
@@ -256,15 +209,6 @@
     text-align: start;
 }
 
-.advancedHeading {
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-    color: var(--xc-text);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    margin: var(--xc-space-4) 0 var(--xc-space-2);
-}
-
 .lockFlagRow {
     padding: var(--xc-space-2) 0;
     border-bottom: 1px solid var(--xc-border);
@@ -272,17 +216,6 @@
 
 .lockFlagRow:last-child {
     border-bottom: none;
-}
-
-.lockFlagRow .checkRow {
-    margin-bottom: var(--xc-space-1);
-}
-
-.lockFlagHint {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    margin: 0 0 0 calc(var(--xc-space-2) + 1em);
-    line-height: 1.4;
 }
 
 .listRow {

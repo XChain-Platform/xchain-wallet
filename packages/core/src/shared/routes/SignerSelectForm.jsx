@@ -35,7 +35,12 @@
 // `messaging.createAccount` / `messaging.generateReceiveAddress`.
 
 import { useEffect, useState } from 'react';
+import { FormPage, FormSection, InfoTip, RadioGroup } from '@xchain-wallet/core/ui';
+import { t } from '../../i18n/index.js';
 import { useMessaging } from '../useMessaging.js';
+import { useWalletMode } from '../hooks/useWalletMode.js';
+
+const NOOP = () => {};
 
 /**
  * @param {object} props
@@ -46,40 +51,54 @@ import { useMessaging } from '../useMessaging.js';
  */
 export function SignerSelectForm({ walletId, value, onChange, disabled = false }) {
     const { messaging } = useMessaging();
-    const [signers, setSigners] = useState(/** @type {any[] | null} */ (null));
-    const [error, setError] = useState(/** @type {string | null} */ (null));
+    const { isWatcherMode } = useWalletMode();
+    const emitChange = typeof onChange === 'function' ? onChange : NOOP;
+    const [registry, setRegistry] = useState(/** @type {{ walletId: string, messaging: any, signers: any[] | null, error: string | null } | null} */ (null));
+    const currentRegistry = registry?.walletId === walletId && registry.messaging === messaging
+        ? registry
+        : null;
+    const signers = currentRegistry?.signers ?? null;
+    const error = currentRegistry?.error ?? null;
 
     useEffect(() => {
         let cancelled = false;
+        setRegistry({ walletId, messaging, signers: null, error: null });
         if (typeof messaging.listSigners !== 'function') {
             // Shell hasn't wired listSigners; treat as zero HW signers.
-            setSigners([]);
+            setRegistry({ walletId, messaging, signers: [], error: null });
             return () => { cancelled = true; };
         }
-        messaging.listSigners(walletId)
+        Promise.resolve().then(() => messaging.listSigners(walletId))
             .then((list) => {
                 if (cancelled) return;
-                setSigners(Array.isArray(list) ? list : []);
+                setRegistry({
+                    walletId,
+                    messaging,
+                    signers: Array.isArray(list) ? list : [],
+                    error: null,
+                });
             })
             .catch((err) => {
                 if (cancelled) return;
                 // Loading the registry failed; fall back to software so
                 // the parent flow stays usable. Surface the error inline
                 // for diagnostic visibility.
-                setSigners([]);
-                setError(err?.message || 'Failed to load signers.');
+                setRegistry({
+                    walletId,
+                    messaging,
+                    signers: [],
+                    error: err?.message || 'Failed to load signers.',
+                });
             });
         return () => { cancelled = true; };
     }, [walletId, messaging]);
 
-    // Once the list is in, auto-resolve to software when there are no
-    // HW signers. Avoids a render with stale selection when the list
-    // changes (e.g., a device was just unpaired).
+    // Resolve a missing selection to software after the signer registry loads.
     useEffect(() => {
-        if (signers && signers.length === 0 && value !== null) {
-            onChange(null);
+        if (signers && value !== null && !signers.some((signer) => signer.id === value)) {
+            emitChange(null);
         }
-    }, [signers, value, onChange]);
+    }, [signers, value, emitChange]);
 
     if (!signers || signers.length === 0) {
         // Either still loading (we don't render a placeholder; the
@@ -93,121 +112,53 @@ export function SignerSelectForm({ walletId, value, onChange, disabled = false }
         {
             id: null,
             label: 'Software wallet (this seed)',
-            sub: 'Derived from the wallet password. Fast, no device needed.',
+            sub: 'Uses this wallet\'s recovery phrase on this device. Unlock it with the wallet password.',
             kind: 'software',
         },
         ...signers.map((s) => ({
             id: s.id,
             label: s.label || `${s.vendor} ${s.model}`,
-            sub: `${s.vendor} · ${s.model}${s.firmwareVersion ? ` · firmware ${s.firmwareVersion}` : ''}`,
+            sub: `Hardware device: connect ${s.vendor} ${s.model} and approve there; the wallet password is not sent to it${s.firmwareVersion ? ` (firmware ${s.firmwareVersion})` : ''}.`,
             kind: s.kind,
         })),
     ];
 
     return (
-        <fieldset style={FIELDSET_STYLE} aria-label="Choose signer">
-            <legend style={LEGEND_STYLE}>Signer</legend>
-            <ul style={LIST_STYLE}>
-                {options.map((opt) => {
-                    const checked = (value ?? null) === (opt.id ?? null);
-                    return (
-                        <li key={opt.id ?? 'software'}>
-                            <label
-                                style={{
-                                    ...CARD_STYLE,
-                                    ...(checked ? CARD_CHECKED_STYLE : null),
-                                    ...(disabled ? CARD_DISABLED_STYLE : null),
-                                }}
-                            >
-                                <input
-                                    type="radio"
-                                    name={`signer-${walletId}`}
-                                    value={opt.id ?? 'software'}
-                                    checked={checked}
-                                    disabled={disabled}
-                                    onChange={() => onChange(opt.id)}
-                                    style={RADIO_STYLE}
-                                />
-                                <span style={CARD_TEXT_STYLE}>
-                                    <strong style={CARD_LABEL_STYLE}>{opt.label}</strong>
-                                    <span style={CARD_SUB_STYLE}>{opt.sub}</span>
-                                </span>
-                            </label>
-                        </li>
-                    );
-                })}
-            </ul>
-        </fieldset>
+        <FormPage as="div" sectioned label={t('signerSelect.choose')}>
+            <FormSection title={t('signerSelect.choose')}>
+                <InfoTip label={t('signerSelect.intro')} />
+                {isWatcherMode ? (
+                    <p role="note" style={WATCH_ONLY_STYLE}>
+                        {t('signerSelect.watcherNote')}
+                    </p>
+                ) : null}
+                <RadioGroup
+                    legend={t('signerSelect.title')}
+                    aria-label={t('signerSelect.choose')}
+                    name={`signer-${walletId}`}
+                    value={value ?? 'software'}
+                    onChange={(nextValue) => emitChange(nextValue === 'software' ? null : nextValue)}
+                    options={options.map((opt) => ({
+                        value: opt.id ?? 'software',
+                        label: opt.label,
+                        description: opt.sub,
+                    }))}
+                    disabled={disabled}
+                />
+            </FormSection>
+        </FormPage>
     );
 }
 
-const FIELDSET_STYLE = {
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-md)',
-    padding: 'var(--xc-space-2) var(--xc-space-3) var(--xc-space-3)',
-    margin: '0 0 var(--xc-space-3) 0',
-};
-
-const LEGEND_STYLE = {
-    padding: '0 var(--xc-space-2)',
-    color: 'var(--xc-text-muted)',
-    fontSize: 'var(--xc-text-sm)',
-    fontWeight: 500,
-};
-
-const LIST_STYLE = {
-    listStyle: 'none',
-    margin: 0,
-    padding: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 'var(--xc-space-2)',
-};
-
-const CARD_STYLE = {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: 'var(--xc-space-3)',
-    padding: 'var(--xc-space-2) var(--xc-space-3)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-sm)',
-    background: 'var(--xc-bg)',
-    cursor: 'pointer',
-};
-
-const CARD_CHECKED_STYLE = {
-    borderColor: 'var(--xc-accent-primary)',
-    background: 'var(--xc-surface-raised)',
-};
-
-const CARD_DISABLED_STYLE = {
-    opacity: 0.6,
-    cursor: 'not-allowed',
-};
-
-const RADIO_STYLE = {
-    marginTop: 4,
-};
-
-const CARD_TEXT_STYLE = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 2,
-    minWidth: 0,
-};
-
-const CARD_LABEL_STYLE = {
-    color: 'var(--xc-text)',
-    fontSize: 'var(--xc-text-sm)',
-};
-
-const CARD_SUB_STYLE = {
-    color: 'var(--xc-text-muted)',
+const WATCH_ONLY_STYLE = {
+    color: 'var(--xc-warning-fg, var(--xc-text))',
     fontSize: 'var(--xc-text-xs)',
+    margin: '0 0 var(--xc-space-2)',
 };
+
 
 const ERROR_STYLE = {
-    color: 'var(--xc-danger)',
+    color: 'var(--xc-danger-fg)',
     fontSize: 'var(--xc-text-sm)',
     margin: '0 0 var(--xc-space-3) 0',
 };

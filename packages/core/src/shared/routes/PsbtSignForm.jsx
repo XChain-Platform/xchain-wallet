@@ -47,32 +47,41 @@ import {
     Screen,
     Button,
     Input,
+    Select,
+    Textarea,
     ChainBadge,
     AddressText,
     ChainPicker,
     CopyButton,
-    Icon,
     StatusMessage,
     QrScanner,
     PageHeader,
+    FormPage,
+    ListPage,
 } from '@xchain-wallet/core/ui';
+import { ClipboardPasteButton } from '../../ui/ClipboardPasteButton.jsx';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useDropZone } from '../hooks/useDropZone.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useConfirmAction, isConfirmOpenPhase } from '../hooks/useConfirmAction.js';
 import {
     exactNetworkFeeSats,
-    formatExactSats,
+    exactSats,
     sumExactSats,
 } from '../../flows/psbtNetworkFee.js';
+import {
+    formatNativeBaseUnits,
+    tickerForDescriptor,
+} from '../../registry/coinTicker.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { PsbtConfirmScreen } from '../components/PsbtConfirmScreen.jsx';
 import { HwSignBlock } from '../components/HwSignBlock.jsx';
 import { SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
-import { decodeBbqrPsbt } from '../../uri/bbqrPsbt.js';
+import { decodeBbqrPsbt, parseBbqrFrame } from '../../uri/bbqrPsbt.js';
 import { decodeUrPsbt, UrPsbtDecoder } from '../../uri/urPsbt.js';
 import { detectQrFrameFormat, describeUnsupportedFormat } from '../../uri/qrPsbtFormat.js';
 import {
@@ -81,7 +90,12 @@ import {
     XCW_PREFIX,
 } from '../../uri/psbtQr.js';
 import styles from './IssueTokenForm.module.css';
-import { preferredSourceId } from '../addressSelection.js';
+import {
+    hasAnyAddress,
+    preferredSourceId,
+    signingAddressesByChain,
+    WATCH_ONLY_SIGNING_MESSAGE,
+} from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { psbtActionSummary } from '../utils/actionDisplayLabel.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
@@ -117,9 +131,67 @@ function arrayBufferToHex(buf) {
 const chainRegistry = registryLib.defaultRegistry();
 
 const HEX_RE = /^[0-9a-fA-F]+$/;
+const PSBT_MAGIC_HEX = '70736274ff';
+const PSBT_FILE_MAX_BYTES = 2 * 1024 * 1024;
 // Base64-encoded PSBT magic bytes (`psbt` + 0xff) start with `cHNid`.
-// Reliable signal that an opaque blob is a base64 PSBT rather than hex.
 const BASE64_PSBT_PREFIX = 'cHNid';
+
+function hasPsbtMagic(hex) {
+    return typeof hex === 'string' && hex.toLowerCase().startsWith(PSBT_MAGIC_HEX);
+}
+
+function readCompactSize(bytes, cursor) {
+    if (cursor.offset >= bytes.length) throw new Error('Missing compact size.');
+    const prefix = bytes[cursor.offset];
+    cursor.offset += 1;
+    if (prefix < 0xfd) return prefix;
+    const byteCount = prefix === 0xfd ? 2 : prefix === 0xfe ? 4 : 8;
+    if (cursor.offset + byteCount > bytes.length) throw new Error('Truncated compact size.');
+    let value = 0n;
+    for (let i = 0; i < byteCount; i += 1) {
+        value |= BigInt(bytes[cursor.offset + i]) << BigInt(i * 8);
+    }
+    cursor.offset += byteCount;
+    if (value > BigInt(bytes.length)) throw new Error('Compact size exceeds PSBT length.');
+    return Number(value);
+}
+
+function readPsbtMap(bytes, cursor, onKey) {
+    while (cursor.offset < bytes.length) {
+        const keyLength = readCompactSize(bytes, cursor);
+        if (keyLength === 0) return;
+        if (cursor.offset + keyLength > bytes.length) throw new Error('Truncated PSBT key.');
+        const keyType = bytes[cursor.offset];
+        cursor.offset += keyLength;
+        const valueLength = readCompactSize(bytes, cursor);
+        if (cursor.offset + valueLength > bytes.length) throw new Error('Truncated PSBT value.');
+        cursor.offset += valueLength;
+        onKey(keyType);
+    }
+    throw new Error('Unterminated PSBT map.');
+}
+
+// Final script fields mean an input is complete and must not enter a signer.
+// The SDK preview omits PSBT key-value metadata, so read only the map keys here.
+function finalizedPsbtInputCount(psbtHex, inputCount) {
+    if (!hasPsbtMagic(psbtHex) || !Number.isInteger(inputCount) || inputCount < 1) return 0;
+    try {
+        const bytes = Uint8Array.from(psbtHex.match(/../g).map((pair) => Number.parseInt(pair, 16)));
+        const cursor = { offset: 5 };
+        readPsbtMap(bytes, cursor, () => {});
+        let finalized = 0;
+        for (let i = 0; i < inputCount; i += 1) {
+            let inputFinalized = false;
+            readPsbtMap(bytes, cursor, (keyType) => {
+                if (keyType === 0x07 || keyType === 0x08) inputFinalized = true;
+            });
+            if (inputFinalized) finalized += 1;
+        }
+        return finalized;
+    } catch {
+        return 0;
+    }
+}
 
 /**
  * Convert a pasted blob to a normalized hex PSBT. Returns `null` if the
@@ -151,21 +223,23 @@ export function normalizePsbtInput(raw) {
     const frames = trimmedRaw.split(/\s+/).filter((s) => s.length > 0);
     if (frames.length > 0 && frames.every((f) => detectQrFrameFormat(f) === 'bbqr')) {
         try {
-            return decodeBbqrPsbt(frames).psbtHex;
+            const hex = decodeBbqrPsbt(frames).psbtHex;
+            return hasPsbtMagic(hex) ? hex : null;
         } catch {
             return null;
         }
     }
     if (frames.length > 0 && frames.every((f) => detectQrFrameFormat(f) === 'ur')) {
         try {
-            return decodeUrPsbt(frames).psbtHex;
+            const hex = decodeUrPsbt(frames).psbtHex;
+            return hasPsbtMagic(hex) ? hex : null;
         } catch {
             return null;
         }
     }
 
     const trimmed = trimmedRaw.replace(/\s+/g, '');
-    if (HEX_RE.test(trimmed) && trimmed.length % 2 === 0) {
+    if (HEX_RE.test(trimmed) && trimmed.length % 2 === 0 && hasPsbtMagic(trimmed)) {
         return trimmed.toLowerCase();
     }
     if (trimmed.startsWith(BASE64_PSBT_PREFIX)) {
@@ -175,12 +249,118 @@ export function normalizePsbtInput(raw) {
             for (let i = 0; i < bin.length; i += 1) {
                 hex += bin.charCodeAt(i).toString(16).padStart(2, '0');
             }
-            return hex;
+            return hasPsbtMagic(hex) ? hex : null;
         } catch (_err) {
             return null;
         }
     }
     return null;
+}
+
+/**
+ * Explain why a non-empty pasted value cannot be imported as a PSBT.
+ *
+ * @param {string} raw
+ * @returns {string | null}
+ */
+export function psbtInputError(raw) {
+    if (typeof raw !== 'string' || raw.trim().length === 0 || normalizePsbtInput(raw)) return null;
+    const frames = raw.trim().split(/\s+/).filter(Boolean);
+    const firstFormat = detectQrFrameFormat(frames[0]);
+    if (firstFormat === 'bbqr') {
+        return 'This BBQr transaction is incomplete or malformed. Scan every frame again.';
+    }
+    if (firstFormat === 'ur') {
+        return 'This UR transaction is incomplete or malformed. Keep scanning, or paste every frame.';
+    }
+    const compact = raw.replace(/\s+/g, '');
+    if (HEX_RE.test(compact)) {
+        if (compact.length % 2 !== 0) {
+            return 'Transaction hex must contain complete byte pairs.';
+        }
+        return `This hex is not a PSBT. A PSBT starts with ${PSBT_MAGIC_HEX}.`;
+    }
+    if (compact.startsWith(BASE64_PSBT_PREFIX)) {
+        return 'Transaction base64 is incomplete or malformed.';
+    }
+    return 'Paste a PSBT as hex or base64, or import a .psbt file.';
+}
+
+/**
+ * Refuse parser output whose values cannot support an exact signing review.
+ *
+ * @param {unknown} decomposed
+ * @returns {string | null}
+ */
+export function psbtReviewError(decomposed) {
+    if (!decomposed || typeof decomposed !== 'object'
+        || !Array.isArray(decomposed.inputs) || !Array.isArray(decomposed.outputs)) {
+        return 'The wallet could not read this transaction\'s inputs and outputs.';
+    }
+    if (decomposed.inputs.length === 0) return 'This transaction has no inputs.';
+    if (decomposed.outputs.length === 0) return 'This transaction has no outputs.';
+
+    for (let i = 0; i < decomposed.inputs.length; i += 1) {
+        const input = decomposed.inputs[i];
+        const amount = exactSats(input?.value);
+        if (amount === null) return `Input ${i + 1} has an invalid amount.`;
+        if (amount === 0n) return `Input ${i + 1} amount must be greater than zero.`;
+        if (input?.address !== null && input?.address !== undefined
+            && (typeof input.address !== 'string' || !input.address.trim())) {
+            return `Input ${i + 1} has an invalid address.`;
+        }
+    }
+    for (let i = 0; i < decomposed.outputs.length; i += 1) {
+        const output = decomposed.outputs[i];
+        const amount = exactSats(output?.value);
+        if (amount === null) return `Output ${i + 1} has an invalid amount.`;
+        if (output?.address !== null && output?.address !== undefined
+            && (typeof output.address !== 'string' || !output.address.trim())) {
+            return `Output ${i + 1} has an invalid address.`;
+        }
+        if (amount === 0n && output?.address) {
+            return `Output ${i + 1} amount must be greater than zero.`;
+        }
+    }
+
+    const totalIn = sumExactSats(decomposed.inputs.map((input) => input.value));
+    const totalOut = sumExactSats(decomposed.outputs.map((output) => output.value));
+    if (totalIn !== null && totalOut !== null && totalOut > totalIn) {
+        return 'This transaction spends more than its inputs contain.';
+    }
+    if (exactNetworkFeeSats(decomposed) === null) {
+        return 'The wallet could not verify this transaction\'s network fee.';
+    }
+    return null;
+}
+
+function nativeAmountLabel(value, descriptor) {
+    const amount = exactSats(value);
+    if (amount === null || !descriptor) return null;
+    const display = formatNativeBaseUnits(amount, descriptor);
+    const ticker = tickerForDescriptor(descriptor);
+    return display === null || !ticker ? null : `${display} ${ticker}`;
+}
+
+/**
+ * Decode either a binary .psbt file or a UTF-8 file containing hex/base64.
+ *
+ * @param {ArrayBuffer} content
+ * @returns {string | null} normalized PSBT hex
+ */
+export function normalizePsbtFile(content) {
+    if (Object.prototype.toString.call(content) !== '[object ArrayBuffer]') return null;
+    const bytes = new Uint8Array(content);
+    const binaryHex = arrayBufferToHex(content);
+    if (hasPsbtMagic(binaryHex)) return binaryHex;
+    let offset = 0;
+    if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) offset = 3;
+    let text = '';
+    for (let i = offset; i < bytes.length; i += 1) {
+        if (bytes[i] > 0x7f) return null;
+        text += String.fromCharCode(bytes[i]);
+    }
+    return normalizePsbtInput(text);
 }
 
 /**
@@ -235,8 +415,8 @@ function ArtifactBlock({ label, copyLabel, value, testId }) {
 export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
+    const { isWatcherMode } = useWalletMode();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -284,53 +464,31 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
 
     const psbtHex = useMemo(() => normalizePsbtInput(pasted), [pasted]);
 
-    // §20.4 / G043: when a paste fails to normalize, check whether it
-    // matched a known-but-unsupported QR format (UR) so the error
-    // message tells the user *why* instead of saying "not hex or
-    // base64". The first non-empty token is enough for UR; BBQr-Z
-    // (Cluster U FOLLOWUP 1) and BBQr-H/B all decode now, but
-    // malformed BBQr frames still surface via `decodeBbqrPsbt`'s
-    // thrown error which we catch.
-    const unsupportedFormatHint = useMemo(() => {
+    // Keep decoder failures out of the UI and explain the detected input
+    // shape in terms the user can act on.
+    const inputError = useMemo(() => {
         if (!pasted || psbtHex) return null;
         const firstToken = pasted.trim().split(/\s+/)[0];
-        const fmt = detectQrFrameFormat(firstToken);
-        const generic = describeUnsupportedFormat(fmt);
-        if (generic) return generic;
-        if (fmt === 'bbqr') {
-            // Format detected as BBQr but normalize returned null.
-            // Most likely a malformed frame, an incomplete multi-frame
-            // capture, or a future encoding the wallet doesn't yet
-            // support. Try a one-frame decode to surface the
-            // BBQr-specific error message.
-            try { decodeBbqrPsbt([firstToken]); } catch (e) {
-                return e?.message ?? 'BBQr decode failed';
-            }
-        }
-        if (fmt === 'ur') {
-            // Detected as UR but not decoded: usually an incomplete
-            // multi-part fountain capture (one frame of many). Surface
-            // the UR-specific message so the user knows to keep
-            // scanning / paste every frame rather than thinking it failed.
-            try { decodeUrPsbt([firstToken]); } catch (e) {
-                return e?.message ?? 'UR decode failed';
-            }
-        }
-        return null;
+        return describeUnsupportedFormat(detectQrFrameFormat(firstToken))
+            || psbtInputError(pasted);
     }, [pasted, psbtHex]);
 
-    // §20.4 / Cluster E FOLLOWUP 4: camera QR scan. Two transports:
+    // §20.4 / Cluster E FOLLOWUP 4: camera QR scan. Four input shapes:
     //   • XCW: each frame accrues into an XCW collector; the wallet
     //     emits the SHA-256-verified PSBT bytes once the chunk count
     //     matches the announced total.
-    //   • BBQr / hex / base64: each detected frame is appended to the
-    //     paste textarea (newline-separated for BBQr); the existing
-    //     `normalizePsbtInput` pipeline handles assembly.
+    //   • BBQr: distinct indexes accrue until the announced total arrives.
+    //   • Hex / base64: a single frame routes through normalizePsbtInput.
     //   • UR (crypto-psbt): each frame feeds a fountain decoder; the
     //     wallet emits the PSBT once enough frames reduce to the full
     //     message (Cluster U FOLLOWUP 2).
     const [scannerOpen, setScannerOpen] = useState(false);
-    const [xcwCollector, setXcwCollector] = useState(() => createXcwCollector());
+    const [, setXcwCollector] = useState(() => createXcwCollector());
+    const bbqrFramesRef = useRef(/** @type {Map<number, string>} */ (new Map()));
+    const bbqrStreamRef = useRef('');
+    const [scanProgress, setScanProgress] = useState(
+        /** @type {null | { format: 'XCW' | 'BBQr', received: number, total: number } | { format: 'UR', percent: number }} */ (null),
+    );
     // UR multi-part fountain frames accrue into a stateful decoder; it emits
     // the PSBT once enough frames have been mixed/reduced to recover the whole
     // message (Cluster U FU 2). A fresh decoder is minted on each completion
@@ -344,16 +502,29 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
             setXcwCollector((prev) => {
                 const next = addChunkToCollector({ ...prev }, text);
                 if (next.error) {
-                    setError(`QR scan: ${next.error}`);
+                    setError('Could not read that transaction QR. Start the scan again.');
                     return next;
+                }
+                if (next.total !== null) {
+                    setScanProgress({
+                        format: 'XCW',
+                        received: next.receivedCount,
+                        total: next.total,
+                    });
                 }
                 if (next.complete && next.psbt) {
                     let hex = '';
                     for (let i = 0; i < next.psbt.length; i += 1) {
                         hex += next.psbt[i].toString(16).padStart(2, '0');
                     }
-                    setPasted(hex);
+                    const decoded = normalizePsbtInput(hex);
+                    if (!decoded) {
+                        setError('That XCW code does not contain a PSBT.');
+                        return createXcwCollector();
+                    }
+                    setPasted(decoded);
                     setScannerOpen(false);
+                    setScanProgress(null);
                     if (error) setError(null);
                     return createXcwCollector();
                 }
@@ -372,33 +543,80 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                 urDecoder.receive(text);
                 done = urDecoder.complete;
             } catch {
+                setError('Could not read that UR transaction QR. Keep scanning every frame.');
                 return;
             }
             if (done) {
-                setPasted(urDecoder.psbtHex);
+                const decoded = normalizePsbtInput(urDecoder.psbtHex);
+                if (!decoded) {
+                    setError('That UR code does not contain a PSBT.');
+                    return;
+                }
+                setPasted(decoded);
                 setScannerOpen(false);
+                setScanProgress(null);
                 if (error) setError(null);
                 setUrDecoder(new UrPsbtDecoder());
+            } else {
+                setScanProgress({ format: 'UR', percent: Math.round(urDecoder.progress * 100) });
             }
             return;
         }
         if (fmt === 'bbqr') {
-            // Append BBQr frames newline-separated; the paste-pipeline
-            // detects the multi-frame BBQr shape and decodes when all
-            // pieces are present.
-            setPasted((cur) => (cur.length > 0 ? `${cur}\n${text}` : text));
+            let parsed;
+            try {
+                parsed = parseBbqrFrame(text);
+            } catch {
+                setError('Could not read that BBQr transaction frame. Scan it again.');
+                return;
+            }
+            const stream = `${parsed.encoding}:${parsed.fileType}:${parsed.total}`;
+            if (bbqrStreamRef.current !== stream) {
+                bbqrStreamRef.current = stream;
+                bbqrFramesRef.current = new Map();
+            }
+            const trimmedFrame = text.trim();
+            const priorFrame = bbqrFramesRef.current.get(parsed.index);
+            if (priorFrame && priorFrame !== trimmedFrame) {
+                setError('These BBQr frames do not belong to one transaction. Start the scan again.');
+                bbqrFramesRef.current = new Map();
+                setScanProgress(null);
+                return;
+            }
+            bbqrFramesRef.current.set(parsed.index, trimmedFrame);
+            const received = bbqrFramesRef.current.size;
+            setScanProgress({ format: 'BBQr', received, total: parsed.total });
+            if (received === parsed.total) {
+                try {
+                    const frames = [...bbqrFramesRef.current.entries()]
+                        .sort(([a], [b]) => a - b)
+                        .map(([, frame]) => frame);
+                    const decoded = normalizePsbtInput(frames.join('\n'));
+                    if (!decoded) throw new Error('not a PSBT');
+                    setPasted(decoded);
+                    setScannerOpen(false);
+                    setScanProgress(null);
+                    if (error) setError(null);
+                } catch {
+                    setError('Could not assemble that BBQr transaction. Scan every frame again.');
+                }
+            }
             return;
         }
-        if (fmt === 'hex' || fmt === 'base64') {
-            // A single QR carrying the whole PSBT. Stop scanning.
-            setPasted(text);
+        const decoded = normalizePsbtInput(text);
+        if (decoded) {
+            setPasted(decoded);
             setScannerOpen(false);
+            setScanProgress(null);
             if (error) setError(null);
             return;
         }
-        // Unrecognized / unsupported: silently ignore so the scanner can
-        // keep running without flashing errors at every unrelated QR the
-        // camera spots.
+        const compact = text.replace(/\s+/g, '');
+        if (compact.toLowerCase().startsWith(PSBT_MAGIC_HEX)
+            || compact.startsWith(BASE64_PSBT_PREFIX)) {
+            setError(psbtInputError(text));
+        }
+        // Unrelated QR content remains silent so the scanner can keep running.
     }, [error, urDecoder]);
 
     // Reset XCW collector whenever the scanner re-opens so a partial
@@ -407,6 +625,9 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
         if (scannerOpen) {
             setXcwCollector(createXcwCollector());
             setUrDecoder(new UrPsbtDecoder());
+            bbqrFramesRef.current = new Map();
+            bbqrStreamRef.current = '';
+            setScanProgress(null);
         }
     }, [scannerOpen]);
 
@@ -414,17 +635,22 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
     // converted to hex before being routed through the same paste pipeline.
     const drop = useDropZone({
         accept: ['.psbt', 'application/octet-stream', 'text/plain'],
+        maxBytes: PSBT_FILE_MAX_BYTES,
         readAs: 'arrayBuffer',
-        onError: setError,
+        onError: (message) => {
+            setError(message.startsWith('File is too large')
+                ? 'This transaction file is too large. Choose a .psbt file smaller than 2 MB.'
+                : 'Could not read that transaction file. Choose a .psbt file in binary, hex, or base64 form.');
+        },
         disabled: busy,
         onFile: ({ content }) => {
-            try {
-                const hex = arrayBufferToHex(content);
-                setPasted(hex);
-                if (error) setError(null);
-            } catch (_e) {
-                setError('Could not decode the dropped transaction file.');
+            const hex = normalizePsbtFile(content);
+            if (!hex) {
+                setError('This file does not contain a valid PSBT in binary, hex, or base64 form.');
+                return;
             }
+            setPasted(hex);
+            if (error) setError(null);
         },
     });
 
@@ -452,19 +678,20 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
         ])
             .then(([byChain, active, chainSettings]) => {
                 if (cancelled) return;
-                setAddressesByChain(byChain);
+                const signingByChain = signingAddressesByChain(byChain);
+                setAddressesByChain(signingByChain);
                 setActiveByChain(active || {});
-                if (Object.keys(byChain || {}).length === 0) {
-                    setLoadError(
-                        'No addresses on any chain yet. Use Receive to generate one before signing.',
-                    );
+                if (Object.keys(signingByChain).length === 0) {
+                    setLoadError(hasAnyAddress(byChain)
+                        ? WATCH_ONLY_SIGNING_MESSAGE
+                        : 'No addresses on any chain yet. Use Receive to generate one before signing.');
                     return;
                 }
                 // `byChain` is in address-creation order, so opening on its
                 // first key opened PSBT sign on the wallet's OLDEST chain
                 // forever. Open on the last-used chain instead, ahead of the
                 // first-key fallback, exactly as Send does.
-                setChainId((prev) => pickDefaultChainId(byChain, {
+                setChainId((prev) => pickDefaultChainId(signingByChain, {
                     explicitChainId: prev,
                     settings: chainSettings,
                 }));
@@ -509,7 +736,15 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
         messaging.parsePsbtRequest({ chainId, psbtHex })
             .then((res) => {
                 if (cancelled) return;
-                setDecomposed(res?.decomposed || null);
+                const reviewError = psbtReviewError(res?.decomposed);
+                if (reviewError) {
+                    setDecomposed(null);
+                    setParsedAction(null);
+                    setParsedActionReason(null);
+                    setParseError(reviewError);
+                    return;
+                }
+                setDecomposed(res.decomposed);
                 // The action carried inside, when it decodes.
                 // Additive on the host side, so an older shell simply reports
                 // no action and the confirm page renders its loud
@@ -528,14 +763,10 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
         return () => { cancelled = true; };
     }, [psbtHex, chainId, messaging]);
 
-    const chainOptions = useMemo(() => {
+    const chainIds = useMemo(() => {
         if (!addressesByChain) return [];
         return Object.keys(addressesByChain)
-            .filter((id) => (addressesByChain[id] || []).length > 0)
-            .map((id) => {
-                const desc = chainRegistry.get(id);
-                return { id, label: desc?.displayName || id };
-            });
+            .filter((id) => (addressesByChain[id] || []).length > 0);
     }, [addressesByChain]);
 
     const addressOptions = useMemo(() => {
@@ -546,6 +777,11 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
     const selectedAddress = useMemo(
         () => addressOptions.find((a) => a.id === addressId) || null,
         [addressOptions, addressId],
+    );
+
+    const ownAddressSet = useMemo(
+        () => new Set(addressOptions.map((a) => a.address)),
+        [addressOptions],
     );
 
     // §30.4 / Cluster E FOLLOWUP 1: HW source detection. When the chosen
@@ -580,25 +816,39 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
         return n;
     }, [decomposed, selectedAddress]);
 
+    const walletOwnedInputCount = useMemo(() => {
+        if (!decomposed) return 0;
+        return decomposed.inputs.filter((input) => ownAddressSet.has(input.address)).length;
+    }, [decomposed, ownAddressSet]);
+
+    const finalizedInputCount = useMemo(
+        () => finalizedPsbtInputCount(psbtHex, decomposed?.inputs?.length || 0),
+        [psbtHex, decomposed],
+    );
+
+    const importEligibilityError = useMemo(() => {
+        if (!decomposed) return null;
+        if (finalizedInputCount > 0) {
+            return finalizedInputCount === decomposed.inputs.length
+                ? 'This transaction is already finalized and cannot be signed again.'
+                : 'This transaction contains finalized inputs and cannot be signed on this screen.';
+        }
+        if (walletOwnedInputCount === 0) {
+            return 'This transaction has no inputs this wallet can sign. Check the selected chain or import a different transaction.';
+        }
+        return null;
+    }, [decomposed, finalizedInputCount, walletOwnedInputCount]);
+
     const totalIn = useMemo(() => {
-        if (!decomposed) return 0n;
-        return sumExactSats(decomposed.inputs.map((input) => input.value)) ?? 0n;
+        if (!decomposed) return null;
+        return sumExactSats(decomposed.inputs.map((input) => input.value));
     }, [decomposed]);
     const totalOut = useMemo(() => {
-        if (!decomposed) return 0n;
-        return sumExactSats(decomposed.outputs.map((output) => output.value)) ?? 0n;
+        if (!decomposed) return null;
+        return sumExactSats(decomposed.outputs.map((output) => output.value));
     }, [decomposed]);
-    const fee = exactNetworkFeeSats(decomposed) ?? 0;
-
-    // Own addresses on the selected chain, used to mark outputs that pay back
-    // to this wallet (change) vs external recipients. Same signal the
-    // extension's PsbtIntentSummary uses (getAddressesByChain). Without this
-    // the air-gapped surface showed only aggregate totals, so a user could not
-    // verify WHO gets paid (F2).
-    const ownAddressSet = useMemo(
-        () => new Set(addressOptions.map((a) => a.address)),
-        [addressOptions],
-    );
+    const fee = exactNetworkFeeSats(decomposed);
+    const chainDescriptor = chainRegistry.get(chainId);
 
     // §5.6 slice 3: software signing goes through the shared confirm
     // page in its PSBT variant (§5.5). Hardware keeps the legacy inline flow -
@@ -664,6 +914,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
         if (!addressId) { setError('Pick a signing address.'); return; }
         if (!psbtHex) { setError('Paste a valid transaction (hex or base64).'); return; }
         if (!decomposed) { setError('Transaction could not be parsed for this chain.'); return; }
+        if (importEligibilityError) return;
         if (ownedInputCount === 0) {
             setError(
                 `The chosen address signs none of this transaction's inputs. Pick a different address or transaction.`,
@@ -732,10 +983,23 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
         <PageHeader onBack={onBack} backDisabled={busy} title="Sign transaction" />
     );
 
+    if (isWatcherMode) {
+        return (
+            <Screen variant={variant} header={header}>
+                <ListPage>
+                    <StatusMessage variant="status">
+                        This watch-only wallet cannot sign transactions. Move the unsigned
+                        transaction to a Signer-mode wallet to sign it.
+                    </StatusMessage>
+                </ListPage>
+            </Screen>
+        );
+    }
+
     if (loadError) {
         return (
             <Screen variant={variant} header={header}>
-                <div role="alert" style={{ color: 'var(--xc-danger)', padding: 'var(--xc-space-3)' }}>
+                <div role="alert" style={{ color: 'var(--xc-danger-fg)', padding: 'var(--xc-space-3)' }}>
                     {loadError}
                 </div>
             </Screen>
@@ -753,8 +1017,8 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                         {/* ChainBadge takes a descriptor, not an id: passing an
                             id crashed this screen on every successful signing. */}
                         {chainRegistry.get(chainId)
-                            ? <ChainBadge descriptor={chainRegistry.get(chainId)} size="sm" />
-                            : <span>{chainId}</span>}
+                            ? <ChainBadge descriptor={chainRegistry.get(chainId)} size="sm" showName={false} />
+                            : null}
                         <AddressText address={selectedAddress?.address || ''} />
                     </div>
                 </div>
@@ -816,7 +1080,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                         queued-transactions banner, where you can retry without signing again.
                     </div>
                 ) : broadcastState === 'error' ? (
-                    <div role="alert" style={{ color: 'var(--xc-danger)', fontSize: 'var(--xc-text-sm)' }}>
+                    <div role="alert" style={{ color: 'var(--xc-danger-fg)', fontSize: 'var(--xc-text-sm)' }}>
                         {broadcastError}
                     </div>
                 ) : signedPsbtHex ? (
@@ -834,7 +1098,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                         wallet, or hand the raw hex to any other broadcaster.
                     </p>
                 )}
-                <div style={{ display: 'flex', gap: 'var(--xc-space-2)' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--xc-space-2)' }}>
                     {broadcastState !== 'broadcast' && broadcastState !== 'queued' ? (
                         <Button
                             variant="primary"
@@ -896,7 +1160,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
         );
         return (
             <Screen variant={variant} header={header}>
-                {isFull ? <div className={styles.card}>{body}</div> : body}
+                <ListPage>{body}</ListPage>
             </Screen>
         );
     }
@@ -918,22 +1182,55 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                 <strong>Outputs:</strong> {decomposed.outputs.length}
             </div>
             <div>
-                <strong>Total in:</strong> {formatExactSats(totalIn)} sats
+                <strong>Total in:</strong>{' '}
+                {totalIn != null ? nativeAmountLabel(totalIn, chainDescriptor) : 'unavailable'}
                 {' · '}
-                <strong>Total out:</strong> {formatExactSats(totalOut)} sats
+                <strong>Total out:</strong>{' '}
+                {totalOut != null ? nativeAmountLabel(totalOut, chainDescriptor) : 'unavailable'}
                 {' · '}
-                <strong>Fee:</strong> {formatExactSats(fee)} sats
+                <strong>Network fee:</strong>{' '}
+                {fee != null ? nativeAmountLabel(fee, chainDescriptor) : 'unavailable'}
             </div>
             <div>
                 <strong>Inputs this address signs:</strong> {ownedInputCount} of {decomposed.inputs.length}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 4 }}>
+                <strong>What this transaction spends:</strong>
+                {decomposed.inputs.map((input, i) => {
+                    const amount = nativeAmountLabel(input.value, chainDescriptor);
+                    const isUnknown = !input.address || amount === null;
+                    return (
+                        <div
+                            key={`${input.prevTxHash || 'unknown'}-${input.prevTxIndex ?? i}`}
+                            data-testid="psbt-sign-input"
+                            style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}
+                        >
+                            <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                {isUnknown ? 'Unknown input' : 'Input'}
+                            </span>
+                            {input.address ? (
+                                <AddressText address={input.address} truncate={false} />
+                            ) : (
+                                <span style={{ color: 'var(--xc-text-muted)' }}>
+                                    (unknown source script)
+                                </span>
+                            )}
+                            <span style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }}>
+                                {amount !== null ? amount : 'amount unknown'}
+                            </span>
+                        </div>
+                    );
+                })}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 4 }}>
                 <strong>Where the coins go:</strong>
                 {decomposed.outputs.map((o, i) => {
                     const own = !!o.address && ownAddressSet.has(o.address);
+                    const amount = nativeAmountLabel(o.value, chainDescriptor);
                     return (
                         <div
                             key={`${o.address || 'data'}-${i}`}
+                            data-testid="psbt-sign-output"
                             style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}
                         >
                             <span
@@ -946,14 +1243,14 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                                 {own ? 'Change (back to you)' : 'Recipient'}
                             </span>
                             {o.address ? (
-                                <AddressText address={o.address} />
+                                <AddressText address={o.address} truncate={false} />
                             ) : (
                                 <span style={{ color: 'var(--xc-text-muted)' }}>
                                     (data / non-address output)
                                 </span>
                             )}
                             <span style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }}>
-                                {formatExactSats(o.value ?? 0)} sats
+                                {amount !== null ? amount : 'amount unknown'}
                             </span>
                         </div>
                     );
@@ -962,60 +1259,76 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
         </div>
     ) : null;
 
+    if (isWatcherMode) {
+        return (
+            <Screen variant={variant} header={header}>
+                <ListPage>
+                    <StatusMessage variant="status">
+                        Watcher mode creates unsigned transactions but never signs them or asks for a signing password. Switch to Signer mode to sign an imported transaction.
+                    </StatusMessage>
+                </ListPage>
+            </Screen>
+        );
+    }
+
+    const visibleError = error || inputError || parseError || importEligibilityError;
+
     const formBody = (
-        <form onSubmit={handleSubmit} noValidate>
+        <FormPage
+            label="Sign transaction"
+            onSubmit={handleSubmit}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={busy}
+                    disabled={
+                        busy
+                        || !psbtHex
+                        || !decomposed
+                        || Boolean(importEligibilityError)
+                        || ownedInputCount === 0
+                        || !addressId
+                        // On the confirm-page path the password is typed there, so
+                        // it must not gate the button that opens it.
+                        || (useConfirmPage
+                            ? false
+                            : (isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)))
+                    }
+                >
+                    {isHwSource && selectedAddress
+                        ? `Sign on ${selectedAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                        : 'Sign transaction'}
+                </Button>
+            )}
+        >
             <div style={{ marginBottom: 'var(--xc-space-3)' }}>
                 <ChainPicker
-                    chains={chainOptions}
-                    selectedChainId={chainId}
-                    onChange={setChainId}
+                    chainIds={chainIds}
+                    chainRegistry={chainRegistry}
+                    value={chainId || ''}
+                    onChange={(nextChainId) => {
+                        setChainId(nextChainId);
+                        if (error) setError(null);
+                    }}
                     label="Chain"
+                    hideNetworkKind
                 />
             </div>
             <div style={{ marginBottom: 'var(--xc-space-3)' }}>
-                <label
-                    htmlFor="psbt-sign-address"
-                    style={{
-                        display: 'block',
-                        color: 'var(--xc-text-muted)',
-                        fontSize: 'var(--xc-text-sm)',
-                        marginBottom: 4,
-                    }}
-                >
-                    Signing address
-                </label>
-                <select
+                <Select
                     id="psbt-sign-address"
+                    label="Signing address"
                     value={addressId || ''}
                     onChange={(e) => { setAddressId(e.target.value || null); if (error) setError(null); }}
                     aria-label="Signing address"
-                    style={{
-                        width: '100%',
-                        background: 'var(--xc-bg)',
-                        color: 'var(--xc-text)',
-                        border: '1px solid var(--xc-border)',
-                        borderRadius: 'var(--xc-radius-sm)',
-                        padding: 'var(--xc-space-2)',
-                        fontSize: 'var(--xc-text-sm)',
-                    }}
                 >
                     {addressOptions.map((a) => (
                         <option key={a.id} value={a.id}>{a.address}</option>
                     ))}
-                </select>
+                </Select>
             </div>
             <div style={{ marginBottom: 'var(--xc-space-3)' }}>
-                <label
-                    htmlFor="psbt-sign-paste"
-                    style={{
-                        display: 'block',
-                        color: 'var(--xc-text-muted)',
-                        fontSize: 'var(--xc-text-sm)',
-                        marginBottom: 4,
-                    }}
-                >
-                    Unsigned transaction (hex or base64)
-                </label>
                 <div
                     {...drop.rootProps}
                     style={{
@@ -1026,8 +1339,9 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                         transition: 'border-color 120ms ease',
                     }}
                 >
-                    <textarea
+                    <Textarea
                         id="psbt-sign-paste"
+                        label="Unsigned transaction (hex or base64)"
                         value={pasted}
                         onChange={(e) => { setPasted(e.target.value); if (error) setError(null); }}
                         placeholder="Paste transaction hex (70736274ff…) or base64 (cHNid…), or drop a .psbt file"
@@ -1046,10 +1360,17 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                             wordBreak: 'break-all',
                         }}
                     />
-                    <input {...drop.pickerProps} aria-label="Upload transaction file" />
+                    <span style={{ display: 'none' }}>
+                        <Input {...drop.pickerProps} aria-label="Upload transaction file" />
+                    </span>
                 </div>
                 <div style={{ marginTop: 4, fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)', display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)', flexWrap: 'wrap' }}>
                     <span>Or</span>
+                    <ClipboardPasteButton
+                        disabled={busy}
+                        label="Paste transaction from clipboard"
+                        onPaste={(text) => { setPasted(text); if (error) setError(null); }}
+                    />
                     <Button
                         variant="ghost"
                         size="sm"
@@ -1070,30 +1391,32 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                 {scannerOpen ? (
                     <div style={{ marginTop: 'var(--xc-space-2)' }}>
                         <QrScanner onFrame={handleScannerFrame} alt="Transaction QR scanner" />
-                        {xcwCollector.total !== null ? (
-                            <p style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)', marginTop: 4 }}>
-                                XCW frames received: {xcwCollector.receivedCount} of {xcwCollector.total}
+                        {scanProgress ? (
+                            <p
+                                role="status"
+                                aria-live="polite"
+                                style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)', marginTop: 4 }}
+                            >
+                                {scanProgress.format === 'UR'
+                                    ? `UR decoding progress: ${scanProgress.percent}%`
+                                    : `${scanProgress.format} frames received: ${scanProgress.received} of ${scanProgress.total}`}
                             </p>
                         ) : null}
                     </div>
                 ) : null}
-                {pasted && !psbtHex ? (
+                {visibleError ? (
                     <StatusMessage
                         variant="error"
-                        recovery={{ label: 'Clear', onAction: () => { setPasted(''); if (error) setError(null); } }}
+                        recovery={pasted && !psbtHex && !error
+                            ? { label: 'Clear', onAction: () => { setPasted(''); setError(null); } }
+                            : undefined}
                     >
-                        {unsupportedFormatHint
-                            || "Doesn't look like hex, base64, or BBQr transaction. Strip whitespace, paste the full blob."}
+                        {visibleError}
                     </StatusMessage>
                 ) : null}
                 {parsing ? (
                     <div style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)', marginTop: 4 }}>
                         Parsing transaction…
-                    </div>
-                ) : null}
-                {parseError ? (
-                    <div role="alert" style={{ color: 'var(--xc-danger)', fontSize: 'var(--xc-text-sm)', marginTop: 4 }}>
-                        {parseError}
                     </div>
                 ) : null}
             </div>
@@ -1118,9 +1441,6 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                         onStatusChange={onHwStatusChange}
                         signerInfo={hwSignerInfo}
                     />
-                    {error ? (
-                        <StatusMessage variant="error">{error}</StatusMessage>
-                    ) : null}
                 </div>
             ) : signerReady ? (
                 // Withdraw the "ready to sign" claim while panic mode
@@ -1137,32 +1457,9 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                     value={password}
                     onChange={(e) => { setPassword(e.target.value); if (error) setError(null); }}
                     autoComplete="current-password"
-                    error={error || undefined}
                 />
             )}
-            <Button
-                type="submit"
-                variant="primary"
-                block
-                loading={busy}
-                disabled={
-                    busy
-                    || !psbtHex
-                    || !decomposed
-                    || ownedInputCount === 0
-                    || !addressId
-                    // On the confirm-page path the password is typed there, so
-                    // it must not gate the button that opens it.
-                    || (useConfirmPage
-                        ? false
-                        : (isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)))
-                }
-            >
-                {isHwSource && selectedAddress
-                    ? `Sign on ${selectedAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                    : 'Sign transaction'}
-            </Button>
-        </form>
+        </FormPage>
     );
 
     // §5.5 confirm page (PSBT variant), rendered in place of the form.
@@ -1185,6 +1482,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                 spendsOwnInputs={ownedInputCount > 0}
                 developerMode={developerMode}
                 chainLabel={chainRegistry.get(chainId)?.displayName || chainId}
+                chainDescriptor={chainDescriptor}
                 signerReady={signerReady}
                 password={password}
                 onPasswordChange={setPassword}
@@ -1195,7 +1493,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
 
     return (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{formBody}</div> : formBody}
+            {formBody}
         </Screen>
     );
 }

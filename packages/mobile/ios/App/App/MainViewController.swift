@@ -34,7 +34,48 @@ import WebKit
 
 class MainViewController: CAPBridgeViewController {
 
+    private var launchCover: UIView?
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+
+        let cover = UIImageView(image: UIImage(named: "Splash"))
+        cover.backgroundColor = .systemBackground
+        cover.contentMode = .scaleAspectFill
+        cover.frame = view.bounds
+        cover.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.addSubview(cover)
+        launchCover = cover
+
+        let edgeBack = UIScreenEdgePanGestureRecognizer(
+            target: self,
+            action: #selector(handleEdgeBack(_:))
+        )
+        edgeBack.edges = .left
+        // A committed edge Back owns its touch sequence, so the WebView cannot
+        // also activate or drag the sheet that the shared handler dismisses.
+        edgeBack.cancelsTouchesInView = true
+        view.addGestureRecognizer(edgeBack)
+
+        let bootstrap = "window.__xchainNativeFontScale = \(nativeFontScale())"
+        webView?.configuration.userContentController.addUserScript(
+            WKUserScript(source: bootstrap, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(dynamicTypeDidChange),
+            name: UIContentSizeCategory.didChangeNotification,
+            object: nil
+        )
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        publishFontScale()
+    }
+
     override func capacitorDidLoad() {
+        bridge?.registerPluginInstance(XChainAppPlugin())
         bridge?.registerPluginInstance(XChainVaultPlugin())
         // SSC-4. Same silent-failure shape as the vault: without
         // this line the SPA finds no clipboard plugin, and a sensitive copy
@@ -48,9 +89,56 @@ class MainViewController: CAPBridgeViewController {
         // discarded. Nothing logs, nothing fails, and the §2.1 guideline-4.2
         // defence demos as broken.
         bridge?.registerPluginInstance(XChainLinksPlugin())
+        bridge?.registerPluginInstance(XChainSplashPlugin())
+
+        // WebKit history does not know about route-local review steps or
+        // signing locks. The app-owned edge gesture routes through the same
+        // handler as the visible Back control instead.
+        webView?.allowsBackForwardNavigationGestures = false
+
+        // Route bodies own vertical scrolling. Keep the document scroll view
+        // from rubber-banding far enough to expose WKWebView's native backing.
+        webView?.scrollView.bounces = false
+        webView?.scrollView.alwaysBounceVertical = false
+        webView?.scrollView.alwaysBounceHorizontal = false
 
         disableUnusedCapacitorPlugins()
         blockNativeHttpProxy()
+    }
+
+    /// Complete a deliberate left-edge swipe through the SPA back stack.
+    @objc private func handleEdgeBack(_ gesture: UIScreenEdgePanGestureRecognizer) {
+        guard gesture.state == .ended else { return }
+        let distance = gesture.translation(in: view).x
+        let velocity = gesture.velocity(in: view).x
+        let committed = distance >= min(view.bounds.width * 0.25, 120) || velocity >= 600
+        guard committed else { return }
+        webView?.evaluateJavaScript(
+            "window.dispatchEvent(new Event('xchain:native-edge-back'))"
+        )
+    }
+
+    fileprivate func markShellReady() {
+        launchCover?.removeFromSuperview()
+        launchCover = nil
+    }
+
+    private func nativeFontScale() -> CGFloat {
+        UIFontMetrics.default.scaledValue(for: 16, compatibleWith: traitCollection) / 16
+    }
+
+    @objc private func dynamicTypeDidChange() {
+        publishFontScale()
+    }
+
+    private func publishFontScale() {
+        let scale = nativeFontScale()
+        webView?.evaluateJavaScript("""
+            window.__xchainNativeFontScale = \(scale);
+            window.dispatchEvent(new CustomEvent('xchain:native-font-scale', {
+              detail: { fontScale: \(scale) }
+            }));
+            """)
     }
 
     // MARK: - SSC-1, door 1: the plugin registry
@@ -153,6 +241,45 @@ class MainViewController: CAPBridgeViewController {
                 fatalError("SSC-1: no userContentController to install the native-HTTP-proxy block into.")
             }
             controller.add(list)
+        }
+    }
+
+    // MARK: - iPadOS window controls
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        clearWindowControls()
+    }
+
+    /// Clear the iPadOS 26 window controls: a resizable window keeps them outside the
+    /// plain safe area, so top the safe area that the WebView reads through env() up to
+    /// UIKit's corner-adapted value. Full screen, where the two agree, is unchanged.
+    private func clearWindowControls() {
+        guard #available(iOS 26.0, *) else { return }
+        // Window controls exist only on iPad; an iPhone keeps its plain safe area untouched.
+        guard traitCollection.userInterfaceIdiom == .pad else { return }
+        let base = view.safeAreaInsets.top - additionalSafeAreaInsets.top
+        let adapted = view.edgeInsets(for: .safeArea(cornerAdaptation: .vertical)).top
+        let extra = max(0, adapted - base)
+        // Only on a real change: setting the inset lays the view out again.
+        if abs(additionalSafeAreaInsets.top - extra) > 0.5 {
+            additionalSafeAreaInsets.top = extra
+        }
+    }
+}
+
+@objc(XChainSplashPlugin)
+public class XChainSplashPlugin: CAPPlugin, CAPBridgedPlugin {
+    public let identifier = "XChainSplashPlugin"
+    public let jsName = "SplashScreen"
+    public let pluginMethods: [CAPPluginMethod] = [
+        CAPPluginMethod(name: "hide", returnType: CAPPluginReturnPromise)
+    ]
+
+    @objc func hide(_ call: CAPPluginCall) {
+        DispatchQueue.main.async { [weak self] in
+            (self?.bridge?.viewController as? MainViewController)?.markShellReady()
+            call.resolve()
         }
     }
 }

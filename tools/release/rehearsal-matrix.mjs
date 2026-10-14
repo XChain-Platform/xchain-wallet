@@ -167,9 +167,9 @@ export const LANES = [
         os: 'darwin',
         arch: 'arm64',
         format: 'zip',
-        device: 'Mac Studio (release machine)',
+        device: 'MacBook Pro M3 Max (clean user profile, not the release machine)',
         deviceHost: { silicon: 'arm64', translated: false },
-        note: 'The one lane whose hardware the program already owns.',
+        note: 'Watched on a second Mac with no wallet profile: the release machine fails Gatekeeper with a Code Signing subsystem error, so it cannot stand in for a clean install.',
     },
     {
         id: 'linux-x64-appimage',
@@ -184,8 +184,8 @@ export const LANES = [
         os: 'linux',
         arch: 'arm64',
         format: 'AppImage',
-        device: 'linux-arm64 CI runner (Ubuntu 24.04)',
-        note: 'Own pointer (stable-linux-arm64.yml); shares it with the arm64 deb.',
+        device: 'Ubuntu 24.04 arm64 Parallels VM on the Mac Studio (GNOME desktop, clean profile)',
+        note: 'Own pointer (stable-linux-arm64.yml); shares it with the arm64 deb. The update is watched on a desktop VM because a CI runner has no screen to watch it on.',
     },
     {
         id: 'linux-x64-deb',

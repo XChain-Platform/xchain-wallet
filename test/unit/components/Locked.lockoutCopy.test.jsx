@@ -8,16 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// the wrong-password lockout copy read like rate limiting to a
-// tester, who answered it by reaching for a VPN instead of waiting out the
-// local, per-device counter. Both places the copy renders (the aria-live
-// banner and the field-level error under the password input) must name the
-// lockout as local to this device and say plainly that changing networks
-// does not help, so nobody reads it as an IP-based rate limit again.
-
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
+
+const nextPaint = vi.hoisted(() => vi.fn(async () => {}));
+
+vi.mock('../../../packages/core/src/shared/utils/nextPaint.js', () => ({ nextPaint }));
 
 import { Locked } from '../../../packages/core/src/shared/routes/Locked.jsx';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -26,8 +23,15 @@ import {
     recordLockoutFailure,
 } from '../../../packages/core/src/flows/index.js';
 
-beforeEach(() => clearLockoutState());
-afterEach(() => { cleanup(); clearLockoutState(); });
+beforeEach(() => {
+    clearLockoutState();
+    nextPaint.mockClear();
+});
+afterEach(() => {
+    cleanup();
+    clearLockoutState();
+    vi.useRealTimers();
+});
 
 /** An InvalidPasswordError look-alike: only `name` is checked by Locked.jsx. */
 function invalidPasswordError() {
@@ -55,33 +59,37 @@ function submitPassword(pw = 'guess') {
     fireEvent.click(screen.getByRole('button', { name: 'Unlock Wallet' }));
 }
 
-describe('Locked: lockout copy does not read as rate limiting', () => {
-    it('names the counter as local to this device and says changing networks will not help, once locked', async () => {
-        // Attempts 1-2 carry no delay (see the schedule in lockoutTracking.js),
-        // so drive the counter to N=3 first, which is the first attempt that
-        // actually locks and renders the copy under test.
+describe('Locked password failure feedback', () => {
+    it('shows one plain, live lockout message and refocuses after the wait', async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-10-13T12:00:00Z'));
         recordLockoutFailure();
         recordLockoutFailure();
 
         mount();
-        submitPassword();
-
-        await waitFor(() => {
-            expect(screen.getByRole('status')).toBeTruthy();
+        await act(async () => {
+            submitPassword();
         });
 
+        const password = screen.getByLabelText('Password');
         const banner = screen.getByRole('status');
-        expect(banner.textContent).toMatch(/too many incorrect passwords on this device/i);
-        expect(banner.textContent).toMatch(/changing networks will not skip the wait/i);
-        // Never the old bare "rate limit"-adjacent phrasing the tester
-        // misread; the fix must not just append the new sentence next to it.
-        expect(banner.textContent).not.toMatch(/incorrect password\. try again/i);
+        expect(banner).toHaveTextContent(
+            'Too many incorrect passwords on this device. '
+            + 'Wait 5 seconds before trying again. '
+            + 'Changing networks will not skip the wait.',
+        );
+        expect(screen.getAllByText(/too many incorrect passwords on this device/i))
+            .toHaveLength(1);
+        expect(password).toHaveValue('');
+        expect(password).toBeDisabled();
 
-        // Both the banner and the field-level error under the password
-        // input carry the fixed copy; neither is the old bare
-        // "Incorrect password. Try again in ...".
-        const matches = screen.getAllByText(/too many incorrect passwords on this device/i);
-        expect(matches.length).toBeGreaterThanOrEqual(2);
+        act(() => vi.advanceTimersByTime(1000));
+        expect(banner).toHaveTextContent(/wait 4 seconds before trying again/i);
+
+        act(() => vi.advanceTimersByTime(4000));
+        expect(screen.queryByRole('status')).toBeNull();
+        expect(password).toBeEnabled();
+        expect(password).toHaveFocus();
     });
 
     it('leaves the plain "Incorrect password." message alone on the first miss (no lockout yet)', async () => {
@@ -91,6 +99,9 @@ describe('Locked: lockout copy does not read as rate limiting', () => {
         await waitFor(() => {
             expect(screen.getAllByText(/incorrect password/i).length).toBeGreaterThan(0);
         });
+        expect(screen.getAllByText('Incorrect password.')).toHaveLength(1);
+        expect(screen.getByLabelText('Password')).toHaveValue('');
+        expect(screen.getByLabelText('Password')).toHaveFocus();
         expect(screen.queryByText(/too many incorrect passwords/i)).toBeNull();
         expect(screen.queryByText(/changing networks/i)).toBeNull();
         expect(screen.queryByRole('status')).toBeNull();

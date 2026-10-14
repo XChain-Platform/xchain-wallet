@@ -78,6 +78,14 @@ const routes = {
             html_url: 'https://example.invalid/run/999',
         }],
     },
+    ['/repos/' + REPO + '/commits/${SHA}/status']: {
+        statuses: [{
+            context: 'license/cla',
+            state: 'success',
+            updated_at: '2026-08-07T06:39:33Z',
+            target_url: 'https://example.invalid/status/cla',
+        }],
+    },
     ['/repos/' + REPO + '/actions/runs/999/jobs']: { jobs: world.jobs },
 };
 for (const job of world.jobs) {

@@ -1,0 +1,5 @@
+// Exposes the vendored Argon2 reference implementation to Swift as `import Argon2`.
+module Argon2 [system] {
+    header "include/argon2.h"
+    export *
+}

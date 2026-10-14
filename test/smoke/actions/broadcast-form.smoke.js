@@ -109,11 +109,11 @@ assert.ok(
 // --- 6. Params composer -----------------------------------------------
 
 assert.ok(
-    /VERSION:\s*version/.test(src) || /p\.VERSION\s*=/.test(src) || /VERSION:\s*['"]0['"]/.test(src) || /version\s*=\s*['"]0['"]/.test(src),
+    /VERSION:\s*version/.test(src),
     'BroadcastForm composes VERSION',
 );
 assert.ok(
-    /MESSAGE:\s*message/.test(src) || /p\.MESSAGE/.test(src) || /MESSAGE:\s*feed/.test(src),
+    /MESSAGE:\s*message/.test(src),
     'BroadcastForm sets MESSAGE',
 );
 assert.ok(

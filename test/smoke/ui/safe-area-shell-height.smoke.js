@@ -27,6 +27,9 @@
 //   2. tokens.css defines --xc-viewport-h as the viewport MINUS that inset.
 //   3. Both root height consumers (Screen, FullLayoutWithNav's layout) fall
 //      back to --xc-viewport-h and NOT to a bare 100vh/100dvh.
+//   4. The Android shell replaces that token with the native WebView's
+//      innerHeight, because WebView 102 can resolve 100vh below its visible
+//      and accessibility bounds after Capacitor applies system-bar padding.
 //
 // Rule 3 is the one that rots: a bare `100dvh` reads as obviously right,
 // and on every non-iOS shell it behaves identically, so nothing but a
@@ -44,6 +47,10 @@ const tokens = readFileSync(join(core, 'src', 'ui', 'tokens.css'), 'utf8');
 const screen = readFileSync(join(core, 'src', 'ui', 'Screen.module.css'), 'utf8');
 const leftNav = readFileSync(
     join(core, 'src', 'shared', 'components', 'LeftNav.module.css'),
+    'utf8',
+);
+const keyboardViewport = readFileSync(
+    join(core, '..', 'web', 'src', 'platform', 'keyboardViewport.js'),
     'utf8',
 );
 
@@ -79,6 +86,26 @@ for (const decl of viewportH) {
     );
 }
 
+// --- 2b. the dvh form is gated, never a second declaration in :root -------
+//
+// A custom property accepts any tokens, so a later `--xc-viewport-h` always
+// wins the cascade. Written as a plain pair inside :root, the dvh form won on
+// engines WITHOUT dvh too (Chromium below 108), was invalid where it was used,
+// and took the shell's height with it: the bottom tab bar floated mid-screen
+// on an LG K51's stock WebView 102 (2026-10-12).
+
+const rootBlock = tokens.slice(tokens.indexOf(':root {'), tokens.indexOf('\n}\n', tokens.indexOf(':root {')));
+assert.ok(rootBlock.length > 100, 'located the leading :root block in tokens.css');
+const rootDecls = rootBlock.match(/--xc-viewport-h:[^;]+;/g) || [];
+assert.equal(rootDecls.length, 1, ':root declares --xc-viewport-h exactly once');
+assert.match(rootDecls[0], /100vh/, 'the unconditional --xc-viewport-h uses plain vh');
+assert.doesNotMatch(rootDecls[0], /dvh/, 'the unconditional --xc-viewport-h does not need dvh');
+assert.match(
+    tokens,
+    /@supports \(height: 100dvh\) \{\s*:root \{\s*--xc-viewport-h: calc\(100dvh - env\(safe-area-inset-top, 0px\)\);/,
+    'the dvh form of --xc-viewport-h sits behind @supports (height: 100dvh)',
+);
+
 // --- 3. both root consumers use it ---------------------------------------
 
 for (const [name, css] of [['Screen.module.css', screen], ['LeftNav.module.css', leftNav]]) {
@@ -95,5 +122,46 @@ for (const [name, css] of [['Screen.module.css', screen], ['LeftNav.module.css',
         );
     }
 }
+
+// --- 4. the bottom inset is paid exactly once ------------------------------
+//
+// Without a bottom tab bar (onboarding, the iPad side rail) nothing paid the
+// home-indicator inset, so the license's Accept button and the rail's Lock
+// sat inside it (iPad Pro 11-inch simulator). With the bar, the bar pays it
+// and the Screen above must not pay it again.
+
+assert.match(
+    screen,
+    /\.body:last-child\s*\{[^}]*padding-bottom:[^;]*var\(--xc-screen-safe-bottom,\s*env\(safe-area-inset-bottom,\s*0px\)\)/,
+    'a Screen whose body ends it pads the body by the bottom inset',
+);
+assert.match(
+    screen,
+    /\.footer\s*\{[^}]*padding-bottom:[^;]*var\(--xc-screen-safe-bottom,\s*env\(safe-area-inset-bottom,\s*0px\)\)/,
+    'a Screen footer pads by the bottom inset',
+);
+assert.match(
+    leftNav,
+    /\.layoutWithBottomBar > \.main\s*\{[^}]*--xc-screen-safe-bottom:\s*0px/,
+    'the bottom tab bar layout zeroes the Screen inset the bar already pays',
+);
+assert.match(
+    leftNav,
+    /\.nav\s*\{[^}]*padding-bottom:[^;]*env\(safe-area-inset-bottom,\s*0px\)/,
+    'the side rail keeps its footer clear of the home indicator',
+);
+
+// --- 5. Android uses the native WebView's visible height -----------------
+
+assert.match(
+    keyboardViewport,
+    /Capacitor\?\.getPlatform\?\.\(\) === 'android'/,
+    'the viewport override is limited to the Android native shell',
+);
+assert.match(
+    keyboardViewport,
+    /--xc-viewport-h'[\s\S]*?Math\.round\(win\.innerHeight\)/,
+    'Android sizes --xc-viewport-h from the native WebView innerHeight',
+);
 
 console.log('safe-area-shell-height smoke OK');

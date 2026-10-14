@@ -26,12 +26,15 @@
         android:theme="@style/AppTheme">
 
         <activity
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density|fontScale|fontWeightAdjustment"
             android:name=".MainActivity"
             android:label="@string/title_activity_main"
             android:theme="@style/AppTheme.NoActionBarLaunch"
             android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize"
             android:exported="true">
+
+            <!-- adjustResize keeps focused fields above the Chrome 102 keyboard. -->
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -96,6 +99,15 @@
                 <data android:scheme="xchain" />
             </intent-filter>
 
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="bitcoin" />
+                <data android:scheme="litecoin" />
+                <data android:scheme="dogecoin" />
+            </intent-filter>
+
         </activity>
 
         <!--
@@ -118,6 +130,7 @@
         -->
         <receiver
             android:name="androidx.profileinstaller.ProfileInstallReceiver"
+            android:exported="false"
             tools:node="remove" />
 
         <provider
@@ -134,6 +147,14 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!--
+      Android 13+ notification delivery. The shared settings screen requests
+      this runtime permission only when the user chooses to enable desktop
+      notifications.
+    -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!--
       Biometric unlock (S2). Both are normal-protection: granted at

@@ -60,6 +60,15 @@ describe('flows/priceAlerts', () => {
         expect(await vault.priceAlerts.count()).toBe(3);
     });
 
+    it('does not collapse alerts denominated in different currencies', async () => {
+        const usd = await saveAlert({ vault, ...ALERT });
+        const eur = await saveAlert({ vault, ...ALERT, fiatCurrency: 'EUR' });
+
+        expect(eur.id).not.toBe(usd.id);
+        expect(eur.fiatCurrency).toBe('eur');
+        expect(await vault.priceAlerts.count()).toBe(2);
+    });
+
     it('re-arms a triggered alert when the same alert is re-saved', async () => {
         const a = await saveAlert({ vault, ...ALERT });
         await markAlertTriggered({ vault, id: a.id });
@@ -69,6 +78,56 @@ describe('flows/priceAlerts', () => {
         expect(again.status).toBe('armed');
         expect(again.triggeredAt).toBeNull();
         expect(await vault.priceAlerts.count()).toBe(1);
+    });
+
+    it('edits an alert in place and re-arms it', async () => {
+        const original = await saveAlert({ vault, ...ALERT });
+        await markAlertTriggered({ vault, id: original.id });
+
+        const edited = await saveAlert({
+            vault,
+            ...ALERT,
+            id: original.id,
+            direction: 'below',
+            targetFiat: 64000,
+            fiatCurrency: 'eur',
+        });
+
+        expect(edited).toMatchObject({
+            id: original.id,
+            direction: 'below',
+            targetFiat: 64000,
+            fiatCurrency: 'eur',
+            status: 'armed',
+            triggeredAt: null,
+        });
+        expect(await vault.priceAlerts.count()).toBe(1);
+    });
+
+    it('rejects an edit that would duplicate another alert', async () => {
+        const first = await saveAlert({ vault, ...ALERT });
+        await saveAlert({ vault, ...ALERT, direction: 'below' });
+
+        await expect(saveAlert({
+            vault,
+            ...ALERT,
+            id: first.id,
+            direction: 'below',
+        })).rejects.toThrow('A matching price alert already exists');
+        expect(await vault.priceAlerts.count()).toBe(2);
+    });
+
+    it('does not edit an alert through another wallet', async () => {
+        const original = await saveAlert({ vault, ...ALERT });
+
+        await expect(saveAlert({
+            vault,
+            ...ALERT,
+            id: original.id,
+            walletId: 'wallet-2',
+            targetFiat: 1,
+        })).rejects.toThrow('alert was not found for this wallet');
+        expect((await vault.priceAlerts.get(original.id)).targetFiat).toBe(70000);
     });
 
     it('markAlertTriggered disarms with a timestamp', async () => {
@@ -90,6 +149,49 @@ describe('flows/priceAlerts', () => {
         const a = await saveAlert({ vault, ...ALERT });
         expect(await clearAlert({ vault, id: a.id })).toBe(true);
         expect(await listAlertsForWallet({ vault, walletId: 'wallet-1' })).toHaveLength(0);
+    });
+
+    it('does not restore an alert when deletion races its triggered transition', async () => {
+        const alert = await saveAlert({ vault, ...ALERT });
+        const originalGet = vault.priceAlerts.get.bind(vault.priceAlerts);
+        let releaseRead;
+        let markRead;
+        const readStarted = new Promise((resolve) => { markRead = resolve; });
+        const readReleased = new Promise((resolve) => { releaseRead = resolve; });
+        let firstRead = true;
+        vault.priceAlerts.get = async (id) => {
+            const record = await originalGet(id);
+            if (firstRead) {
+                firstRead = false;
+                markRead();
+                await readReleased;
+            }
+            return record;
+        };
+
+        const marking = markAlertTriggered({ vault, id: alert.id });
+        await readStarted;
+        const clearing = clearAlert({ vault, id: alert.id });
+        releaseRead();
+
+        await expect(marking).resolves.toMatchObject({ status: 'triggered' });
+        await expect(clearing).resolves.toBe(true);
+        expect(await originalGet(alert.id)).toBeNull();
+    });
+
+    it('keeps a triggered alert disarmed after reopening the vault', async () => {
+        const backend = new InMemoryBackend();
+        const firstVault = new Vault({ backend, masterKey: MASTER_KEY });
+        await firstVault.open();
+        const alert = await saveAlert({ vault: firstVault, ...ALERT });
+        await markAlertTriggered({ vault: firstVault, id: alert.id });
+        firstVault.close();
+
+        const reopenedVault = new Vault({ backend, masterKey: MASTER_KEY });
+        await reopenedVault.open();
+
+        expect(await listAlertsForWallet({ vault: reopenedVault, walletId: ALERT.walletId }))
+            .toMatchObject([{ id: alert.id, status: 'triggered' }]);
     });
 
     it('markAlertTriggered / rearmAlert no-op on a missing id', async () => {

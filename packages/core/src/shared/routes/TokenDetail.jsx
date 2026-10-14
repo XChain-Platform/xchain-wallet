@@ -8,8 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Button, ChainBadge, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { AddressText, Button, ChainBadge, CopyButton, EmptyState, Icon, Input, ListPage, ListRow, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -17,28 +17,50 @@ import { isDemoGatedActionIndex } from '../../flows/demoGatedContent.js';
 import { StalenessLabel } from '../components/StalenessLabel.jsx';
 import { GatedFileViewer } from '../components/GatedFileViewer.jsx';
 import { Sparkline, synthesizeTokenChart } from '../components/Sparkline.jsx';
-import { RANGES as CHART_RANGES, resampleTo as resampleSeriesTo } from '../components/PortfolioChart.jsx';
+import { isDemoWallet } from '../../flows/demoMode.js';
+import { synthesizeDemoNativePrices } from '../../flows/demoFixtures.js';
+import { RANGES as CHART_RANGES, priceHistoryForRange } from '../components/PortfolioChart.jsx';
 import portfolioChartStyles from '../components/PortfolioChart.module.css';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { useIsTokenIssuer } from '../hooks/useIsTokenIssuer.js';
 import { useNativePrice } from '../hooks/useNativePrice.js';
 import { usePriceAlerts } from '../hooks/usePriceAlerts.js';
 import { PriceAlertForm } from '../components/PriceAlertForm.jsx';
+import { RouteErrorBoundary } from '../components/RouteErrorBoundary.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { usePortfolioChartVisible } from '../hooks/usePortfolioChartVisible.js';
-import { coinFromChainId } from '../components/BalanceList.jsx';
+import { useOnlineStatus } from '../hooks/useOnlineStatus.js';
+import { useReachability } from '../hooks/useReachability.js';
+import { coinFromChainId, formatFiat } from '../components/BalanceList.jsx';
 import { BridgeOriginTick } from './BridgeOriginBadge.jsx';
 import { parseBridgedTick, bridgeDisplayTick, coinDisplay } from './BridgeTick.js';
 import {
-    compareDecimalStrings,
     decimalFromBaseUnits,
+    formatAtomicAmount,
+    formatDecimalAmount,
+    formatTokenQuantity,
+    formatWithThousands,
     multiplyDecimalStrings,
 } from '../utils/amountFormat.js';
+import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
+import { tickerForCoin } from '../../registry/coinTicker.js';
+import { extractHolderRows } from '../utils/holderRows.js';
+import { explorerPage, uniqueRows } from '../utils/pagedRows.js';
+import { percentChangeDisplay } from '../utils/percentFormat.js';
+import { safeHttpUrl } from '../utils/externalUrl.js';
+import { readActiveAccount } from '../utils/activeAccountMemory.js';
+import { sumTickOnChain } from '../utils/walletBalanceShape.js';
 import styles from './TokenDetail.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const HOLDERS_PAGE_SIZE = 25;
+const HOLDER_WINDOW_SIZE = 100;
+
+function callAsync(callback) {
+    return Promise.resolve().then(callback);
+}
 
 /**
  * §27.6 token detail page (G071).
@@ -64,7 +86,8 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {'native' | 'token' | 'subtoken' | string} [props.kind]
  * @param {string} [props.displayName]               human-readable name (defaults to ticker)
  * @param {number} [props.divisibility]
- * @param {number | null} [props.fiatRate]           USD per token if known
+ * @param {number | null} [props.fiatRate]           selected fiat currency per token if known
+ * @param {string | null} [props.fiatRateSource]     rate source, including `market` for DEX-derived prices
  * @param {string} [props.quantity]                  atomic-unit balance string
  * @param {() => void} props.onBack
  * @param {() => void} [props.onSend]                navigate to Send route
@@ -72,15 +95,26 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {() => void} [props.onViewActivity]        navigate to History pre-filtered to this tick
  * @param {() => void} [props.onManageToken]         navigate to the issuer's Manage Token view for this tick; only offered when the wallet holds the issuing address (see useIsTokenIssuer.js)
  */
-export function TokenDetail({
+export function TokenDetail(props) {
+    const assetScope = JSON.stringify([
+        props.walletId,
+        props.chainId,
+        props.tick,
+        props.kind || 'token',
+    ]);
+    return <TokenDetailContent key={assetScope} {...props} />;
+}
+
+function TokenDetailContent({
     walletId,
     chainId,
     tick,
     kind = 'token',
     displayName,
-    divisibility = 8,
+    divisibility = null,
     fiatRate = null,
-    quantity = '0',
+    fiatRateSource = null,
+    quantity: suppliedQuantity,
     imageUrl: rowImageUrl = null,
     onBack,
     onSend,
@@ -90,19 +124,68 @@ export function TokenDetail({
     onManageToken,
 }) {
     const { messaging, shell } = useMessaging();
-    const { settings } = useSettings();
+    const { settings, error: settingsError } = useSettings();
     const fiatCurrency = settings?.fiatCurrency || 'USD';
+    const walletModeReady = settings !== null;
+    const isWatcherMode = settings?.walletMode === 'watcher';
+    const browserOnline = useOnlineStatus();
+    const { overall: reachabilityOverall } = useReachability({});
+    const networkActionsAvailable = browserOnline && reachabilityOverall !== 'offline';
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
+    const tabsId = useId();
+    const [resolvedQuantity, setResolvedQuantity] = useState(
+        typeof suppliedQuantity === 'string' ? suppliedQuantity : null,
+    );
+    useEffect(() => {
+        if (typeof suppliedQuantity === 'string') {
+            setResolvedQuantity(suppliedQuantity);
+            return undefined;
+        }
+        setResolvedQuantity(null);
+        if (typeof messaging.getWalletBalances !== 'function') return undefined;
+        let cancelled = false;
+        messaging.getWalletBalances(walletId, readActiveAccount(walletId) || undefined)
+            .then((byChain) => {
+                if (!cancelled) setResolvedQuantity(sumTickOnChain(byChain, chainId, tick));
+            })
+            .catch(() => {
+                if (!cancelled) setResolvedQuantity('0');
+            });
+        return () => { cancelled = true; };
+    }, [messaging, walletId, chainId, tick, suppliedQuantity]);
+    const quantity = resolvedQuantity ?? '0';
 
     const descriptor = chainRegistry.get(chainId);
     const isNative = kind === 'native';
+    const isDemo = isDemoWallet(walletId);
+    // The price section shows outside test networks, including before
+    // settings load; the demo wallet prices its synthetic test holdings.
+    const fiatSupported = isDemo || (settings
+        ? settings.activeNetwork !== 'testnet' && settings.activeNetwork !== 'regtest'
+        : Boolean(settingsError) || descriptor?.networkKind === 'mainnet');
+    // A fiat value itself needs a mainnet holding, whatever the settings say.
+    const fiatAllowed = isDemo || descriptor?.networkKind === 'mainnet';
+    const displayFiatRate = fiatSupported && fiatAllowed ? fiatRate : null;
 
     // §27.6 / Cluster I FOLLOWUP 3 + Cluster C FOLLOWUP 3: pull
     // description / creator / supply / locks / market / extracted
     // imageUrl. Skipped for native coins (BTC / LTC / DOGE) since
     // they're not XChain-issued tokens.
-    const assetInfo = useTokenInfo({ chainId, tick, skip: isNative });
+    const assetInfo = useTokenInfo({ chainId, tick, skip: isNative, demo: isDemo });
+    const resolvedDivisibility = isNative
+        ? normalizedDivisibility(divisibility)
+        : normalizedDivisibility(assetInfo?.divisibility) ?? normalizedDivisibility(divisibility);
+    const [tokenMissing, setTokenMissing] = useState(false);
+    useEffect(() => {
+        setTokenMissing(false);
+        if (isNative || isDemo || typeof messaging.getTokenInfo !== 'function') return undefined;
+        let cancelled = false;
+        callAsync(() => messaging.getTokenInfo({ chainId, tick }))
+            .then((info) => { if (!cancelled) setTokenMissing(info == null); })
+            .catch(() => { /* A read failure is not proof that the token is gone. */ });
+        return () => { cancelled = true; };
+    }, [messaging, chainId, tick, isNative, isDemo]);
+    const metadataLoading = !isNative && !assetInfo && !tokenMissing;
 
     // A holder who is also the issuer gets a way back to the admin
     // surface: without this, ManageToken was reachable only via Menu ->
@@ -120,14 +203,36 @@ export function TokenDetail({
     // flag the UI uses to hide the stats strip + chart with no calls
     // having fired. Skipped for non-native (XCP tokens don't have a
     // CoinGecko entry).
-    const nativePrice = useNativePrice(isNative ? chainId : null, { includeSparkline: true });
+    const queriedNativePrice = useNativePrice(isNative && fiatSupported && fiatAllowed && !isDemo ? chainId : null, {
+        includeSparkline: true,
+        fiatCurrency,
+    });
+    const nativePrice = isNative && isDemo
+        ? {
+            entry: synthesizeDemoNativePrices([chainId])[chainId] ?? null,
+            loading: false,
+            disabled: false,
+            error: null,
+        }
+        : queriedNativePrice;
 
     const supplyHistory = useSupplyHistory({ messaging, chainId, tick, skip: isNative });
+
+    const handleBack = useCallback(() => {
+        onBack();
+        restoreBalanceRowFocus(chainId, tick);
+    }, [chainId, onBack, tick]);
 
     const [holdersOpen, setHoldersOpen] = useState(false);
     const [holders, setHolders] = useState(/** @type {any[] | null} */ (null));
     const [holdersError, setHoldersError] = useState(/** @type {string | null} */ (null));
+    const [holdersMoreError, setHoldersMoreError] = useState(/** @type {string | null} */ (null));
     const [holdersLoading, setHoldersLoading] = useState(false);
+    const [holdersLoadingMore, setHoldersLoadingMore] = useState(false);
+    const [holdersPage, setHoldersPage] = useState(0);
+    const [holdersTotal, setHoldersTotal] = useState(/** @type {number | null} */ (null));
+    const [holdersHasMore, setHoldersHasMore] = useState(false);
+    const holdersRequestId = useRef(0);
     // Cluster G FOLLOWUP 5: Unix ms of the last holders fetch; drives a
     // staleness label inside the holders panel so the user can tell at
     // a glance whether the listing is live.
@@ -142,23 +247,35 @@ export function TokenDetail({
     const [gatedLoading, setGatedLoading] = useState(false);
 
     useEffect(() => {
-        if (!holdersOpen || holders !== null || isNative) return undefined;
+        if (!holdersOpen || isNative) return undefined;
         if (typeof messaging.getHoldersForToken !== 'function') {
             setHoldersError('Holders lookup is not available in this build.');
             return undefined;
         }
         let cancelled = false;
+        holdersRequestId.current += 1;
+        setHolders(null);
         setHoldersLoading(true);
+        setHoldersLoadingMore(false);
         setHoldersError(null);
-        messaging.getHoldersForToken({ chainId, tick: tick })
+        setHoldersMoreError(null);
+        setHoldersPage(0);
+        setHoldersTotal(null);
+        setHoldersHasMore(false);
+        callAsync(() => messaging.getHoldersForToken({
+            chainId,
+            tick,
+            opts: { page: 1, limit: HOLDERS_PAGE_SIZE },
+        }))
             .then((resp) => {
                 if (cancelled) return;
-                const list = Array.isArray(resp) ? resp
-                    : Array.isArray(resp?.data) ? resp.data
-                    : Array.isArray(resp?.rows) ? resp.rows
-                    : [];
+                const list = uniqueRows(extractHolderRows(resp), holderIdentity);
+                const page = explorerPage(resp, extractHolderRows(resp), 1, HOLDERS_PAGE_SIZE);
                 setHolders(list);
                 setHoldersFetchedAt(Date.now());
+                setHoldersPage(1);
+                setHoldersTotal(page.total);
+                setHoldersHasMore(page.hasMore);
             })
             .catch((err) => {
                 if (cancelled) return;
@@ -166,10 +283,39 @@ export function TokenDetail({
             })
             .finally(() => { if (!cancelled) setHoldersLoading(false); });
         return () => { cancelled = true; };
-    }, [holdersOpen, holders, isNative, tick, chainId, messaging]);
+    }, [holdersOpen, isNative, tick, chainId, messaging]);
+
+    const loadMoreHolders = useCallback(() => {
+        if (holdersLoading || holdersLoadingMore || !holdersHasMore) return;
+        const nextPage = holdersPage + 1;
+        const requestId = holdersRequestId.current;
+        const before = holders || [];
+        setHoldersLoadingMore(true);
+        setHoldersMoreError(null);
+        callAsync(() => messaging.getHoldersForToken({
+            chainId,
+            tick,
+            opts: { page: nextPage, limit: HOLDERS_PAGE_SIZE },
+        })).then((resp) => {
+            if (requestId !== holdersRequestId.current) return;
+            const pageRows = extractHolderRows(resp);
+            const page = explorerPage(resp, pageRows, nextPage, HOLDERS_PAGE_SIZE);
+            const merged = uniqueRows([...before, ...pageRows], holderIdentity);
+            setHolders(merged);
+            setHoldersHasMore(page.hasMore && merged.length > before.length);
+            setHoldersPage(nextPage);
+            setHoldersTotal(page.total);
+            setHoldersFetchedAt(Date.now());
+        }).catch((err) => {
+            if (requestId !== holdersRequestId.current) return;
+            setHoldersMoreError(readFailureMessage(err, 'load more holders'));
+        }).finally(() => {
+            if (requestId === holdersRequestId.current) setHoldersLoadingMore(false);
+        });
+    }, [chainId, holders, holdersHasMore, holdersLoading, holdersLoadingMore, holdersPage, messaging, tick]);
 
     useEffect(() => {
-        if (!holdersOpen || gatedGroups !== null || isNative) return undefined;
+        if (!holdersOpen || isNative) return undefined;
         if (typeof messaging.listGatedContent !== 'function') {
             // Older host build without gated-content support; skip silently
             // (no error UI), since pre-feature tokens have no gated entries.
@@ -177,9 +323,10 @@ export function TokenDetail({
             return undefined;
         }
         let cancelled = false;
+        setGatedGroups(null);
         setGatedLoading(true);
         setGatedError(null);
-        messaging.listGatedContent({ chainId, tick })
+        callAsync(() => messaging.listGatedContent({ chainId, tick }))
             .then((resp) => {
                 if (cancelled) return;
                 setGatedGroups(Array.isArray(resp) ? resp : []);
@@ -190,12 +337,12 @@ export function TokenDetail({
             })
             .finally(() => { if (!cancelled) setGatedLoading(false); });
         return () => { cancelled = true; };
-    }, [holdersOpen, gatedGroups, isNative, tick, chainId, messaging]);
+    }, [holdersOpen, isNative, tick, chainId, messaging]);
 
     const fiat = useMemo(() => {
-        if (typeof fiatRate !== 'number' || !isFinite(fiatRate)) return null;
-        return fiatValue(quantity, divisibility, fiatRate);
-    }, [quantity, divisibility, fiatRate]);
+        if (typeof displayFiatRate !== 'number' || !isFinite(displayFiatRate)) return null;
+        return fiatValue(quantity, resolvedDivisibility, displayFiatRate);
+    }, [quantity, resolvedDivisibility, displayFiatRate]);
 
     // Header icon picks the smallest representation available: a TIS
     // `icon`-typed image first, then any other TIS image, then the
@@ -220,28 +367,39 @@ export function TokenDetail({
         return null;
     }, [assetInfo, rowImageUrl, isNative, chainId]);
 
+    const pageTitle = displayName || bridgeDisplayTick(tick, coinFromChainId(chainId)).label;
     const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={handleBack}
             // A bridged copy is titled by its bare name; the rooted wire form
             // and the origin chain are both on the Details panel below, so the
             // page never hides which asset this really is.
-            title={displayName || bridgeDisplayTick(tick, coinFromChainId(chainId)).label}
+            title={(
+                <span className={styles.headerTitle} title={pageTitle}>
+                    {pageTitle}
+                </span>
+            )}
             titleIcon={headerIconUrl ? (
-                <img
+                <AssetArtwork
                     src={headerIconUrl}
-                    alt=""
-                    aria-hidden="true"
                     className={styles.headerIcon}
-                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    fallbackClassName={styles.headerIconFallback}
+                    fallbackText={tick}
+                />
+            ) : metadataLoading ? (
+                <Skeleton
+                    shape="avatar"
+                    width={28}
+                    height={28}
+                    ariaLabel="Loading token artwork"
                 />
             ) : null}
         />
     );
 
-    const showNativeStats = isNative && !nativePrice.disabled && nativePrice.entry?.priceFiat != null;
-    const showSparkline = showNativeStats && Array.isArray(nativePrice.entry?.sparkline) && nativePrice.entry.sparkline.length > 1;
-    const hasDescription = !isNative && Boolean(assetInfo?.description);
+    const nativePriceValue = positiveFiniteNumber(nativePrice.entry?.priceFiat);
+    const showNativeStats = isNative && !nativePrice.disabled && nativePriceValue !== null;
+    const hasDescription = !isNative && detailText(assetInfo?.description) !== '-';
     const hasMarketData = (isNative && showNativeStats) || (!isNative && assetInfo?.marketPrice != null);
 
     // Tabs match the Home layout pattern (Coins / Tokens / NFTs / DeFi /
@@ -284,83 +442,70 @@ export function TokenDetail({
     // is one tap away for users who think in USD.
     const [primaryUnit, setPrimaryUnit] = useState('tick');
 
-    // 4th quick-action button is now a "More" dropdown (matches the
-    // pattern from the ActionDetail page). Buy lives inside the menu so
-    // less-frequent actions stay out of the primary row.
-    const [moreOpen, setMoreOpen] = useState(false);
-    const moreWrapRef = useRef(/** @type {HTMLDivElement | null} */ (null));
-    useEffect(() => {
-        if (!moreOpen) return undefined;
-        const onClick = (e) => {
-            if (moreWrapRef.current?.contains(e.target)) return;
-            setMoreOpen(false);
-        };
-        const onKey = (e) => { if (e.key === 'Escape') setMoreOpen(false); };
-        window.addEventListener('mousedown', onClick);
-        window.addEventListener('keydown', onKey);
-        return () => {
-            window.removeEventListener('mousedown', onClick);
-            window.removeEventListener('keydown', onKey);
-        };
-    }, [moreOpen]);
-    const moreOptions = [];
-    if (typeof onViewActivity === 'function') {
-        moreOptions.push({
-            id: 'history',
-            label: 'History',
-            icon: <Icon.HistoryIcon />,
-            onClick: () => { setMoreOpen(false); onViewActivity(); },
-        });
-    }
-    // Issuer-only hop into ManageToken; gated on isTokenOwner (not just
-    // the handler being wired) so a holder who isn't the issuer never
-    // sees an entry that would 404 or open someone else's token.
-    if (typeof onManageToken === 'function' && isTokenOwner) {
-        moreOptions.push({
-            id: 'manage-token',
-            label: 'Manage token',
-            icon: <Icon.GearIcon />,
-            onClick: () => { setMoreOpen(false); onManageToken(); },
-        });
-    }
-
     const fiatAvailable = fiat != null && isFinite(fiat);
+    const hasDexPrice = !isNative && (
+        fiatRateSource === 'market'
+        || (assetInfo?.marketPrice != null
+            && Number.isFinite(Number(assetInfo.marketPrice))
+            && Number(assetInfo.marketPrice) > 0)
+    );
     // Amount + unit code are kept separate so the unit can render as a
     // smaller styled span next to the digits (matches the Home total-
     // balance hero treatment). For BTC the code is the tick ticker;
     // for fiat the code is the wallet's preferred currency.
-    const assetAmount = formatAmount(quantity, divisibility);
-    const fiatAmount = fiatAvailable ? formatFiatNumber(fiat, fiatCurrency) : 'N/A';
+    const assetAmount = formatAmount(quantity, resolvedDivisibility);
+    const fiatAmount = fiatAvailable ? formatFiatNumber(fiat, fiatCurrency) : '-';
     const showFiatPrimary = primaryUnit === 'fiat' && fiatAvailable;
     const primaryAmount = showFiatPrimary ? fiatAmount : assetAmount;
     const primaryCode = showFiatPrimary ? fiatCurrency : tick;
     const secondaryAmount = showFiatPrimary ? assetAmount : fiatAmount;
     const secondaryCode = showFiatPrimary ? tick : (fiatAvailable ? fiatCurrency : '');
+    const atomicQuantity = parseAtomicQuantity(quantity);
+    const sendDisabledReason = atomicQuantity == null
+        ? 'Balance is unavailable.'
+        : atomicQuantity <= 0n ? 'No balance to send.'
+        : !networkActionsAvailable ? 'Send needs a network connection.' : null;
+    const tradeDisabledReason = !networkActionsAvailable ? 'Trade needs a network connection.' : null;
+
+    if (tokenMissing) {
+        return (
+            <Screen variant={variant} header={header}>
+                <ListPage><EmptyState title="Token not found" body="It may not be indexed yet, or the name may be mistyped." /></ListPage>
+            </Screen>
+        );
+    }
 
     return (
         <Screen variant={variant} header={header}>
-            <div className={isFull ? styles.bodyFull : styles.bodyPopup}>
+            <ListPage>
                 {/* Token balance hero: gradient block, same style as
                     Home's TotalBalanceHero. Top row carries the label,
                     a swap button for flipping tick ↔ fiat as primary,
                     and the hide-balance eye. Big number = primary,
                     small number underneath = secondary. */}
                 <section className={styles.balanceHero} aria-label={`${displayName || tick} balance`}>
-                    {headerIconUrl ? (
+                    {headerIconUrl || metadataLoading ? (
                         <div className={styles.balanceHeroIconWrap}>
-                            <img
-                                src={headerIconUrl}
-                                alt=""
-                                aria-hidden="true"
-                                className={styles.balanceHeroIcon}
-                                onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                            />
+                            {headerIconUrl ? (
+                                <AssetArtwork
+                                    src={headerIconUrl}
+                                    className={styles.balanceHeroIcon}
+                                    fallbackClassName={styles.balanceHeroIconFallback}
+                                    fallbackText={tick}
+                                />
+                            ) : (
+                                <Skeleton
+                                    shape="card"
+                                    width="100%"
+                                    height="100%"
+                                    ariaLabel="Loading token artwork"
+                                />
+                            )}
                             {!isNative && chainId ? (
                                 <img
                                     src={branding.chainIconSmallUrl(chainId)}
                                     alt=""
                                     aria-hidden="true"
-                                    title={descriptor?.displayName || chainId}
                                     className={styles.balanceHeroChainOverlay}
                                 />
                             ) : null}
@@ -369,47 +514,43 @@ export function TokenDetail({
                     <div className={styles.balanceHeroMain}>
                         <div className={styles.balanceHeroRow}>
                             <span className={styles.balanceHeroLabel}>Total balance</span>
+                            <div className={styles.balanceHeroAmount}>
+                                {balanceHidden ? (
+                                    <span className={styles.balanceHeroHidden}>•••••</span>
+                                ) : (
+                                    <AutoShrinkText>
+                                        {primaryAmount}
+                                        <span className={styles.balanceHeroAmountCode}>{primaryCode}</span>
+                                    </AutoShrinkText>
+                                )}
+                            </div>
                             <div className={styles.balanceHeroControls}>
-                                <button
-                                    type="button"
+                                <Button
                                     className={styles.balanceHeroSwap}
                                     onClick={() => setPrimaryUnit((p) => (p === 'tick' ? 'fiat' : 'tick'))}
                                     disabled={!fiatAvailable}
                                     aria-label="Swap primary unit"
                                     title="Swap primary unit"
-                                >
-                                    <Icon.SwapIcon />
-                                </button>
-                                <button
-                                    type="button"
-                                    className={styles.balanceHeroEye}
-                                    onClick={toggleChartVisible}
-                                    aria-pressed={chartVisible ? 'true' : 'false'}
-                                    aria-label={chartVisible ? 'Hide chart' : 'Show chart'}
-                                    title={chartVisible ? 'Hide chart' : 'Show chart'}
-                                >
-                                    <Icon.LineChartIcon />
-                                </button>
-                                <button
-                                    type="button"
+                                    icon={<Icon.SwapIcon />}
+                                />
+                                {fiatSupported ? (
+                                    <Button
+                                        className={styles.balanceHeroEye}
+                                        onClick={toggleChartVisible}
+                                        aria-pressed={chartVisible ? 'true' : 'false'}
+                                        aria-label={chartVisible ? 'Hide chart' : 'Show chart'}
+                                        title={chartVisible ? 'Hide chart' : 'Show chart'}
+                                        icon={<Icon.LineChartIcon />}
+                                    />
+                                ) : null}
+                                <Button
                                     className={styles.balanceHeroEye}
                                     onClick={toggleBalanceHidden}
                                     aria-label={balanceHidden ? 'Show balance' : 'Hide balance'}
                                     title={balanceHidden ? 'Show balance' : 'Hide balance'}
-                                >
-                                    {balanceHidden ? <Icon.EyeOffIcon /> : <Icon.EyeIcon />}
-                                </button>
+                                    icon={balanceHidden ? <Icon.EyeOffIcon /> : <Icon.EyeIcon />}
+                                />
                             </div>
-                        </div>
-                        <div className={styles.balanceHeroAmount}>
-                            {balanceHidden ? (
-                                <span className={styles.balanceHeroHidden}>•••••</span>
-                            ) : (
-                                <AutoShrinkText>
-                                    {primaryAmount}
-                                    <span className={styles.balanceHeroAmountCode}>{primaryCode}</span>
-                                </AutoShrinkText>
-                            )}
                         </div>
                         {!balanceHidden && fiatAvailable ? (
                             <div className={styles.balanceHeroNote}>
@@ -417,6 +558,7 @@ export function TokenDetail({
                                     <AutoShrinkText>
                                         {`≈ ${secondaryAmount}`}
                                         <span className={styles.balanceHeroNoteCode}>{secondaryCode}</span>
+                                        {hasDexPrice ? ' · DEX price' : ''}
                                     </AutoShrinkText>
                                 </span>
                             </div>
@@ -428,135 +570,159 @@ export function TokenDetail({
                     registry's current roster (owner-attested on-chain;
                     Project_Registry.md). Display policy is "just show
                     it" (every attesting project is listed). */}
-                {Array.isArray(assetInfo?.projects) && assetInfo.projects.length > 0 ? (
-                    <p className={styles.officialBanner} role="status">
-                        This token is an official token in the{' '}
-                        {assetInfo.projects.map((p, i) => (
-                            <span key={p} className={styles.officialBannerProject}>
-                                {i > 0 ? ', ' : ''}{p}
-                            </span>
-                        ))}
-                        {' '}project{assetInfo.projects.length === 1 ? '' : 's'}.
-                    </p>
+                {!isNative ? (
+                    <div className={styles.officialBannerSlot}>
+                        {metadataLoading ? (
+                            <Skeleton height={38} ariaLabel="Loading token verification" />
+                        ) : Array.isArray(assetInfo?.projects) && assetInfo.projects.length > 0 ? (
+                            <p className={styles.officialBanner} role="status">
+                                This token is an official token in the{' '}
+                                {assetInfo.projects.map((p, i) => (
+                                    <span key={p} className={styles.officialBannerProject}>
+                                        {i > 0 ? ', ' : ''}{p}
+                                    </span>
+                                ))}
+                                {' '}project{assetInfo.projects.length === 1 ? '' : 's'}.
+                            </p>
+                        ) : null}
+                    </div>
                 ) : null}
 
                 {/* Market section: stats strip + sparkline. Sits above
                     the quick actions and is collapsible via the chart-icon
                     button in the balance hero (same hook the Home portfolio
                     chart uses, so the toggle persists across both surfaces). */}
-                {chartVisible ? (
+                {fiatSupported && chartVisible ? (
                     <div className={`${styles.infoCard} ${styles.marketCardOffset}`}>
-                        <MarketPanel
-                            isNative={isNative}
-                            nativePrice={nativePrice}
-                            showNativeStats={showNativeStats}
-                            showSparkline={showSparkline}
-                            assetInfo={assetInfo}
-                            tick={tick}
-                            chainId={chainId}
-                            hasMarketData={hasMarketData}
-                            fiatRate={fiatRate}
-                            fiatCurrency={fiatCurrency}
-                        />
+                        <RouteErrorBoundary
+                            variant="compact"
+                            resetKey={`${chainId}:${tick}:market`}
+                        >
+                            <MarketPanel
+                                isNative={isNative}
+                                nativePrice={nativePrice}
+                                showNativeStats={showNativeStats}
+                                isDemo={isDemo}
+                                assetInfo={assetInfo}
+                                tick={tick}
+                                chainId={chainId}
+                                hasMarketData={hasMarketData}
+                                fiatRate={displayFiatRate}
+                                fiatRateSource={fiatRateSource}
+                                fiatCurrency={fiatCurrency}
+                                loading={metadataLoading}
+                            />
+                        </RouteErrorBoundary>
                     </div>
                 ) : null}
 
-                {!isNative && supplyHistory.length >= 2 ? (
-                    <div className={styles.infoCard}>
-                        <SupplyChart points={supplyHistory} divisibility={divisibility} tick={tick} />
+                {!isNative && supplyHistory.available ? (
+                    <div className={`${styles.infoCard} ${styles.supplyCard}`}>
+                        <RouteErrorBoundary
+                            variant="compact"
+                            resetKey={`${chainId}:${tick}:supply`}
+                        >
+                            {supplyHistory.loading ? (
+                                <Skeleton height={94} ariaLabel="Loading supply history" />
+                            ) : supplyHistory.points.length >= 2 ? (
+                                <SupplyChart points={supplyHistory.points} divisibility={resolvedDivisibility} tick={tick} />
+                            ) : (
+                                <EmptyState
+                                    title="No supply history yet"
+                                    body="Indexed issuance and destruction activity builds this history."
+                                    titleAs="p"
+                                />
+                            )}
+                        </RouteErrorBoundary>
                     </div>
                 ) : null}
 
-                {isNative && !nativePrice.disabled && nativePrice.entry?.priceFiat != null ? (
+                {isNative && fiatSupported ? (
                     <NativePriceAlertEntry
                         walletId={walletId}
                         chainId={chainId}
-                        currentPrice={nativePrice.entry.priceFiat}
+                        currentPrice={nativePriceValue}
                         fiatCurrency={fiatCurrency}
+                        loading={nativePrice.loading || (!nativePrice.entry && !nativePrice.disabled && !nativePrice.error)}
+                        disabled={!fiatAllowed || nativePrice.disabled}
                     />
                 ) : null}
 
-                {/* Quick actions: Send / Receive / Swap / Buy, matching
-                    Home's 4-up grid. */}
+                {!fiatSupported ? (
+                    <p className={styles.muted}>Test coins have no value.</p>
+                ) : null}
+
+                {/* Every shell shares this action order. Missing capabilities
+                    disappear, while temporary blocks stay visible with the
+                    reason that prevents the action. */}
                 <div className={styles.quickActions} role="group" aria-label="Quick actions">
-                    <button type="button" className={styles.quickAction} onClick={onSend} disabled={!onSend}>
-                        <span className={styles.quickActionIcon} aria-hidden="true"><Icon.SendIcon /></span>
-                        <span>Send</span>
-                    </button>
-                    <button type="button" className={styles.quickAction} onClick={onReceive} disabled={!onReceive}>
-                        <span className={styles.quickActionIcon} aria-hidden="true"><Icon.ReceiveIcon /></span>
-                        <span>Receive</span>
-                    </button>
-                    {/* Absent, not greyed, when the shell wires no handler: a
-                        build can have compiled the DEX surface out,
-                        and there is then no market for this token to open. */}
-                    {onBuy ? (
-                        <button type="button" className={styles.quickAction} onClick={onBuy}>
-                            <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MarketIcon /></span>
-                            <span>Markets</span>
-                        </button>
+                    {typeof onSend === 'function' && walletModeReady && !isWatcherMode ? (
+                        <ListRow
+                            onClick={onSend}
+                            disabled={Boolean(sendDisabledReason)}
+                            aria-label="Send"
+                            aria-busy="false"
+                            leading={<span className={styles.quickActionIcon} aria-hidden="true"><Icon.SendIcon /></span>}
+                            title="Send"
+                            subtitle={sendDisabledReason}
+                        />
                     ) : null}
-                    {onBuy && !isNative && safeBigInt(quantity) > 0n ? (
-                        <button type="button" className={styles.quickAction} onClick={onBuy}>
-                            <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MarketIcon /></span>
-                            <span>Sell on DEX</span>
-                        </button>
+                    {typeof onReceive === 'function' ? (
+                        <ListRow
+                            onClick={onReceive}
+                            aria-busy="false"
+                            leading={<span className={styles.quickActionIcon} aria-hidden="true"><Icon.ReceiveIcon /></span>}
+                            title="Receive"
+                        />
                     ) : null}
-                    <div className={styles.quickActionMoreWrap} ref={moreWrapRef}>
-                        <button
-                            type="button"
-                            className={styles.quickAction}
-                            onClick={() => setMoreOpen((o) => !o)}
-                            aria-haspopup="menu"
-                            aria-expanded={moreOpen}
-                            disabled={moreOptions.length === 0}
-                        >
-                            <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MoreIcon /></span>
-                            <span>More</span>
-                        </button>
-                        {moreOpen && moreOptions.length > 0 ? (
-                            <div className={styles.quickActionMoreMenu} role="menu">
-                                {moreOptions.map((opt) => (
-                                    <button
-                                        key={opt.id}
-                                        type="button"
-                                        role="menuitem"
-                                        className={styles.quickActionMoreItem}
-                                        onClick={opt.onClick}
-                                    >
-                                        {opt.icon ? (
-                                            <span className={styles.quickActionMoreItemIcon} aria-hidden="true">
-                                                {opt.icon}
-                                            </span>
-                                        ) : null}
-                                        <span>{opt.label}</span>
-                                    </button>
-                                ))}
-                            </div>
-                        ) : null}
-                    </div>
+                    {typeof onBuy === 'function' ? (
+                        <ListRow
+                            onClick={onBuy}
+                            disabled={Boolean(tradeDisabledReason)}
+                            aria-label="Trade"
+                            aria-busy="false"
+                            leading={<span className={styles.quickActionIcon} aria-hidden="true"><Icon.MarketIcon /></span>}
+                            title="Trade"
+                            subtitle={tradeDisabledReason}
+                        />
+                    ) : null}
+                    {typeof onViewActivity === 'function' ? (
+                        <ListRow
+                            onClick={onViewActivity}
+                            aria-busy="false"
+                            leading={<span className={styles.quickActionIcon} aria-hidden="true"><Icon.HistoryIcon /></span>}
+                            title="History"
+                        />
+                    ) : null}
+                    {!isNative && typeof onManageToken === 'function' && isTokenOwner ? (
+                        <ListRow
+                            onClick={onManageToken}
+                            aria-busy="false"
+                            leading={<span className={styles.quickActionIcon} aria-hidden="true"><Icon.GearIcon /></span>}
+                            title="Manage"
+                        />
+                    ) : null}
                 </div>
 
                 {/* Tabs: matches HomeTabs visual rhythm. Native coins
                     get a single Details tab; tokens add About / Media /
                     Unlock so the per-asset content surfaces in tab form
                     rather than stacking. */}
-                <div className={styles.tabs} role="tablist" aria-label="Token detail view">
-                            {tabs.map((t) => (
-                                <button
-                                    key={t.id}
-                                    type="button"
-                                    role="tab"
-                                    aria-selected={activeTab === t.id ? 'true' : 'false'}
-                                    className={`${styles.tab} ${activeTab === t.id ? styles.tabActive : ''}`}
-                                    onClick={() => setActiveTab(t.id)}
-                                >
-                                    {t.label}
-                                </button>
-                            ))}
-                        </div>
+                <Tabs
+                    id={tabsId}
+                    items={tabs}
+                    value={activeTab}
+                    onChange={setActiveTab}
+                    panelId={`${tabsId}-panel`}
+                    aria-label="Token detail view"
+                />
 
-                        <div className={styles.tabPanel} role="tabpanel">
+                        <div
+                            id={`${tabsId}-panel`}
+                            className={styles.tabPanel}
+                            role="tabpanel"
+                            aria-labelledby={`${tabsId}-tab-${activeTab}`}
+                        >
                             {activeTab === 'details' ? (
                                 <div className={styles.infoCard}>
                                     <DetailsPanel
@@ -567,8 +733,9 @@ export function TokenDetail({
                                         kind={kind}
                                         isNative={isNative}
                                         assetInfo={assetInfo}
+                                        loading={metadataLoading}
                                         quantity={quantity}
-                                        divisibility={divisibility}
+                                        divisibility={resolvedDivisibility}
                                         fiat={fiat}
                                         fiatCurrency={fiatCurrency}
                                     />
@@ -580,6 +747,7 @@ export function TokenDetail({
                                     isNative={isNative}
                                     assetInfo={assetInfo}
                                     hasDescription={hasDescription}
+                                    loading={metadataLoading}
                                 />
                             ) : null}
 
@@ -587,6 +755,7 @@ export function TokenDetail({
                                 <MediaPanel
                                     isNative={isNative}
                                     assetInfo={assetInfo}
+                                    loading={metadataLoading}
                                 />
                             ) : null}
 
@@ -608,44 +777,45 @@ export function TokenDetail({
                                         displayName={displayName || tick}
                                     />
                                     <HoldersPanel
+                                        holderListScope={`${chainId}:${tick}`}
                                         holders={holders}
                                         holdersLoading={holdersLoading}
                                         holdersError={holdersError}
                                         holdersFetchedAt={holdersFetchedAt}
-                                        divisibility={divisibility}
+                                        holdersHasMore={holdersHasMore}
+                                        holdersLoadingMore={holdersLoadingMore}
+                                        holdersMoreError={holdersMoreError}
+                                        holdersTotal={holdersTotal}
+                                        onLoadMore={loadMoreHolders}
+                                        divisibility={resolvedDivisibility}
                                     />
                                 </>
                             ) : null}
                         </div>
 
-            </div>
+            </ListPage>
         </Screen>
     );
 }
 
 /**
- * §46: context-first "Set price alert" entry on the native-coin detail
- * page. Collapsed to a single button; expands to the shared PriceAlertForm
- * pinned to this coin and prefilled with the live price. Renders nothing
- * when the shell doesn't expose the price-alert routes.
- *
- * @param {object} props
- * @param {string} props.walletId
- * @param {string} props.chainId
- * @param {number} props.currentPrice
- * @param {string} props.fiatCurrency
- */
-/**
  * Supply-over-time points for an issued token. The lookup is optional on the
- * messaging surface; a missing method, a failure or an empty answer yields
- * no points and the chart stays hidden.
+ * messaging surface; a missing method hides the section, while a failure or
+ * empty answer resolves the reserved chart space to an empty state.
  */
 function useSupplyHistory({ messaging, chainId, tick, skip }) {
+    const available = !skip && typeof messaging?.getSupplyHistory === 'function';
     const [points, setPoints] = useState([]);
+    const [loading, setLoading] = useState(available);
     useEffect(() => {
-        if (skip || typeof messaging?.getSupplyHistory !== 'function') return undefined;
+        if (!available) {
+            setPoints([]);
+            setLoading(false);
+            return undefined;
+        }
         let cancelled = false;
-        Promise.resolve(messaging.getSupplyHistory({ chainId, tick }))
+        setLoading(true);
+        callAsync(() => messaging.getSupplyHistory({ chainId, tick }))
             .then((resp) => {
                 if (cancelled) return;
                 const list = Array.isArray(resp) ? resp : Array.isArray(resp?.data) ? resp.data : [];
@@ -654,10 +824,11 @@ function useSupplyHistory({ messaging, chainId, tick, skip }) {
                     .filter((p) => Number.isFinite(p.supply));
                 setPoints(clean);
             })
-            .catch(() => { if (!cancelled) setPoints([]); });
+            .catch(() => { if (!cancelled) setPoints([]); })
+            .finally(() => { if (!cancelled) setLoading(false); });
         return () => { cancelled = true; };
-    }, [messaging, chainId, tick, skip]);
-    return points;
+    }, [messaging, chainId, tick, available]);
+    return { points, loading, available };
 }
 
 function SupplyChart({ points, divisibility, tick }) {
@@ -674,10 +845,10 @@ function SupplyChart({ points, divisibility, tick }) {
             return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`;
         })
         .join(' ');
-    const latest = formatAmount(String(Math.round(points[points.length - 1].supply)), divisibility);
+    const latest = formatTokenQuantity(String(points[points.length - 1].supply), divisibility);
     return (
         <section aria-label="Supply over time">
-            <h3 className={styles.sectionTitle}>Supply over time</h3>
+            <SectionHeader title="Supply over time" />
             <svg
                 className={styles.supplyChart}
                 viewBox={`0 0 ${W} ${H}`}
@@ -691,12 +862,42 @@ function SupplyChart({ points, divisibility, tick }) {
     );
 }
 
-function NativePriceAlertEntry({ walletId, chainId, currentPrice, fiatCurrency }) {
+/**
+ * §46: context-first "Set price alert" entry on the native-coin detail
+ * page. Collapsed to a single button; expands to the shared PriceAlertForm
+ * pinned to this coin and prefilled with the live price. Renders nothing
+ * when the shell doesn't expose the price-alert routes.
+ *
+ * @param {object} props
+ * @param {string} props.walletId
+ * @param {string} props.chainId
+ * @param {number | null} props.currentPrice
+ * @param {string} props.fiatCurrency
+ * @param {boolean} props.loading
+ * @param {boolean} props.disabled
+ */
+function NativePriceAlertEntry({ walletId, chainId, currentPrice, fiatCurrency, loading, disabled }) {
     const { supported, addAlert } = usePriceAlerts(walletId);
     const [open, setOpen] = useState(false);
     const [done, setDone] = useState(false);
 
     if (!supported || !walletId) return null;
+
+    if (loading) {
+        return (
+            <div className={`${styles.infoCard} ${styles.priceAlertCard}`}>
+                <Skeleton height={28} ariaLabel="Loading price alert action" />
+            </div>
+        );
+    }
+
+    if (disabled || currentPrice == null) {
+        return (
+            <div className={`${styles.infoCard} ${styles.priceAlertCard}`}>
+                <p className={styles.muted}>Price alerts need current market data.</p>
+            </div>
+        );
+    }
 
     const onCreate = async (input) => {
         await addAlert(input);
@@ -705,7 +906,7 @@ function NativePriceAlertEntry({ walletId, chainId, currentPrice, fiatCurrency }
     };
 
     return (
-        <div className={styles.infoCard} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-2)' }}>
+        <div className={`${styles.infoCard} ${styles.priceAlertCard}`}>
             {open ? (
                 <PriceAlertForm
                     onCreate={onCreate}
@@ -715,78 +916,77 @@ function NativePriceAlertEntry({ walletId, chainId, currentPrice, fiatCurrency }
                     onCancel={() => setOpen(false)}
                 />
             ) : (
-                <button
-                    type="button"
+                <Button
+                    variant="secondary"
+                    size="sm"
                     onClick={() => { setOpen(true); setDone(false); }}
-                    style={{
-                        background: 'transparent',
-                        border: '1px solid var(--xc-border)',
-                        borderRadius: 'var(--xc-radius-sm)',
-                        color: 'var(--xc-text)',
-                        cursor: 'pointer',
-                        fontFamily: 'inherit',
-                        fontSize: 'var(--xc-text-sm)',
-                        padding: 'var(--xc-space-1) var(--xc-space-3)',
-                        alignSelf: 'flex-start',
-                    }}
                 >
                     {done ? 'Price alert set ✓ · Add another' : 'Set price alert'}
-                </button>
+                </Button>
             )}
         </div>
     );
 }
 
-function MarketPanel({ isNative, nativePrice, showSparkline, assetInfo, tick, chainId, fiatRate, fiatCurrency }) {
+// Chart placeholder for real wallets: a price line is drawn only from real
+// history (wallet rule: never fabricate a number), so an absent series gets
+// this message instead of a synthesized walk.
+const NO_PRICE_HISTORY = 'No price history yet';
+
+function MarketPanel({ isNative, nativePrice, isDemo, assetInfo, tick, chainId, fiatRate, fiatRateSource, fiatCurrency, loading }) {
+    const tabsId = useId();
     // Always render the KPI strip with the same shape. Placeholders
     // fill in for missing data so the structure stays consistent
     // whether the price oracle is disabled, still loading, or simply
     // doesn't have data for this tick (e.g. testnet, regtest).
 
     // Range picker: mirrors the PortfolioChart buttons on Home. Native
-    // coins have a 7d CoinGecko sparkline (168 hourly points), so 24h /
-    // 7d are slices of the real series; 30d / 90d / All synthesize the
-    // same way single tokens do (the line still ends at current price).
-    const [rangeId, setRangeId] = useState('30d');
-    const range = CHART_RANGES.find((r) => r.id === rangeId) || CHART_RANGES[2];
+    // Coins have a 7d CoinGecko sparkline (168 hourly points), so real
+    // wallets offer the 24h tail and the full 7d series. Demo wallets also
+    // offer longer synthesized ranges.
+    const availableRanges = isDemo ? CHART_RANGES : CHART_RANGES.filter((item) => item.realCapable);
+    const [rangeId, setRangeId] = useState(isDemo ? '30d' : '7d');
+    const range = availableRanges.find((item) => item.id === rangeId) || availableRanges[0];
 
-    let priceCell = 'N/A';
-    let marketCapCell = 'N/A';
-    let floorCell = 'N/A';
+    let priceCell = '-';
+    let priceLabel = 'Price';
+    let marketCapCell = '-';
+    let floorCell = '-';
+    let pctLabel24h;
     let pctTone24h;
-    let pct24h = 'N/A';
+    let pct24h = '-';
     let sparkline = null;
     let hint = null;
+    const nativeLoading = nativePrice.loading
+        || (!nativePrice.entry && !nativePrice.disabled && !nativePrice.error);
 
     if (isNative) {
         if (nativePrice.disabled) {
             hint = 'Price data is disabled. Enable “Native coin price data” in Settings → Privacy to populate this section.';
-        } else if (nativePrice.loading && !nativePrice.entry) {
+        } else if (nativeLoading) {
             hint = 'Loading market data…';
         } else if (nativePrice.entry) {
             const e = nativePrice.entry;
-            if (e.priceFiat != null) priceCell = formatFiat(e.priceFiat);
-            if (e.marketCapFiat != null) marketCapCell = formatCompactFiat(e.marketCapFiat);
-            if (e.change24hPct != null) {
-                pct24h = formatPct(e.change24hPct);
-                pctTone24h = pctTone(e.change24hPct);
+            const priceFiat = positiveFiniteNumber(e.priceFiat);
+            if (priceFiat !== null) priceCell = formatFiat(priceFiat, fiatCurrency);
+            if (e.marketCapFiat != null) marketCapCell = formatCompactFiat(e.marketCapFiat, fiatCurrency);
+            if (e.change24hPct != null && e.change24hPct !== '' && Number.isFinite(Number(e.change24hPct))) {
+                const display = percentChangeDisplay(Number(e.change24hPct));
+                pct24h = display?.text ?? '-';
+                pctLabel24h = display?.label;
+                pctTone24h = display?.direction;
             }
-            if (showSparkline && range.realCapable && Array.isArray(e.sparkline) && e.sparkline.length >= 2) {
-                // Real CoinGecko sparkline = 168 hourly points (7d).
-                // 24h uses the tail; 7d uses the full series; longer
-                // ranges fall through to synthesis below.
-                const src = range.id === '24h'
-                    ? e.sparkline.slice(-Math.min(range.points, e.sparkline.length))
-                    : e.sparkline;
-                sparkline = resampleSeriesTo(src, range.points);
-            } else if (e.priceFiat != null) {
-                // No real series available for this range (or sparkline
-                // fetch failed); synthesize a walk seeded by chain +
-                // change so the chart always renders something. The line
-                // still ends at the actual current price.
+            const recordedHistory = priceHistoryForRange(e, range);
+            if (recordedHistory) {
+                sparkline = recordedHistory;
+            } else if (priceFiat !== null && isDemo) {
+                // Demo wallets only: no real series for this range, so
+                // synthesize a walk seeded by chain + change so the demo
+                // chart always renders. The line still ends at the current
+                // price. Real wallets fall through to the empty-state message.
                 const synth = synthesizeTokenChart(
                     `${chainId}|native|${range.id}|${(e.change24hPct ?? 0).toFixed(2)}`,
-                    e.priceFiat,
+                    priceFiat,
                     range.points,
                 );
                 sparkline = synth.sparkline;
@@ -799,30 +999,52 @@ function MarketPanel({ isNative, nativePrice, showSparkline, assetInfo, tick, ch
                 <section className={styles.stats}>
                     <StatCell label="Price" value={priceCell} />
                     <StatCell label="Market cap" value={marketCapCell} />
-                    <StatCell label="24h" value={pct24h} tone={pctTone24h} />
+                    <StatCell label="24h" value={pct24h} valueLabel={pctLabel24h} tone={pctTone24h} />
                 </section>
-                {sparkline ? (
-                    <>
-                        <div className={styles.chart} aria-label={`${range.label} price chart`}>
-                            <Sparkline series={sparkline} height={40} />
-                        </div>
-                        <div className={portfolioChartStyles.ranges} role="tablist" aria-label="Chart range">
-                            {CHART_RANGES.map((r) => (
-                                <button
-                                    key={r.id}
-                                    type="button"
-                                    role="tab"
-                                    aria-selected={r.id === rangeId ? 'true' : 'false'}
-                                    className={`${portfolioChartStyles.range} ${r.id === rangeId ? portfolioChartStyles.rangeActive : ''}`}
-                                    onClick={() => setRangeId(r.id)}
-                                >
-                                    {r.label}
-                                </button>
-                            ))}
-                        </div>
-                    </>
-                ) : null}
-                {hint ? <p className={styles.muted}>{hint}</p> : null}
+                {/* Range tabs show only when some range can carry a line: a real
+                    series exists, or the wallet is a demo wallet. */}
+                <div className={styles.marketHistorySlot}>
+                    {nativeLoading ? (
+                        <Skeleton height={64} ariaLabel="Loading price history" />
+                    ) : sparkline ? (
+                        <>
+                            <div
+                                id={`${tabsId}-panel`}
+                                role="tabpanel"
+                                aria-labelledby={`${tabsId}-tab-${rangeId}`}
+                            >
+                                {sparkline ? (
+                                    <div className={styles.chart} aria-label={`${range.label} price chart`}>
+                                        <Sparkline series={sparkline} height={40} rangeLabel={range.label} />
+                                    </div>
+                                ) : (
+                                    <EmptyState title={NO_PRICE_HISTORY} body="Indexed market activity builds this token's price history." titleAs="p" />
+                                )}
+                            </div>
+                            <div className={portfolioChartStyles.ranges} role="tablist" aria-label="Chart range">
+                                {availableRanges.map((r) => (
+                                    // A native button preserves tab semantics and roving tab focus, which Button does not provide.
+                                    <button
+                                        key={r.id}
+                                        id={`${tabsId}-tab-${r.id}`}
+                                        type="button"
+                                        role="tab"
+                                        aria-selected={r.id === rangeId ? 'true' : 'false'}
+                                        aria-controls={`${tabsId}-panel`}
+                                        tabIndex={r.id === rangeId ? 0 : -1}
+                                        className={`${portfolioChartStyles.range} ${r.id === rangeId ? portfolioChartStyles.rangeActive : ''}`}
+                                        onClick={() => setRangeId(r.id)}
+                                    >
+                                        {r.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </>
+                    ) : !hint ? (
+                        <EmptyState title={NO_PRICE_HISTORY} body="Indexed market activity builds this token's price history." titleAs="p" />
+                    ) : null}
+                    {hint && !nativeLoading ? <p className={styles.muted}>{hint}</p> : null}
+                </div>
             </>
         );
     }
@@ -835,32 +1057,43 @@ function MarketPanel({ isNative, nativePrice, showSparkline, assetInfo, tick, ch
     void floorCell;
     const nativeTick = nativeTickerOf(chainId);
     const marketPriceNum = assetInfo?.marketPrice != null ? Number(assetInfo.marketPrice) : null;
-    if (marketPriceNum != null && Number.isFinite(marketPriceNum)) {
+    if (marketPriceNum != null && Number.isFinite(marketPriceNum) && marketPriceNum > 0) {
+        priceLabel = 'Price (DEX)';
         priceCell = `${assetInfo.marketPrice} ${nativeTick}`;
         if (assetInfo.totalSupply != null) {
             const supply = String(assetInfo.totalSupply).replace(/[,_]/g, '');
             const marketCap = multiplyDecimalStrings(assetInfo.marketPrice, supply);
             if (marketCap !== null) {
-                const formatted = new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 })
-                    .format(marketCap);
+                const formatted = formatDecimalAmount(marketCap, undefined, {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 4,
+                });
                 marketCapCell = `${formatted} ${nativeTick}`;
             }
         }
-        const synth = synthesizeTokenChart(`${chainId}|${tick}|native|${range.id}`, marketPriceNum, range.points);
-        if (synth.change24hPct != null) {
-            pct24h = formatPct(synth.change24hPct);
-            pctTone24h = pctTone(synth.change24hPct);
+        if (isDemo) {
+            const synth = synthesizeTokenChart(`${chainId}|${tick}|native|${range.id}`, marketPriceNum, range.points);
+            if (synth.change24hPct != null) {
+                const display = percentChangeDisplay(synth.change24hPct);
+                pct24h = display?.text ?? '-';
+                pctLabel24h = display?.label;
+                pctTone24h = display?.direction;
+            }
+            sparkline = synth.sparkline;
         }
-        sparkline = synth.sparkline;
     } else if (typeof fiatRate === 'number' && isFinite(fiatRate) && fiatRate > 0) {
-        priceCell = formatFiat(fiatRate);
-        void fiatCurrency;
-        const synth = synthesizeTokenChart(`${chainId}|${tick}|fiat|${range.id}`, fiatRate, range.points);
-        if (synth.change24hPct != null) {
-            pct24h = formatPct(synth.change24hPct);
-            pctTone24h = pctTone(synth.change24hPct);
+        if (fiatRateSource === 'market') priceLabel = 'Price (DEX)';
+        priceCell = formatFiat(fiatRate, fiatCurrency);
+        if (isDemo) {
+            const synth = synthesizeTokenChart(`${chainId}|${tick}|fiat|${range.id}`, fiatRate, range.points);
+            if (synth.change24hPct != null) {
+                const display = percentChangeDisplay(synth.change24hPct);
+                pct24h = display?.text ?? '-';
+                pctLabel24h = display?.label;
+                pctTone24h = display?.direction;
+            }
+            sparkline = synth.sparkline;
         }
-        sparkline = synth.sparkline;
     } else if (!assetInfo) {
         hint = 'Loading market data…';
     }
@@ -868,16 +1101,48 @@ function MarketPanel({ isNative, nativePrice, showSparkline, assetInfo, tick, ch
     return (
         <>
             <section className={styles.stats}>
-                <StatCell label="Price" value={priceCell} />
+                <StatCell label={priceLabel} value={priceCell} />
                 <StatCell label="Market cap" value={marketCapCell} />
-                <StatCell label="24h" value={pct24h} tone={pctTone24h} />
+                <StatCell label="24h" value={pct24h} valueLabel={pctLabel24h} tone={pctTone24h} />
             </section>
-            {sparkline ? (
-                <div className={styles.chart} aria-label="7-day price chart">
-                    <Sparkline series={sparkline} height={40} />
-                </div>
-            ) : null}
-            {hint ? <p className={styles.muted}>{hint}</p> : null}
+            <div className={styles.marketHistorySlot}>
+                {loading ? (
+                    <Skeleton height={64} ariaLabel="Loading price history" />
+                ) : sparkline ? (
+                    <div
+                        id={`${tabsId}-panel`}
+                        role="tabpanel"
+                        aria-labelledby={`${tabsId}-tab-${rangeId}`}
+                    >
+                        <div className={styles.chart} aria-label={`${range.label} price chart`}>
+                            <Sparkline series={sparkline} height={40} rangeLabel={range.label} />
+                        </div>
+                    </div>
+                ) : !hint ? (
+                    <EmptyState title={NO_PRICE_HISTORY} body="Indexed market activity builds this token's price history." titleAs="p" />
+                ) : null}
+                {sparkline && isDemo ? (
+                    <div className={portfolioChartStyles.ranges} role="tablist" aria-label="Chart range">
+                        {CHART_RANGES.map((r) => (
+                            // A native button preserves tab semantics and roving tab focus, which Button does not provide.
+                            <button
+                                key={r.id}
+                                id={`${tabsId}-tab-${r.id}`}
+                                type="button"
+                                role="tab"
+                                aria-selected={r.id === rangeId ? 'true' : 'false'}
+                                aria-controls={`${tabsId}-panel`}
+                                tabIndex={r.id === rangeId ? 0 : -1}
+                                className={`${portfolioChartStyles.range} ${r.id === rangeId ? portfolioChartStyles.rangeActive : ''}`}
+                                onClick={() => setRangeId(r.id)}
+                            >
+                                {r.label}
+                            </button>
+                        ))}
+                    </div>
+                ) : null}
+                {hint && !loading ? <p className={styles.muted}>{hint}</p> : null}
+            </div>
         </>
     );
 }
@@ -890,6 +1155,7 @@ function DetailsPanel({
     kind,
     isNative,
     assetInfo,
+    loading,
     quantity,
     divisibility,
     fiat,
@@ -897,88 +1163,90 @@ function DetailsPanel({
 }) {
     const [balanceHidden] = useBalancesHidden();
     return (
-        <div className={styles.infoStack}>
-            <table className={styles.metaTable}>
-                <tbody>
-                    <tr className={styles.metaRow}>
-                        <th scope="row">Name</th>
-                        <td>{displayName || tick}</td>
-                    </tr>
-                    <tr className={styles.metaRow}>
-                        <th scope="row">Ticker</th>
-                        <td>
-                            <BridgeOriginTick tick={tick} localCoin={coinFromChainId(chainId)} />
-                        </td>
-                    </tr>
-                    {/* A bridged copy is a claim on an asset held in escrow on
-                        another chain, and its holder should be able to read that
-                        off the page rather than infer it from a dot in the
-                        ticker. Native rows have no origin to name and get no
-                        row at all. */}
-                    {parseBridgedTick(tick, coinFromChainId(chainId)) ? (
-                        <tr className={styles.metaRow}>
-                            <th scope="row">Origin</th>
-                            <td>
-                                {`Native to ${coinDisplay(parseBridgedTick(tick, coinFromChainId(chainId)).origin)}`
-                                    + `, bridged here as ${tick}`}
-                            </td>
-                        </tr>
-                    ) : null}
-                    <tr className={styles.metaRow}>
-                        <th scope="row">Type</th>
-                        <td>{kindLabel(kind)}</td>
-                    </tr>
-                    <tr className={styles.metaRow}>
-                        <th scope="row">Chain</th>
-                        <td>{descriptor?.displayName || chainId}</td>
-                    </tr>
-                    {!isNative ? (
-                        <tr className={styles.metaRow}>
-                            <th scope="row">Divisibility</th>
-                            <td>{divisibility}</td>
-                        </tr>
-                    ) : null}
-                    <tr className={styles.metaRow}>
-                        <th scope="row">Total supply</th>
-                        <td>{formatTotalSupply(isNative, chainId, assetInfo)}</td>
-                    </tr>
-                    <tr className={styles.metaRow}>
-                        <th scope="row">Current balance</th>
-                        <td>{balanceHidden ? '•••••' : `${formatAmount(quantity, divisibility)} ${tick}`}</td>
-                    </tr>
-                    <tr className={styles.metaRow}>
-                        <th scope="row">Estimated value</th>
-                        <td>
-                            {balanceHidden
-                                ? '•••••'
-                                : fiat == null
-                                    ? 'N/A'
-                                    : `${formatFiatNumber(fiat, fiatCurrency)} ${(fiatCurrency || 'USD').toUpperCase()}`}
-                        </td>
-                    </tr>
-                    {!isNative && assetInfo?.creator ? (
-                        <tr className={styles.metaRow}>
-                            <th scope="row">Creator</th>
-                            <td className={styles.creatorCell} title={assetInfo.creator}>
-                                {shorten(assetInfo.creator)}
-                            </td>
-                        </tr>
-                    ) : null}
-                    {!isNative && assetInfo ? (
-                        <tr className={styles.metaRow}>
-                            <th scope="row">Status</th>
-                            <td>
-                                {assetInfo.locked ? (
-                                    <span className={styles.lockedFlag}>Locked</span>
-                                ) : (
-                                    <span className={styles.unlockedFlag}>Mutable</span>
-                                )}
-                            </td>
-                        </tr>
-                    ) : null}
-                </tbody>
-            </table>
+        <div
+            className={styles.infoStack}
+            role="region"
+            aria-label="Token details"
+            aria-busy={loading || undefined}
+        >
+            <ul className={styles.detailList} aria-label="Token detail fields">
+                <DetailRow label="Name">{displayName || tick}</DetailRow>
+                <DetailRow label="Ticker">
+                    <BridgeOriginTick tick={tick} localCoin={coinFromChainId(chainId)} />
+                </DetailRow>
+                {/* A bridged copy is a claim on an asset held in escrow on
+                    another chain, and its holder should be able to read that
+                    off the page rather than infer it from a dot in the
+                    ticker. Native rows have no origin to name and get no
+                    row at all. */}
+                {parseBridgedTick(tick, coinFromChainId(chainId)) ? (
+                    <DetailRow label="Origin">
+                        {`Native to ${coinDisplay(parseBridgedTick(tick, coinFromChainId(chainId)).origin)}`
+                            + `, bridged here as ${tick}`}
+                    </DetailRow>
+                ) : null}
+                <DetailRow label="Type">{kindLabel(kind)}</DetailRow>
+                {descriptor ? (
+                    <DetailRow label="Chain"><ChainBadge descriptor={descriptor} size="sm" /></DetailRow>
+                ) : null}
+                {!isNative ? (
+                    <DetailRow label="Divisibility">{detailText(divisibility)}</DetailRow>
+                ) : null}
+                <DetailRow label={<span>Total supply</span>}>
+                    <span>
+                        {formatTotalSupply(isNative, chainId, assetInfo, divisibility)}
+                        {!isNative && typeof assetInfo?.locked === 'boolean' ? (
+                            <span className={styles.supplyState}>
+                                {assetInfo.locked ? 'Locked supply' : 'Unlocked supply'}
+                            </span>
+                        ) : null}
+                    </span>
+                </DetailRow>
+                <DetailRow label="Current balance">
+                    {balanceHidden ? '•••••' : amountWithUnit(quantity, divisibility, tick)}
+                </DetailRow>
+                <DetailRow label="Estimated value">
+                    {balanceHidden
+                        ? '•••••'
+                        : fiat == null
+                            ? '-'
+                            : `${formatFiatNumber(fiat, fiatCurrency)} ${(fiatCurrency || 'USD').toUpperCase()}`}
+                </DetailRow>
+                {!isNative ? (
+                    <DetailRow label={<span>Creator</span>}>
+                        {loading ? (
+                            <Skeleton shape="text" width="70%" height={20} />
+                        ) : detailText(assetInfo?.creator) !== '-' ? (
+                            <span className={styles.copyableValue}>
+                                <AddressText address={assetInfo.creator} className={styles.creatorCell} />
+                                <CopyButton value={assetInfo.creator} ariaLabel="Copy creator address" />
+                            </span>
+                        ) : '-'}
+                    </DetailRow>
+                ) : null}
+                {!isNative ? (
+                    <DetailRow label={<span>Status</span>}>
+                        {loading ? (
+                            <Skeleton shape="text" width="40%" height={20} />
+                        ) : assetInfo?.locked == null ? (
+                            '-'
+                        ) : assetInfo.locked ? (
+                            <span className={styles.lockedFlag}>Locked</span>
+                        ) : (
+                            <span className={styles.unlockedFlag}>Mutable</span>
+                        )}
+                    </DetailRow>
+                ) : null}
+            </ul>
         </div>
+    );
+}
+
+function DetailRow({ label, children }) {
+    return (
+        <li>
+            <ListRow title={label} trailing={children} />
+        </li>
     );
 }
 
@@ -988,21 +1256,30 @@ function DetailsPanel({
 // PGP signature) so a token's published metadata renders in one place.
 // When the token has no TIS document the panel renders an empty-state
 // hint so the tab still has something to land on.
-function InfoPanel({ isNative, assetInfo, hasDescription }) {
+function InfoPanel({ isNative, assetInfo, hasDescription, loading }) {
     if (isNative) {
         return (
-            <div className={styles.infoCard}>
-                <p className={styles.metadataHint}>
-                    Native coin. Token-information documents are an XChain-issued-token concept.
-                </p>
+            <EmptyState
+                title="Native coin"
+                titleAs="p"
+                body="Token-information documents apply only to XChain-issued tokens."
+            />
+        );
+    }
+    if (loading) {
+        return (
+            <div className={styles.infoCard} role="status" aria-label="Loading token information" aria-busy="true">
+                <Skeleton.List rows={3} rowHeight={48} avatar={false} />
             </div>
         );
     }
     if (!assetInfo) {
         return (
-            <div className={styles.infoCard}>
-                <p className={styles.metadataHint}>Loading token information…</p>
-            </div>
+            <EmptyState
+                title="No additional information"
+                body="Information published by the token issuer appears here."
+                titleAs="p"
+            />
         );
     }
     const hasLinks = Boolean(assetInfo.website)
@@ -1023,18 +1300,18 @@ function InfoPanel({ isNative, assetInfo, hasDescription }) {
         || hasPgpsig;
     if (!hasAbout) {
         return (
-            <div className={styles.infoCard}>
-                <p className={styles.metadataHint}>
-                    No additional information published for this token yet.
-                </p>
-            </div>
+            <EmptyState
+                title="No additional information"
+                body="Information published by the token issuer appears here."
+                titleAs="p"
+            />
         );
     }
     return (
         <div className={`${styles.infoCard} ${styles.aboutCard}`}>
             {hasDescription ? (
                 <div className={styles.metaBlock}>
-                    <h4 className={styles.metaBlockTitle}>About</h4>
+                    <SectionHeader title="About" />
                     <p className={styles.descriptionBody}>{assetInfo.description}</p>
                 </div>
             ) : null}
@@ -1043,7 +1320,7 @@ function InfoPanel({ isNative, assetInfo, hasDescription }) {
             {hasContacts ? <ContactsBlock contacts={assetInfo.contacts} /> : null}
             {hasLinks ? (
                 <div className={styles.metaBlock}>
-                    <h4 className={styles.metaBlockTitle}>Links</h4>
+                    <SectionHeader title="Links" />
                     <LinksAndFiles assetInfo={assetInfo} />
                 </div>
             ) : null}
@@ -1056,8 +1333,8 @@ function InfoPanel({ isNative, assetInfo, hasDescription }) {
 function DnsBlock({ dns }) {
     return (
         <div className={styles.metaBlock}>
-            <h4 className={styles.metaBlockTitle}>DNS</h4>
-            <table className={styles.metaTable}>
+            <SectionHeader title="DNS" />
+            <table className={styles.metaTable} aria-label="DNS records">
                 <tbody>
                     {dns.map((r, i) => (
                         <tr key={`${r.type}:${r.host}:${i}`} className={styles.metaRow}>
@@ -1081,7 +1358,8 @@ function DnsBlock({ dns }) {
 // document. Pure visual surface; everything textual lives in the
 // About tab so a user can browse the artwork without being asked to
 // also read prose.
-function MediaPanel({ isNative, assetInfo }) {
+function MediaPanel({ isNative, assetInfo, loading }) {
+    const tabsId = useId();
     // Only large + hires images count toward the Image surface (icon
     // and standard buckets render in the page header instead). We
     // derive the buckets unconditionally so the React hook below can
@@ -1090,12 +1368,19 @@ function MediaPanel({ isNative, assetInfo }) {
     const images = Array.isArray(assetInfo?.images)
         ? assetInfo.images.filter((i) => {
             const t = String(i?.type || '').toLowerCase();
-            return t === 'large' || t === 'hires' || t === 'hi-res' || t === 'highres';
+            return safeHttpUrl(i?.url)
+                && (t === 'large' || t === 'hires' || t === 'hi-res' || t === 'highres');
         })
         : [];
-    const audio = Array.isArray(assetInfo?.audio) ? assetInfo.audio : [];
-    const video = Array.isArray(assetInfo?.video) ? assetInfo.video : [];
-    const files = Array.isArray(assetInfo?.files) ? assetInfo.files : [];
+    const audio = Array.isArray(assetInfo?.audio)
+        ? assetInfo.audio.filter((entry) => safeHttpUrl(entry?.url))
+        : [];
+    const video = Array.isArray(assetInfo?.video)
+        ? assetInfo.video.filter((entry) => safeHttpUrl(entry?.url))
+        : [];
+    const files = Array.isArray(assetInfo?.files)
+        ? assetInfo.files.filter((entry) => safeHttpUrl(entry?.url))
+        : [];
     const subtabs = [
         images.length > 0 ? { id: 'image', label: images.length === 1 ? 'Image' : 'Images' } : null,
         audio.length > 0 ? { id: 'audio', label: 'Audio' } : null,
@@ -1115,30 +1400,38 @@ function MediaPanel({ isNative, assetInfo }) {
             setActiveSubtab(subtabs[0].id);
         }
     }, [subtabs, activeSubtab]);
+    const selectedSubtab = subtabs.some((t) => t.id === activeSubtab)
+        ? activeSubtab
+        : subtabs[0]?.id;
 
     if (isNative) {
         return (
-            <div className={styles.infoCard}>
-                <p className={styles.metadataHint}>
-                    Native coins don't carry attached media.
-                </p>
+            <EmptyState title="No attached media" titleAs="p" body="Native coins don't carry attached media." />
+        );
+    }
+    if (loading) {
+        return (
+            <div className={styles.infoCard} role="status" aria-label="Loading token media" aria-busy="true">
+                <Skeleton height={144} />
             </div>
         );
     }
     if (!assetInfo) {
         return (
-            <div className={styles.infoCard}>
-                <p className={styles.metadataHint}>Loading media…</p>
-            </div>
+            <EmptyState
+                title="No published media"
+                body="Images, audio, video, and files published for this token appear here."
+                titleAs="p"
+            />
         );
     }
     if (subtabs.length === 0) {
         return (
-            <div className={styles.infoCard}>
-                <p className={styles.metadataHint}>
-                    No images, audio, video, or files published for this token yet.
-                </p>
-            </div>
+            <EmptyState
+                title="No published media"
+                body="Images, audio, video, and files published for this token appear here."
+                titleAs="p"
+            />
         );
     }
     // Single media type. No need for a subtab strip; render directly.
@@ -1149,20 +1442,28 @@ function MediaPanel({ isNative, assetInfo }) {
         <div className={styles.mediaPanel}>
             <div className={styles.subtabs} role="tablist" aria-label="Token media">
                 {subtabs.map((t) => (
+                    // A native button preserves tab semantics and roving tab focus, which Button does not provide.
                     <button
                         key={t.id}
+                        id={`${tabsId}-tab-${t.id}`}
                         type="button"
                         role="tab"
-                        aria-selected={activeSubtab === t.id ? 'true' : 'false'}
-                        className={`${styles.subtab} ${activeSubtab === t.id ? styles.subtabActive : ''}`}
+                        aria-selected={selectedSubtab === t.id ? 'true' : 'false'}
+                        aria-controls={`${tabsId}-panel`}
+                        tabIndex={selectedSubtab === t.id ? 0 : -1}
+                        className={`${styles.subtab} ${selectedSubtab === t.id ? styles.subtabActive : ''}`}
                         onClick={() => setActiveSubtab(t.id)}
                     >
                         {t.label}
                     </button>
                 ))}
             </div>
-            <div role="tabpanel">
-                <MediaSubpanel kind={activeSubtab} images={images} audio={audio} video={video} files={files} />
+            <div
+                id={`${tabsId}-panel`}
+                role="tabpanel"
+                aria-labelledby={`${tabsId}-tab-${selectedSubtab}`}
+            >
+                <MediaSubpanel kind={selectedSubtab} images={images} audio={audio} video={video} files={files} />
             </div>
         </div>
     );
@@ -1227,6 +1528,7 @@ function MediaSubpanel({ kind, images, audio, video, files }) {
     }
     if (kind === 'files') {
         return (
+            // The kit has no file-list primitive, so native list semantics group these file links.
             <ul className={styles.filesList}>
                 {files.map((f, i) => (
                     <li key={`${f.url}:${i}`}>
@@ -1245,6 +1547,7 @@ function MediaSubpanel({ kind, images, audio, video, files }) {
                             {f.type ? (
                                 <span className={styles.fileLinkType}>{f.type}</span>
                             ) : null}
+                            <span aria-hidden="true">↗</span>
                         </a>
                     </li>
                 ))}
@@ -1257,8 +1560,8 @@ function MediaSubpanel({ kind, images, audio, video, files }) {
 function OwnerBlock({ owner }) {
     return (
         <div className={styles.metaBlock}>
-            <h4 className={styles.metaBlockTitle}>Owner</h4>
-            <table className={styles.metaTable}>
+            <SectionHeader title="Owner" />
+            <table className={styles.metaTable} aria-label="Token owner">
                 <tbody>
                     {owner.name ? (
                         <tr className={styles.metaRow}>
@@ -1295,22 +1598,24 @@ const CONTACT_LABELS = {
 function ContactsBlock({ contacts }) {
     return (
         <div className={styles.metaBlock}>
-            <h4 className={styles.metaBlockTitle}>Contact</h4>
-            <table className={styles.metaTable}>
+            <SectionHeader title="Contact" />
+            <table className={styles.metaTable} aria-label="Token contacts">
                 <tbody>
                     {contacts.map((c, i) => {
                         const label = CONTACT_LABELS[c.type] || (c.type.charAt(0).toUpperCase() + c.type.slice(1));
                         const isMail = c.type === 'email';
                         const isPhone = c.type === 'phone';
-                        const isUrl = c.type === 'url' || /^https?:\/\//i.test(c.value);
+                        const safeUrl = safeHttpUrl(c.value);
                         let display = c.value;
                         if (isMail) {
                             display = <a href={`mailto:${c.value}`}>{c.value}</a>;
                         } else if (isPhone) {
                             display = <a href={`tel:${c.value.replace(/[^+\d]/g, '')}`}>{c.value}</a>;
-                        } else if (isUrl) {
+                        } else if (safeUrl) {
                             display = (
-                                <a href={c.value} target="_blank" rel="noreferrer noopener">{c.value}</a>
+                                <a href={safeUrl} target="_blank" rel="noreferrer noopener">
+                                    {c.value} <span aria-hidden="true">↗</span>
+                                </a>
                             );
                         }
                         return (
@@ -1331,8 +1636,8 @@ const CATEGORY_LABELS = { main: 'Category', sub: 'Subcategory', other: 'Other' }
 function CategoriesBlock({ categories }) {
     return (
         <div className={styles.metaBlock}>
-            <h4 className={styles.metaBlockTitle}>Categories</h4>
-            <table className={styles.metaTable}>
+            <SectionHeader title="Categories" />
+            <table className={styles.metaTable} aria-label="Token categories">
                 <tbody>
                     {categories.map((c, i) => (
                         <tr key={`${c.type}:${i}`} className={styles.metaRow}>
@@ -1349,43 +1654,74 @@ function CategoriesBlock({ categories }) {
 function PgpsigBlock({ pgpsig }) {
     return (
         <div className={styles.metaBlock}>
-            <h4 className={styles.metaBlockTitle}>PGP signature</h4>
+            <SectionHeader title="PGP signature" />
             <pre className={styles.pgpsigBlock}>{pgpsig}</pre>
         </div>
     );
 }
 
 function ImageHero({ img }) {
-    const anchor = (
+    const [failedImageUrl, setFailedImageUrl] = useState(null);
+    const safeUrl = safeHttpUrl(img.url);
+    const failed = !safeUrl || failedImageUrl === safeUrl;
+    const media = failed ? (
+        <div
+            className={styles.heroImageFallback}
+            role="img"
+            aria-label={`${img.name || 'Token media'} unavailable`}
+        >
+            Image unavailable
+        </div>
+    ) : (
         <a
-            href={img.url}
+            href={safeUrl}
             target="_blank"
             rel="noreferrer noopener"
             className={styles.heroImageLink}
+            aria-label={img.name ? `Open image ${img.name}` : 'Open token image'}
             title={img.name || ''}
         >
             <img
-                src={img.url}
+                src={safeUrl}
                 alt={img.name || ''}
                 className={styles.heroImage}
-                onError={(e) => {
-                    const card = e.currentTarget.closest(`.${styles.galleryMediaCard}`);
-                    const a = e.currentTarget.closest('a');
-                    if (card) card.style.display = 'none';
-                    else if (a) a.style.display = 'none';
-                }}
+                loading="lazy"
+                decoding="async"
+                style={{ aspectRatio: '1 / 1' }}
+                onError={() => setFailedImageUrl(safeUrl)}
             />
+            <span aria-hidden="true">↗</span>
         </a>
     );
     if (img.name) {
         return (
             <div className={styles.galleryMediaCard}>
                 <div className={styles.galleryMediaCaption}>{img.name}</div>
-                {anchor}
+                {media}
             </div>
         );
     }
-    return anchor;
+    return media;
+}
+
+function AssetArtwork({ src, className, fallbackClassName, fallbackText }) {
+    const [failedImageUrl, setFailedImageUrl] = useState(null);
+    if (failedImageUrl === src) {
+        return (
+            <span className={fallbackClassName} aria-hidden="true">
+                {String(fallbackText || '?').slice(0, 2)}
+            </span>
+        );
+    }
+    return (
+        <img
+            src={src}
+            alt=""
+            aria-hidden="true"
+            className={className}
+            onError={() => setFailedImageUrl(src)}
+        />
+    );
 }
 
 
@@ -1458,10 +1794,16 @@ function LinksAndFiles({ assetInfo }) {
     // the singular `website` field for older bundles that haven't been
     // re-normalized. Files live in the Media tab's Files subtab now;
     // they're not rendered here.
-    const websites = Array.isArray(assetInfo?.websites) && assetInfo.websites.length > 0
+    const websiteCandidates = Array.isArray(assetInfo?.websites) && assetInfo.websites.length > 0
         ? assetInfo.websites
         : (assetInfo?.website ? [assetInfo.website] : []);
-    const socials = Array.isArray(assetInfo?.socials) ? assetInfo.socials : [];
+    const websites = websiteCandidates.map(safeHttpUrl).filter(Boolean);
+    const socials = Array.isArray(assetInfo?.socials)
+        ? assetInfo.socials.flatMap((social) => {
+            const url = safeHttpUrl(social?.url);
+            return url ? [{ ...social, url }] : [];
+        })
+        : [];
     const hasAnything = websites.length > 0 || socials.length > 0;
     if (!hasAnything) return null;
     const multipleWebsites = websites.length > 1;
@@ -1499,6 +1841,7 @@ function LinksAndFiles({ assetInfo }) {
                         >
                             <SocialIcon platform={s.platform} />
                             {socialLabel(s.platform)} · {s.host}
+                            <span aria-hidden="true">↗</span>
                         </a>
                     ))}
                 </div>
@@ -1515,15 +1858,22 @@ const NATIVE_SUPPLY_BY_COIN = {
     dogecoin: 'No cap (inflationary)',
 };
 
-function formatTotalSupply(isNative, chainId, assetInfo) {
+function formatTotalSupply(isNative, chainId, assetInfo, divisibility) {
     if (isNative) {
         const coin = chainId.split('-')[0];
-        return NATIVE_SUPPLY_BY_COIN[coin] || 'N/A';
+        return NATIVE_SUPPLY_BY_COIN[coin] || '-';
     }
-    if (assetInfo?.totalSupply == null) return 'N/A';
-    return assetInfo.maxSupply
-        ? `${assetInfo.totalSupply} / ${assetInfo.maxSupply}`
-        : String(assetInfo.totalSupply);
+    const totalSupply = detailText(assetInfo?.totalSupply);
+    if (totalSupply === '-') return totalSupply;
+    const total = formatTokenQuantity(totalSupply, divisibility);
+    const maxSupply = detailText(assetInfo?.maxSupply);
+    return maxSupply === '-' ? total : `${total} / ${formatTokenQuantity(maxSupply, divisibility)}`;
+}
+
+function detailText(value) {
+    if (value == null || value === '' || (typeof value === 'number' && !Number.isFinite(value))) return '-';
+    const text = String(value).trim();
+    return !text || /^(?:undefined|null|nan)$/i.test(text) ? '-' : text;
 }
 
 // Token-gated content panel: renders the list of gated FILEs published
@@ -1549,7 +1899,7 @@ function GatedContentPanel({ walletId, chainId, tick, groups, loading, error, pa
             return;
         }
         setAddressesLoading(true);
-        messaging.getAddressesByChain(walletId)
+        callAsync(() => messaging.getAddressesByChain(walletId))
             .then((byChain) => {
                 const list = (byChain && byChain[chainId]) ? byChain[chainId] : [];
                 const usable = list.filter((a) => a.source === 'hd' || a.source === 'imported-wif');
@@ -1566,13 +1916,11 @@ function GatedContentPanel({ walletId, chainId, tick, groups, loading, error, pa
     if (error) return <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>;
     if (!groups || groups.length === 0) {
         return (
-            <div className={styles.infoCard}>
-                <p className={styles.muted}>
-                    No token-gated content published for {tick}. Holders unlock
-                    creator drops, packs, and sealed bundles here when the issuer
-                    publishes locked content for this token.
-                </p>
-            </div>
+            <EmptyState
+                title="No token-gated content"
+                body="Holders unlock creator drops, packs, and sealed bundles here when the issuer publishes locked content for this token."
+                titleAs="p"
+            />
         );
     }
     return (
@@ -1633,6 +1981,7 @@ function GatedGroupCard({
     ownsToken,
     tokenLabel,
 }) {
+    const unlockErrorId = `${useId()}-unlock-error`;
     const [password, setPassword] = useState('');
     const [unlockError, setUnlockError] = useState(/** @type {string | null} */ (null));
     const [accessError, setAccessError] = useState(/** @type {string | null} */ (null));
@@ -1644,6 +1993,7 @@ function GatedGroupCard({
     /** @type {[{ name: string, declaredType: string | null, plaintextBase64: string } | null, Function]} */
     const [viewer, setViewer] = useState(null);
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const fileOpenBusyRef = useRef(false);
 
     const passwordOpen = pendingFile !== null;
 
@@ -1684,13 +2034,14 @@ function GatedGroupCard({
             openFile(plain, file);
             return;
         }
+        if (fileOpenBusyRef.current) return;
+        fileOpenBusyRef.current = true;
+        setSubmitting(true);
         // Demo content: the backend short-circuit (flows/gatedContent.js)
         // returns hardcoded plaintext for `demo:` action indices without
         // touching the vault, so we can unlock the whole group inline
         // without a password prompt or address picker.
         if (isDemoGatedActionIndex(file.actionIndex)) {
-            if (submitting) return;
-            setSubmitting(true);
             try {
                 const results = new Map(unlocked);
                 for (const f of group.files) {
@@ -1713,6 +2064,7 @@ function GatedGroupCard({
             } catch (err) {
                 setAccessError(err?.message || 'Failed to unlock demo content.');
             } finally {
+                fileOpenBusyRef.current = false;
                 setSubmitting(false);
             }
             return;
@@ -1758,6 +2110,7 @@ function GatedGroupCard({
                     // Vault row unusable (stale, explorer down, ...):
                     // fall through to the password-gated scan path.
                 } finally {
+                    fileOpenBusyRef.current = false;
                     setSubmitting(false);
                 }
             }
@@ -1766,6 +2119,8 @@ function GatedGroupCard({
         // automatically on submit (handleUnlock iterates the user's
         // addresses to find whichever one received the seller's key
         // handoff for this group's KEY_HASH).
+        fileOpenBusyRef.current = false;
+        setSubmitting(false);
         onRequestAddresses();
         setUnlockError(null);
         setPendingFile(file);
@@ -1882,10 +2237,8 @@ function GatedGroupCard({
 
     return (
         <div className={styles.metaBlock}>
-            <h4 className={styles.metaBlockTitle}>{heading}</h4>
-            {description ? (
-                <p className={styles.descriptionBody}>{description}</p>
-            ) : null}
+            <SectionHeader title={heading} description={description} />
+            {/* The kit has no file-list primitive, so native list semantics group these file actions. */}
             <ul className={styles.filesList}>
                 {group.files.map((f) => {
                     const plain = unlocked.get(String(f.actionIndex));
@@ -1902,10 +2255,11 @@ function GatedGroupCard({
                     }
                     return (
                         <li key={f.actionIndex}>
-                            <button
-                                type="button"
+                            <Button
                                 onClick={() => handleFileClick(f)}
-                                className={styles.fileLink}
+                                disabled={submitting}
+                                aria-busy={submitting}
+                                className={`${styles.fileLink} ${styles.fileButton}`}
                                 style={{
                                     cursor: 'pointer',
                                     font: 'inherit',
@@ -1916,20 +2270,23 @@ function GatedGroupCard({
                                 aria-label={ownsToken
                                     ? `Unlock and open ${f.name || 'gated file'}`
                                     : `Locked: purchase required to access ${f.name || 'gated file'}`}
+                                icon={null}
                             >
-                                <span className={styles.fileLinkIcon} aria-hidden="true">
-                                    <Icon.FileTypeIcon type={f.type} />
-                                </span>
-                                <span className={styles.fileLinkName}>{f.name || `Action #${f.actionIndex}`}</span>
-                                {f.type ? (
-                                    <span className={styles.fileLinkType}>{f.type}</span>
-                                ) : null}
-                                {f.gateMinAmount ? (
-                                    <span className={styles.fileLinkType}>
-                                        hold ≥ {f.gateMinAmount} {tick} to unlock
+                                <span className={styles.fileLinkContent}>
+                                    <span className={styles.fileLinkIcon} aria-hidden="true">
+                                        <Icon.FileTypeIcon type={f.type} />
                                     </span>
-                                ) : null}
-                            </button>
+                                    <span className={styles.fileLinkName}>{f.name || `Action #${f.actionIndex}`}</span>
+                                    {f.type ? (
+                                        <span className={styles.fileLinkType}>{f.type}</span>
+                                    ) : null}
+                                    {f.gateMinAmount ? (
+                                        <span className={styles.fileLinkType}>
+                                            hold ≥ {f.gateMinAmount} {tick} to unlock
+                                        </span>
+                                    ) : null}
+                                </span>
+                            </Button>
                         </li>
                     );
                 })}
@@ -1969,9 +2326,15 @@ function GatedGroupCard({
                         }}
                         autoComplete="current-password"
                         aria-invalid={unlockError ? true : undefined}
+                        aria-describedby={unlockError ? unlockErrorId : undefined}
                     />
                     {unlockError ? (
-                        <p role="alert" className={styles.error} style={{ marginTop: 'var(--xc-space-1)' }}>
+                        <p
+                            id={unlockErrorId}
+                            role="alert"
+                            className={styles.error}
+                            style={{ marginTop: 'var(--xc-space-1)' }}
+                        >
                             {unlockError}
                         </p>
                     ) : null}
@@ -2020,10 +2383,9 @@ function GatedGroupCard({
 // as the fallback. The declared `type` is cosmetic (icon + chip).
 function UnlockedFileLink({ name, type, onOpen }) {
     return (
-        <button
-            type="button"
+        <Button
             onClick={onOpen}
-            className={styles.fileLink}
+            className={`${styles.fileLink} ${styles.fileButton}`}
             style={{
                 cursor: 'pointer',
                 font: 'inherit',
@@ -2031,78 +2393,167 @@ function UnlockedFileLink({ name, type, onOpen }) {
                 textAlign: 'left',
             }}
             aria-label={`Open unlocked file ${name}`}
+            icon={null}
         >
-            <span className={styles.fileLinkIcon} aria-hidden="true">
-                <Icon.FileTypeIcon type={type} />
+            <span className={styles.fileLinkContent}>
+                <span className={styles.fileLinkIcon} aria-hidden="true">
+                    <Icon.FileTypeIcon type={type} />
+                </span>
+                <span className={styles.fileLinkName}>{name}</span>
+                {type ? (
+                    <span className={styles.fileLinkType}>{type}</span>
+                ) : null}
             </span>
-            <span className={styles.fileLinkName}>{name}</span>
-            {type ? (
-                <span className={styles.fileLinkType}>{type}</span>
-            ) : null}
-        </button>
+        </Button>
     );
 }
 
-function HoldersPanel({ holders, holdersLoading, holdersError, holdersFetchedAt, divisibility }) {
+function HoldersPanel({
+    holderListScope,
+    holders,
+    holdersLoading,
+    holdersError,
+    holdersFetchedAt,
+    holdersHasMore,
+    holdersLoadingMore,
+    holdersMoreError,
+    holdersTotal,
+    onLoadMore,
+    divisibility,
+}) {
+    const [holderWindow, setHolderWindow] = useState(() => ({
+        scope: '',
+        count: HOLDER_WINDOW_SIZE,
+    }));
+    const visibleHolderCount = holderWindow.scope === holderListScope
+        ? holderWindow.count
+        : HOLDER_WINDOW_SIZE;
+
     if (holdersLoading) return <p className={styles.muted}>Loading holders…</p>;
     if (holdersError) return <StatusMessage variant="error" className={styles.error}>{holdersError}</StatusMessage>;
-    if (!holders || holders.length === 0) return null;
+    if (!holders || holders.length === 0) {
+        return <EmptyState title="No holders yet" body="Mint or distribute supply to populate this list." titleAs="p" />;
+    }
+    const count = holdersTotal != null && holdersTotal > holders.length
+        ? `${holders.length} of ${holdersTotal}`
+        : String(holders.length);
+    const renderedHolders = holders.slice(0, visibleHolderCount);
+    const showMoreLoadedHolders = () => {
+        setHolderWindow((current) => ({
+            scope: holderListScope,
+            count: Math.min(
+                holders.length,
+                (current.scope === holderListScope ? current.count : HOLDER_WINDOW_SIZE)
+                    + HOLDER_WINDOW_SIZE,
+            ),
+        }));
+    };
     return (
-        <>
+        <section className={styles.infoCard} aria-label="Holders">
+            <SectionHeader title={`Holders (${count})`} />
             {holdersFetchedAt ? (
                 <div className={styles.holdersStaleness}>
                     <StalenessLabel lastSyncedAt={holdersFetchedAt} warnAfterMs={10 * 60_000} />
                 </div>
             ) : null}
-            <ol className={styles.holdersList}>
-                {holders.slice(0, 25).map((h, i) => (
-                    <li key={`${h.address || ''}:${i}`} className={styles.holdersRow}>
-                        <span className={styles.holdersAddr}>
-                            {shorten(h.address || h.ADDRESS || 'unknown')}
-                        </span>
-                        <span className={styles.holdersQty}>
-                            {formatAmount(String(h.quantity ?? h.QUANTITY ?? '0'), divisibility)}
-                        </span>
-                    </li>
-                ))}
-            </ol>
-        </>
+            <ul className={styles.holdersList} aria-label="Holder balances">
+                {renderedHolders.map((h, i) => {
+                    const address = holderAddress(h);
+                    const balance = formatHolderBalance(h, divisibility);
+                    return (
+                        <li key={holderIdentity(h) || `holder:${i}`}>
+                            <ListRow
+                                title={(
+                                    <span className={styles.holdersAddrWrap}>
+                                        {address === '-' ? (
+                                            <span className={styles.holdersAddr}>-</span>
+                                        ) : (
+                                            <AddressText address={address} className={styles.holdersAddr} />
+                                        )}
+                                        {address !== '-' ? (
+                                            <CopyButton
+                                                value={address}
+                                                ariaLabel={`Copy holder address ${i + 1}`}
+                                            />
+                                        ) : null}
+                                    </span>
+                                )}
+                                trailing={<span className={styles.holdersQty}>{balance}</span>}
+                            />
+                        </li>
+                    );
+                })}
+            </ul>
+            {holdersMoreError ? (
+                <StatusMessage variant="error" className={styles.error}>{holdersMoreError}</StatusMessage>
+            ) : null}
+            {visibleHolderCount < holders.length ? (
+                <Button type="button" variant="secondary" onClick={showMoreLoadedHolders}>
+                    Show more holders ({Math.min(visibleHolderCount, holders.length).toLocaleString('en-US')} of {holders.length.toLocaleString('en-US')} shown)
+                </Button>
+            ) : holdersHasMore ? (
+                <Button type="button" variant="secondary" loading={holdersLoadingMore} onClick={onLoadMore}>
+                    Load more holders
+                </Button>
+            ) : null}
+        </section>
     );
 }
 
-function StatCell({ label, value, tone }) {
+function holderIdentity(holder) {
+    return holder?.address ?? holder?.ADDRESS ?? null;
+}
+
+function holderAddress(holder) {
+    return detailText(holder?.address ?? holder?.ADDRESS);
+}
+
+function formatHolderBalance(holder, divisibility) {
+    const atomic = holder?.quantity ?? holder?.QUANTITY;
+    if (atomic != null) return formatAmount(atomic, divisibility);
+    const amount = detailText(holder?.amount ?? holder?.AMOUNT);
+    if (amount === '-' || !/^-?\d+(?:\.\d+)?$/.test(amount)) return '-';
+    return formatWithThousands(amount);
+}
+
+function restoreBalanceRowFocus(chainId, tick) {
+    if (typeof document === 'undefined') return;
+    const key = `${chainId}:${tick}`;
+    setTimeout(() => {
+        const row = Array.from(document.querySelectorAll('[data-balance-key]'))
+            .find((candidate) => candidate.getAttribute('data-balance-key') === key);
+        const target = row?.matches('button:not(:disabled), [href], [tabindex]:not([tabindex="-1"])')
+            ? row
+            : row?.querySelector('button:not(:disabled), [href], [tabindex]:not([tabindex="-1"])');
+        target?.focus();
+    }, 0);
+}
+
+function StatCell({ label, value, valueLabel, tone }) {
     const cls = tone === 'positive' ? styles.statValuePositive
         : tone === 'negative' ? styles.statValueNegative
         : styles.statValue;
     return (
         <div className={styles.statCell}>
             <div className={styles.statLabel}>{label}</div>
-            <div className={cls}>{value}</div>
+            <div className={cls} aria-label={valueLabel}>{value}</div>
         </div>
     );
 }
 
-function formatCompactFiat(usd) {
-    if (usd === null || usd === undefined || !isFinite(usd)) return 'N/A';
-    const abs = Math.abs(usd);
-    if (abs >= 1e12) return `$${(usd / 1e12).toFixed(2)}T`;
-    if (abs >= 1e9) return `$${(usd / 1e9).toFixed(2)}B`;
-    if (abs >= 1e6) return `$${(usd / 1e6).toFixed(2)}M`;
-    if (abs >= 1e3) return `$${(usd / 1e3).toFixed(2)}K`;
-    return formatFiat(usd);
+function formatCompactFiat(value, currency) {
+    if (value === null || value === undefined || !isFinite(value)) return '-';
+    const abs = Math.abs(value);
+    if (abs >= 1e12) return `${formatFiat(value / 1e12, currency)}T`;
+    if (abs >= 1e9) return `${formatFiat(value / 1e9, currency)}B`;
+    if (abs >= 1e6) return `${formatFiat(value / 1e6, currency)}M`;
+    if (abs >= 1e3) return `${formatFiat(value / 1e3, currency)}K`;
+    return formatFiat(value, currency);
 }
 
-function formatPct(pct) {
-    if (pct === null || pct === undefined || !isFinite(pct)) return 'N/A';
-    const sign = pct > 0 ? '+' : '';
-    return `${sign}${pct.toFixed(2)}%`;
-}
-
-function pctTone(pct) {
-    if (typeof pct !== 'number' || !isFinite(pct)) return undefined;
-    if (pct > 0) return 'positive';
-    if (pct < 0) return 'negative';
-    return undefined;
+function positiveFiniteNumber(value) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
 function kindLabel(kind) {
@@ -2113,89 +2564,54 @@ function kindLabel(kind) {
 
 function nativeTickerOf(chainId) {
     const desc = chainRegistry.get(chainId);
-    return desc?.coin ? desc.coin.toUpperCase() : '';
+    return tickerForCoin(desc?.coin);
 }
 
-function shorten(addr) {
-    if (!addr || addr.length <= 12) return addr;
-    return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
-}
-
-function safeBigInt(v) {
+function parseAtomicQuantity(v) {
     if (typeof v === 'bigint') return v;
-    if (typeof v === 'number') return BigInt(Math.trunc(v));
+    if (typeof v === 'number') return Number.isSafeInteger(v) ? BigInt(v) : null;
     if (typeof v === 'string') {
         const t = v.trim();
-        if (!/^-?\d+$/.test(t)) return 0n;
+        if (!/^-?\d+$/.test(t)) return null;
         return BigInt(t);
     }
-    return 0n;
+    return null;
+}
+
+function normalizedDivisibility(value) {
+    if (value === null || value === undefined || value === '') return null;
+    const parsed = Number(value);
+    return Number.isInteger(parsed) && parsed >= 0 && parsed <= 8 ? parsed : null;
 }
 
 function formatAmount(quantityStr, divisibility) {
-    const q = String(quantityStr || '0');
-    if (!divisibility || divisibility <= 0) return groupThousands(q);
-    const negative = q.startsWith('-');
-    const abs = negative ? q.slice(1) : q;
-    const padded = abs.padStart(divisibility + 1, '0');
-    const whole = padded.slice(0, padded.length - divisibility);
-    const frac = padded.slice(padded.length - divisibility);
-    // Always render to full divisibility; trailing zeros are kept so
-    // 0.04210000 BTC reads as 0.04210000 (not 0.0421). Matches the Home
-    // BalanceList convention and what users coming from BTC-native
-    // accounting expect.
-    const out = `${groupThousands(whole)}.${frac}`;
-    return negative ? `-${out}` : out;
+    if (parseAtomicQuantity(quantityStr) == null || normalizedDivisibility(divisibility) == null) return '-';
+    return formatAtomicAmount(quantityStr, divisibility);
 }
 
-function groupThousands(s) {
-    return String(s).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+function amountWithUnit(quantity, divisibility, unit) {
+    const amount = formatAmount(quantity, divisibility);
+    return amount === '-' ? '-' : `${amount} ${unit}`;
 }
 
 function fiatValue(quantityStr, divisibility, fiatRate) {
-    if (typeof fiatRate !== 'number' || !isFinite(fiatRate)) return null;
-    const amount = decimalFromBaseUnits(safeBigInt(quantityStr), divisibility || 0);
+    const quantity = parseAtomicQuantity(quantityStr);
+    const scale = normalizedDivisibility(divisibility);
+    if (quantity == null || scale == null || typeof fiatRate !== 'number' || !isFinite(fiatRate) || fiatRate <= 0) return null;
+    const amount = decimalFromBaseUnits(quantity, scale);
     return multiplyDecimalStrings(amount, String(fiatRate));
 }
 
-function formatFiat(usd) {
-    if (usd === null || usd === undefined) return 'N/A';
-    if (compareDecimalStrings(usd, '0') === 0) return '$0.00';
-    if (compareDecimalStrings(usd, '0') === 1 && compareDecimalStrings(usd, '0.01') === -1) {
-        return '<$0.01';
-    }
-    return new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: 'USD',
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    }).format(String(usd));
-}
-
 // Returns just the symbol-prefixed numeric portion of a fiat value in
-// the wallet's preferred currency ("$8,642.00", "¥1,200"). The ISO
+// the wallet's preferred currency ("€8,642.00", "¥1,200"). The ISO
 // currency code is rendered separately as a styled suffix span by the
 // caller so it can be sized down relative to the amount. Uses
 // Intl.NumberFormat so currencies with non-USD symbols / decimal
 // conventions render correctly; falls back to a plain-number rendering
 // if the code is unknown to Intl.
 function formatFiatNumber(value, currency) {
-    if (value === null || value === undefined) return 'N/A';
-    const code = String(currency || 'USD').toUpperCase();
-    try {
-        const formatter = new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: code,
-            currencyDisplay: 'symbol',
-        });
-        const minorUnit = formatter.resolvedOptions().maximumFractionDigits === 0 ? 1 : 0.01;
-        if (value > 0 && value < minorUnit) {
-            return `<${formatter.format(minorUnit)}`;
-        }
-        return formatter.format(value);
-    } catch {
-        return value.toLocaleString('en-US', { maximumFractionDigits: 2 });
-    }
+    if (value === null || value === undefined) return '-';
+    return formatFiatAmount(String(value), currency);
 }
 
 // Fits its children on a single line by measuring overflow with a
@@ -2221,12 +2637,18 @@ function AutoShrinkText({ children }) {
             i.style.transform = 'scale(1)';
             const cw = c.clientWidth;
             const iw = i.scrollWidth;
-            if (iw <= 0 || cw <= 0) { setScale(1); return; }
             // 2px safety margin absorbs subpixel rounding in transform
             // scaling; without it the trailing glyph can clip by a
             // fraction of a pixel ("USD" → "US", "BTC" → "BT+half C").
             const target = Math.max(0, cw - 2);
-            setScale(iw > target ? target / iw : 1);
+            const next = (iw <= 0 || cw <= 0 || iw <= target) ? 1 : target / iw;
+            // Write the result back here too. The reset above is imperative,
+            // and when `next` equals the scale already in state React skips
+            // the re-render, so the reset stuck: every re-measure (fonts
+            // settling, a resize) left a long balance unscaled and its ticker
+            // clipped by up to 53px (2026-10-12).
+            i.style.transform = `scale(${next})`;
+            setScale(next);
         };
         measure();
         // First layout often runs before the mono webfont has loaded;
@@ -2252,17 +2674,4 @@ function AutoShrinkText({ children }) {
             </span>
         </span>
     );
-}
-
-const PALETTE = [
-    '#1E90C7', '#7B2C8F', '#0EA5E9', '#10B981', '#F59E0B',
-    '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316',
-    '#6366F1', '#84CC16', '#06B6D4', '#A855F7', '#F43F5E',
-];
-function tickerColor(tick) {
-    let h = 0;
-    for (let i = 0; i < tick.length; i += 1) {
-        h = (h * 31 + tick.charCodeAt(i)) >>> 0;
-    }
-    return PALETTE[h % PALETTE.length];
 }

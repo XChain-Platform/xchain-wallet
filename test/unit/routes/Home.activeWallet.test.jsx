@@ -16,15 +16,26 @@
 // `walletBalances` rejects by design - "account X does not belong to wallet Y" -
 // which blanked Home behind an error for every multi-wallet user.
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { act, render, screen, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Home } from '../../../packages/core/src/shared/routes/Home.jsx';
+import {
+    readBalanceCache,
+    writeBalanceCache,
+} from '../../../packages/core/src/shared/utils/balanceCache.js';
 
 const WALLET_A = { id: 'wallet-a', name: 'Main Wallet' };
 const WALLET_B = { id: 'wallet-b', name: 'Buyer Wallet' };
 const ACCOUNT_B = 'account-b';
+
+const balance = (chainId, address, tick, quantity) => ({
+    [chainId]: [{
+        address,
+        balances: { native: { tick, quantity, divisibility: 8 }, tokens: [] },
+    }],
+});
 
 function mountHome(props = {}) {
     const messaging = {
@@ -45,9 +56,51 @@ function mountHome(props = {}) {
     return { messaging, view };
 }
 
-afterEach(() => cleanup());
+beforeEach(() => localStorage.clear());
+
+afterEach(() => {
+    cleanup();
+    localStorage.clear();
+});
 
 describe('Home honours the host active wallet', () => {
+    it('replaces the first-paint skeleton in the balance surface slot', async () => {
+        let finishBalances;
+        const messaging = {
+            listWallets: vi.fn().mockResolvedValue([WALLET_A]),
+            listAccounts: vi.fn().mockResolvedValue([]),
+            getWalletBalances: vi.fn(() => new Promise((resolve) => { finishBalances = resolve; })),
+            getAddressesByChain: vi.fn().mockResolvedValue({}),
+            getActiveAddresses: vi.fn().mockResolvedValue({}),
+            getSettings: vi.fn().mockResolvedValue({}),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <Home
+                    activeWalletId={WALLET_A.id}
+                    activeAccountId="account-a"
+                    onSend={() => {}}
+                    onReceive={() => {}}
+                />
+            </MessagingProvider>,
+        );
+
+        const loading = await screen.findByRole('status', { name: /loading balances/i });
+        const slotAnchor = loading.previousElementSibling;
+        expect(loading.querySelectorAll('[aria-hidden="true"]')).not.toHaveLength(0);
+        expect([...loading.querySelectorAll('[style]')].some((node) => node.style.height === '72px')).toBe(true);
+
+        // The balance read starts once the active network setting has loaded.
+        await waitFor(() => expect(messaging.getWalletBalances).toHaveBeenCalled());
+        await act(async () => { finishBalances({}); });
+
+        const walletTabs = await screen.findByRole('tablist', { name: 'Wallet view' });
+        // The balance surface takes the skeleton's slot: the element right
+        // after the same anchor now holds the wallet tabs.
+        expect(slotAnchor.nextElementSibling).toContainElement(walletTabs);
+        expect(screen.queryByRole('status', { name: /loading balances/i })).toBeNull();
+    });
+
     it('reads balances for the HOST wallet, not wallets[0]', async () => {
         // The switched-to wallet is second in the list: self-electing wallets[0]
         // is exactly the bug, so a passing assertion here has to come from the
@@ -96,6 +149,56 @@ describe('Home honours the host active wallet', () => {
             const last = messaging.getWalletBalances.mock.calls.at(-1);
             expect(last[0]).toBe(WALLET_B.id);
             expect(last[1]).toBe(ACCOUNT_B);
+        });
+    });
+
+    it('shows only the active wallet cache while its fresh balances load', async () => {
+        writeBalanceCache(WALLET_A.id, 'account-a', {
+            balances: balance('bitcoin-mainnet', 'bc1qwalleta', 'BTC', '100000000'),
+            activeByChain: {},
+            fetchedAt: 100,
+        });
+        writeBalanceCache(WALLET_B.id, ACCOUNT_B, {
+            balances: balance('dogecoin-mainnet', 'DWalletB', 'DOGE', '200000000'),
+            activeByChain: {},
+            fetchedAt: 200,
+        });
+
+        const finishBalances = {};
+        const messaging = {
+            listWallets: vi.fn().mockResolvedValue([WALLET_A, WALLET_B]),
+            listAccounts: vi.fn().mockResolvedValue([]),
+            getWalletBalances: vi.fn((walletId) => new Promise((resolve) => {
+                finishBalances[walletId] = resolve;
+            })),
+            getAddressesByChain: vi.fn().mockResolvedValue({}),
+            getActiveAddresses: vi.fn().mockResolvedValue({}),
+            getSettings: vi.fn().mockResolvedValue({}),
+        };
+        const tree = (walletId, accountId) => (
+            <MessagingProvider shell="web" messaging={messaging}>
+                <Home activeWalletId={walletId} activeAccountId={accountId} />
+            </MessagingProvider>
+        );
+        const { rerender } = render(tree(WALLET_A.id, 'account-a'));
+
+        expect(await screen.findByText(/^BTC\b/)).toBeTruthy();
+        expect(screen.getByText('Updating balances…')).toBeTruthy();
+
+        rerender(tree(WALLET_B.id, ACCOUNT_B));
+
+        expect(await screen.findByText(/^DOGE\b/)).toBeTruthy();
+        expect(screen.queryByText(/^BTC\b/)).toBeNull();
+        expect(screen.getByText('Updating balances…')).toBeTruthy();
+
+        await act(async () => {
+            finishBalances[WALLET_B.id](balance('litecoin-mainnet', 'ltc1qfresh', 'LTC', '300000000'));
+        });
+        expect(await screen.findByText(/^LTC\b/)).toBeTruthy();
+        await waitFor(() => expect(screen.queryByText('Updating balances…')).toBeNull());
+        await waitFor(() => {
+            expect(readBalanceCache(WALLET_B.id, ACCOUNT_B)?.balances)
+                .toEqual(balance('litecoin-mainnet', 'ltc1qfresh', 'LTC', '300000000'));
         });
     });
 });

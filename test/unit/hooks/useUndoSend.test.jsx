@@ -7,8 +7,12 @@
 // General Public License v3.0 or later; see LICENSE.md.
 
 import { act, renderHook } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useUndoSend } from '../../../packages/core/src/shared/hooks/useUndoSend.js';
+
+afterEach(() => {
+    vi.useRealTimers();
+});
 
 function setup(extra = {}) {
     const clock = { t: 10_000 };
@@ -58,6 +62,23 @@ describe('useUndoSend', () => {
         h.advance(1000);
         expect(h.result.current.remaining).toBe(4);
         expect(h.result.current.status).toBe('counting');
+    });
+
+    it('counts the configured window down with real interval scheduling', () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-10-13T12:00:00Z'));
+        const { result } = renderHook(() => useUndoSend());
+
+        act(() => result.current.start(3));
+        expect(result.current.remaining).toBe(3);
+
+        act(() => vi.advanceTimersByTime(1000));
+        expect(result.current.remaining).toBe(2);
+        act(() => vi.advanceTimersByTime(1000));
+        expect(result.current.remaining).toBe(1);
+        act(() => vi.advanceTimersByTime(1000));
+        expect(result.current.remaining).toBe(0);
+        expect(result.current.status).toBe('elapsed');
     });
 
     it('elapses at 5000 ms, calls onElapsed once and clears the tick', () => {

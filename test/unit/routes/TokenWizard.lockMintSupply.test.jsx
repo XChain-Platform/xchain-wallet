@@ -79,7 +79,8 @@ async function pickTemplate(label) {
 }
 
 function submit() {
-    fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Review token' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to confirmation' }));
 }
 
 async function composedParams() {
@@ -150,6 +151,9 @@ describe('TokenWizard fixed-supply templates lock MINT_SUPPLY', () => {
         });
         fireEvent.change(screen.getByLabelText('Edition size'), { target: { value: '10' } });
         fireEvent.change(screen.getByLabelText('Copies per mint'), { target: { value: '1' } });
+        fireEvent.change(screen.getByLabelText('Image URL'), {
+            target: { value: 'https://example.com/prints.png' },
+        });
         submit();
 
         const params = await composedParams();

@@ -207,8 +207,9 @@ describe('submitFailureMessage says what actually happened', () => {
         expect(submitFailureMessage(new Error('boom'), { fallback: 'Sweep failed.' }))
             .toBe('Sweep failed.');
         // With no fallback it still says something concrete rather than an empty string.
-        expect(submitFailureMessage(new Error('boom'))).toBe('boom');
+        expect(submitFailureMessage(new Error('boom')))
+            .toBe("Couldn't complete this. Something went wrong. Try again.");
         expect(submitFailureMessage(null))
-            .toBe('The request stopped because the wallet service returned no explanation.');
+            .toBe("Couldn't complete this. Something went wrong. Try again.");
     });
 });

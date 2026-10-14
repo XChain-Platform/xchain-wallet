@@ -9,24 +9,26 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainPicker, Icon, InfoTip, Input, MultisigBadge, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, ChainPicker, Checkbox, CopyButton, EmptyState, FormPage, FormSection, Icon, InfoTip, Input, ListPage, ListRow, MultisigBadge, PageHeader, Screen, Select, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
-import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import { EmptyStateNudge } from '../components/EmptyStateNudge.jsx';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
 import { ConfirmModal } from '../components/ConfirmModal.jsx';
 import { useConfirmModal } from '../hooks/useConfirmModal.js';
 import { useToast } from '../components/ToastHost.jsx';
 import { AddAddressModal, addressTypeHint } from './AddAddressModal.jsx';
-import { coinFromChainId, formatAmount, fiatValue } from '../components/BalanceList.jsx';
+import { coinFromChainId, formatAmount, fiatValue, formatFiat } from '../components/BalanceList.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { addressTypeLabel } from '../utils/addressTypeLabel.js';
 import { recordLastUsedChain } from '../chainSelection.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
+import { t } from '../../i18n/index.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
-import { tickerForCoin, explorerCoinCode } from '../../registry/coinTicker.js';
+import { useProtectedScreen } from '../utils/screenGuard.js';
+import { blurNumberInputOnWheel } from '../utils/formInput.js';
+import { tickerForCoin } from '../../registry/coinTicker.js';
+import { explorerPageUrl } from '../utils/explorerLinks.js';
 import {
     feePreferenceLabel,
     requireMemoLabel,
@@ -37,6 +39,7 @@ import local from './AddressList.module.css';
 import wifStyles from './AddressList.wif.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const ADDRESS_WINDOW_SIZE = 100;
 
 // D-64: the WIF field's placeholder was a fixed "L1aW…" - a Bitcoin MAINNET
 // key - shown unchanged on every chain, so the only format hint the screen
@@ -78,14 +81,13 @@ const DERIVED_SOURCES = new Set(['hd', 'trezor', 'ledger']);
  *
  * @param {object} opts
  * @param {{ source?: string, derivationPath?: string | null, role?: string } | null | undefined} opts.record
- * @param {string} opts.chainName
  * @param {string[]} [opts.holdings]   formatted non-zero balances ("0.5 DOGE", "1,000 XCP")
  * @param {boolean} [opts.hidden]      Privacy Mode: say funds exist without the amounts
  * @param {boolean} [opts.active]      this is the chain's active address
  * @param {boolean} [opts.last]        this is the chain's only address in the wallet
  * @returns {string}
  */
-export function deleteAddressMessage({ record, chainName, holdings = [], hidden = false, active = false, last = false }) {
+export function deleteAddressMessage({ record, holdings = [], hidden = false, active = false, last = false }) {
     const parts = [];
     if (holdings.length > 0) {
         parts.push(hidden ? 'It holds funds.' : `It holds ${holdings.join(', ')}.`);
@@ -94,35 +96,20 @@ export function deleteAddressMessage({ record, chainName, holdings = [], hidden 
         parts.push('It runs a dispenser, which this wallet cannot show or manage while the address is gone.');
     }
     if (active) {
-        parts.push(`It is the active ${chainName} address; the lowest remaining address takes over.`);
+        parts.push('It is the active address; the lowest remaining address on the chain takes over.');
     }
     if (last) {
-        parts.push(`It is the only ${chainName} address in this wallet, so ${chainName} leaves the wallet until you add one.`);
+        parts.push('It is the only address on this chain, so the chain leaves the wallet until you add one.');
     }
     const derived = DERIVED_SOURCES.has(record?.source) && typeof record?.derivationPath === 'string';
     if (derived) {
-        parts.push(`Its key comes from your recovery phrase, so it is not lost: Add address > Generate on ${chainName} re-derives the lowest missing address before any new one.`);
+        parts.push('Its key comes from your recovery phrase, so it is not lost: Add address > Generate re-derives the lowest missing address before any new one.');
     } else if (record?.source === 'watch-only') {
         parts.push('A watch-only address can be added again from its address string.');
     } else {
         parts.push('An imported key is gone unless you have a separate backup.');
     }
     return parts.join(' ');
-}
-
-// Format a fiat value in the user's selected currency (symbol + amount),
-// e.g. "$32.10" / "¥3,200". The 3-letter code is appended by the caller.
-function formatFiatAmount(value, currency) {
-    if (value === null || value === undefined) return '';
-    const code = String(currency || 'USD').toUpperCase();
-    try {
-        const fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: code, currencyDisplay: 'symbol' });
-        const minorUnit = fmt.resolvedOptions().maximumFractionDigits === 0 ? 1 : 0.01;
-        if (value > 0 && value < minorUnit) return `<${fmt.format(minorUnit)}`;
-        return fmt.format(value);
-    } catch {
-        return value.toLocaleString('en-US', { maximumFractionDigits: 2 });
-    }
 }
 
 /**
@@ -164,7 +151,7 @@ export function AddressList({
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const confirmDialog = useConfirmModal();
-    const { showToast } = useToast();
+    const { showToast, announce } = useToast();
     const { settings } = useSettings();
     const fiatCurrency = (settings?.fiatCurrency || 'USD').toUpperCase();
     // App-wide Privacy Mode (the Home eye toggle): when on, mask every
@@ -189,8 +176,15 @@ export function AddressList({
     // Inline label editor state for the detail view.
     const [labelDraft, setLabelDraft] = useState('');
     const [labelSaving, setLabelSaving] = useState(false);
+    const [detailAction, setDetailAction] = useState(/** @type {'use' | 'delete' | null} */ (null));
     // Brief "copied" feedback on the inline address copy icon.
     const [addrCopied, setAddrCopied] = useState(false);
+    const [showHidden, setShowHidden] = useState(false);
+    const [visibilitySaving, setVisibilitySaving] = useState(false);
+    const [addressWindow, setAddressWindow] = useState(() => ({
+        scope: '',
+        count: ADDRESS_WINDOW_SIZE,
+    }));
 
     // PC-32: the selected address's current on-chain preferences (consensus
     // fold; protocol defaults when never written). Lazy per selection; a
@@ -221,6 +215,7 @@ export function AddressList({
     const [advancedDerivationIndex, setAdvancedDerivationIndex] = useState('');
     const [advancedBusy, setAdvancedBusy] = useState(false);
     const [advancedError, setAdvancedError] = useState(/** @type {string | null} */ (null));
+    const advancedGenerateLockRef = useRef(false);
     const addMenuRef = useRef(null);
     useEffect(() => {
         if (!addMenuOpen) return undefined;
@@ -321,34 +316,45 @@ export function AddressList({
         }
         return out;
     };
-    // Formatted fiat value for a row, with the currency code (e.g. "$32.10 USD"),
+    // Formatted fiat value for a row, with the currency code (e.g. "€32.10 EUR"),
     // or '' when there's no price/balance.
     const fiatTextFor = (row) => {
         const nb = nativeByKey.get(`${row.chainId}:${String(row.address || '').toLowerCase()}`);
         if (!nb) return '';
         const v = fiatValue(nb.quantity, nb.divisibility, nb.fiatRate);
-        return v === null ? '' : `${formatFiatAmount(v, fiatCurrency)} ${fiatCurrency}`;
+        return v === null ? '' : `${formatFiat(v, fiatCurrency)} ${fiatCurrency}`;
     };
 
     // Human label for the address type, mirroring the toggle categories.
     const typeLabelFor = (row) => (
         row.multisig
             ? 'Multisig'
-            : row.record?.source === 'imported-wif'
-                ? 'Imported'
-                : row.record?.source === 'hd'
-                    ? 'Normal'
-                    : 'Other'
+            : row.record?.role === 'change'
+                ? 'Change'
+                : row.record?.source === 'imported-wif'
+                    ? 'Imported'
+                    : row.record?.source === 'hd'
+                        ? 'Normal'
+                        : 'Other'
     );
 
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [multisigs, setMultisigs] = useState(
         /** @type {Array<{ multisigConfigId: string, address: string, threshold: number, cosignerCount: number, scheme: string }>} */ ([]),
     );
+    const bitcoinChainId = useMemo(() => {
+        const candidates = chainRegistry.byCoin('bitcoin');
+        return candidates.find((d) => d.networkKind === settings?.activeNetwork)?.id
+            || candidates[0]?.id
+            || '';
+    }, [settings?.activeNetwork]);
     // §15.5 / G020 + G021: Import WIF inline form. Hidden until the user
     // expands it; gates submit on the §15.5.3 backup-implications warning
     // checkbox.
     const [showWifForm, setShowWifForm] = useState(false);
+    // A pasted WIF is the wallet, so Android blocks capture only while this
+    // form is open and leaves the ordinary address list screenshottable.
+    useProtectedScreen(showWifForm);
     const [wifChainId, setWifChainId] = useState('');
     const [wifInput, setWifInput] = useState('');
     // D-68: a WIF is a spending key, so it is masked like a password by
@@ -375,6 +381,29 @@ export function AddressList({
     // on P2PKH. Two screens in one app disagreeing about a migrating user's
     // address format is the defect; the answer is the same resolver.
     const [walletFormat, setWalletFormat] = useState(undefined);
+    const addressScopeRef = useRef({ walletId, accountId, messaging });
+    if (addressScopeRef.current.walletId !== walletId
+        || addressScopeRef.current.accountId !== accountId
+        || addressScopeRef.current.messaging !== messaging) {
+        addressScopeRef.current = { walletId, accountId, messaging };
+        // React retries this render with an empty scope, so no address,
+        // balance, selection, or wallet format from another wallet commits.
+        setAddressesByChain(null);
+        setBalancesByChain(null);
+        setActiveByChain({});
+        setMultisigs([]);
+        setLoadError(null);
+        setSelected(null);
+        setChainPrefs(null);
+        setChainPrefsError(null);
+        setWalletFormat(undefined);
+        setShowWifForm(false);
+        setWifInput('');
+        setWifPassword('');
+        setWifNotice(null);
+        setShowAdvancedGenerate(false);
+        setAdvancedError(null);
+    }
     useEffect(() => {
         let live = true;
         if (typeof messaging.listWallets !== 'function') return undefined;
@@ -482,13 +511,13 @@ export function AddressList({
 
     useEffect(() => {
         let cancelled = false;
-        const btc = chainRegistry.byCoin('bitcoin')[0]?.id;
-        if (!btc) return undefined;
+        if (!bitcoinChainId) return undefined;
+        setMultisigs([]);
         const fetcher = typeof messaging.listMultisigReceiveAddresses === 'function'
-            ? messaging.listMultisigReceiveAddresses({ walletId, chainId: btc })
+            ? messaging.listMultisigReceiveAddresses({ walletId, chainId: bitcoinChainId })
                 .then((list) => Array.isArray(list) ? list : [])
             : (typeof messaging.getMultisigReceiveAddress === 'function'
-                ? messaging.getMultisigReceiveAddress({ walletId, chainId: btc })
+                ? messaging.getMultisigReceiveAddress({ walletId, chainId: bitcoinChainId })
                     .then((r) => (r && typeof r.address === 'string' ? [r] : []))
                 : Promise.resolve([]));
         fetcher
@@ -498,7 +527,7 @@ export function AddressList({
             })
             .catch(() => { /* no multisig configured; silent */ });
         return () => { cancelled = true; };
-    }, [walletId, messaging]);
+    }, [walletId, messaging, bitcoinChainId]);
 
     // The Import-WIF chain picker offered only the chains the
     // account already occupies, so an account with no addresses had no
@@ -533,7 +562,7 @@ export function AddressList({
 
     async function handleAdvancedGenerate(event) {
         event.preventDefault();
-        if (advancedBusy) return;
+        if (advancedGenerateLockRef.current) return;
         const derivationIndex = Number(advancedDerivationIndex);
         if (!effectiveAdvancedChainId) {
             setAdvancedError('Pick a coin.');
@@ -552,6 +581,7 @@ export function AddressList({
             setAdvancedError('Address generation is not available in this shell.');
             return;
         }
+        advancedGenerateLockRef.current = true;
         setAdvancedBusy(true);
         setAdvancedError(null);
         try {
@@ -571,6 +601,7 @@ export function AddressList({
                 'Could not generate that address. Check the derivation index and try again.',
             ));
         } finally {
+            advancedGenerateLockRef.current = false;
             setAdvancedBusy(false);
         }
     }
@@ -580,10 +611,10 @@ export function AddressList({
         const multisigByAddress = new Map(
             multisigs
                 .filter((m) => typeof m.address === 'string')
-                .map((m) => [m.address.toLowerCase(), m]),
+                .map((m) => [`${bitcoinChainId}:${m.address.toLowerCase()}`, m]),
         );
         const networkMatch = (chainId) => (
-            network === 'all' || coinFromChainId(chainId) === network
+            network === 'all' || chainId === network || coinFromChainId(chainId) === network
         );
         /** @type {Array<{ key: string, chainId: string, address: string, label: string, multisig: any, record: any }>} */
         const out = [];
@@ -591,9 +622,11 @@ export function AddressList({
             if (!networkMatch(chainId)) continue;
             if (!Array.isArray(addrs)) continue;
             for (const a of addrs) {
-                const matched = multisigByAddress.get((a.address || '').toLowerCase()) || null;
+                const matched = multisigByAddress.get(
+                    `${chainId}:${(a.address || '').toLowerCase()}`,
+                ) || null;
                 out.push({
-                    key: `${chainId}:${a.address}`,
+                    key: `${chainId}:${a.id || a.address}`,
                     chainId,
                     address: a.address,
                     label: a.label || '',
@@ -605,13 +638,15 @@ export function AddressList({
         // Synthesize one row per multisig config when its derived address
         // isn't already in the wallet's address table; Receive derives
         // them on-demand and doesn't necessarily persist them.
-        const btc = chainRegistry.byCoin('bitcoin')[0]?.id;
-        if (btc && networkMatch(btc)) {
+        if (bitcoinChainId && networkMatch(bitcoinChainId)) {
             for (const m of multisigs) {
-                if (!out.some((r) => r.address?.toLowerCase() === m.address.toLowerCase())) {
+                if (!out.some((r) => (
+                    r.chainId === bitcoinChainId
+                    && r.address?.toLowerCase() === m.address.toLowerCase()
+                ))) {
                     out.push({
-                        key: `${btc}:${m.address}:synthetic`,
-                        chainId: btc,
+                        key: `${bitcoinChainId}:${m.address}:synthetic`,
+                        chainId: bitcoinChainId,
                         address: m.address,
                         label: 'Multisig receive',
                         multisig: m,
@@ -630,7 +665,7 @@ export function AddressList({
                 // multisig, hardware, watch-only.
                 const cat = r.multisig
                     ? 'misc'
-                    : r.record?.role === 'dispenser'
+                    : r.record?.role === 'dispenser' || r.record?.role === 'change'
                         ? 'misc'
                         : r.record?.source === 'imported-wif'
                             ? 'imported'
@@ -648,7 +683,28 @@ export function AddressList({
             ));
         }
         return next;
-    }, [addressesByChain, network, query, sourceFilter, multisigs]);
+    }, [addressesByChain, network, query, sourceFilter, multisigs, bitcoinChainId]);
+
+    const hiddenRows = rows.filter((row) => row.record?.hidden === true);
+    const listedRows = rows.filter((row) => (
+        row.record?.hidden !== true || (!pickerMode && showHidden)
+    ));
+    const addressListScope = [query, network, sourceFilter, showHidden ? 'hidden' : 'visible'].join('\u0000');
+    const visibleAddressCount = addressWindow.scope === addressListScope
+        ? addressWindow.count
+        : ADDRESS_WINDOW_SIZE;
+    const renderedAddressRows = listedRows.slice(0, visibleAddressCount);
+
+    const showMoreAddresses = () => {
+        setAddressWindow((current) => ({
+            scope: addressListScope,
+            count: Math.min(
+                listedRows.length,
+                (current.scope === addressListScope ? current.count : ADDRESS_WINDOW_SIZE)
+                    + ADDRESS_WINDOW_SIZE,
+            ),
+        }));
+    };
 
     // Add addresses is its own page, same pattern as Import address.
     if (showAddModal) {
@@ -678,68 +734,15 @@ export function AddressList({
                     />
                 )}
             >
-                <form className={wifStyles.wifForm} onSubmit={handleAdvancedGenerate} noValidate>
-                    <p className={wifStyles.wifNotice}>
-                        Advanced option for recovering or recreating a known receive address.
-                        The index must not already be held by this account.
-                    </p>
-                    <ChainPicker
-                        label="Coin"
-                        value={effectiveAdvancedChainId}
-                        onChange={(nextChainId) => {
-                            setAdvancedChainId(nextChainId);
-                            setAdvancedAddressType('');
-                            setAdvancedError(null);
-                        }}
-                        chainIds={wifChainIds}
-                        chainRegistry={chainRegistry}
-                        disabled={advancedBusy}
-                    />
-                    {advancedDescriptor ? (
-                        <label className={wifStyles.wifField}>
-                            <span className={wifStyles.wifLabel}>Address type</span>
-                            <select
-                                value={effectiveAdvancedAddressType}
-                                onChange={(e) => {
-                                    setAdvancedAddressType(e.target.value);
-                                    setAdvancedError(null);
-                                }}
-                                disabled={advancedBusy}
-                                className={wifStyles.wifSelect}
-                            >
-                                {(advancedDescriptor.addressTypes || []).map((type) => {
-                                    const hint = addressTypeHint(advancedDescriptor, type);
-                                    return (
-                                        <option key={type} value={type}>
-                                            {type.toUpperCase()}{hint ? ` (starts with ${hint})` : ''}
-                                        </option>
-                                    );
-                                })}
-                            </select>
-                        </label>
-                    ) : null}
-                    <Input
-                        label="Derivation index"
-                        type="number"
-                        inputMode="numeric"
-                        min={0}
-                        max={0x7fffffff}
-                        step={1}
-                        value={advancedDerivationIndex}
-                        onChange={(e) => {
-                            setAdvancedDerivationIndex(e.target.value);
-                            setAdvancedError(null);
-                        }}
-                        hint="Use the exact external address index you want to derive."
-                        disabled={advancedBusy}
-                        autoFocus
-                    />
-                    {advancedError ? (
+                <FormPage
+                    label="Generate address at index"
+                    onSubmit={handleAdvancedGenerate}
+                    status={advancedError ? (
                         <StatusMessage variant="error" className={styles.error}>
                             {advancedError}
                         </StatusMessage>
                     ) : null}
-                    <div className={wifStyles.wifActions}>
+                    actions={(
                         <Button
                             type="submit"
                             variant="primary"
@@ -750,8 +753,62 @@ export function AddressList({
                         >
                             Generate
                         </Button>
-                    </div>
-                </form>
+                    )}
+                >
+                    <ChainPicker
+                        label="Coin"
+                        value={effectiveAdvancedChainId}
+                        onChange={(nextChainId) => {
+                            setAdvancedChainId(nextChainId);
+                            setAdvancedAddressType('');
+                            setAdvancedError(null);
+                        }}
+                        chainIds={wifChainIds}
+                        chainRegistry={chainRegistry}
+                        hideNetworkKind
+                        disabled={advancedBusy}
+                    />
+                    {advancedDescriptor ? (
+                        <Select
+                            label="Address type"
+                            value={effectiveAdvancedAddressType}
+                            onChange={(e) => {
+                                setAdvancedAddressType(e.target.value);
+                                setAdvancedError(null);
+                            }}
+                            disabled={advancedBusy}
+                        >
+                            {/* Select uses native options because the kit has no option primitive. */}
+                            {(advancedDescriptor.addressTypes || []).map((type) => {
+                                const hint = addressTypeHint(advancedDescriptor, type);
+                                return (
+                                    <option key={type} value={type}>
+                                        {type.toUpperCase()}{hint ? ` (starts with ${hint})` : ''}
+                                    </option>
+                                );
+                            })}
+                        </Select>
+                    ) : null}
+                    <Input
+                        label="Derivation index"
+                        type="number"
+                        inputMode="numeric"
+                        enterKeyHint="go"
+                        autoComplete="off"
+                        min={0}
+                        max={0x7fffffff}
+                        step={1}
+                        value={advancedDerivationIndex}
+                        onChange={(e) => {
+                            setAdvancedDerivationIndex(e.target.value);
+                            setAdvancedError(null);
+                        }}
+                        onWheel={blurNumberInputOnWheel}
+                        hint="Use the exact external index of the receive address you want to recover or recreate. It must not already be held by this account."
+                        disabled={advancedBusy}
+                        autoFocus
+                    />
+                </FormPage>
             </Screen>
         );
     }
@@ -771,7 +828,24 @@ export function AddressList({
                     />
                 )}
             >
-                <form className={wifStyles.wifForm} onSubmit={handleImportWif} noValidate>
+                <FormPage
+                    label="Import address"
+                    onSubmit={handleImportWif}
+                    status={wifError ? (
+                        <StatusMessage variant="error" className={wifStyles.wifErrorBox}>{wifError}</StatusMessage>
+                    ) : null}
+                    actions={(
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            size="md"
+                            loading={wifBusy}
+                            disabled={!wifWarningAck || wifInput.trim().length === 0 || (!signerReady && wifPassword.length === 0) || !wifChainId}
+                        >
+                            Import
+                        </Button>
+                    )}
+                >
                         <ChainPicker
                             label="Chain"
                             value={wifChainId}
@@ -786,27 +860,26 @@ export function AddressList({
                             }}
                             chainIds={wifChainIds}
                             chainRegistry={chainRegistry}
+                            hideNetworkKind
                             disabled={wifBusy}
                         />
                         {wifChainId ? (
-                            <label className={wifStyles.wifField}>
-                                <span className={wifStyles.wifLabel}>Address type</span>
-                                <select
-                                    value={effectiveWifAddressType}
-                                    onChange={(e) => setWifAddressType(e.target.value)}
-                                    disabled={wifBusy}
-                                    className={wifStyles.wifSelect}
-                                >
-                                    {(wifDescriptor?.addressTypes || []).map((t) => {
-                                        const hint = addressTypeHint(wifDescriptor, t);
-                                        return (
-                                            <option key={t} value={t}>
-                                                {t.toUpperCase()}{hint ? ` (starts with ${hint})` : ''}
-                                            </option>
-                                        );
-                                    })}
-                                </select>
-                            </label>
+                            <Select
+                                label="Address type"
+                                value={effectiveWifAddressType}
+                                onChange={(e) => setWifAddressType(e.target.value)}
+                                disabled={wifBusy}
+                            >
+                                {/* Select uses native options because the kit has no option primitive. */}
+                                {(wifDescriptor?.addressTypes || []).map((t) => {
+                                    const hint = addressTypeHint(wifDescriptor, t);
+                                    return (
+                                        <option key={t} value={t}>
+                                            {t.toUpperCase()}{hint ? ` (starts with ${hint})` : ''}
+                                        </option>
+                                    );
+                                })}
+                            </Select>
                         ) : null}
                         <Input
                             label="WIF private key"
@@ -823,14 +896,16 @@ export function AddressList({
                             spellCheck={false}
                             disabled={wifBusy}
                         />
-                        <button
+                        <Button
                             type="button"
+                            variant="ghost"
+                            size="sm"
                             className={wifStyles.wifToggle}
                             onClick={() => setWifRevealed((s) => !s)}
                             aria-pressed={wifRevealed}
                         >
                             {wifRevealed ? 'Hide private key' : 'Show private key'}
-                        </button>
+                        </Button>
                         <Input
                             label="Label (optional)"
                             value={wifLabel}
@@ -857,33 +932,17 @@ export function AddressList({
                             <strong>Not covered by your recovery phrase.</strong>{' '}
                             Keep a copy of the WIF, or a current backup file (Settings &gt; Backup).
                         </p>
-                        <label className={wifStyles.wifAck}>
-                            <input
-                                type="checkbox"
-                                checked={wifWarningAck}
-                                onChange={(e) => {
-                                    setWifWarningAck(e.target.checked);
-                                    if (wifError) setWifError(null);
-                                }}
-                                disabled={wifBusy}
-                            />
-                            <span>I understand this key is not backed up by my recovery phrase.</span>
-                        </label>
-                        {wifError ? (
-                            <StatusMessage variant="error" className={wifStyles.wifErrorBox}>{wifError}</StatusMessage>
-                        ) : null}
-                        <div className={wifStyles.wifActions}>
-                            <Button
-                                type="submit"
-                                variant="primary"
-                                size="md"
-                                loading={wifBusy}
-                                disabled={!wifWarningAck || wifInput.trim().length === 0 || (!signerReady && wifPassword.length === 0) || !wifChainId}
-                            >
-                                Import
-                            </Button>
-                        </div>
-                </form>
+                        <Checkbox
+                            className={wifStyles.wifAck}
+                            label="I understand this key is not backed up by my recovery phrase."
+                            checked={wifWarningAck}
+                            onChange={(e) => {
+                                setWifWarningAck(e.target.checked);
+                                if (wifError) setWifError(null);
+                            }}
+                            disabled={wifBusy}
+                        />
+                </FormPage>
             </Screen>
         );
     }
@@ -895,22 +954,22 @@ export function AddressList({
             titleIcon={<Icon.ScanIcon />}
             trailing={(
                 <div className={local.addMenuWrap} ref={addMenuRef}>
-                    <button
+                    <Button
                         type="button"
                         className={local.addBtn}
+                        icon={<Icon.PlusIcon />}
                         onClick={() => setAddMenuOpen((o) => !o)}
                         aria-haspopup="menu"
                         aria-expanded={addMenuOpen}
                         aria-label="Add or import address"
                         title="Add address"
                         data-testid="address-add-menu"
-                    >
-                        <Icon.PlusIcon />
-                    </button>
+                    />
                     {addMenuOpen ? (
+                        /* The kit has no menu-list container, so native list semantics group its menu items. */
                         <ul className={local.addMenu} role="menu">
                             <li>
-                                <button
+                                <Button
                                     type="button"
                                     role="menuitem"
                                     className={local.addMenuItem}
@@ -919,10 +978,10 @@ export function AddressList({
                                 >
                                     <span className={local.addMenuIcon} aria-hidden="true"><Icon.PlusIcon /></span>
                                     Add address
-                                </button>
+                                </Button>
                             </li>
                             <li>
-                                <button
+                                <Button
                                     type="button"
                                     role="menuitem"
                                     className={local.addMenuItem}
@@ -935,10 +994,10 @@ export function AddressList({
                                 >
                                     <span className={local.addMenuIcon} aria-hidden="true"><Icon.PlusIcon /></span>
                                     Generate at index (advanced)
-                                </button>
+                                </Button>
                             </li>
                             <li>
-                                <button
+                                <Button
                                     type="button"
                                     role="menuitem"
                                     className={local.addMenuItem}
@@ -956,7 +1015,7 @@ export function AddressList({
                                 >
                                     <span className={local.addMenuIcon} aria-hidden="true"><Icon.DownloadIcon /></span>
                                     Import address
-                                </button>
+                                </Button>
                             </li>
                         </ul>
                     ) : null}
@@ -992,7 +1051,7 @@ export function AddressList({
         const canSecret = !!(onShowPrivateKey && selected.record && !selected.multisig);
         const canDelete = !!selected.record?.id;
         const fields = [
-            { label: 'Network', value: d?.displayName || selected.chainId },
+            ...(d ? [{ label: 'Network', value: <ChainBadge descriptor={d} size="sm" showName={false} /> }] : []),
             { label: 'Balance', value: amountTextFor(selected) },
             { label: 'Type', value: typeLabelFor(selected) },
         ];
@@ -1002,7 +1061,7 @@ export function AddressList({
             fields.push({
                 label: 'Address format',
                 value: prefix ? `${addressTypeLabel(type)} (starts with ${prefix})` : addressTypeLabel(type),
-                hint: 'How this address is written. The format decides what the address starts with; some older services cannot send to the newer SegWit and Taproot formats.',
+                hint: 'This controls how the address begins and which services can send to it. Some older services cannot use newer formats.',
             });
         }
         if (selected.multisig) {
@@ -1027,48 +1086,80 @@ export function AddressList({
                 hint: 'Where this account sits inside your recovery phrase. Different paths produce different addresses from the same phrase; it is a technical detail you rarely need to change.',
             });
         }
-        const openXchain = () => {
-            const base = d?.explorer?.defaultUrl || branding.DEFAULT_EXPLORER_BASE;
-            if (!base) return;
-            // The explorer base is bare; append the coin path segment.
-            const code = explorerCoinCode(d);
-            const path = code ? `/${code}/address/${selected.address}` : `/address/${selected.address}`;
-            try { window.open(`${base.replace(/\/$/, '')}${path}`, '_blank', 'noopener'); } catch { /* no-op */ }
-        };
+        const explorerUrl = explorerPageUrl({
+            chainId: selected.chainId,
+            kind: 'address',
+            value: selected.address,
+            settings,
+        });
         const saveLabel = async () => {
             if (!selected.record?.id || labelSaving) return;
+            const targetId = selected.record.id;
             setLabelSaving(true);
             try {
                 const next = labelDraft.trim();
-                await messaging.setAddressLabel(selected.record.id, next);
-                setSelected({ ...selected, label: next, record: { ...selected.record, label: next } });
-                setReloadKey((k) => k + 1);
+                const result = await messaging.setAddressLabel(targetId, next);
+                const savedLabel = typeof result?.label === 'string'
+                    ? result.label
+                    : (next || 'Address');
+                setSelected((current) => (
+                    current?.record?.id === targetId
+                        ? { ...current, label: savedLabel, record: { ...current.record, label: savedLabel } }
+                        : current
+                ));
+                setAddressesByChain((current) => Object.fromEntries(
+                    Object.entries(current || {}).map(([chainId, records]) => [
+                        chainId,
+                        Array.isArray(records)
+                            ? records.map((record) => record?.id === targetId
+                                ? { ...record, label: savedLabel }
+                                : record)
+                            : records,
+                    ]),
+                ));
+                announce('Address label saved.');
             } catch (err) {
                 setLoadError(userFacingMessage(err, 'Could not save that label. Try again.'));
             } finally {
                 setLabelSaving(false);
             }
         };
-        const copyAddress = () => {
+        const toggleAddressHidden = async () => {
+            if (!selected.record?.id || visibilitySaving) return;
+            const nextHidden = selected.record.hidden !== true;
+            setVisibilitySaving(true);
             try {
-                navigator.clipboard?.writeText?.(selected.address);
-                setAddrCopied(true);
-                setTimeout(() => setAddrCopied(false), 1200);
-            } catch { /* no-op */ }
+                await messaging.setAddressHidden(selected.record.id, nextHidden);
+                setAddressesByChain((current) => {
+                    if (!current) return current;
+                    return Object.fromEntries(Object.entries(current).map(([chainId, records]) => [
+                        chainId,
+                        Array.isArray(records)
+                            ? records.map((record) => record.id === selected.record.id
+                                ? { ...record, hidden: nextHidden }
+                                : record)
+                            : records,
+                    ]));
+                });
+                setSelected(null);
+            } catch (err) {
+                setLoadError(userFacingMessage(err, 'Could not update address visibility. Try again.'));
+            } finally {
+                setVisibilitySaving(false);
+            }
         };
         const removeAddress = async () => {
-            if (!selected.record?.id) return;
+            if (!selected.record?.id || detailAction) return;
+            setDetailAction('delete');
             // Deleting is allowed even for the active or only address on a
             // chain: the active pointer falls back to the lowest remaining
             // index on its own, and removing the last record is the only
             // way to drop a chain from the wallet. The dialog says both.
-            const chainName = d?.displayName || selected.chainId;
             const onChain = (addressesByChain[selected.chainId] || []).filter((a) => a?.id);
             if (!(await confirmDialog.confirm({
                 title: 'Delete this address?',
                 message: deleteAddressMessage({
                     record: selected.record,
-                    chainName,
                     holdings: holdingsFor(selected),
                     hidden: balancesHidden,
                     active: isActiveRow(selected),
@@ -1076,7 +1167,10 @@ export function AddressList({
                 }),
                 confirmLabel: 'Delete',
                 danger: true,
-            }))) return;
+            }))) {
+                setDetailAction(null);
+                return;
+            }
             // §37.2 / Cluster D FOLLOWUP 2: snapshot the whole record
             // before the delete so the Undo toast can put it back
             // verbatim. Taken here rather than inside onAction because
@@ -1117,10 +1211,13 @@ export function AddressList({
                 }
             } catch (err) {
                 setLoadError(userFacingMessage(err, 'Could not delete that address. Try again.'));
+            } finally {
+                setDetailAction(null);
             }
         };
         const setAsActive = async () => {
-            if (!selected.record?.id || typeof messaging.setActiveAddress !== 'function') return;
+            if (!selected.record?.id || detailAction || typeof messaging.setActiveAddress !== 'function') return;
+            setDetailAction('use');
             try {
                 await messaging.setActiveAddress(accountId, selected.chainId, selected.record.id);
                 // Choosing an address is choosing its chain: the action forms
@@ -1139,11 +1236,14 @@ export function AddressList({
                 // same way - a flow name and an internal - so the copy is
                 // guarded here rather than left to the next one.
                 setLoadError(userFacingMessage(err, 'Could not switch to that address. Try again.'));
+            } finally {
+                setDetailAction(null);
             }
         };
         return (
-            <Screen variant={variant} header={<PageHeader onBack={() => setSelected(null)} title="View Address" titleIcon={<Icon.ScanIcon />} />}>
-                <div className={local.detailTop}>
+            <Screen variant={variant} header={<PageHeader onBack={() => setSelected(null)} title="View address" titleIcon={<Icon.ScanIcon />} />}>
+                <ListPage>
+                    <div className={local.detailTop}>
                     <div className={local.detailLabelRow}>
                         <span className={local.detailLabel}>Address</span>
                         {isActiveRow(selected) ? (
@@ -1152,15 +1252,16 @@ export function AddressList({
                     </div>
                     <div className={local.detailAddr}>
                         <AddressText address={selected.address} truncate={false} />
-                        <button
-                            type="button"
-                            className={local.copyIcon}
-                            onClick={copyAddress}
-                            aria-label="Copy address"
-                            title="Copy address"
-                        >
-                            {addrCopied ? <Icon.CheckIcon /> : <Icon.CopyIcon />}
-                        </button>
+                        <span title={addrCopied ? 'Copied' : 'Copy address'}>
+                            <CopyButton
+                                value={selected.address}
+                                label={addrCopied ? 'Copied' : 'Copy address'}
+                                onCopied={() => {
+                                    setAddrCopied(true);
+                                    setTimeout(() => setAddrCopied(false), 1200);
+                                }}
+                            />
+                        </span>
                     </div>
                     <div className={local.detailLabel} style={{ marginTop: 'var(--xc-space-3)' }}>Label</div>
                     {selected.record?.id ? (
@@ -1171,6 +1272,7 @@ export function AddressList({
                                 onChange={(e) => setLabelDraft(e.target.value)}
                                 placeholder="Add a label"
                                 aria-label="Address label"
+                                autoComplete="off"
                             />
                             <Button
                                 size="md"
@@ -1187,59 +1289,80 @@ export function AddressList({
                             {selected.label || 'No label'}
                         </div>
                     )}
-                </div>
+                    </div>
 
-                <div className={local.quickActions} role="group" aria-label="Address actions">
-                    <button
-                        type="button"
-                        className={local.quickAction}
-                        onClick={setAsActive}
-                        disabled={!selected.record?.id}
-                        title={isActiveRow(selected) ? 'This is the active address' : 'Make this the active address'}
-                    >
-                        <span className={local.quickActionIcon} aria-hidden="true"><Icon.ReceiveIcon /></span>
-                        <span>Use</span>
-                    </button>
-                    {/* Absent when the shell wired no handler, greyed only for
-                        rows that cannot reveal (same rule as onReceive below). */}
-                    {onShowPrivateKey ? (
-                        <button
+                    <div className={local.quickActions} role="group" aria-label="Address actions">
+                    {selected.record?.id && !isActiveRow(selected) ? (
+                        <Button
+                            type="button"
+                            className={local.quickAction}
+                            onClick={setAsActive}
+                            disabled={detailAction !== null}
+                            aria-busy={detailAction === 'use'}
+                            title={isActiveRow(selected) ? 'This is the active address' : 'Make this the active address'}
+                        >
+                            <span className={local.quickActionIcon} aria-hidden="true"><Icon.ReceiveIcon /></span>
+                            <span>{detailAction === 'use' ? 'Switching…' : 'Use'}</span>
+                        </Button>
+                    ) : null}
+                    {selected.record?.id && typeof messaging.setAddressHidden === 'function' ? (
+                        <Button
+                            type="button"
+                            className={local.quickAction}
+                            onClick={toggleAddressHidden}
+                            disabled={visibilitySaving}
+                        >
+                            <span className={local.quickActionIcon} aria-hidden="true">
+                                {selected.record.hidden ? <Icon.EyeIcon /> : <Icon.EyeOffIcon />}
+                            </span>
+                            <span>{selected.record.hidden ? 'Unhide' : 'Hide'}</span>
+                        </Button>
+                    ) : null}
+                    {canSecret ? (
+                        <Button
                             type="button"
                             className={local.quickAction}
                             onClick={() => onShowPrivateKey?.(selected.record)}
-                            disabled={!canSecret}
                         >
                             <span className={local.quickActionIcon} aria-hidden="true"><Icon.KeyIcon /></span>
                             <span>Secret</span>
-                        </button>
+                        </Button>
                     ) : null}
-                    <button
-                        type="button"
-                        className={local.quickAction}
-                        onClick={openXchain}
-                    >
-                        <span className={local.quickActionIcon} aria-hidden="true"><Icon.ExternalLinkIcon /></span>
-                        <span>XChain</span>
-                    </button>
-                    <button
-                        type="button"
-                        className={local.quickAction}
-                        onClick={removeAddress}
-                        disabled={!canDelete}
-                    >
-                        <span className={local.quickActionIcon} aria-hidden="true"><Icon.TrashIcon /></span>
-                        <span>Delete</span>
-                    </button>
-                </div>
+                    {explorerUrl ? (
+                        <Button
+                            type="button"
+                            className={local.quickAction}
+                            onClick={() => {
+                                try { window.open(explorerUrl, '_blank', 'noopener,noreferrer'); } catch { /* no-op */ }
+                            }}
+                        >
+                            <span className={local.quickActionIcon} aria-hidden="true"><Icon.ExternalLinkIcon /></span>
+                            <span>XChain</span>
+                        </Button>
+                    ) : null}
+                    {canDelete ? (
+                        <Button
+                            type="button"
+                            className={local.quickAction}
+                            onClick={removeAddress}
+                            disabled={detailAction !== null}
+                            aria-busy={detailAction === 'delete'}
+                        >
+                            <span className={local.quickActionIcon} aria-hidden="true"><Icon.TrashIcon /></span>
+                            <span>{detailAction === 'delete' ? 'Deleting…' : 'Delete'}</span>
+                        </Button>
+                    ) : null}
+                    </div>
 
-                <div className={local.tabsRow} role="tablist" aria-label="Address sections">
+                    <div className={local.tabsRow} role="tablist" aria-label="Address sections">
+                    {/* The tab stays native because the kit has no tab control. */}
                     <button type="button" role="tab" aria-selected="true" className={`${local.tab} ${local.tabActive}`}>
                         About
                     </button>
-                </div>
+                    </div>
 
-                <div className={local.tabPanel}>
-                    <div className={local.detailCard}>
+                    <div className={local.tabPanel}>
+                    <FormSection title="About" headingLevel="h3" className={local.detailCard}>
                         {/* The testid is derived from the label so every detail field is
                             addressable without hand-maintaining a list. Before it, a spec
                             reading a field had to find the label text and walk to its
@@ -1259,18 +1382,19 @@ export function AddressList({
                                 </div>
                             </div>
                         ))}
-                    </div>
+                    </FormSection>
                     {/* PC-32: on-chain ADDRESS v0 preferences for this address. */}
-                    <div className={local.detailCard} style={{ marginTop: 'var(--xc-space-3)' }}>
-                        <div className={local.detailField}>
-                            <div className={local.detailLabel}>On-chain preferences</div>
-                            <div className={local.detailValue}>
-                                {chainPrefsError
-                                    ? chainPrefsError
-                                    : (chainPrefs
-                                        ? (chainPrefs.onChain ? 'Custom preferences set' : 'Protocol defaults')
-                                        : 'Loading…')}
-                            </div>
+                    <FormSection
+                        title="On-chain preferences"
+                        headingLevel="h3"
+                        className={`${local.detailCard} ${local.detailCardSpaced}`}
+                    >
+                        <div className={local.detailValue}>
+                            {chainPrefsError
+                                ? chainPrefsError
+                                : (chainPrefs
+                                    ? (chainPrefs.onChain ? 'Custom preferences set' : 'Protocol defaults')
+                                    : 'Loading…')}
                         </div>
                         {chainPrefs ? (
                             <>
@@ -1299,15 +1423,16 @@ export function AddressList({
                                 </Button>
                             </div>
                         ) : null}
+                    </FormSection>
                     </div>
-                </div>
-                {confirmDialog.request ? (
-                    <ConfirmModal
-                        {...confirmDialog.request}
-                        onConfirm={confirmDialog.onConfirm}
-                        onCancel={confirmDialog.onCancel}
-                    />
-                ) : null}
+                    {confirmDialog.request ? (
+                        <ConfirmModal
+                            {...confirmDialog.request}
+                            onConfirm={confirmDialog.onConfirm}
+                            onCancel={confirmDialog.onCancel}
+                        />
+                    ) : null}
+                </ListPage>
             </Screen>
         );
     }
@@ -1318,32 +1443,39 @@ export function AddressList({
 
     if (activeChainIds.length === 0 && multisigs.length === 0) {
         return wrap(
-            <EmptyStateNudge
-                title="No addresses yet"
-                body="Generate a receive address to populate this list."
-                actionLabel={onReceive ? 'Receive' : undefined}
-                onAction={onReceive}
-                icon={onReceive ? <Icon.ReceiveIcon /> : undefined}
-            />,
+            <ListPage>
+                <EmptyState
+                    title="No addresses yet"
+                    body="Generate a receive address to populate this list."
+                    actionLabel={onReceive ? 'Receive' : undefined}
+                    onAction={onReceive}
+                    actionIcon={onReceive ? <Icon.ReceiveIcon /> : undefined}
+                />
+            </ListPage>,
         );
     }
 
     return wrap(
-        <>
-            <div className={local.toolbar}>
-                <input
-                    type="text"
-                    className={local.search}
-                    placeholder="Search"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    aria-label="Search addresses"
-                />
+        <ListPage toolbar={(
+            <>
+                <div className={local.searchField}>
+                    <Input
+                        type="search"
+                        enterKeyHint="search"
+                        autoCapitalize="off"
+                        role="textbox"
+                        placeholder="Search"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        autoComplete="off"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        aria-label="Search addresses"
+                    />
+                </div>
                 <NetworkFilterDropdown value={network} onChange={setNetwork} />
-            </div>
+            </>
+        )}>
             <div className={local.segmented} role="tablist" aria-label="Filter by address type">
                 {[
                     { id: 'all', label: 'All' },
@@ -1351,6 +1483,7 @@ export function AddressList({
                     { id: 'imported', label: 'Imported' },
                     { id: 'misc', label: 'Misc' },
                 ].map((opt) => (
+                    /* Segmented tabs stay native because the kit has no segmented control. */
                     <button
                         key={opt.id}
                         type="button"
@@ -1371,78 +1504,115 @@ export function AddressList({
 
 
             {pickerMode && pickerActions.length > 0 ? (
+                /* The kit has no list container, so native list semantics group picker actions. */
                 <ul className={`${local.addrList} ${local.pickerActionsList}`} aria-label="Picker options">
                     {pickerActions.map((act) => (
                         <li key={act.key}>
-                            <button type="button" className={local.addrRow} onClick={act.onSelect}>
-                                <div className={local.addrTopRow}>
-                                    <span className={local.addrLabel}>{act.label}</span>
-                                </div>
-                                {act.sublabel ? (
-                                    <div className={local.addrLine2}>
-                                        <span className={local.addrFiat}>{act.sublabel}</span>
-                                    </div>
-                                ) : null}
-                            </button>
+                            <ListRow
+                                type="button"
+                                title={act.label}
+                                subtitle={act.sublabel}
+                                onClick={act.onSelect}
+                                aria-busy="false"
+                            />
                         </li>
                     ))}
                 </ul>
             ) : null}
-            {rows.length === 0 ? (
-                <div className={local.emptyCard}>
-                    No addresses match the current filter.
-                </div>
+            {listedRows.length === 0 ? (
+                <EmptyState
+                    title={hiddenRows.length > 0 ? "All matching addresses are hidden" : "No matching addresses"}
+                    body={hiddenRows.length > 0
+                        ? "Show hidden addresses to see them again."
+                        : "Try a different search or network filter."}
+                />
             ) : (
-            <ul className={local.addrList} aria-label="Wallet addresses">
-                {rows.map((row) => {
+            <>
+            {/* The kit has no list container, so native list semantics expose the address rows. */}
+            <ul className={local.addrList} aria-label="Addresses">
+                {renderedAddressRows.map((row) => {
                     const d = chainRegistry.get(row.chainId);
-                    const iconUrl = d ? branding.chainIconSmallUrl(d.id) : null;
                     return (
                         <li key={row.key}>
-                            <button
+                            <ListRow
                                 type="button"
-                                className={local.addrRow}
                                 onClick={() => {
                                     if (pickerMode && onPick && row.record) { onPick(row.record); return; }
                                     setSelected(row);
                                     setLabelDraft(row.label || '');
                                 }}
                                 aria-label={`View address ${row.address}`}
-                            >
-                                {(row.label || isActiveRow(row)) ? (
-                                    <div className={local.addrTopRow}>
-                                        <span className={local.addrLabel}>{row.label || ''}</span>
-                                        {isActiveRow(row) ? (
-                                            <span className={local.addrActive}>Active</span>
+                                aria-busy="false"
+                                title={(
+                                    <span className={local.addrRowMain}>
+                                        {(row.label || isActiveRow(row) || row.record?.hidden) ? (
+                                            <span className={local.addrTopRow}>
+                                                <span className={local.addrLabel}>{row.label || ''}</span>
+                                                <span className={local.addrBadges}>
+                                                    {isActiveRow(row) ? (
+                                                        <span className={local.addrActive}>Active</span>
+                                                    ) : null}
+                                                    {row.record?.hidden ? (
+                                                        <span className={local.addrHidden}>Hidden</span>
+                                                    ) : null}
+                                                </span>
+                                            </span>
                                         ) : null}
-                                    </div>
-                                ) : null}
-                                <div className={local.addrLine1}>
-                                    {iconUrl ? (
-                                        <img src={iconUrl} alt="" className={local.chainIcon} width={16} height={16} />
-                                    ) : null}
-                                    <AddressText address={row.address} truncate={false} />
-                                    {row.multisig ? (
-                                        <MultisigBadge
-                                            threshold={row.multisig.threshold}
-                                            cosignerCount={row.multisig.cosignerCount}
-                                            scheme={row.multisig.scheme}
-                                            size="sm"
-                                        />
-                                    ) : null}
-                                </div>
-                                <div className={local.addrLine2}>
-                                    <span className={local.addrAmount}>{amountTextFor(row)}</span>
-                                    {fiatTextFor(row) ? (
-                                        <span className={local.addrFiat}>{balancesHidden ? '•••' : fiatTextFor(row)}</span>
-                                    ) : null}
-                                </div>
-                            </button>
+                                        <span className={local.addrLine1}>
+                                            {d ? <ChainBadge descriptor={d} size="sm" showName={false} /> : null}
+                                            <AddressText address={row.address} />
+                                            {row.multisig ? (
+                                                <MultisigBadge
+                                                    threshold={row.multisig.threshold}
+                                                    cosignerCount={row.multisig.cosignerCount}
+                                                    scheme={row.multisig.scheme}
+                                                    size="sm"
+                                                />
+                                            ) : null}
+                                        </span>
+                                    </span>
+                                )}
+                                subtitle={(
+                                    <span className={local.addrLine2}>
+                                        <span className={local.addrAmount}>{amountTextFor(row)}</span>
+                                        {fiatTextFor(row) ? (
+                                            <span className={local.addrFiat}>{balancesHidden ? '•••' : fiatTextFor(row)}</span>
+                                        ) : null}
+                                    </span>
+                                )}
+                            />
                         </li>
                     );
                 })}
             </ul>
+            {visibleAddressCount < listedRows.length ? (
+                <div className={styles.pagination} aria-live="polite">
+                    <span className={styles.paginationCount}>
+                        {t('addressList.pagination', {
+                            shown: Math.min(visibleAddressCount, listedRows.length),
+                            total: listedRows.length,
+                        })}
+                    </span>
+                    <Button type="button" variant="secondary" icon={null} onClick={showMoreAddresses}>
+                        Show more addresses
+                    </Button>
+                </div>
+            ) : null}
+            </>
             )}
-        </>,
+            {!pickerMode && hiddenRows.length > 0 ? (
+                <Button
+                    type="button"
+                    variant="ghost"
+                    className={local.hiddenToggle}
+                    onClick={() => setShowHidden((value) => !value)}
+                    aria-expanded={showHidden}
+                >
+                    {showHidden
+                        ? t('addressList.hidden.hide', { count: hiddenRows.length })
+                        : t('addressList.hidden.show', { count: hiddenRows.length })}
+                </Button>
+            ) : null}
+        </ListPage>,
     );
 }

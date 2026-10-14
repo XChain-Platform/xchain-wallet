@@ -14,7 +14,13 @@
     margin: calc(var(--xc-space-2) - var(--xc-space-4)) 0 var(--xc-space-3);
 }
 
-.quickAction {
+.quickActions > button,
+.quickActionMoreWrap > button {
+    padding: var(--xc-space-3) var(--xc-space-1);
+    flex-direction: column;
+}
+
+.quickActionLink {
     appearance: none;
     background: var(--xc-surface-raised);
     border: 1px solid var(--xc-accent-primary);
@@ -32,18 +38,13 @@
     font-weight: 600;
 }
 
-.quickAction:hover:not(:disabled) {
+.quickActionLink:hover {
     background: var(--xc-bg-muted);
 }
 
-.quickAction:focus-visible {
+.quickActionLink:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: 2px;
-}
-
-.quickAction:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
 }
 
 .quickActionIcon {
@@ -51,7 +52,7 @@
     height: 32px;
     border-radius: 50%;
     background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -72,7 +73,7 @@
     align-self: stretch;
 }
 
-.quickActionMoreWrap > .quickAction {
+.quickActionMoreWrap > button {
     flex: 1 1 auto;
     width: 100%;
 }
@@ -92,29 +93,8 @@
     flex-direction: column;
 }
 
-.quickActionMoreItem {
-    appearance: none;
-    background: transparent;
-    border: none;
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: var(--xc-radius-sm);
-    color: var(--xc-text);
-    font-family: inherit;
-    font-size: var(--xc-text-sm);
-    text-align: start;
-    cursor: pointer;
-}
-
-.quickActionMoreItem:hover:not(:disabled) {
-    background: var(--xc-bg-muted);
-}
-
-.quickActionMoreItem:disabled {
-    color: var(--xc-text-muted);
-    cursor: default;
+.quickActionMoreMenu > button {
+    justify-content: flex-start;
 }
 
 /* Tab strip: single "Dispenses" tab today, shaped like the home tabs so
@@ -158,32 +138,29 @@
     overflow: hidden;
 }
 
-.dispenseRow {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--xc-space-2);
-    padding: var(--xc-space-3);
+.dispenseList li + li {
     border-top: 1px solid var(--xc-border);
-    font-size: var(--xc-text-sm);
-}
-
-.dispenseList li:first-child .dispenseRow {
-    border-top: none;
 }
 
 .dispenseAmount {
     font-weight: 600;
-    white-space: nowrap;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .dispensePaid {
     flex: 1 1 auto;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
     color: var(--xc-text-muted);
+}
+
+.dispenseAmount,
+.dispensePaid,
+.remainingPill,
+.buyerAddressSelect {
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .dispenseWhen {
@@ -216,7 +193,7 @@
     padding: 1px 7px;
     border-radius: 999px;
     background: color-mix(in srgb, var(--xc-danger) 14%, transparent);
-    color: var(--xc-danger);
+    color: var(--xc-danger-fg);
     font-size: var(--xc-text-xs);
     font-weight: 600;
     white-space: nowrap;
@@ -224,13 +201,6 @@
 
 .dispenseInvalidReason {
     font-size: var(--xc-text-xs);
-}
-
-.dispenseEmpty {
-    padding: var(--xc-space-5) var(--xc-space-3);
-    text-align: center;
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-sm);
 }
 
 /* Remaining-fills bubble beside the dispense count: how many more times the
@@ -245,7 +215,9 @@
     border-radius: 999px;
     font-size: var(--xc-text-xs);
     font-weight: 600;
-    white-space: nowrap;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
 }
 
 .remainingOk {
@@ -255,7 +227,7 @@
 
 .remainingEmpty {
     background: color-mix(in srgb, var(--xc-danger) 14%, transparent);
-    color: var(--xc-danger);
+    color: var(--xc-danger-fg);
 }
 
 /* Close-window banner: shown while a dispenser sits in its 1-hour
@@ -286,4 +258,45 @@
 .buyFillsRow > button {
     margin-block-start: 1.6rem;
     flex: 0 0 auto;
+}
+
+.buySection {
+    min-width: 0;
+    margin-top: var(--xc-space-4);
+    overflow-wrap: anywhere;
+}
+
+.buySection code,
+.buySection button {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.buyerAddressSelect {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+@media not all and (min-width: 400px) {
+    .dispenseWhen {
+        white-space: normal;
+    }
+
+    .buyFillsRow {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .buyFillsRow > button {
+        width: 100%;
+        margin-block-start: 0;
+    }
+
+    .remainingPill {
+        margin-inline-start: 0;
+        white-space: normal;
+    }
 }

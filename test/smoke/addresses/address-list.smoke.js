@@ -50,7 +50,7 @@ assert.ok(/<MultisigBadge[\s\S]*?threshold=\{(?:row\.)?multisig\.threshold\}/.te
 // tokenQuery), so the route honours those instead of owning chip state.
 assert.ok(/networkFilter/.test(route),
     'AddressList honours the networkFilter prop (replaces the removed chip bar)');
-assert.ok(/aria-label="Wallet addresses"/.test(route),
+assert.ok(/aria-label="Addresses"/.test(route),
     'AddressList row container is labeled');
 assert.ok(/Multisig receive/.test(route),
     'AddressList synthesizes a "Multisig receive" row when the address is not in the persisted table');
@@ -60,8 +60,7 @@ assert.ok(/Multisig receive/.test(route),
 const home = readFileSync(join(sharedRoutes, 'Home.jsx'), 'utf8');
 assert.ok(/\bonAddresses\b/.test(home),
     'Home accepts an onAddresses nav prop');
-assert.ok(/onClick=\{onAddresses\}[\s\S]*?disabled=\{!onAddresses\}/.test(home)
-    || /disabled=\{!onAddresses\}[\s\S]*?onClick=\{onAddresses\}/.test(home),
+assert.ok(/onClick=\{onAddresses\}[\s\S]*?disabled=\{!onAddresses\}/.test(home),
     'Home renders an Addresses button wired to onAddresses');
 assert.ok(/Addresses/.test(home),
     'Home surfaces the "Addresses" button label');

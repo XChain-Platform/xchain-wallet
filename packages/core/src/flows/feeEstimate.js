@@ -65,25 +65,30 @@ export function resolveFeeUnit(descriptor) {
 }
 
 /**
- * Per-chain fee tier table. Each tier has a per-byte rate (sat/vB on
- * BTC/LTC, koinu/byte on DOGE). `txSize` is the assumed virtual size in
- * vbytes (BTC/LTC) or raw bytes (DOGE uses per-kB of raw size for
+ * Per-chain fee tier table. Each tier and `minimumRate` use a per-byte rate
+ * and `maximumRate` matches the encoder's per-chain estimate sanity ceiling.
+ * (sat/vB on BTC/LTC, koinu/byte on DOGE). `txSize` is the assumed virtual
+ * size in vbytes (BTC/LTC) or raw bytes (DOGE uses per-kB of raw size for
  * minrelayfee). The DISPLAY unit is not here: it comes from the chain
  * descriptor's feeStrategy.unit via resolveFeeUnit.
  */
 const PLACEHOLDER_FEE_TIERS = /** @type {const} */ ({
     bitcoin: {
         txSize: 250,
+        minimumRate: 1,
+        maximumRate: 1_000,
         tiers: {
-            low: { rate: 1, label: 'Low', etaMinutes: 60 },
+            low: { rate: 1, label: 'Slow', etaMinutes: 60 },
             normal: { rate: 6, label: 'Normal', etaMinutes: 30 },
             fast: { rate: 12, label: 'Fast', etaMinutes: 10 },
         },
     },
     litecoin: {
         txSize: 250,
+        minimumRate: 1,
+        maximumRate: 1_000,
         tiers: {
-            low: { rate: 1, label: 'Low', etaMinutes: 5 },
+            low: { rate: 1, label: 'Slow', etaMinutes: 5 },
             normal: { rate: 1, label: 'Normal', etaMinutes: 3 },
             fast: { rate: 2, label: 'Fast', etaMinutes: 2 },
         },
@@ -92,10 +97,10 @@ const PLACEHOLDER_FEE_TIERS = /** @type {const} */ ({
         // DOGE minrelayfee 1 DOGE/kB → 100_000_000 koinu/kB ≈
         // 100_000 koinu/B. Tier rates are koinu per byte.
         txSize: 250,
+        minimumRate: 100_000,
+        maximumRate: 1_000_000,
         tiers: {
-            // Below mainnet's minrelayfee. Many nodes will reject;
-            // included only because some Doge nodes still relax it.
-            low: { rate: 10_000, label: 'Low', etaMinutes: 5 },
+            low: { rate: 100_000, label: 'Slow', etaMinutes: 5 },
             normal: { rate: 100_000, label: 'Normal', etaMinutes: 1 },
             fast: { rate: 200_000, label: 'Fast', etaMinutes: 1 },
         },
@@ -103,6 +108,7 @@ const PLACEHOLDER_FEE_TIERS = /** @type {const} */ ({
 });
 
 const DEFAULT_SPEED = 'normal';
+const DEFAULT_FETCH_TIMEOUT_MS = 4_000;
 
 /**
  * @typedef {'low' | 'normal' | 'fast'} FeeSpeed
@@ -133,20 +139,13 @@ const DEFAULT_SPEED = 'normal';
  */
 export function estimateNativeSendFee({ chainId, chainRegistry, speed = DEFAULT_SPEED } = {}) {
     if (typeof chainId !== 'string' || !chainRegistry) return null;
-    const desc = chainRegistry.get(chainId);
+    const desc = getDescriptor(chainRegistry, chainId);
     const coin = desc?.coin;
     if (!coin) return null;
     const table = PLACEHOLDER_FEE_TIERS[coin];
-    if (!table) {
-        return {
-            sats: 0,
-            coinAmount: '0',
-            source: 'static-placeholder',
-            confidence: 'low',
-            speed,
-        };
-    }
-    const tier = table.tiers[speed] ?? table.tiers[DEFAULT_SPEED];
+    if (!table) return null;
+    const resolvedSpeed = Object.hasOwn(table.tiers, speed) ? speed : DEFAULT_SPEED;
+    const tier = table.tiers[resolvedSpeed];
     const unit = resolveFeeUnit(desc);
     const sats = computeSats(table, tier.rate);
     return {
@@ -161,7 +160,7 @@ export function estimateNativeSendFee({ chainId, chainRegistry, speed = DEFAULT_
         // mode echoes this value back through the input verbatim.
         rateValue: perByteRateToDisplay(unit, tier.rate),
         vsize: table.txSize,
-        speed,
+        speed: resolvedSpeed,
         etaMinutes: tier.etaMinutes,
     };
 }
@@ -175,20 +174,23 @@ export function estimateNativeSendFee({ chainId, chainRegistry, speed = DEFAULT_
  * @param {object} opts
  * @param {string} opts.chainId
  * @param {{ get: (id: string) => any }} opts.chainRegistry
- * @returns {{ low: FeeEstimate, normal: FeeEstimate, fast: FeeEstimate, unit: string } | null}
+ * @returns {{ low: FeeEstimate, normal: FeeEstimate, fast: FeeEstimate, unit: string, minimumRate: number, maximumRate: number } | null}
  */
 export function estimateNativeSendFeeTiers({ chainId, chainRegistry } = {}) {
     if (typeof chainId !== 'string' || !chainRegistry) return null;
-    const desc = chainRegistry.get(chainId);
+    const desc = getDescriptor(chainRegistry, chainId);
     const coin = desc?.coin;
     if (!coin) return null;
     const table = PLACEHOLDER_FEE_TIERS[coin];
     if (!table) return null;
+    const unit = resolveFeeUnit(desc);
     return {
         low: estimateNativeSendFee({ chainId, chainRegistry, speed: 'low' }),
         normal: estimateNativeSendFee({ chainId, chainRegistry, speed: 'normal' }),
         fast: estimateNativeSendFee({ chainId, chainRegistry, speed: 'fast' }),
-        unit: resolveFeeUnit(desc),
+        unit,
+        minimumRate: perByteRateToDisplay(unit, table.minimumRate),
+        maximumRate: perByteRateToDisplay(unit, table.maximumRate),
     };
 }
 
@@ -208,16 +210,20 @@ export function customFeeEstimate({ chainId, chainRegistry, rate } = {}) {
     if (typeof chainId !== 'string' || !chainRegistry) return null;
     const scaledRate = decimalToBaseUnits(rate, 8);
     if (scaledRate === null) return null;
-    const desc = chainRegistry.get(chainId);
+    const numericRate = Number(rate);
+    if (!Number.isFinite(numericRate)) return null;
+    const desc = getDescriptor(chainRegistry, chainId);
     const coin = desc?.coin;
     if (!coin) return null;
     const table = PLACEHOLDER_FEE_TIERS[coin];
     if (!table) return null;
     const unit = resolveFeeUnit(desc);
-    const ratePerByte = displayRateToPerByte(unit, Number(rate));
+    const ratePerByte = displayRateToPerByte(unit, numericRate);
     const divisor = isPerKbUnit(unit) ? 1000n : 100000000n;
     const numerator = scaledRate * BigInt(table.txSize);
-    const sats = Number((numerator + divisor - 1n) / divisor);
+    const exactFee = (numerator + divisor - 1n) / divisor;
+    if (exactFee > BigInt(Number.MAX_SAFE_INTEGER)) return null;
+    const sats = Number(exactFee);
     return {
         sats,
         coinAmount: satsToCoinDecimal(sats),
@@ -327,48 +333,80 @@ export function displayRateToPerByte(unit, displayValue) {
  * values as the sync `estimateNativeSendFee`.
  *
  * SDK contract (when it lands):
- *   `messaging.estimateFee({ chainId })` → `{ low, normal, fast, unit, sourceLabel? }`
+ *   `messaging.estimateFee({ chainId })` → `{ low, normal, fast, unit, minimumRate?, sourceLabel? }`
  *   where each tier is `{ rate, etaMinutes? }` in the chain's
- *   per-byte unit (sat/vB / koinu/byte). The flow shapes this into
- *   the same `FeeEstimate` callers already consume.
+ *   per-byte unit (sat/vB / koinu/byte), and `minimumRate` uses that same
+ *   unit. The flow shapes this into the same `FeeEstimate` callers consume.
  *
  * @param {object} opts
- * @param {{ estimateFee?: (req: { chainId: string }) => Promise<{ low?: { rate: number, etaMinutes?: number }, normal?: { rate: number, etaMinutes?: number }, fast?: { rate: number, etaMinutes?: number }, unit?: string } | null> }} [opts.messaging]
+ * @param {{ estimateFee?: (req: { chainId: string }) => Promise<{ low?: { rate: number, etaMinutes?: number }, normal?: { rate: number, etaMinutes?: number }, fast?: { rate: number, etaMinutes?: number }, unit?: string, minimumRate?: number } | null> }} [opts.messaging]
  * @param {string} opts.chainId
  * @param {{ get: (id: string) => any }} opts.chainRegistry
- * @returns {Promise<{ low: FeeEstimate, normal: FeeEstimate, fast: FeeEstimate, unit: string } | null>}
+ * @param {number} [opts.timeoutMs]
+ * @returns {Promise<{ low: FeeEstimate, normal: FeeEstimate, fast: FeeEstimate, unit: string, minimumRate: number } | null>}
  */
-export async function fetchNativeSendFeeTiers({ messaging, chainId, chainRegistry } = {}) {
+export async function fetchNativeSendFeeTiers({
+    messaging,
+    chainId,
+    chainRegistry,
+    timeoutMs = DEFAULT_FETCH_TIMEOUT_MS,
+} = {}) {
     if (typeof chainId !== 'string' || !chainRegistry) return null;
-    const desc = chainRegistry.get(chainId);
+    const desc = getDescriptor(chainRegistry, chainId);
     const coin = desc?.coin;
     if (!coin) return null;
     const table = PLACEHOLDER_FEE_TIERS[coin];
     if (!table) return null;
 
     if (messaging && typeof messaging.estimateFee === 'function') {
+        let timeoutId;
         try {
-            const sdk = await messaging.estimateFee({ chainId });
+            // A shell or explorer request can remain pending while it retries a
+            // throttled endpoint. Bound the upgrade so callers always settle on
+            // the local table and never wait indefinitely for live rates.
+            const sdk = await Promise.race([
+                Promise.resolve().then(() => messaging.estimateFee({ chainId })),
+                new Promise((resolve) => {
+                    const delay = Number.isFinite(timeoutMs) && timeoutMs >= 0
+                        ? timeoutMs
+                        : DEFAULT_FETCH_TIMEOUT_MS;
+                    timeoutId = setTimeout(() => resolve(null), delay);
+                }),
+            ]);
             if (sdk && typeof sdk === 'object') {
-                const unit = typeof sdk.unit === 'string' ? sdk.unit : resolveFeeUnit(desc);
+                const unit = resolveFeeUnit(desc);
+                // The descriptor owns the chain's fee unit. A different unit
+                // identifies a stale or cross-chain response, so none of its
+                // rates can safely be applied to this request.
+                if (sdk.unit !== undefined && sdk.unit !== unit) {
+                    return estimateNativeSendFeeTiers({ chainId, chainRegistry });
+                }
+                const minimumRate = usableRate(table, sdk.minimumRate)
+                    ? sdk.minimumRate
+                    : table.minimumRate;
                 return {
-                    low: shapeSdkTier({ table, sdk: sdk.low, unit, fallback: table.tiers.low, speed: 'low' }),
-                    normal: shapeSdkTier({ table, sdk: sdk.normal, unit, fallback: table.tiers.normal, speed: 'normal' }),
-                    fast: shapeSdkTier({ table, sdk: sdk.fast, unit, fallback: table.tiers.fast, speed: 'fast' }),
+                    low: shapeSdkTier({ table, sdk: sdk.low, unit, fallback: table.tiers.low, speed: 'low', minimumRate }),
+                    normal: shapeSdkTier({ table, sdk: sdk.normal, unit, fallback: table.tiers.normal, speed: 'normal', minimumRate }),
+                    fast: shapeSdkTier({ table, sdk: sdk.fast, unit, fallback: table.tiers.fast, speed: 'fast', minimumRate }),
                     unit,
+                    minimumRate: perByteRateToDisplay(unit, minimumRate),
                 };
             }
         } catch {
-            // SDK refused or errored; silently fall through to the placeholder.
+            // A rejected estimator uses the same safe local fallback as a timeout.
+        } finally {
+            if (timeoutId !== undefined) clearTimeout(timeoutId);
         }
     }
 
     return estimateNativeSendFeeTiers({ chainId, chainRegistry });
 }
 
-function shapeSdkTier({ table, sdk, unit, fallback, speed }) {
-    const live = sdk && typeof sdk === 'object' && Number.isFinite(sdk.rate);
-    const ratePerByte = live ? sdk.rate : fallback.rate;
+function shapeSdkTier({ table, sdk, unit, fallback, speed, minimumRate }) {
+    const live = sdk && typeof sdk === 'object'
+        && usableRate(table, sdk.rate)
+        && sdk.rate >= minimumRate;
+    const ratePerByte = live ? sdk.rate : Math.max(fallback.rate, minimumRate);
     const sats = computeSats(table, ratePerByte);
     return {
         sats,
@@ -382,6 +420,21 @@ function shapeSdkTier({ table, sdk, unit, fallback, speed }) {
         speed,
         etaMinutes: live && Number.isFinite(sdk.etaMinutes) ? sdk.etaMinutes : fallback.etaMinutes,
     };
+}
+
+function usableRate(table, rate) {
+    return Number.isFinite(rate)
+        && rate >= table.minimumRate
+        && rate <= table.maximumRate
+        && Number.isSafeInteger(Math.ceil(rate * table.txSize));
+}
+
+function getDescriptor(chainRegistry, chainId) {
+    try {
+        return chainRegistry.get(chainId);
+    } catch {
+        return null;
+    }
 }
 
 function computeSats(table, ratePerByte) {

@@ -37,7 +37,21 @@ assert.match(
 assert.match(src, /Notification\.permission/, 'reads live Notification.permission');
 assert.match(src, /Notification\.requestPermission\(\)/, 'requests notification permission');
 assert.match(src, /Request permission/, 'renders a Request permission control');
-assert.match(src, /<PermissionRow \/>/, 'mounts the permission row above the toggles');
+assert.match(
+    src,
+    /<PermissionRow permission=\{permission\} setPermission=\{setPermission\} \/>/,
+    'mounts the permission row above the toggles with shared live state',
+);
+assert.match(
+    src,
+    /permissionBlocksDelivery \|\| pendingKey !== null/,
+    'disables category toggles when notification permission blocks delivery',
+);
+assert.match(
+    src,
+    /checked=\{!permissionBlocksDelivery/,
+    'renders category toggles off when notification permission blocks delivery',
+);
 
 // Every notification flag the schema defines is wired in the section.
 const schemaFlagsBlock = schemaSrc.match(/notifications:\s*\{[\s\S]*?\}\s*,/);

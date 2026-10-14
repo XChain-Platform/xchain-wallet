@@ -31,7 +31,11 @@ vi.mock('../../../packages/core/src/flows/sendToken.js', () => ({
 }));
 
 import { submitAction } from '../../../packages/core/src/flows/submitAction.js';
-import { oraclePriceAction } from '../../../packages/core/src/flows/oraclePriceAction.js';
+import {
+    oraclePriceAction,
+    oraclePriceFeeError,
+    oraclePriceValueError,
+} from '../../../packages/core/src/flows/oraclePriceAction.js';
 import {
     myOracleFeeds,
     oracleConsumers,
@@ -113,6 +117,37 @@ describe('oraclePriceAction', () => {
         await oraclePriceAction(opts({ COIN: 'BTC', TICK: 'pepecash', FIAT: 'usd', VALUE: '0.05' }));
         const call = vi.mocked(submitAction).mock.calls[0][0];
         expect(call.pendingTxMeta.actionSummary).toBe('Publish oracle price PEPECASH = 0.05 USD');
+    });
+
+    it.each(['1e-8', '-1', '0', '0.123456789', '10000000000'])('refuses invalid VALUE %s before submit', async (value) => {
+        await expect(oraclePriceAction(opts({
+            COIN: 'BTC', TICK: 'PEPECASH', FIAT: 'USD', VALUE: value,
+        }))).rejects.toThrow(/params\.VALUE/);
+        expect(submitAction).not.toHaveBeenCalled();
+    });
+
+    it('forwards the widest valid price without numeric coercion', async () => {
+        const value = '9999999999.12345678';
+        await oraclePriceAction(opts({ COIN: 'BTC', TICK: 'PEPECASH', FIAT: 'USD', VALUE: value }));
+
+        const call = vi.mocked(submitAction).mock.calls[0][0];
+        expect(call.actionData.params.VALUE).toBe(value);
+        expect(call.pendingTxMeta.actionSummary).toContain(value);
+    });
+});
+
+describe('oracle PRICE decimal validation', () => {
+    it('validates value type, range, and 8-place precision as strings', () => {
+        expect(oraclePriceValueError('0.00000001')).toBeNull();
+        expect(oraclePriceValueError('9999999999.99999999')).toBeNull();
+        expect(oraclePriceValueError(0.5)).toMatch(/positive price/);
+        expect(oraclePriceValueError('10000000000.00000000')).toMatch(/below 10,000,000,000/);
+    });
+
+    it('compares the 18-place fee boundary without floating-point rounding', () => {
+        expect(oraclePriceFeeError('1.000000000000000000')).toBeNull();
+        expect(oraclePriceFeeError('1.000000000000000001')).toMatch(/between 0 and 1/);
+        expect(oraclePriceFeeError(0.1)).toMatch(/between 0 and 1/);
     });
 });
 

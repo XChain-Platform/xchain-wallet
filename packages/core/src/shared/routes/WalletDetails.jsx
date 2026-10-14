@@ -9,10 +9,12 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { Button, Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { isDemoWallet, getDemoWalletExpiry } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { exitDemoWallet } from '../utils/demoGraduation.js';
+import { DemoExitConfirm } from '../components/DemoExitConfirm.jsx';
+import { t } from '../../i18n/index.js';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
@@ -32,7 +34,7 @@ export { isVaultEmpty } from '../utils/demoGraduation.js';
  * @param {object} props
  * @param {string} props.walletId
  * @param {() => void} props.onBack
- * @param {() => void} [props.onRename]              navigates to RenameWalletForm scoped to this wallet
+ * @param {(wallet: any) => void} [props.onRename]   navigates to RenameWalletForm scoped to this wallet
  * @param {() => void} [props.onMigrateToBip39]      shown only when format === 'counterwallet-legacy'; navigates to the §40.13 migration wizard scoped to this wallet
  * @param {() => void} [props.onExited]              fires after a successful demo wipe so the host can refresh App state
  */
@@ -40,14 +42,26 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
 
-    const [wallet, setWallet] = useState(/** @type {any | null} */ (null));
-    const [accountCount, setAccountCount] = useState(/** @type {number | null} */ (null));
-    const [error, setError] = useState(/** @type {string | null} */ (null));
+    const [walletLoad, setWalletLoad] = useState(
+        /** @type {{ walletId: string | null, wallet: any | null, error: string | null }} */ (
+            { walletId: null, wallet: null, error: null }
+        ),
+    );
+    const [accountLoad, setAccountLoad] = useState(
+        /** @type {{ walletId: string | null, count: number | null }} */ (
+            { walletId: null, count: null }
+        ),
+    );
     const [exitBusy, setExitBusy] = useState(false);
     const [exitError, setExitError] = useState(/** @type {string | null} */ (null));
+    const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
 
     const isDemo = isDemoWallet(walletId);
     const demoExpiry = isDemo ? getDemoWalletExpiry() : null;
+    const currentWalletLoad = walletLoad.walletId === walletId ? walletLoad : null;
+    const wallet = currentWalletLoad?.wallet || null;
+    const error = currentWalletLoad?.error || null;
+    const accountCount = accountLoad.walletId === walletId ? accountLoad.count : null;
 
     async function handleExitDemo() {
         if (exitBusy) return;
@@ -66,6 +80,7 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
             // Welcome instead, and only when nothing else is left.
             const { reloaded } = await exitDemoWallet({ messaging, walletId });
             if (reloaded) return;
+            setExitConfirmOpen(false);
             if (typeof onExited === 'function') onExited();
         } catch (err) {
             setExitError(err?.message || 'Could not exit demo mode.');
@@ -77,47 +92,68 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
     useEffect(() => {
         let cancelled = false;
         if (typeof messaging.listWallets !== 'function') {
-            setError('messaging.listWallets is not available in this shell.');
+            setWalletLoad({
+                walletId,
+                wallet: null,
+                error: 'messaging.listWallets is not available in this shell.',
+            });
             return undefined;
         }
-        messaging.listWallets()
+        Promise.resolve()
+            .then(() => messaging.listWallets())
             .then((list) => {
                 if (cancelled) return;
                 const found = Array.isArray(list) ? list.find((w) => w.id === walletId) : null;
-                if (!found) setError('Wallet not found.');
-                else setWallet(found);
+                setWalletLoad({
+                    walletId,
+                    wallet: found || null,
+                    error: found ? null : 'Wallet not found.',
+                });
             })
-            .catch((err) => { if (!cancelled) setError(err?.message || 'Failed to load wallet.'); });
+            .catch((err) => {
+                if (!cancelled) {
+                    setWalletLoad({
+                        walletId,
+                        wallet: null,
+                        error: err?.message || 'Failed to load wallet.',
+                    });
+                }
+            });
         return () => { cancelled = true; };
     }, [walletId, messaging]);
 
     useEffect(() => {
         let cancelled = false;
         if (typeof messaging.listAccounts !== 'function') return undefined;
-        messaging.listAccounts(walletId)
+        Promise.resolve()
+            .then(() => messaging.listAccounts(walletId))
             .then((list) => {
                 if (cancelled) return;
-                setAccountCount(Array.isArray(list) ? list.length : 0);
+                setAccountLoad({ walletId, count: Array.isArray(list) ? list.length : 0 });
             })
-            .catch(() => { if (!cancelled) setAccountCount(0); });
+            .catch(() => { if (!cancelled) setAccountLoad({ walletId, count: 0 }); });
         return () => { cancelled = true; };
     }, [walletId, messaging]);
 
     const header = (
-        <PageHeader onBack={onBack} title="Wallet details" />
+        <PageHeader onBack={onBack} backDisabled={exitBusy} title={t('walletDetails.title')} />
     );
 
     if (error) {
         return (
             <Screen variant={variant} header={header}>
-                <StatusMessage variant="error" className={styles.entryDescription}>{error}</StatusMessage>
+                <ListPage>
+                    <StatusMessage variant="error" className={styles.entryDescription}>{error}</StatusMessage>
+                </ListPage>
             </Screen>
         );
     }
     if (!wallet) {
         return (
             <Screen variant={variant} header={header}>
-                <div className={styles.entryDescription}>Loading…</div>
+                <ListPage>
+                    <div className={styles.entryDescription}>{t('common.loading')}</div>
+                </ListPage>
             </Screen>
         );
     }
@@ -137,85 +173,95 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
 
     return (
         <Screen variant={variant} header={header}>
-            <dl className={pickerStyles.detailList}>
-                <Row label="Name" value={wallet.name || 'Unnamed wallet'} />
-                <Row label="Type" value={formatLabel} />
-                <Row label="Origin" value={originLabel} />
-                <Row
-                    label="25th-word passphrase"
-                    value={!wallet.passphraseEnabled
-                        ? 'Disabled'
-                        : wallet.passphraseStored
-                            ? 'Stored'
-                            : 'Needs its passphrase once. Lock the wallet; the unlock screen will ask for it.'}
-                />
-                <Row label="Accounts" value={accountCount === null ? '…' : String(accountCount)} />
-                <Row label="Created" value={createdLabel} />
-                {isDemo ? (
+            <ListPage>
+                <dl className={pickerStyles.detailList}>
+                    <Row label={t('walletDetails.name')} value={wallet.name || 'Unnamed wallet'} />
+                    <Row label={t('walletDetails.type')} value={formatLabel} />
+                    <Row label={t('walletDetails.origin')} value={originLabel} />
                     <Row
-                        label="Status"
-                        value={
-                            <span>
-                                Demo wallet (throwaway)
-                                {formatDemoExpiry(demoExpiry) ? ` · ${formatDemoExpiry(demoExpiry)}` : ''}
-                            </span>
-                        }
+                        label={t('walletDetails.passphrase')}
+                        value={!wallet.passphraseEnabled
+                            ? 'Disabled'
+                            : wallet.passphraseStored
+                                ? 'Stored'
+                                : 'Needs its passphrase once. Lock the wallet; the unlock screen will ask for it.'}
                     />
-                ) : null}
-                <Row label="ID" value={<code className={pickerStyles.code}>{wallet.id}</code>} />
-            </dl>
-            {wallet.format === 'counterwallet-legacy' && onMigrateToBip39 ? (
-                <div style={{ marginTop: 'var(--xc-space-3)' }}>
-                    <Button
-                        type="button"
-                        variant="primary"
-                        block
-                        onClick={onMigrateToBip39}
-                        icon={<Icon.MigrateIcon />}
-                    >
-                        Upgrade recovery phrase
-                    </Button>
-                </div>
-            ) : null}
-            {onRename ? (
-                <div style={{ marginTop: 'var(--xc-space-2)' }}>
-                    <Button
-                        type="button"
-                        variant="primary"
-                        block
-                        onClick={onRename}
-                        icon={<Icon.PencilIcon />}
-                    >
-                        Rename wallet
-                    </Button>
-                </div>
-            ) : null}
-            {isDemo ? (
-                <div style={{ marginTop: 'var(--xc-space-3)' }}>
-                    <Button
-                        type="button"
-                        variant="danger"
-                        block
-                        onClick={handleExitDemo}
-                        loading={exitBusy}
-                        disabled={exitBusy}
-                    >
-                        Exit demo &amp; wipe
-                    </Button>
-                    {exitError ? (
-                        <p
-                            role="alert"
-                            style={{
-                                marginTop: 'var(--xc-space-2)',
-                                fontSize: 'var(--xc-text-xs)',
-                                color: 'var(--xc-danger)',
-                            }}
-                        >
-                            {exitError}
-                        </p>
+                    <Row label={t('accountPicker.title')} value={accountCount === null ? '…' : String(accountCount)} />
+                    <Row label={t('walletDetails.created')} value={createdLabel} />
+                    {isDemo ? (
+                        <Row
+                            label={t('history.filters.statusHeader')}
+                            value={
+                                <span>
+                                    {t('walletDetails.demoWallet')}
+                                    {formatDemoExpiry(demoExpiry) ? ` · ${formatDemoExpiry(demoExpiry)}` : ''}
+                                </span>
+                            }
+                        />
                     ) : null}
-                </div>
-            ) : null}
+                    <Row label={t('walletDetails.id')} value={<code className={pickerStyles.code}>{wallet.id}</code>} />
+                </dl>
+                {wallet.format === 'counterwallet-legacy' && onMigrateToBip39 ? (
+                    <div style={{ marginTop: 'var(--xc-space-3)' }}>
+                        <Button
+                            type="button"
+                            variant="primary"
+                            block
+                            onClick={onMigrateToBip39}
+                            disabled={exitBusy}
+                            icon={<Icon.MigrateIcon />}
+                        >
+                            {t('walletDetails.upgradeRecovery')}
+                        </Button>
+                    </div>
+                ) : null}
+                {onRename ? (
+                    <div style={{ marginTop: 'var(--xc-space-2)' }}>
+                        <Button
+                            type="button"
+                            variant="primary"
+                            block
+                            onClick={() => onRename(wallet)}
+                            disabled={exitBusy}
+                            icon={<Icon.PencilIcon />}
+                        >
+                            {t('renameWallet.title')}
+                        </Button>
+                    </div>
+                ) : null}
+                {isDemo ? (
+                    <div style={{ marginTop: 'var(--xc-space-3)' }}>
+                        <Button
+                            type="button"
+                            variant="danger"
+                            block
+                            onClick={() => { setExitError(null); setExitConfirmOpen(true); }}
+                        >
+                            {t('walletDetails.exitDemo')}
+                        </Button>
+                        {exitError && !exitConfirmOpen ? (
+                            <p
+                                role="alert"
+                                style={{
+                                    marginTop: 'var(--xc-space-2)',
+                                    fontSize: 'var(--xc-text-xs)',
+                                    color: 'var(--xc-danger-fg)',
+                                }}
+                            >
+                                {exitError}
+                            </p>
+                        ) : null}
+                        {exitConfirmOpen ? (
+                            <DemoExitConfirm
+                                busy={exitBusy}
+                                error={exitError}
+                                onConfirm={handleExitDemo}
+                                onCancel={() => { setExitConfirmOpen(false); setExitError(null); }}
+                            />
+                        ) : null}
+                    </div>
+                ) : null}
+            </ListPage>
         </Screen>
     );
 }

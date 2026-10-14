@@ -36,8 +36,12 @@
 // The endpoint is on the §5 wire-audit list, which the Play Data safety
 // answers are derived from. It is a static file: no query string, no
 // identifiers, no headers we control beyond the request itself.
+// Production feed: https://downloads.xchain.io/wallet/android/latest.json
 
-const FEED_URL = 'https://downloads.xchain.io/wallet/android/latest.json';
+import { ANDROID_UPDATE_FEED_URL } from '../../../core/src/branding/branding.js';
+import { callNativeVault, getNativeVault, isNativeShell } from '../storage/nativeVault.js';
+
+const FEED_URL = ANDROID_UPDATE_FEED_URL;
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const PREF_KEY = 'xchain-wallet:update-check';
 const MAX_FEED_BYTES = 4096;
@@ -138,7 +142,6 @@ export async function checkForDirectUpdate(opts) {
     } = opts || {};
 
     if (typeof currentVersion !== 'string' || !SEMVER_RE.test(currentVersion)) return null;
-    if (typeof fetchImpl !== 'function') return null;
 
     const prefs = readPrefs(storage);
     if (prefs.enabled === false) return null;
@@ -151,14 +154,7 @@ export async function checkForDirectUpdate(opts) {
 
     let version;
     try {
-        const response = await fetchImpl(FEED_URL, {
-            method: 'GET',
-            cache: 'no-store',
-            redirect: 'error',      // a redirect off our origin is not our feed
-            credentials: 'omit',    // nothing about this request identifies anyone
-        });
-        if (!response?.ok) return null;
-        const text = await response.text();
+        const text = await requestFeed(fetchImpl);
         if (typeof text !== 'string' || text.length > MAX_FEED_BYTES) return null;
         version = parseUpdateFeed(JSON.parse(text));
     } catch (_err) {
@@ -189,6 +185,26 @@ export const UPDATE_CHECK_INTERVAL_MS = CHECK_INTERVAL_MS;
 // offline; the rehearsal has to be able to, so it needs the cap rather than
 // a second copy of the number.
 export const UPDATE_FEED_MAX_BYTES = MAX_FEED_BYTES;
+
+async function requestFeed(fetchImpl) {
+    if (isNativeShell()) {
+        const nativePlugin = getNativeVault();
+        // The Android bridge exposes only this fixed endpoint, preserving the
+        // CSP boundary while avoiding the WebView's cross-origin restriction.
+        if (!nativePlugin || typeof nativePlugin.fetchDirectUpdateFeed !== 'function') return null;
+        const reply = await callNativeVault('fetchDirectUpdateFeed');
+        return reply?.status === 'OK' ? reply.body : null;
+    }
+    if (typeof fetchImpl !== 'function') return null;
+    const response = await fetchImpl(FEED_URL, {
+        method: 'GET',
+        cache: 'no-store',
+        redirect: 'error',      // a redirect off our origin is not our feed
+        credentials: 'omit',    // nothing about this request identifies anyone
+    });
+    if (!response?.ok) return null;
+    return response.text();
+}
 
 function safeStorage() {
     try {

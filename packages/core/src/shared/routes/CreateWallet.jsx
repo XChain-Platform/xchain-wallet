@@ -10,16 +10,30 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
-import { Button, Icon, InfoTip, Input, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { RECOVERY_PHRASE_WARNING } from '../utils/securityMomentCopy.js';
+import { Button, Checkbox, FormErrorSummary, FormPage, Icon, InfoTip, Input, PageHeader, RadioGroup, Screen, StatusMessage, Switch } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { crypto as cryptoLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { MnemonicGrid } from '../components/MnemonicGrid.jsx';
+import { AdsNotice } from '../components/AdsNotice.jsx';
 import { pickQuizPositions } from '../utils/pickQuizPositions.js';
+import { nextPaint } from '../utils/nextPaint.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { writeActiveWallet } from '../utils/activeWalletMemory.js';
+import { useBackHandler } from '../../ui/backStack.js';
 import styles from './CreateWallet.module.css';
-import pickerStyles from './WalletPicker.module.css';
 
 const MIN_PASSWORD_LENGTH = 8;
+
+function numberedWalletName(wallets) {
+    const names = new Set(
+        wallets.map((wallet) => String(wallet?.name || '').trim().toLowerCase()),
+    );
+    let number = Math.max(2, wallets.length + 1);
+    while (names.has(`wallet ${number}`)) number += 1;
+    return `Wallet ${number}`;
+}
 
 /**
  * Multi-stage create-wallet flow (§15.3 + §19.2).
@@ -38,10 +52,10 @@ const MIN_PASSWORD_LENGTH = 8;
  *
  * @param {object} props
  * @param {() => void} props.onBack
- * @param {() => void} props.onCreated
+ * @param {(wallet?: { id: string, name: string }) => void} props.onCreated
  * @param {'fresh' | 'add'} [props.mode]   'fresh' = first wallet (pre-host `wallet.import`); 'add' = adds to an open vault (`wallet.add.import`). Defaults to 'fresh'.
  */
-export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
+export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh' }) {
     // S4: The recovery phrase is displayed here. A screenshot of it, or the
     // recents snapshot Android persists, is a copy of the wallet.
     // No-op on every shell that installs no screen guard (web, extension,
@@ -53,7 +67,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     const isFull = variant === 'full';
 
     const [stage, setStage] = useState(
-        /** @type {'password'|'mnemonic'|'verify'|'persisting'|'ads-consent'} */ ('password'),
+        /** @type {'password'|'mnemonic'|'verify'|'persisting'|'ads-notice'} */ ('password'),
     );
     // §19.2 / G033: verification quiz state. `quizPositions` is a sorted
     // list of 1-based word indices the user must type back; `quizAnswers`
@@ -62,9 +76,9 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     const [quizPositions, setQuizPositions] = useState(/** @type {number[]} */ ([]));
     const [quizAnswers, setQuizAnswers] = useState(/** @type {Record<number, string>} */ ({}));
     const [quizError, setQuizError] = useState(/** @type {string | null} */ (null));
-    const [adsBusy, setAdsBusy] = useState(false);
-    const [adsError, setAdsError] = useState(/** @type {string | null} */ (null));
-    const [name, setName] = useState('Main Wallet');
+    const [quizErrorPosition, setQuizErrorPosition] = useState(/** @type {number | null} */ (null));
+    const [validationAttempt, setValidationAttempt] = useState(0);
+    const [name, setName] = useState(mode === 'add' ? 'Wallet 2' : 'Main Wallet');
     const [password, setPassword] = useState('');
     const [confirm, setConfirm] = useState('');
     // §15.1: 12-word default, 24-word opt-in. 12 words = 128-bit entropy, 24 = 256-bit.
@@ -81,20 +95,111 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
     const [persistError, setPersistError] = useState(
         /** @type {string | null} */ (null),
     );
+    const headingRef = useRef(/** @type {HTMLHeadingElement | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const firstQuizInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const stageFormRef = useRef(/** @type {HTMLFormElement | null} */ (null));
+    const keepKeyboardDismissedRef = useRef(false);
+    const phraseGeneratedRef = useRef(false);
+    const creationInFlightRef = useRef(false);
+    const createdWalletRef = useRef(/** @type {{ id: string, name: string } | null} */ (null));
+    const nameEditedRef = useRef(false);
+    const defaultNameRef = useRef(name);
+
+    useEffect(() => {
+        if (mode !== 'add' || typeof messaging.listWallets !== 'function') return undefined;
+        let cancelled = false;
+        Promise.resolve()
+            .then(() => messaging.listWallets())
+            .then((wallets) => {
+                if (cancelled) return;
+                const suggestedName = numberedWalletName(Array.isArray(wallets) ? wallets : []);
+                defaultNameRef.current = suggestedName;
+                if (!nameEditedRef.current) setName(suggestedName);
+            })
+            .catch(() => { /* Wallet 2 remains a safe fallback when the list is unavailable. */ });
+        return () => { cancelled = true; };
+    }, [messaging, mode]);
 
     // The clipboard auto-clear that used to live here is gone with the copy
     // button it existed for (, decided 2026-08-01): the phrase cannot
     // be copied, so there is nothing to clear.
 
     useEffect(() => {
-        if (stage === 'password') {
-            setTimeout(() => passwordRef.current?.focus(), 0);
-        }
+        const id = setTimeout(() => {
+            if (keepKeyboardDismissedRef.current) {
+                keepKeyboardDismissedRef.current = false;
+                const heading = stageFormRef.current?.querySelector('h1');
+                if (heading instanceof HTMLElement) {
+                    heading.tabIndex = -1;
+                    heading.focus();
+                }
+            } else if (stage === 'password') passwordRef.current?.focus();
+            else if (stage === 'verify') firstQuizInputRef.current?.focus();
+            else headingRef.current?.focus();
+        }, 0);
+        return () => clearTimeout(id);
     }, [stage]);
+
+    useBackHandler(handleNativeBack, stage === 'persisting' || stage === 'ads-notice');
+
+    function clearEntrySecrets() {
+        setPassword('');
+        setConfirm('');
+        setBip39Passphrase('');
+        setBip39PassphraseConfirm('');
+        setPasswordError(null);
+    }
+
+    function clearWalletSecrets() {
+        clearEntrySecrets();
+        setMnemonic(null);
+        setSaved(false);
+        setQuizPositions([]);
+        setQuizAnswers({});
+        setQuizError(null);
+        setQuizErrorPosition(null);
+        phraseGeneratedRef.current = false;
+    }
+
+    function onCreated() {
+        handleCreated(createdWalletRef.current || undefined);
+    }
+
+    function handleBack() {
+        if (stage === 'verify') {
+            setQuizAnswers({});
+            setQuizError(null);
+            setStage('mnemonic');
+            return;
+        }
+        if (stage === 'mnemonic') {
+            clearEntrySecrets();
+            setSaved(false);
+            setQuizPositions([]);
+            setQuizAnswers({});
+            setQuizError(null);
+            setQuizErrorPosition(null);
+            setPersistError(null);
+            setStage('password');
+            return;
+        }
+        clearEntrySecrets();
+        onBack();
+    }
+
+    function handleNativeBack() {
+        if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        // Returning from the phrase to the password form must not reopen the
+        // software keyboard that the edge gesture just dismissed.
+        keepKeyboardDismissedRef.current = stage === 'mnemonic';
+        handleBack();
+    }
 
     function handlePasswordSubmit(event) {
         event.preventDefault();
+        if (stage !== 'password' || (phraseGeneratedRef.current && !mnemonic)) return;
+        setValidationAttempt((attempt) => attempt + 1);
         if (password.length < MIN_PASSWORD_LENGTH) {
             setPasswordError(
                 `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`,
@@ -116,12 +221,24 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
             return;
         }
         setPasswordError(null);
-        setMnemonic(cryptoLib.generateBip39Mnemonic(wordCount === 24 ? 256 : 128));
+        const requestedWordCount = wordCount === 24 ? 24 : 12;
+        if (mnemonic?.trim().split(/\s+/).length === requestedWordCount) {
+            setStage('mnemonic');
+            return;
+        }
+        phraseGeneratedRef.current = true;
+        try {
+            setMnemonic(cryptoLib.generateBip39Mnemonic(requestedWordCount === 24 ? 256 : 128));
+        } catch (err) {
+            phraseGeneratedRef.current = false;
+            setPasswordError(userFacingMessage(err, 'Failed to generate a recovery phrase. Try again.'));
+            return;
+        }
         setStage('mnemonic');
     }
 
     function handleStartVerify() {
-        if (!mnemonic || !saved) return;
+        if (stage !== 'mnemonic' || !mnemonic || !saved) return;
         const totalWords = mnemonic.trim().split(/\s+/).length;
         const positions = pickQuizPositions(totalWords);
         setQuizPositions(positions);
@@ -134,41 +251,62 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
 
     function handleSubmitVerify(event) {
         event.preventDefault();
-        if (!mnemonic) return;
+        setValidationAttempt((attempt) => attempt + 1);
+        if (stage !== 'verify' || !mnemonic || !saved) return;
+        if (quizPositions.length === 0) {
+            setQuizErrorPosition(null);
+            setQuizError('Recovery phrase verification could not start. Go back and try again.');
+            return;
+        }
         const words = mnemonic.trim().split(/\s+/);
         for (const p of quizPositions) {
             const expected = (words[p - 1] || '').trim().toLowerCase();
             const got = (quizAnswers[p] || '').trim().toLowerCase();
             if (got.length === 0) {
+                setQuizErrorPosition(p);
                 setQuizError('Fill in every word.');
                 return;
             }
             if (got !== expected) {
-                setQuizError(`Word #${p} doesn't match. Double-check your written copy.`);
+                setQuizErrorPosition(p);
+                setQuizError(`Word ${p} does not match your written copy.`);
                 return;
             }
         }
+        setQuizErrorPosition(null);
         setQuizError(null);
-        handlePersist();
+        void handlePersist();
     }
 
     async function handlePersist() {
-        if (!mnemonic || !saved || stage === 'persisting') return;
+        if (stage !== 'verify' || !mnemonic || !saved || creationInFlightRef.current) return;
+        creationInFlightRef.current = true;
+        createdWalletRef.current = null;
         setStage('persisting');
         setPersistError(null);
         try {
+            // Paint "Creating your wallet" before key stretching holds the
+            // UI thread so the progress state reaches the screen.
+            await nextPaint();
             const passphraseArg = showPassphrase && bip39Passphrase.length > 0
                 ? bip39Passphrase
                 : '';
+            const walletName = name.trim() || defaultNameRef.current;
             let createdWalletId = null;
             if (mode === 'add') {
                 if (typeof messaging.addImportedWallet !== 'function') {
                     throw new Error('messaging.addImportedWallet is not available in this shell.');
                 }
-                const r = await messaging.addImportedWallet({ password, mnemonic, name, bip39Passphrase: passphraseArg, origin: 'created' });
+                const r = await messaging.addImportedWallet({ password, mnemonic, name: walletName, bip39Passphrase: passphraseArg, origin: 'created' });
                 createdWalletId = r?.wallet?.id || r?.walletId || null;
+                if (createdWalletId) {
+                    createdWalletRef.current = {
+                        id: createdWalletId,
+                        name: r?.wallet?.name || r?.walletName || walletName,
+                    };
+                }
             } else {
-                const r = await messaging.importMnemonic({ password, mnemonic, name, bip39Passphrase: passphraseArg, origin: 'created' });
+                const r = await messaging.importMnemonic({ password, mnemonic, name: walletName, bip39Passphrase: passphraseArg, origin: 'created' });
                 createdWalletId = r?.wallet?.id || r?.walletId || null;
             }
             // §19.7 / G034: record that the user just verified the seed
@@ -176,165 +314,105 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
             // not to nag them.
             if (createdWalletId) {
                 try { flowsLib.markBackupVerified(createdWalletId); } catch { /* best-effort */ }
+                writeActiveWallet(createdWalletId, name);
             }
-            // §36.1 ADS consent: one-time screen during wallet
-            // creation. ADS_DEFAULT_ENABLED is true so "Enable" is a
-            // no-op write; "Decline" persists ads.enabled = false. The
-            // user can flip in Settings -> ADS afterwards either way.
-            setStage('ads-consent');
+            // §36.1: end onboarding on the ADS notice (AdsNotice.jsx).
+            clearWalletSecrets();
+            setStage('ads-notice');
         } catch (err) {
-            setPersistError(err?.message || 'Failed to create wallet.');
-            setStage('mnemonic');
-        }
-    }
-
-    async function handleAdsChoice(enable) {
-        setAdsBusy(true);
-        setAdsError(null);
-        try {
-            if (typeof messaging?.updateSettings === 'function') {
-                await messaging.updateSettings({ ads: { enabled: Boolean(enable) } });
-            }
-            onCreated();
-        } catch (err) {
-            setAdsError(err?.message || 'Could not save your preference. Try again.');
+            setPersistError(userFacingMessage(err, 'Failed to create wallet. Try again.'));
+            setStage('verify');
         } finally {
-            setAdsBusy(false);
+            creationInFlightRef.current = false;
         }
     }
 
     const headClass = isFull ? styles.headFull : styles.headPopup;
-    const titleClass = isFull ? styles.titleFull : styles.titlePopup;
     const subtitleClass = isFull ? styles.subtitleFull : styles.subtitlePopup;
     const actionsClass = isFull ? styles.actionsFull : styles.actionsPopup;
 
+    const headerTitle = stage === 'password'
+        ? (isFull ? 'Create a new wallet' : 'Create wallet')
+        : stage === 'mnemonic'
+            ? (isFull ? 'Write down your recovery phrase' : 'Recovery phrase')
+            : stage === 'verify'
+                ? (isFull ? 'Verify your recovery phrase' : 'Verify phrase')
+                : stage === 'persisting'
+                    ? 'Creating your wallet'
+                    : 'Automatic Donation System';
     const screenHeader = (
-        <div className={pickerStyles.header}>
-            <button
-                type="button"
-                onClick={onBack}
-                className={pickerStyles.iconBtn}
-                aria-label="Back"
-                title="Back"
-                disabled={stage === 'persisting'}
-            >
-                <Icon.BackIcon />
-            </button>
-            <span />
-            <span />
-        </div>
+        <PageHeader
+            onBack={stage === 'verify' ? undefined : handleBack}
+            backLabel={stage === 'password' ? 'Back to wallet setup' : 'Back to previous step'}
+            backDisabled={stage === 'persisting' || stage === 'ads-notice'}
+            title={headerTitle}
+            titleRef={headingRef}
+        />
     );
 
-    if (stage === 'ads-consent') {
-        const consentBody = (
-            <>
-                <header className={headClass}>
-                    <h1 className={titleClass}>
-                        {isFull ? 'Support XChain development' : 'Support XChain'}
-                    </h1>
-                    <p className={subtitleClass}>
-                        The wallet can add a small donation to each transaction you send,
-                        helping fund XChain Platform development. This is entirely optional;
-                        you can change it any time in Settings &rarr; Automatic Donation System.
-                    </p>
-                </header>
-                <ul style={{
-                    margin: 0,
-                    padding: 'var(--xc-space-2) var(--xc-space-3)',
-                    background: 'var(--xc-surface-raised)',
-                    border: '1px solid var(--xc-border)',
-                    borderRadius: 'var(--xc-radius-md)',
-                    listStyle: 'none',
-                    fontSize: 'var(--xc-text-sm)',
-                    color: 'var(--xc-text-muted)',
-                }}>
-                    <li>Bitcoin: 1,000 sats per transaction (sent when accumulated &gt; 25,000 sats)</li>
-                    <li>Litecoin: 0.001 LTC per transaction (sent when accumulated &gt; 0.025 LTC)</li>
-                    <li>Dogecoin: 0.05 DOGE per transaction (sent when accumulated &gt; 1.25 DOGE)</li>
-                    <li>Amounts configurable per chain in Settings</li>
-                    <li>No donation line on sign screens; runs invisibly after setup</li>
-                </ul>
-                {adsError ? (
-                    <StatusMessage variant="error" className={styles.error}>{adsError}</StatusMessage>
-                ) : null}
-                <div className={actionsClass}>
-                    <Button
-                        variant="primary"
-                        onClick={() => handleAdsChoice(true)}
-                        disabled={adsBusy}
-                        loading={adsBusy}
-                        block={!isFull}
-                        size={isFull ? undefined : 'sm'}
-                        icon={<Icon.CheckIcon />}
-                    >
-                        Enable and continue
-                    </Button>
-                    <Button
-                        variant="secondary"
-                        onClick={() => handleAdsChoice(false)}
-                        disabled={adsBusy}
-                        block={!isFull}
-                        size={isFull ? undefined : 'sm'}
-                    >
-                        Decline (I'll consider it later)
-                    </Button>
-                </div>
-            </>
+    if (stage === 'ads-notice') {
+        const noticeBody = (
+            <AdsNotice
+                onContinue={onCreated}
+                isFull={isFull}
+                headClass={headClass}
+                subtitleClass={subtitleClass}
+                actionsClass={actionsClass}
+            />
         );
         return (
             <Screen variant={variant} header={screenHeader}>
-                {isFull ? <div className={styles.card}>{consentBody}</div> : consentBody}
+                <FormPage ref={stageFormRef} label="Automatic Donation System">
+                    {noticeBody}
+                </FormPage>
             </Screen>
         );
     }
 
-    if (stage === 'verify' || stage === 'persisting') {
+    if (stage === 'persisting') {
+        return (
+            <Screen variant={variant} header={screenHeader}>
+                <FormPage
+                    ref={stageFormRef}
+                    label="Wallet creation status"
+                    description="XChain Platform is encrypting your wallet with your password. This can take a minute on some devices. Keep the app open."
+                    progress={<span aria-current="step">Step 3 of 3</span>}
+                    aria-live="polite"
+                    actions={<Button loading icon={<Icon.CheckIcon />}>Create wallet</Button>}
+                />
+            </Screen>
+        );
+    }
+
+    if (stage === 'verify') {
         const verifyBody = (
-            <>
-                <header className={headClass}>
-                    <h1 className={titleClass}>
-                        {isFull ? 'Verify your recovery phrase' : 'Verify phrase'}
-                    </h1>
-                    <p className={subtitleClass}>
-                        {isFull
-                            ? "Type the words at the positions below. We'll check them against the phrase you just wrote down. There's no second chance to copy it after this step."
-                            : 'Type the words at these positions to confirm.'}
-                    </p>
-                </header>
-                <form onSubmit={handleSubmitVerify} noValidate>
-                    <ol className={styles.quizList}>
-                        {quizPositions.map((p) => (
-                            <li key={p} className={styles.quizRow}>
-                                <span className={styles.quizIndex}>#{p}</span>
-                                <Input
-                                    label={`Word ${p}`}
-                                    value={quizAnswers[p] || ''}
-                                    onChange={(e) => {
-                                        setQuizAnswers((prev) => ({ ...prev, [p]: e.target.value }));
-                                        if (quizError) setQuizError(null);
-                                    }}
-                                    autoComplete="off"
-                                    autoCapitalize="none"
-                                    autoCorrect="off"
-                                    spellCheck={false}
-                                    disabled={stage === 'persisting'}
-                                />
-                            </li>
-                        ))}
-                    </ol>
-                    {quizError ? (
-                        <StatusMessage variant="error" className={styles.error}>{quizError}</StatusMessage>
-                    ) : null}
-                    {persistError ? (
-                        <StatusMessage variant="error" className={styles.error}>{persistError}</StatusMessage>
-                    ) : null}
-                    <div className={actionsClass}>
+            <FormPage
+                ref={stageFormRef}
+                label="Verify recovery phrase"
+                onSubmit={handleSubmitVerify}
+                description={isFull
+                    ? 'Enter the requested words from the recovery phrase you wrote down.'
+                    : 'Enter the requested words to confirm your recovery phrase.'}
+                progress={<span aria-current="step">Step 3 of 3</span>}
+                status={<FormErrorSummary
+                    errors={[
+                        ...(quizError ? [{
+                            id: quizErrorPosition ? `create-quiz-word-${quizErrorPosition}` : undefined,
+                            label: quizErrorPosition ? `Word ${quizErrorPosition}` : undefined,
+                            message: quizError,
+                        }] : []),
+                        ...(persistError ? [{ message: persistError }] : []),
+                    ]}
+                    focusKey={validationAttempt}
+                />}
+                actions={(
+                    <>
+                        {/* Keep verification's step-back beside submit while the shared header leaves its leading lane empty. */}
                         <Button
                             variant="secondary"
                             type="button"
                             onClick={() => { setQuizError(null); setStage('mnemonic'); }}
                             disabled={stage === 'persisting'}
-                            size={isFull ? undefined : 'sm'}
                         >
                             Back
                         </Button>
@@ -342,38 +420,71 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                             type="submit"
                             variant="primary"
                             loading={stage === 'persisting'}
-                            block={!isFull}
-                            size={isFull ? undefined : 'sm'}
                             icon={<Icon.CheckIcon />}
                         >
                             Create wallet
                         </Button>
-                    </div>
-                </form>
-            </>
+                    </>
+                )}
+            >
+                {/* The ordered quiz stays native because the kit has no semantic form-list primitive. */}
+                <ol className={styles.quizList}>
+                    {/* Native list items preserve the quiz order within the form. */}
+                    {quizPositions.map((p) => (
+                        <li key={p} className={styles.quizRow}>
+                            <Input
+                                id={`create-quiz-word-${p}`}
+                                ref={p === quizPositions[0] ? firstQuizInputRef : undefined}
+                                label={`Word ${p}`}
+                                value={quizAnswers[p] || ''}
+                                onChange={(e) => {
+                                    setQuizAnswers((prev) => ({ ...prev, [p]: e.target.value }));
+                                    if (quizError) {
+                                        setQuizError(null);
+                                        setQuizErrorPosition(null);
+                                    }
+                                }}
+                                autoComplete="off"
+                                autoCapitalize="off"
+                                autoCorrect="off"
+                                spellCheck={false}
+                                disabled={stage === 'persisting'}
+                            />
+                        </li>
+                    ))}
+                </ol>
+            </FormPage>
         );
         return (
             <Screen variant={variant} header={screenHeader}>
-                {isFull ? <div className={styles.card}>{verifyBody}</div> : verifyBody}
+                {verifyBody}
             </Screen>
         );
     }
 
     if (stage === 'mnemonic') {
         const mnemonicBody = (
-            <>
-                <header className={headClass}>
-                    <h1 className={titleClass}>
-                        {isFull
-                            ? 'Write down your recovery phrase'
-                            : 'Recovery phrase'}
-                    </h1>
-                    <p className={subtitleClass}>
-                        {isFull
-                            ? `These ${wordCount === 24 ? 'twenty-four' : 'twelve'} words are the ONLY way to recover your wallet if you lose access to this device. Write them down on paper and store them somewhere safe. Never type them into a website, email, or photo.`
-                            : `Write these ${wordCount} words down and store them somewhere safe. They're the only way to recover your wallet.`}
-                    </p>
-                </header>
+            <FormPage
+                ref={stageFormRef}
+                label="Recovery phrase"
+                description={isFull
+                    ? `These ${wordCount === 24 ? 'twenty-four' : 'twelve'} words are your recovery phrase. Write them on paper and store them in a safe place. ${RECOVERY_PHRASE_WARNING} You can use it to restore your wallet on a new device.`
+                    : `Write these ${wordCount} words on paper and store your recovery phrase safely. ${RECOVERY_PHRASE_WARNING}`}
+                progress={<span aria-current="step">Step 2 of 3</span>}
+                status={persistError ? (
+                    <StatusMessage variant="error" className={styles.error}>{persistError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <Button
+                        variant="primary"
+                        onClick={handleStartVerify}
+                        disabled={!saved}
+                        icon={<Icon.CheckIcon />}
+                    >
+                        Verify recovery phrase
+                    </Button>
+                )}
+            >
                 <MnemonicGrid mnemonic={mnemonic || ''} variant={variant} />
                 {/* SSC-4 /, decided 2026-08-01: the recovery phrase
                     is NOT copyable, on any shell. A clipboard is readable by
@@ -384,78 +495,89 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     which is what the wallet has always told users to do, and
                     what MnemonicGrid already said this UI did. */}
                 <p className={styles.copyHint}>
-                    Write these words on paper. They cannot be copied: a
-                    clipboard is readable by other apps and, on a phone, is
-                    often synced to your other devices.
+                    Copying is disabled to keep your recovery phrase out of
+                    shared clipboards.
                 </p>
-                <label className={styles.confirmRow}>
-                    <input
-                        type="checkbox"
-                        checked={saved}
-                        onChange={(e) => setSaved(e.target.checked)}
-                        disabled={stage === 'persisting'}
-                    />
-                    <span>
-                        {isFull
-                            ? 'I have written down my recovery phrase and stored it safely.'
-                            : "I've saved my recovery phrase."}
-                    </span>
-                </label>
-                {persistError ? (
-                    <StatusMessage variant="error" className={styles.error}>{persistError}</StatusMessage>
-                ) : null}
-                <div className={actionsClass}>
-                    <Button
-                        variant="primary"
-                        onClick={handleStartVerify}
-                        disabled={!saved}
-                        block={!isFull}
-                        size={isFull ? undefined : 'sm'}
-                        icon={<Icon.CheckIcon />}
-                    >
-                        Verify recovery phrase
-                    </Button>
-                </div>
-            </>
+                <Checkbox
+                    className={styles.confirmRow}
+                    label="I have saved my recovery phrase safely."
+                    checked={saved}
+                    onChange={(e) => setSaved(e.target.checked)}
+                    disabled={stage === 'persisting'}
+                />
+            </FormPage>
         );
         return (
             <Screen variant={variant} header={screenHeader}>
-                {isFull ? <div className={styles.card}>{mnemonicBody}</div> : mnemonicBody}
+                {mnemonicBody}
             </Screen>
         );
     }
 
+    const passwordStepDisabledReason = password.length === 0
+        ? 'Enter a password to continue.'
+        : confirm.length === 0
+            ? 'Confirm your password to continue.'
+            : null;
+    let passwordErrorTarget;
+    if (/at least/i.test(passwordError || '')) passwordErrorTarget = { id: 'create-password', label: 'Password' };
+    else if (passwordError === 'Passwords do not match.') passwordErrorTarget = { id: 'create-confirm', label: 'Confirm password' };
+    else if (/^Enter the BIP39/i.test(passwordError || '')) passwordErrorTarget = { id: 'create-bip39-passphrase', label: 'BIP39 passphrase' };
+    else if (/BIP39 passphrases do not match/i.test(passwordError || '')) passwordErrorTarget = { id: 'create-bip39-confirm', label: 'Confirm passphrase' };
+    const passwordErrors = passwordError
+        ? [{ ...passwordErrorTarget, message: passwordError }]
+        : [];
     const formBody = (
-        <form onSubmit={handlePasswordSubmit} noValidate>
-            <header className={headClass}>
-                {isFull ? (
-                    <img
-                        src={branding.logoUrl()}
-                        alt=""
-                        aria-hidden="true"
-                        className={styles.logo}
-                    />
-                ) : null}
-                <h1 className={titleClass}>
-                    {isFull ? 'Create a new wallet' : 'Create wallet'}
-                </h1>
-                <p className={subtitleClass}>
-                    {isFull
-                        ? "Your password encrypts the wallet on this device. It can't be recovered. If you forget it, use the recovery phrase on the next screen to restore access."
-                        : 'Your password encrypts the wallet on this device.'}
-                </p>
-            </header>
+        <FormPage
+            ref={stageFormRef}
+            label="Create wallet"
+            onSubmit={handlePasswordSubmit}
+            description={isFull
+                ? 'Your password encrypts this wallet on this device. If you forget it, you can restore the wallet with the recovery phrase shown next.'
+                : 'Your password encrypts this wallet on this device.'}
+            visual={isFull ? (
+                <img
+                    src={branding.logoUrl()}
+                    alt=""
+                    aria-hidden="true"
+                    className={styles.logo}
+                />
+            ) : null}
+            progress={<span aria-current="step">Step 1 of 3</span>}
+            status={passwordError ? (
+                <FormErrorSummary errors={passwordErrors} focusKey={validationAttempt} />
+            ) : passwordStepDisabledReason ? (
+                <StatusMessage id="create-wallet-disabled-reason">
+                    {passwordStepDisabledReason}
+                </StatusMessage>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    disabled={Boolean(passwordStepDisabledReason)}
+                    aria-describedby={passwordStepDisabledReason ? 'create-wallet-disabled-reason' : undefined}
+                    icon={<Icon.MigrateIcon />}
+                >
+                    Next
+                </Button>
+            )}
+        >
             <Input
                 label="Wallet name"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => {
+                    nameEditedRef.current = true;
+                    setName(e.target.value);
+                }}
                 autoComplete="off"
             />
             <Input
+                id="create-password"
                 ref={passwordRef}
                 type="password"
                 label="Password"
-                hint={`At least ${MIN_PASSWORD_LENGTH} characters.`}
+                hint={`At least ${MIN_PASSWORD_LENGTH} characters. Use a unique password; longer is stronger.`}
                 value={password}
                 onChange={(e) => {
                     setPassword(e.target.value);
@@ -464,6 +586,7 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                 autoComplete="new-password"
             />
             <Input
+                id="create-confirm"
                 type="password"
                 label={isFull ? 'Confirm password' : 'Confirm'}
                 value={confirm}
@@ -472,37 +595,30 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                     if (passwordError) setPasswordError(null);
                 }}
                 autoComplete="new-password"
-                error={passwordError || undefined}
             />
-            <fieldset className={styles.wordCountRow}>
-                <legend className={styles.wordCountLegend}>Recovery phrase length</legend>
-                <label className={styles.wordCountOption}>
-                    <input
-                        type="radio"
-                        name="word-count"
-                        value="12"
-                        checked={wordCount === 12}
-                        onChange={() => setWordCount(12)}
-                    />
-                    <span className={styles.wordCountLabel}>12 words</span>
-                    <span className={styles.wordCountHint}>Default (128-bit entropy)</span>
-                </label>
-                <label className={styles.wordCountOption}>
-                    <input
-                        type="radio"
-                        name="word-count"
-                        value="24"
-                        checked={wordCount === 24}
-                        onChange={() => setWordCount(24)}
-                    />
-                    <span className={styles.wordCountLabel}>24 words</span>
-                    <span className={styles.wordCountHint}>256-bit entropy</span>
-                </label>
-            </fieldset>
+            <RadioGroup
+                className={styles.wordCountRow}
+                legend="Recovery phrase length"
+                name="word-count"
+                value={String(wordCount)}
+                onChange={(nextWordCount) => setWordCount(Number(nextWordCount))}
+                options={[
+                    {
+                        value: '12',
+                        label: '12 words',
+                        description: 'Recommended: secure and easier to back up',
+                    },
+                    {
+                        value: '24',
+                        label: '24 words',
+                        description: 'Extra entropy, twice as many words to store',
+                    },
+                ]}
+            />
             <div className={styles.advancedRow}>
-                <label className={styles.advancedToggle}>
-                    <input
-                        type="checkbox"
+                <div className={styles.advancedToggle}>
+                    <Switch
+                        label="Use a BIP39 passphrase (advanced)"
                         checked={showPassphrase}
                         onChange={(e) => {
                             setShowPassphrase(e.target.checked);
@@ -512,34 +628,34 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                             }
                         }}
                     />
-                    <span>Add a BIP39 passphrase (advanced)</span>
                     <InfoTip
                         aria="BIP39 passphrase help"
-                        label="An optional 25th word that mixes with your recovery phrase to derive a different wallet. Someone who learns your recovery phrase but not the passphrase cannot reach your funds. You enter it once here; the wallet stores it, protected by your password. You will need it again only to restore this wallet somewhere else. If you forget it, the wallet is unrecoverable; it cannot be reset. Hardware wallets handle passphrases on the device itself."
+                        label="This extra secret combines with your recovery phrase to create a different wallet and must match exactly when you restore. Hardware wallets handle it on the device."
                     />
-                </label>
+                </div>
                 {showPassphrase ? (
                     <>
                         <p className={styles.advancedWarning}>
-                            The passphrase becomes a permanent part of your wallet.
-                            It is stored on this device, protected by your wallet
-                            password, so you will not be asked for it again here. To
-                            restore this wallet anywhere else you will need BOTH your
-                            recovery phrase AND this passphrase. If you forget it,
-                            your wallet cannot be recovered or reset.
+                            Save this passphrase separately from your recovery phrase.
+                            You need both to restore this wallet. It cannot be reset or
+                            recovered, and a missing or mistyped passphrase opens a
+                            different wallet without warning. Capitalization and spaces
+                            matter.
                         </p>
                         <Input
+                            id="create-bip39-passphrase"
                             type="password"
                             label="BIP39 passphrase"
-                            hint="Optional. Leave blank to skip."
+                            hint="Required when enabled."
                             value={bip39Passphrase}
                             onChange={(e) => {
                                 setBip39Passphrase(e.target.value);
                                 if (passwordError) setPasswordError(null);
                             }}
-                            autoComplete="new-password"
+                            autoComplete="off"
                         />
                         <Input
+                            id="create-bip39-confirm"
                             type="password"
                             label="Confirm passphrase"
                             value={bip39PassphraseConfirm}
@@ -547,28 +663,17 @@ export function CreateWallet({ onBack, onCreated, mode = 'fresh' }) {
                                 setBip39PassphraseConfirm(e.target.value);
                                 if (passwordError) setPasswordError(null);
                             }}
-                            autoComplete="new-password"
+                            autoComplete="off"
                         />
                     </>
                 ) : null}
             </div>
-            <div className={actionsClass}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    disabled={password.length === 0 || confirm.length === 0}
-                    size={isFull ? undefined : 'sm'}
-                    icon={<Icon.MigrateIcon />}
-                >
-                    Next
-                </Button>
-            </div>
-        </form>
+        </FormPage>
     );
 
     return (
         <Screen variant={variant} header={screenHeader}>
-            {isFull ? <div className={styles.card}>{formBody}</div> : formBody}
+            {formBody}
         </Screen>
     );
 }

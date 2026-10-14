@@ -14,12 +14,16 @@
 // send. Rows here are shaped as the explorer's token lanes serve them.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MarketActivity } from '../../../packages/core/src/shared/routes/MarketActivity.jsx';
+import { formatLocalDateTime } from '../../../packages/core/src/shared/utils/dateTime.js';
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+});
 
 const ORACLE = 'bcrt1qoracleoracleoracleoracleoracleoracle';
 const offer = (idx, extra) => ({
@@ -36,7 +40,7 @@ const DISPENSES = [
     { action_index: '31', status: 'invalid: no matching oracle price', give_tick: 'XCHAIN', give_amount: '2', get_coin: 'BTC', get_tick: null, get_amount: '0.5', timestamp: 1785186699 },
 ];
 
-function renderMarket(extra = {}) {
+function renderMarket(extra = {}, props = {}) {
     // One chain answers; the rest of the fan-out is empty, so each row renders once.
     const once = (rows) => {
         let answered = false;
@@ -59,7 +63,7 @@ function renderMarket(extra = {}) {
     render(React.createElement(
         MessagingProvider,
         { shell: 'web', messaging },
-        React.createElement(MarketActivity, { walletId: 'w1', onBack() {} }),
+        React.createElement(MarketActivity, { walletId: 'w1', onBack() {}, ...props }),
     ));
     return messaging;
 }
@@ -70,6 +74,16 @@ describe('Marketplace on explorer-shaped rows', () => {
         expect(await screen.findByText('5 XCHAIN per 0.01 BTC')).toBeInTheDocument();
         expect(screen.getAllByText('100 XCHAIN remaining').length).toBe(2);
         expect(screen.queryByText(/7 XCHAIN per/)).toBeNull();
+        expect(screen.queryByRole('button', { name: /5 XCHAIN per 0.01 BTC/ })).toBeNull();
+        expect(screen.queryAllByRole('button').filter((button) => button.disabled)).toHaveLength(0);
+    });
+
+    it('makes an offer a button only when the route supplies a working action', async () => {
+        const onOpenDispenser = vi.fn();
+        renderMarket({}, { onOpenDispenser });
+        const button = await screen.findByRole('button', { name: /5 XCHAIN per 0.01 BTC/ });
+        fireEvent.click(button);
+        expect(onOpenDispenser).toHaveBeenCalledWith(expect.any(String), '20');
     });
 
     it('prices a Mode B offer from its oracle, never as zero coin', async () => {
@@ -97,6 +111,17 @@ describe('Marketplace on explorer-shaped rows', () => {
         renderMarket();
         expect(await screen.findByText('Sold 15 XCHAIN for 0.03 BTC')).toBeInTheDocument();
         expect(screen.queryByText(/Sold 2 XCHAIN/)).toBeNull();
+    });
+
+    it('shows recent activity through the shared relative-time display', async () => {
+        const timestamp = DISPENSES[0].timestamp;
+        vi.spyOn(Date, 'now').mockReturnValue(timestamp * 1000 + 5 * 60_000);
+        renderMarket();
+
+        const sale = await screen.findByText('Sold 15 XCHAIN for 0.03 BTC');
+        const time = within(sale.closest('li')).getByText('5 minutes ago');
+        expect(time.tagName).toBe('TIME');
+        expect(time).toHaveAttribute('title', formatLocalDateTime(timestamp));
     });
 
     it('shows open DEX orders using explorer amount and coin fields', async () => {

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, FormSection, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useGatedTickNotice, gatedTickWarningCopy } from '../hooks/useGatedTickNotice.js';
@@ -17,7 +17,8 @@ import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hook
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
-import { divideDecimalStrings, formatWithThousands } from '../utils/amountFormat.js';
+import { compareDecimalStrings, divideDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import { addressValidationError } from '../utils/addressValidation.js';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
@@ -27,13 +28,20 @@ import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
+import { useOnlineStatus } from '../hooks/useOnlineStatus.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { preferredSourceId } from '../addressSelection.js';
+import {
+    hasAnyAddress,
+    preferredSourceId,
+    signingAddressesByChain,
+    WATCH_ONLY_SIGNING_MESSAGE,
+} from '../addressSelection.js';
 import { pickDefaultChainId, recordLastUsedChain } from '../chainSelection.js';
+import { formatLocalDateTime } from '../utils/dateTime.js';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -42,6 +50,7 @@ import {
 } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { useNativeFee } from '../hooks/useNativeFee.js';
+import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -54,6 +63,39 @@ const PROTOCOL_COIN_TICKER = {
     litecoin: 'LTC',
     dogecoin: 'DOGE',
 };
+
+const isPlainPositive = (value) => /^\d+(\.\d+)?$/.test(String(value).trim())
+    && compareDecimalStrings(String(value).trim(), '0') === 1;
+
+const isPositiveActionIndex = (value) => /^[0-9]+$/.test(String(value).trim())
+    && /[1-9]/.test(String(value));
+
+function expirationValidationError(mode, input, nowSec = Math.floor(Date.now() / 1000)) {
+    if (mode !== 'custom') return null;
+    if (!input.trim()) return 'Pick an expiration date and time, or switch to the default window.';
+    const ms = Date.parse(input.trim());
+    if (!Number.isFinite(ms)) return 'Pick a valid expiration date and time.';
+    if (Math.floor(ms / 1000) <= nowSec) return 'Expiration must be in the future.';
+    return null;
+}
+
+function withFormattedExpiration(confirmAction) {
+    const decoded = confirmAction?.composed?.decoded;
+    if (!decoded || !Array.isArray(decoded.details)) return confirmAction;
+    const details = decoded.details.map((detail) => {
+        if (!/expir/i.test(String(detail?.label || ''))) return detail;
+        const unixSec = Number(detail.value);
+        if (!Number.isFinite(unixSec) || unixSec <= 0 || unixSec >= 10_000_000_000) return detail;
+        return { ...detail, value: formatLocalDateTime(unixSec) };
+    });
+    return {
+        ...confirmAction,
+        composed: {
+            ...confirmAction.composed,
+            decoded: { ...decoded, details },
+        },
+    };
+}
 
 /**
  * §41.5 SWAP authoring surface.
@@ -87,9 +129,9 @@ const PROTOCOL_COIN_TICKER = {
  */
 export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, initialGiveOwnership }) {
     const { messaging, shell } = useMessaging();
+    const networkAvailable = useOnlineStatus();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -136,6 +178,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const [hwStatus, setHwStatus] = useState('idle');
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const submitPendingRef = useRef(false);
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
     useEffect(() => {
@@ -153,16 +196,17 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         ])
             .then(([byChain, active, settings]) => {
                 if (cancelled) return;
-                setAddressesByChain(byChain);
+                const signingByChain = signingAddressesByChain(byChain, settings);
+                setAddressesByChain(signingByChain);
                 setActiveByChain(active || {});
-                if (!Object.keys(byChain)[0]) {
-                    setLoadError(
-                        'No addresses on any chain yet. Use Receive to generate one before creating a swap.',
-                    );
+                if (!Object.keys(signingByChain)[0]) {
+                    setLoadError(hasAnyAddress(byChain)
+                        ? WATCH_ONLY_SIGNING_MESSAGE
+                        : 'No addresses on any chain yet. Use Receive to generate one before creating a swap.');
                     return;
                 }
                 // Don't clobber a caller-seeded chain (ManageToken sell flow).
-                setChainId((c) => pickDefaultChainId(byChain, { explicitChainId: c, settings }));
+                setChainId((c) => pickDefaultChainId(signingByChain, { explicitChainId: c, settings }));
             })
             .catch((err) => {
                 if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
@@ -203,6 +247,16 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         address: fromAddress?.address,
         tick: giveTick,
     });
+    const giveTokenInfo = useTokenInfo({
+        chainId,
+        tick: giveTick,
+        skip: giveOwnership || !giveTick.trim(),
+    });
+    const getTokenInfo = useTokenInfo({
+        chainId,
+        tick: getTick,
+        skip: getOwnership || !getTick.trim(),
+    });
     const hw = isHwSource(fromAddress);
     const hwSignerInfo = useSignerInfo({
         walletId,
@@ -210,11 +264,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     });
 
     const expError = useMemo(() => {
-        if (expMode !== 'custom' || !expInput.trim()) return null;
-        const ms = Date.parse(expInput.trim());
-        if (!Number.isFinite(ms)) return 'Pick a valid expiration date and time.';
-        if (Math.floor(ms / 1000) <= Math.floor(Date.now() / 1000)) return 'Expiration must be in the future.';
-        return null;
+        return expirationValidationError(expMode, expInput);
     }, [expMode, expInput]);
 
     const validationError = useMemo(() => {
@@ -230,8 +280,52 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         if (giveTick.toUpperCase() === getTick.toUpperCase()) {
             return 'Give and get tickers must differ.';
         }
+        if (!giveOwnership && giveAmount && !isPlainPositive(giveAmount)) {
+            return 'Give amount must be a positive decimal number.';
+        }
+        if (!getOwnership && getAmount && !isPlainPositive(getAmount)) {
+            return 'Get amount must be a positive decimal number.';
+        }
+        if (!giveOwnership && giveAmount) {
+            const precisionError = tokenAmountPrecisionError(giveAmount, {
+                divisibility: giveTokenInfo?.divisibility,
+                tick: giveTick,
+                noun: 'Give amount',
+            });
+            if (precisionError) return precisionError;
+            if (giveBalance !== null && compareDecimalStrings(giveAmount, giveBalance) === 1) {
+                return `Give amount is above your available ${giveTick.trim().toUpperCase()} balance.`;
+            }
+        }
+        if (!getOwnership && getAmount) {
+            const precisionError = tokenAmountPrecisionError(getAmount, {
+                divisibility: getTokenInfo?.divisibility,
+                tick: getTick,
+                noun: 'Get amount',
+            });
+            if (precisionError) return precisionError;
+        }
+        if (getAddress.trim()) {
+            const addressError = addressValidationError(getAddress, descriptor);
+            if (addressError) return addressError;
+        }
+        if (allowListIdx && !isPositiveActionIndex(allowListIdx)) return 'Allow-list ID must be a positive whole number.';
+        if (blockListIdx && !isPositiveActionIndex(blockListIdx)) return 'Block-list ID must be a positive whole number.';
+        if (memo.includes('|') || memo.includes(';')) return 'Memo cannot contain "|" or ";".';
         return null;
-    }, [giveTick, getTick, coinTicker]);
+    }, [giveTick, getTick, coinTicker, giveOwnership, giveAmount, getOwnership, getAmount,
+        giveTokenInfo?.divisibility, getTokenInfo?.divisibility, giveBalance, getAddress,
+        descriptor, allowListIdx, blockListIdx, memo]);
+
+    const rate = !giveOwnership && !getOwnership
+        ? divideDecimalStrings(getAmount, giveAmount, 8)
+        : null;
+    const displayedRate = rate === '0' && isPlainPositive(getAmount) && isPlainPositive(giveAmount)
+        ? '< 0.00000001'
+        : rate;
+    const rateText = displayedRate
+        ? `1 ${giveTick.trim().toUpperCase()} = ${displayedRate} ${getTick.trim().toUpperCase()}`
+        : 'Enter both amounts to see the rate';
 
     // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
@@ -259,6 +353,10 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     const feePerKb = (feeEstimate && feeEstimate.unit
         && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
+        : null;
+    const feeError = feePick.mode === 'custom'
+        && (!Number.isFinite(feePick.customRate) || Number(feePick.customRate) <= 0 || !feeCustomEstimate)
+        ? 'Enter a valid custom network fee rate before reviewing.'
         : null;
 
     // Wire-format SWAP v0 params: the one definition the confirm compose and
@@ -311,6 +409,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
     // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
     async function openConfirmScreen() {
+        if (!networkAvailable) return;
         const from = {
             address: fromAddress.address,
             publicKey: fromAddress.publicKey,
@@ -353,6 +452,8 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 mandatory: nativeFeeMandatory,
                 fallback: err?.message || 'Swap failed.',
             }));
+        } finally {
+            submitPendingRef.current = false;
         }
     }
 
@@ -361,30 +462,42 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     // and are only reachable after the user confirms on the review screen.
     function handleReview(event) {
         event.preventDefault();
+        if (!networkAvailable) return;
         if (!fromAddress || !chainId) {
             setFormError('Pick a source address first.');
             return;
         }
-        if (validationError || expError) return;
         if (!giveTick || !getTick
             || (!giveOwnership && !giveAmount)
             || (!getOwnership && !getAmount)) {
-            setFormError('Fill the give/get tickers and amounts before reviewing.');
+            setFormError('Enter the give and get tickers and amounts before reviewing.');
             return;
         }
+        if (validationError || expError || feeError) return;
         setFormError(null);
-        if (singleEncode) { openConfirmScreen(); return; }
+        if (singleEncode) {
+            if (submitPendingRef.current) return;
+            submitPendingRef.current = true;
+            void openConfirmScreen();
+            return;
+        }
         setStage('review');
     }
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
+        if (!networkAvailable) return;
+        if (stage === 'submitting' || submitPendingRef.current) return;
         if (!fromAddress || !chainId) return;
-        if (validationError || expError) return;
+        const freshExpirationError = expirationValidationError(expMode, expInput);
+        if (validationError || freshExpirationError || feeError) {
+            if (freshExpirationError) setSubmitError(freshExpirationError);
+            return;
+        }
         if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && hw && hwStatus !== 'available') return;
 
+        submitPendingRef.current = true;
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -442,6 +555,8 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
             }
+        } finally {
+            submitPendingRef.current = false;
         }
     }
 
@@ -452,15 +567,24 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     }
     const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={stage === 'review'
+                ? () => { setStage('form'); setSubmitError(null); }
+                : onBack}
             title={stage === 'review' || stage === 'submitting'
                 ? 'Review swap'
                 : `Swap tokens`}
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+        <Screen
+            variant={variant}
+            header={header}
+            restoreScroll={!(stage === 'review' || stage === 'submitting')}
+        >
+            {!networkAvailable ? (
+                <StatusMessage variant="warning">Swapping needs a network connection.</StatusMessage>
+            ) : null}
+            {children}
         </Screen>
     );
 
@@ -518,43 +642,93 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     // --- Review / submitting screen -------------------------------------
     if (stage === 'review' || stage === 'submitting') {
         const giveSide = giveOwnership
-            ? `ownership of ${giveTick.trim().toUpperCase()}`
-            : `${giveAmount} ${giveTick.trim().toUpperCase()}`;
+            ? `ownership of ${swapParams.GIVE_TICK.toUpperCase()}`
+            : `${swapParams.GIVE_AMOUNT} ${swapParams.GIVE_TICK.toUpperCase()}`;
         const getSide = getOwnership
-            ? `ownership of ${getTick.trim().toUpperCase()}`
-            : `${getAmount} ${getTick.trim().toUpperCase()}`;
+            ? `ownership of ${swapParams.GET_TICK.toUpperCase()}`
+            : `${swapParams.GET_AMOUNT} ${swapParams.GET_TICK.toUpperCase()}`;
         const feeLabel = feeEstimate
             ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
             : 'Estimate unavailable';
 
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
+            <FormPage
+                label="Review swap"
+                onSubmit={handleSubmit}
+                status={(isWatcherMode || hw) && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <>
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            onClick={() => { setStage('form'); setSubmitError(null); }}
+                            disabled={stage === 'submitting'}
+                        >
+                            Edit
+                        </Button>
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            loading={stage === 'submitting'}
+                            disabled={
+                                isWatcherMode
+                                    ? false
+                                    : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)
+                            }
+                        >
+                            {isWatcherMode
+                                ? 'Create unsigned transaction'
+                                : hw
+                                    ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                    : 'Sign swap'}
+                        </Button>
+                    </>
+                )}
+            >
                 <p className={styles.summary}>
-                    Swap {giveSide} for {getSide}
-                    {descriptor ? ` on ${descriptor.displayName}` : ''}.
+                    Swap {giveSide} for {getSide}.
                 </p>
                 <dl className={styles.detailsList}>
-                    <DetailRow label="Chain" value={
-                        descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId
-                    } />
-                    <DetailRow label="From" value={<AddressText address={fromAddress.address} />} />
-                    <DetailRow label="Give" value={giveSide} />
-                    <DetailRow label="Get" value={getSide} />
-                    {!giveOwnership && !getOwnership ? (
-                        <DetailRow
-                            label="Price"
-                            value={
-                                divideDecimalStrings(getAmount, giveAmount, 8) !== null
-                                    ? `1 ${giveTick.trim().toUpperCase()} = ${
-                                        divideDecimalStrings(getAmount, giveAmount, 8)
-                                    } ${getTick.trim().toUpperCase()}`
-                                    : 'n/a'
-                            }
-                        />
+                    {descriptor ? (
+                        <DetailRow label="Give chain" value={<ChainBadge descriptor={descriptor} size="sm" />} />
                     ) : null}
-                    {memo.trim() ? <DetailRow label="Memo" value={memo.trim()} /> : null}
+                    <DetailRow label="From" value={<AddressText address={fromAddress.address} />} />
+                    <DetailRow label="Give amount" value={giveSide} />
+                    {descriptor ? (
+                        <DetailRow label="Get chain" value={<ChainBadge descriptor={descriptor} size="sm" />} />
+                    ) : null}
+                    <DetailRow label="Get amount" value={getSide} />
+                    {!giveOwnership && !getOwnership ? (
+                        <DetailRow label="Rate" value={rateText} />
+                    ) : null}
+                    <DetailRow
+                        label="Expiration"
+                        value={swapParams.EXPIRATION
+                            ? formatLocalDateTime(Number(swapParams.EXPIRATION))
+                            : 'Default window'}
+                    />
+                    <DetailRow
+                        label="Receive at"
+                        value={swapParams.GET_ADDRESS
+                            ? <AddressText address={swapParams.GET_ADDRESS} />
+                            : 'Source address (default)'}
+                    />
+                    <DetailRow label="Allow list" value={swapParams.ALLOW_LIST ? `#${swapParams.ALLOW_LIST}` : 'None'} />
+                    <DetailRow label="Block list" value={swapParams.BLOCK_LIST ? `#${swapParams.BLOCK_LIST}` : 'None'} />
+                    {swapParams.MEMO ? <DetailRow label="Memo" value={swapParams.MEMO} /> : null}
                     <DetailRow label="Network fee" value={feeLabel} />
+                    <DetailRow
+                        label="Protocol fee"
+                        value={`If charged, paid in ${payFeeInNativeCoin ? coinTicker : 'XCHAIN'}; the network fee is separate.`}
+                    />
                 </dl>
+                <p className={styles.hintLeft}>
+                    The give side is escrowed until this offer is matched. If you cancel it or
+                    it expires, the escrow returns to the source address. Paid transaction fees
+                    are not refunded.
+                </p>
                 {payFeeInNativeCoin ? (
                     <div role="alert" className={styles.warnings}>
                         <p className={styles.warning}>{NATIVE_FEE_WARNING}</p>
@@ -584,30 +758,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                         signerInfo={hwSignerInfo}
                     />
                 )}
-                {(isWatcherMode || hw) && submitError ? (
-                    <p role="alert" style={{ margin: '0.25rem 0 0', color: '#ef5350', fontSize: '0.75rem' }}>
-                        {submitError}
-                    </p>
-                ) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={
-                            isWatcherMode
-                                ? false
-                                : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)
-                        }
-                    >
-                        {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : hw
-                                ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : 'Sign swap'}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -619,7 +770,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     if (actionConfirm.open) {
         return (
             <ActionConfirmScreen
-                confirmAction={actionConfirm.confirmAction}
+                confirmAction={withFormattedExpiration(actionConfirm.confirmAction)}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
                 feeText={feeEstimate?.coinAmount
@@ -708,109 +859,166 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
     }
 
     return wrap(
-        <form onSubmit={handleReview} noValidate>
-            <ChainPicker
-                label="Chain"
-                value={chainId}
-                onChange={setChainId}
-                chainIds={chainIds}
-                chainRegistry={chainRegistry}
-            />
-
-            {fromAddress ? (
-                <AddressField
-                    label="From"
-                    icon="addresses"
-                    value={fromAddress.address}
-                    readOnly
-                    onChange={() => {}}
-                    onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel="Choose source address"
-                />
+        <FormPage
+            label="Swap tokens"
+            onSubmit={handleReview}
+            sectioned
+            inert={actionConfirm.composing ? '' : undefined}
+            aria-busy={actionConfirm.composing ? 'true' : undefined}
+            onChangeCapture={() => { if (formError) setFormError(null); }}
+            status={validationError || feeError || formError ? (
+                <>
+                    {validationError ? (
+                        <StatusMessage variant="error" className={styles.error}>
+                            {validationError}
+                        </StatusMessage>
+                    ) : null}
+                    {feeError ? (
+                        <StatusMessage variant="error" className={styles.error}>
+                            {feeError}
+                        </StatusMessage>
+                    ) : null}
+                    {formError ? (
+                        <StatusMessage variant="error" className={styles.error}>
+                            {formError}
+                        </StatusMessage>
+                    ) : null}
+                </>
             ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={actionConfirm.composing}
+                    disabled={actionConfirm.composing || !networkAvailable}
+                    title={!networkAvailable ? 'Swapping needs a network connection' : undefined}
+                >
+                    {actionConfirm.composing
+                        ? 'Preparing review…'
+                        : 'Review'}
+                </Button>
+            )}
+        >
+            <FormSection
+                title="Network"
+                description="Both swap legs settle on this chain."
+            >
+                <ChainPicker
+                    label="Give and get chain"
+                    value={chainId}
+                    onChange={setChainId}
+                    chainIds={chainIds}
+                    chainRegistry={chainRegistry}
+                    hideNetworkKind
+                />
 
-            <TokenField
-                label="Give token"
-                value={giveTick && chainId ? { chainId, tick: giveTick } : null}
-                onOpenPicker={() => setGivePickerOpen(true)}
-            />
-            {gatedGiveNotice.gated && !giveOwnership ? (
-                <div role="alert" className={styles.warnings}>
-                    <p className={styles.warning}>
-                        {gatedTickWarningCopy(giveTick, 'the swap counterparty')}
+                {fromAddress ? (
+                    <AddressField
+                        label="From"
+                        icon="addresses"
+                        value={fromAddress.address}
+                        readOnly
+                        onChange={() => {}}
+                        onIconClick={() => setSourcePickerOpen(true)}
+                        iconLabel="Choose source address"
+                    />
+                ) : null}
+            </FormSection>
+
+            <FormSection title="You give">
+                <TokenField
+                    label="Give token"
+                    value={giveTick && chainId ? { chainId, tick: giveTick } : null}
+                    onOpenPicker={() => setGivePickerOpen(true)}
+                />
+                {gatedGiveNotice.gated && !giveOwnership ? (
+                    <div role="alert" className={styles.warnings}>
+                        <p className={styles.warning}>
+                            {gatedTickWarningCopy(giveTick, 'the swap counterparty')}
+                        </p>
+                    </div>
+                ) : null}
+                {giveOwnership ? null : (
+                    <AmountField
+                        label="Give amount"
+                        amount={giveAmount}
+                        tick={giveTick}
+                        onAmountFieldChange={(rawValue) => {
+                            const stripped = String(rawValue).replace(/,/g, '');
+                            if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
+                            setGiveAmount(stripped);
+                        }}
+                        onMax={giveBalance && Number(giveBalance) > 0
+                            ? () => setGiveAmount(giveBalance)
+                            : undefined}
+                        maxDisabled={!giveBalance}
+                        balanceText={giveBalance != null && giveTick.trim()
+                            ? `${formatWithThousands(giveBalance)} ${giveTick.trim().toUpperCase()} available`
+                            : null}
+                    />
+                )}
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', margin: '0.25rem 0 0.5rem' }}>
+                    {/* Native checkboxes preserve toggle keyboard behavior because the kit has no checkbox primitive. */}
+                    <input
+                        type="checkbox"
+                        checked={giveOwnership}
+                        onChange={(e) => setGiveOwnership(e.target.checked)}
+                    />
+                    Give this token&apos;s ownership instead of an amount
+                </label>
+                {giveOwnership ? (
+                    <p className={styles.hint} style={{ margin: '0 0 0.5rem' }}>
+                        Transfers the entire ownership of {giveTick.trim() ? giveTick.trim().toUpperCase() : 'this token'} (single-fill, no partial matches).
                     </p>
-                </div>
-            ) : null}
-            {giveOwnership ? null : (
-                <AmountField
-                    label="Give amount"
-                    amount={giveAmount}
-                    tick={giveTick}
-                    onAmountFieldChange={(rawValue) => {
-                        const stripped = String(rawValue).replace(/,/g, '');
-                        if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
-                        setGiveAmount(stripped);
-                    }}
-                    onMax={giveBalance && Number(giveBalance) > 0
-                        ? () => setGiveAmount(giveBalance)
-                        : undefined}
-                    maxDisabled={!giveBalance}
-                    balanceText={giveBalance != null && giveTick.trim()
-                        ? `${formatWithThousands(giveBalance)} ${giveTick.trim().toUpperCase()} available`
-                        : null}
-                />
-            )}
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', margin: '0.25rem 0 0.5rem' }}>
-                <input
-                    type="checkbox"
-                    checked={giveOwnership}
-                    onChange={(e) => setGiveOwnership(e.target.checked)}
-                />
-                Give this token&apos;s ownership instead of an amount
-            </label>
-            {giveOwnership ? (
-                <p className={styles.hint} style={{ margin: '0 0 0.5rem' }}>
-                    Transfers the entire ownership of {giveTick.trim() ? giveTick.trim().toUpperCase() : 'this token'} (single-fill, no partial matches).
-                </p>
-            ) : null}
+                ) : null}
+            </FormSection>
 
-            <TokenField
-                label="Get token"
-                value={getTick && chainId ? { chainId, tick: getTick } : null}
-                onOpenPicker={() => setGetPickerOpen(true)}
-            />
-            {getOwnership ? null : (
-                <AmountField
-                    label="Get amount"
-                    amount={getAmount}
-                    tick={getTick}
-                    onAmountFieldChange={(rawValue) => {
-                        const stripped = String(rawValue).replace(/,/g, '');
-                        if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
-                        setGetAmount(stripped);
-                    }}
+            <FormSection title="You get">
+                <TokenField
+                    label="Get token"
+                    value={getTick && chainId ? { chainId, tick: getTick } : null}
+                    onOpenPicker={() => setGetPickerOpen(true)}
                 />
-            )}
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', margin: '0.25rem 0 0.5rem' }}>
-                <input
-                    type="checkbox"
-                    checked={getOwnership}
-                    onChange={(e) => setGetOwnership(e.target.checked)}
-                />
-                Require the matcher to give that token&apos;s ownership instead of an amount
-            </label>
-            {getOwnership ? (
-                <p className={styles.hint} style={{ margin: '0 0 0.5rem' }}>
-                    The matcher must currently own {getTick.trim() ? getTick.trim().toUpperCase() : 'this token'}; on match its ownership transfers to you.
-                </p>
-            ) : null}
+                {getOwnership ? null : (
+                    <AmountField
+                        label="Get amount"
+                        amount={getAmount}
+                        tick={getTick}
+                        onAmountFieldChange={(rawValue) => {
+                            const stripped = String(rawValue).replace(/,/g, '');
+                            if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
+                            setGetAmount(stripped);
+                        }}
+                    />
+                )}
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', margin: '0.25rem 0 0.5rem' }}>
+                    {/* Native checkboxes preserve toggle keyboard behavior because the kit has no checkbox primitive. */}
+                    <input
+                        type="checkbox"
+                        checked={getOwnership}
+                        onChange={(e) => setGetOwnership(e.target.checked)}
+                    />
+                    Require the matcher to give that token&apos;s ownership instead of an amount
+                </label>
+                {getOwnership ? (
+                    <p className={styles.hint} style={{ margin: '0 0 0.5rem' }}>
+                        The matcher must currently own {getTick.trim() ? getTick.trim().toUpperCase() : 'this token'}; on match its ownership transfers to you.
+                    </p>
+                ) : null}
+            </FormSection>
 
+            <FormSection
+                title="Timing and fees"
+                description="The give side stays escrowed until a match, cancellation, or expiration."
+            >
             <p className={styles.successLabel}>Expiration</p>
             <label className={styles.checkRow}>
+                {/* Native radios preserve single-choice keyboard behavior because the kit has no radio primitive. */}
                 <input type="radio" name="swap-exp" checked={expMode === 'default'} onChange={() => setExpMode('default')} />
                 {' '}Default window
             </label>
             <label className={styles.checkRow}>
+                {/* Native radios preserve single-choice keyboard behavior because the kit has no radio primitive. */}
                 <input type="radio" name="swap-exp" checked={expMode === 'custom'} onChange={() => setExpMode('custom')} />
                 {' '}Expire at a specific time
             </label>
@@ -825,18 +1033,42 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
             ) : null}
             {expError ? <StatusMessage variant="error" className={styles.error}>{expError}</StatusMessage> : null}
 
-            <button
-                type="button"
+            <dl className={styles.detailsList}>
+                <DetailRow label="Rate" value={rateText} />
+            </dl>
+
+            <p className={styles.hintLeft}>
+                Cancel from My swaps or let the offer expire to return the escrow to the
+                source address. Paid transaction fees are not refunded.
+            </p>
+
+            <Input
+                id="swap-memo"
+                label="Memo"
+                optional
+                value={memo}
+                onChange={(e) => setMemo(e.target.value)}
+            />
+
+            <Button
+                variant="link"
+                size="sm"
+                icon={null}
+                className={styles.advancedToggle}
+                aria-expanded={showAdvanced}
+                aria-controls="swap-advanced-options"
                 onClick={() => setShowAdvanced((v) => !v)}
-                style={{ background: 'none', border: 0, padding: '0.25rem 0', color: 'var(--xc-accent, #6ea8fe)', cursor: 'pointer', font: 'inherit' }}
             >
-                {showAdvanced ? 'Hide advanced options' : 'Advanced options (receive address, lists)'}
-            </button>
+                Advanced options
+                <Icon.ChevronDownIcon
+                    style={{ transform: showAdvanced ? 'rotate(180deg)' : undefined }}
+                />
+            </Button>
             {showAdvanced ? (
-                <>
-                    <Input
+                <div id="swap-advanced-options" className={styles.advancedOptions}>
+                    <AddressField
                         label="Receive at (optional)"
-                        hint="Address to receive the GET side on. Defaults to your source address."
+                        hint="Address where you receive the get side. Defaults to your source address."
                         value={getAddress}
                         onChange={(e) => setGetAddress(e.target.value)}
                         autoComplete="off"
@@ -855,14 +1087,8 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                         {blockListIdx ? <Button variant="secondary" size="sm" onClick={() => setBlockListIdx('')}>Clear</Button> : null}
                     </div>
                     <p className={styles.hint}>Allow/block lists are address lists you published (see My Lists).</p>
-                </>
+                </div>
             ) : null}
-
-            <Input
-                label="Memo (optional)"
-                value={memo}
-                onChange={(e) => setMemo(e.target.value)}
-            />
 
             {feeTiers ? (
                 <FeeSelector
@@ -881,33 +1107,8 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 coinTicker={coinTicker}
                 mandatory={nativeFeeMandatory}
             />
-
-            {validationError ? (
-                <p role="alert" className={styles.error} style={{ marginTop: '0.5rem' }}>
-                    {validationError}
-                </p>
-            ) : null}
-
-            {formError ? (
-                <p role="alert" className={styles.error} style={{ marginTop: '0.5rem' }}>
-                    {formError}
-                </p>
-            ) : null}
-
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    block
-                    loading={actionConfirm.composing}
-                    disabled={actionConfirm.composing}
-                >
-                    {actionConfirm.composing
-                        ? 'Preparing review…'
-                        : (singleEncode ? 'Swap' : 'Review')}
-                </Button>
-            </div>
-        </form>,
+            </FormSection>
+        </FormPage>,
     );
 }
 

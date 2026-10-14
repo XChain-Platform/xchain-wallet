@@ -45,6 +45,7 @@ import {
 import { regtestSidecarPlugin } from '../web/regtestSidecar.js';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import sharp from 'sharp';
+import { EXTENSION_ICON_SIZES, EXTENSION_ICON_SOURCE } from './iconConfig.js';
 
 // Absolute paths for our workspace-local Node shims that xchain-sdk
 // pulls in at module load. Vite resolves these via resolve.alias below.
@@ -57,6 +58,59 @@ const httpBrowserShim = fileURLToPath(
 const replBrowserShim = fileURLToPath(
     new URL('../core/src/shims/repl-browser.js', import.meta.url),
 );
+const startupThemeUrl = new URL('../web/public/theme-init.js', import.meta.url);
+
+/**
+ * Install the shared parser-blocking theme bootstrap on every extension page.
+ * The inline background rules cover the interval before the module bundle and
+ * tokens load, while the external script remains compatible with MV3 CSP.
+ */
+function startupThemePlugin() {
+    return {
+        name: 'xchain-startup-theme',
+        async buildStart() {
+            this.emitFile({
+                type: 'asset',
+                fileName: 'theme-init.js',
+                source: await readFile(startupThemeUrl, 'utf8'),
+            });
+        },
+        configureServer(server) {
+            server.middlewares.use('/theme-init.js', async (_request, response, next) => {
+                try {
+                    response.statusCode = 200;
+                    response.setHeader('Content-Type', 'text/javascript; charset=utf-8');
+                    response.end(await readFile(startupThemeUrl, 'utf8'));
+                } catch {
+                    next();
+                }
+            });
+        },
+        transformIndexHtml: {
+            order: 'pre',
+            handler() {
+                return [
+                    {
+                        tag: 'style',
+                        children: `html, body { background: #FFFFFF; }
+@media (prefers-color-scheme: dark) {
+    html:not([data-xc-theme="light"]),
+    html:not([data-xc-theme="light"]) body { background: #0B0F17; }
+}
+html[data-xc-theme="dark"], html[data-xc-theme="dark"] body { background: #0B0F17; }
+html[data-xc-theme="light"], html[data-xc-theme="light"] body { background: #FFFFFF; }`,
+                        injectTo: 'head-prepend',
+                    },
+                    {
+                        tag: 'script',
+                        attrs: { src: '/theme-init.js' },
+                        injectTo: 'head-prepend',
+                    },
+                ];
+            },
+        },
+    };
+}
 
 // (mirrors packages/web/vite.config.js): vite-plugin-node-polyfills
 // rewrites Buffer/process/global inside transformed CJS to bare
@@ -294,6 +348,7 @@ export default defineConfig({
     publicDir: false,
     plugins: [
         polyfillShimResolver,
+        startupThemePlugin(),
         stampBuildProfilePlugin(),
         regtestSidecarPlugin(resolveBuildProfile()),
         react(),
@@ -311,12 +366,9 @@ export default defineConfig({
             outDir: new URL('./dist/chain-icons/', import.meta.url),
         }),
         iconResizePlugin({
-            source: new URL(
-                '../core/src/branding/images/favicon.png',
-                import.meta.url,
-            ),
+            source: new URL(EXTENSION_ICON_SOURCE, import.meta.url),
             outDir: new URL('./dist/icons/', import.meta.url),
-            sizes: [16, 32, 48, 128],
+            sizes: EXTENSION_ICON_SIZES,
         }),
     ],
 });

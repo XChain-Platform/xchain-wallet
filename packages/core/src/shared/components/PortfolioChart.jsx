@@ -8,7 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
+import { StatusMessage } from '@xchain-wallet/core/ui';
 import { Sparkline, synthesizeTokenChart } from './Sparkline.jsx';
 import { useMessaging } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -18,6 +19,9 @@ import { isDemoWallet } from '../../flows/demoMode.js';
 import { synthesizeDemoNativePrices } from '../../flows/demoFixtures.js';
 import { DEMO_CHART_SEED } from '../../flows/demoCapture.js';
 import { fiatValue } from './BalanceList.jsx';
+import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
+import { readFailureMessage } from '../utils/readFailureMessage.js';
+import { percentChangeDisplay } from '../utils/percentFormat.js';
 import styles from './PortfolioChart.module.css';
 
 // Range definitions. CoinGecko's sparkline is 168 hourly points (7d),
@@ -36,9 +40,9 @@ export const RANGES = [
  * Portfolio performance chart for Home.
  *
  * Sums each row's current fiat value into a single time series sized
- * by the active range. For native rows with a real CoinGecko sparkline
- * we use it for 24h / 7d; everything else falls through to the same
- * deterministic walk TokenDetail uses on tokens without a history feed.
+ * by the active range. Native rows chart their real CoinGecko sparkline
+ * (24h / 7d). A real wallet charts nothing else; only the demo wallet
+ * fills the gaps with the deterministic walk Sparkline.jsx provides.
  * Each row's contribution is scaled so its series ends at the row's
  * current fiat value, which means the series end always equals the
  * portfolio total and stays in sync with TotalBalanceHero.
@@ -47,14 +51,23 @@ export const RANGES = [
  * @param {Array<any>} props.rows                  rows from `buildBalanceRows`, already network-filtered
  * @param {string | null} [props.walletId]         used to seed synthesized walks per wallet so flipping wallets reshuffles
  */
-export function PortfolioChart({ rows, walletId }) {
+export function PortfolioChart({ rows, walletId, nativePriceMap, nativePricesLoading, nativePricesError }) {
     const { messaging } = useMessaging();
     const { settings } = useSettings();
     const fiatCurrency = settings?.fiatCurrency || 'USD';
     const [hidden] = useBalancesHidden();
     const [chartVisible] = usePortfolioChartVisible();
-    const [rangeId, setRangeId] = useState('30d');
-    const range = RANGES.find((r) => r.id === rangeId) || RANGES[2];
+    const chartPanelId = useId();
+    // Only 24h and 7d have recorded prices behind them, so a real wallet
+    // offers just those and opens on 7d; the longer ranges exist for the
+    // demo wallet's synthesized walk.
+    const isDemo = isDemoWallet(walletId);
+    const ranges = isDemo ? RANGES : RANGES.filter((r) => r.realCapable);
+    const [rangeId, setRangeId] = useState(isDemo ? '30d' : '7d');
+    useEffect(() => {
+        setRangeId(isDemo ? '30d' : '7d');
+    }, [isDemo]);
+    const range = ranges.find((r) => r.id === rangeId) || ranges[ranges.length - 1];
 
     // Pull native price entries (with sparkline) for any native row in
     // the displayed set. Mirrors TotalBalanceHero's fetch pattern.
@@ -71,28 +84,55 @@ export function PortfolioChart({ rows, walletId }) {
 
     // A demo wallet prices itself from its own fixtures, like every other
     // number on this screen (see TotalBalanceHero for the whole argument).
-    const isDemo = isDemoWallet(walletId);
-
     const [priceMap, setPriceMap] = useState(/** @type {Record<string, any>} */ ({}));
+    const [fetchedPriceLoading, setFetchedPriceLoading] = useState(!isDemo && nativeChainIds.length > 0);
+    const [fetchedPriceError, setFetchedPriceError] = useState(/** @type {string | null} */ (null));
     useEffect(() => {
+        if (nativePriceMap !== undefined) return undefined;
         if (isDemo) {
             setPriceMap(synthesizeDemoNativePrices(nativeChainIds));
+            setFetchedPriceLoading(false);
+            setFetchedPriceError(null);
             return undefined;
         }
-        if (typeof messaging?.getNativePricesRequest !== 'function' || nativeChainIds.length === 0) {
+        if (nativeChainIds.length === 0) {
             setPriceMap({});
+            setFetchedPriceLoading(false);
+            setFetchedPriceError(null);
+            return undefined;
+        }
+        if (typeof messaging?.getNativePricesRequest !== 'function') {
+            setPriceMap({});
+            setFetchedPriceLoading(false);
+            setFetchedPriceError('Price history is unavailable.');
             return undefined;
         }
         let cancelled = false;
-        messaging.getNativePricesRequest({ chainIds: nativeChainIds, includeSparkline: true })
+        setPriceMap({});
+        setFetchedPriceLoading(true);
+        setFetchedPriceError(null);
+        messaging.getNativePricesRequest({
+            chainIds: nativeChainIds,
+            includeSparkline: true,
+            fiatCurrency,
+        })
             .then((res) => {
                 if (cancelled) return;
-                if (res?.disabled) { setPriceMap({}); return; }
+                if (res?.disabled) { setPriceMap({}); setFetchedPriceLoading(false); return; }
                 setPriceMap(res?.prices || {});
+                setFetchedPriceLoading(false);
             })
-            .catch(() => { if (!cancelled) setPriceMap({}); });
+            .catch((err) => {
+                if (cancelled) return;
+                setPriceMap({});
+                setFetchedPriceLoading(false);
+                setFetchedPriceError(readFailureMessage(err, 'load portfolio price history'));
+            });
         return () => { cancelled = true; };
-    }, [messaging, nativeChainKey, isDemo]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [messaging, nativeChainKey, isDemo, fiatCurrency, nativePriceMap]); // eslint-disable-line react-hooks/exhaustive-deps
+    const effectivePriceMap = nativePriceMap ?? priceMap;
+    const priceLoading = nativePriceMap === undefined ? fetchedPriceLoading : Boolean(nativePricesLoading);
+    const priceError = nativePriceMap === undefined ? fetchedPriceError : nativePricesError;
 
     // A demo wallet's id is a fresh UUID on every demo session, and the
     // synthesized walk below is seeded by it, so the demo chart (and the
@@ -107,11 +147,12 @@ export function PortfolioChart({ rows, walletId }) {
     const seedId = isDemo ? DEMO_CHART_SEED : walletId;
 
     const series = useMemo(
-        () => buildPortfolioSeries(rows, priceMap, seedId, range),
-        [rows, priceMap, seedId, range],
+        () => buildPortfolioSeries(rows, effectivePriceMap, seedId, range, isDemo),
+        [rows, effectivePriceMap, seedId, range, isDemo],
     );
 
-    const hasData = Array.isArray(series) && series.length >= 2;
+    const hasData = Array.isArray(series) && series.length > 0;
+    const hasBalance = (rows || []).some((row) => hasNonZeroQuantity(row));
 
     const { delta, pct } = useMemo(() => {
         if (!hasData) return { delta: null, pct: null };
@@ -122,43 +163,70 @@ export function PortfolioChart({ rows, walletId }) {
         return { delta: d, pct: p };
     }, [hasData, series]);
 
-    const tone = delta == null || delta === 0
-        ? styles.changeNeutral
-        : delta > 0 ? styles.changePositive : styles.changeNegative;
-    const arrow = delta == null || delta === 0 ? '-' : delta > 0 ? '▲' : '▼';
+    const pctDisplay = percentChangeDisplay(pct);
+    const direction = pctDisplay?.direction ?? 'neutral';
+    const tone = direction === 'positive'
+        ? styles.changePositive
+        : direction === 'negative' ? styles.changeNegative : styles.changeNeutral;
+    const arrow = direction === 'positive' ? '▲' : direction === 'negative' ? '▼' : '-';
+    const selectedTabId = `${chartPanelId}-tab-${range.id}`;
 
     // Chart-icon toggle in TotalBalanceHero collapses the whole section.
     // The eye toggle is a separate, narrower concern handled below; it
     // suppresses the numeric delta line but leaves the chart shape and
     // range pills visible. The early return lives below every hook call
     // so the hook count stays stable as the toggle flips.
-    if (!chartVisible) return null;
+    if (!chartVisible || !hasBalance) return null;
 
     return (
-        <section className={styles.wrap} aria-label="Portfolio performance">
-            {hasData && delta != null && !hidden ? (
-                <div className={`${styles.change} ${tone}`}>
-                    {arrow} {formatFiat(Math.abs(delta), fiatCurrency)}
-                    {pct != null && Number.isFinite(pct)
-                        ? ` (${pct > 0 ? '+' : ''}${pct.toFixed(2)}%)`
-                        : ''}
-                </div>
-            ) : null}
-            {hasData ? (
-                <div className={styles.chart}>
-                    <Sparkline series={series} height={40} />
-                </div>
-            ) : (
-                <div className={styles.placeholder}>No price data for this view.</div>
-            )}
+        <section
+            className={styles.wrap}
+            aria-label="Portfolio performance"
+            aria-busy={priceLoading || undefined}
+        >
+            <div
+                id={chartPanelId}
+                role="tabpanel"
+                aria-labelledby={selectedTabId}
+            >
+                {hasData && delta != null && !hidden ? (
+                    <div
+                        className={`${styles.change} ${tone}`}
+                        aria-label={`${range.label} change. ${pctDisplay?.label ?? 'Change unavailable'}; ${formatFiat(Math.abs(delta), fiatCurrency)}`}
+                    >
+                        {arrow} {formatFiat(Math.abs(delta), fiatCurrency)}
+                        {pctDisplay ? ` (${pctDisplay.text})` : ''} · {range.label}
+                    </div>
+                ) : null}
+                {priceLoading ? (
+                    <StatusMessage variant="status">Loading price history…</StatusMessage>
+                ) : priceError ? (
+                    <StatusMessage variant="error">{priceError}</StatusMessage>
+                ) : hasData ? (
+                    <div className={styles.chart}>
+                        <Sparkline
+                            series={series}
+                            height={40}
+                            label="Portfolio performance chart"
+                            rangeLabel={range.label}
+                            formatValue={(value) => formatFiatTooltip(value, fiatCurrency)}
+                        />
+                    </div>
+                ) : (
+                    <div className={styles.placeholder}>No price history for this range yet.</div>
+                )}
+            </div>
             <div className={styles.ranges} role="tablist" aria-label="Chart range">
-                {RANGES.map((r) => (
+                {ranges.map((r) => (
                     <button
                         key={r.id}
+                        id={`${chartPanelId}-tab-${r.id}`}
                         type="button"
                         role="tab"
-                        aria-selected={r.id === rangeId ? 'true' : 'false'}
-                        className={`${styles.range} ${r.id === rangeId ? styles.rangeActive : ''}`}
+                        aria-selected={r.id === range.id ? 'true' : 'false'}
+                        aria-controls={chartPanelId}
+                        tabIndex={r.id === range.id ? 0 : -1}
+                        className={`${styles.range} ${r.id === range.id ? styles.rangeActive : ''}`}
                         onClick={() => setRangeId(r.id)}
                     >
                         {r.label}
@@ -171,7 +239,7 @@ export function PortfolioChart({ rows, walletId }) {
 
 // `seedId` is the wallet's own id for a real wallet and a constant for a
 // demo one; it only ever feeds the synthesized walk's seed.
-function buildPortfolioSeries(rows, priceMap, seedId, range) {
+function buildPortfolioSeries(rows, priceMap, seedId, range, synthesize) {
     if (!Array.isArray(rows) || rows.length === 0) return null;
     const points = range.points;
     if (points < 2) return null;
@@ -179,8 +247,8 @@ function buildPortfolioSeries(rows, priceMap, seedId, range) {
     let anyContrib = false;
     for (const row of rows) {
         const current = fiatValueOf(row);
-        if (current === null || current === 0) continue;
-        const rowSeries = seriesForRow(row, current, priceMap, seedId, range);
+        if (current === null || !Number.isFinite(current) || current <= 0) continue;
+        const rowSeries = seriesForRow(row, current, priceMap, seedId, range, synthesize);
         if (!rowSeries) continue;
         anyContrib = true;
         for (let i = 0; i < points; i += 1) sums[i] += rowSeries[i];
@@ -188,18 +256,13 @@ function buildPortfolioSeries(rows, priceMap, seedId, range) {
     return anyContrib ? sums : null;
 }
 
-function seriesForRow(row, current, priceMap, seedId, range) {
+function seriesForRow(row, current, priceMap, seedId, range, synthesize) {
     // Native row + real CoinGecko sparkline → scale into the row's
     // current fiat value. The series always ends at `current`, so the
     // summed chart's last point equals the portfolio total exactly.
     if (range.realCapable && row.kind === 'native' && row.chainId) {
-        const entry = priceMap?.[row.chainId];
-        const spark = entry?.sparkline;
-        if (Array.isArray(spark) && spark.length >= 2) {
-            const src = range.id === '24h'
-                ? spark.slice(-Math.min(range.points, spark.length))
-                : spark;
-            const resampled = resampleTo(src, range.points);
+        const resampled = priceHistoryForRange(priceMap?.[row.chainId], range);
+        if (resampled) {
             const last = resampled[resampled.length - 1];
             if (last > 0) {
                 const scaled = resampled.map((p) => (p / last) * current);
@@ -208,17 +271,32 @@ function seriesForRow(row, current, priceMap, seedId, range) {
             }
         }
     }
-    // Otherwise synthesize. Seeded so re-renders stay stable but each
+    // A real wallet charts only recorded prices (§45.4: never fabricate a
+    // number), so a row with no recorded history sits out; with none left
+    // the card says there is no history yet.
+    if (!synthesize) return null;
+    // A demo wallet synthesizes. Seeded so re-renders stay stable but each
     // (wallet, row, range) combination gets its own walk shape.
     const key = `${seedId || '_'}|${row.chainId || ''}|${row.kind === 'native' ? 'native' : row.tick}|${range.id}|${current.toFixed(2)}`;
     const { sparkline } = synthesizeTokenChart(key, current, range.points);
     return sparkline;
 }
 
+export function priceHistoryForRange(entry, range) {
+    if (!range?.realCapable || !Array.isArray(entry?.sparkline)) return null;
+    const finite = entry.sparkline.filter((point) => Number.isFinite(point) && point > 0);
+    if (finite.length === 0) return null;
+    const source = range.id === '24h'
+        ? finite.slice(-Math.min(range.points, finite.length))
+        : finite;
+    return resampleTo(source, range.points);
+}
+
 // Linear resample of `src` onto `n` evenly-spaced points. Used when a
 // real sparkline doesn't already have exactly the count we need (the
 // 24h slice off a 168-pt series is 24, but the helper is generic).
 export function resampleTo(src, n) {
+    if (!Array.isArray(src) || src.length === 0 || n < 1) return [];
     if (src.length === n) return src.slice();
     if (n <= 1) return [src[src.length - 1]];
     const out = new Array(n);
@@ -241,18 +319,20 @@ function fiatValueOf(row) {
     return exact === null ? null : Number(exact);
 }
 
-function formatFiat(value, currency) {
-    const code = String(currency || 'USD').toUpperCase();
+function hasNonZeroQuantity(row) {
     try {
-        const fmt = new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: code,
-            currencyDisplay: 'symbol',
-        });
-        const minorUnit = fmt.resolvedOptions().maximumFractionDigits === 0 ? 1 : 0.01;
-        if (value > 0 && value < minorUnit) return `<${fmt.format(minorUnit)}`;
-        return fmt.format(value);
+        return BigInt(row?.quantity ?? 0) !== 0n;
     } catch {
-        return value.toLocaleString('en-US', { maximumFractionDigits: 2 });
+        const quantity = Number(row?.quantity);
+        return Number.isFinite(quantity) && quantity !== 0;
     }
+}
+
+function formatFiat(value, currency) {
+    return formatFiatAmount(String(value), currency);
+}
+
+function formatFiatTooltip(value, currency) {
+    const code = String(currency || 'USD').toUpperCase();
+    return `${formatFiat(value, code)} ${code}`;
 }

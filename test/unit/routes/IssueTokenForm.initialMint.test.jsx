@@ -21,10 +21,11 @@
 // broadcast action.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { IssueTokenForm } from '../../../packages/core/src/shared/routes/IssueTokenForm.jsx';
+import { userEvent } from '../../helpers/userEvent.js';
 
 const ADDRESSES = {
     'bitcoin-mainnet': [
@@ -40,7 +41,7 @@ const ADDRESSES = {
 
 let composeForConfirm;
 
-function mountForm() {
+function mountForm(overrides = {}) {
     composeForConfirm = vi.fn().mockResolvedValue({
         psbt: 'aa00', encoding: 'psbt', actionString: 'ACT', version: 0,
     });
@@ -52,6 +53,7 @@ function mountForm() {
         composeForConfirm,
         preflight: vi.fn().mockResolvedValue({ verdict: 'pass', findings: [] }),
         issueToken: vi.fn().mockResolvedValue({ txid: 'deadbeef' }),
+        ...overrides,
     };
     return render(
         React.createElement(
@@ -63,7 +65,7 @@ function mountForm() {
 }
 
 // Fill ticker + supply (+ optional initial mint) and submit.
-async function fill({ supply, initialMint, lockSupply }) {
+async function fill({ supply, initialMint, lockSupply, divisible }) {
     fireEvent.change(await screen.findByLabelText('Ticker'), {
         target: { value: 'MINTABLE' },
     });
@@ -75,6 +77,9 @@ async function fill({ supply, initialMint, lockSupply }) {
     }
     if (lockSupply) {
         fireEvent.click(screen.getByLabelText('Lock supply + minting (irreversible)'));
+    }
+    if (divisible) {
+        fireEvent.click(screen.getByLabelText('Divisible (8 decimal places)'));
     }
 }
 
@@ -92,6 +97,179 @@ afterEach(() => cleanup());
 beforeEach(() => { composeForConfirm = undefined; });
 
 describe('IssueTokenForm initial mint', () => {
+    it('ignores a stale taken-name result after the ticker changes', async () => {
+        let resolveOld;
+        let resolveCurrent;
+        const getTokenInfo = vi.fn(({ tick }) => new Promise((resolve) => {
+            if (tick === 'OLDNAME') resolveOld = resolve;
+            if (tick === 'NEWNAME') resolveCurrent = resolve;
+        }));
+        mountForm({ getTokenInfo });
+        const ticker = await screen.findByLabelText('Ticker');
+        fireEvent.change(ticker, { target: { value: 'OLDNAME' } });
+        await waitFor(() => expect(getTokenInfo).toHaveBeenCalledWith(expect.objectContaining({ tick: 'OLDNAME' })));
+        fireEvent.change(ticker, { target: { value: 'NEWNAME' } });
+        await waitFor(() => expect(getTokenInfo).toHaveBeenCalledWith(expect.objectContaining({ tick: 'NEWNAME' })));
+
+        resolveCurrent({ canonicalTick: null, creator: null, totalSupply: null });
+        resolveOld({ canonicalTick: 'OLDNAME', creator: 'bc1qcreator', totalSupply: '10' });
+        await waitFor(() => expect(ticker).not.toHaveAttribute('aria-invalid', 'true'));
+        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '10' } });
+        await submit();
+
+        await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(1));
+        expect((await composedParams()).TICK).toBe('NEWNAME');
+    });
+
+    it('handles a rejected name lookup and still allows valid issuance', async () => {
+        const getTokenInfo = vi.fn().mockRejectedValue(new Error('explorer offline'));
+        mountForm({ getTokenInfo });
+        await fill({ supply: '10' });
+        await waitFor(() => expect(getTokenInfo).toHaveBeenCalled());
+        await submit();
+
+        await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(1));
+    });
+
+    it('blocks a ticker that the current network already contains', async () => {
+        const getTokenInfo = vi.fn().mockResolvedValue({
+            canonicalTick: 'MINTABLE', creator: 'bc1qcreator', totalSupply: '10',
+        });
+        mountForm({ getTokenInfo });
+        await fill({ supply: '10' });
+
+        expect(await screen.findByText(/already exists on this network/i)).toBeTruthy();
+        await submit();
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('treats the empty record the host returns for an unknown ticker as available', async () => {
+        const getTokenInfo = vi.fn().mockResolvedValue({
+            canonicalTick: null, creator: null, totalSupply: null, divisibility: null,
+        });
+        mountForm({ getTokenInfo });
+        await fill({ supply: '10' });
+        await waitFor(() => expect(getTokenInfo).toHaveBeenCalled());
+        await act(async () => { await getTokenInfo.mock.results.at(-1).value; });
+        expect(screen.queryByText(/already exists on this network/i)).toBeNull();
+        await submit();
+
+        await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(1));
+    });
+
+    it.each([
+        ['Supply', 'Supply must be a whole number for an indivisible token.'],
+        ['Initial mint (optional)', 'Initial mint must be a whole number for an indivisible token.'],
+        ['Max mint per transaction (optional)', 'Max mint per transaction must be a whole number for an indivisible token.'],
+    ])('keeps a fractional %s intact when divisibility is turned off and refuses it', async (label, message) => {
+        mountForm();
+        await fill({ supply: label === 'Supply' ? '1.5' : '10' });
+        const divisible = screen.getByLabelText('Divisible (8 decimal places)');
+        fireEvent.click(divisible);
+        if (label !== 'Supply') {
+            fireEvent.change(screen.getByLabelText(label), { target: { value: '1.5' } });
+        }
+        fireEvent.click(divisible);
+
+        expect(screen.getByLabelText(label)).toHaveValue('1.5');
+        await submit();
+        expect(await screen.findByRole('alert')).toHaveTextContent(message);
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('resets a custom fee preview when the network changes', async () => {
+        mountForm({
+            getAddressesByChain: vi.fn().mockResolvedValue({
+                ...ADDRESSES,
+                'dogecoin-mainnet': [{
+                    id: 'doge-1',
+                    address: 'DExampleExampleExampleExampleExample1',
+                    publicKey: '02cd',
+                    derivationPath: "m/44'/3'/0'/0/0",
+                    source: 'hd',
+                }],
+            }),
+        });
+        await screen.findByLabelText('Ticker');
+        fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
+            target: { value: '3' },
+        });
+        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '25' } });
+        expect(screen.getByRole('slider', { name: 'Network fee' })).toHaveAttribute(
+            'aria-valuetext',
+            expect.stringMatching(/^Custom:/),
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: /Network: Bitcoin/i }));
+        fireEvent.click(screen.getByRole('option', { name: /Dogecoin/i }));
+
+        await waitFor(() => expect(screen.getByRole('slider', { name: 'Network fee' })).toHaveAttribute(
+            'aria-valuetext',
+            expect.stringMatching(/^Normal:/),
+        ));
+        expect(screen.queryByLabelText(/Custom fee rate/)).toBeNull();
+
+        fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
+            target: { value: '3' },
+        });
+        expect(screen.getByLabelText(/Custom fee rate/)).toHaveValue('1');
+    });
+
+    it('tabs in field order and opens review from Enter only when valid', async () => {
+        const user = userEvent.setup();
+        mountForm();
+        const ticker = await screen.findByLabelText('Ticker');
+        ticker.focus();
+
+        await user.tab();
+        const supply = screen.getByLabelText('Supply');
+        expect(document.activeElement).toBe(supply);
+        fireEvent.change(ticker, { target: { value: 'KEYS' } });
+        fireEvent.change(supply, { target: { value: 'invalid' } });
+        await user.keyboard('{Enter}');
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('Supply must be a positive number.');
+        expect(composeForConfirm).not.toHaveBeenCalled();
+
+        fireEvent.change(supply, { target: { value: '1000' } });
+        supply.focus();
+        await user.keyboard('{Enter}');
+
+        await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(1));
+        expect(await screen.findByTestId('confirm-modal')).toBeInTheDocument();
+
+        await user.keyboard('{Escape}');
+        expect(await screen.findByLabelText('Ticker')).toHaveValue('KEYS');
+        expect(screen.queryByTestId('confirm-modal')).toBeNull();
+    });
+
+    it.each([
+        ['Supply', '1,000', 'Supply must be a positive number.'],
+        ['Initial mint (optional)', 'Infinity', 'Initial mint must be zero or a positive number.'],
+        ['Max mint per transaction (optional)', 'five', 'Max mint per transaction must be a positive number'],
+    ])('refuses malformed numeric text in %s before composing', async (label, value, message) => {
+        mountForm();
+        await fill({ supply: '5000' });
+        fireEvent.change(screen.getByLabelText(label), { target: { value } });
+        await submit();
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(message);
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        'Transfer ownership to (optional)',
+        'Send the initial mint to (optional)',
+    ])('refuses an invalid %s address before composing', async (label) => {
+        mountForm();
+        await fill({ supply: '5000' });
+        fireEvent.change(screen.getByLabelText(label), { target: { value: 'not-an-address' } });
+        await submit();
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(/not valid for the active chain/i);
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+
     it('leaves mint headroom when the initial mint is below the supply', async () => {
         mountForm();
         await fill({ supply: '5000', initialMint: '1000' });
@@ -135,7 +313,11 @@ describe('IssueTokenForm initial mint', () => {
 
     it('refuses an initial mint one atomic unit above a large supply', async () => {
         mountForm();
-        await fill({ supply: '90071992.54740901', initialMint: '90071992.54740902' });
+        await fill({
+            supply: '90071992.54740901',
+            initialMint: '90071992.54740902',
+            divisible: true,
+        });
         await submit();
 
         await screen.findByText('Initial mint cannot be more than the supply.');
@@ -163,7 +345,11 @@ describe('IssueTokenForm initial mint', () => {
 
     it('shows one atomic unit of headroom at a large supply', async () => {
         mountForm();
-        await fill({ supply: '90071992.54740902', initialMint: '90071992.54740901' });
+        await fill({
+            supply: '90071992.54740902',
+            initialMint: '90071992.54740901',
+            divisible: true,
+        });
 
         await screen.findByText(/Leaves 0\.00000001 to mint later/);
     });

@@ -426,7 +426,7 @@ test.describe(`user-oracle (Mode B) fiat dispensers on ${REGTEST_CHAIN_LABEL}`, 
 
         await test.step('a BUYER pays a bare coin payment sized to 7.4 oracle units', async () => {
             await gotoPalette(page, 'Switch wallet');
-            await page.getByRole('button', { name: 'Add Wallet' }).click();
+            await page.getByRole('button', { name: 'Add wallet' }).click();
             await createWallet(page, { password: PASSWORD, name: 'Oracle Buyer', navigate: false });
             await gotoPalette(page, 'Switch wallet');
             await page.getByRole('button', { name: /Oracle Buyer/ }).first().click();

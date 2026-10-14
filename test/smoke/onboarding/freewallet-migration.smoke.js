@@ -18,12 +18,11 @@
 //      rebrands the title/copy, pre-sets the wallet name to
 //      "FreeWallet", and tightens the word-count validator to 12.
 //   3. MigrateToBip39.jsx exists, exports a single component, runs
-//      through explain → create → submitting → done, reuses
-//      IssueTokenForm CSS, and calls messaging.createWallet.
+//      through setup, phrase backup, verification, persistence, and
+//      sweep review, reuses IssueTokenForm CSS, and adds the wallet.
 //   4. The shared walletAlerts.js list carries the legacy-wallet alert
 //      when the active wallet has format === 'counterwallet-legacy' and
-//      onMigrateToBip39 is supplied; Home and the web menu build from it;
-//      banner class `.legacyBanner` ships in Home.module.css.
+//      onMigrateToBip39 is supplied; Home and the web menu build from it.
 //   5. All three shells: App.jsx imports MigrateToBip39, tracks the
 //      'migrate-bip39' sub-route + 'import-freewallet' onboarding
 //      step, wires onImportFromFreeWallet on Onboarding, wires
@@ -33,6 +32,7 @@ import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withEnglishCopy } from '../_localized-source.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -50,7 +50,7 @@ assert.ok(/From FreeWallet/.test(onboarding), 'Onboarding renders "From FreeWall
 
 // --- 2. ImportWallet freewallet variant ------------------------------
 
-const importWallet = readFileSync(join(sharedRoutes, 'ImportWallet.jsx'), 'utf8');
+const importWallet = withEnglishCopy(readFileSync(join(sharedRoutes, 'ImportWallet.jsx'), 'utf8'));
 assert.ok(
     /variant:\s*importVariant\s*=\s*['"]default['"]/.test(importWallet),
     'ImportWallet accepts a variant prop defaulting to "default"',
@@ -70,6 +70,16 @@ assert.ok(
     'ImportWallet defaults wallet name to "FreeWallet" in FreeWallet mode',
 );
 
+// The variant is the same route as a plain import, so it ends where every
+// import ends: on the Automatic Donation System notice, whose Continue is the
+// only thing that calls onImported (ads-onboarding-notice.smoke.js pins the
+// rest).
+assert.ok(
+    /<AdsNotice[\s\S]*onContinue=\{continueAfterNotice\}/.test(importWallet)
+        && /const continueAfterNotice = \(\) => \{[^}]*onImported\(\);[^}]*\}/.test(importWallet),
+    'ImportWallet (FreeWallet variant included) hands over to onImported only from the ADS notice',
+);
+
 // --- 3. MigrateToBip39 ----------------------------------------------
 
 const migratePath = join(sharedRoutes, 'MigrateToBip39.jsx');
@@ -82,7 +92,7 @@ assert.equal(
     'MigrateToBip39.jsx only exports the component',
 );
 assert.ok(/IssueTokenForm\.module\.css/.test(migrate), 'MigrateToBip39 reuses IssueTokenForm CSS');
-for (const stage of ['explain', 'create', 'submitting', 'backup', 'done']) {
+for (const stage of ['explain', 'create', 'backup', 'verify', 'submitting', 'done']) {
     assert.ok(migrate.includes(`'${stage}'`), `MigrateToBip39 tracks stage "${stage}"`);
 }
 // This wizard runs on a device that ALREADY holds the legacy wallet, so the
@@ -114,7 +124,7 @@ assert.ok(
 assert.ok(/messaging\.getAddressesByChain\s*\(/.test(migrate), 'MigrateToBip39 fetches addresses for the side-by-side preview');
 assert.ok(/Legacy FreeWallet format|Counterwallet/.test(migrate), 'MigrateToBip39 references the legacy format in copy');
 
-// --- 4. Home legacy banner ------------------------------------------
+// --- 4. Home legacy alert -------------------------------------------
 
 const home = readFileSync(join(sharedRoutes, 'Home.jsx'), 'utf8');
 assert.ok(/onMigrateToBip39/.test(home), 'Home.jsx accepts onMigrateToBip39 prop');
@@ -131,9 +141,6 @@ assert.ok(
     /buildWalletAlerts\(/.test(readFileSync(join(web, 'src', 'App.jsx'), 'utf8')),
     'web App.jsx builds the menu Alerts panel from walletAlerts.js',
 );
-
-const homeCss = readFileSync(join(sharedRoutes, 'Home.module.css'), 'utf8');
-assert.ok(/\.legacyBanner\b/.test(homeCss), 'Home.module.css defines .legacyBanner');
 
 // --- 5. Three-shell App.jsx wiring ----------------------------------
 
@@ -171,5 +178,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK: freewallet migration smoke (Onboarding 3rd entry + ImportWallet freewallet variant + MigrateToBip39 4-stage wizard + Home legacy banner + 3-shell App.jsx wiring of onboarding + unlocked sub-route)',
+    'OK: freewallet migration smoke (Onboarding 3rd entry + ImportWallet freewallet variant + MigrateToBip39 verified-backup wizard + shared legacy alert + 3-shell App.jsx wiring of onboarding + unlocked sub-route)',
 );

@@ -8,24 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §27.7 / §28 / G077: EmptyStateNudge component + integration
-// into BalanceList, History, and AddressList.
-//
-// (Cluster I FOLLOWUP 7 closed at v0.287.0 retired UnifiedBalanceList;
-//  it had been an orphaned variant since the BalanceList consolidation;
-//  the previous "UnifiedBalanceList parity" assertions are gone.)
-//
-// Verifies:
-//   1. EmptyStateNudge.jsx + module.css exist; component is named export
-//      with title / body / actionLabel / onAction / icon props.
-//   2. BalanceList renders <EmptyStateNudge> instead of bare <p>; old
-//      `emptyMessage` prop is renamed to `emptyTitle` + `emptyBody`.
-//   3. HomeTabs accepts + forwards `onReceive` so the empty-state
-//      nudges show the Receive CTA.
-//   4. Home.jsx threads `onReceive` into HomeTabs.
-//   5. History + AddressList accept an `onReceive` prop and render
-//      <EmptyStateNudge> with a Receive CTA in their empty states.
-//   6. Web + extension App.jsx wire `onReceive` into both routes.
+// Empty list views use the shared EmptyState template while the legacy
+// EmptyStateNudge files remain available for downstream compatibility.
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
@@ -40,7 +24,7 @@ const web = join(wsRoot, 'packages', 'web');
 const components = join(core, 'src', 'shared', 'components');
 const routes = join(core, 'src', 'shared', 'routes');
 
-// --- 1. EmptyStateNudge itself --------------------------------------------
+// --- 1. Legacy component remains available but unused ---------------------
 
 const nudgePath = join(components, 'EmptyStateNudge.jsx');
 const nudgeCss = join(components, 'EmptyStateNudge.module.css');
@@ -60,16 +44,16 @@ assert.ok(
     'EmptyStateNudge only renders the button when both actionLabel + onAction are supplied',
 );
 
-// --- 2. BalanceList swaps the bare <p> for <EmptyStateNudge> --------------
+// --- 2. List components use EmptyState ------------------------------------
 
 const balanceListSrc = readFileSync(join(components, 'BalanceList.jsx'), 'utf8');
 assert.ok(
-    /from\s*['"]\.\/EmptyStateNudge\.jsx['"]/.test(balanceListSrc),
-    'BalanceList imports EmptyStateNudge',
+    /import\s*\{[^}]*\bEmptyState\b[^}]*\}\s*from\s*['"]@xchain-wallet\/core\/ui['"]/.test(balanceListSrc),
+    'BalanceList imports the shared EmptyState template',
 );
 assert.ok(
-    /<EmptyStateNudge\b/.test(balanceListSrc),
-    'BalanceList renders <EmptyStateNudge> in its empty branch',
+    /<EmptyState\b/.test(balanceListSrc),
+    'BalanceList renders <EmptyState> in its empty branch',
 );
 assert.ok(
     /emptyTitle/.test(balanceListSrc) && /emptyBody/.test(balanceListSrc),
@@ -83,6 +67,21 @@ assert.ok(
     !/<p\s+className=\{styles\.empty\}/.test(balanceListSrc),
     'BalanceList no longer renders the bare <p className=empty> placeholder',
 );
+
+const collectiblesSrc = readFileSync(join(components, 'CollectiblesView.jsx'), 'utf8');
+assert.ok(
+    /import\s*\{[^}]*\bEmptyState\b[^}]*\}\s*from\s*['"]@xchain-wallet\/core\/ui['"]/.test(collectiblesSrc),
+    'CollectiblesView imports the shared EmptyState template',
+);
+assert.ok(
+    /<EmptyState\b/.test(collectiblesSrc),
+    'CollectiblesView renders <EmptyState> in its empty branch',
+);
+
+for (const source of [balanceListSrc, collectiblesSrc]) {
+    assert.ok(!/EmptyStateNudge/.test(source), 'list components do not use EmptyStateNudge');
+    assert.ok(/actionIcon=\{/.test(source), 'list components preserve the Receive action icon');
+}
 
 // --- 3. HomeTabs forwards onReceive --------------------------------------
 
@@ -108,30 +107,30 @@ assert.ok(
 
 const historySrc = readFileSync(join(routes, 'History.jsx'), 'utf8');
 assert.ok(
-    /from\s*['"]\.\.\/components\/EmptyStateNudge\.jsx['"]/.test(historySrc),
-    'History imports EmptyStateNudge',
+    /\bEmptyState\b/.test(historySrc),
+    'History imports EmptyState',
 );
 assert.ok(
     /onReceive/.test(historySrc),
     'History accepts onReceive prop',
 );
 assert.ok(
-    (historySrc.match(/<EmptyStateNudge\b/g) || []).length >= 2,
-    'History renders <EmptyStateNudge> in both empty branches (no addresses + no entries)',
+    (historySrc.match(/<EmptyState\b/g) || []).length >= 2,
+    'History renders <EmptyState> in both empty branches (no addresses + no entries)',
 );
 
 const addrSrc = readFileSync(join(routes, 'AddressList.jsx'), 'utf8');
 assert.ok(
-    /from\s*['"]\.\.\/components\/EmptyStateNudge\.jsx['"]/.test(addrSrc),
-    'AddressList imports EmptyStateNudge',
+    /import\s*\{[^}]*\bEmptyState\b[^}]*\}\s*from\s*['"]@xchain-wallet\/core\/ui['"]/.test(addrSrc),
+    'AddressList imports the shared EmptyState template',
 );
 assert.ok(
     /onReceive/.test(addrSrc),
     'AddressList accepts onReceive prop',
 );
 assert.ok(
-    /<EmptyStateNudge\b/.test(addrSrc),
-    'AddressList renders <EmptyStateNudge> in its empty branch',
+    /<EmptyState\b/.test(addrSrc),
+    'AddressList renders <EmptyState> in its empty branch',
 );
 
 // --- 6. App.jsx wires onReceive into both routes -------------------------

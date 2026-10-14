@@ -99,6 +99,12 @@ describe('ListForkForm edit presentation', () => {
     it('titles the compose screen Edit list', async () => {
         mountFork(true);
         expect(await screen.findByText('Edit list')).toBeTruthy();
+
+        const member = screen.getByRole('checkbox', { name: 'KEEP' });
+        expect(member).toBeChecked();
+        fireEvent.click(member);
+        expect(member).not.toBeChecked();
+        expect(screen.getByRole('textbox', { name: 'Add tokens (one per line)' })).toBeTruthy();
     });
 
     it.each([false, null])('shows the repoint rail when resolution is %s', async (resolution) => {

@@ -18,7 +18,7 @@
 // A disabled account is refused by the daemon and treated as unknown by the
 // bridge resolver, so the toggle is the safe kill-switch.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
     PageHeader,
@@ -27,7 +27,9 @@ import {
     ChainBadge,
     AddressText,
     CopyButton,
+    FormPage,
     StatusMessage,
+    ListPage,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -37,20 +39,44 @@ import {
     buildPolicyDraft,
 } from './CoSignerPolicyEditor.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
+import { addressValidationError } from '../utils/addressValidation.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
+import { ConfirmModal } from '../components/ConfirmModal.jsx';
+import { useConfirmModal } from '../hooks/useConfirmModal.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const COSIGNER_CHAIN_IDS = new Set(chainRegistry.byCoin('bitcoin').map((descriptor) => descriptor.id));
+
+function accountMatchesScope(account, accountId, walletId) {
+    return Boolean(account
+        && account.id === accountId
+        && (walletId == null || account.walletId === walletId)
+        && COSIGNER_CHAIN_IDS.has(account.chainId));
+}
+
+function policyAddressError(built, descriptor) {
+    for (const [index, address] of (built.policy.allowedDestinations || []).entries()) {
+        const error = addressValidationError(address, descriptor);
+        if (error) return `Allowed recipient ${index + 1}: ${error}`;
+    }
+    for (const [index, output] of built.allowedOutputs.entries()) {
+        const error = addressValidationError(output.address, descriptor);
+        if (error) return `Allowed output ${index + 1}: ${error}`;
+    }
+    return null;
+}
 
 /**
  * @param {object} props
  * @param {string} props.accountId
+ * @param {string} [props.walletId]
  * @param {() => void} props.onBack
  */
-export function CoSignerAccountDetail({ accountId, onBack }) {
+export function CoSignerAccountDetail({ accountId, walletId, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
+    const confirmDialog = useConfirmModal();
 
     const [account, setAccount] = useState(/** @type {any | null} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
@@ -60,63 +86,162 @@ export function CoSignerAccountDetail({ accountId, onBack }) {
     const [name, setName] = useState('');
     const [policyDraft, setPolicyDraft] = useState(null);
     const [editError, setEditError] = useState(/** @type {string | null} */ (null));
+    const editBaselineRef = useRef('');
+    const viewRef = useRef(0);
+    const operationRef = useRef(0);
+    const busyRef = useRef(false);
+
+    function editableSnapshot(value) {
+        return JSON.stringify(editableFields(value));
+    }
+
+    function editableFields(value) {
+        return {
+            name: value?.name,
+            policy: value?.policy,
+            allowedOutputs: value?.allowedOutputs,
+        };
+    }
 
     useEffect(() => {
+        const view = viewRef.current + 1;
+        viewRef.current = view;
+        operationRef.current += 1;
+        busyRef.current = false;
         let cancelled = false;
-        messaging.getCoSignerAccount({ id: accountId })
+        setAccount(null);
+        setError(null);
+        setBusy(false);
+        setEditing(false);
+        setName('');
+        setPolicyDraft(null);
+        setEditError(null);
+        editBaselineRef.current = '';
+        confirmDialog.onCancel();
+        Promise.resolve()
+            .then(() => messaging.getCoSignerAccount({ id: accountId }))
             .then((a) => {
-                if (cancelled) return;
-                if (!a) { setError('Agent account not found.'); return; }
+                if (cancelled || viewRef.current !== view) return;
+                if (!accountMatchesScope(a, accountId, walletId)) {
+                    setError('Agent account not found for this wallet and network.');
+                    return;
+                }
                 setAccount(a);
             })
-            .catch((err) => { if (!cancelled) setError(userFacingMessage(err, 'Failed to load the agent account.')); });
-        return () => { cancelled = true; };
-    }, [accountId, messaging]);
+            .catch((err) => {
+                if (!cancelled && viewRef.current === view) {
+                    setError(userFacingMessage(err, 'Failed to load the agent account.'));
+                }
+            });
+        return () => {
+            cancelled = true;
+            if (viewRef.current === view) {
+                viewRef.current += 1;
+                operationRef.current += 1;
+                busyRef.current = false;
+            }
+        };
+    }, [accountId, walletId, messaging, confirmDialog.onCancel]);
 
     async function toggleEnabled() {
-        if (!account) return;
+        if (!account || busyRef.current) return;
+        const target = account;
+        const view = viewRef.current;
+        if (target.enabled && !(await confirmDialog.confirm({
+            title: 'Disable this agent account?',
+            message: 'This revokes the agent\'s signing access until you enable the account again. Funds already sent to the shared address are not moved.',
+            confirmLabel: 'Disable',
+            danger: true,
+        }))) return;
+        if (viewRef.current !== view || busyRef.current) return;
+        const operation = operationRef.current + 1;
+        operationRef.current = operation;
+        busyRef.current = true;
         setBusy(true);
         setError(null);
         try {
             const updated = await messaging.updateCoSignerAccount({
-                id: account.id,
-                patch: { enabled: !account.enabled },
+                id: target.id,
+                patch: { enabled: !target.enabled },
             });
-            setAccount(updated);
+            if (!accountMatchesScope(updated, target.id, walletId)) {
+                throw new Error('The updated agent account could not be loaded for this wallet and network.');
+            }
+            if (viewRef.current === view && operationRef.current === operation) setAccount(updated);
         } catch (err) {
-            setError(userFacingMessage(err, 'Failed to update the agent account.'));
+            if (viewRef.current === view && operationRef.current === operation) {
+                setError(userFacingMessage(err, 'Failed to update the agent account.'));
+            }
         } finally {
-            setBusy(false);
+            if (viewRef.current === view && operationRef.current === operation) {
+                busyRef.current = false;
+                setBusy(false);
+            }
         }
     }
 
     function startEdit() {
         setName(account.name);
         setPolicyDraft(draftFromAccount(account));
+        editBaselineRef.current = editableSnapshot(account);
         setEditError(null);
         setEditing(true);
     }
 
-    async function saveEdit() {
+    async function saveEdit(event) {
+        event?.preventDefault();
+        if (!account || busyRef.current) return;
         const built = buildPolicyDraft(policyDraft);
         if (built.error) { setEditError(built.error); return; }
+        const target = account;
+        const descriptor = chainRegistry.get(target.chainId);
+        const addressError = policyAddressError(built, descriptor);
+        if (addressError) { setEditError(addressError); return; }
+        const view = viewRef.current;
+        const operation = operationRef.current + 1;
+        operationRef.current = operation;
+        busyRef.current = true;
         setBusy(true);
         setEditError(null);
         try {
+            const fresh = await messaging.getCoSignerAccount({ id: target.id });
+            if (viewRef.current !== view || operationRef.current !== operation) return;
+            if (!accountMatchesScope(fresh, target.id, walletId)) {
+                throw new Error('This agent account no longer exists in this wallet and network.');
+            }
+            if (editableSnapshot(fresh) !== editBaselineRef.current) {
+                setAccount(fresh);
+                setName(fresh.name);
+                setPolicyDraft(draftFromAccount(fresh));
+                editBaselineRef.current = editableSnapshot(fresh);
+                setEditError('This agent account changed after you opened the editor. Review the latest policy, then save again.');
+                return;
+            }
             const updated = await messaging.updateCoSignerAccount({
-                id: account.id,
+                id: target.id,
                 patch: {
-                    name: name.trim() || account.name,
+                    expectedEditable: editableFields(fresh),
+                    name: name.trim() || target.name,
                     policy: built.policy,
                     allowedOutputs: built.allowedOutputs,
                 },
             });
-            setAccount(updated);
-            setEditing(false);
+            if (!accountMatchesScope(updated, target.id, walletId)) {
+                throw new Error('The updated agent account could not be loaded for this wallet and network.');
+            }
+            if (viewRef.current === view && operationRef.current === operation) {
+                setAccount(updated);
+                setEditing(false);
+            }
         } catch (err) {
-            setEditError(userFacingMessage(err, 'Failed to save changes.'));
+            if (viewRef.current === view && operationRef.current === operation) {
+                setEditError(userFacingMessage(err, 'Failed to save changes.'));
+            }
         } finally {
-            setBusy(false);
+            if (viewRef.current === view && operationRef.current === operation) {
+                busyRef.current = false;
+                setBusy(false);
+            }
         }
     }
 
@@ -128,28 +253,40 @@ export function CoSignerAccountDetail({ accountId, onBack }) {
     const header = <PageHeader onBack={onBack} title="Agent account" />;
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            {children}
+            {confirmDialog.request ? (
+                <ConfirmModal
+                    {...confirmDialog.request}
+                    onConfirm={confirmDialog.onConfirm}
+                    onCancel={confirmDialog.onCancel}
+                />
+            ) : null}
         </Screen>
     );
 
-    if (error && !account) return wrap(<StatusMessage variant="error">{error}</StatusMessage>);
-    if (!account) return wrap(<p className={styles.hint}>Loading…</p>);
+    if (error && !account) return wrap(<ListPage><StatusMessage variant="error">{error}</StatusMessage></ListPage>);
+    if (!account) return wrap(<ListPage><p className={styles.hint}>Loading…</p></ListPage>);
 
     if (editing) {
         return wrap(
-            <>
-                <p className={styles.hint} style={{ textAlign: 'left' }}>
-                    Editing the policy changes only the rules; the account's address
-                    and keys stay the same.
-                </p>
+            <FormPage
+                label="Edit agent account"
+                onSubmit={saveEdit}
+                status={editError ? <StatusMessage variant="error">{editError}</StatusMessage> : null}
+                actions={(
+                    <>
+                        <Button type="button" variant="secondary" onClick={() => setEditing(false)} disabled={busy}>Cancel</Button>
+                        <Button type="submit" variant="primary" loading={busy} disabled={busy}>Save changes</Button>
+                    </>
+                )}
+            >
+                <details>
+                    <summary>What changes?</summary>
+                    <p className={styles.hint}>Only the policy rules change. The account address and keys stay the same.</p>
+                </details>
                 <Input label="Account name" value={name} onChange={(e) => setName(e.target.value)} />
                 <CoSignerPolicyEditor value={policyDraft} onChange={setPolicyDraft} />
-                {editError ? <StatusMessage variant="error">{editError}</StatusMessage> : null}
-                <div className={styles.actions}>
-                    <Button variant="primary" onClick={saveEdit} loading={busy} disabled={busy}>Save changes</Button>
-                    <Button variant="secondary" onClick={() => setEditing(false)} disabled={busy}>Cancel</Button>
-                </div>
-            </>,
+            </FormPage>,
         );
     }
 
@@ -157,7 +294,7 @@ export function CoSignerAccountDetail({ accountId, onBack }) {
     const p = account.policy || {};
 
     return wrap(
-        <>
+        <ListPage>
             <p className={styles.successTitle}>{account.name}</p>
             <p className={styles.hint} style={{ textAlign: 'left' }}>
                 {account.enabled
@@ -166,14 +303,18 @@ export function CoSignerAccountDetail({ accountId, onBack }) {
             </p>
 
             <dl className={styles.detailsList}>
-                <dt className={styles.detailsLabel}>Network</dt>
-                <dd className={styles.detailsValue}>
-                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : account.chainId}
-                </dd>
+                {descriptor ? (
+                    <>
+                        <dt className={styles.detailsLabel}>Network</dt>
+                        <dd className={styles.detailsValue}>
+                            <ChainBadge descriptor={descriptor} size="sm" showName={false} />
+                        </dd>
+                    </>
+                ) : null}
                 <dt className={styles.detailsLabel}>Fund this address</dt>
                 <dd className={styles.detailsValue} style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'center', flexWrap: 'wrap' }}>
                     <AddressText address={account.aggregateAddress} />
-                    <CopyButton value={account.aggregateAddress || ''} label="Copy" />
+                    <CopyButton value={account.aggregateAddress || ''} label="Copy funding address" />
                 </dd>
                 <dt className={styles.detailsLabel}>Allowed actions</dt>
                 <dd className={styles.detailsValue}>{(p.allowedActions || []).map(actionDisplayLabel).join(', ') || 'none'}</dd>
@@ -206,6 +347,6 @@ export function CoSignerAccountDetail({ accountId, onBack }) {
                     {account.enabled ? 'Disable' : 'Enable'}
                 </Button>
             </div>
-        </>,
+        </ListPage>,
     );
 }

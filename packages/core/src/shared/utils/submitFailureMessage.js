@@ -48,11 +48,43 @@
 import { nativeFeeErrorMessage } from '../../sdk/nativeFeePreflight.js';
 import { encoderErrorMessage } from '../../sdk/encoderErrors.js';
 import { explorerErrorMessage } from '../../sdk/explorerErrors.js';
+import { knownSdkErrorMessage, unknownSdkErrorCode } from '../../sdk/sdkErrorMessages.js';
 import { validationErrorMessage } from '../../sdk/validationErrors.js';
 import { broadcastFailureKindFromError } from '../../flows/broadcastPermanence.js';
 import { humanizeError } from './humanizeError.js';
 import { actionDisplayLabel } from './actionDisplayLabel.js';
 import { CHUNK_LANE_OPENER_RE } from './chunkLaneCopy.js';
+import { protocolRefusalReason, userFacingMessage } from './userFacingMessage.js';
+
+const NEXT_STEP_RE = /\b(?:add|check|choose|enter|give|reconnect|report|retry(?:ing)?|review|try|update|wait)\b/i;
+const SIGNER_CANCELLED_RE = /\b(?:user (?:cancelled|canceled)|(?:cancelled|canceled) (?:by the user|on (?:the )?device)|user rejected on (?:the )?device)\b/i;
+
+function isSignerCancellation(err) {
+    if (!err || typeof err !== 'object') return false;
+    const e = /** @type {any} */ (err);
+    if (/^(?:Signer|User)Cancel(?:led|ed)Error$/.test(String(e.name || ''))) return true;
+    return SIGNER_CANCELLED_RE.test(String(e.message || ''));
+}
+
+function compactActionableMessage(message) {
+    const plain = message
+        .replace(/,\s*quoting "[A-Z][A-Z0-9_]+"/g, '')
+        .replace(/; retrying\./g, '; wait before trying again.');
+    const sentences = plain.split(/(?<=[.!?])\s+/);
+    if (sentences.length <= 2) return plain;
+
+    const context = sentences.slice(0, -1).map((sentence, index) => {
+        const clause = sentence.replace(/[.!?]+$/, '');
+        return index === 0 ? clause : clause.charAt(0).toLowerCase() + clause.slice(1);
+    }).join('; ');
+    return `${context}. ${sentences.at(-1)}`;
+}
+
+function safeBuildMessage(message, generic) {
+    const safe = userFacingMessage(message, generic);
+    const actionable = NEXT_STEP_RE.test(safe) ? safe : `${safe} Review the form and try again.`;
+    return compactActionableMessage(actionable);
+}
 
 /**
  * A native-coin fee refusal, recognised however it reached us.
@@ -64,7 +96,7 @@ import { CHUNK_LANE_OPENER_RE } from './chunkLaneCopy.js';
  * @param {unknown} err
  * @returns {boolean}
  */
-export function isNativeFeeForfeit(err) {
+function isNativeFeeForfeit(err) {
     if (!err || typeof err !== 'object') return false;
     const e = /** @type {any} */ (err);
     if (e.name === 'NativeFeeForfeitError') return true;
@@ -159,7 +191,7 @@ function isCommitFeeTooLowBroadcast(err) {
         ? String(/** @type {any} */ (err).message || '')
         : (typeof err === 'string' ? err : '');
     return /^broadcast failed \(commit\):/i.test(message.trim())
-        && /\b(?:min(?:imum)?[-\s]+relay[-\s]+fee|fee[-\s]+too[-\s]+low)\b/i.test(message);
+        && /\b(?:min(?:imum)?[-\s]+relay[-\s]+fee|fee[-\s]+too[-\s]+low|insufficient[-\s]+fee)\b/i.test(message);
 }
 
 // Read the per-chain action gates' refusals (registry/actions.js and the nested
@@ -224,12 +256,23 @@ export function chainGateErrorMessage(err) {
 export function submitFailureMessage(
     err, { coinTicker, mandatory = false, chainId, networkKind, requiredNative, fallback = '', verb = 'complete this' } = {},
 ) {
+    const generic = `Couldn't ${verb}. Something went wrong. Try again.`;
+    const protocolRefusal = protocolRefusalReason(err);
+    if (protocolRefusal) return protocolRefusal;
+    if (unknownSdkErrorCode(err)) return generic;
+    if (isSignerCancellation(err)) {
+        return 'Signing was cancelled. Nothing was signed. Review the details and try again when you are ready.';
+    }
     if (isNativeFeeForfeit(err)) {
-        return nativeFeeErrorMessage(err, { coinTicker, mandatory, chainId, networkKind });
+        return userFacingMessage(
+            nativeFeeErrorMessage(err, { coinTicker, mandatory, chainId, networkKind }), generic,
+        );
     }
     // Before every other classifier and before the fallback: the error already
     // carries the whole remedy, and nothing else here would recognise it.
-    if (isWatcherChunkLane(err)) return String(/** @type {any} */ (err).message || '');
+    if (isWatcherChunkLane(err)) {
+        return userFacingMessage(String(/** @type {any} */ (err).message || ''), generic);
+    }
     if (isCommitFeeTooLowBroadcast(err)) return NETWORK_FEE_TOO_LOW_MESSAGE;
     const broadcastKind = broadcastFailureKindFromError(err);
     if (broadcastKind === 'transient') return SIGNED_NOT_BROADCAST_MESSAGE;
@@ -239,34 +282,36 @@ export function submitFailureMessage(
     // transaction's fate as a build failure.
     if (broadcastKind === null) {
         const encoderCopy = encoderErrorMessage(err, { coinTicker, requiredNative });
-        if (encoderCopy) return encoderCopy;
+        if (encoderCopy) return safeBuildMessage(encoderCopy, generic);
         // Name a per-chain gate refusal ahead of the params-builder check below.
         const chainGateCopy = chainGateErrorMessage(err);
-        if (chainGateCopy) return chainGateCopy;
+        if (chainGateCopy) return userFacingMessage(chainGateCopy, generic);
         // A params-builder refusal happens BEFORE the encoder is called at all,
         // so it can only be reached here - and it is checked after the encoder
         // for the same reason the encoder is checked after broadcast: the more
         // specific classifier goes first. See validationErrors.js (D-118).
         const validationCopy = validationErrorMessage(err);
-        if (validationCopy) return validationCopy;
+        if (validationCopy) return safeBuildMessage(validationCopy, generic);
         // The explorer: the third service a submit talks to, and the last one
         // whose failures were reaching users as wire wording (URL included).
         // Checked last of the three because it is the broadest - every
         // fee-bearing action reads a quote from it - and a message that matched
         // an encoder or params refusal is the more specific answer.
         const explorerCopy = explorerErrorMessage(err);
-        if (explorerCopy) return explorerCopy;
+        if (explorerCopy) return safeBuildMessage(explorerCopy, generic);
+        const sdkCopy = knownSdkErrorMessage(err);
+        if (sdkCopy) return sdkCopy;
     }
     const raw = (err && typeof err === 'object')
         ? String(/** @type {any} */ (err).message || '')
         : (typeof err === 'string' ? err : '');
-    const fallbackText = String(fallback || '');
-    if (fallbackText && fallbackText !== raw) return fallbackText;
+    const fallbackText = String(fallback || '').trim();
+    if (fallbackText && (!raw || !fallbackText.includes(raw))) {
+        return userFacingMessage(fallbackText, generic);
+    }
     const humanized = humanizeError(err, verb);
-    if ((fallbackText && fallbackText === raw)
-        || humanized.cause !== 'unknown'
-        || humanized.details) return humanized.message;
-    return raw || 'The request stopped because the wallet service returned no explanation.';
+    if (humanized.cause !== 'unknown') return humanized.message;
+    return generic;
 }
 
 /**
@@ -279,6 +324,9 @@ export function submitFailureMessage(
  * @returns {string}
  */
 export function submitFailureDetails(err, message) {
+    const unknownCode = unknownSdkErrorCode(err);
+    if (unknownCode) return unknownCode;
+    if (knownSdkErrorMessage(err)) return '';
     const details = String(humanizeError(err).details || '').trim();
     if (!details) return '';
     const fold = (text) => String(text || '').toLowerCase().replace(/[\s.!?]+$/, '');

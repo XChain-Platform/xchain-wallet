@@ -38,9 +38,20 @@ export function validateCrossChainTemplate(t) {
         return { ok: false, errors: ['template must be an object'] };
     }
     const tt = /** @type {Record<string, unknown>} */ (t);
-    if (typeof tt.id !== 'string' || tt.id.length === 0) errors.push('id must be a non-empty string');
-    if (typeof tt.name !== 'string' || tt.name.length === 0) errors.push('name must be a non-empty string');
-    if (typeof tt.description !== 'string' || tt.description.length === 0) errors.push('description must be a non-empty string');
+    if (!isNonEmptyString(tt.id)) errors.push('id must be a non-empty string');
+    if (!isNonEmptyString(tt.name)) errors.push('name must be a non-empty string');
+    if (!isNonEmptyString(tt.description)) errors.push('description must be a non-empty string');
+    if (tt.personas !== undefined) {
+        if (!Array.isArray(tt.personas)) {
+            errors.push('personas must be an array');
+        } else {
+            tt.personas.forEach((persona, i) => {
+                if (!isNonEmptyString(persona)) {
+                    errors.push(`personas[${i}]: must be a non-empty string`);
+                }
+            });
+        }
+    }
     if (!Array.isArray(tt.actions) || tt.actions.length === 0) {
         errors.push('actions must be a non-empty array');
     } else {
@@ -53,13 +64,30 @@ export function validateCrossChainTemplate(t) {
             if (!['primary', 'secondary', 'tertiary'].includes(/** @type {string} */ (r.chainHint))) {
                 errors.push(`actions[${i}].chainHint: must be 'primary' | 'secondary' | 'tertiary'`);
             }
-            if (typeof r.action !== 'string' || /** @type {string} */ (r.action).length === 0) {
+            if (!isNonEmptyString(r.action)) {
                 errors.push(`actions[${i}].action: must be a non-empty string`);
             }
             if (!r.params || typeof r.params !== 'object' || Array.isArray(r.params)) {
                 errors.push(`actions[${i}].params: must be an object`);
+            } else {
+                Object.entries(/** @type {Record<string, unknown>} */ (r.params))
+                    .forEach(([key, value]) => {
+                        if (!isNonEmptyString(key)) {
+                            errors.push(`actions[${i}].params: keys must be non-empty strings`);
+                        }
+                        if (typeof value !== 'string') {
+                            errors.push(`actions[${i}].params.${key}: must be a string`);
+                        }
+                    });
+            }
+            if (r.note !== undefined && typeof r.note !== 'string') {
+                errors.push(`actions[${i}].note: must be a string`);
             }
         });
     }
     return errors.length === 0 ? { ok: true } : { ok: false, errors };
+}
+
+function isNonEmptyString(value) {
+    return typeof value === 'string' && value.trim().length > 0;
 }

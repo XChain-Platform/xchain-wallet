@@ -92,6 +92,7 @@ function staleLocalSend(over = {}) {
         broadcastAt: new Date(Date.now() - 600000).toISOString(),
         mempoolSeenAt: null,
         rbfReplacement: null,
+        rbf: true,
         tick: 'XCHAIN',
         amount: '100',
         ...over,
@@ -190,8 +191,8 @@ describe('History pending detail branch', () => {
         // one output's amount with another output's destination.
         const { view } = mountHistory({ mempool: [mempoolRow()] });
         const region = await openRow(view, 'seen');
-        expect(within(region).getByText(`100 XCHAIN to ${OURS}`)).toBeTruthy();
-        expect(within(region).getByText(`7 SPARE to ${THEIRS}`)).toBeTruthy();
+        expect(within(region).getByText(`+100 XCHAIN to ${OURS}`)).toBeTruthy();
+        expect(within(region).getByText(`+7 SPARE to ${THEIRS}`)).toBeTruthy();
     });
 
     it('shows raw segments for an action it cannot decode, and invents no amounts', async () => {
@@ -199,7 +200,7 @@ describe('History pending detail branch', () => {
             mempool: [mempoolRow({ action: 'MINT', data: 'MINT|0|XCHAIN|100|^397' })],
         });
         const region = await openRow(view, 'seen');
-        expect(within(region).getByText(/does not read Mint data/)).toBeTruthy();
+        expect(within(region).getByText(/doesn't read Mint data/)).toBeTruthy();
         expect(within(region).getByText('^397')).toBeTruthy();
         expect(region.textContent).not.toContain('100 XCHAIN to');
     });
@@ -213,9 +214,9 @@ describe('History pending detail branch', () => {
         // sentence nobody wrote.
         expect(within(panel).getByText(
             'Taken from this wallet\'s own record of the send. '
-            + 'The network has not reported the transaction data yet.',
+            + 'The network hasn\'t reported the transaction data yet.',
         )).toBeTruthy();
-        expect(within(panel).getByText(`100 XCHAIN to ${THEIRS}`)).toBeTruthy();
+        expect(within(panel).getByText(`-100 XCHAIN to ${THEIRS}`)).toBeTruthy();
     });
 
     it('upgrades the open detail in place when the transaction confirms', async () => {
@@ -252,7 +253,10 @@ describe('History offers replacement only where it can still work', () => {
         // that this shell cannot execute.
         const { view } = mountHistory({ pendingTxs: [staleLocalSend()] });
         const region = await openRow(view, 'not-seen');
-        expect(within(region).queryByRole('group', { name: 'Action options' })).toBeNull();
+        // The More menu still opens (Copy receipt applies to every entry),
+        // but it must not offer a replacement this shell cannot run.
+        fireEvent.click(within(region).getByText('More'));
+        expect(within(region).getByText('Copy receipt')).toBeTruthy();
         expect(within(region).queryByText('Speed up')).toBeNull();
         expect(within(region).queryByText('Cancel transaction')).toBeNull();
     });
@@ -266,6 +270,71 @@ describe('History offers replacement only where it can still work', () => {
         fireEvent.click(within(region).getByText('More'));
         expect(within(region).getByText('Speed up')).toBeTruthy();
         expect(within(region).getByText('Cancel transaction')).toBeTruthy();
+    });
+
+    it('retains RBF availability when a local record merges with its mempool row', async () => {
+        const { view } = mountHistory({
+            mempool: [mempoolRow({ tx_hash: LOCAL_HASH, source: OURS })],
+            pendingTxs: [staleLocalSend()],
+            replaceTx: vi.fn(),
+        });
+        const region = await openRow(view, 'seen');
+        fireEvent.click(within(region).getByText('More'));
+        expect(within(region).getByText('Speed up')).toBeTruthy();
+    });
+
+    it.each([false, null])('withholds replacement when the recorded RBF flag is %s', async (rbf) => {
+        const { view } = mountHistory({
+            pendingTxs: [staleLocalSend({ rbf })],
+            replaceTx: vi.fn(),
+        });
+        const region = await openRow(view, 'not-seen');
+        const more = within(region).queryByText('More');
+        if (more) fireEvent.click(more);
+        expect(within(region).queryByText('Speed up')).toBeNull();
+        expect(within(region).queryByText('Cancel transaction')).toBeNull();
+    });
+
+    it('shows the old fee, new fee, and added cost before broadcasting', async () => {
+        const replaceTx = vi.fn(async (request) => (request.preview ? {
+            originalFee: '0.00001',
+            replacementFee: '0.00002',
+            feeIncrease: '0.00001',
+        } : { replacementTxHash: REPLACEMENT_HASH }));
+        const { view } = mountHistory({ pendingTxs: [staleLocalSend()], replaceTx });
+        const region = await openRow(view, 'not-seen');
+        fireEvent.click(within(region).getByText('More'));
+        fireEvent.click(within(region).getByText('Speed up'));
+
+        const dialog = await screen.findByRole('dialog', { name: 'Speed up this transaction?' });
+        expect(within(dialog).getByText(
+            'Old fee: 0.00001 LTC. New fee: 0.00002 LTC. Additional cost: 0.00001 LTC.',
+        )).toBeTruthy();
+        expect(replaceTx).toHaveBeenCalledTimes(1);
+        expect(replaceTx.mock.calls[0][0]).toMatchObject({ strategy: 'speedup', preview: true });
+
+        fireEvent.click(within(dialog).getByText('Broadcast speed up'));
+        await waitFor(() => expect(replaceTx).toHaveBeenCalledTimes(2));
+        expect(replaceTx.mock.calls[1][0]).not.toHaveProperty('preview');
+    });
+
+    it('plainly reports a send that confirms after fee review', async () => {
+        const replaceTx = vi.fn()
+            .mockResolvedValueOnce({
+                originalFee: '0.00001',
+                replacementFee: '0.00002',
+                feeIncrease: '0.00001',
+            })
+            .mockRejectedValueOnce(new Error('This transaction is already confirmed.'));
+        const { view } = mountHistory({ pendingTxs: [staleLocalSend()], replaceTx });
+        const region = await openRow(view, 'not-seen');
+        fireEvent.click(within(region).getByText('More'));
+        fireEvent.click(within(region).getByText('Speed up'));
+
+        const dialog = await screen.findByRole('dialog', { name: 'Speed up this transaction?' });
+        fireEvent.click(within(dialog).getByText('Broadcast speed up'));
+
+        expect(await within(region).findByText('This transaction is already confirmed.')).toBeTruthy();
     });
 
     it('withdraws the offer once the transaction has been replaced', async () => {
@@ -313,13 +382,14 @@ describe('History shows a transaction this wallet proved into a block as confirm
         const region = await openRow(view, 'confirmed');
         const panel = within(region).getByRole('region', { name: 'Confirmed transaction' });
         expect(within(panel).getByText('Confirmed, no effect')).toBeTruthy();
-        expect(within(panel).getByText('Included in block 67,881,853')).toBeTruthy();
+        const confirmedBlock = (67881853).toLocaleString();
+        expect(within(panel).getByText(`Included in block ${confirmedBlock}`)).toBeTruthy();
         expect(region.textContent).not.toMatch(/not seen by the network/i);
         expect(region.textContent).not.toMatch(/may never have reached/i);
         expect(region.textContent).not.toMatch(/no longer in (the )?mempool/i);
         expect(region.textContent).not.toContain('Pending, not yet validated by the service.');
         // The timeline reads the same proof: the block is a done stage.
-        expect(within(region).getByText('Confirmed at block 67,881,853')).toBeTruthy();
+        expect(within(region).getByText(`Confirmed at block ${confirmedBlock}`)).toBeTruthy();
         // And a mined transaction is not offered a fee bump.
         const more = within(region).queryByText('More');
         if (more) fireEvent.click(more);
@@ -334,7 +404,7 @@ describe('History shows a transaction this wallet proved into a block as confirm
         const region = await openRow(view, 'confirmed');
         const panel = within(region).getByRole('region', { name: 'Confirmed transaction' });
         expect(within(panel).getByText('Confirmed on the network')).toBeTruthy();
-        expect(within(panel).getByText(`30 LTC to ${THEIRS}`)).toBeTruthy();
+        expect(within(panel).getByText(`-30 LTC to ${THEIRS}`)).toBeTruthy();
         expect(within(panel).queryByText(/has not reported the transaction data yet/)).toBeNull();
         expect(region.textContent).not.toMatch(/not seen by the network/i);
     });
@@ -367,10 +437,19 @@ describe('History failed-transaction detail words the stored error for a user', 
         return Array.from(panel.querySelectorAll('p')).map((p) => p.textContent || '').join(' | ');
     }
 
+    it('says when the wallet did not record a specific failure reason', async () => {
+        const panel = await openFailed(null);
+        expect(proseOf(panel)).toContain(
+            "Couldn't send this transaction. The wallet did not record a specific reason.",
+        );
+        expect(panel.querySelector('details')).toBeNull();
+    });
+
     it('keeps a function-prefixed precondition out of the prose', async () => {
         const raw = 'submitAction: params.TICK is required';
         const panel = await openFailed(raw);
         expect(proseOf(panel)).not.toMatch(/submitAction:|Reason:/);
+        expect(proseOf(panel)).toContain("Couldn't send this transaction. Something went wrong. Try again.");
         const details = panel.querySelector('details');
         expect(details, 'raw text kept behind a disclosure').toBeTruthy();
         expect(details.querySelector('summary').textContent).toBe('Technical details');
@@ -380,6 +459,7 @@ describe('History failed-transaction detail words the stored error for a user', 
     it('keeps an SDK string out of the prose', async () => {
         const panel = await openFailed('broadcast.signedTx: SDK did not return a txid');
         expect(proseOf(panel)).not.toMatch(/SDK did not return|broadcast\.signedTx|Reason:/);
+        expect(proseOf(panel)).toContain("Couldn't send this transaction. Something went wrong. Try again.");
     });
 
     it('turns a node reject code into a plain sentence and keeps the code in the details', async () => {

@@ -15,6 +15,14 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { NotificationService } from '../../../packages/core/src/notifications/NotificationService.js';
+import {
+    readBalanceCache,
+    writeBalanceCache,
+} from '../../../packages/core/src/shared/utils/balanceCache.js';
+import {
+    readHistoryCache,
+    writeHistoryCache,
+} from '../../../packages/core/src/shared/utils/historyCache.js';
 
 /** Drain microtasks + the timer queue so async handlers settle. */
 const flush = () => new Promise((r) => setTimeout(r, 0));
@@ -42,6 +50,7 @@ function makeSdk() {
 
 function makeDeps(overrides = {}) {
     const settings = {
+        activeNetwork: 'mainnet',
         notifications: {
             txConfirmations: true,
             incomingReceipts: true,
@@ -85,6 +94,95 @@ function makeService(deps, extra = {}) {
 }
 
 describe('NotificationService', () => {
+    it('keeps persisted portfolio snapshots isolated by active network', () => {
+        localStorage.clear();
+        const mainBalances = { 'bitcoin-mainnet': [{ address: 'main-address' }] };
+        const regtestBalances = { 'bitcoin-regtest': [{ address: 'regtest-address' }] };
+        writeBalanceCache('network-wallet', 'account', {
+            balances: mainBalances, fetchedAt: 1,
+        }, 'mainnet');
+        writeBalanceCache('network-wallet', 'account', {
+            balances: regtestBalances, fetchedAt: 2,
+        }, 'regtest');
+
+        const mainHistory = {
+            entries: [{ chainId: 'bitcoin-mainnet' }],
+            addressesByChain: { 'bitcoin-mainnet': [{ address: 'main-address' }] },
+            fetchedAt: 3,
+        };
+        const regtestHistory = {
+            entries: [{ chainId: 'bitcoin-regtest' }],
+            addressesByChain: { 'bitcoin-regtest': [{ address: 'regtest-address' }] },
+            fetchedAt: 4,
+        };
+        writeHistoryCache('network-wallet', 'account', mainHistory, 'mainnet');
+        writeHistoryCache('network-wallet', 'account', regtestHistory, 'regtest');
+
+        expect(readBalanceCache('network-wallet', 'account', 'mainnet')?.balances)
+            .toEqual(mainBalances);
+        expect(readBalanceCache('network-wallet', 'account', 'regtest')?.balances)
+            .toEqual(regtestBalances);
+        expect(readHistoryCache('network-wallet', 'account', 'mainnet')).toEqual(mainHistory);
+        expect(readHistoryCache('network-wallet', 'account', 'regtest')).toEqual(regtestHistory);
+        expect(readBalanceCache('network-wallet', 'account', 'testnet')).toBeNull();
+        expect(readHistoryCache('network-wallet', 'account', 'testnet')).toBeNull();
+    });
+
+    it('ignores an older address lookup after a network refresh starts', async () => {
+        let resolveOld;
+        const oldLookup = new Promise((resolve) => { resolveOld = resolve; });
+        const mainSdk = makeSdk();
+        const regtestSdk = makeSdk();
+        const networkSdks = {
+            'bitcoin-mainnet': mainSdk,
+            'bitcoin-regtest': regtestSdk,
+        };
+        const deps = makeDeps({
+            sdks: networkSdks,
+            getSdkForChain: (chainId) => networkSdks[chainId],
+            getActiveAddresses: vi.fn()
+                .mockReturnValueOnce(oldLookup)
+                .mockResolvedValueOnce([{
+                    address: 'regtest-address',
+                    chainId: 'bitcoin-regtest',
+                    label: 'Bitcoin Regtest',
+                    network: 'regtest',
+                }]),
+        });
+        const service = makeService(deps);
+
+        const starting = service.start();
+        await service.refresh();
+        resolveOld([{
+            address: 'main-address',
+            chainId: 'bitcoin-mainnet',
+            label: 'Bitcoin',
+            network: 'mainnet',
+        }]);
+        await starting;
+
+        expect(mainSdk.onAddress).not.toHaveBeenCalled();
+        expect(regtestSdk.onAddress).toHaveBeenCalledWith(
+            'regtest-address',
+            expect.any(Function),
+        );
+    });
+
+    it('ignores events from a subscription on the previous network', async () => {
+        const deps = makeDeps();
+        const service = makeService(deps);
+        await service.start();
+        deps.settings.activeNetwork = 'regtest';
+
+        deps.sdks['bitcoin-mainnet'].emit('addrBTC', {
+            type: 'NEW_ACTION',
+            data: { action_index: 10, source: 'someoneElse', destination: 'addrBTC' },
+        });
+        await flush();
+
+        expect(deps.notify).not.toHaveBeenCalled();
+    });
+
     it('start() connects each chain once and subscribes per address', async () => {
         const deps = makeDeps({});
         deps.addresses.push({ address: 'addrBTC2', chainId: 'bitcoin-mainnet', label: 'Bitcoin', network: 'mainnet' });
@@ -200,6 +298,26 @@ describe('NotificationService', () => {
         expect(onTxConfirmed).toHaveBeenCalledWith('txOurs');
     });
 
+    it('records our confirmed transaction without notifying when tx confirmations are off', async () => {
+        const deps = makeDeps();
+        deps.settings.notifications.txConfirmations = false;
+        const onTxConfirmed = vi.fn(async () => {});
+        const svc = makeService(deps, {
+            getPendingTxids: async () => new Set(['txOurs']),
+            onTxConfirmed,
+        });
+        await svc.start();
+
+        deps.sdks['bitcoin-mainnet'].emit('addrBTC', {
+            type: 'NEW_ACTION',
+            data: { action_index: 22, source: 'addrBTC', tx_hash: 'txOurs' },
+        });
+        await flush();
+
+        expect(onTxConfirmed).toHaveBeenCalledWith('txOurs');
+        expect(deps.notify).not.toHaveBeenCalled();
+    });
+
     it('fires order-fill on ORDER_MATCH, suppressed when orderFills is off', async () => {
         const deps = makeDeps();
         const svc = makeService(deps);
@@ -215,6 +333,36 @@ describe('NotificationService', () => {
         await flush();
         expect(deps.notify).toHaveBeenCalledTimes(1);
         expect(deps.notify.mock.calls[0][0]).toMatchObject({ kind: 'order-fill' });
+    });
+
+    it('suppresses dispenser fills when dispenserFills is off', async () => {
+        const deps = makeDeps();
+        deps.settings.notifications.dispenserFills = false;
+        const svc = makeService(deps);
+        await svc.start();
+
+        deps.sdks['bitcoin-mainnet'].emit('addrBTC', {
+            type: 'DISPENSE',
+            data: { action_index: 32 },
+        });
+        await flush();
+
+        expect(deps.notify).not.toHaveBeenCalled();
+    });
+
+    it('suppresses CoinPay-required prompts when incoming receipts are off', async () => {
+        const deps = makeDeps();
+        deps.settings.notifications.incomingReceipts = false;
+        const svc = makeService(deps);
+        await svc.start();
+
+        deps.sdks['bitcoin-mainnet'].emit('addrBTC', {
+            type: 'COINPAY_REQUIRED',
+            data: { action_index: 33 },
+        });
+        await flush();
+
+        expect(deps.notify).not.toHaveBeenCalled();
     });
 
     it('dedupes the same event within the 30s window', async () => {
@@ -301,5 +449,21 @@ describe('NotificationService', () => {
         await svc.refresh();
         expect(deps.sdks['bitcoin-mainnet'].onAddress).toHaveBeenCalledTimes(2);
         expect(deps.sdks['bitcoin-mainnet'].subCount('addrBTC2')).toBe(1);
+    });
+
+    it('tags subscription failures without logging addresses or error payloads', async () => {
+        const deps = makeDeps();
+        const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+        deps.sdks['bitcoin-mainnet'].onAddress.mockImplementation(() => {
+            throw new Error('password=hunter2 body={"address":"addrBTC","balance":42}');
+        });
+
+        const svc = makeService(deps, { logger });
+        await svc.start();
+
+        expect(logger.error).toHaveBeenCalledTimes(1);
+        expect(logger.error.mock.calls[0][0]).toMatch(/^\[notify\] /);
+        expect(logger.error.mock.calls[0][1]).toBe('<Error>');
+        expect(JSON.stringify(logger.error.mock.calls)).not.toMatch(/addrBTC|hunter2|balance|body=/);
     });
 });

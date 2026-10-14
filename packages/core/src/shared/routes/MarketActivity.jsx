@@ -8,13 +8,14 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useState } from 'react';
-import { Screen, PageHeader, Icon, Skeleton } from '@xchain-wallet/core/ui';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Button, EmptyState, Icon, ListPage, ListRow, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSupportedChains } from '../hooks/useSupportedChains.js';
 import { TickerIcon } from '../components/TickerIcon.jsx';
+import { RelativeTime } from '../components/RelativeTime.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { useOracleFeeds } from '../hooks/useOracleFeeds.js';
 import {
@@ -29,8 +30,10 @@ import {
 } from '../utils/dispenserPricing.js';
 import styles from './MarketActivity.module.css';
 import { formatWithThousands } from '../utils/amountFormat.js';
+import { actionRowIdentity, uniqueRows } from '../utils/pagedRows.js';
 
 const chainRegistry = registryLib.defaultRegistry();
+const ACTIVITY_PAGE_SIZE = 50;
 
 // Featured market shown on landing (same for everyone, independent of
 // holdings): XChain's own token. Tapping the header swaps it for any
@@ -87,10 +90,19 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
     const [selected, setSelected] = useState(FEATURED_MARKET);
     const [picking, setPicking] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
+    const [reload, setReload] = useState(0);
     const [offers, setOffers] = useState(/** @type {Array<{chainId: string, row: any}> | null} */ (null));
     const [sales, setSales] = useState(/** @type {Array<{chainId: string, row: any}> | null} */ (null));
     const [dexOrders, setDexOrders] = useState(/** @type {Array<{chainId: string, row: any}> | null} */ (null));
     const [dexSwaps, setDexSwaps] = useState(/** @type {Array<{chainId: string, row: any}> | null} */ (null));
+    const loadedMarketKeyRef = useRef(/** @type {string | null} */ (null));
+    const [visibleCounts, setVisibleCounts] = useState({
+        offers: ACTIVITY_PAGE_SIZE,
+        orders: ACTIVITY_PAGE_SIZE,
+        sales: ACTIVITY_PAGE_SIZE,
+        swaps: ACTIVITY_PAGE_SIZE,
+    });
 
     const tick = (selected.tick || '').toUpperCase();
 
@@ -100,24 +112,41 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
     useEffect(() => {
         if (!tick) return undefined;
         let cancelled = false;
+        const marketKey = `${walletId || ''}:${tick}:${chains.join(',')}`;
+        const hasCachedRows = loadedMarketKeyRef.current === marketKey;
         setLoading(true);
-        setOffers(null);
-        setSales(null);
-        setDexOrders(null);
-        setDexSwaps(null);
+        setLoadError(false);
+        if (!hasCachedRows) {
+            setOffers(null);
+            setSales(null);
+            setDexOrders(null);
+            setDexSwaps(null);
+        }
+        setVisibleCounts({
+            offers: ACTIVITY_PAGE_SIZE,
+            orders: ACTIVITY_PAGE_SIZE,
+            sales: ACTIVITY_PAGE_SIZE,
+            swaps: ACTIVITY_PAGE_SIZE,
+        });
 
         if (walletId && flowsLib.isDemoWallet(walletId)) {
-            const demo = flowsLib.synthesizeDemoMarketActivity(tick);
+            const demo = flowsLib.synthesizeDemoMarketActivity(tick, { chainIds: chains });
             if (!cancelled) {
-                setOffers(demo.offers);
-                setSales(demo.sales);
-                setDexOrders(demo.dexOrders);
-                setDexSwaps(demo.dexSwaps);
+                setOffers(uniqueRows(demo.offers, marketRowIdentity));
+                setSales(uniqueRows(demo.sales, marketRowIdentity));
+                setDexOrders(uniqueRows(demo.dexOrders, marketRowIdentity));
+                setDexSwaps(uniqueRows(demo.dexSwaps, marketRowIdentity));
+                loadedMarketKeyRef.current = marketKey;
                 setLoading(false);
             }
             return () => { cancelled = true; };
         }
 
+        let failed = false;
+        const markFailed = () => {
+            failed = true;
+            return [];
+        };
         const offersByChain = chains.map((cid) =>
             messaging.getDispensersForToken({ chainId: cid, token: tick })
                 // The explorer's status is a string label ('valid'), which
@@ -125,7 +154,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                 .then((resp) => extractRows(resp)
                     .filter((d) => isOpenDispenserSelling(d, tick))
                     .map((row) => ({ chainId: cid, row })))
-                .catch(() => []),
+                .catch(markFailed),
         );
         const salesByChain = chains.map((cid) =>
             typeof messaging.getDispenses === 'function'
@@ -135,7 +164,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                     .then((resp) => extractRows(resp)
                         .filter((row) => flowsLib.dispenseIsValid(row))
                         .map((row) => ({ chainId: cid, row })))
-                    .catch(() => [])
+                    .catch(markFailed)
                 : Promise.resolve([]),
         );
         const ordersByChain = chains.map((cid) =>
@@ -147,7 +176,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                             : null))
                     .then((rows) => rows.filter((row) => isOpenOffer(row))
                         .map((row) => ({ chainId: cid, row })))
-                    .catch(() => [])
+                    .catch(markFailed)
                 : Promise.resolve([]),
         );
         const swapsByChain = chains.map((cid) =>
@@ -159,7 +188,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                             : null))
                     .then((rows) => rows.filter((row) => isCompleteSwap(row))
                         .map((row) => ({ chainId: cid, row })))
-                    .catch(() => [])
+                    .catch(markFailed)
                 : Promise.resolve([]),
         );
 
@@ -170,14 +199,16 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
             Promise.all(swapsByChain),
         ]).then(([offersBatches, salesBatches, ordersBatches, swapsBatches]) => {
             if (cancelled) return;
-            setOffers(offersBatches.flat());
-            setSales(salesBatches.flat().sort(byTimeDesc));
-            setDexOrders(ordersBatches.flat());
-            setDexSwaps(swapsBatches.flat().sort(byTimeDesc));
+            setOffers(uniqueRows(offersBatches.flat(), marketRowIdentity));
+            setSales(uniqueRows(salesBatches.flat().sort(byTimeDesc), marketRowIdentity));
+            setDexOrders(uniqueRows(ordersBatches.flat(), marketRowIdentity));
+            setDexSwaps(uniqueRows(swapsBatches.flat().sort(byTimeDesc), marketRowIdentity));
+            if (!failed) loadedMarketKeyRef.current = marketKey;
+            setLoadError(failed);
             setLoading(false);
         });
         return () => { cancelled = true; };
-    }, [tick, walletId, messaging, chains]);
+    }, [tick, walletId, messaging, chains, reload]);
 
     // A Mode B offer carries no price on this lane; it comes from its oracle.
     const oracleFeedsFor = useOracleFeeds(messaging, offers);
@@ -218,210 +249,260 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
     );
 
     const iconChainId = selected.chainId || defaultChainId;
-
-    return (
-        <Screen variant={variant} header={header}>
-            <button
-                type="button"
-                className={styles.marketSelector}
-                onClick={() => setPicking(true)}
-                aria-label={`Change market (currently ${selected.displayName || tick})`}
-            >
+    const marketSelector = (
+        <Button
+            type="button"
+            className={styles.marketSelector}
+            onClick={() => setPicking(true)}
+            aria-label={`Change market (currently ${selected.displayName || tick})`}
+        >
+            <span className={styles.marketSelectorContent}>
                 <TickerIcon chainId={iconChainId} tick={tick} size={40} />
                 <span className={styles.marketSelectorText}>
                     <span className={styles.marketSelectorName}>{selected.displayName || tick}</span>
                     <span className={styles.marketSelectorSub}>{tick}</span>
                 </span>
                 <span className={styles.marketSelectorChevron} aria-hidden="true">›</span>
-            </button>
+            </span>
+        </Button>
+    );
 
-            {loading && offers === null ? (
-                <div className={styles.list}>
-                    <Skeleton height={56} />
-                    <Skeleton height={56} />
-                    <Skeleton height={56} />
+    return (
+        <Screen variant={variant} header={header}>
+            <ListPage toolbar={marketSelector}>
+                <div role="region" aria-label="Marketplace activity" aria-busy={loading || undefined}>
+                    {loading && offers === null ? (
+                        <div className={styles.list} role="status" aria-label="Loading marketplace activity">
+                            <Skeleton height={56} />
+                            <Skeleton height={56} />
+                            <Skeleton height={56} />
+                        </div>
+                    ) : null}
+
+                {loadError ? (
+                    <StatusMessage
+                        variant="error"
+                        recovery={{ label: 'Try again', onAction: () => setReload((value) => value + 1) }}
+                    >
+                        Some marketplace activity could not be loaded.
+                    </StatusMessage>
+                ) : null}
+
+                {offers !== null ? (
+                    <section className={styles.section} aria-label="Open dispensers">
+                        <SectionHeader
+                            as="h2"
+                            title={(
+                                <>
+                                    Open dispensers <span className={styles.count}>{offers.length}</span>
+                                </>
+                            )}
+                        />
+                        {offers.length === 0 ? (
+                            loadError ? null : <EmptyState title="No open dispensers" body={<>Open dispensers selling {tick} appear here.</>} titleAs="p" />
+                        ) : (
+                            /* Safari needs an explicit list role because this class removes list styling. */
+                            <ul className={styles.list} role="list">
+                                {offers.slice(0, visibleCounts.offers).map(({ chainId, row }, index) => {
+                                    // Explorer fields: GIVE_AMOUNT per fill, GET_AMOUNT
+                                    // (0 on a fiat-priced one), live escrow_remaining.
+                                    const remaining = flowsLib.dispenserLiveState(row).giveRemaining;
+                                    const actionIndex = row.action_index || row.actionIndex || row.tx_hash || row.id;
+                                    const onClick = typeof onOpenDispenser === 'function' && actionIndex
+                                        ? () => onOpenDispenser(chainId, actionIndex)
+                                        : undefined;
+                                    const title = isDispenserPriceStale(row)
+                                        ? dispenserRateLabel(row)
+                                        : row.give_amount
+                                            ? dispenserRateLabel(row, oracleFeedsFor(chainId, row))
+                                            : 'Open dispenser';
+                                    return (
+                                        <li key={marketRowIdentity({ chainId, row }) || `offer:${index}`}>
+                                            <ListRow
+                                                className={styles.row}
+                                                leading={<TickerIcon chainId={chainId} tick={tick} size={32} />}
+                                                title={title}
+                                                subtitle={remaining != null ? `${formatDecimal(remaining)} ${tick} remaining` : undefined}
+                                                chevron={onClick ? <Icon.ForwardIcon /> : false}
+                                                onClick={onClick}
+                                            />
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+                        )}
+                        {offers.length > visibleCounts.offers ? (
+                            <LoadMoreActivity onClick={() => setVisibleCounts((counts) => ({
+                                ...counts,
+                                offers: counts.offers + ACTIVITY_PAGE_SIZE,
+                            }))} label="Load more open dispensers" />
+                        ) : null}
+                    </section>
+                ) : null}
+
+                {dexOrders !== null ? (
+                    <section className={styles.section} aria-label="Open DEX orders">
+                        <SectionHeader
+                            as="h2"
+                            title={(
+                                <>
+                                    Open DEX orders <span className={styles.count}>{dexOrders.length}</span>
+                                </>
+                            )}
+                        />
+                        {dexOrders.length === 0 ? (
+                            loadError ? null : <EmptyState title="No open DEX orders" body={<>Open orders involving {tick} appear here.</>} titleAs="p" />
+                        ) : (
+                            /* Safari needs an explicit list role because this class removes list styling. */
+                            <ul className={styles.list} role="list">
+                                {dexOrders.slice(0, visibleCounts.orders).map(({ chainId, row }, i) => {
+                                    const giveTick = row.give_tick || row.give_coin || row.giveTick || row.giveCoin || '';
+                                    const getTick = row.get_tick || row.get_coin || row.getTick || row.getCoin || '';
+                                    const { give: giveQty, get: getQty } = offerAmounts(row);
+                                    const isSell = giveTick.toUpperCase() === tick;
+                                    const title = isSell
+                                        ? (giveQty != null && getQty != null
+                                            ? `Sell ${formatWithThousands(giveQty)} ${tick} for ${formatWithThousands(getQty)} ${getTick}`
+                                            : `Sell ${tick}`)
+                                        : (giveQty != null && getQty != null
+                                            ? `Buy ${formatWithThousands(getQty)} ${tick} for ${formatWithThousands(giveQty)} ${giveTick}`
+                                            : `Buy ${tick}`);
+                                    return (
+                                        <li key={marketRowIdentity({ chainId, row }) || `order:${i}`}>
+                                            <ListRow
+                                                className={styles.row}
+                                                leading={<TickerIcon chainId={chainId} tick={tick} size={32} />}
+                                                title={title}
+                                            />
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+                        )}
+                        {dexOrders.length > visibleCounts.orders ? (
+                            <LoadMoreActivity onClick={() => setVisibleCounts((counts) => ({
+                                ...counts,
+                                orders: counts.orders + ACTIVITY_PAGE_SIZE,
+                            }))} label="Load more DEX orders" />
+                        ) : null}
+                    </section>
+                ) : null}
+
+                {sales !== null ? (
+                    <section className={styles.section} aria-label="Recent dispenses">
+                        <SectionHeader
+                            as="h2"
+                            title={(
+                                <>
+                                    Recent dispenses <span className={styles.count}>{sales.length}</span>
+                                </>
+                            )}
+                        />
+                        {sales.length === 0 ? (
+                            loadError ? null : <EmptyState title="No recent dispenses" body={<>Recent dispenses of {tick} appear here.</>} titleAs="p" />
+                        ) : (
+                            /* Safari needs an explicit list role because this class removes list styling. */
+                            <ul className={styles.list} role="list">
+                                {sales.slice(0, visibleCounts.sales).map(({ chainId, row }, i) => {
+                                    // A dispense row's GET_AMOUNT is what the buyer actually
+                                    // paid, so it is right even for a fiat-priced dispenser.
+                                    const give = row.give_amount;
+                                    const soldTick = row.give_tick || tick;
+                                    const payAsset = row.get_tick || row.get_coin || '';
+                                    const get = row.get_amount;
+                                    const timestamp = row.timestamp || row.block_time;
+                                    return (
+                                        <li key={marketRowIdentity({ chainId, row }) || `sale:${i}`}>
+                                            <ListRow
+                                                className={styles.row}
+                                                leading={<TickerIcon chainId={chainId} tick={tick} size={32} />}
+                                                title={(
+                                                    <>
+                                                        {give ? `Sold ${formatDecimal(give)} ${soldTick}` : `Sold ${soldTick}`}
+                                                        {give && Number(get) > 0 && payAsset ? ` for ${formatDecimal(get)} ${payAsset}` : ''}
+                                                    </>
+                                                )}
+                                                subtitle={timestamp ? <RelativeTime timestamp={timestamp} /> : undefined}
+                                            />
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+                        )}
+                        {sales.length > visibleCounts.sales ? (
+                            <LoadMoreActivity onClick={() => setVisibleCounts((counts) => ({
+                                ...counts,
+                                sales: counts.sales + ACTIVITY_PAGE_SIZE,
+                            }))} label="Load more recent dispenses" />
+                        ) : null}
+                    </section>
+                ) : null}
+
+                {dexSwaps !== null ? (
+                    <section className={styles.section} aria-label="Recent DEX swaps">
+                        <SectionHeader
+                            as="h2"
+                            title={(
+                                <>
+                                    Recent DEX swaps <span className={styles.count}>{dexSwaps.length}</span>
+                                </>
+                            )}
+                        />
+                        {dexSwaps.length === 0 ? (
+                            loadError ? null : <EmptyState title="No recent DEX swaps" body={<>Recent swaps involving {tick} appear here.</>} titleAs="p" />
+                        ) : (
+                            /* Safari needs an explicit list role because this class removes list styling. */
+                            <ul className={styles.list} role="list">
+                                {dexSwaps.slice(0, visibleCounts.swaps).map(({ chainId, row }, i) => {
+                                    const giveTick = row.give_tick || row.give_coin || row.giveTick || row.giveCoin || '';
+                                    const getTick = row.get_tick || row.get_coin || row.getTick || row.getCoin || '';
+                                    const giveQty = row.give_amount ?? row.giveAmount ?? null;
+                                    const getQty = row.get_amount ?? row.getAmount ?? null;
+                                    const timestamp = row.timestamp || row.block_time;
+                                    const isSell = giveTick.toUpperCase() === tick;
+                                    const title = isSell
+                                        ? (giveQty != null && getQty != null
+                                            ? `Sold ${formatWithThousands(giveQty)} ${tick} for ${formatWithThousands(getQty)} ${getTick}`
+                                            : `Sold ${tick}`)
+                                        : (giveQty != null && getQty != null
+                                            ? `Bought ${formatWithThousands(getQty)} ${tick} for ${formatWithThousands(giveQty)} ${giveTick}`
+                                            : `Bought ${tick}`);
+                                    return (
+                                        <li key={marketRowIdentity({ chainId, row }) || `swap:${i}`}>
+                                            <ListRow
+                                                className={styles.row}
+                                                leading={<TickerIcon chainId={chainId} tick={tick} size={32} />}
+                                                title={title}
+                                                subtitle={timestamp ? <RelativeTime timestamp={timestamp} /> : undefined}
+                                            />
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+                        )}
+                        {dexSwaps.length > visibleCounts.swaps ? (
+                            <LoadMoreActivity onClick={() => setVisibleCounts((counts) => ({
+                                ...counts,
+                                swaps: counts.swaps + ACTIVITY_PAGE_SIZE,
+                            }))} label="Load more recent DEX swaps" />
+                        ) : null}
+                    </section>
+                ) : null}
                 </div>
-            ) : null}
-
-            {offers !== null ? (
-                <section className={styles.section} aria-label="Open dispensers">
-                    <header className={styles.sectionHeader}>
-                        <h3 className={styles.sectionTitle}>
-                            Open dispensers <span className={styles.count}>{offers.length}</span>
-                        </h3>
-                    </header>
-                    {offers.length === 0 ? (
-                        <p className={styles.empty}>No open dispensers selling {tick}.</p>
-                    ) : (
-                        <ul className={styles.list} role="list">
-                            {offers.map(({ chainId, row }) => {
-                                // Explorer fields: GIVE_AMOUNT per fill, GET_AMOUNT
-                                // (0 on a fiat-priced one), live escrow_remaining.
-                                const remaining = flowsLib.dispenserLiveState(row).giveRemaining;
-                                const actionIndex = row.action_index || row.actionIndex || row.tx_hash || row.id;
-                                const onClick = typeof onOpenDispenser === 'function' && actionIndex
-                                    ? () => onOpenDispenser(chainId, actionIndex)
-                                    : undefined;
-                                return (
-                                    <li key={`${chainId}:${actionIndex}`}>
-                                        <button
-                                            type="button"
-                                            className={styles.row}
-                                            onClick={onClick}
-                                            disabled={!onClick}
-                                        >
-                                            <TickerIcon chainId={chainId} tick={tick} size={32} />
-                                            <span className={styles.rowText}>
-                                                <span className={styles.rowTitle}>
-                                                    {isDispenserPriceStale(row)
-                                                        ? dispenserRateLabel(row)
-                                                        : row.give_amount
-                                                            ? dispenserRateLabel(row, oracleFeedsFor(chainId, row))
-                                                            : 'Open dispenser'}
-                                                </span>
-                                                <span className={styles.rowSub}>
-                                                    {remaining != null ? `${formatDecimal(remaining)} ${tick} remaining` : ''}
-                                                </span>
-                                            </span>
-                                            {onClick ? <Icon.ForwardIcon /> : null}
-                                        </button>
-                                    </li>
-                                );
-                            })}
-                        </ul>
-                    )}
-                </section>
-            ) : null}
-
-            {dexOrders !== null ? (
-                <section className={styles.section} aria-label="Open DEX orders">
-                    <header className={styles.sectionHeader}>
-                        <h3 className={styles.sectionTitle}>
-                            Open DEX orders <span className={styles.count}>{dexOrders.length}</span>
-                        </h3>
-                    </header>
-                    {dexOrders.length === 0 ? (
-                        <p className={styles.empty}>No open DEX orders involving {tick}.</p>
-                    ) : (
-                        <ul className={styles.list} role="list">
-                            {dexOrders.slice(0, 50).map(({ chainId, row }, i) => {
-                                const giveTick = row.give_tick || row.give_coin || row.giveTick || row.giveCoin || '';
-                                const getTick = row.get_tick || row.get_coin || row.getTick || row.getCoin || '';
-                                const { give: giveQty, get: getQty } = offerAmounts(row);
-                                const isSell = giveTick.toUpperCase() === tick;
-                                const title = isSell
-                                    ? (giveQty != null && getQty != null
-                                        ? `Sell ${formatWithThousands(giveQty)} ${tick} for ${formatWithThousands(getQty)} ${getTick}`
-                                        : `Sell ${tick}`)
-                                    : (giveQty != null && getQty != null
-                                        ? `Buy ${formatWithThousands(getQty)} ${tick} for ${formatWithThousands(giveQty)} ${giveTick}`
-                                        : `Buy ${tick}`);
-                                const key = row.action_index || row.actionIndex || row.tx_hash || `${chainId}:${i}`;
-                                return (
-                                    <li key={String(key)}>
-                                        <div className={styles.row}>
-                                            <TickerIcon chainId={chainId} tick={tick} size={32} />
-                                            <span className={styles.rowText}>
-                                                <span className={styles.rowTitle}>{title}</span>
-                                            </span>
-                                        </div>
-                                    </li>
-                                );
-                            })}
-                        </ul>
-                    )}
-                </section>
-            ) : null}
-
-            {sales !== null ? (
-                <section className={styles.section} aria-label="Recent dispenses">
-                    <header className={styles.sectionHeader}>
-                        <h3 className={styles.sectionTitle}>
-                            Recent dispenses <span className={styles.count}>{sales.length}</span>
-                        </h3>
-                    </header>
-                    {sales.length === 0 ? (
-                        <p className={styles.empty}>No recent dispenses of {tick}.</p>
-                    ) : (
-                        <ul className={styles.list} role="list">
-                            {sales.slice(0, 50).map(({ chainId, row }, i) => {
-                                // A dispense row's GET_AMOUNT is what the buyer actually
-                                // paid, so it is right even for a fiat-priced dispenser.
-                                const give = row.give_amount;
-                                const soldTick = row.give_tick || tick;
-                                const payAsset = row.get_tick || row.get_coin || '';
-                                const get = row.get_amount;
-                                const ts = Number(row.timestamp || row.block_time || 0);
-                                const dateLabel = ts > 0
-                                    ? new Date(ts * (ts > 1e12 ? 1 : 1000)).toLocaleString()
-                                    : '';
-                                return (
-                                    <li key={`${chainId}:${i}`}>
-                                        <div className={styles.row}>
-                                            <TickerIcon chainId={chainId} tick={tick} size={32} />
-                                            <span className={styles.rowText}>
-                                                <span className={styles.rowTitle}>
-                                                    {give ? `Sold ${formatDecimal(give)} ${soldTick}` : `Sold ${soldTick}`}
-                                                    {give && Number(get) > 0 && payAsset ? ` for ${formatDecimal(get)} ${payAsset}` : ''}
-                                                </span>
-                                                <span className={styles.rowSub}>
-                                                    {dateLabel}
-                                                </span>
-                                            </span>
-                                        </div>
-                                    </li>
-                                );
-                            })}
-                        </ul>
-                    )}
-                </section>
-            ) : null}
-
-            {dexSwaps !== null ? (
-                <section className={styles.section} aria-label="Recent DEX swaps">
-                    <header className={styles.sectionHeader}>
-                        <h3 className={styles.sectionTitle}>
-                            Recent DEX swaps <span className={styles.count}>{dexSwaps.length}</span>
-                        </h3>
-                    </header>
-                    {dexSwaps.length === 0 ? (
-                        <p className={styles.empty}>No recent DEX swaps involving {tick}.</p>
-                    ) : (
-                        <ul className={styles.list} role="list">
-                            {dexSwaps.slice(0, 50).map(({ chainId, row }, i) => {
-                                const giveTick = row.give_tick || row.give_coin || row.giveTick || row.giveCoin || '';
-                                const getTick = row.get_tick || row.get_coin || row.getTick || row.getCoin || '';
-                                const giveQty = row.give_amount ?? row.giveAmount ?? null;
-                                const getQty = row.get_amount ?? row.getAmount ?? null;
-                                const ts = Number(row.timestamp || row.block_time || 0);
-                                const dateLabel = ts > 0
-                                    ? new Date(ts * (ts > 1e12 ? 1 : 1000)).toLocaleString()
-                                    : '';
-                                const isSell = giveTick.toUpperCase() === tick;
-                                const title = isSell
-                                    ? (giveQty != null && getQty != null
-                                        ? `Sold ${formatWithThousands(giveQty)} ${tick} for ${formatWithThousands(getQty)} ${getTick}`
-                                        : `Sold ${tick}`)
-                                    : (giveQty != null && getQty != null
-                                        ? `Bought ${formatWithThousands(getQty)} ${tick} for ${formatWithThousands(giveQty)} ${giveTick}`
-                                        : `Bought ${tick}`);
-                                const key = row.action_index || row.actionIndex || row.tx_hash || `${chainId}:${i}`;
-                                return (
-                                    <li key={String(key)}>
-                                        <div className={styles.row}>
-                                            <TickerIcon chainId={chainId} tick={tick} size={32} />
-                                            <span className={styles.rowText}>
-                                                <span className={styles.rowTitle}>{title}</span>
-                                                <span className={styles.rowSub}>{dateLabel}</span>
-                                            </span>
-                                        </div>
-                                    </li>
-                                );
-                            })}
-                        </ul>
-                    )}
-                </section>
-            ) : null}
+            </ListPage>
         </Screen>
     );
+}
+
+function LoadMoreActivity({ onClick, label }) {
+    return (
+        <Button type="button" variant="secondary" onClick={onClick} aria-label={label}>
+            {label}
+        </Button>
+    );
+}
+
+function marketRowIdentity(entry) {
+    const identity = actionRowIdentity(entry?.row);
+    return identity == null ? null : `${entry.chainId}:${identity}`;
 }

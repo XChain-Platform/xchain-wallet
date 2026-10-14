@@ -3,34 +3,68 @@
  * with a subtle fade. Animation collapses to an instantaneous swap
  * when the user prefers reduced motion.
  *
- * The viewport is `pointer-events: none` so it doesn't trap clicks
- * across the rest of the page; individual toasts re-enable pointer
- * events so their Undo / Dismiss buttons stay clickable.
+ * The viewport and the toast cards are `pointer-events: none`, so a
+ * toast never traps a tap on whatever it floats over: on a phone it sits
+ * just above the tab bar, over a screen's bottom controls (Receive's
+ * Share QR was untappable for the toast's lifetime). Only the Undo and
+ * Dismiss buttons take pointer events.
  */
 .viewport {
     position: fixed;
-    bottom: var(--xc-space-4);
+    /* The bar publishes its content height; its safe-area padding remains
+       separate, so both contribute to the clearance. */
+    bottom: calc(
+        var(--xc-space-4)
+        + var(--xc-bottom-bar-h, 0px)
+        + env(safe-area-inset-bottom, 0px)
+    );
     inset-inline-start: 50%;
     transform: translateX(-50%);
     display: flex;
     flex-direction: column;
     align-items: stretch;
     gap: var(--xc-space-2);
-    z-index: 9999;
+    z-index: var(--xc-z-toast);
     pointer-events: none;
-    width: min(28rem, calc(100vw - 2 * var(--xc-space-4)));
+    width: min(28rem, calc(
+        100vw
+        - env(safe-area-inset-left, 0px)
+        - env(safe-area-inset-right, 0px)
+        - 2 * var(--xc-space-4)
+    ));
 }
 
-/* Cluster D FOLLOWUP 4 - overflow indicator. Surfaces above the
-   visible stack when more toasts are queued than the VISIBLE_LIMIT
-   allows on screen at once. Visual only (aria-hidden) since the
-   queued toasts continue to fire their aria-live announcements as
-   they surface. */
+.liveAnnouncement {
+    position: absolute;
+    /* Keep the live region in an untokenized one-pixel box while hiding it visually. */
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* The fitted viewport height follows an overlay keyboard on iOS. Android
+   resizes 100vh, making this adjustment zero there. */
+:global(html[data-xc-keyboard='open']) .viewport {
+    bottom: calc(
+        100vh - var(--xc-viewport-h, 100vh)
+        - env(safe-area-inset-top, 0px)
+        + var(--xc-space-4)
+    );
+}
+
+/* The visual overflow count stays out of the accessibility tree because
+   queued toasts announce themselves when they receive a visible slot. */
 .overflowBadge {
     pointer-events: none;
     align-self: center;
+    /* Preserve the untokenized 2px optical inset around the compact badge. */
     padding: 2px var(--xc-space-2);
-    border-radius: 999px;
+    border-radius: var(--xc-radius-pill);
     background: var(--xc-surface-raised);
     color: var(--xc-text-muted);
     font-size: var(--xc-text-xs);
@@ -38,35 +72,66 @@
 }
 
 .toast {
-    pointer-events: auto;
+    pointer-events: none;
+    box-sizing: border-box;
     display: flex;
+    min-width: 0;
+    max-width: 100%;
     align-items: center;
     justify-content: space-between;
     gap: var(--xc-space-2);
-    padding: var(--xc-space-2) var(--xc-space-3);
+    padding: var(--xc-card-pad);
     border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
+    border-radius: var(--xc-card-radius);
     background: var(--xc-surface-raised);
     color: var(--xc-text);
     font-size: var(--xc-text-sm);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-    animation: toast-in 160ms ease-out;
+    line-height: 1.4;
+    box-shadow: var(--xc-shadow-toast);
+    animation: toast-in var(--xc-motion-duration-standard) var(--xc-motion-ease-enter);
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .toast { animation: none; }
+    :global(:root:not([data-xc-reduced-motion='no-preference'])) .toast { animation: none; }
 }
 
+:global(:root[data-xc-reduced-motion='reduce']) .toast { animation: none; }
+
 @keyframes toast-in {
-    from { opacity: 0; transform: translateY(8px); }
+    from { opacity: 0; transform: translateY(var(--xc-space-2)); }
     to   { opacity: 1; transform: translateY(0); }
 }
 
-.variant_success {
-    border-color: var(--xc-success, #2c7a3d);
+.variant_info {
+    border-color: var(--xc-info);
+    background: var(--xc-info-bg);
+    color: var(--xc-info-text);
 }
+
+.variant_warning {
+    border-color: var(--xc-warning);
+    background: var(--xc-warning-bg);
+    color: var(--xc-warning-text);
+}
+
+.variant_success {
+    border-color: var(--xc-success);
+    background: var(--xc-success-bg);
+    color: var(--xc-success);
+}
+
 .variant_error {
-    border-color: var(--xc-error, #b00);
+    border-color: var(--xc-danger);
+    background: var(--xc-danger-bg);
+    color: var(--xc-danger-text);
+}
+
+.icon {
+    flex: 0 0 auto;
+    align-self: flex-start;
+    font-size: var(--xc-icon-sm);
+    font-weight: 700;
+    line-height: 1.4;
 }
 
 .message {
@@ -76,6 +141,7 @@
 }
 
 .controls {
+    pointer-events: auto;
     display: inline-flex;
     align-items: center;
     gap: var(--xc-space-1);
@@ -85,7 +151,7 @@
 .actionBtn {
     background: transparent;
     border: none;
-    color: var(--xc-accent-primary);
+    color: inherit;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -94,6 +160,9 @@
     padding: var(--xc-space-1) var(--xc-space-2);
     border-radius: var(--xc-radius-sm);
     font-family: inherit;
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
     /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
        inheriting it from whichever line box the platform font produces. */
     min-height: var(--xc-tap-min);
@@ -112,7 +181,7 @@
 .dismissBtn {
     background: transparent;
     border: none;
-    color: var(--xc-text-muted);
+    color: inherit;
     cursor: pointer;
     font-size: var(--xc-text-lg);
     line-height: 1;
@@ -121,7 +190,8 @@
     font-family: inherit;
     /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
        inheriting it from whichever line box the platform font produces. */
-    min-height: var(--xc-tap-min);
+    min-width: var(--xc-control-h-sm);
+    min-height: var(--xc-control-h-sm);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -133,4 +203,17 @@
 .dismissBtn:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: 2px;
+}
+
+@media (max-width: 360px) {
+    .toast {
+        align-items: stretch;
+        flex-wrap: wrap;
+    }
+
+    .controls {
+        flex: 1 1 100%;
+        min-width: 0;
+        justify-content: flex-end;
+    }
 }

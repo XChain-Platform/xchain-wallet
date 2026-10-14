@@ -31,6 +31,7 @@ import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withEnglishCopy } from '../_localized-source.js';
 
 import { flows } from '../../../packages/core/src/index.js';
 
@@ -126,10 +127,11 @@ assert.ok(/toAddress: selectedCounterparty/.test(src) && /message: t,/.test(src)
     'the reply prefill carries the recipient and the typed body');
 assert.ok(/fixedEncryption: threadEncryption/.test(src) && /threadEncryption\b/.test(src),
     'the reply locks the conversation encryption method onto the form');
-assert.ok(/className=\{local\.composerInput\}/.test(src) && /className=\{local\.composerSend\}/.test(src),
-    'composer pairs a message input with a send button');
-assert.ok(/className=\{local\.composerSend\} aria-label="Send message"/.test(src),
-    'the composer send button is labelled and submits the form (Enter or click)');
+assert.ok(/<Input[\s\S]*?className=\{local\.composerInput\}/.test(src)
+    && /<Button type="submit"[\s\S]*?aria-label="Send message"/.test(src),
+    'composer pairs the shared message Input with a shared send Button');
+assert.ok(/<Button type="submit"[\s\S]*?aria-label="Send message"/.test(src),
+    'the shared composer send Button is labelled and submits the form (Enter or click)');
 assert.ok(!/function SendConfirm\b/.test(src) && !/messaging\.messageAction\s*\(/.test(src),
     'the bespoke SendConfirm screen is gone; ComposeMessage is the single send surface');
 assert.ok(!/>\s*Reply\s*</.test(src),
@@ -159,8 +161,8 @@ assert.ok(/function formatDaySeparator\b/.test(src) && /'Today'/.test(src) && /'
     'day separator labels Today / Yesterday and dates');
 assert.ok(/local\.daySeparator/.test(src),
     'thread renders a day-separator row');
-assert.ok(/function formatTime\b/.test(src),
-    'message bubbles show a per-message time-of-day caption');
+assert.ok(/<RelativeTime timestamp=\{m\.timestamp\}/.test(src),
+    'message bubbles use the shared recent and absolute timestamp display');
 
 // --- 2e. iMessage-style bubbles ---------------------------------------
 
@@ -237,7 +239,7 @@ for (const [shell, appPath] of [
 
 // --- 6. Home wiring ----------------------------------------------------
 
-const homeSrc = readFileSync(join(sharedRoutes, 'Home.jsx'), 'utf8');
+const homeSrc = withEnglishCopy(readFileSync(join(sharedRoutes, 'Home.jsx'), 'utf8'));
 assert.ok(/onMessaging/.test(homeSrc), 'Home.jsx accepts onMessaging prop');
 assert.ok(/>\s*Messaging\b/.test(homeSrc),
     'Home.jsx renders a "Messaging" button');
@@ -324,8 +326,8 @@ assert.ok(/>\s*Messaging\b/.test(homeSrc),
 
     const lockedSrc = readFileSync(join(sharedRoutes, 'Locked.jsx'), 'utf8');
     assert.ok(
-        (lockedSrc.match(/sweepMsgMemoryForWallet\(demoWalletId\)/g) || []).length >= 2,
-        'Locked.jsx handleExitDemo sweeps messaging memory on both the surgical-remove and full-wipe fallback paths',
+        /await wipeWalletStorage\(\)[\s\S]*sweepMsgMemoryForWallet\(demoWalletId\)/.test(lockedSrc),
+        'Locked.jsx sweeps messaging memory only after the full demo wipe succeeds',
     );
 }
 

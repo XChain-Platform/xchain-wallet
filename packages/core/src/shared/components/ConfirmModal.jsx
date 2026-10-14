@@ -8,9 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect } from 'react';
-import { Button } from '@xchain-wallet/core/ui';
-import styles from './NoticeModal.module.css';
+import { useCallback, useEffect, useId, useRef } from 'react';
+import { Button, StatusMessage } from '@xchain-wallet/core/ui';
+import { OverlaySurface } from './OverlaySurface.jsx';
+import { useBackHandler } from '../../ui/backStack.js';
+import { useFocusTrap, useInertBackground } from '../utils/focusTrap.js';
+import { t } from '../../i18n/index.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 
 /**
  * Small centered confirm/cancel dialog: the in-app replacement for the native
@@ -26,39 +30,106 @@ import styles from './NoticeModal.module.css';
  * @param {string} [props.confirmLabel]  defaults to "Confirm"
  * @param {string} [props.cancelLabel]   defaults to "Cancel"
  * @param {boolean} [props.danger]       style the confirm button as destructive
+ * @param {boolean} [props.busy]         keep the dialog open and disable dismissal while confirming
+ * @param {string | null} [props.error]  confirmation failure shown inside the dialog
  * @param {() => void} props.onConfirm
  * @param {() => void} props.onCancel
  */
 export function ConfirmModal({
-    title, message, confirmLabel = 'Confirm', cancelLabel = 'Cancel', danger = false, onConfirm, onCancel,
+    title,
+    message,
+    confirmLabel = t('common.confirm'),
+    cancelLabel = t('common.cancel'),
+    danger = false,
+    busy = false,
+    error = null,
+    onConfirm,
+    onCancel,
 }) {
+    const cancel = useCallback(() => { if (!busy) onCancel(); }, [busy, onCancel]);
+    const confirmingRef = useRef(false);
+    const confirmationIdRef = useRef(0);
+    const releaseTimerRef = useRef(null);
+    const confirm = useCallback((event) => {
+        event?.preventDefault();
+        // Hold the first activation while the parent closes the dialog or exposes its busy state.
+        if (busy || confirmingRef.current) return;
+        confirmingRef.current = true;
+        const confirmationId = ++confirmationIdRef.current;
+        const release = () => {
+            if (confirmationId === confirmationIdRef.current) confirmingRef.current = false;
+        };
+        try {
+            const result = onConfirm();
+            if (result && typeof result.then === 'function') {
+                Promise.resolve(result).then(release, release);
+            } else {
+                releaseTimerRef.current = setTimeout(() => {
+                    releaseTimerRef.current = null;
+                    release();
+                }, 0);
+            }
+        } catch (error) {
+            release();
+            throw error;
+        }
+    }, [busy, onConfirm]);
+    const rootRef = useRef(null);
+    const panelRef = useRef(null);
+    const titleId = useId();
+    const messageId = useId();
+    useFocusTrap(panelRef, { active: true });
+    useInertBackground(rootRef, { active: true });
+    // The system Back gesture closes this before it leaves the screen.
+    useBackHandler(cancel);
+    useEffect(() => () => {
+        confirmationIdRef.current += 1;
+        if (releaseTimerRef.current !== null) {
+            clearTimeout(releaseTimerRef.current);
+            releaseTimerRef.current = null;
+        }
+    }, []);
     useEffect(() => {
-        const onKey = (e) => { if (e.key === 'Escape') onCancel(); };
+        const onKey = (e) => { if (e.key === 'Escape') cancel(); };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [onCancel]);
+    }, [cancel]);
 
     return (
-        <div
-            className={styles.overlay}
-            role="dialog"
-            aria-modal="true"
-            aria-label={title}
-            onClick={onCancel}
+        <OverlaySurface
+            rootRef={rootRef}
+            surfaceRef={panelRef}
+            title={title}
+            titleId={titleId}
+            titleAs="p"
+            aria-labelledby={titleId}
+            aria-describedby={message ? messageId : undefined}
+            aria-busy={busy ? 'true' : 'false'}
+            onBackdrop={cancel}
             tabIndex={-1}
-        >
-            <div className={styles.panel} onClick={(e) => e.stopPropagation()} role="presentation" tabIndex={-1}>
-                <p className={styles.title}>{title}</p>
-                {message ? <p className={styles.message}>{message}</p> : null}
-                <div style={{ display: 'flex', gap: 'var(--xc-space-2)' }}>
-                    <Button variant="secondary" block onClick={onCancel} autoFocus>
+            footer={(
+                <>
+                    <Button variant="secondary" block onClick={cancel} disabled={busy} autoFocus>
                         {cancelLabel}
                     </Button>
-                    <Button variant={danger ? 'error' : 'primary'} block onClick={onConfirm}>
+                    <Button
+                        variant={danger ? 'danger' : 'primary'}
+                        block
+                        onClick={confirm}
+                        loading={busy}
+                        disabled={busy}
+                    >
                         {confirmLabel}
                     </Button>
-                </div>
-            </div>
-        </div>
+                </>
+            )}
+        >
+            {message ? <p id={messageId}>{message}</p> : null}
+            {error ? (
+                <StatusMessage variant="error">
+                    {userFacingMessage(error, 'Could not complete this request. Try again.')}
+                </StatusMessage>
+            ) : null}
+        </OverlaySurface>
     );
 }

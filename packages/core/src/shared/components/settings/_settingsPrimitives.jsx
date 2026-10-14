@@ -15,11 +15,14 @@
 // Underscore prefix marks this as internal to `components/settings/`;
 // other directories shouldn't import from here.
 
+import { cloneElement, useId } from 'react';
+import { Switch } from '@xchain-wallet/core/ui';
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
 
 export const ROW = {
     display: 'flex',
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 'var(--xc-space-2) var(--xc-space-3)',
@@ -32,9 +35,11 @@ export const ROW = {
 export const STACK = {
     display: 'flex',
     flexDirection: 'column',
-    gap: 'var(--xc-space-1)',
+    gap: 'var(--xc-settings-row-gap)',
 };
 export const ROW_LABEL = { color: 'var(--xc-text-muted)' };
+// A row's own title: full-strength text so every card in one list reads alike.
+export const ROW_TITLE = { color: 'var(--xc-text)', fontWeight: 500 };
 export const ROW_VALUE = { color: 'var(--xc-text)', fontWeight: 500 };
 export const ROW_HINT = {
     color: 'var(--xc-text-muted)',
@@ -61,9 +66,52 @@ export const INPUT = {
     fontFamily: 'inherit',
 };
 
+export const ROW_COPY = {
+    display: 'flex',
+    flexDirection: 'column',
+    flex: '1 1 280px',
+    minWidth: 'min(100%, 280px)',
+};
+export const EMBEDDED_ROW = {
+    ...ROW,
+    padding: 'var(--xc-space-1) 0',
+    background: 'transparent',
+    border: 0,
+    borderRadius: 0,
+};
+
 /**
- * Two-column row with a label + hint on the left and an `<input
- * type="checkbox">` styled as a toggle on the right.
+ * A settings row that associates one visible label and description with its control.
+ *
+ * @param {object} props
+ * @param {string} props.label
+ * @param {string} [props.hint]
+ * @param {import('react').ReactElement} props.children
+ * @param {boolean} [props.embedded]
+ */
+export function SettingsFieldRow({ label, hint, children, embedded = false }) {
+    const generatedId = useId();
+    const controlId = children.props.id || `settings-field-${generatedId}`;
+    const hintId = hint ? `${controlId}-hint` : undefined;
+    const describedBy = [children.props['aria-describedby'], hintId].filter(Boolean).join(' ') || undefined;
+    const control = cloneElement(children, {
+        id: controlId,
+        'aria-describedby': describedBy,
+    });
+
+    return (
+        <div style={embedded ? EMBEDDED_ROW : ROW}>
+            <div style={ROW_COPY}>
+                <label htmlFor={controlId} style={ROW_VALUE}>{label}</label>
+                {hint ? <span id={hintId} style={ROW_HINT}>{hint}</span> : null}
+            </div>
+            {control}
+        </div>
+    );
+}
+
+/**
+ * Two-column row with a label, hint, and on-off control.
  *
  * @param {object} props
  * @param {string} props.label
@@ -71,30 +119,27 @@ export const INPUT = {
  * @param {boolean} props.checked
  * @param {(next: boolean) => void} props.onChange
  * @param {boolean} [props.disabled]
+ * @param {string} [props.accessibleLabel]
+ * @param {boolean} [props.embedded]
  */
-export function ToggleRow({ label, hint, checked, onChange, disabled }) {
+export function ToggleRow({
+    label,
+    hint,
+    checked,
+    onChange,
+    disabled,
+    accessibleLabel,
+    embedded = false,
+}) {
     return (
-        <div style={ROW}>
-            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                <span style={{ color: 'var(--xc-text)', fontWeight: 500 }}>{label}</span>
-                {hint ? <span style={ROW_HINT}>{hint}</span> : null}
-            </div>
-            <input
-                type="checkbox"
-                role="switch"
-                aria-label={label}
+        <div style={embedded ? EMBEDDED_ROW : ROW}>
+            <Switch
+                label={label}
+                description={hint}
+                aria-label={accessibleLabel}
                 checked={checked}
                 disabled={disabled}
                 onChange={(e) => onChange(e.target.checked)}
-                style={{
-                    width: 36,
-                    // slice 2: was 20px tall, under the 24px pointer
-                    // target floor (--xc-tap-min). Every settings switch in
-                    // the wallet renders through this one row, so the whole
-                    // Settings screen moves with this number.
-                    height: 'var(--xc-tap-min)',
-                    cursor: disabled ? 'not-allowed' : 'pointer',
-                }}
             />
         </div>
     );
@@ -104,17 +149,18 @@ export function ToggleRow({ label, hint, checked, onChange, disabled }) {
  * @param {object} props
  * @param {string} props.text
  * @param {'error'|'muted'} [props.tone]
+ * @param {string} [props.id]
  */
-export function Status({ text, tone }) {
+export function Status({ text, tone, id }) {
     return (
-        <div style={{
+        <div id={id} role={tone === 'error' ? 'alert' : undefined} style={{
             padding: 'var(--xc-space-3) var(--xc-space-4)',
             background: 'var(--xc-surface-raised)',
             border: tone === 'error'
-                ? '1px solid var(--xc-error, #c33)'
+                ? '1px solid var(--xc-danger-fg)'
                 : '1px dashed var(--xc-border)',
             borderRadius: 'var(--xc-radius-md)',
-            color: tone === 'error' ? 'var(--xc-error, #c33)' : 'var(--xc-text-muted)',
+            color: tone === 'error' ? 'var(--xc-danger-fg)' : 'var(--xc-text-muted)',
             fontSize: 'var(--xc-text-sm)',
         }}>
             {text}

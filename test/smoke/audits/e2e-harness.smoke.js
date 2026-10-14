@@ -136,7 +136,7 @@ assert.ok(
 // The donation-consent screen renders only AFTER the Argon2id derivation
 // that "Create wallet" starts, so any fixed budget in front of it is a bet
 // on how fast the runner derives, not on how fast a component paints. That
-// bet was lost on roughly a quarter of CI runs: `acknowledgeDonationConsent`
+// bet was lost on roughly a quarter of CI runs: `acknowledgeDonationNotice`
 // waited a bare 10s, gave up SILENTLY (it returns false to stay usable on
 // the extension popup, which has no consent step), and `createWallet` then
 // spent its whole 180s KDF budget waiting for a shell parked behind an
@@ -149,20 +149,20 @@ assert.ok(
 // the race, and the absence of a literal - because a future edit that
 // reintroduces `timeout: 10_000` here would restore a failure whose symptom
 // points at an entirely different line.
-const consentFn = fixture.slice(fixture.indexOf('export async function acknowledgeDonationConsent'));
+const consentFn = fixture.slice(fixture.indexOf('export async function acknowledgeDonationNotice'));
 const consentBody = consentFn.slice(0, consentFn.indexOf('\n}\n') + 2);
-assert.ok(consentBody.length > 100, 'located acknowledgeDonationConsent in the fixture');
+assert.ok(consentBody.length > 100, 'located acknowledgeDonationNotice in the fixture');
 assert.ok(
     /\.or\(unlockedShell\(page\)\)/.test(consentBody),
-    'donation-consent wait races the consent button against the unlocked shell',
+    'donation-notice wait races the notice heading against the unlocked shell',
 );
 assert.ok(
     /timeout:\s*KDF_STEP_MS/.test(consentBody),
-    'donation-consent wait is bounded by the shared KDF budget',
+    'donation-notice wait is bounded by the shared KDF budget',
 );
 assert.ok(
     !/timeout:\s*[0-9]/.test(consentBody),
-    'donation-consent wait carries no literal timeout (it sits behind the KDF)',
+    'donation-notice wait carries no literal timeout (it sits behind the KDF)',
 );
 
 // The a11y spec scans that same screen directly rather than through the
@@ -172,11 +172,11 @@ assert.ok(
 const a11ySrc = readFileSync(specs.a11y, 'utf8');
 assert.ok(
     /kdfStepTimeout/.test(a11ySrc),
-    'a11y spec waits on the consent screen with the shared KDF budget',
+    'a11y spec waits on the notice screen with the shared KDF budget',
 );
 assert.ok(
-    !/Support XChain development[\s\S]{0,200}?timeout:\s*[0-9]/.test(a11ySrc),
-    'a11y spec pins no literal timeout on the consent heading',
+    !/Automatic Donation System[\s\S]{0,200}?timeout:\s*[0-9]/.test(a11ySrc),
+    'a11y spec pins no literal timeout on the notice heading',
 );
 
 // And the invariant those two are instances OF, because pinning instances is

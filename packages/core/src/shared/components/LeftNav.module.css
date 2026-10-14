@@ -16,9 +16,45 @@
        is the viewport MINUS the top safe-area inset that body pads by, so
        the shell ends where the screen ends instead of overhanging it. */
     height: var(--xc-screen-h, var(--xc-viewport-h, 100vh));
-    height: var(--xc-screen-h, var(--xc-viewport-h, 100dvh));
     background: var(--xc-bg);
     color: var(--xc-text);
+}
+
+/* Skip-to-content link (WCAG 2.4.1): persistent navigation and header chrome
+   sit around every route at all widths. Park the link above the window until
+   it takes focus, then expose the direct path to the active screen. */
+/* Parked as a one-pixel clipped box rather than a negative offset: the
+   layout sits below the top safe-area inset, so a parked offset would land
+   behind the status bar clock. Focus brings it into view. */
+.skipLink {
+    position: absolute;
+    inset-inline-start: var(--xc-space-3);
+    top: 0;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    background: var(--xc-text);
+    color: var(--xc-bg);
+    padding: 0;
+    border-radius: var(--xc-radius-sm);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    text-decoration: none;
+    z-index: 1000;
+}
+
+.skipLink:focus,
+.skipLink:focus-visible {
+    top: var(--xc-space-3);
+    width: auto;
+    height: auto;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    overflow: visible;
+    clip-path: none;
+    outline: 2px solid var(--xc-accent-primary, var(--xc-text));
+    outline-offset: 2px;
 }
 
 .sidebar {
@@ -26,6 +62,7 @@
     min-width: 0;
     height: 100%;
     overflow: hidden;
+    transition: flex-basis 120ms ease-out;
 }
 
 .main {
@@ -40,11 +77,53 @@
     --xc-screen-h: 100%;
 }
 
-/* §49 / Cluster G FOLLOWUP 4: persistent header slot for banners
-   (QueuedBroadcastBanner, etc) that should survive route changes. The
-   slot collapses when no header is supplied (parent renders nothing). */
+/* §49 / Cluster G FOLLOWUP 4: persistent header slot for chrome that
+   should survive route changes. The slot collapses when no header is
+   supplied (parent renders nothing). It must never clip: the app header
+   row anchors the settings popover and the scan menu below itself, so an
+   overflow box here would cut them down to the row's own height. */
 .header {
     flex: 0 0 auto;
+}
+
+/* The compact header owns explicit safe-area padding while body reserves the
+   same viewport inset. Matching negative margins keep the header content and
+   the layout footprint from consuming that inset twice. */
+.layout[data-xc-tier='compact'] > .main > .header {
+    margin-top: calc(0px - env(safe-area-inset-top, 0px));
+    margin-inline-start: calc(0px - env(safe-area-inset-left, 0px));
+    margin-inline-end: calc(0px - env(safe-area-inset-right, 0px));
+    padding: env(safe-area-inset-top, 0px)
+        env(safe-area-inset-right, 0px)
+        0
+        env(safe-area-inset-left, 0px);
+    background: var(--xc-surface);
+}
+
+/* Stacked banners (QueuedBroadcastBanner, ReachabilityBanner, ...) under
+   the header row. They are the part that can grow, so the cap lives here
+   rather than on .header. */
+.notices {
+    composes: scrollArea from '../../ui/Screen.module.css';
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    /* Each tier publishes a notice inset beside its page gutter, so stacked
+       notices line up with route content; compact keeps the base gutter. */
+    padding-block: var(--xc-space-2);
+    padding-inline: calc(var(--xc-notice-inset, var(--xc-space-3)) + var(--xc-scrollbar-lane, 0px));
+}
+
+.notices > * {
+    margin: 0;
+}
+
+/* Keep stacked notices from consuming the route on phone-sized layouts. */
+.layout[data-xc-tier='compact'] .notices {
+    max-height: 45%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
 .mainBody {
@@ -62,6 +141,19 @@
     position: relative;
 }
 
+.routeFocusTarget:focus {
+    outline: none;
+}
+
+/* The route container takes focus from code, so it shows no ring on screen,
+   but forced-colors mode gets a system-colour ring so focus is never lost. */
+@media (forced-colors: active) {
+    .routeFocusTarget:focus {
+        outline: 2px solid Highlight;
+        outline-offset: -2px;
+    }
+}
+
 /* compact tier (< 640px): the bottom tab bar owns navigation.
    FullLayoutWithNav already withholds the nav slot here, so this rule is
    the belt-and-braces for any shell that renders a sidebar anyway. */
@@ -70,13 +162,29 @@
 }
 
 /* §24.3 / G054: when a bottom-tab bar is supplied (compact tier only),
-   give the main pane enough bottom-padding to clear the fixed 56px bar
+   give the main pane enough bottom-padding to clear the scalable bar
    (+ iOS safe-area inset). Visibility is JS-gated by the bottomBar prop;
    no viewport-keyed media query because a narrow frame inside a wide
    window should still surface the bar. */
 
 .layoutWithBottomBar > .main {
-    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0));
+    padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0));
+    /* The bar pays the home-indicator inset, so the Screen above it does not. */
+    --xc-screen-safe-bottom: 0px;
+}
+
+/* The bar is hidden while the keyboard is up (BottomTabBar.module.css), so
+   its slot is not held either. */
+:global(html[data-xc-keyboard='open']) .layoutWithBottomBar > .main {
+    padding-bottom: 0;
+}
+
+/* Match the short-landscape tab row so an invisible 12px spacer does not
+   remain below the route after the visible bar becomes shorter. */
+@media (orientation: landscape) and (max-height: 480px) {
+    .layoutWithBottomBar > .main {
+        padding-bottom: calc(44px + env(safe-area-inset-bottom, 0));
+    }
 }
 
 .bottomBarSlot {
@@ -84,14 +192,27 @@
 }
 
 .nav {
+    composes: scrollArea from '../../ui/Screen.module.css';
     display: flex;
     flex-direction: column;
     height: 100%;
+    min-height: 0;
     width: 100%;
     background: var(--xc-surface-raised);
     border-inline-end: 1px solid var(--xc-border);
     padding: var(--xc-space-3) 0;
+    /* Keep Settings and Lock at the foot of the rail clear of the home indicator. */
+    padding-bottom: calc(var(--xc-space-3) + env(safe-area-inset-bottom, 0px));
     overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.nav > .brand,
+.nav > .search,
+.nav > .list,
+.nav > .divider,
+.nav > .footer {
+    flex-shrink: 0;
 }
 
 .brand {
@@ -136,29 +257,40 @@
     outline-offset: -2px;
 }
 
-/* §33 command-palette launcher row: a muted, pill-outlined variant of a
-   nav item so it reads as a search box rather than a destination. */
+/* §33 command-palette launcher reads as a search box rather than a destination. */
 .search {
     margin: 0 var(--xc-space-3) var(--xc-space-2);
-    width: auto;
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    color: var(--xc-text-muted);
+}
+
+.search > button,
+.action > button {
+    justify-content: flex-start;
+    text-align: start;
+}
+
+.action {
+    margin: var(--xc-space-1) var(--xc-space-3) 0;
+}
+
+.action > button {
+    gap: var(--xc-space-3);
+    padding-inline: calc(var(--xc-space-1) - 1px);
 }
 
 .itemActive {
     background: var(--xc-surface);
     font-weight: 600;
-    color: var(--xc-accent-primary, var(--xc-text));
-    box-shadow: inset 3px 0 0 var(--xc-accent-primary, var(--xc-text));
+    color: var(--xc-accent-text, var(--xc-text));
+    box-shadow: var(--xc-shadow-nav-indicator);
 }
 
 .icon {
+    --xc-icon-size: var(--xc-icon-md);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 18px;
-    height: 18px;
+    width: var(--xc-icon-md);
+    height: var(--xc-icon-md);
     flex: 0 0 auto;
 }
 
@@ -173,14 +305,16 @@
 /* Unread/attention count pill pinned to the right of a nav row. */
 .badge {
     flex: 0 0 auto;
-    min-width: 1.1rem;
-    padding: 0 0.35rem;
-    border-radius: 999px;
+    box-sizing: border-box;
+    min-width: var(--xc-badge-height-sm);
+    height: var(--xc-badge-height-sm);
+    padding: 0 var(--xc-badge-padding-inline-sm);
+    border-radius: var(--xc-badge-radius);
     background: var(--xc-accent-primary, #0b84ff);
     color: var(--xc-on-accent);
-    font-size: var(--xc-text-xs);
-    font-weight: 700;
-    line-height: 1.25rem;
+    font-size: var(--xc-badge-font-size-sm);
+    font-weight: var(--xc-badge-font-weight);
+    line-height: 1;
     text-align: center;
 }
 
@@ -201,46 +335,16 @@
     flex-direction: column;
 }
 
-.walletSwitcher {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--xc-space-2);
-    width: 100%;
-    padding: var(--xc-space-2) var(--xc-space-4);
-    background: transparent;
-    border: 0;
-    color: var(--xc-text);
-    font: inherit;
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-    text-align: start;
-    cursor: pointer;
-}
-
-.walletSwitcher:hover,
-.walletSwitcher:focus-visible {
-    background: var(--xc-surface);
-    outline: none;
-}
-
-.walletSwitcher:focus-visible {
-    outline: 2px solid var(--xc-accent-primary, var(--xc-text));
-    outline-offset: -2px;
-}
-
-.walletName {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
 @media (prefers-contrast: more) {
     .itemActive {
         outline: 2px solid currentColor;
         outline-offset: -2px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sidebar {
+        transition: none;
     }
 }
 
@@ -257,10 +361,27 @@
     flex: 0 0 64px;
 }
 
-/* The brand wordmark and the wallet switcher have no icon-only form.
-   Both stay reachable from the app header at this width. */
-.layout[data-xc-tier='rail'] .brand,
-.layout[data-xc-tier='rail'] .walletSwitcher {
+.layout[data-xc-tier='rail'] {
+    --xc-page-top: var(--xc-space-4);
+}
+
+.layout[data-xc-tier='full'] {
+    --xc-page-top: var(--xc-space-4);
+}
+
+/* Notices sit above Screen, so they take the tier's gutter value here
+   rather than reading the Screen-owned page gutter. */
+.layout[data-xc-tier='rail'] .notices {
+    --xc-notice-inset: var(--xc-space-4);
+}
+
+.layout[data-xc-tier='full'] .notices {
+    --xc-notice-inset: var(--xc-space-6);
+}
+
+/* The brand wordmark has no icon-only form. The app header keeps the
+   product identity visible at this width. */
+.layout[data-xc-tier='rail'] .brand {
     display: none;
 }
 
@@ -286,18 +407,38 @@
     margin-inline: var(--xc-space-2);
 }
 
+.layout[data-xc-tier='rail'] .search > button,
+.layout[data-xc-tier='rail'] .action > button {
+    justify-content: center;
+    padding-inline: 0;
+}
+
+.layout[data-xc-tier='rail'] .action {
+    margin-inline: var(--xc-space-2);
+}
+
 /* Count pill tucks into the icon's top corner once the row has no label
    to sit beside. Kept as a readable number, not a bare dot. */
 .layout[data-xc-tier='rail'] .badge {
     position: absolute;
     top: 2px;
     inset-inline-end: 6px;
-    min-width: 0.9rem;
-    padding: 0 0.25rem;
-    font-size: 9px;
-    line-height: 0.9rem;
+    min-width: var(--xc-badge-height-sm);
+    padding: 0 var(--xc-badge-padding-inline-sm);
 }
 
 .layout[data-xc-tier='rail'] .divider {
     margin-inline: var(--xc-space-2);
+}
+
+@media (orientation: landscape) and (max-height: 480px) {
+    .layout[data-xc-tier] {
+        --xc-page-top: var(--xc-space-2);
+    }
+}
+
+/* The header menu trigger is redundant when it would hold only Search and a
+   visible rail already shows a Search button. */
+.layout[data-xc-rail='shown'] :global([data-header-menu='search-only']) {
+    display: none;
 }

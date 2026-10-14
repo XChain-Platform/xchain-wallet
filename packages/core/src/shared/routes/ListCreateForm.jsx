@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Input, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, EmptyState, FeeSelector, FormPage, Input, ListPage, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib, decoder as decoderLib, airdrop as airdropLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -47,6 +47,7 @@ import {
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { listActionSize, listActionSizeError } from '../utils/listActionSize.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -88,7 +89,6 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -117,8 +117,6 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         ({ valid: [], invalid: [], duplicates: 0, wrongNetwork: [] }),
     );
     const [showInvalid, setShowInvalid] = useState(false);
-    const fileInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
-
     // TYPE=1 (token list) member entry: same free-text tick parsing as
     // ProjectRosterForm.
     const [ticksText, setTicksText] = useState('');
@@ -138,6 +136,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const submitInFlightRef = useRef(false);
 
     // The active map and the settings read are best-effort: a host without
     // `getActiveAddresses` / `getSettings`, or one whose call fails, still
@@ -304,6 +303,10 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         ...(trimmedMemo ? { MEMO: trimmedMemo } : {}),
         ITEM: items,
     }), [withMeta, listType, items, trimmedMemo, trimmedName, trimmedDescription]);
+    const actionSize = useMemo(
+        () => listActionSize(wireParams, descriptor, isWatcherMode ? null : fromAddress),
+        [wireParams, descriptor, isWatcherMode, fromAddress],
+    );
 
     const recipientsDrop = useDropZone({
         accept: ['.csv', '.txt', 'text/csv', 'text/plain'],
@@ -313,20 +316,9 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
             const text = typeof content === 'string' ? content : '';
             const parts = airdropLib.parseCsv(text);
             setPasteText((prev) => (prev.trim() ? `${prev}\n${parts.join('\n')}` : parts.join('\n')));
+            setFormError(null);
         },
     });
-
-    function handleFile(event) {
-        const file = event.target?.files?.[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = () => {
-            const text = typeof reader.result === 'string' ? reader.result : '';
-            const parts = airdropLib.parseCsv(text);
-            setPasteText((prev) => (prev.trim() ? `${prev}\n${parts.join('\n')}` : parts.join('\n')));
-        };
-        reader.readAsText(file);
-    }
 
     // Software sources go through the single-encode confirm
     // page; hardware + watcher keep the legacy review stage (same split
@@ -359,9 +351,11 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
     }, [stage, actionConfirm.open, wireParams, chainId]);
 
     async function openConfirmScreen() {
-        const from = sourceDescriptor();
+        if (submitInFlightRef.current) return;
+        submitInFlightRef.current = true;
         setSubmitError(null);
         try {
+            const from = sourceDescriptor();
             const res = await actionConfirm.run({
                 chainId,
                 from,
@@ -389,6 +383,8 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 chainId,
                 coinTicker, mandatory: nativeFee.mandatory, fallback: err?.message || 'Create list failed.',
             }));
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 
@@ -405,6 +401,13 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
 
     function validate() {
         if (!fromAddress) { setFormError('No signing address available on this chain.'); return false; }
+        if (feePick.mode === 'custom' && feePerKb === null) {
+            const rate = Number(feePick.customRate);
+            setFormError(rate > 0
+                ? 'Custom fee rate can have no more than 8 decimal places.'
+                : 'Custom fee rate must be greater than zero.');
+            return false;
+        }
         // Verify no pipe or semicolon in MEMO (both are protocol delimiters)
         if (/[|;]/.test(memo)) { setFormError('Memo cannot contain | or ; characters.'); return false; }
         // Verify MEMO fits the chain's length limit, measured as sent (trimmed)
@@ -412,6 +415,10 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         if (memoTooLong) { setFormError(memoTooLong); return false; }
         if (nameError || descriptionError) { setFormError('Fix the list name and description first.'); return false; }
         if (listType === '2') {
+            if (recipients.invalid.length > 0) {
+                setFormError(`Remove ${recipients.invalid.length} invalid address${recipients.invalid.length === 1 ? '' : 'es'} before reviewing.`);
+                return false;
+            }
             if (recipients.valid.length === 0) { setFormError('Add at least one valid address.'); return false; }
         } else {
             // Verify every token name is well formed before counting them
@@ -421,6 +428,8 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
             }
             if (memberTicks.length === 0) { setFormError('Add at least one token.'); return false; }
         }
+        const sizeError = listActionSizeError(actionSize);
+        if (sizeError) { setFormError(sizeError); return false; }
         return true;
     }
 
@@ -434,9 +443,10 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
+        if (stage === 'submitting' || submitInFlightRef.current) return;
         if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && hw && hwStatus !== 'available') return;
+        submitInFlightRef.current = true;
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -476,6 +486,8 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
             }));
             setStage('review');
             if (!isWatcherMode && !hw) { passwordRef.current?.focus(); passwordRef.current?.select(); }
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 
@@ -486,8 +498,8 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>
+            {children}
         </Screen>
     );
 
@@ -520,7 +532,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 {listType === '1' && missingTicks.length > 0 ? (
                     <p className={styles.hint}>
                         {missingTicks.length} of these ({missingTicks.join(', ')}) {missingTicks.length === 1 ? 'was' : 'were'} not
-                        found on {descriptor?.displayName || chainId}; the network leaves an unknown token out of the list.
+                        found on the selected chain; the network leaves an unknown token out of the list.
                         Check the members in My Lists once it's indexed.
                     </p>
                 ) : null}
@@ -541,7 +553,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={null}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
@@ -562,17 +574,51 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
 
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
+            <FormPage
+                label="Review list"
+                onSubmit={handleSubmit}
+                status={(isWatcherMode || hw) && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={(event) => {
+                                event.preventDefault();
+                                setSubmitError(null);
+                                setStage('form');
+                            }}
+                            disabled={stage === 'submitting'}
+                        >
+                            Back
+                        </Button>
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            loading={stage === 'submitting'}
+                            disabled={isWatcherMode ? false : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
+                        >
+                            {isWatcherMode ? 'Create unsigned transaction' : hw ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}` : 'Publish list'}
+                        </Button>
+                    </>
+                )}
+            >
                 <p className={styles.summary}>{decoded?.summary}</p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
+                    <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected chain'}</dd>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
                     <dt className={styles.detailsLabel}>Type</dt>
                     <dd className={styles.detailsValue}>{listType === '2' ? 'Address list' : 'Token list'}</dd>
                     <dt className={styles.detailsLabel}>Items</dt>
                     <dd className={styles.detailsValue}>{items.length}</dd>
+                    <dt className={styles.detailsLabel}>Action size</dt>
+                    <dd className={styles.detailsValue}>
+                        {actionSize.compiledBytes.toLocaleString('en-US')} / {actionSize.maxBytes.toLocaleString('en-US')} bytes
+                    </dd>
                     {trimmedMemo ? (
                         <>
                             <dt className={styles.detailsLabel}>Memo</dt>
@@ -584,6 +630,10 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                         {feeEstimate ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}` : 'Estimate unavailable'}
                     </dd>
                 </dl>
+                <details>
+                    <summary>Review {items.length} item{items.length === 1 ? '' : 's'}</summary>
+                    <ul>{items.map((item) => (<li key={item}><code>{item}</code></li>))}</ul>
+                </details>
                 {decoded && decoded.warnings.length > 0 ? (
                     <div role="alert" className={styles.warnings}>
                         {decoded.warnings.map((w, i) => (<p key={i} className={styles.warning}>{w}</p>))}
@@ -605,21 +655,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 )}
-                {(isWatcherMode || hw) && submitError ? (<StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>) : null}
-                <div className={styles.actions}>
-                    <Button type="button" variant="ghost" onClick={() => setStage('form')} disabled={stage === 'submitting'}>
-                        Back
-                    </Button>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={isWatcherMode ? false : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
-                    >
-                        {isWatcherMode ? 'Create unsigned transaction' : hw ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}` : 'Publish list'}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -650,6 +686,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                         : coinTicker;
                     const item = tickCoinSupported ? qualifyTickItem(selectedCoin, t, coinTicker) : t;
                     if (item) setTicksText((prev) => (prev.trim() ? `${prev}\n${item}` : item));
+                    setFormError(null);
                     setTokenPickerOpen(false);
                 }}
                 onBack={() => setTokenPickerOpen(false)}
@@ -665,6 +702,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 chainCoin={descriptor?.coin}
                 onAdd={(addresses) => {
                     setPasteText((prev) => (prev.trim() ? `${prev}\n${addresses.join('\n')}` : addresses.join('\n')));
+                    setFormError(null);
                     setContactPickerOpen(false);
                 }}
                 onBack={() => setContactPickerOpen(false)}
@@ -674,12 +712,29 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
 
     // stage === 'form'
     return wrap(
-        <form onSubmit={handleReview} noValidate>
-            <NetworkField
+        <FormPage
+            label="Create list"
+            onSubmit={handleReview}
+            onChangeCapture={() => { if (formError) setFormError(null); }}
+            status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={actionConfirm.composing}
+                    disabled={actionConfirm.composing}
+                >
+                    {actionConfirm.composing ? 'Preparing review…' : singleEncode ? 'Publish list' : 'Review'}
+                </Button>
+            )}
+        >
+            <ChainPicker
+                label="Network"
                 value={chainId}
-                onChange={(cid) => { setChainId(cid); setFromAddressId(null); }}
+                onChange={(cid) => { setChainId(cid); setFromAddressId(null); setFormError(null); }}
                 chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]}
                 chainRegistry={chainRegistry}
+                hideNetworkKind
             />
             {fromAddress ? (
                 <AddressField
@@ -698,7 +753,10 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
             <Select
                 label="List type"
                 value={listType}
-                onChange={(e) => setListType(/** @type {'1' | '2'} */ (e.target.value))}
+                onChange={(e) => {
+                    setListType(/** @type {'1' | '2'} */ (e.target.value));
+                    setFormError(null);
+                }}
                 hint={listType === '2'
                     ? 'A reusable list of addresses. Used by airdrops, allow/block gates, dispensers, and orders.'
                     : 'A reusable list of tokens. Used for project rosters and allow/block gates.'}
@@ -709,37 +767,41 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
 
             {listType === '2' ? (
                 <>
-                    <label
-                        className={styles.pickerLabel}
-                        htmlFor="list-addresses"
+                    <div
                         {...recipientsDrop.rootProps}
                         data-drop-active={recipientsDrop.isDragOver ? 'true' : 'false'}
                     >
-                        Addresses
-                        <textarea
+                        <Textarea
                             id="list-addresses"
-                            className={styles.picker}
+                            label="Addresses"
                             value={pasteText}
-                            onChange={(e) => setPasteText(e.target.value)}
+                            onChange={(e) => { setPasteText(e.target.value); setFormError(null); }}
                             placeholder={recipientsDrop.isDragOver
                                 ? 'Drop the CSV / TXT file here'
                                 : 'Paste addresses, one per line or comma-separated.'}
                             rows={8}
                             spellCheck={false}
-                            autoCapitalize="none"
+                            autoCapitalize="off"
                             autoCorrect="off"
+                            autoComplete="off"
                         />
-                    </label>
-                    <div className={styles.fromLine}>
-                        <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept=".csv,.txt,text/csv,text/plain"
-                            onChange={handleFile}
-                            aria-label="Upload CSV of addresses"
-                        />
+                    </div>
+                    {/* Wraps, and drives a hidden file input from a real
+                        button: the browser's own picker is unstyled and,
+                        beside the Contacts button, ran off a phone screen. */}
+                    <div className={styles.fromLine} style={{ flexWrap: 'wrap' }}>
+                        <div style={{ display: 'none' }}>
+                            <Input
+                                {...recipientsDrop.pickerProps}
+                                aria-label="Upload CSV of addresses"
+                                autoComplete="off"
+                            />
+                        </div>
+                        <Button type="button" variant="ghost" onClick={recipientsDrop.openFilePicker}>
+                            Upload CSV
+                        </Button>
                         <Button type="button" variant="ghost" onClick={() => setContactPickerOpen(true)}>
-                            Add from Contacts
+                            Add from contacts
                         </Button>
                     </div>
                     {pasteText.trim() ? (
@@ -751,9 +813,9 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                     ) : null}
                     {recipients.invalid.length > 0 ? (
                         <div className={styles.hint}>
-                            <button type="button" className={styles.back} onClick={() => setShowInvalid((s) => !s)}>
+                            <Button type="button" className={styles.back} onClick={() => setShowInvalid((s) => !s)}>
                                 {showInvalid ? 'Hide' : 'Show'} {recipients.invalid.length} invalid
-                            </button>
+                            </Button>
                             {showInvalid ? (
                                 <ul>{recipients.invalid.map((a, i) => (<li key={i}><code>{a}</code></li>))}</ul>
                             ) : null}
@@ -767,13 +829,14 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                                 {recipients.wrongNetwork.length} address
                                 {recipients.wrongNetwork.length === 1 ? ' is' : 'es are'} for another
                                 network and {recipients.wrongNetwork.length === 1 ? 'was' : 'were'} skipped.
-                                This list is published on {descriptor?.displayName || chainId}.
+                                This list is published on the selected chain.
                             </p>
                             <DiagnosticDetails
                                 summary={`Skipped addresses (${recipients.wrongNetwork.length})`}
+                                keepAddresses
                                 items={recipients.wrongNetwork.map((address) => ({
                                     subject: address,
-                                    message: `Does not belong to ${descriptor?.displayName || chainId}.`,
+                                    message: 'Does not belong to the selected chain.',
                                 }))}
                             />
                         </div>
@@ -808,10 +871,10 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
             ) : (
                 <TickItemsEditor
                     value={ticksText}
-                    onChange={setTicksText}
+                    onChange={(value) => { setTicksText(value); setFormError(null); }}
                     items={tickItems}
                     chainId={chainId}
-                    chainLabel={descriptor?.displayName || chainId}
+                    chainLabel="the selected chain"
                     listCoin={coinTicker}
                     coinQualified={tickCoinSupported}
                     messaging={messaging}
@@ -828,7 +891,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                         hint={`${utf8ByteLength(trimmedName)} / ${LIST_META_NAME_MAX_BYTES} bytes`}
                         error={nameError || undefined}
                         value={listName}
-                        onChange={(e) => setListName(e.target.value)}
+                        onChange={(e) => { setListName(e.target.value); setFormError(null); }}
                         autoComplete="off"
                     />
                     <Input
@@ -836,7 +899,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                         hint={`${utf8ByteLength(trimmedDescription)} / ${LIST_META_DESCRIPTION_MAX_BYTES} bytes`}
                         error={descriptionError || undefined}
                         value={listDescription}
-                        onChange={(e) => setListDescription(e.target.value)}
+                        onChange={(e) => { setListDescription(e.target.value); setFormError(null); }}
                         autoComplete="off"
                     />
                 </>
@@ -845,7 +908,7 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
                 label="Memo (optional)"
                 hint={MEMO_HINT}
                 value={memo}
-                onChange={(e) => setMemo(e.target.value)}
+                onChange={(e) => { setMemo(e.target.value); setFormError(null); }}
                 autoComplete="off"
             />
 
@@ -862,21 +925,10 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
             <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
             <p className={styles.hint}>
                 A bigger list is a bigger transaction: the network fee rises with the number of items. The exact fee is set when you broadcast.
+                {' '}Action size: {actionSize.compiledBytes.toLocaleString('en-US')} / {actionSize.maxBytes.toLocaleString('en-US')} bytes.
             </p>
 
-            {formError ? (<StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>) : null}
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    block
-                    loading={actionConfirm.composing}
-                    disabled={actionConfirm.composing}
-                >
-                    {actionConfirm.composing ? 'Preparing review…' : singleEncode ? 'Publish list' : 'Review'}
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }
 
@@ -896,7 +948,6 @@ export function ListCreateForm({ walletId, chainId: initialChainId, initialType,
  * @param {() => void} props.onBack
  */
 function ContactAddressPickerScreen({ variant, messaging, chainCoin, onAdd, onBack }) {
-    const isFull = variant === 'full';
     const [contacts, setContacts] = useState(/** @type {any[] | null} */ (null));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [checked, setChecked] = useState(/** @type {Set<string>} */ (new Set()));
@@ -931,17 +982,17 @@ function ContactAddressPickerScreen({ variant, messaging, chainCoin, onAdd, onBa
         });
     }
 
-    const header = <PageHeader onBack={onBack} title="Add from Contacts" />;
+    const header = <PageHeader onBack={onBack} title="Add from contacts" />;
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            <ListPage>{children}</ListPage>
         </Screen>
     );
 
     if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
     if (!contacts) return wrap(<p className={styles.hint}>Loading contacts…</p>);
     if (rows.length === 0) {
-        return wrap(<p className={styles.hint}>No matching contact addresses on this chain.</p>);
+        return wrap(<EmptyState title="No matching contact addresses" body="Matching contact addresses on this chain appear here." />);
     }
 
     return wrap(
@@ -949,14 +1000,17 @@ function ContactAddressPickerScreen({ variant, messaging, chainCoin, onAdd, onBa
             <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                 {rows.map((r) => (
                     <li key={r.key} style={{ padding: 'var(--xc-space-2) 0', borderBottom: '1px solid var(--xc-border)' }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)', cursor: 'pointer' }}>
-                            <input type="checkbox" checked={checked.has(r.key)} onChange={() => toggle(r.key)} />
-                            <span>
-                                <strong>{r.name}</strong>{r.label ? ` (${r.label})` : ''}
-                                <br />
-                                <code>{r.address}</code>
-                            </span>
-                        </label>
+                        <Checkbox
+                            checked={checked.has(r.key)}
+                            onChange={() => toggle(r.key)}
+                            label={(
+                                <span>
+                                    <strong>{r.name}</strong>{r.label ? ` (${r.label})` : ''}
+                                    <br />
+                                    <code>{r.address}</code>
+                                </span>
+                            )}
+                        />
                     </li>
                 ))}
             </ul>
@@ -964,7 +1018,6 @@ function ContactAddressPickerScreen({ variant, messaging, chainCoin, onAdd, onBa
                 <Button
                     type="button"
                     variant="primary"
-                    block
                     disabled={checked.size === 0}
                     onClick={() => onAdd(rows.filter((r) => checked.has(r.key)).map((r) => r.address))}
                 >

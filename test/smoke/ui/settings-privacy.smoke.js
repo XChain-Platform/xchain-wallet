@@ -30,13 +30,15 @@ assert.match(
     'privacy writes go through update({ privacy: { [field]: next } }), nested merge',
 );
 
-// All five live toggles (v2 added blurOnBlur + labelsSurviveRestore)
-for (const field of ['torRouting', 'changeAddressRotation', 'hideSmallBalances', 'blurOnBlur', 'labelsSurviveRestore']) {
+// Privacy controls stay in this panel; balance visibility lives in Display.
+for (const field of ['torRouting', 'changeAddressRotation', 'blurOnBlur', 'labelsSurviveRestore']) {
     assert.ok(
         src.includes(`onToggle('${field}'`),
         `toggle for privacy.${field} present`,
     );
 }
+assert.ok(!src.includes("onToggle('hideSmallBalances'"),
+    'hide-small-balances control lives in Display');
 assert.match(src, /Blur sensitive data on blur/, 'blur-on-blur row present');
 assert.match(src, /Labels survive restore/, 'labels-survive-restore row present');
 
@@ -85,7 +87,13 @@ for (const name of ['ROW', 'STACK', 'ROW_HINT', 'ToggleRow', 'Status']) {
         `_settingsPrimitives exports ${name}`,
     );
 }
-assert.match(primSrc, /role="switch"/, 'ToggleRow renders an aria switch');
+assert.match(
+    primSrc,
+    /import \{ Switch \} from '@xchain-wallet\/core\/ui';/,
+    'ToggleRow imports the kit Switch',
+);
+assert.match(primSrc, /<Switch\b/, 'ToggleRow renders the kit Switch');
+assert.doesNotMatch(primSrc, /<input\b/, 'ToggleRow has no route-local checkbox input');
 
 // Settings.jsx wiring
 const settingsSrc = readFileSync(settingsPath, 'utf8');

@@ -48,7 +48,7 @@ import { SIGNER_BRIDGE_CHANNEL } from '../../../packages/desktop/main/signerBrid
 import { wipeWalletStorage } from '../../../packages/core/src/shared/utils/wipeWalletStorage.js';
 import { sendMessage as rendererSendMessage } from '../../../packages/desktop/renderer/bridgeMessaging.js';
 import { createDeepLinkSlot, pickDeepLinkTarget } from '../../../packages/desktop/main/protocol.js';
-import { deepLinkRoute, watchDeepLinks, useDeepLinks } from '../../../packages/desktop/renderer/deepLinkRoute.js';
+import { deepLinkRoute, watchDeepLinks, useDeepLinks, INVALID_DEEP_LINK_MESSAGE } from '../../../packages/desktop/renderer/deepLinkRoute.js';
 import { registry as registryLib } from '@xchain-wallet/core';
 
 // Path arithmetic goes through node:path, not `new URL(rel, import.meta.url)`:
@@ -255,7 +255,7 @@ describe('desktop preload: the renderer sandbox surface', () => {
         await bridge.wipeStorage();
         await win.openDetached({ initialView: 'history' });
         await registry.getRemoteDescriptors();
-        signer.postMessage({ kind: 'announce', signerIds: [] });
+        signer.postMessage({ kind: 'register', signerIds: [] });
         // row 142: the install call is walked here specifically so
         // the agreement check below covers it. A preload that invoked a
         // channel main never registered would be the same failure the
@@ -354,15 +354,14 @@ describe('desktop preload: request/response bridge', () => {
 });
 
 describe('desktop preload: wipeStorage stays un-aimable', () => {
-    it('invokes with the channel and NO arguments, whatever the caller passes', async () => {
+    it('rejects arguments before invoking the fixed wipe channel', () => {
         const pre = runPreload();
         pre.setReply(async () => ({ ok: true, cleared: ['storage'] }));
 
-        // A compromised renderer trying to point the wipe at a path.
-        await pre.worlds.get('xchainWalletBridge').wipeStorage('/Users/someone/.ssh', { force: true });
+        expect(() => pre.worlds.get('xchainWalletBridge').wipeStorage('/outside/wallet', { force: true }))
+            .toThrow(TypeError);
 
-        expect(pre.invokes).toHaveLength(1);
-        expect(pre.invokes[0]).toEqual(['xchain:wipe-storage']);
+        expect(pre.invokes).toEqual([]);
     });
 
     it('carries main\'s failure back to core\'s wipe, which must refuse to report success', async () => {
@@ -425,7 +424,7 @@ describe('desktop preload: signer-bridge duplex port', () => {
 
     it('sends renderer → main fire-and-forget (send, never invoke)', () => {
         const pre = runPreload();
-        const msg = { kind: 'announce', signerIds: ['trezor-1'] };
+        const msg = { kind: 'register', signerIds: ['trezor-1'] };
 
         pre.worlds.get('xchainWalletSignerBridge').postMessage(msg);
 
@@ -476,14 +475,18 @@ describe('desktop preload: signer-bridge duplex port', () => {
 
 /**
  * Every channel main pushes to a renderer on, read off main's own source:
- * the quoted literal of each `webContents.send('...'` and
- * `broadcastToWindows('...'`. The signer listener pushes from its own module
+ * the quoted literal of each `webContents.send('...'`,
+ * `broadcastToWindows('...'` and `sendToWindow(<window>, '...'`. The signer listener pushes from its own module
  * on a constant, so that channel is added by identity.
  */
 function mainPushedChannels() {
     const src = readFileSync(MAIN_PATH, 'utf8');
     const channels = new Set([SIGNER_BRIDGE_CHANNEL]);
     for (const m of src.matchAll(/(?:webContents\.send|broadcastToWindows)\(\s*'([^']+)'/g)) {
+        channels.add(m[1]);
+    }
+    // The guarded single-window helper takes the target window first.
+    for (const m of src.matchAll(/sendToWindow\(\s*[^,()]+,\s*'([^']+)'/g)) {
         channels.add(m[1]);
     }
     return channels;
@@ -540,7 +543,7 @@ describe('desktop preload: deep-link bridge', () => {
         const parked = { scheme: 'xchain', raw: 'xchain:receive', parsed: null };
         pre.setReply(async () => parked);
 
-        const res = await pre.worlds.get('xchainWalletDeepLink').takePending('ignored');
+        const res = await pre.worlds.get('xchainWalletDeepLink').takePending();
 
         expect(pre.invokes).toEqual([['xchain:deep-link-take']]);
         expect(res).toBe(parked);
@@ -569,11 +572,13 @@ describe('desktop main: the deep-link slot', () => {
 describe('desktop renderer: deep-link routing', () => {
     const reg = registryLib.defaultRegistry();
 
-    it('routes nothing for absent, malformed or unknown input', () => {
+    const invalid = { view: 'deep-link-error', message: INVALID_DEEP_LINK_MESSAGE };
+
+    it('routes nothing for absent or unknown input, and a plain error for a malformed claimed link', () => {
         expect(deepLinkRoute(undefined, reg)).toBe(null);
         expect(deepLinkRoute('', reg)).toBe(null);
-        expect(deepLinkRoute('xchain:', reg)).toBe(null);
         expect(deepLinkRoute('https://example.com', reg)).toBe(null);
+        expect(deepLinkRoute('xchain:', reg)).toEqual(invalid);
     });
 
     it('routes a send link to a hardened Send prefill', () => {
@@ -596,7 +601,7 @@ describe('desktop renderer: deep-link routing', () => {
             contractRef: { chainId: 'bitcoin-mainnet', contractActionIndex: '12' },
             executePrefill: { method: 'foo', paramsText: '' },
         });
-        expect(deepLinkRoute('xchain:BTC/execute?method=foo', reg)).toBe(null);
+        expect(deepLinkRoute('xchain:BTC/execute?method=foo', reg)).toEqual(invalid);
     });
 });
 

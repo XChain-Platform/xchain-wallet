@@ -1,17 +1,26 @@
-/* §49.1 / §49.2 - Offline / degraded reachability banner. Sits above
-   the unlocked route surface. Two variants: degraded (yellow) and
-   offline (red). Layout-light so it works in both popup and web shells.
-*/
+/* §49.1 / §49.2 - Compact reachability notice below the app header. */
+
+.notice {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border-block: 1px solid;
+}
 
 .banner {
     display: flex;
     align-items: center;
+    flex-wrap: nowrap;
     gap: var(--xc-space-2);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: var(--xc-radius-md);
-    border: 1px solid;
-    font-size: var(--xc-text-sm);
-    margin: var(--xc-space-2);
+    min-width: 0;
+    min-height: var(--xc-tap-min);
+    padding-inline: var(--xc-space-2);
+    font-size: var(--xc-text-xs);
+    line-height: 1.2;
+    white-space: nowrap;
+    /* The notices slot owns the inset, so the strip lines up with route
+       content on every screen. */
+    margin-inline: 0;
 }
 
 .degraded {
@@ -26,65 +35,93 @@
     color: var(--xc-danger-text, #5c1216);
 }
 
-.icon {
-    font-size: 1.25em;
-    flex-shrink: 0;
-}
-
-.body {
-    flex: 1;
+.message {
+    flex: 1 1 auto;
     min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-.title {
-    font-weight: 600;
-}
-
-.detail {
-    color: inherit;
-    opacity: 0.9;
-    font-size: var(--xc-text-xs);
-    line-height: 1.4;
-}
-
-.staleness {
-    font-style: italic;
-    margin-inline-start: 4px;
-}
-
-.retry {
-    padding: 4px 10px;
-    border-radius: var(--xc-radius-sm);
-    border: 1px solid currentColor;
+.retry,
+.detailsToggle {
+    min-height: var(--xc-tap-min);
+    padding: 0 var(--xc-space-1);
+    border: 0;
     background: transparent;
     color: inherit;
     cursor: pointer;
     font: inherit;
-    font-size: var(--xc-text-xs);
-    flex-shrink: 0;
-    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
-       inheriting it from whichever line box the platform font produces. */
-    min-height: var(--xc-tap-min);
+    font-weight: 600;
+    text-decoration: underline;
+    /* The underline sits two pixels below the text; the spacing scale starts at four. */
+    text-underline-offset: 2px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
 }
 
-.retry:hover {
-    background: rgba(0, 0, 0, 0.05);
+.retry {
+    flex: 0 0 auto;
 }
 
-/* §53 / Cluster K FOLLOWUP 2 - explicit focus ring. */
-.retry:focus-visible {
+.retry:disabled {
+    cursor: wait;
+    opacity: 0.7;
+}
+
+.detailsToggle {
+    flex: 0 0 auto;
+}
+
+/* The panel is a row below the notice line: it grows the strip to its
+   content, so it never scrolls inside itself or overlaps the header. */
+.detailPanel {
+    padding: 0 var(--xc-space-2) var(--xc-space-2);
+    font-size: var(--xc-text-xs);
+    line-height: 1.2;
+}
+
+.coinList {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.staleness {
+    margin: var(--xc-space-1) 0 0;
+    color: var(--xc-text-muted);
+}
+
+.coin {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-height: var(--xc-control-h-sm);
+}
+
+.coin img,
+.coinFallback {
+    width: var(--xc-icon-lg);
+    height: var(--xc-icon-lg);
+    flex: 0 0 var(--xc-icon-lg);
+    border-radius: 50%;
+}
+
+.coinFallback {
+    background: currentColor;
+    opacity: 0.3;
+}
+
+.retry:focus-visible,
+.detailsToggle:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
+    /* The ring sits two pixels inside the compact strip so it is never clipped; the spacing scale has no negative step. */
+    outline-offset: -2px;
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .retry {
+    .retry,
+    .detailsToggle {
         transition: none;
     }
 }

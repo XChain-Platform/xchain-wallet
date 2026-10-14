@@ -41,6 +41,7 @@
 //     stored credential ID + ciphertext.
 
 import { encrypt as aeadEncrypt, decrypt as aeadDecrypt } from '../crypto/aead.js';
+import { t } from '../i18n/index.js';
 
 const STORAGE_KEY = 'xchain-wallet:biometric';
 const RP_NAME = 'XChain Wallet';
@@ -50,6 +51,28 @@ export class BiometricUnsupportedError extends Error {
     constructor(reason) {
         super(`biometricUnlock: not supported (${reason})`);
         this.name = 'BiometricUnsupportedError';
+    }
+}
+
+/**
+ * The detail both native shells send when the person dismisses the prompt:
+ * iOS for LAError.userCancel (VaultBiometricSidecar.swift), Android for
+ * BiometricPrompt's user-cancel, negative-button and system-cancel codes
+ * (VaultBiometricSidecar.java). A fixed token rather than the platform's own
+ * message, which is localized and therefore not matchable.
+ */
+export const BIOMETRIC_CANCELLED_DETAIL = 'the biometric prompt was cancelled';
+
+/**
+ * The person closed the prompt. Not a failure: callers show nothing and
+ * leave the screen as it was. Before this, a cancel surfaced as
+ * "biometricUnlock: not supported (Fingerprint operation canceled by
+ * user.)" in a red error box (LG K51, 2026-10-12).
+ */
+export class BiometricCancelledError extends Error {
+    constructor() {
+        super('biometricUnlock: prompt cancelled');
+        this.name = 'BiometricCancelledError';
     }
 }
 
@@ -92,12 +115,12 @@ export class BiometricPrfUnavailableError extends Error {
 // provider releases the password, and the password remains the KDF root:
 // biometrics shorten the path to it, they never replace the derivation.
 //
-// HOW A PROVIDER DESCRIBES ITSELF. The shared UI used to hardcode
-// "Touch ID / Windows Hello / device biometric" and explain unavailability in
-// terms of WebAuthn and PRF. On a phone that is wrong twice over: it names an
-// Apple brand and a Microsoft one on Android, and it explains a browser API to
-// someone whose actual problem is that no fingerprint is enrolled - a reason
-// the native provider already had and threw away. So the vocabulary belongs to
+// HOW A PROVIDER DESCRIBES ITSELF. A shared UI that hardcodes
+// "Touch ID / Windows Hello / device biometric" and explains unavailability in
+// terms of WebAuthn and PRF is wrong twice over on a phone: it names an Apple
+// brand and a Microsoft one on Android, and it explains a browser API to
+// someone whose actual problem is that no fingerprint is enrolled, a reason
+// only the native provider knows. So the vocabulary belongs to
 // the provider, not to the component: each one names its own mechanism and
 // gives its own plain-language reason, and `describeBiometric()` below is the
 // single thing the UI asks. `mechanism`, `wrapNote` and `describe` are all
@@ -109,7 +132,7 @@ export class BiometricPrfUnavailableError extends Error {
 // @property {() => boolean} isRegistered
 // @property {(opts: { password: string, accountName?: string }) => Promise<void>} register
 // @property {() => Promise<string>} unlock      resolves to the wallet password
-// @property {() => void} clear
+// @property {() => void | Promise<void>} clear
 // @property {string} name
 // @property {string} [mechanism]   what the USER uses, in their words
 // @property {string} [wrapNote]    how the password is protected, in their words
@@ -170,11 +193,12 @@ async function webauthnDescribe() {
     if (typeof navigator === 'undefined'
         || !navigator.credentials
         || typeof navigator.credentials.create !== 'function'
+        || typeof navigator.credentials.get !== 'function'
         || typeof globalThis.PublicKeyCredential === 'undefined'
         || typeof globalThis.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable !== 'function') {
         return {
             supported: false,
-            reason: 'This browser does not support the sign-in technology biometric unlock needs.',
+            reason: t('flows.biometric.browserUnsupported'),
         };
     }
     try {
@@ -183,13 +207,12 @@ async function webauthnDescribe() {
         if (present) return { supported: true };
         return {
             supported: false,
-            reason: 'This device has no built-in fingerprint, face, or PIN unlock that this'
-                + ' browser can use. Set one up in your system settings, then come back.',
+            reason: t('flows.biometric.deviceUnavailable'),
         };
     } catch (_err) {
         return {
             supported: false,
-            reason: 'This browser could not check whether a built-in unlock method is available.',
+            reason: t('flows.biometric.probeFailed'),
         };
     }
 }
@@ -201,21 +224,14 @@ async function webauthnIsSupported() {
 
 /** @returns {boolean} */
 function webauthnIsRegistered() {
-    const store = getStorage();
-    if (!store) return false;
-    try {
-        const raw = store.getItem(STORAGE_KEY);
-        return Boolean(raw);
-    } catch (_err) {
-        return false;
-    }
+    return readRecord() !== null;
 }
 
 /** Discard the stored credential reference + ciphertext. */
 function webauthnClear() {
     const store = getStorage();
     if (!store) return;
-    try { store.removeItem(STORAGE_KEY); } catch (_err) { /* ignore */ }
+    store.removeItem(STORAGE_KEY);
 }
 
 /**
@@ -359,7 +375,7 @@ const webAuthnProvider = {
  * the defect records.
  */
 export const BIOMETRIC_GENERIC_MECHANISM = 'your device biometric';
-export const BIOMETRIC_GENERIC_UNAVAILABLE = 'Biometric unlock is not available on this device.';
+export const BIOMETRIC_GENERIC_UNAVAILABLE = "Biometric unlock isn't available on this device.";
 export const BIOMETRIC_GENERIC_WRAP_NOTE = 'Your password is encrypted and is never stored in plain text.';
 
 /**
@@ -411,7 +427,7 @@ export async function describeBiometric() {
         supported,
         // Supported means there is nothing to explain; unsupported always
         // explains something, even when the provider declined to.
-        reason: supported ? null : (reason || BIOMETRIC_GENERIC_UNAVAILABLE),
+        reason: supported ? null : (reason || t('flows.biometric.genericUnavailable')),
         mechanism,
         wrapNote: typeof provider.wrapNote === 'string' && provider.wrapNote
             ? provider.wrapNote
@@ -462,9 +478,38 @@ export function unlockWithBiometric() {
     return activeProvider().unlock();
 }
 
-/** Discard the enrollment. Called on disable AND on password change. */
+/**
+ * Discard the enrollment. Called by the disable button and, through
+ * `retireBiometricAfterPasswordChange`, by every password change.
+ */
 export function clearBiometricCredential() {
-    activeProvider().clear();
+    return activeProvider().clear();
+}
+
+/**
+ * Called once a password change has committed. An enrolment wraps the unlock
+ * password as it was on the day of enrolment, so after the change it releases
+ * a password the vault no longer opens under: biometric unlock fails with
+ * "Incorrect password" and the old password sits wrapped on the device for as
+ * long as the enrolment does. Clearing it is the only safe move, because
+ * re-enrolling needs a fresh biometric prompt the person did not ask for.
+ *
+ * `vaultRekeyed: false` means only a wallet with its own separate password
+ * changed and the unlock password the enrolment wraps is untouched, so the
+ * enrolment stays. Anything else, an absent flag included, clears.
+ *
+ * @param {{ vaultRekeyed?: boolean } | null | undefined} changeResult   what wallet.changePassword returned
+ * @returns {Promise<boolean>} true when an enrolment was cleared
+ * @throws {Error} when an enrolment existed and could not be cleared
+ */
+export async function retireBiometricAfterPasswordChange(changeResult) {
+    if (changeResult?.vaultRekeyed === false) return false;
+    if (!isBiometricRegistered()) return false;
+    await clearBiometricCredential();
+    if (isBiometricRegistered()) {
+        throw new Error('biometricUnlock: the enrolment is still present after clearing');
+    }
+    return true;
 }
 
 // ---------------------------------------------------------------------
@@ -490,9 +535,9 @@ function readRecord() {
         const parsed = JSON.parse(raw);
         if (
             !parsed
-            || typeof parsed.credentialId !== 'string'
-            || typeof parsed.prfSalt !== 'string'
-            || typeof parsed.ciphertext !== 'string'
+            || typeof parsed.credentialId !== 'string' || parsed.credentialId.length === 0
+            || typeof parsed.prfSalt !== 'string' || parsed.prfSalt.length === 0
+            || typeof parsed.ciphertext !== 'string' || parsed.ciphertext.length === 0
         ) {
             return null;
         }

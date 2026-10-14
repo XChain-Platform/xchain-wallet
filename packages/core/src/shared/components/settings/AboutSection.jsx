@@ -14,9 +14,11 @@
 // Items whose underlying artifact isn't yet published render with a
 // muted "not yet published" hint instead of an inert link.
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button, StatusMessage } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
+import { copyText } from '../../clipboard.js';
+import { nativePlatformName } from '../../nativeShell.js';
 import {
     LICENSE_FILE,
     LICENSE_NAME,
@@ -36,30 +38,31 @@ import {
     isUpdateNoticeEnabled,
     setUpdateNoticeEnabled,
 } from '../../../flows/directUpdate.js';
-import { ToggleRow } from './_settingsPrimitives.jsx';
+import {
+    ROW,
+    ROW_LABEL,
+    ROW_VALUE,
+    STACK,
+    ToggleRow,
+} from './_settingsPrimitives.jsx';
+import { useHapticFeedback } from '../../hooks/useHaptic.js';
+import {
+    redactDiagnosticText,
+    sanitizeDiagnosticValue,
+} from '../../../flows/diagnosticDump.js';
 
-const ROW = {
-    display: 'flex',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 'var(--xc-space-2) var(--xc-space-3)',
-    background: 'var(--xc-surface-raised)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-md)',
-    fontSize: 'var(--xc-text-sm)',
-};
-const ROW_LABEL = { color: 'var(--xc-text-muted)' };
-const ROW_VALUE = { color: 'var(--xc-text)', fontWeight: 500 };
 const ROW_VALUE_MUTED = { color: 'var(--xc-text-muted)', fontStyle: 'italic' };
-const STACK = {
+const PARAGRAPHS = {
     display: 'flex',
     flexDirection: 'column',
-    gap: 'var(--xc-space-1)',
+    gap: 'var(--xc-space-3)',
 };
+const PARAGRAPH = { margin: 0 };
+const PROBLEM_REPORT_URL = 'https://github.com/XChain-Platform/xchain-wallet/issues/new';
 
 export function AboutSection() {
-    const { messaging } = useMessaging();
+    const { shell, messaging } = useMessaging();
+    const haptic = useHapticFeedback();
     const [busy, setBusy] = useState(false);
     const [status, setStatus] = useState(/** @type {string | null} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
@@ -67,6 +70,8 @@ export function AboutSection() {
     const [previewOpen, setPreviewOpen] = useState(false);
     const [previewBusy, setPreviewBusy] = useState(false);
     const [licenseOpen, setLicenseOpen] = useState(false);
+    const [diagnosticMeta, setDiagnosticMeta] = useState(null);
+    const copyResetRef = useRef(null);
     // Read once at mount: the provider is installed at shell boot, before any
     // settings route can render, so this cannot go stale within a session.
     const [updateLane] = useState(() => hasDirectUpdateLane());
@@ -76,16 +81,36 @@ export function AboutSection() {
     // "Try again" against whichever action last failed.
     const retryRef = useRef(/** @type {null | (() => void)} */ (null));
 
+    useEffect(() => () => clearTimeout(copyResetRef.current), []);
+
     async function fetchDump() {
         if (typeof messaging?.getDiagnosticDump !== 'function') {
             throw new Error('Diagnostic dump is not available in this shell.');
         }
         const dump = await messaging.getDiagnosticDump();
-        return JSON.stringify(dump, null, 2);
+        return JSON.stringify(prepareDiagnosticDump(dump, shell), null, 2);
     }
+
+    useEffect(() => {
+        let active = true;
+        if (typeof messaging?.getDiagnosticDump !== 'function') return undefined;
+        messaging.getDiagnosticDump().then((dump) => {
+            if (!active) return;
+            const prepared = prepareDiagnosticDump(dump, shell);
+            const platform = prepared.wallet.platform;
+            const buildHash = prepared.build?.gitCommit || prepared.build?.buildId;
+            setDiagnosticMeta({
+                platform,
+                buildHash: typeof buildHash === 'string' ? buildHash : null,
+            });
+            setPreview(JSON.stringify(prepared, null, 2));
+        }).catch(() => {});
+        return () => { active = false; };
+    }, [messaging, shell]);
 
     async function handleCopyDiagnostics() {
         if (busy) return;
+        clearTimeout(copyResetRef.current);
         setBusy(true);
         setStatus(null);
         setError(null);
@@ -93,11 +118,17 @@ export function AboutSection() {
         try {
             const text = preview ?? (await fetchDump());
             if (preview === null) setPreview(text);
-            await navigator.clipboard?.writeText?.(text);
+            const { ok } = await copyText(text);
+            if (!ok) {
+                throw new Error('Copy is not available here. Select the diagnostics preview and copy it manually.');
+            }
             setStatus(`Copied (${text.length.toLocaleString()} bytes). Paste into your bug report.`);
+            copyResetRef.current = setTimeout(() => setStatus(null), 1500);
+            haptic.tap();
         } catch (err) {
             retryRef.current = handleCopyDiagnostics;
             setError(err?.message || 'Could not copy diagnostics.');
+            haptic.error();
         } finally {
             setBusy(false);
         }
@@ -127,10 +158,36 @@ export function AboutSection() {
         }
     }
 
+    function handleReportProblem() {
+        setError(null);
+        retryRef.current = null;
+        try {
+            globalThis.open?.(PROBLEM_REPORT_URL, '_blank', 'noopener,noreferrer');
+        } catch (err) {
+            retryRef.current = handleReportProblem;
+            setError(err?.message || 'Could not open the problem report.');
+            haptic.error();
+        }
+    }
+
     return (
         <div style={STACK}>
+            <p style={{ ...PARAGRAPH, color: 'var(--xc-text-muted)', lineHeight: 1.5 }}>
+                A self-custodial wallet for the XChain Platform. Current chain support:
+                {' '}Bitcoin, Litecoin, and Dogecoin.
+            </p>
             <Row label="Version">
                 <span style={ROW_VALUE}>{WALLET_VERSION}</span>
+            </Row>
+            <Row label="Build identifier">
+                <span style={diagnosticMeta?.buildHash ? ROW_VALUE : ROW_VALUE_MUTED}>
+                    {diagnosticMeta?.buildHash || 'not available'}
+                </span>
+            </Row>
+            <Row label="Platform">
+                <span style={ROW_VALUE}>
+                    {diagnosticMeta?.platform || platformLabel(shell)}
+                </span>
             </Row>
             <Row label="Update channel">
                 <span style={ROW_VALUE}>{UPDATE_CHANNEL}</span>
@@ -144,11 +201,8 @@ export function AboutSection() {
                 <ToggleRow
                     label="Check for new versions"
                     hint={
-                        'You installed this app directly, so nothing updates it for you.'
-                        + ' Once a day the wallet asks our download site whether a newer'
-                        + ' version exists, and tells you if there is one. It never'
-                        + ' downloads or installs anything, and the request says nothing'
-                        + ' about you or your wallet.'
+                        'Checks our download site once a day and alerts you to new versions.'
+                        + ' It does not download or install them or send wallet data.'
                     }
                     checked={updateCheck}
                     onChange={(next) => {
@@ -165,7 +219,7 @@ export function AboutSection() {
                         repo on GitHub to read what they're agreeing to. */}
                     <Button
                         size="sm"
-                        variant="ghost"
+                        variant="secondary"
                         onClick={() => setLicenseOpen((open) => !open)}
                         aria-expanded={licenseOpen}
                         aria-controls="full-license-text"
@@ -177,21 +231,22 @@ export function AboutSection() {
             {/* Plain-language summary shown by default for the wallet's
                 non-technical audience; the full AGPL text is one tap away
                 via the "Show full text" toggle above. */}
-            <p
+            <LicenseParagraphs
+                text={LICENSE_SUMMARY}
                 style={{
+                    ...PARAGRAPHS,
                     margin: 'var(--xc-space-1) 0 0',
                     fontSize: 'var(--xc-text-xs)',
                     color: 'var(--xc-text-muted, var(--xc-text))',
-                    whiteSpace: 'pre-line',
                     lineHeight: 1.5,
                 }}
-            >
-                {LICENSE_SUMMARY}
-            </p>
+            />
             {licenseOpen ? (
-                <pre
+                <LicenseParagraphs
                     id="full-license-text"
+                    text={LICENSE_TEXT}
                     style={{
+                        ...PARAGRAPHS,
                         margin: 0,
                         padding: 'var(--xc-space-3)',
                         background: 'var(--xc-surface-sunken, var(--xc-surface-raised))',
@@ -200,14 +255,9 @@ export function AboutSection() {
                         fontSize: 'var(--xc-text-xs)',
                         fontFamily: 'var(--xc-font-mono, monospace)',
                         color: 'var(--xc-text)',
-                        whiteSpace: 'pre-wrap',
                         wordBreak: 'break-word',
-                        maxHeight: '32rem',
-                        overflow: 'auto',
                     }}
-                >
-                    {LICENSE_TEXT}
-                </pre>
+                />
             ) : null}
             <Row label="Notice">
                 <DocLink path={NOTICE_FILE} label={NOTICE_FILE} />
@@ -235,7 +285,7 @@ export function AboutSection() {
                 )}
             </Row>
             <Row label="Diagnostics">
-                <div style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'center' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--xc-space-2)', alignItems: 'center' }}>
                     <Button
                         size="sm"
                         variant="ghost"
@@ -254,9 +304,18 @@ export function AboutSection() {
                         loading={busy}
                         disabled={busy}
                     >
-                        Copy diagnostics
+                        {status ? 'Copied' : 'Copy diagnostics'}
                     </Button>
                 </div>
+            </Row>
+            <Row label="Feedback">
+                <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={handleReportProblem}
+                >
+                    Report a problem
+                </Button>
             </Row>
             {previewOpen && preview !== null ? (
                 <pre
@@ -272,8 +331,6 @@ export function AboutSection() {
                         color: 'var(--xc-text-muted)',
                         whiteSpace: 'pre-wrap',
                         wordBreak: 'break-all',
-                        maxHeight: '24rem',
-                        overflow: 'auto',
                     }}
                 >
                     {preview}
@@ -305,35 +362,75 @@ function Row({ label, children }) {
     );
 }
 
+function LicenseParagraphs({ text, ...props }) {
+    return (
+        <div {...props}>
+            {text.trim().split('\n\n').map((paragraph, index) => (
+                <p key={index} style={PARAGRAPH}>{paragraph}</p>
+            ))}
+        </div>
+    );
+}
+
 function DocLink({ path, label }) {
-    // Two kinds of target land here. Documents that ship inside the wallet
-    // bundle (LICENSE.md / NOTICE.md / SECURITY.md) are repo-relative and
-    // are still shown literally, since there is nothing to open. The
-    // verification docs now live on the hosted documentation site
-    //, so an absolute URL is rendered as a real link the user
-    // can follow instead of a path they would have to go hunting for.
     const isUrl = typeof path === 'string' && /^https?:\/\//.test(path);
+    const href = isUrl
+        ? path
+        : `https://github.com/XChain-Platform/xchain-wallet/blob/main/${path}`;
+    // A row's only value, not a link inside a sentence, so it takes the
+    // shared 24px pointer-target floor.
     const style = {
         color: 'var(--xc-text)',
         fontFamily: 'var(--xc-font-mono, monospace)',
         fontSize: 'var(--xc-text-xs)',
+        display: 'inline-flex',
+        alignItems: 'center',
+        minHeight: 'var(--xc-tap-min)',
     };
-    if (isUrl) {
-        return (
-            <a
-                href={path}
-                target="_blank"
-                rel="noreferrer noopener"
-                style={{ ...style, color: 'var(--xc-accent, var(--xc-text))' }}
-            >
-                {label}
-            </a>
-        );
-    }
     return (
-        <span style={style}>
-            {label}
-            <span style={{ color: 'var(--xc-text-muted)', marginLeft: 6 }}>({path})</span>
-        </span>
+        <a
+            href={href}
+            target="_blank"
+            rel="noreferrer noopener"
+            style={{ ...style, color: 'var(--xc-accent, var(--xc-text))' }}
+        >
+            {label} <span aria-hidden="true">↗</span>
+        </a>
     );
+}
+
+/** Shell name for display; a Capacitor build reports its OS, not the "web" shell it wraps. */
+function platformLabel(shell) {
+    return nativePlatformName() || (shell === 'popup' ? 'extension' : shell);
+}
+
+function prepareDiagnosticDump(dump, shell) {
+    const sanitized = sanitizeDiagnosticValue(dump);
+    const report = sanitized && typeof sanitized === 'object' && !Array.isArray(sanitized)
+        ? sanitized
+        : {};
+    const platform = platformLabel(shell);
+    const wallet = report.wallet && typeof report.wallet === 'object' ? report.wallet : {};
+    const build = report.build && typeof report.build === 'object' ? report.build : {};
+    const buildId = build.buildId || runtimeBuildHash();
+    return {
+        ...report,
+        wallet: {
+            ...wallet,
+            version: wallet.version || WALLET_VERSION,
+            platform: wallet.platform || platform,
+        },
+        build: Object.keys(build).length > 0 || buildId
+            ? { ...build, ...(buildId ? { buildId } : {}) }
+            : null,
+    };
+}
+
+function runtimeBuildHash() {
+    if (typeof document === 'undefined') return null;
+    for (const script of document.querySelectorAll('script[src]')) {
+        const match = /-([A-Za-z0-9_-]{8,})\.js(?:$|[?#])/.exec(script.src);
+        if (match) return match[1];
+    }
+    return null;
 }

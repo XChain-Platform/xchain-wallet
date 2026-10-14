@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -18,7 +18,7 @@ import {
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
+import { TickerIcon } from '../components/TickerIcon.jsx';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
@@ -50,11 +50,16 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { currentListMemberCount } from '../../flows/listMembership.js';
-import { compareDecimalStrings } from '../utils/amountFormat.js';
+import { compareDecimalStrings, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { sharedBlockPickState } from '../utils/sharedBlockPick.js';
 import { listLabel } from '../utils/listLabel.js';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+function isPositiveDecimal(value) {
+    const text = String(value || '').trim();
+    return /^\d+(?:\.\d+)?$/.test(text) && compareDecimalStrings(text, '0') === 1;
+}
 
 const PROTOCOL_COIN_TICKER = {
     bitcoin: 'BTC',
@@ -68,13 +73,9 @@ const COIN_DISPLAY = { bitcoin: 'Bitcoin', litecoin: 'Litecoin', dogecoin: 'Doge
 // carries. Derived from the same map above so a new chain lands in both at once.
 const PROTOCOL_COIN_TICKERS = Object.values(PROTOCOL_COIN_TICKER);
 
-// "Bitcoin" on mainnet, "Bitcoin regtest" elsewhere. The registry's
-// displayName is the same string on every network, which is exactly the
-// distinction a wrong-network address needs spelled out.
 function chainLabelFor(descriptor) {
     if (!descriptor?.coin) return null;
-    const name = COIN_DISPLAY[descriptor.coin] || descriptor.coin;
-    return descriptor.networkKind === 'mainnet' ? name : `${name} ${descriptor.networkKind}`;
+    return COIN_DISPLAY[descriptor.coin] || descriptor.coin;
 }
 
 // D-81: validate the TRANSFER destination against the chain the
@@ -158,7 +159,6 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -237,6 +237,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const submitPendingRef = useRef(false);
 
     // The active map and the settings read are best-effort: a host without
     // `getActiveAddresses` / `getSettings`, or one whose call fails, still
@@ -333,17 +334,49 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     // applyNativeFeePreflight.
     const nativeFee = useNativeFee(coinTicker);
 
-    // Current on-chain lock state, read via the same useTokenInfo hook
-    // ManageToken uses. Shared by `'mint-settings'` (PC-01, four of the
-    // seven flags gate its own fields) and `'lock'` (PC-02, all seven
-    // drive the lock matrix below). `'mint-settings'` is only ever
-    // launched from ManageToken with a concrete (chainId, tick) pair
-    // (lockedToken is always true for that mode), so `ticker` is stable
-    // for the life of the form; `'lock'` can also be reached from the
-    // free Actions menu, where `ticker` changes as the owner picks a
-    // token and this hook simply refetches.
-    const assetInfo = useTokenInfo({ chainId, tick: ticker, skip: mode !== 'mint-settings' && mode !== 'lock' && mode !== 'callback-settings' && mode !== 'access-lists' && mode !== 'bridge-settings' });
-    const tokenLocks = assetInfo?.locks || {};
+    // Every mode edits issuer-controlled token state, so each one reads the
+    // current owner before it can compose. The same record supplies lock state
+    // for the modes that need it. This keeps direct Actions-menu routes behind
+    // the same owner boundary as Manage Token instead of relying on a later
+    // protocol rejection that still spends the action fee.
+    const assetInfo = useTokenInfo({ chainId, tick: ticker });
+    const callbackTickKey = callbackTick.trim().toUpperCase();
+    const callbackTokenInfo = useTokenInfo({
+        chainId,
+        tick: callbackTickKey,
+        skip: mode !== 'callback-settings' || !callbackTickKey,
+    });
+    // Accept decimal metadata only for the exact chain and ticker still in the field.
+    const callbackTokenDivisibility = callbackTokenInfo?.chainId === chainId
+        && callbackTokenInfo?.tick === callbackTickKey
+        && Number.isInteger(callbackTokenInfo?.divisibility)
+        ? callbackTokenInfo.divisibility
+        : null;
+    const assetInfoMatchesSelection = !assetInfo || (
+        (!assetInfo.chainId || assetInfo.chainId === chainId)
+        && (!assetInfo.tick || String(assetInfo.tick).toUpperCase() === ticker.trim().toUpperCase())
+    );
+    const currentAssetInfo = assetInfoMatchesSelection ? assetInfo : null;
+    const tokenInfoPending = !!chainId && !!ticker && !currentAssetInfo;
+    const tokenLocks = currentAssetInfo?.locks || {};
+    const tokenOwner = currentAssetInfo?.creator || null;
+    const walletOwnsToken = tokenOwner && addressesByChain && chainId
+        ? (addressesByChain[chainId] || []).some((address) => (
+            String(address?.address || '').toLowerCase() === String(tokenOwner).toLowerCase()
+        ))
+        : null;
+    const selectedSourceOwnsToken = !tokenOwner || !fromAddress
+        ? null
+        : String(fromAddress.address || '').toLowerCase() === String(tokenOwner).toLowerCase();
+    const ownershipError = walletOwnsToken === false
+        ? `This wallet does not own ${ticker}. Only the current owner can make this change.`
+        : selectedSourceOwnsToken === false
+            ? `The selected source address does not own ${ticker}. Choose the current owner address.`
+            : null;
+    const descriptionLocked = mode === 'description' && !!tokenLocks.description;
+    const eligibilityError = descriptionLocked
+        ? `The description for ${ticker} is permanently locked and cannot be updated.`
+        : ownershipError;
     // Callback config gate (PC-03): the indexer only allows CALLBACK_BLOCK
     // /TICK/AMOUNT edits while LOCK_CALLBACK is unset AND supply is
     // undistributed (issue.js). LOCK_CALLBACK reads straight off the lock
@@ -379,14 +412,15 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     // to empty) don't clobber their in-progress edit. MINT_SUPPLY /
     // TRANSFER_SUPPLY have no current value to prefill: they're a
     // one-shot "mint more now" action bundled into the same edit, not
-    // persisted token state.
+    // persisted token state. A field the owner already typed into before
+    // the token record arrived keeps that text; only empty fields prefill.
     const [mintPrefilled, setMintPrefilled] = useState(false);
     useEffect(() => {
         if (mode !== 'mint-settings' || !assetInfo || mintPrefilled) return;
-        setMaxMint(assetInfo.mintMax || '');
-        setMintAddressMax(assetInfo.mintAddressMax || '');
-        setMintStartBlock(assetInfo.mintStartBlock || '');
-        setMintStopBlock(assetInfo.mintStopBlock || '');
+        setMaxMint((current) => current || assetInfo.mintMax || '');
+        setMintAddressMax((current) => current || assetInfo.mintAddressMax || '');
+        setMintStartBlock((current) => current || assetInfo.mintStartBlock || '');
+        setMintStopBlock((current) => current || assetInfo.mintStopBlock || '');
         setMintPrefilled(true);
     }, [mode, assetInfo, mintPrefilled]);
 
@@ -641,6 +675,14 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             setFormError(tickerError);
             return;
         }
+        if (tokenInfoPending) {
+            setFormError(`Wait for the wallet to verify the current owner of ${ticker}.`);
+            return;
+        }
+        if (eligibilityError) {
+            setFormError(eligibilityError);
+            return;
+        }
         if (mode === 'description' && !description.trim()) {
             setFormError('Description is required.');
             return;
@@ -664,6 +706,43 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 setFormError('Enter at least one field to update.');
                 return;
             }
+            if (maxMint && !isPositiveDecimal(maxMint)) {
+                setFormError('Max mint per transaction must be a positive number.');
+                return;
+            }
+            if (mintAddressMax && !isPositiveDecimal(mintAddressMax)) {
+                setFormError('Max mint per address must be a positive number.');
+                return;
+            }
+            if (mintSupply && !isPositiveDecimal(mintSupply)) {
+                setFormError('Mint supply must be a positive number.');
+                return;
+            }
+            // Keep all token quantities within this token's on-chain decimal scale.
+            for (const [value, noun] of [
+                [maxMint, 'Max mint per transaction'],
+                [mintAddressMax, 'Max mint per address'],
+                [mintSupply, 'Mint supply'],
+            ]) {
+                if (!value) continue;
+                const precisionError = tokenAmountPrecisionError(value, {
+                    divisibility: assetInfo?.divisibility,
+                    tick: ticker,
+                    noun,
+                });
+                if (precisionError) {
+                    setFormError(precisionError);
+                    return;
+                }
+            }
+            if (mintStartBlock && !/^\d+$/.test(mintStartBlock.trim())) {
+                setFormError('Minting start must be a whole block number.');
+                return;
+            }
+            if (mintStopBlock && !/^\d+$/.test(mintStopBlock.trim())) {
+                setFormError('Minting close must be a whole block number.');
+                return;
+            }
             if (mintAddressMax && maxMint
                 && compareDecimalStrings(mintAddressMax, maxMint) === -1) {
                 setFormError('Max mint per address must be at least the max mint per transaction.');
@@ -671,6 +750,16 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
             }
             if (mintStartBlock && mintStopBlock && Number(mintStopBlock) <= Number(mintStartBlock)) {
                 setFormError('Minting must close after it opens. Check the block numbers.');
+                return;
+            }
+            if (transferSupply && !mintSupply) {
+                setFormError('Sending new supply needs a mint supply amount.');
+                return;
+            }
+            if (transferSupply && !isValidAddressForChain(
+                transferSupply.trim(), descriptor.coin, descriptor.networkKind,
+            )) {
+                setFormError(`New supply destination is not valid for ${descriptor.displayName || chainId}.`);
                 return;
             }
         }
@@ -698,8 +787,23 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 setFormError(callbackTickError);
                 return;
             }
-            if (callbackAmount && !(Number(callbackAmount) > 0)) {
+            if (callbackAmount && !isPositiveDecimal(callbackAmount)) {
                 setFormError('Callback amount must be a positive number.');
+                return;
+            }
+            // Hold fractional payouts until the newly typed token lookup resolves.
+            if (callbackAmount.includes('.') && callbackTokenDivisibility == null) {
+                setFormError(`Callback amount must be a whole number until the wallet confirms whether ${callbackTickKey || 'the callback token'} supports decimals.`);
+                return;
+            }
+            // Price callback payouts in the payout token's decimal scale.
+            const callbackPrecisionError = tokenAmountPrecisionError(callbackAmount, {
+                divisibility: callbackTokenDivisibility,
+                tick: callbackTick,
+                noun: 'Callback amount',
+            });
+            if (callbackPrecisionError) {
+                setFormError(callbackPrecisionError);
                 return;
             }
             // A usable callback needs all three set (block + tick + amount);
@@ -822,9 +926,10 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
+        if (submitPendingRef.current) return;
         if (!isWatcherMode && !isHwSource && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && isHwSource && hwStatus !== 'available') return;
+        submitPendingRef.current = true;
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -879,6 +984,8 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
             }
+        } finally {
+            submitPendingRef.current = false;
         }
     }
 
@@ -889,15 +996,22 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     }
         const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={stage === 'review'
+                ? () => { setSubmitError(null); setTypedConfirm(''); setStage('form'); }
+                : onBack}
+            backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
                     ? `Review ${MODE_LABEL_LOWER[mode]}`
                     : `${MODE_LABEL[mode]}`}
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+        <Screen
+            variant={variant}
+            header={header}
+            restoreScroll={!(stage === 'review' || stage === 'submitting')}
+        >
+            {children}
         </Screen>
     );
 
@@ -944,13 +1058,43 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
 
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
+            <FormPage
+                label={`Review ${MODE_LABEL_LOWER[mode]}`}
+                onSubmit={handleSubmit}
+                status={(isWatcherMode || isHwSource) && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant={isWatcherMode ? 'primary' : (mode === 'lock' ? 'danger' : 'primary')}
+                        loading={stage === 'submitting'}
+                        disabled={
+                            (mode === 'lock' && !typedConfirmOk) || (
+                                isWatcherMode
+                                    ? false
+                                    : isHwSource
+                                        ? hwStatus !== 'available'
+                                        : (!signerReady && password.length === 0)
+                            )
+                        }
+                    >
+                        {isWatcherMode
+                            ? `Create unsigned transaction: ${MODE_LABEL_LOWER[mode]}`
+                            : isHwSource
+                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: ${MODE_LABEL_LOWER[mode]}`
+                                : `Sign: ${MODE_LABEL_LOWER[mode]}`}
+                    </Button>
+                )}
+            >
                 <p className={styles.summary}>{decoded?.summary}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -970,6 +1114,14 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         {decoded.warnings.map((w, i) => (
                             <p key={i} className={styles.warning}>{w}</p>
                         ))}
+                    </div>
+                ) : null}
+                {mode === 'transfer' ? (
+                    <div role="alert" className={styles.warnings}>
+                        <p className={styles.warning}>
+                            Transferring ownership cannot be undone. After confirmation,
+                            only the new owner can administer this token.
+                        </p>
                     </div>
                 ) : null}
                 {isWatcherMode ? (
@@ -996,9 +1148,6 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         signerInfo={hwSignerInfo}
                     />
                 )}
-                {(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
-                ) : null}
                 {mode === 'lock' ? (
                     <Input
                         label="Type LOCK to confirm"
@@ -1010,29 +1159,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         spellCheck={false}
                     />
                 ) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant={isWatcherMode ? 'primary' : (mode === 'lock' ? 'danger' : 'primary')}
-                        loading={stage === 'submitting'}
-                        disabled={
-                            (mode === 'lock' && !typedConfirmOk) || (
-                                isWatcherMode
-                                    ? false
-                                    : isHwSource
-                                        ? hwStatus !== 'available'
-                                        : (!signerReady && password.length === 0)
-                            )
-                        }
-                    >
-                        {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : (descriptor ? `Sign on ${descriptor.displayName}` : 'Sign')}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -1051,6 +1178,14 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 password={password}
                 onPasswordChange={setPassword}
                 hintClassName={styles.hint}
+                extraCredentials={mode === 'transfer' ? (
+                    <div role="alert" className={styles.warnings}>
+                        <p className={styles.warning}>
+                            Transferring ownership cannot be undone. After confirmation,
+                            only the new owner can administer this token.
+                        </p>
+                    </div>
+                ) : null}
                 // Hardware swaps the password field for the device block
                 // and gates Approve on the device being available (§5.1).
                 hwSource={isHwSource ? fromAddress : null}
@@ -1164,13 +1299,44 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
     }
 
     return wrap(
-        <form onSubmit={handleReview} noValidate>
+        <FormPage
+            label={MODE_LABEL[mode]}
+            onSubmit={handleReview}
+            status={formError || eligibilityError ? (
+                <StatusMessage variant="error" className={styles.error}>
+                    {formError || eligibilityError}
+                </StatusMessage>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant={mode === 'lock' ? 'danger' : 'primary'}
+                    loading={actionConfirm.composing}
+                    disabled={!fromAddress || !ticker
+                        || tokenInfoPending
+                        || !!eligibilityError
+                        || (mode === 'description' && !description)
+                        || (mode === 'transfer' && !transferTo)
+                        || (mode === 'mint-settings' && (nothingMintEditable || !hasAnyMintField))
+                        || (mode === 'callback-settings' && (callbackFieldsDisabled || !hasAnyCallbackField))
+                        || (mode === 'access-lists' && !listsChanged)
+                        || (mode === 'bridge-settings' && (
+                            bridgeFrozen
+                            || !bridgeChanged
+                            || (bridgePolicyBound && pickedBridgeChains.length > 0)
+                        ))
+                        || (mode === 'lock' && (allLocksSet || !hasAnyNewLock))
+                        || (mode === 'lock' && singleEncode && !typedConfirmOk)
+                        || actionConfirm.composing}
+                >
+                    {singleEncode ? 'Update token' : 'Preview'}
+                </Button>
+            )}
+        >
             {lockedToken && chainId ? (
-                <LockedTokenContext chainId={chainId} tick={ticker} />
+                <TickerIcon chainId={chainId} tick={ticker} size={32} />
             ) : (
-                <>
-                    <NetworkField value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
-                </>
+                <ChainPicker label="Network" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} hideNetworkKind />
             )}
 
             {fromAddress ? (
@@ -1203,6 +1369,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     hint="Up to 250 characters. Stored on-chain and replaces the current one."
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
+                    disabled={descriptionLocked}
                     autoComplete="off"
                     maxLength={250}
                 />
@@ -1245,19 +1412,16 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                                 const isLocked = !!tokenLocks[f.key];
                                 return (
                                     <div key={f.key} className={styles.lockFlagRow}>
-                                        <label className={styles.checkRow}>
-                                            <input
-                                                type="checkbox"
-                                                checked={isLocked || !!lockChecks[f.key]}
-                                                disabled={isLocked}
-                                                onChange={(e) => setLockChecks((prev) => ({
-                                                    ...prev,
-                                                    [f.key]: e.target.checked,
-                                                }))}
-                                            />
-                                            <span>{f.label}{isLocked ? ' (already locked)' : ''}</span>
-                                        </label>
-                                        <p className={styles.lockFlagHint}>{f.hint}</p>
+                                        <Checkbox
+                                            label={`${f.label}${isLocked ? ' (already locked)' : ''}`}
+                                            description={f.hint}
+                                            checked={isLocked || !!lockChecks[f.key]}
+                                            disabled={isLocked}
+                                            onChange={(e) => setLockChecks((prev) => ({
+                                                ...prev,
+                                                [f.key]: e.target.checked,
+                                            }))}
+                                        />
                                     </div>
                                 );
                             })}
@@ -1333,7 +1497,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         hint={mintStartEstimate
                             ? `Block height when public minting starts. Est. ${mintStartEstimate}.`
                             : 'Block height when public minting starts. Leave blank to open immediately.'}
-                        inputMode="decimal"
+                        inputMode="numeric"
                         value={mintStartBlock}
                         onChange={(e) => setMintStartBlock(e.target.value)}
                         autoComplete="off"
@@ -1344,7 +1508,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         hint={mintStopEstimate
                             ? `Block height when public minting ends. Est. ${mintStopEstimate}.`
                             : 'Block height when public minting ends. Leave blank to keep it open.'}
-                        inputMode="decimal"
+                        inputMode="numeric"
                         value={mintStopBlock}
                         onChange={(e) => setMintStopBlock(e.target.value)}
                         autoComplete="off"
@@ -1352,7 +1516,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     />
                     {currentHeight != null ? (
                         <p className={styles.hint}>
-                            Current block on {descriptor?.displayName || chainId}: {currentHeight.toLocaleString('en-US')}.
+                            Current block: {currentHeight.toLocaleString('en-US')}.
                             Dates above are rough estimates; real block times vary.
                         </p>
                     ) : null}
@@ -1424,7 +1588,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                         hint={callbackBlockEstimate
                             ? `The earliest block you can trigger the callback. Est. ${callbackBlockEstimate}.`
                             : 'The earliest block height you can trigger the callback. Must be a future block.'}
-                        inputMode="decimal"
+                        inputMode="numeric"
                         value={callbackBlock}
                         onChange={(e) => setCallbackBlock(e.target.value)}
                         autoComplete="off"
@@ -1432,7 +1596,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     />
                     {currentHeight != null ? (
                         <p className={styles.hint}>
-                            Current block on {descriptor?.displayName || chainId}: {currentHeight.toLocaleString('en-US')}.
+                            Current block: {currentHeight.toLocaleString('en-US')}.
                             Date above is a rough estimate; real block times vary.
                         </p>
                     ) : null}
@@ -1537,17 +1701,15 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     ) : null}
                     <span className={styles.pickerLabel}>Destination chains</span>
                     {bridgeDestinations.map((coin) => (
-                        <label key={coin} className={styles.checkRow}>
-                            <input
-                                type="checkbox"
-                                checked={!!bridgeChainPicks[coin]}
-                                disabled={bridgeFrozen || bridgePolicyBound}
-                                onChange={(e) => setBridgeChainPicks(
-                                    (prev) => ({ ...prev, [coin]: e.target.checked }),
-                                )}
-                            />
-                            {` ${bridgeCoinDisplay(coin)}`}
-                        </label>
+                        <Checkbox
+                            key={coin}
+                            label={bridgeCoinDisplay(coin)}
+                            checked={!!bridgeChainPicks[coin]}
+                            disabled={bridgeFrozen || bridgePolicyBound}
+                            onChange={(e) => setBridgeChainPicks(
+                                (prev) => ({ ...prev, [coin]: e.target.checked }),
+                            )}
+                        />
                     ))}
                     <p className={styles.hint}>
                         Unchecking every chain closes the door to NEW transfers. It never
@@ -1556,21 +1718,18 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                     </p>
                     <Input
                         label="Minimum confirmations (optional)"
-                        hint="How many blocks to wait on this chain after a transfer is locked, before its copy is created on the other chain. Waiting longer protects against this chain rewriting its recent blocks, which cannot be undone once a copy exists; the cost is slower transfers. Values below the platform default have no effect."
+                        hint="Blocks to wait before copying a locked transfer to the other chain. Longer waits are safer but slower. Values below the platform default have no effect."
                         value={bridgeMinDepth}
                         onChange={(e) => setBridgeMinDepth(e.target.value)}
                         disabled={bridgeFrozen}
                         inputMode="numeric"
                     />
                     {!bridgeFrozen ? (
-                        <label className={styles.checkRow}>
-                            <input
-                                type="checkbox"
-                                checked={bridgeLock}
-                                onChange={(e) => setBridgeLock(e.target.checked)}
-                            />
-                            {' Freeze these settings permanently'}
-                        </label>
+                        <Checkbox
+                            label="Freeze these settings permanently"
+                            checked={bridgeLock}
+                            onChange={(e) => setBridgeLock(e.target.checked)}
+                        />
                     ) : null}
                     {bridgeLock ? (
                         <StatusMessage variant="status">
@@ -1617,34 +1776,7 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
                 />
             ) : null}
 
-            {formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
-            ) : null}
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant={mode === 'lock' ? 'danger' : 'primary'}
-                    block
-                    loading={actionConfirm.composing}
-                    disabled={!fromAddress || !ticker
-                        || (mode === 'description' && !description)
-                        || (mode === 'transfer' && !transferTo)
-                        || (mode === 'mint-settings' && (nothingMintEditable || !hasAnyMintField))
-                        || (mode === 'callback-settings' && (callbackFieldsDisabled || !hasAnyCallbackField))
-                        || (mode === 'access-lists' && !listsChanged)
-                        || (mode === 'bridge-settings' && (
-                            bridgeFrozen
-                            || !bridgeChanged
-                            || (bridgePolicyBound && pickedBridgeChains.length > 0)
-                        ))
-                        || (mode === 'lock' && (allLocksSet || !hasAnyNewLock))
-                        || (mode === 'lock' && singleEncode && !typedConfirmOk)
-                        || actionConfirm.composing}
-                >
-                    {singleEncode ? 'Update token' : 'Preview'}
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }
 

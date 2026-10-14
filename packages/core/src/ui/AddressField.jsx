@@ -10,6 +10,8 @@
 
 import { forwardRef } from 'react';
 import { Input } from './Input.jsx';
+import { Button } from './Button.jsx';
+import { AddressText } from './AddressText.jsx';
 import { UsersIcon, ScanIcon } from './icons/index.jsx';
 import styles from './AddressField.module.css';
 
@@ -19,8 +21,8 @@ const ICONS = {
 };
 
 /**
- * AddressField: an address input with a single trailing icon action
- * inside the field. The two canonical uses:
+ * AddressField: an address input with an optional trailing icon action
+ * inside the field. The two canonical icon uses:
  *
  *   - To ("contacts"): outbound destination. The field accepts typed or
  *     pasted addresses; the address-book icon navigates to the user's
@@ -40,22 +42,59 @@ const ICONS = {
  *   - icon          'contacts' | 'addresses'
  *   - onIconClick   () => void   navigate to the picker screen
  *   - iconLabel     accessible label override for the icon button
+ *   - onPaste       host callback for URI handling; unconsumed plain text
+ *                     with surrounding whitespace is trimmed before insertion
  *
  * @typedef {object} AddressFieldOwnProps
- * @property {'contacts' | 'addresses'} icon
- * @property {() => void} onIconClick
+ * @property {'contacts' | 'addresses'} [icon]
+ * @property {() => void} [onIconClick]
  * @property {string} [iconLabel]
+ * @property {boolean} [wrapReadOnlyAddress]
  */
 export const AddressField = forwardRef(function AddressField(
-    { icon, onIconClick, iconLabel, size = 'md', label, disabled, style, ...rest },
+    {
+        icon,
+        onIconClick,
+        iconLabel,
+        wrapReadOnlyAddress = false,
+        size = 'md',
+        label,
+        disabled,
+        style,
+        value,
+        onChange,
+        onPaste,
+        ...rest
+    },
     ref,
 ) {
-    const { Component: IconComponent, defaultLabel } = ICONS[icon] || ICONS.contacts;
+    const { Component: IconComponent, defaultLabel } = ICONS[icon] || {};
+    const showReadOnlyAddress = rest.readOnly && typeof value === 'string' && value.length !== 0;
     const wrapClass = [
         styles.wrap,
-        size === 'lg' ? styles.lg : '',
+        styles[size] || '',
         label ? '' : styles.noLabel,
+        showReadOnlyAddress ? styles.readOnly : '',
+        showReadOnlyAddress && wrapReadOnlyAddress ? styles.wrappedReadOnly : '',
     ].filter(Boolean).join(' ');
+
+    const handlePaste = (event) => {
+        onPaste?.(event);
+        if (event.defaultPrevented || typeof onChange !== 'function') return;
+
+        const pasted = event.clipboardData?.getData?.('text');
+        if (typeof pasted !== 'string' || pasted === pasted.trim()) return;
+
+        const input = event.currentTarget;
+        const current = String(value ?? input.value ?? '');
+        const start = input.selectionStart ?? current.length;
+        const end = input.selectionEnd ?? start;
+        event.preventDefault();
+        onChange({
+            target: { value: `${current.slice(0, start)}${pasted.trim()}${current.slice(end)}` },
+        });
+    };
+
     return (
         <div className={wrapClass}>
             <Input
@@ -64,22 +103,40 @@ export const AddressField = forwardRef(function AddressField(
                 size={size}
                 disabled={disabled}
                 autoComplete="off"
-                autoCapitalize="none"
+                autoCapitalize="off"
                 autoCorrect="off"
                 spellCheck={false}
-                style={{ paddingInlineEnd: '48px', ...style }}
+                style={IconComponent ? {
+                    paddingInlineEnd: 'calc(var(--address-control-height) + var(--xc-space-2))',
+                    ...style,
+                } : style}
+                title={showReadOnlyAddress ? value : undefined}
+                value={value}
+                onChange={onChange}
+                onPaste={handlePaste}
+                pasteGuard
                 {...rest}
+                dir="ltr"
             />
-            <button
-                type="button"
-                className={styles.iconButton}
-                onClick={onIconClick}
-                disabled={disabled}
-                aria-label={iconLabel || defaultLabel}
-                title={iconLabel || defaultLabel}
-            >
-                <IconComponent />
-            </button>
+            {showReadOnlyAddress ? (
+                <span className={styles.readOnlyValue} aria-hidden="true">
+                    <AddressText address={value} truncate={!wrapReadOnlyAddress} focusable={false} />
+                </span>
+            ) : null}
+            {IconComponent ? (
+                <span className={styles.iconButton}>
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        size={size}
+                        icon={<IconComponent />}
+                        onClick={onIconClick}
+                        disabled={disabled}
+                        aria-label={iconLabel || defaultLabel}
+                        title={iconLabel || defaultLabel}
+                    />
+                </span>
+            ) : null}
         </div>
     );
 });

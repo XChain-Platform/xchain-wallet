@@ -22,6 +22,7 @@ import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withEnglishCopy } from '../_localized-source.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -143,14 +144,14 @@ assert.ok(
 
 // --- 4. ImportWallet wires mode into backup lane -----------------------
 
-const iw = readFileSync(importWalletPath, 'utf8');
+const iw = withEnglishCopy(readFileSync(importWalletPath, 'utf8'));
 assert.ok(
     /messaging\.importBackupRequest\(\{[\s\S]*mode,[\s\S]*\}\)/.test(iw),
     'ImportWallet forwards mode prop into importBackupRequest',
 );
-assert.ok(/Restore as a new wallet/.test(iw),
-    'add-mode subtitle copy is present');
-assert.ok(/Restore an encrypted backup as a new wallet/.test(iw),
-    'add-mode full-shell subtitle copy is present');
+assert.ok(/label=\{restoreDeviceLabel\(mode\)\}/.test(iw),
+    'backup restore keeps mode-specific device-password guidance on the field');
+assert.ok(/hint=\{restoreDeviceHint\(mode\)\}/.test(iw),
+    'backup restore keeps the mode-specific explanation beside its field');
 
 console.log('backup-add-mode smoke OK');

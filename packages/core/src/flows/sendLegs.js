@@ -315,32 +315,40 @@ export function totalsByTick(legs) {
 }
 
 /**
- * Exact addition of two plain decimals at the protocol's 8-decimal scale.
- * Float addition would drift on the large DOGE-scale amounts these totals reach,
- * and these numbers are shown next to a balance the user checks them against.
+ * Exact addition of two plain decimals at their full entered precision.
+ * Tokens may use up to 18 decimal places, so a fixed satoshi scale truncates
+ * valid token quantities even though native coins use eight places.
  *
  * @param {string} a
  * @param {string|number} b
  * @returns {string}
  */
 function addDecimals(a, b) {
-    const sa = satsOf(a);
-    const sb = satsOf(b);
-    if (sa === null || sb === null) return String(a);
-    return decimalOf(sa + sb);
+    const pa = decimalParts(a);
+    const pb = decimalParts(b);
+    if (pa === null || pb === null) return String(a);
+    const scale = Math.max(pa.scale, pb.scale);
+    const total = pa.units * (10n ** BigInt(scale - pa.scale))
+        + pb.units * (10n ** BigInt(scale - pb.scale));
+    return decimalOf(total, scale);
 }
 
-/** @param {string|number} raw @returns {bigint | null} */
-function satsOf(raw) {
+/** @param {string|number} raw @returns {{ units: bigint, scale: number } | null} */
+function decimalParts(raw) {
     const m = /^(\d*)(?:\.(\d+))?$/.exec(String(raw).trim());
     if (!m || (!m[1] && !m[2])) return null;
-    const frac = (m[2] || '').slice(0, 8).padEnd(8, '0');
-    return BigInt(m[1] || '0') * 100000000n + BigInt(frac);
+    const frac = m[2] || '';
+    return {
+        units: BigInt(`${m[1] || '0'}${frac}`),
+        scale: frac.length,
+    };
 }
 
-/** @param {bigint} sats @returns {string} */
-function decimalOf(sats) {
-    const whole = sats / 100000000n;
-    const frac = (sats % 100000000n).toString().padStart(8, '0').replace(/0+$/, '');
-    return frac ? `${whole}.${frac}` : String(whole);
+/** @param {bigint} units @param {number} scale @returns {string} */
+function decimalOf(units, scale) {
+    if (scale === 0) return units.toString();
+    const digits = units.toString().padStart(scale + 1, '0');
+    const whole = digits.slice(0, -scale);
+    const frac = digits.slice(-scale).replace(/0+$/, '');
+    return frac ? `${whole}.${frac}` : whole;
 }

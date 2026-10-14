@@ -222,7 +222,17 @@ describe('makeLedgerFactory', () => {
                 getTransport: vi.fn().mockResolvedValue(makeValidTransport({ name: 'Bitcoin Test', version: '2.5.0' })),
                 getAppClass: vi.fn().mockResolvedValue(function Btc() { return app; }),
             });
-            await expect(pair()).rejects.toThrow(/Open the Bitcoin app to pair/);
+            await expect(pair()).rejects.toThrow(/Open the Bitcoin app/);
+            expect(app.getWalletPublicKey).not.toHaveBeenCalled();
+        });
+
+        it('names any non-Bitcoin app before reading the identity xpub', async () => {
+            const app = makeValidApp();
+            const pair = makeLedgerFactory({
+                getTransport: vi.fn().mockResolvedValue(makeValidTransport({ name: 'Ethereum' })),
+                getAppClass: vi.fn().mockResolvedValue(function Btc() { return app; }),
+            });
+            await expect(pair()).rejects.toThrow(/"Ethereum" app is open.*Open the Bitcoin app/s);
             expect(app.getWalletPublicKey).not.toHaveBeenCalled();
         });
 

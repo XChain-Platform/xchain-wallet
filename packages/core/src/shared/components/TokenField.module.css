@@ -1,38 +1,43 @@
-/* TokenField: an inline token selector styled to match the shared Input's
-   field chrome (border/background/radius/label) at both sizes, so it sits in
-   a form indistinguishable in size from an Input/Select. The control is a
-   button (icon + ticker/chain text + caret) rather than an <input>, but the
-   sizing contract mirrors Input.module.css: default (md, 36px) values on
-   .control/.label, `.lg` overrides for the 48px hero size. */
+/* TokenField matches the shared Input chrome and size scale while keeping its
+   button semantics for opening the token picker. */
 
 .field {
+    --token-field-control-height: var(--xc-control-h-md);
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-1);
+    min-width: 0;
     margin-bottom: var(--xc-space-3);
 }
 
+.lg {
+    --token-field-control-height: var(--xc-control-h-lg);
+}
+
 .label {
+    margin-block-end: var(--xc-label-gap);
     font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
     font-weight: 500;
 }
 
 .control {
+    /* The pointer target never drops below the WCAG 2.5.8 floor; a later
+       min-height or height here may raise it. */
+    min-block-size: var(--xc-tap-min);
     display: flex;
+    box-sizing: border-box;
     align-items: center;
     gap: var(--xc-space-3);
     width: 100%;
-    /* space-1 vertical (not Input's space-2): the 20px token icon plus
-       borders must fit inside the same 36px outer height as Input md. */
-    padding: var(--xc-space-1) var(--xc-space-3);
-    min-height: 36px;
+    min-width: 0;
+    height: var(--token-field-control-height);
+    padding: 0 var(--xc-control-pad-x);
     font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-md);
+    font-size: var(--xc-control-font);
     color: var(--xc-text);
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
+    border-radius: var(--xc-control-radius);
     cursor: pointer;
     text-align: start;
     transition: border-color var(--xc-transition), box-shadow var(--xc-transition);
@@ -45,7 +50,7 @@
 .control:focus-visible {
     outline: none;
     border-color: var(--xc-accent-primary);
-    box-shadow: 0 0 0 3px var(--xc-focus-ring);
+    box-shadow: var(--xc-shadow-focus-ring);
 }
 
 .control:disabled {
@@ -57,14 +62,7 @@
     border-color: var(--xc-danger);
 }
 .invalid:focus-visible {
-    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.2);
-}
-
-/* lg (hero) size, matching Input.module.css `.lg`. */
-.lg .control {
-    font-size: var(--xc-text-lg);
-    padding: var(--xc-space-3) var(--xc-space-4);
-    min-height: 48px;
+    box-shadow: var(--xc-shadow-danger-focus-ring);
 }
 
 .lg .label {
@@ -72,8 +70,7 @@
     font-weight: 600;
 }
 
-/* md: single line ("TICK on Chain") so the control stays at the Input
-   md height (36px); lg stacks the two lines in the 48px hero field. */
+/* The default is a single line; the lg hero control stacks the two lines. */
 .text {
     display: flex;
     flex-direction: row;
@@ -86,6 +83,7 @@
 .lg .text {
     flex-direction: column;
     align-items: stretch;
+    /* Preserve the untokenized 2px optical separation between stacked labels. */
     gap: 2px;
 }
 
@@ -94,41 +92,29 @@
     font-size: var(--xc-text-md);
     color: var(--xc-text);
     line-height: 1.2;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.chain {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    line-height: 1.2;
-}
-
 .placeholder {
     flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     color: var(--xc-text-muted);
     text-align: start;
 }
 
 .caret {
+    --xc-icon-size: var(--xc-icon-md);
     display: inline-flex;
     align-items: center;
     color: var(--xc-text-muted);
     flex: 0 0 auto;
     margin-inline-start: auto;
-}
-
-/* The trailing action is a list icon (AddressField's icon-slot look);
-   cap it below the Lucide default so it sits inside the md field. */
-.caret svg {
-    width: 18px;
-    height: 18px;
-}
-
-.error {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-danger);
 }
 
 /* Box-shadow focus rings are not painted in forced-colors mode, so give

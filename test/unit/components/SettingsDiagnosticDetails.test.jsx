@@ -8,6 +8,11 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { ContactsSection } from '../../../packages/core/src/shared/components/settings/ContactsSection.jsx';
 import { BackupSection } from '../../../packages/core/src/shared/components/settings/BackupSection.jsx';
 import { RegtestRow } from '../../../packages/core/src/shared/components/settings/DeveloperModeSection.jsx';
+import {
+    auditedContactsJson,
+    malformedContactsCsv,
+    malformedContactsJson,
+} from '../fixtures/contactsImport.js';
 
 function mount(component, messaging) {
     return render(
@@ -64,9 +69,9 @@ describe('settings diagnostic disclosures', () => {
         expect(mismatch.textContent).not.toMatch(/m\/84|\bderived\b/);
         expect(missing.textContent).not.toMatch(/m\/84|\bderived\b/);
 
-        // The heading names the chain and address type in words, not by code.
+        // The heading names the chain by its icon and the address type in words, not by code.
         expect(screen.queryByText(/bitcoin-mainnet/)).toBeNull();
-        expect(screen.getByText('Bitcoin')).toBeTruthy();
+        expect(screen.getByRole('img', { name: 'Bitcoin' })).toBeTruthy();
         expect(screen.getByText('SegWit')).toBeTruthy();
     });
 
@@ -90,12 +95,123 @@ describe('settings diagnostic disclosures', () => {
         fireEvent.change(await screen.findByLabelText('Import contacts JSON'), {
             target: { files: [file] },
         });
+        fireEvent.click(await screen.findByRole('button', { name: 'Import contacts' }));
 
         expect(await screen.findByText('Imported 1 contact; 1 skipped.')).toBeTruthy();
         const summary = screen.getByText('Skipped contacts (1)');
         fireEvent.click(summary);
         expect(screen.getByText('Broken contact')).toBeTruthy();
         expect(screen.getByText(/entries must contain an address/)).toBeTruthy();
+    });
+
+    it('imports valid CSV contacts and identifies an invalid physical line', async () => {
+        const saveContact = vi.fn().mockResolvedValue(undefined);
+        const messaging = {
+            getSettings: vi.fn().mockResolvedValue(settings),
+            listContacts: vi.fn().mockResolvedValue([]),
+            saveContact,
+        };
+        mount(<ContactsSection />, messaging);
+
+        const file = {
+            name: 'contacts.csv',
+            text: async () => 'name,chain,address,notes\n'
+                + 'Alice,bitcoin,bc1qdevmockabcd,"one\ntwo"\n'
+                + 'Bob,,bc1qdevmockbeef,bad\n',
+        };
+        fireEvent.change(await screen.findByLabelText('Import contacts JSON'), {
+            target: { files: [file] },
+        });
+        fireEvent.click(await screen.findByRole('button', { name: 'Import contacts' }));
+
+        expect(await screen.findByText('Imported 1 contact; 1 skipped.')).toBeTruthy();
+        expect(saveContact).toHaveBeenCalledWith({
+            record: expect.objectContaining({
+                name: 'Alice',
+                notes: 'one\ntwo',
+                entries: [{ chain: 'bitcoin', address: 'bc1qdevmockabcd', label: '' }],
+            }),
+        });
+        fireEvent.click(screen.getByText('Skipped contacts (1)'));
+        expect(screen.getByText((_, element) => (
+            element?.tagName === 'LI' && element.textContent.includes('Line 4: chain is required.')
+        ))).toBeTruthy();
+    });
+
+    it.each([
+        ['broken.json', malformedContactsJson, /Unexpected end|JSON/],
+        ['broken.csv', malformedContactsCsv, /unterminated quoted field/],
+    ])('summarizes a malformed %s as one skipped import', async (name, content, detail) => {
+        const messaging = {
+            listContacts: vi.fn().mockResolvedValue([]),
+            saveContact: vi.fn(),
+        };
+        mount(<ContactsSection />, messaging);
+
+        fireEvent.change(await screen.findByLabelText('Import contacts JSON'), {
+            target: { files: [{ name, size: content.length, text: async () => content }] },
+        });
+
+        expect(await screen.findByText('Imported 0 contacts; 1 skipped.')).toBeTruthy();
+        expect(screen.queryByRole('dialog', { name: 'Import contacts?' })).toBeNull();
+        expect(messaging.saveContact).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByText('Skipped contacts (1)'));
+        expect(screen.getByText((_, element) => (
+            element?.tagName === 'LI' && detail.test(element.textContent)
+        ))).toBeTruthy();
+    });
+
+    it('skips unknown fields, unsupported chains, and duplicate contacts with one summary', async () => {
+        const messaging = {
+            listContacts: vi.fn().mockResolvedValue([]),
+            saveContact: vi.fn().mockResolvedValue(undefined),
+        };
+        mount(<ContactsSection />, messaging);
+
+        fireEvent.change(await screen.findByLabelText('Import contacts JSON'), {
+            target: {
+                files: [{
+                    name: 'contacts.json',
+                    size: auditedContactsJson.length,
+                    text: async () => auditedContactsJson,
+                }],
+            },
+        });
+        fireEvent.click(await screen.findByRole('button', { name: 'Import contacts' }));
+
+        expect(await screen.findByText('Imported 1 contact; 3 skipped; 1 duplicate.')).toBeTruthy();
+        expect(messaging.saveContact).toHaveBeenCalledOnce();
+        expect(messaging.saveContact).toHaveBeenCalledWith({
+            record: expect.objectContaining({ id: 'alice', name: 'Alice' }),
+        });
+        fireEvent.click(screen.getByText('Skipped contacts (3)'));
+        expect(screen.getByText(/unknown field "nickname"/)).toBeTruthy();
+        expect(screen.getByText(/address chain must be bitcoin, litecoin, or dogecoin/)).toBeTruthy();
+        expect(screen.getByText(/duplicates Alice \(contact 1\)/)).toBeTruthy();
+    });
+
+    it('rejects an oversized contacts file before reading and gives one summary', async () => {
+        const messaging = {
+            listContacts: vi.fn().mockResolvedValue([]),
+            saveContact: vi.fn(),
+        };
+        const text = vi.fn();
+        mount(<ContactsSection />, messaging);
+
+        fireEvent.change(await screen.findByLabelText('Import contacts JSON'), {
+            target: {
+                files: [{
+                    name: 'huge.json',
+                    size: (2 * 1024 * 1024) + 1,
+                    text,
+                }],
+            },
+        });
+
+        expect(await screen.findByText('Imported 0 contacts; 1 skipped.')).toBeTruthy();
+        expect(text).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByText('Skipped contacts (1)'));
+        expect(screen.getByText(/File is too large/)).toBeTruthy();
     });
 
     it('lists each account left unchanged during network activation', async () => {
@@ -110,7 +226,15 @@ describe('settings diagnostic disclosures', () => {
             }),
         };
         const descriptor = { id: 'bitcoin-regtest', displayName: 'Bitcoin Regtest' };
-        mount(<RegtestRow descriptor={descriptor} isActive={false} disabled={false} />, messaging);
+        mount(
+            <RegtestRow
+                descriptor={descriptor}
+                isActive={false}
+                disabled={false}
+                activeWallet={{ id: 'wallet-1' }}
+            />,
+            messaging,
+        );
 
         fireEvent.click(await screen.findByRole('button', { name: 'Activate…' }));
         const password = await screen.findByLabelText('Bitcoin Regtest activation password');

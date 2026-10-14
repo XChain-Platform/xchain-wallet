@@ -29,6 +29,7 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ROUTE_NAV_GROUPS } from '../../../packages/core/src/shared/routeRegistry.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -61,8 +62,8 @@ assert.ok(/safeChainIdParam\s*\(\s*chainParam\s*\)/.test(scanRouteSrc),
     'ScanRoute gates the scanned bip21 `chain=` param through safeChainIdParam, not a bare length check');
 assert.ok(/QrScanner onFrame=\{handleFrame\}/.test(scanRouteSrc),
     'ScanRoute mounts <QrScanner> with a frame handler');
-assert.ok(/<textarea/.test(scanRouteSrc),
-    'ScanRoute provides a paste-fallback textarea (BarcodeDetector not always available)');
+assert.ok(/<Textarea/.test(scanRouteSrc),
+    'ScanRoute provides a kit paste-fallback textarea (BarcodeDetector not always available)');
 assert.ok(/t\('scan\.classifyPaste'\)/.test(scanRouteSrc),
     'ScanRoute exposes a Classify-pasted-payload action for the textarea path (i18n: scan.classifyPaste)');
 assert.ok(/claimedRef\.current/.test(scanRouteSrc),
@@ -70,7 +71,7 @@ assert.ok(/claimedRef\.current/.test(scanRouteSrc),
 assert.ok(/t\('scan\.error\.wif'\)/.test(scanRouteSrc) && /t\('scan\.error\.mnemonic'\)/.test(scanRouteSrc),
     'ScanRoute refuses to auto-route WIF / mnemonic; directs the user to Import Wallet instead (i18n: scan.error.wif/mnemonic)');
 assert.ok(/t\('scan\.error\.xcwChunk',\s*\{\s*n:\s*detected\.n,\s*total:\s*detected\.total\s*\}\)/.test(scanRouteSrc),
-    'ScanRoute punts XCW chunks back to PsbtSignForm (i18n: scan.error.xcwChunk with n/total vars)');
+    'ScanRoute explains XCW multi-frame progress with n/total values');
 
 // --- 1b. ScanRoute uses t() and dictionary covers every key ----------
 
@@ -87,9 +88,13 @@ const SCAN_KEYS = [
     'scan.classifyPaste',
     'scan.error.pasteEmpty',
     'scan.error.unknownXchainIntent',
+    'scan.error.paymentRequest',
     'scan.error.wif',
     'scan.error.mnemonic',
     'scan.error.xcwChunk',
+    'scan.error.transactionHex',
+    'scan.error.backupPointer',
+    'scan.error.pairingCode',
     'scan.error.unknown',
 ];
 const { en } = await import('../../../packages/core/src/i18n/locales/en/index.js');
@@ -104,10 +109,10 @@ for (const key of SCAN_KEYS) {
         || scanRouteSrc.includes(`t('${key}',`),
         `ScanRoute calls t('${key}')`);
 }
-assert.ok(/\{n\}\/\{total\}/.test(en['scan.error.xcwChunk']),
-    'scan.error.xcwChunk uses {n}/{total} placeholders');
-assert.ok(/\{type\}/.test(en['scan.error.unknown']),
-    'scan.error.unknown uses {type} placeholder');
+assert.ok(/\{n\}/.test(en['scan.error.xcwChunk']) && /\{total\}/.test(en['scan.error.xcwChunk']),
+    'scan.error.xcwChunk uses n and total placeholders');
+assert.ok(!/\{type\}/.test(en['scan.error.unknown']),
+    'scan.error.unknown does not expose an internal classifier type');
 
 // --- 2. BottomTabBar PRIMARY_TABS swap --------------------------------
 
@@ -139,8 +144,8 @@ const leftNavSrc = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'LeftNav.jsx'),
     'utf8',
 );
-assert.ok(/scan: \['scan'\]/.test(leftNavSrc),
-    'LeftNav VIEW_GROUPS knows about the scan view');
+assert.deepEqual(ROUTE_NAV_GROUPS.scan, ['scan', 'sign-psbt'],
+    'LeftNav scan group covers the scanner and its PSBT drilldown');
 assert.ok(
     /\{ id: 'scan', label: 'Scan', Icon: Icon\.ScanIcon \}/.test(leftNavSrc),
     'LeftNav primary list renders a Scan row with ScanIcon',
@@ -156,7 +161,7 @@ const shells = [
 
 for (const shell of shells) {
     const src = readFileSync(join(wsRoot, ...shell.path), 'utf8');
-    assert.ok(/ScanRoute.*from '@xchain-wallet\/core\/shared\/routes\/ScanRoute\.jsx'/.test(src),
+    assert.ok(/(ScanRoute.*from |const\s+ScanRoute\s*=\s*lazyRoute\(\s*\(\)\s*=>\s*import\()'@xchain-wallet\/core\/shared\/routes\/ScanRoute\.jsx'/.test(src),
         `${shell.name} App.jsx imports ScanRoute`);
     assert.ok(/unlockedView === 'scan' && activeWalletId/.test(src),
         `${shell.name} App.jsx ships a 'scan' top-level view guarded on activeWalletId`);
@@ -169,7 +174,8 @@ for (const shell of shells) {
     // Membership, not position. This asserted `'scan'` was the LAST member of
     // the union, so any later view (PC-30's 'oracle', that 'settings')
     // read as a missing scan route.
-    assert.ok(/@type \{[^}]*'scan'[^}]*\} \*\/ \('home'\)/.test(src),
+    // The initial value may be a handoff expression rather than a bare 'home'.
+    assert.ok(/@type \{'home'[^}]*'scan'[^}]*\} \*\/ \(/.test(src),
         `${shell.name} App.jsx unlockedView union covers 'scan'`);
 }
 

@@ -77,6 +77,9 @@ export async function resolveSdkFactory({
     venue = selectSdkVenue(),
     importSdk = () => import('xchain-sdk'),
 } = {}) {
+    if (venue !== 'real' && venue !== 'dev-mock') {
+        throw new Error(`resolveSdkFactory: unknown SDK venue "${venue}"`);
+    }
     // The outer test keeps the literal `import.meta.env?.PROD` token Vite
     // statically replaces, so a release bundle collapses this to `if (false)`
     // and dead-code-eliminates the whole mock branch, warning string included

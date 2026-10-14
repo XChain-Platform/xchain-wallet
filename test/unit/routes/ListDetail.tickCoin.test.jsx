@@ -49,6 +49,7 @@ describe('ListDetail coin-qualified ticker members', () => {
         await waitFor(() => expect(messaging.getTokenInfo).toHaveBeenCalledWith({
             chainId: 'dogecoin-testnet',
             tick: '^42',
+            demo: false,
         }));
     });
 
@@ -68,6 +69,7 @@ describe('ListDetail coin-qualified ticker members', () => {
         await waitFor(() => expect(messaging.getTokenInfo).toHaveBeenCalledWith({
             chainId: 'litecoin-mainnet',
             tick: '^19',
+            demo: false,
         }));
         await act(async () => {
             rejectLookup(new Error('offline'));

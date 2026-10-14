@@ -12,11 +12,8 @@
 //
 // Cross-cuts SignApproval.jsx (extension approval window) and
 // Send.jsx (user-initiated send). Asserts:
-//   - Approve/Reject footer reads a bare "Approve" (thumbs up) and
-//     "Reject" (thumbs down) on every kind but signIn, which keeps its
-//     own "Sign in" verb. The chain suffix that used to ride on the
-//     approve button is retired by operator decision; the chain is shown
-//     by the ChainBadge and the request details instead.
+//   - dApp approvals keep their approval wording, while wallet action
+//     confirmations name the action and amount shown in the review.
 //   - dApp Source block renders when an origin is present (Origin +
 //     optional App name).
 //   - Action details collapsed by default behind a <details> toggle.
@@ -38,6 +35,7 @@ const signSrc = readFileSync(signPath, 'utf8');
 const signCss = readFileSync(signCssPath, 'utf8');
 const sendSrc = readFileSync(sendPath, 'utf8');
 const sendCss = readFileSync(sendCssPath, 'utf8');
+const { en } = await import(join(wsRoot, 'packages', 'core', 'src', 'i18n', 'locales', 'en', 'index.js'));
 
 // --- 1. Approve-button label semantics (SignApproval) -------------------
 
@@ -79,18 +77,10 @@ assert.match(
     'button renders the derived approveLabel, not a hardcoded string',
 );
 
-// --- 1b. the SAME rule on the in-wallet confirm surface -----------------
+// --- 1b. action labels on the in-wallet confirm surface ------------------
 //
-// a later change gave the wallet a second signing surface, and every action form now
-// routes through it. It shipped with a bare "Approve": the button that commits
-// the signature never said which chain it was committing on, while the dApp
-// window a few files away got it right. Found by finally driving the page in a
-// browser (Playwright), not by any unit test - the copy was internally
-// consistent, just wrong.
-//
-// Derived from `variant` inside the component rather than passed by each of the
-// three adapters, because three adapters each remembering the rule is three
-// chances to forget it.
+// The wallet surface derives its label from the reviewed, composed action so
+// every action adapter follows the same wording and amount formatting.
 {
     const confirmSrc = readFileSync(
         join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'ConfirmActionModal.jsx'),
@@ -99,19 +89,19 @@ assert.match(
     assert.doesNotMatch(
         confirmSrc,
         /const defaultApproveLabel[\s\S]{0,120}Approve & Sign/,
-        'confirm surface: the retired "Approve & Sign on <chain>" label has not come back',
+        'confirm surface: action label is not chain-based signing text',
     );
     assert.match(
         confirmSrc,
-        /const defaultApproveLabel = 'Approve';/,
-        'confirm surface: every variant approves with a bare "Approve"',
+        /reviewActionLabel\(formattedDecoded, defaultApproveLabel, chainLabel\)/,
+        'confirm surface: action approvals name the reviewed action and amount',
     );
     assert.match(
         confirmSrc,
-        /\{approveLabel \|\| defaultApproveLabel\}/,
+        /\{resolvedApproveLabel\}/,
         'confirm surface: the footer button renders the derived label',
     );
-    // The regression this guards: a hardcoded verb in the footer.
+    // The footer consumes the label derived from the reviewed action.
     const footerIdx = confirmSrc.indexOf('data-testid="confirm-approve"');
     assert.ok(footerIdx !== -1, 'confirm surface: the Approve button is testid-tagged');
     const footer = confirmSrc.slice(footerIdx, footerIdx + 400);
@@ -130,9 +120,10 @@ assert.match(
 // misrepresent the original bytes that remain in the signing payload.
 assert.match(
     signSrc,
-    /summaryLabel[^>]*>One-time code</,
-    'signIn summary labels the challenge "One-time code"',
+    /t\('extension\.sign\.oneTimeCode'\)/,
+    'signIn summary translates the challenge label',
 );
+assert.equal(en['extension.sign.oneTimeCode'], 'One-time code', 'English challenge label stays exact');
 assert.doesNotMatch(
     signSrc,
     /summaryLabel[^>]*>Nonce</,
@@ -140,17 +131,19 @@ assert.doesNotMatch(
 );
 assert.match(
     signSrc,
-    /<HardenedSignedText value=\{inner\.nonce\} warningNoun="sign-in" \/>/,
+    /<HardenedSignedText value=\{inner\.nonce\} warningNoun=\{t\('extension\.sign\.warningNoun\.signIn'\)\} \/>/,
     'the challenge value renders through signed-text hardening',
 );
+assert.equal(en['extension.sign.warningNoun.signIn'], 'sign-in', 'English warning noun stays exact');
 
 // --- 2. dApp Source block (SignApproval) --------------------------------
 
 assert.match(
     signSrc,
-    /<section className=\{styles\.source\} aria-label="Source">/,
+    /<section className=\{styles\.source\} aria-label=\{t\('extension\.sign\.source'\)\}>/,
     'Source block uses a labelled <section>',
 );
+assert.equal(en['extension.sign.source'], 'Source', 'English Source label stays exact');
 assert.match(
     signSrc,
     /\{origin \?/,
@@ -179,9 +172,10 @@ assert.match(
 );
 assert.match(
     signSrc,
-    /Details \(\{decoded\.details\.length\}\)/,
+    /t\('send\.review\.details', \{ count: decoded\.details\.length \}\)/,
     'toggle shows the row count',
 );
+assert.equal(en['send.review.details'], 'Details ({count})', 'English details label stays exact');
 
 // --- 4. SignApproval CSS hooks -----------------------------------------
 
@@ -191,19 +185,18 @@ for (const cls of ['source', 'sourceLabel', 'sourceOrigin', 'sourceApp', 'detail
 
 // --- 5. Send.jsx polish -------------------------------------------------
 
-// Submit-button label uses chain-suffixed "Sign on <chain>" for
-// software signing (HW path keeps its existing Sign on Trezor / Ledger
-// affordance).
+// Software signing stays generic so the review does not repeat the chain name.
+// The hardware path keeps its Sign on Trezor / Ledger affordance.
 assert.match(
     sendSrc,
-    /descriptor\?\.displayName\s*\?\s*`Sign on \$\{descriptor\.displayName\}`\s*:\s*'Sign'/,
-    'Send.jsx review/sign button reads "Sign on <chain>" (software path)',
+    /const softwareSignLabel = t\('send\.review\.sign'\)/,
+    'Send.jsx review/sign button uses generic software-signing copy',
 );
 // Send is a deliberate two-stage flow: the compose-stage submit button
 // reads "Send" (it advances to Review via handleReview), and only the
-// review-stage button commits with "Sign on <chain>" (asserted above).
+// review-stage button commits with "Sign" (asserted above).
 // A blanket "no Send button anywhere" check is therefore over-broad and
-// was retired; the "Sign on <chain>" assertion already pins the intent.
+// was retired; the generic Sign assertion already pins the intent.
 
 // Details collapsed.
 assert.match(

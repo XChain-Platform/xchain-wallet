@@ -53,7 +53,8 @@ const CHAIN = 'litecoin-regtest';
 const OURS = 'mtkx2FQ7QhPPZmVyLKVWMkfmYmvQRUXCmi';
 const TICK = 'CAMPA';
 const OTHER_TICK = 'XCHAIN';
-const GROUPING_MODE_STORAGE_KEY = 'xc:historyGroupingMode';
+// History keeps its grouping mode per wallet; these tests mount wallet w1.
+const GROUPING_MODE_STORAGE_KEY = 'xc:historyGroupingMode:w1';
 
 /** Recent, because History's default date window is the last 30 days. */
 const NOW_S = Math.floor(Date.now() / 1000);

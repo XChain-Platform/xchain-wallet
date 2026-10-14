@@ -19,10 +19,12 @@ const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 const core = join(wsRoot, 'packages', 'core');
 const sendJsx = join(core, 'src', 'shared', 'routes', 'Send.jsx');
+const broadcastJsx = join(core, 'src', 'shared', 'routes', 'BroadcastForm.jsx');
 const sendCss = join(core, 'src', 'shared', 'routes', 'Send.module.css');
 
 assert.ok(existsSync(sendJsx), 'Send.jsx exists');
 const send = readFileSync(sendJsx, 'utf8');
+const broadcast = readFileSync(broadcastJsx, 'utf8');
 const css = readFileSync(sendCss, 'utf8');
 
 // --- 1. Done stage renders the new success card ---------------------------
@@ -30,10 +32,12 @@ const css = readFileSync(sendCss, 'utf8');
 assert.ok(/stage === 'done'/.test(send), 'Send still gates on stage === "done"');
 assert.ok(/className=\{styles\.successCard\}/.test(send),
     'Done stage renders the styles.successCard wrapper');
-assert.ok(/Broadcast pending/.test(send),
+assert.ok(/t\('send\.success\.broadcastPending'\)/.test(send),
     'Done stage uses "Broadcast pending" copy (§28.4 status timeline language)');
 assert.ok(/role="status"\s+aria-live="polite"/.test(send),
     'Done stage announces success via role=status + aria-live=polite');
+assert.ok(/role="status"\s+aria-live="polite"\s+aria-atomic="true"/.test(send),
+    'Done stage announces the pending result as one atomic update');
 
 // --- 2. Send-another resets state -----------------------------------------
 
@@ -48,17 +52,44 @@ assert.ok(/setAmount\(''\)/.test(send) && /setToAddress\(''\)/.test(send),
 
 assert.ok(/explorer\?\.defaultUrl/.test(send),
     'Done stage reads explorer.defaultUrl from the chain descriptor');
-assert.ok(/View on explorer/.test(send),
+assert.ok(/t\('send\.success\.viewOnExplorer'\)/.test(send),
     'Done stage offers a "View on explorer" link');
 assert.ok(/target="_blank"/.test(send) && /rel="noopener noreferrer"/.test(send),
     'Explorer link opens in a new tab with noopener noreferrer');
 
-// --- 4. Copy-txid affordance is wired to the clipboard ------------------
+// --- 4. BROADCAST actions expose the same transaction essentials -------
 
-assert.ok(/navigator\.clipboard\?\.writeText/.test(send),
-    'Done stage copy-txid uses navigator.clipboard.writeText (best-effort guarded)');
+assert.ok(/Your action was broadcast but is not confirmed yet/.test(broadcast),
+    'BROADCAST success explains that confirmation is still pending');
+assert.ok(/<CopyButton value=\{txid\} label="Copy transaction ID" \/>/.test(broadcast),
+    'BROADCAST success makes the transaction ID copyable');
+assert.ok(/explorerPageUrl\(\{[\s\S]*?kind: 'transaction',[\s\S]*?value: txid/.test(broadcast),
+    'BROADCAST success builds a chain-scoped transaction explorer URL');
+assert.ok(/Broadcast another/.test(broadcast),
+    'BROADCAST success offers a repeat path');
 
-// --- 5. CSS additions ----------------------------------------------------
+// --- 5. Shell completion callbacks return Home -------------------------
+
+for (const appPath of [
+    join(wsRoot, 'packages', 'web', 'src', 'App.jsx'),
+    join(wsRoot, 'packages', 'extension', 'src', 'popup', 'App.jsx'),
+    join(wsRoot, 'packages', 'desktop', 'renderer', 'App.jsx'),
+]) {
+    const app = readFileSync(appPath, 'utf8');
+    assert.ok(/<Send[\s\S]*?onDone=\{\(\) => \{[\s\S]*?setUnlockedView\('home'\)/.test(app),
+        `${appPath} sends Done to Home`);
+    assert.ok(/<BroadcastForm[\s\S]*?onDone=\{formDone\}/.test(app),
+        `${appPath} sends BROADCAST Done through the Home callback`);
+}
+
+// --- 6. Copy-txid affordance is wired to the clipboard ------------------
+
+// CopyButton owns the native plugin / browser split and reports failures inline.
+assert.ok(/<CopyButton[\s\S]*?value=\{txid\}[\s\S]*?ariaLabel=\{t\('common\.copyTransactionId'\)\}[\s\S]*?\/>/.test(send)
+        && !/onCopied=\{\(\) => showToast\(\{ message: 'Transaction ID copied to clipboard\.' \}\)\}/.test(send),
+    'Done stage copy-txid uses the shared one-shot CopyButton announcement');
+
+// --- 7. CSS additions ----------------------------------------------------
 
 for (const cls of [
     'successCard',

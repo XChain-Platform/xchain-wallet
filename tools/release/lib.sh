@@ -548,9 +548,13 @@ xr_write_manifest() {
 
     (
         cd "$dir" || exit 2
-        # shellcheck disable=SC2086  # $sha is a command + flags, must split.
-        printf '%s\n' "$files" | grep . | xargs -I{} $sha {} \
-            >> "RELEASE_HASHES.txt"
+        local -a sha_cmd=() artifact_files=()
+        local artifact
+        read -r -a sha_cmd <<< "$sha"
+        while IFS= read -r artifact; do
+            [[ -n "$artifact" ]] && artifact_files+=("$artifact")
+        done <<< "$files"
+        "${sha_cmd[@]}" "${artifact_files[@]}" >> "RELEASE_HASHES.txt"
     ) || return 2
 }
 
@@ -598,10 +602,12 @@ xr_check_profiles() {
     # an uncovered artifact is one whose feature set nobody declared, and a
     # covered-but-absent one means the manifest describes bytes it does not
     # hash.
+    local -a hashed_names=()
     local hashed
     while IFS= read -r line; do
         [[ -z "$line" ]] && continue
         hashed="${line#*  }"
+        hashed_names+=("$hashed")
         local found=0
         for name in "${covered[@]}"; do
             [[ "$name" == "$hashed" ]] && { found=1; break; }
@@ -613,7 +619,11 @@ xr_check_profiles() {
     done < "$stripped"
 
     for name in "${covered[@]}"; do
-        if ! grep -qF "  ${name}" "$stripped"; then
+        local found=0
+        for hashed in "${hashed_names[@]}"; do
+            [[ "$name" == "$hashed" ]] && { found=1; break; }
+        done
+        if [[ "$found" -eq 0 ]]; then
             echo "verify: profile lines claim '$name', which the manifest does not hash." >&2
             return 1
         fi
@@ -623,8 +633,14 @@ xr_check_profiles() {
 # Echo one header field's value from a manifest, empty if absent.
 # Args: manifest_path field_name
 xr_header_field() {
-    local manifest="$1" field="$2"
-    sed -n "s/^# ${field}: //p" "$manifest" | head -1
+    local manifest="$1" field="$2" line prefix
+    prefix="# ${field}: "
+    while IFS= read -r line; do
+        if [[ "$line" == "$prefix"* ]]; then
+            printf '%s\n' "${line#"$prefix"}"
+            return 0
+        fi
+    done < "$manifest"
 }
 
 # Which RELEASE a tag names, with any re-sign suffix stripped.
@@ -730,7 +746,11 @@ xr_check_ceremony_records() {
 
 # True if the manifest carries the signed header at all.
 xr_has_header() {
-    grep -q '^# manifest-version: ' "$1" 2>/dev/null
+    local line
+    while IFS= read -r line; do
+        [[ "$line" == '# manifest-version: '* ]] && return 0
+    done < "$1" 2>/dev/null
+    return 1
 }
 
 # Does this manifest claim to describe an actual release?

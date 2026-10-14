@@ -50,13 +50,13 @@ afterEach(() => {
 });
 
 describe('Home Activity tab', () => {
-    it('plainly marks the non-demo feed unbuilt and opens History', async () => {
+    it('points the Activity tab of a real wallet at History', async () => {
         const onHistory = vi.fn();
         mountHome(onHistory);
 
         fireEvent.click(await screen.findByRole('tab', { name: 'Activity' }));
 
-        expect(screen.getByText('Activity feed not built yet')).toBeTruthy();
+        expect(screen.getByText('Your activity is in History')).toBeTruthy();
         expect(screen.queryByText('Recent activity')).toBeNull();
 
         const openHistory = screen.getByRole('button', { name: 'Open History' });
@@ -73,7 +73,7 @@ describe('Home Activity tab', () => {
         fireEvent.click(await screen.findByRole('tab', { name: 'Activity' }));
 
         expect(screen.getByText('No activity yet')).toBeTruthy();
-        expect(screen.queryByText('Activity feed not built yet')).toBeNull();
+        expect(screen.queryByText('Your activity is in History')).toBeNull();
         expect(screen.queryByRole('button', { name: 'Open History' })).toBeNull();
         expect(onHistory).not.toHaveBeenCalled();
     });

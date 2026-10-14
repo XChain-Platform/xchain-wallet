@@ -9,30 +9,13 @@
 // contact legal@dankest.llc.
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Button } from '../../ui/Button.jsx';
 import styles from './ToastHost.module.css';
-import { useHaptic } from '../hooks/useHaptic.js';
-
-// §37.2 toast foundation. A single shared host renders an action queue
-// at the bottom of the screen; any route can drop a toast via the
-// `useToast()` hook. Toasts auto-dismiss after `durationMs` (default
-// 8 s per spec) unless the user clicks the optional action button
-// (typically Undo, but the API is generic enough to also surface "Open
-// site" or "Retry" as later integrations land).
-//
-// The host is a context provider so the queue lives above route
-// re-renders: a toast survives navigation back to Home from the form
-// that triggered it (the user might dismiss the source surface and we
-// still owe them the Undo affordance).
-//
-// Cluster D FOLLOWUP 4: at most `VISIBLE_LIMIT` toasts render at once.
-// Older entries stay in the queue with their auto-dismiss timers
-// running; as those fire and the queue shrinks, hidden toasts surface
-// in arrival order. This keeps the bottom-right column from growing
-// into a wall when the user fires several destructive actions back to
-// back. The full toast list is still aria-live'd via the viewport
-// region so a screen reader catches every announcement.
+import { HapticProvider, useHaptic } from '../hooks/useHaptic.js';
 
 const VISIBLE_LIMIT = 3;
+const DEFAULT_DURATION_MS = 8000;
+const ACTION_MIN_DURATION_MS = 12000;
 
 /**
  * @typedef {{
@@ -41,13 +24,14 @@ const VISIBLE_LIMIT = 3;
  *   actionLabel?: string,
  *   onAction?: () => void | Promise<void>,
  *   durationMs?: number,
- *   variant?: 'default' | 'success' | 'error',
+ *   variant?: 'default' | 'info' | 'warning' | 'success' | 'error',
  * }} ToastInput
  */
 
 /**
  * @typedef {{
  *   showToast: (toast: ToastInput) => string,
+ *   announce: (message: string) => void,
  *   dismissToast: (id: string) => void,
  *   clearToasts: () => void,
  * }} ToastApi
@@ -57,15 +41,20 @@ const VISIBLE_LIMIT = 3;
 const ToastContext = createContext(null);
 
 /**
- * Mount once at the app root (web + extension App.jsx wrap their
- * unlocked tree in `<ToastHost>`). Children render exactly once;
- * `<ToastHost>` only adds an absolutely-positioned viewport at the
+ * Mount once at the app root for every shell. Children render exactly once;
+ * `<ToastHost>` only adds a fixed viewport at the
  * bottom of its slot.
  */
 export function ToastHost({ children }) {
     const [toasts, setToasts] = useState(/** @type {ToastInput[]} */ ([]));
+    const [announcement, setAnnouncement] = useState({ id: 0, message: '' });
     const timersRef = useRef(/** @type {Map<string, ReturnType<typeof setTimeout>>} */ (new Map()));
     const haptic = useHaptic();
+
+    const announce = useCallback((message) => {
+        if (typeof message !== 'string' || message.length === 0) return;
+        setAnnouncement((current) => ({ id: current.id + 1, message }));
+    }, []);
 
     const dismissToast = useCallback((id) => {
         setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -78,22 +67,27 @@ export function ToastHost({ children }) {
 
     const showToast = useCallback(/** @param {ToastInput} input */ (input) => {
         const id = input.id || `toast-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
-        const duration = Number.isFinite(input.durationMs) ? Math.max(0, input.durationMs) : 8000;
+        const requestedDuration = Number.isFinite(input.durationMs)
+            ? Math.max(0, input.durationMs)
+            : DEFAULT_DURATION_MS;
+        const duration = requestedDuration > 0 && input.actionLabel && input.onAction
+            ? Math.max(requestedDuration, ACTION_MIN_DURATION_MS)
+            : requestedDuration;
         const record = { ...input, id, durationMs: duration };
-        setToasts((prev) => [...prev, record]);
-        // §37.3: fire a haptic pulse keyed to the toast variant. The
-        // hook silently no-ops on non-vibration hosts and on
-        // prefers-reduced-motion, so this is safe everywhere.
+        const existingTimer = timersRef.current.get(id);
+        if (existingTimer) {
+            clearTimeout(existingTimer);
+            timersRef.current.delete(id);
+        }
+        setToasts((prev) => {
+            const existingIndex = prev.findIndex((toast) => toast.id === id);
+            if (existingIndex === -1) return [...prev, record];
+            return prev.map((toast, index) => (index === existingIndex ? record : toast));
+        });
         if (record.variant === 'error') haptic.error();
+        else if (record.variant === 'warning') haptic.warn();
         else if (record.variant === 'success') haptic.success();
         else haptic.tap();
-        if (duration > 0) {
-            const timer = setTimeout(() => {
-                timersRef.current.delete(id);
-                setToasts((prev) => prev.filter((t) => t.id !== id));
-            }, duration);
-            timersRef.current.set(id, timer);
-        }
         return id;
     }, [haptic]);
 
@@ -108,58 +102,90 @@ export function ToastHost({ children }) {
         timersRef.current.clear();
     }, []);
 
-    const api = useMemo(() => ({ showToast, dismissToast, clearToasts }), [
-        showToast, dismissToast, clearToasts,
+    const api = useMemo(() => ({ showToast, announce, dismissToast, clearToasts }), [
+        showToast, announce, dismissToast, clearToasts,
     ]);
 
-    // Render at most VISIBLE_LIMIT toasts. Newest land at the bottom
-    // (the queue is appended); slicing from the end shows the most
-    // recent feedback first. Older queued toasts surface as their
-    // predecessors auto-dismiss.
-    const visibleToasts = toasts.slice(-VISIBLE_LIMIT);
+    const visibleToasts = toasts.slice(0, VISIBLE_LIMIT);
     const hiddenCount = Math.max(0, toasts.length - visibleToasts.length);
 
+    useEffect(() => {
+        const visibleIds = new Set(visibleToasts.map((toast) => toast.id));
+        for (const [id, timer] of timersRef.current.entries()) {
+            if (!visibleIds.has(id)) {
+                clearTimeout(timer);
+                timersRef.current.delete(id);
+            }
+        }
+        for (const toast of visibleToasts) {
+            if (toast.durationMs <= 0 || timersRef.current.has(toast.id)) continue;
+            const timer = setTimeout(() => {
+                timersRef.current.delete(toast.id);
+                setToasts((prev) => prev.filter((item) => item.id !== toast.id));
+            }, toast.durationMs);
+            timersRef.current.set(toast.id, timer);
+        }
+    }, [visibleToasts]);
+
     return (
-        <ToastContext.Provider value={api}>
-            {children}
-            <div
-                className={styles.viewport}
-                role="region"
-                aria-label="Notifications"
-                aria-live="polite"
-            >
-                {hiddenCount > 0 ? (
-                    <div className={styles.overflowBadge} aria-hidden="true">
-                        {`+${hiddenCount} more`}
-                    </div>
-                ) : null}
-                {visibleToasts.map((t) => (
-                    <ToastItem
-                        key={t.id}
-                        toast={t}
-                        onAction={() => {
-                            if (typeof t.onAction === 'function') {
-                                Promise.resolve(t.onAction()).catch(() => {
-                                    /* swallow; caller surfaces its own error */
-                                });
-                            }
-                            dismissToast(t.id);
-                        }}
-                        onDismiss={() => dismissToast(t.id)}
-                    />
-                ))}
-            </div>
-        </ToastContext.Provider>
+        <HapticProvider value={haptic}>
+            <ToastContext.Provider value={api}>
+                {children}
+                <div
+                    className={styles.viewport}
+                    role="status"
+                    aria-label="Notifications"
+                    aria-live="polite"
+                    aria-atomic="false"
+                    aria-relevant="additions text"
+                >
+                    <span className={styles.liveAnnouncement} key={announcement.id}>
+                        {announcement.message}
+                    </span>
+                    {hiddenCount > 0 ? (
+                        <div className={styles.overflowBadge} aria-hidden="true">
+                            {`+${hiddenCount} more`}
+                        </div>
+                    ) : null}
+                    {visibleToasts.map((t) => (
+                        <ToastItem
+                            key={t.id}
+                            toast={t}
+                            onAction={() => {
+                                if (typeof t.onAction === 'function') {
+                                    try {
+                                        Promise.resolve(t.onAction()).catch(() => {
+                                            /* The caller surfaces action failures through its own UI. */
+                                        });
+                                    } catch {
+                                        /* The caller surfaces action failures through its own UI. */
+                                    }
+                                }
+                                dismissToast(t.id);
+                            }}
+                            onDismiss={() => dismissToast(t.id)}
+                        />
+                    ))}
+                </div>
+            </ToastContext.Provider>
+        </HapticProvider>
     );
 }
 
 function ToastItem({ toast, onAction, onDismiss }) {
-    const variant = toast.variant || 'default';
+    const presentation = TOAST_PRESENTATION[toast.variant || 'default'] || TOAST_PRESENTATION.default;
     return (
         <div
-            className={`${styles.toast} ${styles[`variant_${variant}`] || ''}`}
-            role={variant === 'error' ? 'alert' : 'status'}
+            className={`${styles.toast} ${styles[`variant_${presentation.tone}`]}`}
+            data-variant={presentation.tone}
+            onKeyDown={(event) => {
+                if (event.key !== 'Escape') return;
+                event.preventDefault();
+                event.stopPropagation();
+                onDismiss();
+            }}
         >
+            <span className={styles.icon} aria-hidden="true">{presentation.icon}</span>
             <span className={styles.message}>{toast.message}</span>
             <div className={styles.controls}>
                 {toast.actionLabel && toast.onAction ? (
@@ -171,18 +197,26 @@ function ToastItem({ toast, onAction, onDismiss }) {
                         {toast.actionLabel}
                     </button>
                 ) : null}
-                <button
-                    type="button"
+                <Button
+                    size="sm"
+                    variant="secondary"
                     className={styles.dismissBtn}
+                    icon={<span aria-hidden="true">×</span>}
                     onClick={onDismiss}
                     aria-label="Dismiss notification"
-                >
-                    ×
-                </button>
+                />
             </div>
         </div>
     );
 }
+
+const TOAST_PRESENTATION = {
+    default: { tone: 'info', icon: 'ℹ' },
+    info: { tone: 'info', icon: 'ℹ' },
+    warning: { tone: 'warning', icon: '⚠' },
+    success: { tone: 'success', icon: '✓' },
+    error: { tone: 'error', icon: '✕' },
+};
 
 /**
  * Hook for routes / components that want to surface a toast. Falls back
@@ -195,6 +229,7 @@ export function useToast() {
     if (ctx) return ctx;
     return /** @type {ToastApi} */ ({
         showToast: () => '',
+        announce: () => {},
         dismissToast: () => {},
         clearToasts: () => {},
     });

@@ -23,18 +23,15 @@
 // a seed-only restore cannot tell which external addresses were
 // dispensers.
 //
-// "Next index" fills the lowest change=0 index across ALL roles that has
-// no persisted Address record AND was never funded on-chain, so it never
-// collides with a receive address. This is NOT the same rule as
-// receiveAddress.js's plain lowest-missing-index reuse: a dispenser
-// address can hold real escrowed value, so a gap left by a deleted
-// dispenser that the chain shows was actually used stays permanently
-// skipped, the same way the highest-index-plus-one scan this replaces
-// already treated every gap, rather than being handed to a second
-// dispenser that a buyer or explorer may still have on record.
+// "Next index" checks missing change=0 indexes below the highest held
+// index across ALL roles before reuse, so it never collides with a receive
+// address. receiveAddress.js also checks on-chain history before filling a
+// gap. A deleted address that the chain shows was actually used stays
+// permanently skipped rather than being handed to a second recipient,
+// buyer, or explorer record.
 //
 // Structurally a twin of receiveAddress.js; the differences are the role
-// tag, the default label, and this funded-gap check.
+// tag and default label.
 
 import { createAddress } from '../schemas/address.js';
 import { NoMatchingAccountError } from './receiveAddress.js';

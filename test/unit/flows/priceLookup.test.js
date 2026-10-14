@@ -19,6 +19,7 @@ import {
     subscribeFiatRates,
     _resetPriceLookupForTests,
     coinToFiat,
+    coinToFiatExact,
     fiatToCoin,
 } from '../../../packages/core/src/flows/priceLookup.js';
 
@@ -41,6 +42,55 @@ describe('flows/priceLookup', () => {
     it('returns null before any refresh (no fabricated numbers, §45.4)', () => {
         expect(getFiatRate({ chainCoin: 'bitcoin' })).toBeNull();
         expect(getFiatRate({})).toBeNull();
+    });
+
+    it('rehydrates the last known rate synchronously as stale, then replaces it live', async () => {
+        let now = NOW;
+        let quoted = '50000';
+        configureFiatRateSource({
+            now: () => now,
+            fetch: async () => snapshotResponse([snapshotRow('BTC/USD', quoted)]),
+            explorerUrlByCoin: { bitcoin: 'https://explorer.test' },
+        });
+        await refreshFiatRates({ chainCoins: ['bitcoin'] });
+        const first = getFiatRate({ chainCoin: 'bitcoin' });
+        expect(first).toMatchObject({ rate: 50000, stale: false });
+
+        _resetPriceLookupForTests({ preservePersistent: true });
+        const cached = getFiatRate({ chainCoin: 'bitcoin' });
+        expect(cached).toMatchObject({
+            rate: 50000,
+            fetchedAt: new Date(NOW).toISOString(),
+            stale: true,
+        });
+
+        now += 60_000;
+        quoted = '51000';
+        configureFiatRateSource({
+            now: () => now,
+            fetch: async () => snapshotResponse([snapshotRow('BTC/USD', quoted, Math.floor(now / 1000) - 60)]),
+            explorerUrlByCoin: { bitcoin: 'https://explorer.test' },
+        });
+        await refreshFiatRates({ chainCoins: ['bitcoin'] });
+        expect(getFiatRate({ chainCoin: 'bitcoin' })).toMatchObject({
+            rate: 51000,
+            fetchedAt: new Date(now).toISOString(),
+            stale: false,
+        });
+    });
+
+    it('ignores corrupt persisted rates instead of flashing a zero price', () => {
+        localStorage.setItem('xchain-wallet:fiat-rates:v1', JSON.stringify({
+            version: 1,
+            rates: [
+                { rate: 0, chainCoin: 'bitcoin', fiatCurrency: 'USD', source: 'oracle', fetchedAt: new Date(NOW).toISOString() },
+                { rate: 50000, chainCoin: 'litecoin', fiatCurrency: 'USD', source: 'oracle', fetchedAt: 'not-a-date' },
+            ],
+        }));
+        _resetPriceLookupForTests({ preservePersistent: true });
+
+        expect(getFiatRate({ chainCoin: 'bitcoin' })).toBeNull();
+        expect(getFiatRate({ chainCoin: 'litecoin' })).toBeNull();
     });
 
     it('serves a fresh finalized oracle snapshot as the primary source', async () => {
@@ -193,6 +243,8 @@ describe('flows/priceLookup', () => {
     it('conversion helpers keep their contract', () => {
         const rate = { rate: 40000 };
         expect(coinToFiat('0.5', rate)).toBe(20000);
+        expect(coinToFiatExact('9007199254740993.01', { ...rate, rate: 1 }))
+            .toBe('9007199254740993.01');
         expect(coinToFiat('junk', rate)).toBeNull();
         expect(fiatToCoin('20000', rate)).toBe('0.5');
         expect(fiatToCoin('40000', { rate: 0 })).toBeNull();
@@ -214,5 +266,14 @@ describe('flows/priceLookup', () => {
             expect(out).not.toContain('e');
             expect(grammar.test(out)).toBe(true);
         }
+    });
+
+    it('converts finite exponential numbers without losing the decimal grammar', () => {
+        expect(coinToFiatExact(1e-8, { rate: 1e-8 })).toBe('0.0000000000000001');
+        expect(coinToFiatExact('0.00000001', { rate: 1e21 })).toBe('10000000000000');
+        expect(fiatToCoin(1e-8, { rate: 1 }, 8)).toBe('0.00000001');
+        expect(fiatToCoin('1', { rate: 1e-8 })).toBe('100000000');
+        expect(fiatToCoin('1', { rate: -1 })).toBeNull();
+        expect(coinToFiat('2', { rate: 1e308 })).toBeNull();
     });
 });

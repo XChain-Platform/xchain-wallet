@@ -27,7 +27,7 @@ vi.mock('@xchain-wallet/core/ui', async (importOriginal) => {
     return {
         ...actual,
         QrScanner: ({ onFrame }) => (
-            <button type="button" data-testid="fake-scan" onClick={() => onFrame(globalThis.__XC_SCAN_FRAME__)}>
+            <button type="button" aria-label="Emit scanned backup pointer" onClick={() => onFrame(globalThis.__XC_SCAN_FRAME__)}>
                 scan
             </button>
         ),
@@ -40,7 +40,7 @@ vi.mock('@xchain-wallet/core/ui', async (importOriginal) => {
 // renders and the button is simply absent. Say that out loud instead of
 // leaving a bare "cannot find fake-scan" to read like a product bug.
 function clickFakeScan() {
-    const stub = screen.queryByTestId('fake-scan');
+    const stub = screen.queryByRole('button', { name: 'Emit scanned backup pointer' });
     expect(
         stub,
         'the @xchain-wallet/core/ui mock never reached ImportWallet - the route resolved '
@@ -88,6 +88,45 @@ async function scanPointerInBackupLane() {
 }
 
 describe('ImportWallet backup-pointer restore', () => {
+    it('labels the pasted backup contents field', () => {
+        renderImport({ importBackupRequest: vi.fn() });
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Encrypted backup' }));
+
+        expect(screen.getByRole('textbox', { name: 'Backup file contents' })).toBeTruthy();
+    });
+
+    it('opens the wired picker and reports picker and drag-drop states', async () => {
+        renderImport({ importBackupRequest: vi.fn() });
+        fireEvent.click(screen.getByRole('tab', { name: 'Encrypted backup' }));
+
+        const picker = screen.getByLabelText('Backup file');
+        const pickerClick = vi.spyOn(picker, 'click');
+        fireEvent.submit(screen.getByRole('button', { name: 'Restore' }).closest('form'));
+        fireEvent.click(await screen.findByRole('button', { name: 'Browse' }));
+        expect(pickerClick).toHaveBeenCalledTimes(1);
+
+        const content = screen.getByRole('textbox', { name: 'Backup file contents' });
+        const pickedFile = new File(['{"picked":true}'], 'picked.xchain-wallet', {
+            type: 'application/json',
+        });
+        fireEvent.change(picker, { target: { files: [pickedFile] } });
+        await screen.findByText(/Loaded picked\.xchain-wallet/);
+        expect(content.value).toBe('{"picked":true}');
+
+        fireEvent.dragOver(content, { dataTransfer: { files: [], dropEffect: 'none' } });
+        expect(content.getAttribute('data-drop-active')).toBe('true');
+        expect(screen.getByText('Drop the backup file here.')).toBeTruthy();
+
+        const droppedFile = new File(['{"version":1}'], 'dropped.xchain-wallet', {
+            type: 'application/json',
+        });
+        fireEvent.drop(content, { dataTransfer: { files: [droppedFile] } });
+        await screen.findByText(/Loaded dropped\.xchain-wallet/);
+        expect(content.getAttribute('data-drop-active')).toBe('false');
+        expect(content.value).toBe('{"version":1}');
+    });
+
     it('scans a pointer and restores via importBackupPointerRequest', async () => {
         const importBackupPointerRequest = vi.fn().mockResolvedValue({ walletId: 'w1' });
         const onImported = vi.fn();
@@ -117,7 +156,31 @@ describe('ImportWallet backup-pointer restore', () => {
         // UI and produces a wallet that restores and then cannot sign.
         expect(arg.walletPassword).toBe('the-old-devices-password');
         expect(arg.devicePassword).toBe('this-devices-password');
+        // §36.1: the restore ends on the ADS notice; only its Continue
+        // hands control back to App.
+        expect(onImported).not.toHaveBeenCalled();
+        fireEvent.click(await screen.findByRole('button', { name: 'Continue' }));
         await waitFor(() => expect(onImported).toHaveBeenCalled());
+    });
+
+    it('replaces loaded file state with the scanned pointer', async () => {
+        globalThis.__XC_SCAN_FRAME__ = buildBackupPointer({
+            location: 'https://backups.example/replacement.json',
+        });
+        renderImport({ importBackupPointerRequest: vi.fn() });
+        fireEvent.click(screen.getByRole('tab', { name: 'Encrypted backup' }));
+
+        const content = screen.getByRole('textbox', { name: 'Backup file contents' });
+        fireEvent.change(content, { target: { value: '{"old":"file"}' } });
+        expect(screen.getByText(/Backup contents pasted/)).toBeTruthy();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Scan pointer QR' }));
+        clickFakeScan();
+        await screen.findByText(/Backup pointer loaded/);
+        fireEvent.click(screen.getByRole('button', { name: 'Use a file instead' }));
+
+        expect(screen.getByRole('textbox', { name: 'Backup file contents' }).value).toBe('');
+        expect(screen.queryByText(/Backup contents pasted/)).toBeNull();
     });
 
     it('will not submit until all three passwords are present', async () => {
@@ -171,6 +234,10 @@ describe('ImportWallet backup-pointer restore', () => {
         expect(arg.backupPassword).toBe('pw12345678');
         expect(arg.walletPassword).toBe('the-old-devices-password');
         expect(arg.pointer.location).toBe('https://backups.example/d.json');
+        // §36.1: the restore ends on the ADS notice; only its Continue
+        // hands control back to App.
+        expect(onImported).not.toHaveBeenCalled();
+        fireEvent.click(await screen.findByRole('button', { name: 'Continue' }));
         await waitFor(() => expect(onImported).toHaveBeenCalled());
     });
 

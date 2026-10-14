@@ -46,7 +46,7 @@ const CHAIN = 'bitcoin-mainnet';
 
 const hd = (index, extra = {}) => ({
     id: `addr-${index}`,
-    address: `bc1qindex${index}indexindexindexindexindexindexi`,
+    address: `bc1qdevmock${index}`,
     publicKey: `02a${index}`,
     derivationPath: `m/84'/0'/0'/0/${index}`,
     source: 'hd',

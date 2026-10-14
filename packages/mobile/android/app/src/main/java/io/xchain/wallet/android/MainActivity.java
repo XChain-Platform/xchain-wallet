@@ -1,13 +1,21 @@
 package io.xchain.wallet.android;
 
+import android.content.res.Configuration;
 import android.os.Bundle;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import androidx.activity.EdgeToEdge;
+import androidx.activity.OnBackPressedCallback;
+import androidx.core.splashscreen.SplashScreen;
 
 import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeActivity;
 
+import io.xchain.wallet.android.app.XChainAppPlugin;
 import io.xchain.wallet.android.clipboard.XChainClipboardPlugin;
 import io.xchain.wallet.android.links.XChainLinksPlugin;
 import io.xchain.wallet.android.security.NoNativeHttpProxyWebViewClient;
+import io.xchain.wallet.android.splash.XChainSplashPlugin;
 import io.xchain.wallet.android.vault.XChainVaultPlugin;
 
 /**
@@ -16,8 +24,13 @@ import io.xchain.wallet.android.vault.XChainVaultPlugin;
  * BiometricPrompt requires of its host.
  */
 public class MainActivity extends BridgeActivity {
+    private volatile boolean shellReady = false;
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        SplashScreen splashScreen = SplashScreen.installSplashScreen(this);
+        splashScreen.setKeepOnScreenCondition(() -> !shellReady);
+        configureSystemBars();
         // Registration must happen BEFORE super.onCreate: that is where the
         // Bridge is built, and a plugin registered afterwards is missing from
         // the map the WebView sees. The symptom would not be a crash - it
@@ -25,13 +38,88 @@ public class MainActivity extends BridgeActivity {
         // app whose backup posture assumes the vault is in native storage.
         registerPlugin(XChainVaultPlugin.class);
         registerPlugin(XChainLinksPlugin.class);
+        registerPlugin(XChainSplashPlugin.class);
+        registerPlugin(XChainAppPlugin.class);
         // SSC-4: without this the SPA finds no clipboard plugin and
         // refuses sensitive copies, rather than writing a seed phrase to an
         // unmarked clip any foreground app can read.
         registerPlugin(XChainClipboardPlugin.class);
+        // FLAG_SECURE stays out of the activity-wide setup. The vault plugin
+        // applies it only while the SPA is showing or accepting key material.
         super.onCreate(savedInstanceState);
+        configureWebViewLayout();
         dropUnusedCapacitorPlugins();
         blockNativeHttpProxy();
+        routeBackKeyToTheSpa();
+    }
+
+    @Override
+    public void onStart() {
+        super.onStart();
+        dispatchFontScale();
+    }
+
+    /** Releases the launch splash after the SPA has committed its shell. */
+    public void markShellReady() {
+        shellReady = true;
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        configureWebViewLayout();
+        dispatchFontScale();
+    }
+
+    private void configureSystemBars() {
+        // Capacitor's CSS inset shim keeps edge-to-edge safe on Chrome 102.
+        EdgeToEdge.enable(this);
+        // Day/night resources color the backdrop; SystemBars controls icon contrast.
+    }
+
+    private void configureWebViewLayout() {
+        Bridge bridge = getBridge();
+        WebView webView = bridge == null ? null : bridge.getWebView();
+        if (webView == null) return;
+
+        WebSettings settings = webView.getSettings();
+        // The SPA's large-text setting owns scaling so fixed layouts stay stable.
+        settings.setTextZoom(100);
+        // The fixed shell does not expose scroll continuation beyond its bounds.
+        webView.setOverScrollMode(WebView.OVER_SCROLL_NEVER);
+    }
+
+    private void dispatchFontScale() {
+        Bridge bridge = getBridge();
+        if (bridge == null || bridge.getPlugin("App") == null) return;
+        XChainAppPlugin app = (XChainAppPlugin) bridge.getPlugin("App").getInstance();
+        app.dispatchFontScale(getResources().getConfiguration().fontScale);
+    }
+
+    /**
+     * Send the system Back gesture to the SPA's topmost back handler.
+     *
+     * The narrow App plugin exposes the back event, minimization and the
+     * font-scale bridge. The SPA handler stack closes overlays before routes
+     * and preserves in-route stages that do not create browser history
+     * entries. The SPA also owns the Home-root decision, so a missing listener
+     * swallows Back instead of guessing that an unfinished flow is safe to
+     * leave.
+     */
+    private void routeBackKeyToTheSpa() {
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                Bridge bridge = getBridge();
+                WebView webView = bridge == null ? null : bridge.getWebView();
+                XChainAppPlugin app = null;
+                if (bridge != null && bridge.getPlugin("App") != null) {
+                    app = (XChainAppPlugin) bridge.getPlugin("App").getInstance();
+                }
+                boolean canGoBack = webView != null && webView.canGoBack();
+                if (app != null) app.dispatchBackButton(canGoBack);
+            }
+        });
     }
 
     /**

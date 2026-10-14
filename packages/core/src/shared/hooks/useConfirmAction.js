@@ -42,6 +42,7 @@ import {
     clearQueuedResultHandoff,
     setQueuedResultHandoff,
 } from '../utils/submitFailureMessage.js';
+import { holdAutoLock } from './autoLockGuard.js';
 
 // Module-level singleton: only ONE confirm modal may be live per window.
 let activeInstanceId = null;
@@ -90,9 +91,11 @@ export function useConfirmAction() {
     const sessionIdRef = useRef(null);
     const releasedEncoderInputsRef = useRef(new Set());
     const rejectingRef = useRef(false);
+    const mountedRef = useRef(true);
     // Once Approve is pressed the PSBT may be signed or broadcast, so the
     // encoder reservation must stay held whatever happens to this component.
     const approvalBeganRef = useRef(false);
+    const approveInFlightRef = useRef(false);
     const releaseUnlessApproving = useCallback((built) => {
         if (approvalBeganRef.current) return;
         const sendRelease = optsRef.current?.releaseEncoderInputs;
@@ -111,17 +114,6 @@ export function useConfirmAction() {
     // arrived on confirm() and lived only in optsRef, which that page cannot
     // read, so the page shipped without the legacy stage's From row.
     const [source, setSource] = useState(null);
-
-    // Release the singleton (and abort in-flight work) when the owning
-    // component unmounts while still holding it - a form navigated away
-    // mid-confirm must not wedge every future modal as `busy`.
-    useEffect(() => () => {
-        if (activeInstanceId === instanceId) {
-            activeInstanceId = null;
-            if (abortRef.current) { try { abortRef.current.abort(); } catch { /* noop */ } }
-            releaseUnlessApproving(composedRef.current);
-        }
-    }, [instanceId, releaseUnlessApproving]);
 
     const teardown = useCallback(() => {
         activeInstanceId = null;
@@ -161,6 +153,27 @@ export function useConfirmAction() {
         teardown();
         if (r) r(err);
     }, [teardown]);
+
+    const updateMounted = useCallback((update) => {
+        if (mountedRef.current) update();
+    }, []);
+
+    // Release every resource and settle the caller when navigation removes an
+    // active confirmation. Async continuations use mountedRef before writing UI
+    // state, while an approval already handed to the host is allowed to finish.
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => {
+            mountedRef.current = false;
+            if (activeInstanceId !== instanceId) return;
+            releaseUnlessApproving(composedRef.current);
+            if (approvalBeganRef.current) {
+                activeInstanceId = null;
+                return;
+            }
+            settleReject(new UserRejectedError());
+        };
+    }, [instanceId, releaseUnlessApproving, settleReject]);
 
     /**
      * All SDK access is HOST-side (the React tree only talks to the host over
@@ -230,7 +243,7 @@ export function useConfirmAction() {
         setComposed(null);
         setAcknowledged(new Set());
 
-        return new Promise((resolve, reject) => {
+        const pending = new Promise((resolve, reject) => {
             resolveRef.current = resolve;
             rejectRef.current = reject;
 
@@ -243,8 +256,10 @@ export function useConfirmAction() {
                 try {
                     built = await args.compose();
                 } catch (err) {
-                    setComposing(false);
-                    setPhase('idle');
+                    updateMounted(() => {
+                        setComposing(false);
+                        setPhase('idle');
+                    });
                     settleReject(err);
                     return;
                 }
@@ -320,17 +335,34 @@ export function useConfirmAction() {
                 if (rejectRef.current) settleReject(err);
             });
         });
-    }, [instanceId, settleReject, releaseUnlessApproving]);
+        // Cleanup may reject after the owning component and its await chain
+        // have both unmounted. Mark that expected rejection as observed while
+        // preserving the returned promise's rejection for active callers.
+        pending.catch(() => {});
+        return pending;
+    }, [instanceId, settleReject, releaseUnlessApproving, updateMounted]);
 
     // Approve handler the modal wires to the primary button. Disables
     // synchronously (the caller sets a local disabled flag in the same tick).
+    // A second call while one is still running is dropped here as well, so a
+    // surface whose button guard misses a double tap still signs once.
     const approve = useCallback(async (credentials) => {
         const args = optsRef.current;
         const built = composedRef.current;
         if (!args || !built) return;
+        if (approveInFlightRef.current) return;
+        approveInFlightRef.current = true;
+        const settleUnmountedInterruption = (err = new UserRejectedError()) => {
+            if (mountedRef.current) return;
+            approvalBeganRef.current = false;
+            releaseUnlessApproving(built);
+            settleReject(err);
+        };
 
         approvalBeganRef.current = true;
-        setPhase('signing');
+        updateMounted(() => setPhase('signing'));
+        const releaseAutoLock = holdAutoLock();
+        try {
 
         // §4.6 input liveness. Runs off the PSBT's OWN age, not the report's,
         // so a confirm that never got a report (pre-flight off, offline, timed
@@ -340,7 +372,7 @@ export function useConfirmAction() {
         // PSBT, so the only way forward is a re-compose.
         const psbtAged = Date.now() - composedStampRef.current > STALENESS_MS;
         if (typeof args.checkInputs === 'function' && (psbtAged || args.alwaysCheckInputs)) {
-            setPhase('rechecking');
+            updateMounted(() => setPhase('rechecking'));
             let liveness = null;
             try {
                 liveness = await args.checkInputs(built.psbt);
@@ -348,11 +380,14 @@ export function useConfirmAction() {
             if (liveness && liveness.verdict === 'spent') {
                 const err = new Error(livenessMessage(liveness));
                 err.code = 'INPUTS_SPENT';
-                setError(err);
-                setPhase('ready');
+                updateMounted(() => {
+                    setError(err);
+                    setPhase('ready');
+                });
+                settleUnmountedInterruption(err);
                 return { interrupted: true, reason: 'inputs-spent', liveness };
             }
-            setPhase('signing');
+            updateMounted(() => setPhase('signing'));
         }
 
         // §4.6 staleness re-check: if the report is stale, re-check (bypassing
@@ -360,7 +395,7 @@ export function useConfirmAction() {
         try {
             const stale = report && (Date.now() - reportStampRef.current > STALENESS_MS);
             if (stale && typeof args.preflight === 'function') {
-                setPhase('rechecking');
+                updateMounted(() => setPhase('rechecking'));
                 const fresh = await args.preflight({
                     actionString: built.actionString,
                     source: args.source,
@@ -372,15 +407,16 @@ export function useConfirmAction() {
                     feeMode: built.payFeeInNativeCoin ? 'native' : undefined,
                     mode: args.preflightOpts?.mode || 'report',
                 });
-                setReport(fresh);
+                updateMounted(() => setReport(fresh));
                 reportStampRef.current = Date.now();
                 // Verdict DEGRADED -> interrupt instead of signing.
                 if (verdictRank(fresh?.verdict) > verdictRank(report?.verdict)
                     || !canApproveWithReport(fresh, acknowledged)) {
-                    setPhase('ready');
+                    updateMounted(() => setPhase('ready'));
+                    settleUnmountedInterruption();
                     return { interrupted: true, reason: 'findings-changed' };
                 }
-                setPhase('signing');
+                updateMounted(() => setPhase('signing'));
             }
         } catch { /* re-check best-effort: proceed under the old report */ }
 
@@ -402,8 +438,11 @@ export function useConfirmAction() {
         // and swapping in a differently-priced transaction under a screen they
         // have already read is the one thing an authorization surface must not
         // do. The message tells them to start the action again.
-        if (typeof args.requoteNativeFee === 'function' && Number(built.quote?.requiredFeeSats) > 0) {
-            setPhase('rechecking');
+        // A zero quote still needs this check. A free action can become charged
+        // while the review is open, and the composed transaction has no fee
+        // output with which to satisfy the new requirement.
+        if (typeof args.requoteNativeFee === 'function' && built.quote != null) {
+            updateMounted(() => setPhase('rechecking'));
             let fresh = null;
             try {
                 fresh = await args.requoteNativeFee({
@@ -419,11 +458,14 @@ export function useConfirmAction() {
             const requote = compareNativeFeeQuote({ composed: built.quote, fresh });
             if (isNativeFeeRefusal(requote)) {
                 const err = nativeFeeChangedError(requote);
-                setError(err);
-                setPhase('ready');
+                updateMounted(() => {
+                    setError(err);
+                    setPhase('ready');
+                });
+                settleUnmountedInterruption(err);
                 return { interrupted: true, reason: 'fee-changed', requote };
             }
-            setPhase('signing');
+            updateMounted(() => setPhase('signing'));
         }
 
         // §4.7 reservation at Approve (post sync-disable, before async signing).
@@ -450,20 +492,32 @@ export function useConfirmAction() {
         }
 
         try {
-            setError(null);   // clear a previous attempt's credential error
+            updateMounted(() => setError(null));   // clear a previous attempt's retryable signing error
             const value = await args.onApprove(credentials, built);
-            setPhase('done');
+            updateMounted(() => setPhase('done'));
             settleResolve(value);
             return value;
         } catch (err) {
+            const hardwareRetryError = retryableHardwareSigningError(err);
+            if (hardwareRetryError) {
+                updateMounted(() => {
+                    setError(hardwareRetryError);
+                    setPhase('ready');
+                });
+                return { interrupted: true, reason: 'hardware-retry' };
+            }
+
             // §5.3.4 signing-phase credential failure: re-prompt on the SAME
             // PSBT instead of tearing the modal down. The confirm() promise
             // stays PENDING so the caller's flow is uninterrupted and the user
             // can just retype and Approve again (no re-compose, no re-sign of
             // a different PSBT).
             if (isCredentialFailure(err)) {
-                setError(err);
-                setPhase('ready');
+                updateMounted(() => {
+                    setError(err);
+                    setPhase('ready');
+                });
+                settleUnmountedInterruption(err);
                 return { interrupted: true, reason: 'bad-credentials' };
             }
 
@@ -476,8 +530,10 @@ export function useConfirmAction() {
                 // The tx IS signed and sitting in the broadcast queue - not a
                 // failure from the user's point of view. Terminal "Signed - not
                 // broadcast yet", and RESOLVE so callers don't render an error.
-                setPhase('signed-not-broadcast');
-                setError(null);
+                updateMounted(() => {
+                    setPhase('signed-not-broadcast');
+                    setError(null);
+                });
                 const queuedResult = {
                     queued: true,
                     broadcast: 'queued',
@@ -492,24 +548,35 @@ export function useConfirmAction() {
                 // Can never confirm as-is (inputs spent / confirmed conflict).
                 // PendingTx is already `failed` (or `broadcast` when the commit had
                 // landed); re-signing is forbidden, so the caller must re-compose. Terminal error.
-                setPhase('error');
-                setError(err);
+                updateMounted(() => {
+                    setPhase('error');
+                    setError(err);
+                });
                 settleReject(err);
                 return undefined;
             }
 
             // Everything else is terminal.
-            setPhase('error');
-            setError(err);
+            updateMounted(() => {
+                setPhase('error');
+                setError(err);
+            });
             settleReject(err);
             return undefined;
         }
-    }, [report, acknowledged, instanceId, settleResolve, settleReject]);
+        } finally {
+            approveInFlightRef.current = false;
+            releaseAutoLock();
+        }
+    }, [
+        report, acknowledged, instanceId, settleResolve, settleReject,
+        updateMounted, releaseUnlessApproving,
+    ]);
 
     const reject = useCallback(async () => {
         if (rejectingRef.current) return;
         rejectingRef.current = true;
-        setError(null);
+        updateMounted(() => setError(null));
         try {
             if (!approvalBeganRef.current) {
                 await releaseEncoderInputs(
@@ -520,15 +587,17 @@ export function useConfirmAction() {
             }
         } catch (err) {
             const detail = err?.message ? ` ${err.message}` : '';
-            setError(new Error(`Could not release reserved inputs. Try Reject again.${detail}`));
-            setPhase('ready');
+            updateMounted(() => {
+                setError(new Error(`Could not release reserved inputs. Try Reject again.${detail}`));
+                setPhase('ready');
+            });
             return;
         } finally {
             rejectingRef.current = false;
         }
         settleReject(new UserRejectedError());
-        setPhase('idle');
-    }, [settleReject]);
+        updateMounted(() => setPhase('idle'));
+    }, [settleReject, updateMounted]);
 
     const acknowledge = useCallback((code) => {
         setAcknowledged((prev) => toggleAcknowledged(prev, code));
@@ -616,20 +685,56 @@ function persistSession(args, id, built, report) {
 }
 
 /**
- * A signing-phase CREDENTIAL failure (§5.3.4) - bad password / declined HW -
- * as opposed to a compose, pre-flight, or broadcast failure. These re-prompt
+ * A signing-phase software credential failure (§5.3.4), as opposed to a
+ * compose, pre-flight, or broadcast failure. These re-prompt
  * on the same PSBT; everything else is terminal.
  *
  * The error crosses the messaging boundary as a plain object, so match on the
  * fields that survive: `name` (what the software-unlock path throws) plus a
  * code/message fallback.
  */
-export function isCredentialFailure(err) {
+function isCredentialFailure(err) {
     if (!err) return false;
     if (err.name === 'InvalidPasswordError') return true;
     const code = err.code || err.reason;
     if (code === 'INVALID_PASSWORD' || code === 'BAD_CREDENTIALS') return true;
     return /incorrect password|invalid password|bad password/i.test(String(err.message || ''));
+}
+
+function retryableHardwareSigningError(err) {
+    if (!err) return null;
+    const fingerprint = [
+        err.name,
+        err.status,
+        err.code,
+        err.reason,
+        err.statusCode,
+        err.message,
+    ].filter((value) => value !== undefined && value !== null).join(' ');
+
+    let message = null;
+    if (/firmware.*(?:too old|outdated|unsupported)|(?:too old|unsupported).*firmware|HW_FIRMWARE/i.test(fingerprint)) {
+        message = 'Your hardware wallet firmware is too old. Update it with the vendor app, reconnect and unlock the device, then select Approve again.';
+    } else if (/wrong[- ]app|status ["']wrong-app["']|0x6a82|0x6e00|cla_not_supported/i.test(fingerprint)) {
+        message = 'The wrong app is open on your hardware wallet. Open the app for this network, then select Approve again.';
+    } else if (/UserRejectedError|user[- ]rejected|Failure_ActionCancelled|action cancel(?:led|ed)|denied by user|device declined|0x6985|HW_CANCELLED/i.test(fingerprint)) {
+        message = 'Signing was canceled on your hardware wallet. Nothing was signed. Review the details and select Approve again when you are ready.';
+    } else if (/SignerLockedError|status ["']locked["']|(?:device|ledger|trezor) (?:is )?locked|pin locked/i.test(fingerprint)) {
+        message = 'Your hardware wallet is locked. Unlock it, then select Approve again.';
+    } else if (/HW_DEVICE_NOT_FOUND|no device selected|no (?:compatible )?device|no (?:hardware wallet|ledger|trezor) was found|device.*not found|not found.*device/i.test(fingerprint)) {
+        message = 'No hardware wallet was found. Connect and unlock it, then select Approve again.';
+    } else if (/status ["']disconnected["']|signer bridge disconnected|device disconnected|disconnected.*(?:device|sign)|transport.*(?:disconnected|unavailable|missing)/i.test(fingerprint)) {
+        message = 'Your hardware wallet disconnected before signing finished. Reconnect and unlock it, then select Approve again.';
+    }
+    if (!message) return null;
+
+    const recovery = new Error(message);
+    recovery.name = /cancel(?:led|ed) on your hardware wallet/i.test(message)
+        ? 'HardwareSigningCancellation'
+        : 'HardwareSigningRetryError';
+    recovery.presentation = recovery.name === 'HardwareSigningCancellation' ? 'status' : 'error';
+    recovery.cause = err;
+    return recovery;
 }
 
 /**

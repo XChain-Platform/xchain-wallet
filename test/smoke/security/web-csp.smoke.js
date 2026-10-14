@@ -24,7 +24,9 @@ import { CONTENT_SECURITY_POLICY, cspMetaTag, metaContentSecurityPolicyFor } fro
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 const viteConfigPath = join(wsRoot, 'packages', 'web', 'vite.config.js');
+const indexPath = join(wsRoot, 'packages', 'web', 'index.html');
 const viteSrc = readFileSync(viteConfigPath, 'utf8');
+const indexSrc = readFileSync(indexPath, 'utf8');
 
 // --- 1. The policy locks down the XSS-defining directives ----------------
 
@@ -56,12 +58,21 @@ const EXPECTED_DIRECTIVES = {
     'font-src': ["'self'", 'data:'],
     'connect-src': [
         "'self'",
-        'https:',
-        'wss:',
-        'http://localhost:*',
-        'http://127.0.0.1:*',
-        'ws://localhost:*',
-        'ws://127.0.0.1:*',
+        'https://explorer.xchain.io',
+        'https://encoder.xchain.io',
+        'https://hub.xchain.io',
+        'https://api.coingecko.com',
+        'https://ipfs.io',
+        'https://arweave.net',
+        'https://downloads.xchain.io',
+        'http://localhost:18080',
+        'http://localhost:3023',
+        'http://localhost:10000',
+        'http://localhost:3123',
+        'http://localhost:3223',
+        'http://localhost:3005',
+        'wss://explorer.xchain.io',
+        'ws://localhost:18080',
     ],
     'worker-src': ["'self'", 'blob:'],
     'object-src': ["'none'"],
@@ -105,6 +116,20 @@ assert.doesNotMatch(
     /'unsafe-eval'/,
     'no unsafe-eval anywhere (argon2id is pure JS, no wasm-unsafe-eval needed)',
 );
+assert.ok(
+    shipped['connect-src'].every((source) => !source.includes('*')),
+    'connect-src contains no wildcard hosts or ports',
+);
+assert.ok(
+    shipped['connect-src'].every((source) => source !== 'https:' && source !== 'wss:'),
+    'connect-src contains no scheme-wide sources',
+);
+
+const sourceScripts = [...indexSrc.matchAll(/<script\b[^>]*>/gi)].map((match) => match[0]);
+assert.ok(sourceScripts.length > 0, 'the source entry document contains scripts');
+for (const script of sourceScripts) {
+    assert.match(script, /\ssrc=["'][^"']+["']/i, `source entry script is external: ${script}`);
+}
 
 // --- 2. The meta-tag helper wraps the policy -----------------------------
 
@@ -160,5 +185,22 @@ assert.match(viteSrc, /'http-equiv': 'Content-Security-Policy'/, 'injects the CS
 
 // The plugin must actually be registered in the plugins array.
 assert.match(viteSrc, /plugins:\s*\[[\s\S]*?\n\s*cspPlugin,/, 'cspPlugin is registered in plugins');
+
+const serverStart = viteSrc.indexOf('    server: {');
+const previewStart = viteSrc.indexOf('    preview: {');
+const pluginsStart = viteSrc.indexOf('    plugins: [');
+assert.ok(serverStart >= 0 && previewStart > serverStart && pluginsStart > previewStart, 'vite server blocks are present');
+const devServerConfig = viteSrc.slice(serverStart, previewStart);
+const previewServerConfig = viteSrc.slice(previewStart, pluginsStart);
+assert.doesNotMatch(
+    devServerConfig,
+    /Content-Security-Policy/,
+    'the development server stays compatible with Vite HMR',
+);
+assert.match(
+    previewServerConfig,
+    /headers:\s*\{\s*'Content-Security-Policy':\s*"frame-ancestors 'none'"\s*\}/,
+    'the preview server prevents framing with a response header',
+);
 
 console.log('web-csp smoke OK');

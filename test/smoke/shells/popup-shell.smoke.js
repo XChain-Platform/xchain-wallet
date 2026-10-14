@@ -108,8 +108,11 @@ assert.ok(
     /iconResizePlugin\(/.test(viteCfg),
     'vite.config invokes iconResizePlugin',
 );
+// The size list lives in iconConfig.js, shared with the manifest audit.
+const iconConfig = readFileSync(join(ext, 'iconConfig.js'), 'utf8');
 assert.ok(
-    /sizes: \[16, 32, 48, 128\]/.test(viteCfg),
+    /sizes: EXTENSION_ICON_SIZES/.test(viteCfg)
+        && /EXTENSION_ICON_SIZES = Object\.freeze\(\[16, 32, 48, 128\]\)/.test(iconConfig),
     'icon-resize emits all 4 MV3 sizes',
 );
 

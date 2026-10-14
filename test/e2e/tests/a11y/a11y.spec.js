@@ -23,13 +23,14 @@
 // while this suite sat un-run. They are covered below.
 
 import {
-    acknowledgeDonationConsent,
+    acknowledgeDonationNotice,
     createWallet,
     expect,
     dismissIntroCarousel,
     gotoSection,
     lockWallet,
     readRecoveryPhrase,
+    revealRecoveryPhrase,
     test,
 } from '../../fixtures/wallet.js';
 import { kdfStepTimeout } from '../../timeout-budget.js';
@@ -72,7 +73,11 @@ test.describe('a11y: WCAG 2.1 A/AA', () => {
         await page.getByLabel('Password', { exact: true }).fill('a11ypassword123');
         await page.getByLabel('Confirm password').fill('a11ypassword123');
         await page.getByRole('button', { name: 'Next' }).click();
-        await expect(page.getByRole('list', { name: 'Recovery phrase' })).toBeVisible();
+        // The stage opens concealed; scan it as the user first sees it, then
+        // with the words showing.
+        await expect(page.getByRole('button', { name: 'Reveal recovery phrase' })).toBeVisible();
+        await scan(page, 'CreateWallet mnemonic stage (concealed)');
+        await revealRecoveryPhrase(page);
         await scan(page, 'CreateWallet mnemonic stage');
     });
 
@@ -84,7 +89,7 @@ test.describe('a11y: WCAG 2.1 A/AA', () => {
         await page.getByLabel('Confirm password').fill('a11ypassword123');
         await page.getByRole('button', { name: 'Next' }).click();
         await readRecoveryPhrase(page);
-        await page.getByLabel(/i have written down/i).check();
+        await page.getByLabel(/saved my recovery phrase/i).check();
         await page.getByRole('button', { name: 'Verify recovery phrase' }).click();
         await expect(
             page.getByRole('heading', { name: 'Verify your recovery phrase' }),
@@ -92,7 +97,7 @@ test.describe('a11y: WCAG 2.1 A/AA', () => {
         await scan(page, 'CreateWallet verification stage');
     });
 
-    test('donation consent', async ({ page }) => {
+    test('donation notice', async ({ page }) => {
         await page.goto('/');
         await dismissIntroCarousel(page);
         await page.getByRole('button', { name: 'Create new wallet' }).click();
@@ -101,7 +106,7 @@ test.describe('a11y: WCAG 2.1 A/AA', () => {
         await page.getByRole('button', { name: 'Next' }).click();
 
         const words = await readRecoveryPhrase(page);
-        await page.getByLabel(/i have written down/i).check();
+        await page.getByLabel(/saved my recovery phrase/i).check();
         await page.getByRole('button', { name: 'Verify recovery phrase' }).click();
         for (let position = 1; position <= words.length; position += 1) {
             const box = page.getByRole('textbox', { name: `Word ${position}`, exact: true });
@@ -109,16 +114,16 @@ test.describe('a11y: WCAG 2.1 A/AA', () => {
         }
         await page.getByRole('button', { name: 'Create wallet' }).click();
 
-        // Same far-side-of-the-KDF wait as acknowledgeDonationConsent: this
+        // Same far-side-of-the-KDF wait as acknowledgeDonationNotice: this
         // heading cannot render until the derivation finishes, so it takes the
         // shared budget rather than a bare number that happens to be big
         // enough today.
         await expect(
-            page.getByRole('heading', { name: /Support XChain development/i }),
+            page.getByRole('heading', { name: /Automatic Donation System/i }),
         ).toBeVisible({ timeout: kdfStepTimeout() });
-        await scan(page, 'Donation consent');
+        await scan(page, 'Donation notice');
 
-        await acknowledgeDonationConsent(page);
+        await acknowledgeDonationNotice(page, 'on');
     });
 
     test('import wallet', async ({ page }) => {

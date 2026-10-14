@@ -9,20 +9,25 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { Button, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import {
+    Button, EmptyState, ListPage, ListRow, NetworkField, PageHeader, Screen, StatusMessage,
+} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useGovernanceChainIds } from '../hooks/useGovernanceAddressesPresent.js';
+import { t } from '../../i18n/index.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './IssueTokenForm.module.css';
+import local from './GovernancePolls.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
 // Poll lifecycle -> pill colour. open = live (amber), finalized = decided (green),
 // failed_quorum = did not pass (red). No shared Badge component, so use a plain span.
 function statusColor(status) {
-    if (status === 'finalized') return { bg: '#1b5e20', fg: '#fff' };
-    if (status === 'failed_quorum') return { bg: '#8e1c1c', fg: '#fff' };
-    return { bg: '#8a6d00', fg: '#fff' };
+    if (status === 'finalized') return { bg: 'color-mix(in srgb, var(--xc-success) 18%, transparent)', fg: 'var(--xc-success)' };
+    if (status === 'failed_quorum') return { bg: 'var(--xc-danger-bg)', fg: 'var(--xc-danger-text)' };
+    return { bg: 'var(--xc-warning-bg)', fg: 'var(--xc-warning-text)' };
 }
 // Poll lifecycle code -> plain-language pill label. Mirrors statusColor:
 // open = live, finalized = decided, failed_quorum = did not pass. Unknown
@@ -73,14 +78,23 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
     const [chainId, setChainId] = useState(/** @type {string | null} */ (null));
     const [noChain, setNoChain] = useState(false);
     const [governChains, setGovernChains] = useState(/** @type {string[]} */ ([]));
-    const [rows, setRows] = useState(/** @type {any[] | null} */ (null));
+    const [pollState, setPollState] = useState(
+        /** @type {{ walletId: string, chainId: string, rows: any[] | null, error: string | null } | null} */ (null),
+    );
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    const [addressesReload, setAddressesReload] = useState(0);
+    const [pollsReload, setPollsReload] = useState(0);
 
     // Resolve which governance-capable chains the wallet can act on; the
     // first (registry order) seeds the Network field, which lets the user
     // retarget across the rest.
     useEffect(() => {
         let cancelled = false;
+        setChainId(null);
+        setNoChain(false);
+        setGovernChains([]);
+        setPollState(null);
+        setError(null);
         messaging.getAddressesByChain(walletId)
             .then((byChain) => {
                 if (cancelled) return;
@@ -89,72 +103,126 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
                 if (avail.length > 0) setChainId(avail[0]);
                 else setNoChain(true);
             })
-            .catch((err) => { if (!cancelled) setError(err?.message || 'Failed to load addresses.'); });
+            .catch((err) => {
+                if (!cancelled) setError(userFacingMessage(err, t('governance.error.addresses')));
+            });
         return () => { cancelled = true; };
-    }, [walletId, messaging, governanceChainIds]);
+    }, [walletId, messaging, governanceChainIds, addressesReload]);
 
     useEffect(() => {
         if (!chainId) return;
         let cancelled = false;
-        setRows(null);
-        setError(null);
+        setPollState({ walletId, chainId, rows: null, error: null });
         messaging.governancePolls({ chainId, opts: { limit: 50 } })
-            .then((resp) => { if (!cancelled) setRows(extractRows(resp)); })
-            .catch((err) => { if (!cancelled) setError(err?.message || 'Failed to load polls.'); });
+            .then((resp) => {
+                if (!cancelled) setPollState({ walletId, chainId, rows: extractRows(resp), error: null });
+            })
+            .catch((err) => {
+                if (!cancelled) {
+                    setPollState({
+                        walletId,
+                        chainId,
+                        rows: null,
+                        error: userFacingMessage(err, t('governance.error.polls')),
+                    });
+                }
+            });
         return () => { cancelled = true; };
-    }, [chainId, messaging]);
+    }, [walletId, chainId, messaging, pollsReload]);
 
-    const header = <PageHeader onBack={onBack} title="Governance" />;
+    const currentPollState = pollState?.walletId === walletId && pollState?.chainId === chainId
+        ? pollState
+        : null;
+    const rows = currentPollState?.rows ?? null;
+    const pollError = currentPollState?.error ?? null;
+
+    const header = <PageHeader onBack={onBack} title={t('governance.title')} />;
     const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
 
     if (noChain) {
         return wrap(
-            <>
-                <p className={styles.hint}>No address on a governance-capable chain. Use Receive to generate one first.</p>
-            </>,
+            <EmptyState
+                title={t('governance.noAddress.title')}
+                body={t('governance.noAddress.body')}
+            />,
         );
     }
-    if (!chainId && !error) return wrap(<p>Loading…</p>);
+    if (!chainId && !error) {
+        return wrap(
+            <ListPage>
+                <div role="status" aria-label={t('governance.loadingAddressesLabel')} aria-busy="true">
+                    {t('governance.loadingAddresses')}
+                </div>
+            </ListPage>,
+        );
+    }
+    if (!chainId) {
+        return wrap(
+            <ListPage>
+                <StatusMessage
+                    variant="error"
+                    className={styles.error}
+                    recovery={{ label: t('common.tryAgain'), onAction: () => setAddressesReload((value) => value + 1) }}
+                >
+                    {error}
+                </StatusMessage>
+            </ListPage>,
+        );
+    }
 
     return wrap(
-        <>
-            <NetworkField value={chainId} onChange={setChainId} chainIds={governChains.length ? governChains : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
+        <ListPage toolbar={(
+            <>
+                <NetworkField value={chainId} onChange={setChainId} chainIds={governChains.length ? governChains : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
+                <Button variant="primary" onClick={() => onCreate(chainId)}>{t('governance.createPoll')}</Button>
+                <Button variant="ghost" onClick={() => onDelegate(chainId)}>{t('governance.delegateVotes')}</Button>
+            </>
+        )}>
 
-            <div className={styles.actions} style={{ gap: '0.5rem' }}>
-                <Button variant="primary" onClick={() => onCreate(chainId)}>Create poll</Button>
-                <Button variant="ghost" onClick={() => onDelegate(chainId)}>Delegate votes</Button>
-            </div>
-
-            {error ? <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage> : null}
-            {chainId && !rows && !error ? <p>Loading polls…</p> : null}
+            {pollError ? (
+                <StatusMessage
+                    variant="error"
+                    className={styles.error}
+                    recovery={{ label: t('common.tryAgain'), onAction: () => setPollsReload((value) => value + 1) }}
+                >
+                    {pollError}
+                </StatusMessage>
+            ) : null}
+            {chainId && !rows && !pollError ? (
+                <div role="status" aria-label={t('governance.loadingPollsLabel')} aria-busy="true">
+                    {t('governance.loadingPolls')}
+                </div>
+            ) : null}
             {rows && rows.length === 0 ? (
-                <p className={styles.hint}>No polls on this chain yet. Create the first one.</p>
+                <EmptyState title={t('governance.empty.title')} body={t('governance.empty.body')} />
             ) : null}
 
             {rows && rows.length > 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <div className={local.pollList}>
                     {rows.map((p) => {
                         const id = p.action_index;
                         const label = p.question || (Array.isArray(p.options) ? p.options.join(' / ') : String(p.options || ''));
                         return (
-                            <button
+                            <ListRow
                                 key={String(id)}
                                 type="button"
                                 onClick={() => onOpenPoll(chainId, id)}
-                                className={styles.card}
-                                style={{ textAlign: 'left', cursor: 'pointer', width: '100%' }}
-                            >
-                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', alignItems: 'center' }}>
-                                    <strong>#{String(id)} · {p.tick || 'n/a'}</strong>
-                                    <StatusPill status={p.poll_status} />
-                                </div>
-                                {label ? <div className={styles.hint}>{String(label).slice(0, 100)}</div> : null}
-                                <div className={styles.hint}>Closes at block {String(p.end_block ?? 'n/a')}</div>
-                            </button>
+                                className={local.pollCard}
+                                title={<span className={local.pollTitle}>#{String(id)} · {p.tick || t('common.notAvailable')}</span>}
+                                subtitle={(
+                                    <>
+                                        {label ? <span className={`${styles.hint} ${local.pollText}`} style={{ display: 'block' }}>{String(label).slice(0, 100)}</span> : null}
+                                        <span className={`${styles.hint} ${local.pollText}`} style={{ display: 'block' }}>
+                                            {t('governance.closesAtBlock', { block: String(p.end_block ?? t('common.notAvailable')) })}
+                                        </span>
+                                    </>
+                                )}
+                                trailing={<StatusPill status={p.poll_status} />}
+                            />
                         );
                     })}
                 </div>
             ) : null}
-        </>,
+        </ListPage>,
     );
 }

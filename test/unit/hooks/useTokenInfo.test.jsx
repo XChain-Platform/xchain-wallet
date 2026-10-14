@@ -80,6 +80,18 @@ afterEach(() => {
 });
 
 describe('useTokenInfo cache', () => {
+    it('keeps demo metadata out of the live-wallet cache', async () => {
+        const getTokenInfo = vi.fn(async ({ demo }) => ({ creator: demo ? 'demo-owner' : 'live-owner' }));
+        const demo = mountHook({ getTokenInfo }, { demo: true });
+        await waitFor(() => expect(demo.result.current?.creator).toBe('demo-owner'));
+        demo.unmount();
+
+        const live = mountHook({ getTokenInfo });
+        await waitFor(() => expect(live.result.current?.creator).toBe('live-owner'));
+        expect(getTokenInfo).toHaveBeenNthCalledWith(1, { chainId: CHAIN, tick: TICK, demo: true });
+        expect(getTokenInfo).toHaveBeenNthCalledWith(2, { chainId: CHAIN, tick: TICK, demo: false });
+    });
+
     it('still spares the refetch on Detail -> back -> Detail inside the TTL', async () => {
         const getTokenInfo = ownerSequence(OLD_OWNER);
         const first = mountHook({ getTokenInfo });

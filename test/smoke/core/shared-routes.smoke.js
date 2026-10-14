@@ -115,9 +115,11 @@ const routeMessagingCalls = {
     // a later change removed messaging.lockWallet from Home: both lock paths
     // (idle timer and the manual Lock entry) are shell-owned now, since a
     // route unmounts on navigation and took the idle timer with it.
+    // Home reads balances through loadDisplayBalances, which calls
+    // messaging.getWalletBalances for every wallet but the demo one.
     Home: [
         'messaging.listWallets',
-        'messaging.getWalletBalances',
+        'loadDisplayBalances(messaging',
     ],
     Send: [
         'messaging.sendToken',

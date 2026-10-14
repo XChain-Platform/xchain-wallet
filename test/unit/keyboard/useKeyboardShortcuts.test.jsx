@@ -10,7 +10,11 @@
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, fireEvent, cleanup, screen } from '@testing-library/react';
-import { useKeyboardShortcuts } from '../../../packages/core/src/shared/keyboard/useKeyboardShortcuts.js';
+import {
+    canHandleGlobalShortcut,
+    useKeyboardShortcuts,
+} from '../../../packages/core/src/shared/keyboard/useKeyboardShortcuts.js';
+import { useCommandPalette } from '../../../packages/core/src/shared/commandPalette/useCommandPalette.js';
 
 afterEach(() => cleanup());
 
@@ -29,12 +33,40 @@ function setup(overrides = {}) {
 const press = (init) => fireEvent.keyDown(document.body, init);
 
 describe('useKeyboardShortcuts', () => {
-    it('fires modifier combos anywhere: Cmd/Ctrl+L locks, Cmd/Ctrl+, opens settings', () => {
+    it('fires modifier combos outside editable fields', () => {
         const h = setup();
         press({ key: 'l', ctrlKey: true });
         expect(h.lock).toHaveBeenCalledOnce();
-        press({ key: ',', metaKey: true });
+        press({ key: ',', ctrlKey: true });
         expect(h.navigate).toHaveBeenCalledWith('settings');
+    });
+
+    it('maps mod to Meta on macOS and Control on Windows and Linux', () => {
+        const base = { target: document.body, metaKey: false, ctrlKey: false };
+        expect(canHandleGlobalShortcut({ ...base, metaKey: true }, document, 'MacIntel')).toBe(true);
+        expect(canHandleGlobalShortcut({ ...base, ctrlKey: true }, document, 'MacIntel')).toBe(false);
+        expect(canHandleGlobalShortcut({ ...base, ctrlKey: true }, document, 'Win32')).toBe(true);
+        expect(canHandleGlobalShortcut({ ...base, metaKey: true }, document, 'Linux x86_64')).toBe(false);
+    });
+
+    it('suppresses wallet and palette shortcuts while a modal is open', () => {
+        const handlers = { navigate: vi.fn(), lock: vi.fn(), openHelp: vi.fn() };
+        let palette;
+        function WithModal() {
+            palette = useCommandPalette();
+            useKeyboardShortcuts({ handlers });
+            return <div role="dialog" aria-modal="true">Confirm</div>;
+        }
+        render(<WithModal />);
+
+        press({ key: 'l', ctrlKey: true });
+        press({ key: 'k', ctrlKey: true });
+        press({ key: 'g' });
+        press({ key: 'h' });
+
+        expect(handlers.lock).not.toHaveBeenCalled();
+        expect(handlers.navigate).not.toHaveBeenCalled();
+        expect(palette.open).toBe(false);
     });
 
     it('Cmd/Ctrl+N maps to a new send', () => {
@@ -51,14 +83,34 @@ describe('useKeyboardShortcuts', () => {
         expect(h.openHelp).not.toHaveBeenCalled();
     });
 
-    it('runs the g-leader navigation: g then h -> history, g then c -> contacts', () => {
+    it('runs every catalogued g-leader navigation', () => {
         const h = setup();
-        press({ key: 'g' });
-        press({ key: 'h' });
-        expect(h.navigate).toHaveBeenCalledWith('history');
-        press({ key: 'g' });
-        press({ key: 'c' });
-        expect(h.navigate).toHaveBeenCalledWith('contacts');
+        for (const [key, view] of [
+            ['b', 'home'],
+            ['h', 'history'],
+            ['s', 'send'],
+            ['r', 'receive'],
+            ['d', 'markets'],
+            ['c', 'contacts'],
+        ]) {
+            press({ key: 'g' });
+            press({ key });
+            expect(h.navigate).toHaveBeenLastCalledWith(view);
+        }
+        expect(h.navigate).toHaveBeenCalledTimes(6);
+    });
+
+    it('does not create unlisted shortcuts from Alt or Shift modifiers', () => {
+        const h = setup();
+        press({ key: 'g', altKey: true });
+        press({ key: 'h', altKey: true });
+        press({ key: '?', altKey: true });
+        press({ key: 'G', shiftKey: true });
+        press({ key: 'H', shiftKey: true });
+        expect(h.navigate).not.toHaveBeenCalled();
+
+        press({ key: '?', shiftKey: true });
+        expect(h.openHelp).toHaveBeenCalledOnce();
     });
 
     it('a lone g followed by an unmapped key navigates nowhere', () => {
@@ -85,12 +137,14 @@ describe('useKeyboardShortcuts', () => {
         expect(h.navigate).not.toHaveBeenCalled();
     });
 
-    it('still fires modifier combos even while typing in an input', () => {
+    it('suppresses modifier combos while typing in an input', () => {
         const h = setup();
         const input = screen.getByLabelText('field');
         input.focus();
         fireEvent.keyDown(input, { key: 'l', metaKey: true });
-        expect(h.lock).toHaveBeenCalledOnce();
+        fireEvent.keyDown(input, { key: ',', ctrlKey: true });
+        expect(h.lock).not.toHaveBeenCalled();
+        expect(h.navigate).not.toHaveBeenCalled();
     });
 
     it('honors §34.1 overrides: the rebound key fires, the default goes dead', () => {

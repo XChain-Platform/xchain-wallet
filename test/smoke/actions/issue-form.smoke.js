@@ -273,7 +273,6 @@ assert.ok(
 // --- 11. CSS module ---------------------------------------------------
 
 for (const cls of [
-    '.card',
     '.picker',
     '.fromLine',
     '.checkRow',
@@ -287,6 +286,8 @@ for (const cls of [
         `IssueTokenForm.module.css defines ${cls}`,
     );
 }
+assert.ok(src.includes('<FormPage'), 'IssueTokenForm delegates its page card to FormPage');
+assert.ok(!/(^|\n)\.card\s*\{/.test(css), 'IssueTokenForm has no route-level page card');
 
 console.log(
     'OK: issue form smoke (standalone ISSUE §40.2 + ActionsMenu + Home "More actions" entry + popup/web wiring)',

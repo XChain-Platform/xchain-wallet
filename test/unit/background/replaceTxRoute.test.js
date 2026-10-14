@@ -190,6 +190,19 @@ describe('tx.replace background route', () => {
         expect(h.broadcastTx).not.toHaveBeenCalled();
     });
 
+    it('plainly reports a transaction that confirmed after review', async () => {
+        const h = harness([pending(ORIGINAL, 'original-psbt', {
+            status: 'broadcast',
+            chainConfirmed: true,
+        })]);
+        const response = await call(h.host, {});
+
+        expect(response.ok).toBe(false);
+        expect(response.error.message).toBe('This transaction is already confirmed.');
+        expect(h.signPsbt).not.toHaveBeenCalled();
+        expect(h.broadcastTx).not.toHaveBeenCalled();
+    });
+
     it('refuses an encoder response that diverts a replacement output', async () => {
         const h = harness();
         h.decomposePsbt.mockImplementation((hex) => (

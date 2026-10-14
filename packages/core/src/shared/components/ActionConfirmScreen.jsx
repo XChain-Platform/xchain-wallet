@@ -24,33 +24,43 @@ import { MessagingContext } from '../MessagingContext.js';
 import { ConfirmActionModal } from './ConfirmActionModal.jsx';
 import { SignCredentials } from './SignCredentials.jsx';
 import { SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
-import { satsToCoinDecimal } from '../../flows/feeEstimate.js';
+import { formatNativeBaseUnits, tickerForDescriptor } from '../../registry/coinTicker.js';
 import { withOutcomeLabels } from '../utils/betOutcomeLabels.js';
 import { readActiveWallet } from '../utils/activeWalletMemory.js';
+import { sumDecimalStrings, trimAmountTail } from '../utils/amountFormat.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
 // Native ticker for the §5.2.5 exact-fee line, resolved from the composed
 // envelope's own chainId so no call site has to pass it.
-const NATIVE_TICKER_BY_COIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 function nativeTickerFor(chainId) {
-    const coin = chainId ? chainRegistry.get(chainId)?.coin : null;
-    if (!coin) return '';
-    return NATIVE_TICKER_BY_COIN[coin] || String(coin).toUpperCase();
+    return tickerForDescriptor(chainId ? chainRegistry.get(chainId) : null);
 }
 
 function useSourceIdentity(address, chainId, walletId) {
     const messaging = useContext(MessagingContext)?.messaging;
-    const [identity, setIdentity] = useState({ label: '', walletName: '' });
+    const [identity, setIdentity] = useState({ label: '', walletName: '', wallet: null });
 
     useEffect(() => {
         let cancelled = false;
-        setIdentity({ label: '', walletName: '' });
-        if (!address || typeof messaging?.listWallets !== 'function'
-            || typeof messaging?.getAddressesByChain !== 'function') return undefined;
+        setIdentity({ label: '', walletName: '', wallet: null });
+        if (typeof messaging?.listWallets !== 'function') return undefined;
 
         Promise.resolve().then(() => messaging.listWallets()).then(async (walletsValue) => {
             const wallets = Array.isArray(walletsValue) ? walletsValue : [];
+            const signingWallet = walletId
+                ? wallets.find((wallet) => wallet.id === walletId)
+                : null;
+            if (!address || typeof messaging?.getAddressesByChain !== 'function') {
+                if (!cancelled) {
+                    setIdentity({
+                        label: '',
+                        walletName: '',
+                        wallet: signingWallet || (wallets.length === 1 ? wallets[0] : null),
+                    });
+                }
+                return;
+            }
             const matches = await Promise.all(wallets.map(async (wallet) => {
                 try {
                     const byChain = await messaging.getAddressesByChain(wallet.id);
@@ -76,6 +86,7 @@ function useSourceIdentity(address, chainId, walletId) {
             setIdentity({
                 label: match?.record?.label || '',
                 walletName: wallets.length > 1 ? (match?.wallet?.name || '') : '',
+                wallet: signingWallet || match?.wallet || (wallets.length === 1 ? wallets[0] : null),
             });
         }).catch(() => {});
 
@@ -94,6 +105,7 @@ function useSourceIdentity(address, chainId, walletId) {
  * @param {string} [props.feeText]               the form's rate ESTIMATE, used only as a
  *   fallback: when the composed PSBT knows its own fee (§5.2.5) that exact value wins
  * @param {string} [props.coinTicker]            ticker for the exact-fee line
+ * @param {string} [props.requestOrigin]         browser-verified requesting site
  * @param {boolean} props.signerReady            wallet already unlocked (no password needed)
  * @param {string} props.password
  * @param {(value: string) => void} props.onPasswordChange
@@ -122,6 +134,8 @@ function useSourceIdentity(address, chainId, walletId) {
  *   can only say "outcome 0"; supplying the market's own labels NAMES that index
  *   without replacing it. Display-only annotation, and the only caller-supplied text
  *   this screen renders - see withOutcomeLabels for why it is neutralized first.
+ * @param {(amount: string) => string|null} [props.formatNativeFee]
+ * @param {(amount: string) => string|null} [props.formatProtocolFee]
  */
 export function ActionConfirmScreen({
     confirmAction,
@@ -137,6 +151,7 @@ export function ActionConfirmScreen({
     hintClassName,
     simulation = null,
     coinTicker = '',
+    requestOrigin = '',
     hwSource = null,
     onHwStatusChange,
     hwStatus,
@@ -148,6 +163,8 @@ export function ActionConfirmScreen({
     onHwConfirmedChange,
     hwExplicitConfirmed = false,
     outcomeLabels = null,
+    formatNativeFee,
+    formatProtocolFee,
 }) {
     // A hardware signer has no password to type: readiness is the device being
     // connected, unlocked and on the right app - plus the §18.5 cross-check
@@ -166,18 +183,50 @@ export function ActionConfirmScreen({
     // stays labelled as an estimate rather than passing for the real thing.
     const composed = confirmAction.composed;
     const exactSats = composed?.networkFeeSats;
-    const ticker = coinTicker || nativeTickerFor(composed?.chainId);
+    const descriptor = composed?.chainId ? chainRegistry.get(composed.chainId) : null;
+    const ticker = coinTicker || nativeTickerFor(composed?.chainId || chainId);
     // An envelope's total covers its commit and its reveal, and says so.
     const feeLabel = composed?.envelopeFees ? 'Network fee, both transactions' : 'Network fee';
-    const exactFeeText = Number.isFinite(exactSats)
-        ? `${feeLabel}: ${satsToCoinDecimal(exactSats)} ${ticker}`.trim()
+    const exactCoinAmount = Number.isFinite(exactSats)
+        ? formatNativeBaseUnits(exactSats, descriptor)
         : null;
+    const exactFeeFiat = exactCoinAmount && typeof formatNativeFee === 'function'
+        ? formatNativeFee(exactCoinAmount)
+        : null;
+    const exactFeeText = exactCoinAmount
+        ? `${feeLabel}: ${exactCoinAmount} ${ticker}`.trim()
+            + (exactFeeFiat ? ` (${exactFeeFiat})` : '')
+        : null;
+    const dustChangeLimit = composed?.dustChangeLimitSats;
+    const dustChangeText = Number.isFinite(dustChangeLimit) && dustChangeLimit > 0
+        ? `No change output was created. Any remainder below ${formatNativeBaseUnits(dustChangeLimit, descriptor)} ${ticker}`
+            + ' is included in the network fee shown above.'
+        : null;
+    const unavailableFeeText = ticker ? `Network fee estimate unavailable (${ticker}).` : null;
+    const displayedFee = dustChangeText ? (
+        <>
+            {exactFeeText}
+            <br />
+            <span data-testid="confirm-dust-change">{dustChangeText}</span>
+        </>
+    ) : (exactFeeText || feeText || unavailableFeeText);
 
     // (c): still the host's decode of the composed bytes, with the
     // outcome INDEX annotated by the market's own label for it. The index
     // survives verbatim, and a decode carrying no outcome row (every action
     // that is not a bet or a resolve) comes back untouched.
     const decoded = withOutcomeLabels(composed?.decoded, outcomeLabels);
+    const amountDetail = decoded?.details?.find((detail) => detail?.label === 'Amount');
+    const tokenDetail = decoded?.details?.find((detail) => detail?.label === 'Token');
+    const nativePaymentTotal = composed?.bareNativePayment
+        && Number.isFinite(exactSats)
+        && amountDetail?.value
+        && String(tokenDetail?.value || '').toUpperCase() === String(ticker).toUpperCase()
+        ? trimAmountTail(sumDecimalStrings([
+            amountDetail.value,
+            formatNativeBaseUnits(exactSats, descriptor),
+        ]))
+        : null;
 
     // #40: the spender, taken from the confirm hook rather than from a new
     // prop on all ~38 calling forms. Every form already passes `from` into
@@ -222,9 +271,15 @@ export function ActionConfirmScreen({
             error={confirmAction.error}
             sourceAddress={sourceAddress}
             sourceName={sourceName}
+            signingWallet={sourceIdentity.wallet}
+            hardwareSigner={Boolean(hwSource)}
             chainLabel={chainLabel}
-            feeText={exactFeeText || feeText}
+            feeText={displayedFee}
+            totalText={nativePaymentTotal ? `Total: ${nativePaymentTotal} ${ticker}` : undefined}
+            requestOrigin={requestOrigin}
             nativeTicker={ticker}
+            formatNativeFee={formatNativeFee}
+            formatProtocolFee={formatProtocolFee}
             credentialsReady={credsComplete}
             credentials={(
                 <>

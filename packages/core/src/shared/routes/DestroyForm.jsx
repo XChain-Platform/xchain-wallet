@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -25,7 +25,9 @@ import {
 import { humanizeError } from '../utils/humanizeError.js';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
-import { formatWithThousands } from '../utils/amountFormat.js';
+import { useTokenInfo } from '../hooks/useTokenInfo.js';
+import { formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import { exceedsBalance } from '../utils/dividendPerUnit.js';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { TokenField } from '../components/TokenField.jsx';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
@@ -75,7 +77,6 @@ const PROTOCOL_COIN_TICKER = {
 export function DestroyForm({ walletId, onBack, initialChainId, initialTick, initialFromAddress }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const lockedToken = !!(initialChainId && initialTick);
     const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
@@ -126,6 +127,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
         address: fromAddress?.address,
         tick: ticker,
     });
+    const tokenInfo = useTokenInfo({ chainId, tick: ticker, skip: !ticker.trim() });
     const [amount, setAmount] = useState('');
     const [password, setPassword] = useState('');
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
@@ -303,6 +305,24 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
             setFormError('Amount must be a positive number.');
             return;
         }
+        // Keep the burn within the token's on-chain decimal scale.
+        const precisionError = tokenAmountPrecisionError(amt, {
+            divisibility: tokenInfo?.divisibility,
+            tick: ticker,
+        });
+        if (precisionError) {
+            setFormError(precisionError);
+            return;
+        }
+        // Refuse a burn the selected source address cannot fund.
+        if (exceedsBalance(amt, tickAmtBalance)) {
+            const TICK = ticker.trim().toUpperCase();
+            setFormError(
+                `This address holds only ${formatWithThousands(tickAmtBalance)} ${TICK}. `
+                + 'Enter an amount at or below that balance.',
+            );
+            return;
+        }
         setFormError(null);
         // slice 2: with the flag on, software destroys go straight
         // to the single-encode confirm modal instead of the legacy review
@@ -369,45 +389,61 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
         setSubmitError(null);
         setStage('form');
     }
-        const header = (
+    const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={stage === 'review'
+                ? () => { setSubmitError(null); setStage('form'); }
+                : onBack}
+            backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
                     ? 'Review destroy'
                     : `Destroy`}
         />
     );
-    const wrap = (children, footer = null) => (
-        <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
-            {footer}
+    const wrap = (children) => (
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>
+            {children}
         </Screen>
     );
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+        return wrap(
+            <FormPage
+                label="Destroy token"
+                status={<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>}
+            />,
+        );
     }
     if (!addressesByChain || !chainId) {
-        return wrap(<p className={styles.hint}>Loading…</p>);
+        return wrap(<FormPage label="Destroy token"><p className={styles.hint}>Loading…</p></FormPage>);
     }
 
     if (stage === 'done') {
         const txid = result?.txid || result?.broadcast?.txid;
         if (result?.psbtHex && !txid) {
             return wrap(
-                <WatcherResultPanel
-                    result={result}
-                    onBuildAnother={handleBuildAnother}
-                    onDone={onBack}
-                />,
+                <FormPage label="Unsigned destroy transaction">
+                    <WatcherResultPanel
+                        result={result}
+                        onBuildAnother={handleBuildAnother}
+                        onDone={onBack}
+                    />
+                </FormPage>,
             );
         }
         // Signed but not broadcast. Nothing has been destroyed yet.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} what="destroy" unsaved={result.unsaved} />);
+            return wrap(
+                <FormPage label="Queued destroy transaction">
+                    <QueuedResultPanel onDone={onBack} what="destroy" unsaved={result.unsaved} />
+                </FormPage>,
+            );
         }
         return wrap(
-            <>
+            <FormPage
+                label="Destroy result"
+                actions={<Button variant="primary" onClick={onBack}>Done</Button>}
+            >
                 <h2 className={styles.successTitle}>Destroyed</h2>
                 {txid ? (
                     <>
@@ -417,22 +453,49 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                 ) : (
                     <p className={styles.hint}>Broadcast complete.</p>
                 )}
-                <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Done</Button>
-                </div>
-            </>,
+            </FormPage>,
         );
     }
 
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
+            <FormPage
+                label="Review destroy"
+                onSubmit={handleSubmit}
+                status={(isWatcherMode || isHwSource) && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant={isWatcherMode ? 'primary' : 'danger'}
+                        loading={stage === 'submitting'}
+                        disabled={
+                            !typedConfirmOk || (
+                                isWatcherMode
+                                    ? false
+                                    : isHwSource
+                                        ? hwStatus !== 'available'
+                                        : (!signerReady && password.length === 0)
+                            )
+                        }
+                    >
+                        {isWatcherMode
+                            ? 'Create unsigned transaction: destroy'
+                            : isHwSource
+                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: destroy`
+                                : 'Destroy'}
+                    </Button>
+                )}
+            >
                 <p className={styles.summary}>{decoded?.summary}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -478,9 +541,6 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                         signerInfo={hwSignerInfo}
                     />
                 )}
-                {(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
-                ) : null}
                 <Input
                     label="Type DESTROY to confirm"
                     hint="This burns the amount above and cannot be undone."
@@ -490,29 +550,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                     autoCorrect="off"
                     spellCheck={false}
                 />
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant={isWatcherMode ? 'primary' : 'danger'}
-                        loading={stage === 'submitting'}
-                        disabled={
-                            !typedConfirmOk || (
-                                isWatcherMode
-                                    ? false
-                                    : isHwSource
-                                        ? hwStatus !== 'available'
-                                        : (!signerReady && password.length === 0)
-                            )
-                        }
-                    >
-                        {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : (descriptor ? `Destroy on ${descriptor.displayName}` : 'Destroy')}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -525,7 +563,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
             <ActionConfirmScreen
                 confirmAction={confirmAction}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
                 // Fallback only: the composed PSBT's exact fee wins (§5.2.5).
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
@@ -591,7 +629,23 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
     }
 
     return wrap(
-        <form onSubmit={handleReview} noValidate>
+        <FormPage
+            label="Destroy token"
+            onSubmit={handleReview}
+            status={formError ? (
+                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={confirmAction.composing}
+                    disabled={!fromAddress || !ticker || !amount || confirmAction.composing}
+                >
+                    {!isWatcherMode ? 'Destroy' : 'Preview'}
+                </Button>
+            )}
+        >
             <div role="alert" className={styles.warnings}>
                 <p className={styles.warning}>
                     <strong>Destroy is irreversible.</strong> The burned amount cannot be recovered.
@@ -601,9 +655,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
             {lockedToken && chainId ? (
                 <LockedTokenContext chainId={chainId} tick={ticker} />
             ) : (
-                <>
-                    <NetworkField value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
-                </>
+                <ChainPicker label="Network" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
             )}
 
             {fromAddress ? (
@@ -659,21 +711,7 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
                 />
             ) : null}
             <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
-            {formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
-            ) : null}
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    block
-                    loading={confirmAction.composing}
-                    disabled={!fromAddress || !ticker || !amount || confirmAction.composing}
-                >
-                    {!isWatcherMode ? 'Destroy' : 'Preview'}
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }
 

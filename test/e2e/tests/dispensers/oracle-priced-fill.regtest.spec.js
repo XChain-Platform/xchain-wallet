@@ -391,7 +391,7 @@ test.describe(`user-oracle dispensers on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBe(1);
 
             await gotoPalette(page, 'Switch wallet');
-            await page.getByRole('button', { name: 'Add Wallet' }).click();
+            await page.getByRole('button', { name: 'Add wallet' }).click();
             await createWallet(page, { password: PASSWORD, name: 'Oracle Buyer', navigate: false });
             await gotoPalette(page, 'Switch wallet');
             await page.getByRole('button', { name: /Oracle Buyer/ }).first().click();

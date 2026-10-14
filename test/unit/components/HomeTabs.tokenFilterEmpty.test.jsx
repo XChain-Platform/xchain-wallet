@@ -22,9 +22,13 @@ vi.mock('../../../packages/core/src/shared/components/TotalBalanceHero.jsx', () 
 vi.mock('../../../packages/core/src/shared/components/PortfolioChart.jsx', () => ({
     PortfolioChart: () => null,
 }));
-vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
-    useMessaging: () => ({ messaging: {}, shell: 'web' }),
-}));
+// One object for every render, as the real context provides: HomeTabs reads
+// settings through useSettings, whose effects key on the messaging identity,
+// so a fresh object per render re-runs them forever.
+vi.mock('../../../packages/core/src/shared/useMessaging.js', () => {
+    const value = { messaging: {}, shell: 'web' };
+    return { useMessaging: () => value };
+});
 vi.mock('../../../packages/core/src/shared/hooks/useCollectibleKeys.js', () => ({
     useCollectibleKeys: () => new Set(),
 }));
@@ -65,7 +69,7 @@ describe('HomeTabs token filter empty state', () => {
         mount({ tokenQuery: 'LTC', onTokenQueryChange });
 
         expect(screen.getByText('No matching tokens')).toBeInTheDocument();
-        expect(screen.getByText('Nothing matches "LTC". Clear the filter to see all tokens.')).toBeInTheDocument();
+        expect(screen.getByText('Matching tokens appear here after you change or clear the filter.')).toBeInTheDocument();
         expect(screen.queryByText(/top toolbar/)).toBeNull();
 
         fireEvent.click(screen.getByRole('button', { name: 'Clear filter' }));
@@ -78,8 +82,9 @@ describe('HomeTabs token filter empty state', () => {
     });
 
     it('keeps the filter row collapsed and shows no Clear action without a query', () => {
-        mount();
+        mount({ onReceive: vi.fn() });
         expect(screen.queryByRole('searchbox', { name: 'Search tokens by name' })).toBeNull();
         expect(screen.queryByRole('button', { name: 'Clear filter' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Receive' })).toBeNull();
     });
 });

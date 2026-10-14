@@ -1,7 +1,9 @@
 .badge {
+    --xc-badge-safe-inline-start: env(safe-area-inset-left, 0px);
+
     position: fixed;
-    bottom: 12px;
-    inset-inline-start: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    inset-inline-start: calc(12px + var(--xc-badge-safe-inline-start));
     z-index: 9999;
     display: inline-flex;
     align-items: center;
@@ -13,8 +15,13 @@
     font-size: 11px;
     border-radius: 999px;
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+    -webkit-backdrop-filter: blur(6px);
     backdrop-filter: blur(6px);
     user-select: none;
+}
+
+.badge:dir(rtl) {
+    --xc-badge-safe-inline-start: env(safe-area-inset-right, 0px);
 }
 
 .grip {
@@ -24,7 +31,7 @@
     padding: 0 4px;
     line-height: 1;
     font-size: 14px;
-    touch-action: none;
+    touch-action: pinch-zoom;
 }
 
 .grip:active {
@@ -166,7 +173,8 @@
     color: #FFFFFF;
     font-family: inherit;
     font-size: 11px;
-    padding: 2px 22px 2px 8px;
+    padding-block: 2px;
+    padding-inline: 8px 22px;
     cursor: pointer;
     text-transform: lowercase;
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'><path fill='%23ffffff' d='M6 8L0 0h12z'/></svg>");
@@ -176,6 +184,10 @@
     /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
        inheriting it from whichever line box the platform font produces. */
     min-height: var(--xc-tap-min);
+}
+
+.picker:dir(rtl) {
+    background-position: left 6px center;
 }
 
 .picker:hover {

@@ -84,22 +84,24 @@ jobs:
         shell: bash
         run: |
           mkdir -p swap-check
-          cp packages/desktop/dist/xchain-wallet-setup-*-x64.exe swap-check/
+          FROM_VERSION="$(node -p "require('./package.json').version")"
+          cp "packages/desktop/dist/xchain-wallet-setup-${FROM_VERSION}-x64.exe" swap-check/
           rm -rf packages/desktop/dist
 
-      # The TO build: the same tree, one patch up. Only the desktop package's
-      # version is touched, and only on this throwaway checkout - version
-      # lockstep across the other declarations is a release concern,
-      # and this job publishes nothing.
-      - name: Bump the desktop package one patch and rebuild
+      # The TO build: the same tree, one patch up. The root version names the
+      # artifact and its channel pointer; the desktop version is kept in
+      # lockstep. Both are touched only on this throwaway checkout, and this
+      # job publishes nothing.
+      - name: Bump the build one patch and rebuild
         shell: bash
         run: |
-          node -e "const f='packages/desktop/package.json',fs=require('fs');const p=JSON.parse(fs.readFileSync(f,'utf8'));const [a,b,c]=p.version.split('.');p.version=[a,b,Number(c)+1].join('.');fs.writeFileSync(f,JSON.stringify(p,null,4)+'\n');console.log('updating to '+p.version)"
+          node -e "const fs=require('fs');for(const f of ['package.json','packages/desktop/package.json']){const p=JSON.parse(fs.readFileSync(f,'utf8'));const [a,b,c]=p.version.split('.');p.version=[a,b,Number(c)+1].join('.');fs.writeFileSync(f,JSON.stringify(p,null,4)+'\n');console.log(f+' updating to '+p.version)}"
           pnpm -C packages/desktop dist --win nsis --x64
       - name: Stage the offered build and its channel pointer
         shell: bash
         run: |
-          cp packages/desktop/dist/xchain-wallet-setup-*-x64.exe swap-check/
+          TO_VERSION="$(node -p "require('./package.json').version")"
+          cp "packages/desktop/dist/xchain-wallet-setup-${TO_VERSION}-x64.exe" swap-check/
           cp packages/desktop/dist/stable.yml swap-check/
           ls -l swap-check
 

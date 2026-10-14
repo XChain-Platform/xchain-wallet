@@ -19,6 +19,9 @@ ext {
     // Android 15's identity-check work and is not something a wallet's unlock
     // path should ride while it is still alpha.
     androidxBiometricVersion = '1.1.0'
+    // Argon2id for the native key derivation. Exact pin, and its checksums
+    // sit in gradle/verification-metadata.xml, so a bump is a reviewed edit.
+    bouncyCastleVersion = '1.86'
     junitVersion = '4.13.2'
     androidxJunitVersion = '1.3.0'
     androidxEspressoCoreVersion = '3.7.0'

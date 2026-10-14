@@ -8,37 +8,53 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
     PageHeader,
     Button,
+    CopyButton,
     Input,
+    Select,
     AddressCombobox,
     AddressField,
     ChainBadge,
     AddressText,
     FeeSelector,
- ChainPicker,  Icon, InfoTip, StatusMessage,} from '@xchain-wallet/core/ui';
+    FormPage,
+    EmptyState,
+    Icon,
+    InfoTip,
+    StatusMessage,
+    FormErrorSummary,
+    Checkbox,
+    Switch,
+} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
     uri as uriLib,
 } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
-import { explorerCoinCode } from '../../registry/coinTicker.js';
-import { tickerColor } from '../components/BalanceList.jsx';
+import {
+    coinFromChainId,
+    isAssetImageSourceAllowed,
+    tickerColor,
+} from '../components/BalanceList.jsx';
 import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { WatcherResultPanel } from '../components/WatcherResultPanel.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { buildRecentDestinations } from '../../flows/recentDestinations.js';
-import { detectAddressCoin, isValidAddressForChain } from '../utils/addressValidation.js';
-import { neutralizeControlText } from '../utils/textHardening.js';
+import { addressValidationError, detectAddressCoin, isValidAddressForChain } from '../utils/addressValidation.js';
+import { neutralizeControlText, ZERO_WIDTH } from '../utils/textHardening.js';
 import { findLookalike } from '../utils/lookalike.js';
 import { checkPasteIntegrity } from '../utils/pasteIntegrity.js';
 import { humanizeError } from '../utils/humanizeError.js';
-import { SIGNED_NOT_BROADCAST_TITLE } from '../utils/submitFailureMessage.js';
+import {
+    SIGNED_NOT_BROADCAST_TITLE,
+    submitFailureMessage,
+} from '../utils/submitFailureMessage.js';
 import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
@@ -47,14 +63,34 @@ import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
 import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { UndoSendToast } from '../components/UndoSendToast.jsx';
 import { PanicFreezeNotice, SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
 import {
     resolveFeeConfig,
     resolvePreflightPrivacy,
 } from '../../schemas/settings.js';
+import { createUndoSendRequest, isUndoSendCancellation } from '../../flows/undoSend.js';
 import { checkRecipientNovelty } from '../../flows/recipientNovelty.js';
 import { classifySignRisk } from '../../flows/signRiskClassifier.js';
+import { isDemoWallet } from '../../flows/demoMode.js';
+import { exitDemoWallet } from '../utils/demoGraduation.js';
+import { DemoExitConfirm } from '../components/DemoExitConfirm.jsx';
 import { MAX_SEND_LEGS, summarizeSendLegs, totalsByTick } from '../../flows/sendLegs.js';
+import { explorerPageUrl } from '../utils/explorerLinks.js';
+import { Settings } from './Settings.jsx';
+import {
+    hasAvailableChain,
+    NO_CHAINS_BODY,
+    NO_CHAINS_TITLE,
+} from '../utils/chainAvailability.js';
+import { findContactByName, withEntriesAdded } from '../utils/contactMerge.js';
+import { contactEntryChain } from '../utils/contactChain.js';
+import {
+    formatNativeBaseUnits,
+    nativeDecimalsFor,
+    nativeUnitScaleFor,
+    tickerForDescriptor,
+} from '../../registry/coinTicker.js';
 
 // Exact decimal-string -> satoshi conversion for the send-risk gates (#2249).
 // The old Math.floor(parseFloat(x) * 1e8) accumulated IEEE-754 rounding error
@@ -63,12 +99,13 @@ import { MAX_SEND_LEGS, summarizeSendLegs, totalsByTick } from '../../flows/send
 // is exact; the submitted transaction already uses the exact decimal string,
 // so this only aligns the gates with what actually gets sent. Returns a
 // non-negative Number of sats, or null when the input is not a plain decimal.
-export function exactSatsFromDecimalString(raw) {
+export function exactSatsFromDecimalString(raw, chain = 'bitcoin') {
     const s = String(raw).trim();
     const m = /^(\d+)(?:\.(\d+))?$/.exec(s);
     if (!m) return null;
-    const frac = (m[2] || '').slice(0, 8).padEnd(8, '0');
-    const sats = BigInt(m[1]) * 100000000n + BigInt(frac);
+    const decimals = nativeDecimalsFor(chain);
+    const frac = (m[2] || '').slice(0, decimals).padEnd(decimals, '0');
+    const sats = BigInt(m[1]) * nativeUnitScaleFor(chain) + BigInt(frac || '0');
     // Gate thresholds live far below 2^53; clamp instead of silently losing
     // precision if someone types an absurd amount.
     return sats > BigInt(Number.MAX_SAFE_INTEGER) ? Number.MAX_SAFE_INTEGER : Number(sats);
@@ -80,23 +117,22 @@ export function exactSatsFromDecimalString(raw) {
 // round-trip is acceptable. Also accepts a bare leading dot ('.5') the way
 // parseFloat did, since this parses user-typed field values. Returns a
 // non-negative BigInt of sats, or null when the input is not a plain decimal.
-export function exactSatsBigIntFromDecimalString(raw) {
+export function exactSatsBigIntFromDecimalString(raw, chain = 'bitcoin') {
     const s = String(raw).trim();
     const m = /^(\d*)(?:\.(\d+))?$/.exec(s);
     if (!m || (!m[1] && !m[2])) return null;
-    const frac = (m[2] || '').slice(0, 8).padEnd(8, '0');
-    return BigInt(m[1] || '0') * 100000000n + BigInt(frac);
+    const decimals = nativeDecimalsFor(chain);
+    const frac = (m[2] || '').slice(0, decimals).padEnd(decimals, '0');
+    return BigInt(m[1] || '0') * nativeUnitScaleFor(chain) + BigInt(frac || '0');
 }
 
 // Exact sats -> plain decimal string, never scientific notation. The old
 // Number(x.toFixed(8)).toString() path rendered 1 sat as '1e-8', which the
 // encoder treats as a malformed AMOUNT. Trailing zeros are stripped for a
 // tidy display; negative inputs clamp to '0'.
-export function decimalStringFromSats(sats) {
+export function decimalStringFromSats(sats, chain = 'bitcoin') {
     const clamped = sats < 0n ? 0n : sats;
-    const whole = (clamped / 100000000n).toString();
-    const frac = (clamped % 100000000n).toString().padStart(8, '0').replace(/0+$/, '');
-    return frac ? `${whole}.${frac}` : whole;
+    return formatNativeBaseUnits(clamped, chain) || '0';
 }
 
 // The Max amount for a NON-native (token) balance: the balance string itself, validated
@@ -114,6 +150,49 @@ export function exactTokenMaxAmount(raw) {
     if (/^0+(\.0+)?$/.test(s)) return null;
     return s;
 }
+
+function isPositiveDecimalAmount(raw) {
+    const value = String(raw ?? '').trim();
+    return /^(?:\d+(?:\.\d+)?|\.\d+)$/.test(value) && /[1-9]/.test(value);
+}
+
+export function getUnusualSendWarnings({
+    sendTotals,
+    balances,
+    feeAmount,
+    nativeTicker,
+    isNativeSend,
+}) {
+    const warnings = [];
+    const balancesByTick = new Map((balances || []).map((balance) => [
+        String(balance?.tick || '').trim().toUpperCase(),
+        String(balance?.amount || '').trim(),
+    ]));
+
+    for (const total of sendTotals || []) {
+        const tick = String(total?.tick || '').trim().toUpperCase();
+        const balance = balancesByTick.get(tick);
+        if (!tick || compareDecimalStrings(balance, '0') !== 1) continue;
+        const threshold = multiplyDecimalStrings(balance, '0.9');
+        if (threshold !== null && compareDecimalStrings(total?.amount, threshold) === 1) {
+            warnings.push(`This sends more than 90% of your ${tick} balance.`);
+        }
+    }
+
+    if (isNativeSend && nativeTicker && feeAmount) {
+        const sent = (sendTotals || []).find(
+            (total) => String(total?.tick || '').trim().toUpperCase() === nativeTicker,
+        )?.amount;
+        const threshold = multiplyDecimalStrings(sent, '0.1');
+        if (threshold !== null && compareDecimalStrings(feeAmount, threshold) === 1) {
+            warnings.push(
+                `The network fee is more than 10% of the ${nativeTicker} amount you are sending.`,
+            );
+        }
+    }
+
+    return warnings;
+}
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -123,28 +202,43 @@ import {
     displayRateToSettingsCustom,
     resolveFeeUnit,
 } from '../../flows/feeEstimate.js';
-import { coinToFiat, fiatToCoin } from '../../flows/priceLookup.js';
-import { useFiatRate, fiatRateForTick } from '../hooks/useFiatRate.js';
+import { coinToFiatExact, fiatToCoin } from '../../flows/priceLookup.js';
+import { useFiatRate, useTickFiatRate } from '../hooks/useFiatRate.js';
 import { HwSignBlock } from '../components/HwSignBlock.jsx';
 import { BalanceChanges } from '../components/BalanceChanges.jsx';
 import { RawPsbtViewer } from '../components/RawPsbtViewer.jsx';
 import { useToast } from '../components/ToastHost.jsx';
 import { AmountField } from '../components/AmountField.jsx';
-import { TokenField } from '../components/TokenField.jsx';
+import { TickerIcon } from '../components/TickerIcon.jsx';
+import { DraftDiscardButton } from '../components/DraftDiscardButton.jsx';
+import { TokenPicker } from './TokenPicker.jsx';
 import { useHaptic } from '../hooks/useHaptic.js';
 import { useFormDraft } from '../hooks/useFormDraft.js';
 import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
+import { useUndoSend } from '../hooks/useUndoSend.js';
+import { useReachability } from '../hooks/useReachability.js';
+import { useFormLeaveGuard } from '../hooks/useFormLeaveGuard.js';
 import { useDispenserDestination, dispenserDestinationNotice } from '../hooks/useDispenserDestination.js';
 import {
     formatWithThousands,
     countNonCommaBefore,
     indexAfterNonCommaCount,
+    compareDecimalStrings,
+    multiplyDecimalStrings,
+    roundDecimalString,
 } from '../utils/amountFormat.js';
+import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
 import { dustThresholdForCoin } from '../../sdk/nativeFeePreflight.js';
 import styles from './Send.module.css';
-import { externalIndexOf } from '../addressSelection.js';
+import {
+    externalIndexOf,
+    hasAnyAddress,
+    signingAddressesByChain,
+    WATCH_ONLY_SIGNING_MESSAGE,
+} from '../addressSelection.js';
 import { pickDefaultChainId, recordLastUsedChain } from '../chainSelection.js';
+import { MAX_MEMO_LENGTH, MEMO_HINT, memoLengthError, utf8ByteLength } from '../utils/memoLimit.js';
 
 // §30.5 user-initiated cancel detection. HW-device libraries surface a
 // rejection as an Error whose message contains words like "cancelled",
@@ -163,39 +257,78 @@ const chainRegistry = registryLib.defaultRegistry();
 // breaks every "is this the native asset?" check downstream (most
 // visibly the SelectedTokenHero, which falls through to the letter-badge
 // + chain-overlay branch meant for tokens.
-const NATIVE_TICKER_BY_COIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 function nativeTickerFor(descriptor) {
     if (!descriptor?.coin) return null;
-    return NATIVE_TICKER_BY_COIN[descriptor.coin] || descriptor.coin.toUpperCase();
+    return tickerForDescriptor(descriptor);
 }
 
-const COIN_DISPLAY = { bitcoin: 'Bitcoin', litecoin: 'Litecoin', dogecoin: 'Dogecoin' };
+function hasMeaningfulSendDraft(values) {
+    if (!values || typeof values !== 'object') return false;
+    if ([values.toAddress, values.amount, values.memo]
+        .some((value) => String(value || '').trim().length > 0)) return true;
+
+    const tick = String(values.tick || '').trim().toUpperCase();
+    if (!tick) return false;
+    const descriptor = typeof values.chainId === 'string'
+        ? chainRegistry.get(values.chainId)
+        : null;
+    return tick !== nativeTickerFor(descriptor);
+}
+
+function utxoKey(utxo) {
+    return `${utxo?.txid || ''}:${utxo?.vout ?? ''}`;
+}
+
+function utxoAmount(utxo, descriptor) {
+    try {
+        return decimalStringFromSats(BigInt(utxo?.value ?? 0), descriptor);
+    } catch {
+        return String(utxo?.value ?? '0');
+    }
+}
+
+function utxoValueSats(utxo) {
+    try {
+        const value = BigInt(utxo?.value ?? 0);
+        return value >= 0n ? value : null;
+    } catch {
+        return null;
+    }
+}
+
+function utxoOutpoint(utxo) {
+    const txid = String(utxo?.txid || 'Unknown transaction');
+    return <><AddressText address={txid} size="sm" />:{utxo?.vout ?? '?'}</>;
+}
 
 // Validate the destination against the chain the SEND will be broadcast on.
 // A SEND pays an on-chain output on that chain, so an address for another coin,
 // for the right coin on the wrong network, or simply mistyped, is unspendable:
-// the tokens are gone. `isValidAddressForChain` decodes the base58check checksum
+// the tokens are gone. `addressValidationError` decodes the base58check checksum
 // (or bech32) against that coin+network's parameters, so it catches all three -
 // unlike a leading-character guess, which passes any typo that preserves the
 // first letter and cannot tell mainnet from testnet on the shared 'm'/'n'/'2'
 // leaders. Returns an error string, or null when the address is good (or when
 // there is not yet a chain to validate against).
+const COIN_DISPLAY = { bitcoin: 'Bitcoin', litecoin: 'Litecoin', dogecoin: 'Dogecoin' };
+
 function destinationAddressError(address, descriptor) {
     const a = (address || '').trim();
-    if (!a || !descriptor?.coin || !descriptor?.networkKind) return null;
-    if (isValidAddressForChain(a, descriptor.coin, descriptor.networkKind)) return null;
-
-    const chainName = COIN_DISPLAY[descriptor.coin] || descriptor.coin;
-    // Name the coin it *does* look like when that's unambiguous: a much more
-    // useful error than "invalid" when someone pastes the wrong address.
-    const detected = detectAddressCoin(a);
-    if (detected && detected !== descriptor.coin) {
-        return `This looks like a ${COIN_DISPLAY[detected] || detected} address, not a ${chainName} address.`;
+    if (a && descriptor?.coin && descriptor?.networkKind
+        && !isValidAddressForChain(a, descriptor.coin, descriptor.networkKind)) {
+        // A different coin gets the plain "looks like" wording; the same coin on
+        // another network, or a checksum typo, takes the network-aware copy.
+        const detected = detectAddressCoin(a);
+        if (detected && detected !== descriptor.coin) {
+            const chainName = COIN_DISPLAY[descriptor.coin] || descriptor.coin;
+            return `This looks like a ${COIN_DISPLAY[detected] || detected} address, not a ${chainName} address.`;
+        }
     }
-    const where = descriptor.networkKind === 'mainnet'
-        ? chainName
-        : `${chainName} ${descriptor.networkKind}`;
-    return `This is not a valid ${where} address. Check it for typos.`;
+    return addressValidationError(address, descriptor);
+}
+
+function normalizePastedRecipient(value) {
+    return String(value || '').replace(ZERO_WIDTH, '').trim();
 }
 
 /**
@@ -219,18 +352,19 @@ function destinationAddressError(address, descriptor) {
 /**
  * @param {object} props
  * @param {string} props.walletId
+ * @param {string} [props.accountId]   active BIP44 account; when set, scopes source addresses to that account
  * @param {() => void} props.onBack
- * @param {{ address?: string, amount?: string, tick?: string, chainId?: string, memo?: string, feePriority?: 'low' | 'normal' | 'fast' }} [props.prefill]
+ * @param {{ address?: string, amount?: string, tick?: string, chainId?: string, memo?: string, feePriority?: 'low' | 'normal' | 'fast', feeSelection?: { mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }, assetSwitchNotice?: string }} [props.prefill]
  *        §47 Cluster L FOLLOWUP 1: initial form values from a deep-link
  *        intent (parseXchainUri). Each field is applied once on mount;
  *        the user can override before submitting. Address comes from
  *        the URI path / `to=` param; chainId from the URI path or the
  *        BIP21 `chain=` param; tick from the URI path or `tick=`.
- * @param {(carry: { address: string, amount: string }) => void} [props.onChangeAsset]
+ * @param {(carry: { chainId: string | null, tick: string, address: string, amount: string, feeSelection: { mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number } }) => void} [props.onChangeAsset]
  *        tapped from the asset hero; should navigate to the SendPicker.
- *        Receives the currently-entered To address and amount so the caller can
- *        carry them back into the prefill (changing the asset must not wipe the
- *        destination or amount). Omit to leave the hero non-interactive.
+ *        Receives the current asset-sensitive draft so the shell can retain only
+ *        fields that still apply to the newly selected asset. Omit to leave the
+ *        hero non-interactive.
  * @param {(target: { chainId?: string, txHash?: string }) => void} [props.onViewHistory]
  *        M2.4: tapped from the success card's "View in history" action.
  *        The payload matches History's `initialFocus` shape (chainId +
@@ -238,23 +372,96 @@ function destinationAddressError(address, descriptor) {
  *        The merged entry exists immediately (built from this wallet's own
  *        pending record) even though the network has not sighted it yet;
  *        the card's copy says as much. Omit to hide the action.
+ * @param {() => void} [props.onReceive] navigate to Receive when this wallet has no funds
+ *        on the selected chain
+ * @param {() => void} [props.onDone]
+ *        Leaves a completed send for Home. Falls back to onBack for callers
+ *        that do not distinguish completion from ordinary back navigation.
  */
-export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHistory }) {
+export function Send({ walletId, accountId, onBack, prefill = null, onDone, onChangeAsset, onViewHistory, onReceive }) {
     const { messaging, shell } = useMessaging();
+    const { overall: reachabilityOverall } = useReachability({});
+    const networkOffline = reachabilityOverall === 'offline';
+    const mountedRef = useRef(true);
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => { mountedRef.current = false; };
+    }, []);
     // Unlocked software session signs without a password.
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
     const { developerMode } = useDeveloperMode();
     const { settings } = useSettings();
+    // Watcher mode still composes unsigned PSBTs, so balance-based Send
+    // empty states never replace its form.
+    const { isWatcherMode, isSignerMode } = useWalletMode();
+    // A demo wallet holds fixture balances and cannot move funds: the form
+    // opens at once with an inline note instead of waiting on a balance read.
+    const isDemo = isDemoWallet(walletId);
+    const [demoExitConfirmOpen, setDemoExitConfirmOpen] = useState(false);
+    const [demoExitBusy, setDemoExitBusy] = useState(false);
+    const [demoExitError, setDemoExitError] = useState(/** @type {string | null} */ (null));
+    const handleExitDemo = useCallback(async () => {
+        if (demoExitBusy) return;
+        setDemoExitBusy(true);
+        setDemoExitError(null);
+        try {
+            const { reloaded } = await exitDemoWallet({ messaging, walletId });
+            if (reloaded) return;
+            setDemoExitConfirmOpen(false);
+            onBack?.();
+        } catch {
+            setDemoExitError('Could not exit demo mode. Please try again.');
+        } finally {
+            setDemoExitBusy(false);
+        }
+    }, [demoExitBusy, messaging, walletId, onBack]);
+    const allowRemoteImages = Boolean(settings)
+        && settings.privacy?.metadataFetchEnabled !== false;
     const { showToast } = useToast();
     const haptic = useHaptic();
+    const [undoHoldActive, setUndoHoldActive] = useState(false);
+    const undoHoldIdRef = useRef(/** @type {string | null} */ (null));
+    const clearUndoHold = useCallback(() => {
+        undoHoldIdRef.current = null;
+        setUndoHoldActive(false);
+    }, []);
+    const cancelUndoHold = useCallback(() => {
+        const holdId = undoHoldIdRef.current;
+        if (!holdId) return;
+        const reportFailure = (err) => {
+            console.error('Undo send cancellation failed:', err); // eslint-disable-line no-console
+            showToast({
+                message: 'Could not cancel this send. It may still be broadcast.',
+                variant: 'error',
+                durationMs: 12_000,
+            });
+        };
+        try {
+            Promise.resolve(messaging.sendHoldCancel(holdId)).catch(reportFailure);
+        } catch (err) {
+            reportFailure(err);
+        }
+    }, [messaging, showToast]);
+    const {
+        status: undoSendStatus,
+        remaining: undoSendRemaining,
+        start: startUndoSend,
+        cancel: cancelUndoSend,
+    } = useUndoSend({
+        onElapsed: clearUndoHold,
+        onCancelHold: cancelUndoHold,
+    });
 
     // §5.6 slice 1: the single-encode confirm modal. Flag-gated
     // (read with code defaults, never vault-stamped). brought
     // hardware onto it; watcher sends stay on the legacy review->submit
     // stage machine below (they encode, they never sign).
     const confirmAction = useConfirmAction();
+    const confirmBusy = ['composing', 'preflighting', 'ready', 'signing', 'rechecking']
+        .includes(confirmAction.phase);
+    const confirmLaunchRef = useRef(false);
+    const submitInFlightRef = useRef(false);
 
     // §34.2: Cmd/Ctrl+Enter submits the visible stage's form (compose ->
     // review, review -> sign). requestSubmit (not submit()) so the form's
@@ -275,6 +482,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         /** @type {Record<string, any[]> | null} */ (null),
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const [networkSettingsOpen, setNetworkSettingsOpen] = useState(false);
 
     const [chainId, setChainId] = useState(/** @type {string | null} */ (
         prefill?.chainId || null
@@ -299,7 +507,21 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
     const [toAddress, setToAddress] = useState(prefill?.address || '');
     const [tick, setTick] = useState(prefill?.tick || '');
     const [amount, setAmount] = useState(prefill?.amount || '');
+    const [maxActive, setMaxActive] = useState(false);
+    const [maxBusy, setMaxBusy] = useState(false);
+    const [maxUnavailable, setMaxUnavailable] = useState(false);
+    const [maxNote, setMaxNote] = useState(/** @type {string | null} */ (null));
+    const maxRequestRef = useRef(0);
+    const maxContextRef = useRef(/** @type {string | null} */ (null));
+    const cancelMax = useCallback(() => {
+        setMaxActive(false);
+        setMaxUnavailable(false);
+        setMaxNote(null);
+        maxRequestRef.current += 1;
+        setMaxBusy(false);
+    }, []);
     const [memo, setMemo] = useState(prefill?.memo || '');
+    const [assetSwitchNotice, setAssetSwitchNotice] = useState(prefill?.assetSwitchNotice || null);
     const [amountInputMode, setAmountInputMode] = useState(
         /** @type {'coin' | 'fiat'} */ ('coin'),
     );
@@ -313,6 +535,13 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         /** @type {Array<{ id: string, to: string, amount: string, tick: string }>} */ ([]),
     );
     const [perRecipientToken, setPerRecipientToken] = useState(false);
+    const [recipientErrors, setRecipientErrors] = useState(
+        /** @type {Record<string, { to?: string, amount?: string, tick?: string }>} */ ({}),
+    );
+    const [validationAttempt, setValidationAttempt] = useState(0);
+    const [tokenPickerRecipientId, setTokenPickerRecipientId] = useState(
+        /** @type {string | null} */ (null),
+    );
     const [fiatAmount, setFiatAmount] = useState('');
     const [password, setPassword] = useState('');
     // Live mirror of `password` so the confirm-modal's onApprove closure
@@ -328,15 +557,12 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
     // Inline error on the To field, e.g. a wrong-chain destination address.
     const [toError, setToError] = useState(/** @type {string | null} */ (null));
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
-    // Raw backend/SDK/RPC error string kept for a collapsible "technical
-    // details" disclosure so debuggability is preserved without leading
-    // the review dialog with jargon.
-    const [submitErrorDetail, setSubmitErrorDetail] = useState(/** @type {string | null} */ (null));
-    // Recognized cause from humanizeError; recovery affordances key off
-    // this instead of re-parsing the displayed message text.
+    // Recognized recovery cause for affordances that must not match display copy.
     const [submitErrorCause, setSubmitErrorCause] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const reviewPageRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+    const reviewHeadingRef = useRef(/** @type {HTMLHeadingElement | null} */ (null));
 
     // §37 / G125: form-draft persistence. Persists only the user-visible
     // composition fields; password / mnemonic / passphrase NEVER touch
@@ -350,44 +576,73 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         ? Number(settings.privacy.formDraftTtlMs)
         : undefined;
     const draft = useFormDraft({ view: 'send', walletId, ttlMs: formDraftTtlMs });
-    const [draftPending, setDraftPending] = useState(() => draft.hasDraft());
+    // A stored draft waits for an explicit Restore. A fresh form starts
+    // saving immediately so an auto-lock unmount cannot erase typed values.
+    const [draftPending, setDraftPending] = useState(
+        () => !hasMeaningfulSendDraft(draft.load()),
+    );
     useEffect(() => {
         if (stage !== 'form' || !draftPending) return;
-        draft.save({ chainId, toAddress, tick, amount, memo });
+        const values = { chainId, toAddress, tick, amount, memo };
+        if (hasMeaningfulSendDraft(values)) draft.save(values);
+        else draft.clear();
     }, [stage, draftPending, draft, chainId, toAddress, tick, amount, memo]);
     const restoreDraft = useCallback(() => {
         const v = draft.load();
         if (!v) { setDraftPending(false); return; }
+        cancelMax();
         if (typeof v.chainId === 'string') setChainId(v.chainId);
         if (typeof v.toAddress === 'string') setToAddress(v.toAddress);
         if (typeof v.tick === 'string') setTick(v.tick);
         if (typeof v.amount === 'string') setAmount(v.amount);
         if (typeof v.memo === 'string') setMemo(v.memo);
         setDraftPending(true);
-    }, [draft]);
+    }, [draft, cancelMax]);
     const dismissDraft = useCallback(() => {
         draft.clear();
-        setDraftPending(false);
+        setDraftPending(true);
     }, [draft]);
+    const hasRealInput = useMemo(() => (
+        [toAddress, amount, memo, fiatAmount, password]
+            .some((value) => String(value || '').trim().length > 0)
+        || (tick.trim().length > 0
+            && tick.trim().toUpperCase() !== nativeTickerFor(chainId ? chainRegistry.get(chainId) : null))
+        || extraLegs.some((leg) => [leg.to, leg.amount, leg.tick]
+            .some((value) => String(value || '').trim().length > 0))
+    ), [toAddress, amount, memo, fiatAmount, password, tick, chainId, extraLegs]);
+    const leaveGuard = useFormLeaveGuard({
+        dirty: stage !== 'done' && hasRealInput,
+        submitting: stage === 'submitting',
+        signedUnbroadcast: stage === 'done' && result?.queued === true && result?.unsaved === true,
+        onLeave: onBack,
+    });
 
     // The settings read rides the address load so the last-used chain is
     // known in the render that first shows the form. Best-effort: a host
     // without `getSettings`, or a failed read, still yields a usable form.
     useEffect(() => {
         let cancelled = false;
+        setAddressesByChain(null);
+        setLoadError(null);
+        setChainId(prefill?.chainId || null);
+        setFromAddressId(null);
+        setActiveByChain({});
+        setPickedSourceChain(null);
+        setHistoryRows([]);
         Promise.all([
-            messaging.getAddressesByChain(walletId),
+            messaging.getAddressesByChain(walletId, accountId),
             typeof messaging.getSettings === 'function'
                 ? Promise.resolve(messaging.getSettings()).catch(() => null)
                 : Promise.resolve(null),
         ])
-            .then(([byChain, loadedSettings]) => {
+            .then(([loadedByChain, loadedSettings]) => {
                 if (cancelled) return;
+                const byChain = signingAddressesByChain(loadedByChain, loadedSettings);
                 setAddressesByChain(byChain);
                 if (!Object.keys(byChain)[0]) {
-                    setLoadError(
-                        'No addresses on any chain yet. Use Receive to generate one.',
-                    );
+                    setLoadError(hasAnyAddress(loadedByChain)
+                        ? WATCH_ONLY_SIGNING_MESSAGE
+                        : 'This wallet has no addresses yet. Open Receive to create one.');
                     return;
                 }
                 // §47 Cluster L FOLLOWUP 1: a chain already set (a prefill,
@@ -398,11 +653,13 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                     settings: loadedSettings,
                 }));
             })
-            .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+            .catch(() => {
+                if (!cancelled) {
+                    setLoadError("Couldn't load addresses. Check your connection and try again.");
+                }
             });
         return () => { cancelled = true; };
-    }, [walletId, messaging]);
+    }, [walletId, accountId, messaging, prefill?.chainId]);
 
     // §18.4 firmware-warning support. When the source address is HW we
     // need vendor / model / firmwareVersion to render the warning banner
@@ -422,13 +679,19 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         return () => { cancelled = true; };
     }, [messaging]);
 
-    // Contacts UX state: picker open/close, search query, and the
-    // "save as contact" inline form (idle → naming → saving).
+    // Contacts UX state: picker open/close and the post-send save form.
     const [contactsPickerOpen, setContactsPickerOpen] = useState(false);
+    const [contactSaveStage, setContactSaveStage] = useState(
+        /** @type {'idle' | 'editing' | 'saving' | 'saved'} */ ('idle'),
+    );
+    const [contactName, setContactName] = useState('');
+    const [contactSaveError, setContactSaveError] = useState(/** @type {string | null} */ (null));
+    const contactSaveBusyRef = useRef(false);
 
     const [historyRows, setHistoryRows] = useState(/** @type {any[]} */ ([]));
     useEffect(() => {
         if (!chainId || !addressesByChain) return undefined;
+        setHistoryRows([]);
         const ownAddrs = (addressesByChain[chainId] || []).map((a) => a.address);
         if (ownAddrs.length === 0) {
             setHistoryRows([]);
@@ -438,7 +701,12 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         Promise.all(
             ownAddrs.map((addr) =>
                 messaging.getAddressHistory({ chainId, address: addr })
-                    .then((rows) => Array.isArray(rows) ? rows : [])
+                    .then((response) => {
+                        if (Array.isArray(response)) return response;
+                        if (Array.isArray(response?.data)) return response.data;
+                        if (Array.isArray(response?.rows)) return response.rows;
+                        return [];
+                    })
                     .catch(() => []),
             ),
         ).then((results) => {
@@ -470,7 +738,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         const out = [];
         for (const c of contacts) {
             for (const e of c?.entries || []) {
-                if (e?.chain === coin && e?.address) {
+                if (contactEntryChain(e) === coin && e?.address) {
                     out.push({ contact: c, entry: e });
                 }
             }
@@ -486,11 +754,17 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         return chainContacts.find(({ entry }) => entry.address === trimmed) || null;
     }, [toAddress, chainContacts]);
 
+    const handlePickRecipient = useCallback((entry) => {
+        const address = String(entry?.address || '');
+        const selectedDescriptor = chainId ? chainRegistry.get(chainId) : null;
+        setToAddress(address);
+        setToError(destinationAddressError(address, selectedDescriptor));
+    }, [chainId]);
+
     const handlePickContact = useCallback((entry) => {
-        setToAddress(entry.address);
-        setToError(null);
+        handlePickRecipient(entry);
         setContactsPickerOpen(false);
-    }, []);
+    }, [handlePickRecipient]);
 
 
     // §29.5 smart paste: BIP21 URI pre-fills amount/token/memo;
@@ -501,57 +775,150 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
     // clipboard rewrote itself between paste and re-read.
     const [pasteHint, setPasteHint] = useState(/** @type {string | null} */ (null));
     const [pasteWarning, setPasteWarning] = useState(/** @type {string | null} */ (null));
+    const [pastedRecipient, setPastedRecipient] = useState(/** @type {string | null} */ (null));
+    const pasteIntegritySeqRef = useRef(0);
+    useEffect(() => () => { pasteIntegritySeqRef.current += 1; }, []);
     const onAddressPaste = useCallback((e) => {
         const text = e?.clipboardData?.getData?.('text');
         if (typeof text !== 'string' || text.length === 0) return;
-        const trimmed = text.trim();
+        const trimmed = normalizePastedRecipient(text);
         const detected = uriLib.detectQrContent(trimmed, { chainRegistry });
+        const applyRecipient = (value, targetChainId = chainId) => {
+            const recipient = normalizePastedRecipient(value);
+            setToAddress(recipient);
+            setPastedRecipient(recipient || null);
+            const targetDescriptor = targetChainId ? chainRegistry.get(targetChainId) : null;
+            setToError(destinationAddressError(recipient, targetDescriptor));
+        };
         if (detected.type === 'bip21') {
             e.preventDefault();
-            setToAddress(detected.address);
             const parts = detected.parts;
-            if (parts.amount) setAmount(parts.amount);
+            const chainParam = parts.params?.chain;
+            const requestChainId = uriLib.safeChainIdParam(chainParam);
+            const requestDescriptor = requestChainId ? chainRegistry.get(requestChainId) : null;
+            const requestError = parts.required.length > 0
+                ? 'This payment request requires a feature this wallet does not support.'
+                : (chainParam !== undefined && (
+                    !requestChainId
+                    || !requestDescriptor
+                    || String(requestDescriptor.uriScheme || '').toLowerCase() !== detected.scheme
+                    || !(addressesByChain?.[requestChainId]?.length > 0)
+                )
+                    ? 'This payment request names a network this wallet cannot use.'
+                    : null);
+            if (requestError) {
+                setPastedRecipient(null);
+                setPasteHint(null);
+                setToError(requestError);
+                setPasteWarning(null);
+                return;
+            }
             const tickParam = parts.params?.tick;
-            if (typeof tickParam === 'string' && tickParam.length > 0) {
+            const nextTick = typeof tickParam === 'string' && tickParam.length > 0
+                ? neutralizeControlText(tickParam).toUpperCase()
+                : (requestDescriptor?.uriScheme === detected.scheme && requestChainId !== chainId
+                    ? (nativeTickerFor(requestDescriptor) || '')
+                    : tick);
+            const chainChanged = Boolean(
+                requestDescriptor?.uriScheme === detected.scheme && requestChainId !== chainId,
+            );
+            const tokenChanged = nextTick.trim().toUpperCase() !== tick.trim().toUpperCase();
+            const assetChanged = chainChanged || tokenChanged;
+            applyRecipient(detected.address, requestChainId || chainId);
+            if (parts.amount || assetChanged) cancelMax();
+            if (parts.amount) setAmount(parts.amount);
+            else if (assetChanged) setAmount('');
+            if (assetChanged) {
+                setFiatAmount('');
+                setAmountInputMode('coin');
+                if (chainChanged) {
+                    setExtraLegs([]);
+                    setPerRecipientToken(false);
+                    setRecipientErrors({});
+                } else if (!perRecipientToken) {
+                    setExtraLegs((rows) => rows.map((row) => ({ ...row, amount: '' })));
+                }
+                setAssetSwitchNotice(chainChanged
+                    ? 'Network changed. The amount and network fee were reset because they may not be valid on the new network.'
+                    : 'Token changed. The amount was cleared because the new token may use different decimal places.');
+            }
+            if (nextTick !== tick) {
                 // Pasted text is the same untrusted-URI class as
                 // a deep link or a scanned QR, so tick/memo get the same
                 // neutralization those paths apply. `address` stays raw; see
                 // `hardenUriIntentText`'s comment for why.
-                setTick(neutralizeControlText(tickParam).toUpperCase());
+                setTick(nextTick);
             }
-            if (parts.message) setMemo(neutralizeControlText(parts.message));
-            setPasteHint(`Filled from ${detected.scheme}: URI`);
+            const memoParam = parts.message ?? parts.label;
+            if (memoParam) setMemo(neutralizeControlText(memoParam));
+            if (chainChanged) {
+                setChainId(requestChainId);
+            }
+            setPasteHint('Payment details filled from the pasted payment link.');
         } else if (detected.type === 'xchain-uri') {
             e.preventDefault();
             // Route through the richer parser so the new coin-code form
             // (xchain:TBTC/send?to=…) yields intent.address rather than the
             // raw "TBTC/send" that the BIP21 fallback would surface.
             const intent = uriLib.hardenUriIntentText(uriLib.parseXchainUri(trimmed, { chainRegistry }));
-            if (intent.address) setToAddress(intent.address);
-            if (intent.tick) setTick(intent.tick.toUpperCase());
+            const nextChainId = intent.chainId || chainId;
+            const nextDescriptor = nextChainId ? chainRegistry.get(nextChainId) : null;
+            const nextTick = intent.tick
+                ? intent.tick.toUpperCase()
+                : (nextChainId !== chainId ? (nativeTickerFor(nextDescriptor) || '') : tick);
+            const chainChanged = Boolean(nextChainId && nextChainId !== chainId);
+            const tokenChanged = nextTick.trim().toUpperCase() !== tick.trim().toUpperCase();
+            const assetChanged = chainChanged || tokenChanged;
+            if (intent.address) applyRecipient(intent.address, nextChainId);
+            else if (chainChanged) setToAddress('');
+            if (intent.amount || assetChanged) cancelMax();
             if (intent.amount) setAmount(intent.amount);
+            else if (assetChanged) setAmount('');
+            if (chainChanged && !intent.address) { setToError(null); setPastedRecipient(null); }
+            if (assetChanged) {
+                if (tokenChanged) setTick(nextTick);
+                setFiatAmount('');
+                setAmountInputMode('coin');
+                if (chainChanged) {
+                    setExtraLegs([]);
+                    setPerRecipientToken(false);
+                    setRecipientErrors({});
+                } else if (!perRecipientToken) {
+                    setExtraLegs((rows) => rows.map((row) => ({ ...row, amount: '' })));
+                }
+                setAssetSwitchNotice(chainChanged
+                    ? 'Network changed. The amount and network fee were reset because they may not be valid on the new network.'
+                    : 'Token changed. The amount was cleared because the new token may use different decimal places.');
+            }
             if (intent.memo) setMemo(intent.memo);
             if (intent.chainId && intent.chainId !== chainId) {
                 setChainId(intent.chainId);
             }
-            setPasteHint('Filled from xchain: URI');
+            setPasteHint('Payment details filled from the pasted payment link.');
         } else if (detected.type === 'wif') {
             e.preventDefault();
+            setPastedRecipient(null);
             setPasteHint(
-                'That looks like a private key, not an address. Use Settings → Import private key to import it.',
+                'That looks like a private key, not a payment address. To import it, open Settings and choose Import private key.',
             );
         } else {
-            // raw address / unknown; let the default paste happen.
+            e.preventDefault();
+            applyRecipient(trimmed);
             setPasteHint(null);
         }
         setPasteWarning(null);
         // Defer the integrity check so the paste event finishes first.
         // navigator.clipboard.readText is async and permission-gated;
         // skipped + ok results are silent.
+        const integritySeq = pasteIntegritySeqRef.current + 1;
+        pasteIntegritySeqRef.current = integritySeq;
         Promise.resolve().then(() => checkPasteIntegrity({ pastedText: text }))
-            .then((res) => { if (!res.ok) setPasteWarning(res.reason || 'Clipboard altered after paste; verify the address before sending.'); })
+            .then((res) => {
+                if (!mountedRef.current || pasteIntegritySeqRef.current !== integritySeq) return;
+                if (!res.ok) setPasteWarning(res.reason || 'The clipboard changed after you pasted. Check the address before sending.');
+            })
             .catch(() => { /* silent */ });
-    }, [chainId]);
+    }, [addressesByChain, chainId, perRecipientToken, tick, cancelMax]);
 
     // §21.4 test-send protection. Session-scoped acknowledgement set;
     // marking an address tested suppresses the gate for the rest of
@@ -586,6 +953,23 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         return `Looks ${pct}% similar to ${sourceLabel}: ${hit.match.address}. Double-check this is the address you mean.`;
     }, [toAddress, suggestions]);
 
+    const primaryRecipientNovelty = useMemo(() => {
+        const thresholdText = String(settings?.grace?.testSendThresholdSats ?? '0').trim();
+        const threshold = /^\d+$/.test(thresholdText) ? BigInt(thresholdText) : 0n;
+        if (threshold <= 0n) return null;
+        const dest = toAddress.trim();
+        const desc = chainId ? chainRegistry.get(chainId) : null;
+        if (!dest || !desc?.coin) return null;
+        const nativeTicker = nativeTickerFor(desc);
+        if (!nativeTicker || tick.trim().toUpperCase() !== nativeTicker) return null;
+        return checkRecipientNovelty({
+            address: dest,
+            chainCoin: desc.coin,
+            contacts,
+            historyRows,
+        });
+    }, [settings, toAddress, tick, chainId, contacts, historyRows]);
+
     // §21.4 test-send gate. Active when:
     //   - threshold > 0 (Settings → Safety → Test-send warning)
     //   - the send is a native-coin send (tick matches descriptor.coin
@@ -605,26 +989,22 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         const desc = chainId ? chainRegistry.get(chainId) : null;
         const nativeTicker = nativeTickerFor(desc);
         if (!nativeTicker || tick.trim().toUpperCase() !== nativeTicker) return null;
-        const amountSats = exactSatsBigIntFromDecimalString(amount);
+        const amountSats = nativeDecimalsFor(desc) === 8
+            ? exactSatsBigIntFromDecimalString(amount)
+            : exactSatsBigIntFromDecimalString(amount, desc);
         if (amountSats === null || amountSats <= 0n) return null;
         if (amountSats <= threshold) return null;
-        const novelty = checkRecipientNovelty({
-            address: dest,
-            chainCoin: desc.coin,
-            contacts,
-            historyRows,
-        });
-        if (!novelty.novel) return null;
+        if (!primaryRecipientNovelty?.novel) return null;
         if (testedThisSession.has(dest)) return null;
         return {
             amountSats,
             threshold,
             ticker: nativeTicker,
         };
-    }, [settings, toAddress, tick, amount, chainId, contacts, historyRows, testedThisSession]);
+    }, [settings, toAddress, tick, amount, chainId, primaryRecipientNovelty, testedThisSession]);
 
     // §29.2 Max + §29.3 fiat toggle.
-    // Fiat rate for "≈ $X.XX" preview + the optional fiat-entry mode.
+    // Fiat rate for the approximate-value preview + the optional fiat-entry mode.
     // Oracle-primary with CoinGecko fallback (§45); the
     // fallback is gated on the privacy.priceDataEnabled setting.
     const fiatCurrency = settings?.fiatCurrency || 'USD';
@@ -632,6 +1012,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         chainCoin: chainId ? chainRegistry.get(chainId)?.coin : null,
         fiatCurrency,
         allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
+        enabled: chainRegistry.get(chainId || '')?.networkKind === 'mainnet',
     });
 
     const isNativeSend = useMemo(() => {
@@ -670,9 +1051,33 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
     }, []);
     const updateRecipient = useCallback((id, patch) => {
         setExtraLegs((prev) => prev.map((leg) => (leg.id === id ? { ...leg, ...patch } : leg)));
+        setRecipientErrors((prev) => {
+            const current = prev[id];
+            if (!current) return prev;
+            const nextForRow = { ...current };
+            for (const field of Object.keys(patch)) {
+                const fixed = field === 'amount'
+                    ? isPositiveDecimalAmount(patch[field])
+                    : field === 'to'
+                        ? String(patch[field] || '').trim().length > 0
+                        : true;
+                if (fixed) delete nextForRow[field];
+            }
+            const next = { ...prev };
+            if (Object.keys(nextForRow).length > 0) next[id] = nextForRow;
+            else delete next[id];
+            return next;
+        });
     }, []);
     const removeRecipient = useCallback((id) => {
         setExtraLegs((prev) => prev.filter((leg) => leg.id !== id));
+        setRecipientErrors((prev) => {
+            if (!prev[id]) return prev;
+            const next = { ...prev };
+            delete next[id];
+            return next;
+        });
+        setTokenPickerRecipientId((current) => (current === id ? null : current));
     }, []);
     // A native tick pays real outputs instead of writing an action, so it has
     // no multi-recipient form (flows/sendLegs.js refuses it, and the refusal is
@@ -681,9 +1086,8 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
     // back is the fix, and discarding a list of addresses the user just entered
     // would be the worse failure.
     const nativeMultiSendBlock = isMultiSend && isNativeSend
-        ? `${tick.trim().toUpperCase()} can only be sent to one recipient at a time. `
-          + 'It pays a real output rather than writing an XChain action, so each recipient '
-          + 'needs their own transaction. Remove the extra recipients, or pick a token.'
+        ? `${tick.trim().toUpperCase()} can be sent to only one recipient at a time. `
+          + 'Remove the additional recipients or choose a token.'
         : null;
 
     // dust floor on the RECIPIENT amount, refused here rather than at the node.
@@ -707,10 +1111,10 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         const desc = chainId ? chainRegistry.get(chainId) : null;
         const floor = dustThresholdForCoin(desc?.coin);
         if (!floor) return null;
-        const sats = exactSatsBigIntFromDecimalString(amount);
+        const sats = exactSatsBigIntFromDecimalString(amount, desc);
         if (sats === null || sats <= 0 || sats >= floor) return null;
         const ticker = nativeTickerFor(desc) || tick.trim().toUpperCase();
-        const minimum = decimalStringFromSats(BigInt(floor));
+        const minimum = decimalStringFromSats(BigInt(floor), desc);
         return `That amount is too small to send. The smallest ${ticker} payment the network will `
             + `carry is ${minimum} ${ticker} (${formatWithThousands(String(floor))} sats), and anything `
             + 'under that is refused by every node, so it can never arrive. Enter at least '
@@ -733,20 +1137,18 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         setFormError((prev) => (prev !== null && prev === pushed ? null : prev));
     }, [dustBlock]);
 
-    // `fiatRate` prices the CHAIN COIN. The amount field may be holding a
-    // TOKEN amount, and pricing that at the coin's rate renders a confidently
-    // formatted, wildly wrong number (50,000 XCHAIN shown as billions of dollars).
-    // Everything that prices the AMOUNT uses this gated rate; the network-fee
-    // preview below keeps using the raw `fiatRate`, because a fee is always paid
-    // in the native coin regardless of which token is being sent.
-    const amountFiatRate = useMemo(
-        () => fiatRateForTick({
-            rate: fiatRate,
-            tick,
-            nativeTicker: nativeTickerFor(chainId ? chainRegistry.get(chainId) : null),
-        }),
-        [fiatRate, tick, chainId],
-    );
+    // The amount may be a token while the network fee is always paid in the
+    // chain coin. Resolve them separately so a token with no market shows no
+    // fiat preview, while a token with its own oracle or DEX rate uses that
+    // rate and retains its source label in AmountField.
+    const amountFiatRate = useTickFiatRate({
+        chainCoin: chainId ? chainRegistry.get(chainId)?.coin : null,
+        tick,
+        nativeTicker: nativeTickerFor(chainId ? chainRegistry.get(chainId) : null),
+        fiatCurrency,
+        allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
+        enabled: chainRegistry.get(chainId || '')?.networkKind === 'mainnet',
+    });
 
     // Switching from the coin to a token while typing in fiat would leave the
     // field in a mode it can no longer convert, so fall back to coin entry.
@@ -757,9 +1159,22 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         }
     }, [amountFiatRate, amountInputMode]);
 
-    const onCoinInputChange = useCallback((value) => {
-        setAmount(value);
-    }, []);
+    const onTickInputChange = useCallback((value) => {
+        const changed = value.trim().toUpperCase() !== tick.trim().toUpperCase();
+        setTick(value);
+        if (!changed) return;
+        const hasSharedAmounts = Boolean(amount)
+            || (!perRecipientToken && extraLegs.some((row) => Boolean(row.amount)));
+        if (!hasSharedAmounts) return;
+        cancelMax();
+        if (amount) setAmount('');
+        setFiatAmount('');
+        setAmountInputMode('coin');
+        if (!perRecipientToken) {
+            setExtraLegs((rows) => rows.map((row) => ({ ...row, amount: '' })));
+        }
+        setAssetSwitchNotice('Token changed. The amount was cleared because the new token may use different decimal places.');
+    }, [amount, extraLegs, perRecipientToken, tick, cancelMax]);
 
     const amountInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
@@ -780,6 +1195,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         // the field from accepting "1.2.3" or random chars while still
         // allowing in-progress entries like "" / "." / "1.".
         if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
+        cancelMax();
         if (amountInputMode === 'fiat') {
             setFiatAmount(stripped);
             if (!amountFiatRate) {
@@ -802,14 +1218,14 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                 }
             });
         }
-    }, [amountInputMode, amountFiatRate]);
+    }, [amountInputMode, amountFiatRate, cancelMax]);
 
     const toggleAmountInputMode = useCallback(() => {
         if (!amountFiatRate) return;
         setAmountInputMode((prev) => {
             if (prev === 'coin') {
-                const fv = amount ? coinToFiat(amount, amountFiatRate) : null;
-                setFiatAmount(fv != null ? fv.toFixed(2) : '');
+                const value = amount ? coinToFiatExact(amount, amountFiatRate) : null;
+                setFiatAmount(value != null ? roundDecimalString(value, 2) : '');
                 return 'fiat';
             }
             // fiat -> coin: keep canonical amount, clear typed fiat
@@ -819,7 +1235,8 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
     }, [amount, amountFiatRate]);
 
     const onSendSmallTest = useCallback(() => {
-        const amtSats = exactSatsBigIntFromDecimalString(amount);
+        const desc = chainId ? chainRegistry.get(chainId) : null;
+        const amtSats = exactSatsBigIntFromDecimalString(amount, desc);
         if (amtSats == null || amtSats <= 0n) return;
         // 1% of the original (floor division in sats).: the floor is the chain's
         // dust threshold, not one satoshi, because the gate only ever fires on a NATIVE
@@ -827,32 +1244,35 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         // is a transaction no node relays, so the button that exists to build the user's
         // confidence would have handed them a failure instead. Exact BigInt math keeps
         // the result a plain decimal string ('0.00000001', never '1e-8').
-        const desc = chainId ? chainRegistry.get(chainId) : null;
         const floor = BigInt(dustThresholdForCoin(desc?.coin) || 1);
         const onePercent = amtSats / 100n;
         const lifted = onePercent > floor ? onePercent : floor;
         // Never propose a "small test" larger than what the user asked to send.
         const reduced = lifted < amtSats ? lifted : amtSats;
-        const display = decimalStringFromSats(reduced);
+        const display = nativeDecimalsFor(desc) === 8
+            ? decimalStringFromSats(reduced)
+            : decimalStringFromSats(reduced, desc);
+        cancelMax();
         setAmount(display);
         setStage('form');
-    }, [amount, chainId]);
+    }, [amount, chainId, cancelMax]);
 
     // Latest-tick ref so the chainId effect below can preserve a
     // non-empty tick without subscribing to every keystroke.
     useEffect(() => {
         if (!walletId || typeof messaging.getActiveAddresses !== 'function') return undefined;
         let cancelled = false;
-        messaging.getActiveAddresses(walletId)
+        setActiveByChain({});
+        messaging.getActiveAddresses(walletId, accountId)
             .then((m) => { if (!cancelled) setActiveByChain(m || {}); })
             .catch(() => { if (!cancelled) setActiveByChain({}); });
         return () => { cancelled = true; };
-    }, [walletId, messaging]);
+    }, [walletId, accountId, messaging]);
 
     const tickRef = useRef(tick);
     tickRef.current = tick;
     useEffect(() => {
-        if (!chainId || !addressesByChain) return;
+        if (stage !== 'form' || confirmBusy || !chainId || !addressesByChain) return;
         const all = addressesByChain[chainId] || [];
         // A source the user picked on THIS chain wins over the default.
         // The tick default below still runs either way, so only the
@@ -888,12 +1308,13 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
             const nativeTicker = nativeTickerFor(descriptor);
             if (nativeTicker) setTick(nativeTicker);
         }
-    }, [chainId, addressesByChain, activeByChain, pickedSourceChain]);
+    }, [stage, confirmBusy, chainId, addressesByChain, activeByChain, pickedSourceChain]);
 
-    useEffect(() => {
-        if (stage === 'review') {
-            setTimeout(() => passwordRef.current?.focus(), 0);
-        }
+    useLayoutEffect(() => {
+        if (stage !== 'review') return;
+        const scroller = reviewPageRef.current?.querySelector('main');
+        if (scroller) scroller.scrollTop = 0;
+        reviewHeadingRef.current?.focus({ preventScroll: true });
     }, [stage]);
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
@@ -902,7 +1323,65 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
     }, [chainId, fromAddressId, addressesByChain]);
 
-    const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
+    const [coinControlEnabled, setCoinControlEnabled] = useState(false);
+    const [availableUtxos, setAvailableUtxos] = useState(/** @type {any[]} */ ([]));
+    const [utxoLoadState, setUtxoLoadState] = useState(
+        /** @type {'idle'|'loading'|'ready'|'error'} */ ('idle'),
+    );
+    const [selectedUtxoKeys, setSelectedUtxoKeys] = useState(
+        /** @type {Set<string>} */ (() => new Set()),
+    );
+    const [changeAddressId, setChangeAddressId] = useState('');
+
+    useEffect(() => {
+        setCoinControlEnabled(false);
+        setSelectedUtxoKeys(new Set());
+        setChangeAddressId('');
+        if (!chainId || !fromAddress || typeof messaging.getAddressUtxos !== 'function') {
+            setAvailableUtxos([]);
+            setUtxoLoadState('idle');
+            return undefined;
+        }
+        let cancelled = false;
+        setUtxoLoadState('loading');
+        messaging.getAddressUtxos(chainId, fromAddress.address)
+            .then((resultValue) => {
+                if (cancelled) return;
+                const rows = Array.isArray(resultValue)
+                    ? resultValue
+                    : (Array.isArray(resultValue?.utxos) ? resultValue.utxos : []);
+                setAvailableUtxos(rows);
+                setUtxoLoadState('ready');
+            })
+            .catch(() => {
+                if (cancelled) return;
+                setAvailableUtxos([]);
+                setUtxoLoadState('error');
+            });
+        return () => { cancelled = true; };
+    }, [chainId, fromAddress?.id, fromAddress?.address, messaging]);
+
+    const selectedUtxos = useMemo(
+        () => availableUtxos.filter((utxo) => selectedUtxoKeys.has(utxoKey(utxo))),
+        [availableUtxos, selectedUtxoKeys],
+    );
+    const selectedUtxoTotalSats = useMemo(
+        () => selectedUtxos.reduce((total, utxo) => total + (utxoValueSats(utxo) ?? 0n), 0n),
+        [selectedUtxos],
+    );
+    const changeAddress = useMemo(
+        () => (addressesByChain?.[chainId] || []).find((address) => address.id === changeAddressId) || null,
+        [addressesByChain, chainId, changeAddressId],
+    );
+    const automaticChangeLabel = settings?.privacy?.changeAddressRotation === true && signerReady
+        ? 'Fresh address (change rotation)'
+        : (fromAddress?.address || 'Source address');
+    const changeAddressLabel = changeAddress?.address || automaticChangeLabel;
+    const coinControlLabel = coinControlEnabled
+        ? `${selectedUtxos.length} selected input${selectedUtxos.length === 1 ? '' : 's'}`
+        : 'Automatic input selection';
+    const trimmedMemo = memo.trim();
+    const memoTooLong = memoLengthError(trimmedMemo);
 
     const decoded = useMemo(() => {
         if (stage !== 'review' && stage !== 'submitting') return null;
@@ -945,8 +1424,10 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         // Fetch on review (for the simulator) AND on form (so Max + the
         // "Available: X" hint know what's spendable). Form-stage fetches
         // are non-blocking; failure leaves Max disabled, the hint hidden.
-        if (stage !== 'review' && stage !== 'form') return undefined;
-        if (!chainId || !fromAddress) return undefined;
+        if ((stage !== 'review' && stage !== 'form') || !chainId || !fromAddress) {
+            setPreviewBalances({ loading: false, error: null, sdkShape: null });
+            return undefined;
+        }
         let cancelled = false;
         setPreviewBalances({ loading: true, error: null, sdkShape: null });
         messaging.getAddressBalances(chainId, fromAddress.address)
@@ -954,16 +1435,65 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                 if (cancelled) return;
                 setPreviewBalances({ loading: false, error: null, sdkShape });
             })
-            .catch((err) => {
+            .catch(() => {
                 if (cancelled) return;
                 setPreviewBalances({
                     loading: false,
-                    error: err?.message || 'balance fetch failed',
+                    error: 'Balances could not be loaded. Check your connection and try again.',
                     sdkShape: null,
                 });
             });
         return () => { cancelled = true; };
     }, [stage, chainId, fromAddress, messaging]);
+
+    // Set once the first balance check settles; see the loading gate below.
+    const balanceGateSettledRef = useRef(false);
+    const [chainBalanceState, setChainBalanceState] = useState(
+        /** @type {{ chainId: string | null, status: 'loading' | 'funded' | 'empty' | 'unknown' }} */
+        ({ chainId: null, status: 'loading' }),
+    );
+    useEffect(() => {
+        // Until the address map and chain are known the status stays at its
+        // loading default, so the form never flashes before the check runs.
+        if (!chainId || !addressesByChain) return undefined;
+        if (isWatcherMode || isSignerMode || isDemo) {
+            setChainBalanceState({ chainId, status: 'unknown' });
+            return undefined;
+        }
+        if (typeof messaging.getWalletBalances !== 'function') {
+            setChainBalanceState({ chainId, status: 'unknown' });
+            return undefined;
+        }
+        let cancelled = false;
+        // A re-check for a chain already judged keeps its last status, so a
+        // refreshed address map never swaps the form for a loading line.
+        setChainBalanceState((prev) => (
+            prev.chainId === chainId ? prev : { chainId, status: 'loading' }
+        ));
+        messaging.getWalletBalances(walletId, accountId)
+            .then((byChain) => {
+                if (cancelled) return;
+                const entries = byChain?.[chainId];
+                const addressCount = (addressesByChain[chainId] || []).length;
+                // An incomplete or failed aggregate cannot prove the chain is empty.
+                if (!Array.isArray(entries) || entries.length < addressCount
+                    || entries.some((entry) => entry?.error || !entry?.balances)) {
+                    setChainBalanceState({ chainId, status: 'unknown' });
+                    return;
+                }
+                const nativeTicker = nativeTickerFor(chainRegistry.get(chainId));
+                const funded = entries.some((entry) => {
+                    const native = decoderLib.balancesFromSdk(entry.balances)
+                        .find((row) => String(row.tick || '').toUpperCase() === nativeTicker);
+                    return compareDecimalStrings(String(native?.amount || '0'), '0') === 1;
+                });
+                setChainBalanceState({ chainId, status: funded ? 'funded' : 'empty' });
+            })
+            .catch(() => {
+                if (!cancelled) setChainBalanceState({ chainId, status: 'unknown' });
+            });
+        return () => { cancelled = true; };
+    }, [walletId, accountId, chainId, addressesByChain, messaging, isWatcherMode, isSignerMode, isDemo]);
 
     // PC-26 gated-send readiness. A tick with active gated content can
     // only be sent as BATCH(SEND, MESSAGE-with-key); the host guard
@@ -980,13 +1510,17 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
     const [gatedScanBusy, setGatedScanBusy] = useState(false);
     const [gatedScanError, setGatedScanError] = useState(/** @type {string | null} */ (null));
     const gatedProbeSeq = useRef(0);
+    const gatedScanBusyRef = useRef(false);
     useEffect(() => {
+        const seq = gatedProbeSeq.current + 1;
+        gatedProbeSeq.current = seq;
+        gatedScanBusyRef.current = false;
+        setGatedScanBusy(false);
+        setGatedScanPassword('');
         setGatedInfo(null);
         setGatedScanError(null);
         if (!walletId || !chainId || !tick.trim()) return undefined;
         if (typeof messaging.gatedSendReadiness !== 'function') return undefined; // older host build
-        const seq = gatedProbeSeq.current + 1;
-        gatedProbeSeq.current = seq;
         // Debounced: `tick` changes per keystroke when typed by hand.
         const timer = setTimeout(() => {
             messaging.gatedSendReadiness({
@@ -1008,7 +1542,10 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                     // guard (and ultimately the indexer) still protects the send.
                 });
         }, 400);
-        return () => { clearTimeout(timer); };
+        return () => {
+            clearTimeout(timer);
+            if (gatedProbeSeq.current === seq) gatedProbeSeq.current += 1;
+        };
     }, [walletId, chainId, tick, toAddress, amount, fromAddress?.address, messaging]);
 
     // PC-52 + PC-26: a gated tick's SEND is only valid inside
@@ -1019,8 +1556,8 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
     // `gatedInfo` is non-null only for a tick with active gated content
     // (an 'ungated' probe result is never stored).
     const gatedMultiSendBlock = isMultiSend && gatedInfo
-        ? `${tick.trim().toUpperCase()} has token-gated content, and each recipient needs their own `
-          + 'unlock-key handoff. Send this token to one recipient at a time.'
+        ? `${tick.trim().toUpperCase()} includes protected content. Each recipient needs a separate `
+          + 'unlock key, so send this token to one recipient at a time.'
         : null;
 
     // A matching coin or token payment to an open dispenser is a purchase, and
@@ -1049,7 +1586,9 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
 
     async function handleGatedScan(event) {
         event.preventDefault();
-        if (gatedScanBusy || gatedScanPassword.length === 0) return;
+        if (gatedScanBusyRef.current || gatedScanPassword.length === 0) return;
+        const seq = gatedProbeSeq.current;
+        gatedScanBusyRef.current = true;
         setGatedScanBusy(true);
         setGatedScanError(null);
         try {
@@ -1059,11 +1598,12 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                 chainId,
                 tick: tick.trim(),
             });
+            if (!mountedRef.current || gatedProbeSeq.current !== seq) return;
             setGatedScanPassword('');
             if (!res || res.recoveredKeyHashes?.length === 0) {
                 setGatedScanError(
-                    'No unlock keys found on any of this wallet\'s addresses. '
-                    + 'Keys arrive with the token when it is sent to you directly; ask the sender to re-send it.',
+                    'No unlock keys were found for this wallet. '
+                    + 'Ask the sender to send the token and its key to you again.',
                 );
             }
             // Re-probe either way so the banner reflects the vault state.
@@ -1071,12 +1611,17 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                 walletId, chainId, tick: tick.trim(), sourceAddress: fromAddress?.address,
                 to: toAddress.trim() || undefined, amount: amount || undefined,
             });
+            if (!mountedRef.current || gatedProbeSeq.current !== seq) return;
             setGatedInfo(resp && resp.state !== 'ungated' ? resp : null);
         } catch (err) {
+            if (!mountedRef.current || gatedProbeSeq.current !== seq) return;
             const bad = err?.name === 'WrongPasswordError' || err?.name === 'InvalidPasswordError';
-            setGatedScanError(bad ? 'Incorrect password.' : (err?.message || 'Key recovery scan failed.'));
+            setGatedScanError(bad
+                ? 'Incorrect password.'
+                : 'Could not recover unlock keys. Check your connection and try again.');
         } finally {
-            setGatedScanBusy(false);
+            if (gatedProbeSeq.current === seq) gatedScanBusyRef.current = false;
+            if (mountedRef.current && gatedProbeSeq.current === seq) setGatedScanBusy(false);
         }
     }
 
@@ -1092,11 +1637,19 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         if (fp && ['low', 'normal', 'fast'].includes(fp)) {
             return /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: fp });
         }
+        const selection = prefill?.feeSelection;
+        if (selection && ['low', 'normal', 'fast', 'custom'].includes(selection.mode)) {
+            return selection.mode === 'custom'
+                ? { mode: 'custom', customRate: Number(selection.customRate) || 0 }
+                : { mode: selection.mode };
+        }
         return /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' });
     });
     const prefillFeeConsumedRef = useRef(Boolean(
-        prefill?.feePriority && ['low', 'normal', 'fast'].includes(prefill.feePriority),
+        (prefill?.feePriority && ['low', 'normal', 'fast'].includes(prefill.feePriority))
+        || (prefill?.feeSelection && ['low', 'normal', 'fast', 'custom'].includes(prefill.feeSelection.mode)),
     ));
+    const chainFeeSettings = chainId ? settings?.fees?.[chainId] : undefined;
 
     // Step 5 of §44: initial mode + custom rate seeded from
     // settings.fees[chainId]. Persisted preference flows from the §35
@@ -1104,7 +1657,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
     // FeeSelector without touching the saved default. Re-seeds when
     // the active chain changes.
     useEffect(() => {
-        if (!chainId || !settings?.fees) return;
+        if (!chainId) return;
         // Skip the very first run when a scanned URI carried a feePriority
         // hint; that pick already seeded feePick and should beat the
         // saved default on initial render.
@@ -1112,11 +1665,10 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
             prefillFeeConsumedRef.current = false;
             return;
         }
-        if (!settings.fees[chainId]) return;
         const desc = chainRegistry.get(chainId);
         // §35.10: a stored null strategy follows the release default,
         // resolved against the chain descriptor.
-        const chainFees = resolveFeeConfig(settings.fees[chainId], desc);
+        const chainFees = resolveFeeConfig(chainFeeSettings, desc);
         // Display unit comes from the descriptor's declared feeStrategy.unit
         // (one home), never from a coin-name check here.
         const tableUnit = resolveFeeUnit(desc);
@@ -1125,10 +1677,14 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                 mode: 'custom',
                 customRate: settingsCustomToDisplayRate(tableUnit, chainFees.customSatsPerKb),
             });
-        } else if (['low', 'normal', 'fast'].includes(chainFees.strategy)) {
-            setFeePick({ mode: chainFees.strategy });
+        } else {
+            setFeePick({
+                mode: ['low', 'normal', 'fast'].includes(chainFees.strategy)
+                    ? chainFees.strategy
+                    : 'normal',
+            });
         }
-    }, [chainId, settings]);
+    }, [chainId, chainFeeSettings]);
 
     // §44.3 RBF toggle. The per-send preference seeds from the chain's
     // resolved fee config; the encoder turns `rbf` into BIP125 input
@@ -1182,6 +1738,18 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         return estimateNativeSendFee({ chainId, chainRegistry, speed: feePick.mode });
     }, [chainId, feePick, feeTiers]);
 
+    const coinControlChange = useMemo(() => {
+        const ticker = nativeTickerFor(descriptor) || '';
+        if (selectedUtxos.length === 0) return `0 ${ticker}`.trim();
+        if (!isNativeSend) return 'Calculated during review';
+        const amountSats = exactSatsBigIntFromDecimalString(amount, descriptor);
+        const feeSats = utxoValueSats({ value: feeEstimate?.sats });
+        if (amountSats === null || feeSats === null) return 'Enter an amount to estimate';
+        const changeSats = selectedUtxoTotalSats - amountSats - feeSats;
+        if (changeSats < 0n) return 'Selected inputs do not cover this payment';
+        return `${decimalStringFromSats(changeSats, descriptor)} ${ticker}`.trim();
+    }, [amount, descriptor, feeEstimate?.sats, isNativeSend, selectedUtxoTotalSats, selectedUtxos.length]);
+
     // The picked rate converted to the encoder's feePerKb unit (smallest-unit
     // per KB), so the tier/custom choice actually prices the broadcast tx (not
     // just the on-screen estimate). Null when there's no usable estimate (e.g.
@@ -1202,12 +1770,95 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         if (!previewBalances.sdkShape) return null;
         const tickUpper = tick.trim().toUpperCase();
         if (!tickUpper) return null;
+        const decoded = decoderLib.balancesFromSdk(previewBalances.sdkShape)
+            .find((balance) => balance.tick === tickUpper);
+        if (!decoded) return null;
         const native = previewBalances.sdkShape.native;
-        if (native && String(native.tick || '').toUpperCase() === tickUpper) {
-            return decoderLib.balancesFromSdk(previewBalances.sdkShape).find((b) => b.tick === tickUpper) || null;
-        }
-        return decoderLib.balancesFromSdk(previewBalances.sdkShape).find((b) => b.tick === tickUpper) || null;
+        const rawAsset = native && String(native.tick || '').toUpperCase() === tickUpper
+            ? native
+            : (previewBalances.sdkShape.tokens || [])
+                .find((token) => String(token?.tick || '').toUpperCase() === tickUpper);
+        const divisibility = Number(rawAsset?.divisibility);
+        return {
+            ...decoded,
+            divisibility: Number.isInteger(divisibility) && divisibility >= 0
+                ? divisibility
+                : undefined,
+        };
     }, [previewBalances.sdkShape, tick]);
+
+    const unusualSendWarnings = useMemo(() => {
+        const exactFeeSats = confirmAction.composed?.networkFeeSats;
+        const feeAmount = Number.isSafeInteger(exactFeeSats) && exactFeeSats >= 0
+            ? decimalStringFromSats(BigInt(exactFeeSats))
+            : feeEstimate?.coinAmount;
+        const balances = previewBalances.sdkShape
+            ? decoderLib.balancesFromSdk(previewBalances.sdkShape)
+            : [];
+        return getUnusualSendWarnings({
+            sendTotals,
+            balances,
+            feeAmount,
+            nativeTicker: nativeTickerFor(descriptor),
+            isNativeSend,
+        });
+    }, [
+        confirmAction.composed?.networkFeeSats, feeEstimate?.coinAmount,
+        previewBalances.sdkShape, sendTotals, descriptor, isNativeSend,
+    ]);
+    const nativeSourceBalance = useMemo(() => {
+        if (!previewBalances.sdkShape) return null;
+        const nativeTicker = String(previewBalances.sdkShape.native?.tick || '').toUpperCase();
+        if (!nativeTicker) return null;
+        return decoderLib.balancesFromSdk(previewBalances.sdkShape)
+            .find((balance) => String(balance.tick || '').toUpperCase() === nativeTicker) || null;
+    }, [previewBalances.sdkShape]);
+
+    const [otherAddressHasTick, setOtherAddressHasTick] = useState(
+        /** @type {boolean | null} */ (null),
+    );
+    useEffect(() => {
+        const tickUpper = tick.trim().toUpperCase();
+        if (!chainId || !fromAddress || !addressesByChain || !tickUpper
+            || previewBalances.loading || previewBalances.error || !previewBalances.sdkShape) {
+            setOtherAddressHasTick(null);
+            return undefined;
+        }
+        if (sourceBalance) {
+            const held = compareDecimalStrings(String(sourceBalance.amount || '0'), '0');
+            if (held === null || held > 0) {
+                setOtherAddressHasTick(null);
+                return undefined;
+            }
+        }
+
+        const others = (addressesByChain[chainId] || [])
+            .filter((address) => address.address !== fromAddress.address);
+        if (others.length === 0) {
+            setOtherAddressHasTick(false);
+            return undefined;
+        }
+
+        let cancelled = false;
+        setOtherAddressHasTick(null);
+        Promise.all(others.map((address) =>
+            messaging.getAddressBalances(chainId, address.address)))
+            .then((balancesByAddress) => {
+                if (cancelled) return;
+                const hasTick = balancesByAddress.some((sdkShape) => {
+                    const balance = decoderLib.balancesFromSdk(sdkShape)
+                        .find((row) => String(row.tick || '').toUpperCase() === tickUpper);
+                    if (!balance) return false;
+                    const held = compareDecimalStrings(String(balance.amount || '0'), '0');
+                    return held !== null && held > 0;
+                });
+                setOtherAddressHasTick(hasTick);
+            })
+            .catch(() => {
+                if (!cancelled) setOtherAddressHasTick(null);
+            });
+        return () => { cancelled = true; };
+    }, [chainId, fromAddress, addressesByChain, tick, previewBalances, sourceBalance, messaging]);
 
     // The asset picker is wallet-scoped, the funding is address-scoped, and this
     // is where they disagree. A WARNING rather than a refusal, deliberately: the only
@@ -1218,14 +1869,20 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
     const sourceLacksTick = useMemo(() => {
         if (previewBalances.loading || previewBalances.error || !previewBalances.sdkShape) return null;
         const tickUpper = tick.trim().toUpperCase();
-        if (!tickUpper || sourceBalance) return null;
+        // A native coin always comes back as a row, holding "0" when empty, so a
+        // zero amount counts as none too (an empty BTC address on a phone showed
+        // "0 BTC available" and no warning until the encoder refused the send).
+        if (!tickUpper) return null;
+        if (sourceBalance) {
+            const held = compareDecimalStrings(String(sourceBalance.amount || '0'), '0');
+            if (held === null || held > 0) return null;
+        }
+        if (otherAddressHasTick === false) {
+            return 'This wallet has no funds to send yet. Open Receive to add funds first.';
+        }
         return `This address holds no ${tickUpper}. A send spends from one address, not from the `
             + 'whole wallet, so pick the address that holds it in the From field above.';
-    }, [previewBalances, sourceBalance, tick]);
-
-    // Max is a round trip now, so the button has to be able to say it is
-    // working. The wait is one encoder call, but it is a real one.
-    const [maxBusy, setMaxBusy] = useState(false);
+    }, [previewBalances, sourceBalance, tick, otherAddressHasTick]);
 
     /**
      * The amount to fill in for "send everything", priced by the encoder that
@@ -1251,7 +1908,6 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         // one. Before it is filled the static estimate stands, exactly as before.
         const to = toAddress.trim();
         if (!to || destinationAddressError(to, descriptor)) return null;
-        setMaxBusy(true);
         try {
             const quote = await messaging.quoteMaxSendable({
                 walletId,
@@ -1266,52 +1922,125 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                 },
                 to,
                 rbf: rbfForSend,
+                ...(changeAddress ? { change: changeAddress.address } : {}),
+                ...(coinControlEnabled ? { utxos: selectedUtxos } : {}),
                 ...(feePerKb != null ? { feePerKb } : {}),
             });
             if (!quote || typeof quote.maxSats !== 'string') return null;
             const sats = BigInt(quote.maxSats);
-            return sats > 0n ? sats : null;
+            return sats >= 0n ? { ...quote, maxSats: sats } : null;
         } catch {
             // A quote is an optimisation, never a gate: a failed one must not be
             // able to stop the user filling the field.
             return null;
-        } finally {
-            setMaxBusy(false);
         }
-    }, [isNativeSend, chainId, fromAddress, toAddress, descriptor, walletId, rbfForSend, feePerKb]);
+    }, [
+        isNativeSend, chainId, fromAddress, toAddress, descriptor, walletId, rbfForSend,
+        changeAddress, coinControlEnabled, selectedUtxos, feePerKb,
+    ]);
 
-    const onMax = useCallback(async () => {
-        if (maxBusy) return; // a quote is already in flight; a second one would race it into the field
+    const applyMax = useCallback(async () => {
         if (!sourceBalance || !sourceBalance.amount) return;
+        const requestId = maxRequestRef.current + 1;
+        maxRequestRef.current = requestId;
+        setMaxBusy(true);
         let display;
+        let note;
         if (isNativeSend) {
             // Exact string/BigInt math: this string is what gets signed, and a
             // parseFloat round-trip on a large (>~90M-sat DOGE) balance drifts
             // by whole sats, leaving dust behind or overshooting the balance.
-            const balanceSats = exactSatsBigIntFromDecimalString(sourceBalance.amount);
-            if (balanceSats == null || balanceSats <= 0n) return;
+            const balanceSats = exactSatsBigIntFromDecimalString(sourceBalance.amount, descriptor);
+            if (balanceSats == null || balanceSats <= 0n) {
+                setAmount('');
+                setFiatAmount('');
+                setMaxUnavailable(true);
+                setMaxNote('There is no spendable balance, so Max cannot create a payment.');
+                setMaxBusy(false);
+                return;
+            }
             let maxSats = balanceSats;
             const quoted = await quoteMaxSats();
+            if (!mountedRef.current || requestId !== maxRequestRef.current) return;
             if (quoted != null) {
-                maxSats = quoted;
+                maxSats = quoted.maxSats;
             } else if (feeEstimate) {
-                const feeSats = exactSatsBigIntFromDecimalString(feeEstimate.coinAmount);
+                const feeSats = exactSatsBigIntFromDecimalString(feeEstimate.coinAmount, descriptor);
                 if (feeSats != null) maxSats = balanceSats > feeSats ? balanceSats - feeSats : 0n;
             }
-            display = decimalStringFromSats(maxSats);
+            const floor = BigInt(dustThresholdForCoin(descriptor?.coin) || 0);
+            const tickerUpper = nativeTickerFor(descriptor) || tick.trim().toUpperCase();
+            if (maxSats <= 0n || (floor > 0n && maxSats < floor)) {
+                setAmount('');
+                setFiatAmount('');
+                setMaxUnavailable(true);
+                setMaxNote(maxSats <= 0n
+                    ? 'The selected network fee uses the available balance, so Max cannot create a payment.'
+                    : `The spendable balance after the selected network fee is below the ${decimalStringFromSats(floor, descriptor)} `
+                        + `${tickerUpper} dust minimum, so Max cannot create a payment.`);
+                setMaxBusy(false);
+                return;
+            }
+            display = nativeDecimalsFor(descriptor) === 8
+                ? decimalStringFromSats(maxSats)
+                : decimalStringFromSats(maxSats, descriptor);
+            note = 'Max sends the spendable balance after the selected network fee. '
+                + 'A coin amount that costs more to spend than it is worth may remain at this address.';
         } else {
             // A TOKEN balance is not satoshi-denominated and pays no coin fee out of itself,
             // so it is swept verbatim at the tick's own divisibility. The 8-dp sats path
             // truncated anything finer.
             display = exactTokenMaxAmount(sourceBalance.amount);
-            if (display == null) return;
+            if (display == null) {
+                setMaxBusy(false);
+                return;
+            }
+            const nativeTicker = nativeTickerFor(descriptor) || 'native coin';
+            const feeAmount = feeEstimate?.coinAmount;
+            const nativeAmount = nativeSourceBalance?.amount;
+            const feeSats = feeAmount ? exactSatsBigIntFromDecimalString(feeAmount) : null;
+            const nativeSats = nativeAmount ? exactSatsBigIntFromDecimalString(nativeAmount) : null;
+            if (feeSats != null && nativeSats != null && nativeSats < feeSats) {
+                note = `Max sends the full ${tick.trim().toUpperCase()} balance without spending it on fees. `
+                    + `This address has ${nativeAmount} ${nativeTicker}, below the estimated ${feeAmount} `
+                    + `${nativeTicker} network fee.`;
+            } else {
+                note = `Max sends the full ${tick.trim().toUpperCase()} balance and keeps the native coin `
+                    + `separate for the network fee${feeAmount ? ` (estimated ${feeAmount} ${nativeTicker})` : ''}.`;
+            }
         }
+        if (requestId !== maxRequestRef.current) return;
+        setMaxUnavailable(false);
         setAmount(display);
+        setMaxNote(note);
         if (amountInputMode === 'fiat' && amountFiatRate) {
-            const fv = coinToFiat(display, amountFiatRate);
-            setFiatAmount(fv != null ? fv.toFixed(2) : '');
+            const value = coinToFiatExact(display, amountFiatRate);
+            setFiatAmount(value != null ? roundDecimalString(value, 2) : '');
         }
-    }, [maxBusy, sourceBalance, isNativeSend, feeEstimate, quoteMaxSats, amountInputMode, amountFiatRate]);
+        if (requestId === maxRequestRef.current) setMaxBusy(false);
+    }, [
+        sourceBalance, isNativeSend, quoteMaxSats, feeEstimate, descriptor, tick,
+        nativeSourceBalance, amountInputMode, amountFiatRate,
+    ]);
+
+    const maxContext = [
+        chainId || '', fromAddress?.address || '', toAddress.trim(), tick.trim().toUpperCase(),
+        feePerKb ?? 'default', rbfForSend ? 'rbf' : 'final', changeAddress?.address || '',
+        coinControlEnabled ? [...selectedUtxoKeys].sort().join(',') : 'all',
+    ].join('|');
+
+    const onMax = useCallback(() => {
+        if (maxBusy) return;
+        setMaxActive(true);
+        maxContextRef.current = maxContext;
+        applyMax();
+    }, [maxBusy, maxContext, applyMax]);
+
+    useEffect(() => {
+        if (!maxActive || maxContextRef.current === maxContext) return;
+        maxContextRef.current = maxContext;
+        applyMax();
+    }, [maxActive, maxContext, applyMax]);
 
     // PC-52: the simulator models ONE leg. For a multi-recipient send of a
     // single token that is still exact (the source-side delta is the sum, and
@@ -1351,12 +2080,15 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
 
     function handleReview(event) {
         event.preventDefault();
+        if (networkOffline || maxUnavailable) return;
+        setValidationAttempt((attempt) => attempt + 1);
         if (!chainId || !fromAddress) {
-            setFormError('Pick a source address first.');
+            setFormError('Choose the address to send from.');
             return;
         }
         if (!toAddress.trim()) {
-            setFormError('Destination address is required.');
+            const message = 'Enter a recipient address.';
+            setFormError(message);
             return;
         }
         const addressError = destinationAddressError(toAddress, descriptor);
@@ -1366,11 +2098,11 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
             return;
         }
         if (!tick.trim()) {
-            setFormError('Token ticker is required.');
+            setFormError('Choose a token.');
             return;
         }
         const amt = String(amount).trim();
-        if (!amt || Number(amt) <= 0) {
+        if (!isPositiveDecimalAmount(amt)) {
             setFormError('Amount must be a positive number.');
             return;
         }
@@ -1383,7 +2115,15 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
             return;
         }
         if (/[|;]/.test(memo)) {
-            setFormError('Memo cannot contain | or ; characters.');
+            setFormError(t('send.memoForbiddenChars'));
+            return;
+        }
+        if (memoTooLong) {
+            setFormError(memoTooLong);
+            return;
+        }
+        if (coinControlEnabled && selectedUtxos.length === 0) {
+            setFormError('Choose at least one payment input.');
             return;
         }
         // PC-52: the extra recipients get the same checks the first one gets.
@@ -1394,34 +2134,34 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
             setFormError(nativeMultiSendBlock);
             return;
         }
+        const nextRecipientErrors = {};
         for (let i = 0; i < extraLegs.length; i += 1) {
             const leg = extraLegs[i];
             const label = `Recipient ${i + 2}`;
+            const rowErrors = {};
             if (!leg.to.trim()) {
-                setFormError(`${label}: address is required.`);
-                return;
-            }
-            const legAddressError = destinationAddressError(leg.to, descriptor);
-            if (legAddressError) {
-                setFormError(`${label}: ${legAddressError}`);
-                return;
-            }
-            if (perRecipientToken && !leg.tick.trim()) {
-                setFormError(`${label}: token is required.`);
-                return;
+                rowErrors.to = `${label}: address is required.`;
+            } else {
+                const legAddressError = destinationAddressError(leg.to, descriptor);
+                if (legAddressError) rowErrors.to = `${label}: ${legAddressError}`;
             }
             const legAmount = String(leg.amount).trim();
-            if (!legAmount || Number(legAmount) <= 0) {
-                setFormError(`${label}: amount must be a positive number.`);
-                return;
+            if (!isPositiveDecimalAmount(legAmount)) {
+                rowErrors.amount = `${label}: amount must be a positive number.`;
             }
+            if (Object.keys(rowErrors).length > 0) nextRecipientErrors[leg.id] = rowErrors;
+        }
+        setRecipientErrors(nextRecipientErrors);
+        if (Object.keys(nextRecipientErrors).length > 0) {
+            setFormError(null);
+            return;
         }
         // PC-26: no unlock key held for a gated tick = the network would
         // reject the send anyway; stop it here with the recovery path
         // visible instead of surfacing a compose error later.
         if (gatedInfo?.state === 'blocked') {
             setFormError(
-                `${tick.trim().toUpperCase()} has token-gated content and this wallet holds none of its unlock keys. `
+                `${tick.trim().toUpperCase()} includes protected content, but this wallet has none of its unlock keys. `
                 + 'Recover the keys below before sending.',
             );
             return;
@@ -1436,8 +2176,8 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         // value of this gate is that it cannot be walked past by accident.
         if (testSendGate) {
             setFormError(
-                'This is your first send to this address. Send a small test first, '
-                + 'or choose "I\'ve verified, continue" above.',
+                'This is your first payment to this address. Send a small test first, '
+                + 'or choose "Continue with the full amount" above.',
             );
             return;
         }
@@ -1446,21 +2186,25 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         // single-encode confirm modal instead of the legacy review stage.
         // brought hardware in with them; watcher still branches.
         if (!isWatcherMode) {
-            openConfirmModal();
+            void openConfirmModal();
             return;
         }
         setStage('review');
     }
 
     const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
-    // §20 / G040: watcher mode skips signing + broadcast and produces an
-    // unsigned PSBT for transport to a Signer-mode wallet. Read with the
-    // explicit default fallback so v2 records without the field behave
-    // like 'full' (the broadcast path).
-    // `isSignerMode` is the route's own refusal. Gating the nav is
-    // not enough - a command-palette entry, a `xchain:` URI intent, and a
-    // restored view state all reach this component without passing a nav rail.
-    const { isWatcherMode, isSignerMode } = useWalletMode();
+    const hasNovelSendRecipient = useMemo(() => {
+        const desc = chainId ? chainRegistry.get(chainId) : null;
+        if (!isHwSource || !desc?.coin) return false;
+        const sendLegs = [{ to: toAddress }, ...extraLegs.map((leg) => ({ to: leg.to }))];
+        const recipientNovel = sendLegs.some((leg) => leg.to.trim() && checkRecipientNovelty({
+            address: leg.to,
+            chainCoin: desc.coin,
+            contacts,
+            historyRows,
+        }).novel === true);
+        return recipientNovel;
+    }, [isHwSource, toAddress, extraLegs, chainId, contacts, historyRows]);
     const hwSignerInfo = useSignerInfo({
         walletId,
         signerId: isHwSource ? fromAddress?.signerId : null,
@@ -1479,35 +2223,22 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         if (!isHwSource) return { requireExplicitConfirm: false, reason: null };
         const desc = chainId ? chainRegistry.get(chainId) : null;
         const nativeTicker = nativeTickerFor(desc);
-        const sats = exactSatsBigIntFromDecimalString(amount);
+        const sats = exactSatsBigIntFromDecimalString(amount, desc);
         const isNativeSend = !!nativeTicker
             && tick.trim().toUpperCase() === nativeTicker
             && sats !== null && sats > 0n;
         const amountSats = isNativeSend ? sats : 0n;
-        let recipientNovel = false;
-        // PC-52: ANY never-seen recipient makes the send novel, not just the
-        // first row. The cross-check exists so a hardware user verifies an
-        // unfamiliar address on the device, and a multi-recipient send has more
-        // addresses to get wrong, not fewer.
-        if (desc?.coin) {
-            recipientNovel = sendLegs.some((leg) => leg.to && checkRecipientNovelty({
-                address: leg.to,
-                chainCoin: desc.coin,
-                contacts,
-                historyRows,
-            }).novel === true);
-        }
         return classifySignRisk({
             signerKind: fromAddress?.source,
             amountSats,
-            recipientNovel,
+            recipientNovel: hasNovelSendRecipient,
             multisig: false, // Send.jsx is single-sig; multisig flow is separate.
             settings: {
                 testSendThresholdSats: settings?.grace?.testSendThresholdSats ?? '0',
                 alwaysRequireHwExplicitConfirm: settings?.privacy?.alwaysRequireHwExplicitConfirm === true,
             },
         });
-    }, [isHwSource, fromAddress?.source, chainId, tick, amount, sendLegs, contacts, historyRows, settings]);
+    }, [isHwSource, fromAddress?.source, chainId, tick, amount, hasNovelSendRecipient, settings]);
     // Reset the confirm state whenever the requirement flips on, so a
     // user can't carry a stale "yes" through a recipient/amount change.
     // Editing ANY recipient row counts as that change (PC-52).
@@ -1528,34 +2259,38 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
     // preflight over messaging); Approve signs the byte-identical prebuilt
     // PSBT via sendToken.prebuiltPsbt. Resolves with sendToken's result.
     const openConfirmModal = useCallback(async () => {
-        if (!chainId || !fromAddress) return;
-        const from = {
-            address: fromAddress.address,
-            publicKey: fromAddress.publicKey,
-            derivationPath: fromAddress.derivationPath,
-            addressId: fromAddress.id,
-            source: fromAddress.source,
-            signerId: fromAddress.signerId,
-        };
-        const sendBase = {
-            walletId,
-            chainId,
-            from,
-            to: toAddress.trim(),
-            tick: tick.trim(),
-            amount: String(amount).trim(),
-            memo: isNativeSend ? undefined : (memo.trim() || undefined),
-            rbf: rbfForSend,
-            ...(feePerKb != null ? { feePerKb } : {}),
-            // PC-52: `legs` supersedes to/tick/amount host-side. Sent only for a
-            // real multi-recipient send so a single send composes the identical
-            // v0 bytes it always has.
-            ...(isMultiSend ? { legs: sendLegs } : {}),
-        };
-        setSubmitError(null);
-        setSubmitErrorDetail(null);
-        setSubmitErrorCause(null);
+        if (!chainId || !fromAddress || confirmLaunchRef.current) return;
+        confirmLaunchRef.current = true;
         try {
+            const from = {
+                address: fromAddress.address,
+                publicKey: fromAddress.publicKey,
+                derivationPath: fromAddress.derivationPath,
+                addressId: fromAddress.id,
+                source: fromAddress.source,
+                signerId: fromAddress.signerId,
+            };
+            const sendBase = {
+                walletId,
+                ...(accountId ? { accountId } : {}),
+                chainId,
+                from,
+                to: toAddress.trim(),
+                tick: tick.trim(),
+                amount: String(amount).trim(),
+                memo: isNativeSend ? undefined : (memo.trim() || undefined),
+                rbf: rbfForSend,
+                ...(changeAddress ? { change: changeAddress.address } : {}),
+                ...(coinControlEnabled ? { utxos: selectedUtxos } : {}),
+                ...(feePerKb != null ? { feePerKb } : {}),
+                // PC-52: `legs` supersedes to/tick/amount host-side. Sent only for a
+                // real multi-recipient send so a single send composes the identical
+                // v0 bytes it always has.
+                ...(isMultiSend ? { legs: sendLegs } : {}),
+                ...(createUndoSendRequest(settings) || {}),
+            };
+            setSubmitError(null);
+            setSubmitErrorCause(null);
             const res = await confirmAction.confirm({
                 chainId,
                 source: from.address,
@@ -1618,6 +2353,11 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                     // The shared mapping: a multi-recipient send takes the chunk
                     // lane, so its deferred outputs and any envelope must ride along.
                     const prebuiltPsbt = prebuiltPsbtFromComposed(composed);
+                    if (sendBase.holdId && sendBase.undoSeconds) {
+                        undoHoldIdRef.current = sendBase.holdId;
+                        setUndoHoldActive(true);
+                        startUndoSend(sendBase.undoSeconds);
+                    }
                     return isHwSource
                         ? messaging.sendAssetHw({
                             ...sendBase, signerId: fromAddress.signerId, prebuiltPsbt,
@@ -1627,36 +2367,50 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                         });
                 },
             });
-            setResult(res);
-            setPassword('');
+            recordLastUsedChain(messaging, chainId);
             draft.clear();
-            setDraftPending(false);
+            if (!mountedRef.current) return;
             setStage('done');
             haptic.success();
-            recordLastUsedChain(messaging, chainId);
+            setResult(res);
+            clearUndoHold();
+            setPassword('');
+            setDraftPending(false);
         } catch (err) {
-            // User rejection is a calm no-op: stay on the form untouched.
+            if (!mountedRef.current) return;
+            if (isUndoSendCancellation(err)) {
+                clearUndoHold();
+                setFormError(null);
+                setPassword('');
+                setStage('form');
+                showToast({ message: 'Transaction cancelled.' });
+                return;
+            }
+            // Rejection returns to the intact draft without carrying a signing
+            // credential into the next review.
             if (err && (err.reason === 'user-rejected' || err.name === 'UserRejectedError')) {
+                setPassword('');
                 return;
             }
             // Everything else (compose/tamper failure, bad password, broadcast
             // failure) surfaces in the form's existing error banner; the modal
             // has already unmounted (terminal phase leaves CONFIRM_MODAL_PHASES).
-            const rawMsg = err?.message || '';
             console.error('Send (confirm) failed:', err); // eslint-disable-line no-console
-            const h = humanizeError(err, 'send');
-            setFormError(h.message);
+            setSubmitError(submitFailureMessage(err, { verb: 'send' }));
             haptic.error();
+        } finally {
+            confirmLaunchRef.current = false;
         }
     }, [
         chainId, fromAddress, walletId, toAddress, tick, amount, memo, rbfForSend,
-        feePerKb, password, settings, messaging, confirmAction, draft, haptic,
-        isHwSource, isMultiSend, sendLegs, sendTotals,
+        feePerKb, settings, messaging, confirmAction, draft, haptic,
+        isNativeSend, isHwSource, isMultiSend, sendLegs, sendTotals, startUndoSend,
+        clearUndoHold, showToast, changeAddress, coinControlEnabled, selectedUtxos,
     ]);
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
+        if (networkOffline || stage === 'submitting' || submitInFlightRef.current) return;
         if (!isWatcherMode) {
             if (!isHwSource && !signerReady && password.length === 0) return;
             if (isHwSource && hwStatus !== 'available') return;
@@ -1665,9 +2419,9 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
             // hasn't checked the box.
             if (isHwSource && signRisk.requireExplicitConfirm && !hwExplicitConfirmed) return;
         }
+        submitInFlightRef.current = true;
         setStage('submitting');
         setSubmitError(null);
-        setSubmitErrorDetail(null);
         setSubmitErrorCause(null);
         try {
             const base = {
@@ -1686,10 +2440,13 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                 amount: String(amount).trim(),
                 memo: isNativeSend ? undefined : (memo.trim() || undefined),
                 rbf: rbfForSend,
+                ...(changeAddress ? { change: changeAddress.address } : {}),
+                ...(coinControlEnabled ? { utxos: selectedUtxos } : {}),
                 ...(feePerKb != null ? { feePerKb } : {}),
                 // PC-52: multi-recipient legs, on the watcher and HW paths too
                 // (buildSendPsbt and the HW send handler take the same shape).
                 ...(isMultiSend ? { legs: sendLegs } : {}),
+                ...(!isWatcherMode ? (createUndoSendRequest(settings) || {}) : {}),
             };
             // §20 / G040: watcher mode encodes only. No password, no signer,
             // no broadcast. The result envelope carries `psbtHex` instead of
@@ -1707,23 +2464,24 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
             } else {
                 res = await messaging.sendToken({ ...base, password });
             }
-            setResult(res);
-            setPassword('');
+            recordLastUsedChain(messaging, chainId);
             draft.clear();
-            setDraftPending(false);
+            if (!mountedRef.current) return;
             setStage('done');
             haptic.success();
-            recordLastUsedChain(messaging, chainId);
+            setResult(res);
+            setPassword('');
+            setDraftPending(false);
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
             const rawMsg = err?.message || '';
             const isUserCancel = !isBadPassword && USER_CANCEL_RE.test(rawMsg);
+            if (!mountedRef.current) return;
             if (isUserCancel) {
                 // §30.5: user-initiated cancel returns to the composing
                 // form with a dismissible "Transaction cancelled." toast.
                 // Form values stay intact so the user can edit and retry.
                 setSubmitError(null);
-                setSubmitErrorDetail(null);
                 setSubmitErrorCause(null);
                 setPassword('');
                 setStage('form');
@@ -1732,39 +2490,51 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
             }
             if (isBadPassword) {
                 setSubmitError('Incorrect password.');
-                setSubmitErrorDetail(null);
                 setSubmitErrorCause(null);
             } else {
-                // #2505: lead with plain-language copy; keep the raw
-                // backend/SDK/RPC message for logs + a collapsible detail.
                 console.error('Send failed:', err); // eslint-disable-line no-console
-                const h = humanizeError(err, 'send');
-                setSubmitError(h.message);
-                setSubmitErrorDetail(rawMsg && rawMsg !== h.message ? rawMsg : null);
-                setSubmitErrorCause(h.cause);
+                const message = submitFailureMessage(err, { verb: 'send' });
+                setSubmitError(message);
+                setSubmitErrorCause(humanizeError(err, 'send').cause);
             }
             setStage('review');
             haptic.error();
-            if (!isHwSource) {
-                passwordRef.current?.focus();
-                passwordRef.current?.select();
-            }
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 
     const header = (
         <PageHeader
-            onBack={onBack}
-            backLabel="Back to home"
-            title={stage === 'review' || stage === 'submitting' ? 'Review & Send' : 'Send'}
+            onBack={stage === 'review'
+                ? () => { setSubmitError(null); setPassword(''); setStage('form'); }
+                : leaveGuard.guardedOnBack}
+            backDisabled={stage === 'submitting'}
+            backLabel={stage === 'review' ? t('send.backToEdit') : t('common.backToHome')}
+            title={stage === 'review' || stage === 'submitting' ? t('send.review') : t('send.title')}
             titleIcon={<Icon.SendIcon />}
+            titleRef={stage === 'review' ? reviewHeadingRef : undefined}
         />
     );
 
     const wrap = (children, footer = null) => (
-        <Screen variant={variant} header={header}>
+        <Screen
+            rootRef={reviewPageRef}
+            variant={variant}
+            header={header}
+            restoreScroll={!(stage === 'review' || stage === 'submitting')}
+        >
             {children}
             {footer}
+            {leaveGuard.confirmation}
+            {demoExitConfirmOpen ? (
+                <DemoExitConfirm
+                    busy={demoExitBusy}
+                    error={demoExitError}
+                    onConfirm={handleExitDemo}
+                    onCancel={() => { setDemoExitConfirmOpen(false); setDemoExitError(null); }}
+                />
+            ) : null}
         </Screen>
     );
 
@@ -1779,29 +2549,37 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
     const testSendGateBanner = testSendGate ? (
         <div role="alert" className={styles.testSendGate}>
             <p className={styles.testSendTitle}>
-                First send to this address. Test it first?
+                {t('send.testGate.title')}
             </p>
             <p className={styles.testSendBody}>
-                You're sending {decimalStringFromSats(BigInt(testSendGate.amountSats))} {testSendGate.ticker} to
-                a new recipient. A small test send confirms the address
-                works before the full amount goes out.
+                {t('send.testGate.body', {
+                    amount: decimalStringFromSats(BigInt(testSendGate.amountSats), descriptor),
+                    ticker: testSendGate.ticker,
+                })}
             </p>
             <div className={styles.testSendActions}>
-                <Button
-                    type="button"
-                    variant="primary"
-                    onClick={onSendSmallTest}
-                >
-                    Send a small test first
-                </Button>
                 <Button
                     type="button"
                     variant="secondary"
                     onClick={() => markTested(toAddress.trim())}
                 >
-                    I've verified, continue
+                    {t('send.testGate.continue')}
+                </Button>
+                <Button
+                    type="button"
+                    variant="primary"
+                    onClick={onSendSmallTest}
+                >
+                    {t('send.testGate.sendSmall')}
                 </Button>
             </div>
+        </div>
+    ) : null;
+    const unusualSendWarningBlock = unusualSendWarnings.length > 0 ? (
+        <div role="alert" className={styles.warnings} data-testid="send-unusual-warnings">
+            {unusualSendWarnings.map((warning) => (
+                <p key={warning} className={styles.warning}>{warning}</p>
+            ))}
         </div>
     ) : null;
 
@@ -1813,17 +2591,61 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
     if (isSignerMode) {
         return wrap(
             <StatusMessage variant="status">
-                This wallet is in signer mode, so it does not send or broadcast.
-                It signs transactions passed in from a watcher wallet. Switch the
-                mode under Settings, Wallet Mode to send from this device.
+                {t('send.signerMode')}
             </StatusMessage>,
+        );
+    }
+    if (networkSettingsOpen) {
+        return (
+            <Settings
+                onBack={() => setNetworkSettingsOpen(false)}
+                activeWallet={{ id: walletId }}
+                initialSubpageId="network"
+            />
+        );
+    }
+    if (!hasAvailableChain({ settings }, chainRegistry)) {
+        return wrap(
+            <EmptyState
+                title={NO_CHAINS_TITLE}
+                body={NO_CHAINS_BODY}
+                actionLabel={t('common.openNetworkSettings')}
+                onAction={() => setNetworkSettingsOpen(true)}
+                actionIcon={<Icon.GearIcon />}
+            />,
         );
     }
     if (loadError) {
         return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
     }
     if (!addressesByChain || !chainId) {
-        return wrap(<p className={styles.hint}>Loading…</p>);
+        return wrap(<p className={styles.hint}>{t('common.loading')}</p>);
+    }
+    // Switching chains after a first check keeps the form mounted (typed or
+    // pasted values stay put) while the new chain is checked.
+    const selectedChainBalanceStatus = chainBalanceState.chainId === chainId
+        ? chainBalanceState.status
+        : (chainBalanceState.chainId === null ? 'loading' : 'unknown');
+    if (selectedChainBalanceStatus !== 'loading') balanceGateSettledRef.current = true;
+    // Only the first balance check holds the form back. A later chain switch
+    // (a pasted payment request, the asset picker) sets the new chain to
+    // loading too, and the form must stay mounted through that as well.
+    if (!isWatcherMode && selectedChainBalanceStatus === 'loading' && !balanceGateSettledRef.current) {
+        return wrap(<p className={styles.hint}>{t('common.loading')}</p>);
+    }
+    if (!isWatcherMode && selectedChainBalanceStatus === 'empty') {
+        return wrap(
+            <FormPage as="div" label={t('send.title')}>
+                <EmptyState
+                    title={t('send.empty.title')}
+                    body={t('send.empty.body')}
+                    icon={<Icon.ReceiveIcon />}
+                    actionLabel={onReceive ? t('home.receive') : undefined}
+                    onAction={onReceive}
+                    actionIcon={<Icon.ReceiveIcon />}
+                />
+            </FormPage>,
+        );
     }
 
     // confirm page, rendered in place of the form (operator
@@ -1844,7 +2666,10 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                 chainLabel={descriptor?.displayName || chainId}
                 // Fallback only: the composed PSBT's exact fee wins (§5.2.5).
                 feeText={feeEstimate?.coinAmount
-                    ? `Network fee: ${feeEstimate.coinAmount} ${nativeTickerFor(descriptor) || ''}`.trim()
+                    ? t('send.networkFeeValue', {
+                        amount: feeEstimate.coinAmount,
+                        ticker: nativeTickerFor(descriptor) || '',
+                    }).trim()
                     : undefined}
                 signerReady={signerReady}
                 password={password}
@@ -1863,7 +2688,23 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                 getSignerStatus={messaging.getSignerStatus}
                 hwRequireExplicitConfirm={signRisk.requireExplicitConfirm}
                 hwRequireExplicitConfirmReason={signRisk.reason}
-                extraCredentials={dispenserNoticeBlock}
+                extraCredentials={(
+                    <>
+                        {unusualSendWarningBlock}
+                        {dispenserNoticeBlock}
+                        <dl className={styles.advancedReviewList} aria-label={t('send.advanced.label')}>
+                            <DetailRow label={t('send.memo')} value={trimmedMemo || t('send.advanced.none')} />
+                            <DetailRow label={t('send.advanced.feeBumping')} value={rbfForSend ? t('send.advanced.allowed') : t('send.advanced.notAllowed')} />
+                            <DetailRow label={t('send.advanced.coinControl')} value={coinControlLabel} />
+                            <DetailRow label={t('send.advanced.changeAddress')} value={changeAddressLabel} />
+                        </dl>
+                        <UndoSendToast
+                            status={undoHoldActive ? undoSendStatus : 'idle'}
+                            remaining={undoSendRemaining}
+                            onCancel={cancelUndoSend}
+                        />
+                    </>
+                )}
                 onHwConfirmedChange={setHwExplicitConfirmed}
                 hwExplicitConfirmed={hwExplicitConfirmed}
             />
@@ -1874,36 +2715,70 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         const txid = result?.txid || result?.broadcast?.txid;
         const desc = chainId ? chainRegistry.get(chainId) : null;
         const explorerBase = desc?.explorer?.defaultUrl || '';
-        // The explorer base is bare; append the coin path segment.
-        const explorerCode = explorerCoinCode(desc);
         const explorerUrl = txid && explorerBase
-            ? `${explorerBase.replace(/\/$/, '')}${explorerCode ? `/${explorerCode}` : ''}/tx/${txid}`
+            ? explorerPageUrl({
+                chainId,
+                kind: 'transaction',
+                value: txid,
+                settings,
+            })
             : null;
         const sentAmount = amount && tick ? `${amount} ${tick}` : null;
-        const recipient = toAddress
-            ? `${toAddress.slice(0, 8)}…${toAddress.slice(-6)}`
-            : null;
+        const recipient = toAddress || null;
         const sendAnother = () => {
+            cancelMax();
             setStage('form');
             setAmount('');
             setFiatAmount('');
             setToAddress('');
             setResult(null);
+            setContactSaveStage('idle');
+            setContactName('');
+            setContactSaveError(null);
             // previewResult is a derived useMemo (no setter): clearing the
             // amount/destination above already recomputes it. The old
             // setPreviewResult(null) call referenced a non-existent setter and
             // threw a ReferenceError the moment "Send another" was tapped.
         };
-        const copyTxid = () => {
-            if (!txid) return;
-            try { navigator.clipboard?.writeText(txid); } catch { /* best effort */ }
+        const canSaveRecipient = Boolean(txid && toAddress && desc?.coin && !matchedContact);
+        const saveRecipient = async (event) => {
+            event.preventDefault();
+            if (contactSaveBusyRef.current) return;
+            const name = contactName.trim();
+            if (!name) {
+                setContactSaveError('Enter a contact name.');
+                return;
+            }
+            contactSaveBusyRef.current = true;
+            setContactSaveStage('saving');
+            setContactSaveError(null);
+            const entry = { chain: desc.coin, address: toAddress.trim(), label: '' };
+            const existing = findContactByName(contacts, name);
+            try {
+                const saved = existing
+                    ? await messaging.saveContact({ record: withEntriesAdded(existing, [entry]) })
+                    : await messaging.saveContact({ input: { name, notes: '', entries: [entry] } });
+                if (!mountedRef.current) return;
+                if (saved) {
+                    setContacts((current) => existing
+                        ? current.map((contact) => contact.id === existing.id ? saved : contact)
+                        : [...current, saved]);
+                }
+                setContactSaveStage('saved');
+            } catch {
+                if (!mountedRef.current) return;
+                setContactSaveError('Could not save this contact. Check your connection and try again.');
+                setContactSaveStage('editing');
+            } finally {
+                contactSaveBusyRef.current = false;
+            }
         };
 
         // §20 / G040: watcher mode result. The submit returned an unsigned
         // PSBT instead of a broadcast txid; render the export UI (paste +
         // animated QR) so the user can transport it to a Signer-mode wallet.
         if (result?.psbtHex && !txid) {
-            return wrap(<WatcherResultPanel result={result} onSendAnother={sendAnother} onDone={onBack} />);
+            return wrap(<WatcherResultPanel result={result} onSendAnother={sendAnother} onDone={onDone || leaveGuard.guardedOnBack} />);
         }
 
         // §5.3.4 TRANSIENT broadcast failure: the transaction IS signed and
@@ -1921,18 +2796,15 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         if (result?.queued) {
             return wrap(
                 <>
-                    <div className={styles.successCard} role="status" aria-live="polite">
-                        <div className={styles.successIcon} aria-hidden="true">⏳</div>
-                        <h2 className={styles.successTitle}>{SIGNED_NOT_BROADCAST_TITLE}</h2>
-                        <p className={styles.successHint}>
-                            Your transaction is signed but couldn&apos;t reach the network just now.
-                            It&apos;s waiting in the queued-transactions banner and won&apos;t go out
-                            until you broadcast it from there; the wallet reminds you when the
-                            network is back. Don&apos;t send this payment again.
-                        </p>
-                    </div>
-                    <div className={styles.actions}>
-                        <Button variant="primary" onClick={onBack}>Done</Button>
+                    <div role="status" aria-live="polite">
+                        <EmptyState
+                            role="presentation"
+                            icon={<Icon.ClockIcon />}
+                            title={SIGNED_NOT_BROADCAST_TITLE}
+                            body={t('send.queued.body')}
+                            actionLabel={t('common.done')}
+                            onAction={onDone || leaveGuard.guardedOnBack}
+                        />
                     </div>
                 </>,
             );
@@ -1940,48 +2812,46 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
 
         return wrap(
             <>
-                <div className={styles.successCard} role="status" aria-live="polite">
+                <div className={styles.successCard}>
                     <div className={styles.successIcon} aria-hidden="true">✓</div>
-                    <h2 className={styles.successTitle}>Broadcast pending</h2>
-                    <p className={styles.successHint}>
-                        Your transaction is on its way. It will confirm in the next
-                        few blocks; you can leave this screen at any time.
-                    </p>
+                    <div role="status" aria-live="polite" aria-atomic="true">
+                        <h2 className={styles.successTitle}>{t('send.success.broadcastPending')}</h2>
+                        <p className={styles.successHint}>
+                            {t('send.success.broadcastPendingBody')}
+                        </p>
+                    </div>
                     {sentAmount || recipient ? (
                         <dl className={styles.successSummary}>
                             {sentAmount ? (
                                 <div className={styles.successRow}>
-                                    <dt>Amount</dt>
+                                    <dt>{t('send.fields.amount')}</dt>
                                     <dd>{sentAmount}</dd>
                                 </div>
                             ) : null}
                             {recipient ? (
                                 <div className={styles.successRow}>
-                                    <dt>To</dt>
-                                    <dd className={styles.successMono}>{recipient}</dd>
+                                    <dt>{t('send.fields.to')}</dt>
+                                    <dd className={styles.successMono}><AddressText address={recipient} /></dd>
                                 </div>
                             ) : null}
                             {desc ? (
                                 <div className={styles.successRow}>
-                                    <dt>Chain</dt>
-                                    <dd>{desc.displayName}</dd>
+                                    <dt>{t('send.fields.chain')}</dt>
+                                    <dd><ChainBadge descriptor={desc} showName={false} /></dd>
                                 </div>
                             ) : null}
                         </dl>
                     ) : null}
                     {txid ? (
                         <div className={styles.successTxidBlock}>
-                            <p className={styles.successLabel}>Transaction ID</p>
+                            <p className={styles.successLabel}>{t('send.txid')}</p>
                             <div className={styles.successTxidRow}>
-                                <code className={styles.txid}>{txid}</code>
-                                <button
-                                    type="button"
-                                    className={styles.successLink}
-                                    onClick={copyTxid}
-                                    aria-label="Copy transaction id"
-                                >
-                                    Copy
-                                </button>
+                                <AddressText address={txid} className={styles.txid} size="sm" />
+                                <CopyButton
+                                    value={txid}
+                                    label={t('send.success.copy')}
+                                    ariaLabel={t('common.copyTransactionId')}
+                                />
                             </div>
                             {explorerUrl ? (
                                 <a
@@ -1990,7 +2860,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                                     target="_blank"
                                     rel="noopener noreferrer"
                                 >
-                                    View on explorer ↗
+                                    {t('send.success.viewOnExplorer')} <span aria-hidden="true">↗</span>
                                 </a>
                             ) : null}
                         </div>
@@ -2007,7 +2877,47 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                         <p className={styles.successHint}>{t('send.success.viewInHistoryHint')}</p>
                     ) : null}
                 </div>
+                {contactSaveStage === 'editing' || contactSaveStage === 'saving' ? (
+                    <form className={styles.saveRecipient} onSubmit={saveRecipient}>
+                        <Input
+                            label={t('common.contactName')}
+                            value={contactName}
+                            onChange={(event) => {
+                                setContactName(event.target.value);
+                                if (contactSaveError) setContactSaveError(null);
+                            }}
+                            error={contactSaveError || undefined}
+                            autoComplete="off"
+                            disabled={contactSaveStage === 'saving'}
+                        />
+                        <div className={styles.saveRecipientActions}>
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                disabled={contactSaveStage === 'saving'}
+                                onClick={() => {
+                                    setContactSaveStage('idle');
+                                    setContactName('');
+                                    setContactSaveError(null);
+                                }}
+                            >
+                                {t('common.cancel')}
+                            </Button>
+                            <Button type="submit" variant="primary" disabled={contactSaveStage === 'saving'}>
+                                {contactSaveStage === 'saving' ? t('send.saveRecipient.saving') : t('send.saveRecipient.save')}
+                            </Button>
+                        </div>
+                    </form>
+                ) : null}
+                {contactSaveStage === 'saved' ? (
+                    <StatusMessage variant="status">{t('send.saveRecipient.saved')}</StatusMessage>
+                ) : null}
                 <div className={styles.actions}>
+                    {canSaveRecipient && contactSaveStage === 'idle' ? (
+                        <Button variant="secondary" onClick={() => setContactSaveStage('editing')}>
+                            {t('send.saveRecipient.open')}
+                        </Button>
+                    ) : null}
                     {onViewHistory && txid ? (
                         <Button
                             variant="secondary"
@@ -2017,41 +2927,96 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                         </Button>
                     ) : null}
                     <Button variant="secondary" onClick={sendAnother}>
-                        Send another
+                        {t('send.success.sendAnother')}
                     </Button>
-                    <Button variant="primary" onClick={onBack}>Done</Button>
+                    <Button variant="primary" onClick={onDone || leaveGuard.guardedOnBack}>{t('common.done')}</Button>
                 </div>
             </>,
         );
     }
 
     if (stage === 'review' || stage === 'submitting') {
+        const softwareSignLabel = t('send.review.sign');
         return wrap(
-            <form id="send-review-form" onSubmit={handleSubmit} noValidate>
+            <FormPage
+                id="send-review-form"
+                label={t('send.reviewLabel')}
+                onSubmit={handleSubmit}
+                status={submitError ? (
+                    <StatusMessage
+                        variant="error"
+                        recovery={
+                            submitErrorCause === 'insufficient_funds' && sourceBalance && parseFloat(sourceBalance.amount || '0') > 0
+                                ? { label: t('send.useMax'), onAction: () => { setStage('form'); onMax(); } }
+                                : undefined
+                        }
+                    >
+                        {submitError}
+                    </StatusMessage>
+                ) : networkOffline ? (
+                    <StatusMessage variant="warning">
+                        {t('send.offline.body')}
+                    </StatusMessage>
+                ) : null}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={stage === 'submitting'}
+                        disabled={
+                            networkOffline
+                            || !!testSendGate
+                            || (isWatcherMode
+                                ? false
+                                : isHwSource
+                                    ? (hwStatus !== 'available'
+                                        || (signRisk.requireExplicitConfirm && !hwExplicitConfirmed))
+                                    : (!signerReady && password.length === 0))
+                        }
+                        title={networkOffline ? t('send.offline.title') : undefined}
+                    >
+                        {isWatcherMode
+                            ? t('send.review.submitAction', { label: t('send.review.createUnsigned') })
+                            : isHwSource
+                                ? t('send.review.submitAction', {
+                                    label: t('send.review.signOn', {
+                                        device: fromAddress.source === 'trezor'
+                                            ? t('send.device.trezor')
+                                            : t('send.device.ledger'),
+                                    }),
+                                })
+                                : t('send.review.submitAction', { label: softwareSignLabel })}
+                    </Button>
+                )}
+            >
                 <p className={styles.summary}>{decoded?.summary}</p>
                 {dispenserNoticeBlock}
                 <BalanceChanges
                     result={previewResult}
                     loading={previewBalances.loading}
                     error={previewBalances.error}
+                    chainCoin={descriptor?.networkKind === 'mainnet' ? descriptor.coin : null}
+                    nativeTicker={nativeTickerFor(descriptor)}
+                    fiatCurrency={fiatCurrency}
+                    allowCoingeckoFallback={settings?.privacy?.priceDataEnabled !== false}
                 />
                 {multiTickPreviewGap ? (
                     <StatusMessage variant="status">
-                        This send moves more than one token, and the balance preview
-                        covers a single token at a time. Every recipient and amount is
-                        listed under Details below.
+                        {t('send.review.multiTokenPreview')}
                     </StatusMessage>
                 ) : null}
                 <details className={styles.details}>
                     <summary className={styles.detailsToggle}>
-                        Details ({2 + (decoded?.details?.length || 0)})
+                        {t('send.review.details', { count: 6 + (decoded?.details?.length || 0) })}
                     </summary>
                     <dl className={styles.detailsList}>
-                        <dt className={styles.detailsLabel}>Chain</dt>
-                        <dd className={styles.detailsValue}>
-                            {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                        </dd>
-                        <dt className={styles.detailsLabel}>From</dt>
+                        {descriptor ? (
+                            <>
+                                <dt className={styles.detailsLabel}>{t('send.fields.chain')}</dt>
+                                <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
+                            </>
+                        ) : null}
+                        <dt className={styles.detailsLabel}>{t('send.fields.from')}</dt>
                         <dd className={styles.detailsValue}>
                             <AddressText address={fromAddress.address} highlight />
                         </dd>
@@ -2066,6 +3031,10 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                                 }
                             />
                         ))}
+                        <DetailRow label={t('send.memo')} value={trimmedMemo || t('send.advanced.none')} />
+                        <DetailRow label={t('send.advanced.feeBumping')} value={rbfForSend ? t('send.advanced.allowed') : t('send.advanced.notAllowed')} />
+                        <DetailRow label={t('send.advanced.coinControl')} value={coinControlLabel} />
+                        <DetailRow label={t('send.advanced.changeAddress')} value={changeAddressLabel} />
                     </dl>
                 </details>
                 {decoded && decoded.warnings.length > 0 ? (
@@ -2075,6 +3044,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                         ))}
                     </div>
                 ) : null}
+                {unusualSendWarningBlock}
                 {testSendGateBanner}
                 <RawPsbtViewer
                     developerMode={developerMode}
@@ -2096,16 +3066,15 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                 {isWatcherMode ? (
                     <>
                         <p className={styles.hint}>
-                            Watcher mode: this wallet will build an unsigned transaction
-                            instead of signing and broadcasting. Bring the result
-                            to your Signer-mode wallet to sign.
+                            {t('send.watcherMode')}
                         </p>
                         {isHwSource ? (
                             <StatusMessage variant="status">
-                                Source address is paired to {fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'} on
-                                this wallet, but watcher mode does not sign here.
-                                Pair the same {fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'} on your
-                                Signer-mode wallet to sign the transaction this step produces.
+                                {t('send.watcherHardware', {
+                                    device: fromAddress.source === 'trezor'
+                                        ? t('send.device.trezor')
+                                        : t('send.device.ledger'),
+                                })}
                             </StatusMessage>
                         ) : null}
                     </>
@@ -2143,79 +3112,25 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                                 color: 'var(--xc-text-muted)',
                             }}
                         >
-                            <span aria-hidden="true">🔓</span> Wallet unlocked. No password needed.
+                            <span aria-hidden="true">🔓</span> {t('send.walletUnlocked')}
                         </p>
                     </SigningReadyNote>
                 ) : (
                     <Input
                         ref={passwordRef}
                         type="password"
-                        label="Password"
-                        hint="Required to sign."
+                        label={t('common.password')}
+                        hint={t('send.passwordHint')}
                         value={password}
                         onChange={(e) => {
                             setPassword(e.target.value);
-                            if (submitError) { setSubmitError(null); setSubmitErrorDetail(null); setSubmitErrorCause(null); }
+                            if (submitError) { setSubmitError(null); setSubmitErrorCause(null); }
                         }}
                         autoComplete="current-password"
                         disabled={stage === 'submitting'}
-                        error={submitError || undefined}
                     />
                 )}
-                {/*
-                  * The password Input (the branch above, shown only when the
-                  * wallet is LOCKED) carries submitError on its `error` prop.
-                  * Every other path needs this banner -- including the unlocked
-                  * software path, which previously had no error surface at all,
-                  * so a failed send simply vanished.
-                  */}
-                {submitError && (isWatcherMode || isHwSource || signerReady) ? (
-                    <StatusMessage
-                        variant="error"
-                        recovery={
-                            submitErrorCause === 'insufficient_funds' && sourceBalance && parseFloat(sourceBalance.amount || '0') > 0
-                                ? { label: 'Use Max', onAction: () => { setStage('form'); onMax(); } }
-                                : undefined
-                        }
-                    >
-                        {submitError}
-                        {submitErrorDetail ? (
-                            <details style={{ marginTop: 'var(--xc-space-1)' }}>
-                                <summary style={{ cursor: 'pointer', fontSize: 'var(--xc-text-sm)', opacity: 0.85 }}>
-                                    Technical details
-                                </summary>
-                                <span style={{ fontSize: 'var(--xc-text-sm)', wordBreak: 'break-word' }}>
-                                    {submitErrorDetail}
-                                </span>
-                            </details>
-                        ) : null}
-                    </StatusMessage>
-                ) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={
-                            !!testSendGate
-                            || (isWatcherMode
-                                ? false
-                                : isHwSource
-                                    ? (hwStatus !== 'available'
-                                        || (signRisk.requireExplicitConfirm && !hwExplicitConfirmed))
-                                    : (!signerReady && password.length === 0))
-                        }
-                    >
-                        {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : descriptor?.displayName
-                                    ? `Sign on ${descriptor.displayName}`
-                                    : 'Sign'}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -2226,7 +3141,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title={t('send.fromAddress')}
                 walletId={walletId}
                 chainId={chainId}
                 onPick={(a) => {
@@ -2253,35 +3168,124 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
         );
     }
 
+    if (tokenPickerRecipientId) {
+        const recipientIndex = extraLegs.findIndex((leg) => leg.id === tokenPickerRecipientId);
+        return (
+            <TokenPicker
+                purpose="send"
+                walletId={walletId}
+                title={t('send.recipient.selectToken', { number: recipientIndex + 2 })}
+                networkFilter={coinFromChainId(chainId)}
+                kindFilter="tokens"
+                kindLocked
+                onSelect={(selection) => {
+                    updateRecipient(tokenPickerRecipientId, {
+                        tick: String(selection.tick || '').toUpperCase(),
+                    });
+                    setTokenPickerRecipientId(null);
+                }}
+                onBack={() => setTokenPickerRecipientId(null)}
+            />
+        );
+    }
+
     // stage === 'form'
-    const draftBanner = draft.hasDraft() && !draftPending ? (
+    const draftBanner = hasMeaningfulSendDraft(draft.load()) && !draftPending ? (
         <StatusMessage
             variant="status"
-            recovery={{ label: 'Restore', onAction: restoreDraft }}
+            recovery={{ label: t('send.draft.restore'), onAction: restoreDraft }}
         >
-            You have an unfinished Send draft.
-            <button
-                type="button"
-                onClick={dismissDraft}
-                aria-label="Discard saved draft"
-                style={{
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'inherit',
-                    textDecoration: 'underline',
-                    cursor: 'pointer',
-                    padding: 0,
-                    marginInlineStart: 'var(--xc-space-2)',
-                    fontSize: 'var(--xc-text-xs)',
-                }}
-            >
-                Discard
-            </button>
+            {t('send.draft.unfinished')}
+            <DraftDiscardButton onClick={dismissDraft} label={t('send.draft.discardLabel')}>
+                {t('send.draft.discard')}
+            </DraftDiscardButton>
         </StatusMessage>
     ) : null;
-    const hasTokenSelected = !!chainId && !!tick.trim();
+    const sendFormErrors = [];
+    if (formError) {
+        let id;
+        let label;
+        if (toError || /destination address/i.test(formError)) {
+            id = 'send-destination';
+            label = t('send.fields.to');
+        } else if (/token ticker/i.test(formError)) {
+            id = 'send-token';
+            label = t('send.fields.token');
+        } else if (/amount|dust/i.test(formError)) {
+            id = 'send-amount';
+            label = t('send.fields.amount');
+        } else if (/memo/i.test(formError)) {
+            id = 'send-memo';
+            label = t('send.memo');
+        }
+        sendFormErrors.push({ id, label, message: formError });
+    }
+    for (let i = 0; i < extraLegs.length; i += 1) {
+        const leg = extraLegs[i];
+        const errors = recipientErrors[leg.id];
+        if (errors?.to) {
+            sendFormErrors.push({
+                id: `send-recipient-${leg.id}-to`,
+                label: t('send.recipient.addressLabel', { number: i + 2 }),
+                message: errors.to,
+            });
+        }
+        if (errors?.amount) {
+            sendFormErrors.push({
+                id: `send-recipient-${leg.id}-amount`,
+                label: t('send.recipient.amountLabel', { number: i + 2 }),
+                message: errors.amount,
+            });
+        }
+    }
     return wrap(
-        <form id="send-form" onSubmit={handleReview} noValidate>
+        <FormPage
+            id="send-form"
+            label={t('send.title')}
+            onSubmit={handleReview}
+            onChangeCapture={() => {
+                if (formError) setFormError(null);
+                if (submitError) setSubmitError(null);
+            }}
+            status={isDemo ? (
+                <StatusMessage
+                    variant="info"
+                    recovery={{
+                        label: t('send.demo.createRealWallet'),
+                        onAction: () => { setDemoExitError(null); setDemoExitConfirmOpen(true); },
+                    }}
+                >
+                    {t('send.demo.blocked')}
+                </StatusMessage>
+            ) : submitError ? (
+                <StatusMessage variant="error">{submitError}</StatusMessage>
+            ) : sendFormErrors.length > 0 ? (
+                <FormErrorSummary
+                    errors={sendFormErrors}
+                    focusKey={validationAttempt}
+                    recovery={
+                        /amount/i.test(formError || '') && sourceBalance && parseFloat(sourceBalance.amount || '0') > 0
+                            ? { label: t('send.useMax'), onAction: onMax }
+                            : undefined
+                    }
+                />
+            ) : networkOffline ? (
+                <StatusMessage variant="warning">
+                    {t('send.offline.body')}
+                </StatusMessage>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={confirmAction.composing}
+                    disabled={isDemo || networkOffline || !!testSendGate || maxUnavailable}
+                    title={networkOffline ? t('send.offline.title') : undefined}
+                >
+                    {t('send.title')}
+                </Button>
+            )}
+        >
             {/*
               * State the signing freeze at the TOP of the form, before
               * the user picks a destination and an amount. The refusal used to
@@ -2291,12 +3295,22 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
               */}
             <PanicFreezeNotice surface="send" />
             {draftBanner}
+            {assetSwitchNotice ? (
+                <StatusMessage variant="status">{assetSwitchNotice}</StatusMessage>
+            ) : null}
             <SelectedTokenHero
                 chainId={chainId}
                 tick={tick}
                 descriptor={descriptor}
                 prefill={prefill}
-                onChangeAsset={onChangeAsset ? () => onChangeAsset({ address: toAddress, amount }) : undefined}
+                allowRemoteImages={allowRemoteImages}
+                onChangeAsset={onChangeAsset ? () => onChangeAsset({
+                    chainId,
+                    tick: tick.trim(),
+                    address: toAddress,
+                    amount,
+                    feeSelection: feePick,
+                }) : undefined}
             />
             {/*
               * The funding address, shown and changeable.
@@ -2317,40 +3331,52 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
               */}
             {fromAddress ? (
                 <AddressField
-                    label="From"
+                    size="md"
+                    label={t('send.fields.from')}
                     icon="addresses"
                     value={fromAddress.address}
                     readOnly
                     onChange={() => {}}
                     onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel="Choose source address"
-                    hint="Only what this address holds can be sent."
+                    iconLabel={t('send.source.choose')}
+                    hint={t('send.source.hint')}
                 />
             ) : (
                 <StatusMessage variant="error" className={styles.error}>
-                    No address on this chain. Use Receive to generate one first.
+                    {t('send.source.noAddress')}
                 </StatusMessage>
             )}
             <AddressCombobox
-                size="lg"
+                size="md"
+                id="send-destination"
                 icon="contacts"
                 label={matchedContact
-                    ? <>To <span className={styles.toContactName}>{matchedContact.contact.name}</span></>
-                    : 'To'}
+                    ? <>{t('send.fields.to')} <span className={styles.toContactName}>{matchedContact.contact.name}</span></>
+                    : t('send.fields.to')}
                 value={toAddress}
                 onChange={(e) => {
                     setToAddress(e.target.value);
+                    setPastedRecipient(null);
                     if (toError) setToError(null);
                     if (pasteHint) setPasteHint(null);
                     if (pasteWarning) setPasteWarning(null);
                 }}
+                onBlur={() => setToError(destinationAddressError(toAddress, descriptor))}
                 onPaste={onAddressPaste}
                 suggestions={suggestions}
+                onSuggestionSelect={handlePickRecipient}
                 hint={pasteHint || undefined}
                 onIconClick={() => setContactsPickerOpen(true)}
-                placeholder="Enter or paste an address or name..."
+                placeholder={t('send.destination.placeholder')}
                 error={toError || undefined}
             />
+            {pastedRecipient ? (
+                <div className={styles.pastedRecipient} aria-live="polite">
+                    <span className={styles.pastedRecipientLabel}>{t('send.paste.checkLabel')}</span>
+                    <AddressText address={pastedRecipient} highlight />
+                    <span className={styles.pastedRecipientHint}>{t('send.paste.checkHint')}</span>
+                </div>
+            ) : null}
             {pasteWarning ? (
                 <div role="alert" className={styles.warnings}>
                     <p className={styles.warning}>{pasteWarning}</p>
@@ -2361,30 +3387,27 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                     <p className={styles.warning}>{lookalikeWarning}</p>
                 </div>
             ) : null}
-            {onChangeAsset ? (
-                <TokenField
-                    label="Token"
-                    value={hasTokenSelected ? { chainId, tick: tick.trim().toUpperCase() } : null}
-                    onOpenPicker={() => onChangeAsset({ address: toAddress, amount })}
-                />
-            ) : (
+            {!onChangeAsset ? (
                 <Input
-                    label="Token"
-                    hint="Tick. Native coin by default."
+                    id="send-token"
+                    label={t('send.fields.token')}
+                    hint={t('send.token.hint')}
                     value={tick}
-                    onChange={(e) => setTick(e.target.value)}
+                    onChange={(e) => onTickInputChange(e.target.value)}
                     autoComplete="off"
                     autoCapitalize="characters"
                 />
-            )}
+            ) : null}
             <AmountField
-                size="lg"
+                size="md"
+                id="send-amount"
                 amount={amount}
                 fiatAmount={fiatAmount}
                 tick={tick}
                 fiatRate={amountFiatRate}
                 fiatCurrency={fiatCurrency}
                 amountInputMode={amountInputMode}
+                divisibility={sourceBalance?.divisibility ?? (isNativeSend ? 8 : undefined)}
                 onAmountFieldChange={onAmountFieldChange}
                 toggleAmountInputMode={toggleAmountInputMode}
                 inputRef={amountInputRef}
@@ -2393,14 +3416,23 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                 maxBusy={maxBusy}
                 balanceText={
                     previewBalances.loading
-                        ? 'Loading…'
+                        ? t('common.loading')
                         : previewBalances.error
-                            ? `Balance unavailable (${previewBalances.error})`
+                            ? t('send.balance.unavailable', { error: previewBalances.error })
                             : sourceBalance
-                                ? `${formatWithThousands(sourceBalance.amount)} ${sourceBalance.tick} available`
-                                : `0 ${(tick.trim().toUpperCase()) || ''} available`.replace(/\s+/g, ' ').trim()
+                                ? t('send.balance.available', {
+                                    amount: formatWithThousands(sourceBalance.amount),
+                                    ticker: sourceBalance.tick,
+                                })
+                                : t('send.balance.available', {
+                                    amount: '0',
+                                    ticker: tick.trim().toUpperCase(),
+                                }).replace(/\s+/g, ' ').trim()
                 }
             />
+            {maxNote ? (
+                <p className={styles.balanceHint} role="status">{maxNote}</p>
+            ) : null}
             {/* PC-52: extra recipients. Each row is another leg of the SAME
                 transaction (SEND v1, or v2 when the rows carry their own
                 token), so the recipients share one network fee instead of
@@ -2411,14 +3443,14 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                     {extraLegs.map((leg, i) => (
                         <div key={leg.id} className={styles.recipientRow}>
                             <div className={styles.recipientRowHead}>
-                                <span className={styles.recipientRowLabel}>Recipient {i + 2}</span>
+                                <span className={styles.recipientRowLabel}>{t('send.recipient.heading', { number: i + 2 })}</span>
                                 <Button
                                     type="button"
                                     variant="ghost"
                                     onClick={() => removeRecipient(leg.id)}
-                                    aria-label={`Remove recipient ${i + 2}`}
+                                    aria-label={t('send.recipient.removeLabel', { number: i + 2 })}
                                 >
-                                    Remove
+                                    {t('send.recipient.remove')}
                                 </Button>
                             </div>
                             {/* The visible labels stay "To" / "Token" / "Amount"
@@ -2428,56 +3460,57 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                                 fields with no way to tell which recipient is
                                 being edited. */}
                             <AddressCombobox
-                                label="To"
-                                aria-label={`Recipient ${i + 2} address`}
+                                id={`send-recipient-${leg.id}-to`}
+                                label={t('send.fields.to')}
+                                aria-label={t('send.recipient.addressLabel', { number: i + 2 })}
                                 value={leg.to}
                                 onChange={(e) => updateRecipient(leg.id, { to: e.target.value })}
                                 suggestions={suggestions}
-                                placeholder="Enter or paste an address or name..."
-                                error={leg.to.trim() && destinationAddressError(leg.to, descriptor)
-                                    ? destinationAddressError(leg.to, descriptor)
-                                    : undefined}
+                                placeholder={t('send.destination.placeholder')}
+                                errorKey={validationAttempt}
+                                error={recipientErrors[leg.id]?.to
+                                    || (leg.to.trim() && destinationAddressError(leg.to, descriptor)
+                                        ? destinationAddressError(leg.to, descriptor)
+                                        : undefined)}
                             />
                             {perRecipientToken ? (
-                                <Input
-                                    label="Token"
-                                    aria-label={`Recipient ${i + 2} token`}
-                                    hint="Tick. Leave as the token above to send the same one."
-                                    value={leg.tick}
-                                    onChange={(e) => updateRecipient(leg.id, { tick: e.target.value })}
-                                    autoComplete="off"
-                                    autoCapitalize="characters"
+                                <AssetIconPicker
+                                    label={t('send.recipient.tokenLabel', { number: i + 2 })}
+                                    chainId={chainId}
+                                    tick={(leg.tick.trim() || tick.trim()).toUpperCase()}
+                                    onOpen={() => setTokenPickerRecipientId(leg.id)}
+                                    error={recipientErrors[leg.id]?.tick}
                                 />
                             ) : null}
                             <Input
-                                label="Amount"
-                                aria-label={`Recipient ${i + 2} amount`}
+                                id={`send-recipient-${leg.id}-amount`}
+                                label={t('send.fields.amount')}
+                                aria-label={t('send.recipient.amountLabel', { number: i + 2 })}
                                 inputMode="decimal"
                                 value={leg.amount}
                                 onChange={(e) => updateRecipient(leg.id, { amount: e.target.value })}
                                 autoComplete="off"
+                                errorKey={validationAttempt}
+                                error={recipientErrors[leg.id]?.amount}
                             />
                         </div>
                     ))}
-                    <label className={styles.rbfRow}>
-                        <span className={styles.rbfLabel}>
-                            <span>Different token per recipient</span>
-                            <span className={styles.rbfHint}>
-                                Off: every recipient gets {tick.trim().toUpperCase() || 'the token above'}.
-                            </span>
-                        </span>
-                        <input
-                            type="checkbox"
-                            role="switch"
-                            aria-label="Different token per recipient"
-                            checked={perRecipientToken}
-                            onChange={(e) => setPerRecipientToken(e.target.checked)}
-                        />
-                    </label>
+                    <Switch
+                        className={styles.rbfRow}
+                        label={t('send.recipient.differentToken')}
+                        description={t('send.recipient.differentTokenOff', {
+                            token: tick.trim().toUpperCase() || t('send.recipient.tokenAbove'),
+                        })}
+                        aria-label={t('send.recipient.differentToken')}
+                        checked={perRecipientToken}
+                        onChange={(e) => setPerRecipientToken(e.target.checked)}
+                    />
                     {sendTotals.length > 0 && !nativeMultiSendBlock ? (
                         <p className={styles.hint}>
-                            Total: {sendTotals.map((t) => `${formatWithThousands(t.amount)} ${t.tick}`).join(' + ')}
-                            {' '}across {sendLegs.length} recipients, in one transaction and one network fee.
+                            {t('send.recipient.total', {
+                                total: sendTotals.map((item) => `${formatWithThousands(item.amount)} ${item.tick}`).join(' + '),
+                                count: sendLegs.length,
+                            })}
                         </p>
                     ) : null}
                 </div>
@@ -2513,55 +3546,47 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                     variant="secondary"
                     onClick={addRecipient}
                 >
-                    + Add recipient
+                    {t('send.recipient.add')}
                 </Button>
             ) : null}
             {extraLegs.length + 1 >= MAX_SEND_LEGS ? (
                 <p className={styles.hint}>
-                    {MAX_SEND_LEGS} recipients is the most one send carries. Use an
-                    airdrop to distribute to a longer list.
+                    {t('send.recipient.maximum', { count: MAX_SEND_LEGS })}
                 </p>
             ) : null}
             {gatedInfo && gatedInfo.state === 'ready' ? (
                 <StatusMessage variant="status">
-                    This token has gated content. The unlock key will be securely attached
-                    to this send so the recipient can open it. Gated tokens can only be sent
-                    to addresses that have made at least one transaction.
+                    {t('send.gated.ready')}
                 </StatusMessage>
             ) : null}
             {gatedInfo && gatedInfo.state === 'partial' ? (
                 <div role="alert" className={styles.warnings}>
                     <p className={styles.warning}>
-                        This token has {gatedInfo.groups.length} gated content packs and this wallet
-                        holds keys for only {gatedInfo.groups.filter((g) => g.haveKey).length} of them.
-                        The recipient will NOT be able to open the missing pack(s):{' '}
-                        {gatedInfo.groups.filter((g) => !g.haveKey).map((g) => g.keyHash.slice(0, 12)).join(', ')}…
-                        You can still send, or recover the missing keys first (unlock the content
-                        once from the address that received it).
+                        {t('send.gated.partial', {
+                            total: gatedInfo.groups.length,
+                            available: gatedInfo.groups.filter((g) => g.haveKey).length,
+                            missingCount: gatedInfo.groups.filter((g) => !g.haveKey).length,
+                            missing: gatedInfo.groups.filter((g) => !g.haveKey)
+                                .map((g) => g.keyHash.slice(0, 12)).join(', '),
+                        })}
                     </p>
                 </div>
             ) : null}
             {gatedInfo && gatedInfo.state === 'blocked' ? (
                 <div role="alert" className={styles.warnings}>
                     <p className={styles.warning}>
-                        This token has gated content, and this wallet holds none of its unlock
-                        keys. Sending without the key attached would be rejected by the network,
-                        and the recipient could never open the content.
+                        {t('send.gated.blocked')}
                     </p>
                     {(isWatcherMode || isHwSource) ? (
                         <p className={styles.warning}>
-                            Key recovery needs a software signer (the scan decrypts messages with
-                            the address&apos;s private key, which this signer cannot do). If this
-                            wallet published the content, the key is already stored and this
-                            notice will not appear; otherwise recover the key from a software
-                            wallet holding this address.
+                            {t('send.gated.softwareSigner')}
                         </p>
                     ) : (
                         <div style={{ marginTop: 'var(--xc-space-2)' }}>
                             <Input
                                 type="password"
-                                label="Wallet password (scan for keys)"
-                                hint="Scans messages sent to your addresses for the unlock key and stores it in this wallet."
+                                label={t('send.gated.passwordLabel')}
+                                hint={t('send.gated.passwordHint')}
                                 value={gatedScanPassword}
                                 onChange={(e) => {
                                     setGatedScanPassword(e.target.value);
@@ -2579,7 +3604,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                                 disabled={gatedScanBusy || gatedScanPassword.length === 0}
                                 onClick={handleGatedScan}
                             >
-                                Recover keys
+                                {t('send.gated.recover')}
                             </Button>
                         </div>
                     )}
@@ -2587,7 +3612,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
             ) : null}
             {feeTiers ? (
                 <FeeSelector
-                    label="Network fee"
+                    label={t('send.networkFee')}
                     coinTicker={nativeTickerFor(descriptor)}
                     tiers={feeTiers}
                     value={feePick}
@@ -2595,9 +3620,10 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                     customEstimate={feePick.mode === 'custom' ? feeEstimate : null}
                     formatFiat={(coinAmount) => {
                         if (!fiatRate || !coinAmount) return null;
-                        const v = coinToFiat(String(coinAmount), fiatRate);
-                        if (v == null || !Number.isFinite(v)) return null;
-                        return `≈ ${v.toFixed(2)} ${fiatRate.fiatCurrency || ''}`.trim();
+                        const value = coinToFiatExact(String(coinAmount), fiatRate);
+                        if (value == null) return null;
+                        const code = String(fiatRate.fiatCurrency || fiatCurrency).toUpperCase();
+                        return `≈ ${formatFiatAmount(value, code)} ${code}`;
                     }}
                 />
             ) : null}
@@ -2605,7 +3631,7 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                 className={styles.details}
                 style={{ marginTop: 'var(--xc-space-6)' }}
             >
-                <summary className={styles.detailsToggle}>Advanced</summary>
+                <summary className={styles.detailsToggle}>{t('send.advanced')}</summary>
                 {/* No memo on a native-coin send. It only ever existed
                     as a field of an XChain SEND action, and the chain rejects
                     that action outright for a native tick (there is no BTC
@@ -2614,68 +3640,176 @@ export function Send({ walletId, onBack, prefill = null, onChangeAsset, onViewHi
                     a plain payment with no action at all, so there is nowhere
                     left to put one. Token sends keep it. */}
                 {isNativeSend ? null : (
-                    <Input
-                        label="Memo"
-                        value={memo}
-                        onChange={(e) => setMemo(e.target.value)}
-                        autoComplete="off"
-                        error={/[|;]/.test(memo) ? t('send.memoForbiddenChars') : undefined}
-                    />
+                    <>
+                        <Input
+                            id="send-memo"
+                            label={t('send.memo')}
+                            optional
+                            value={memo}
+                            onChange={(e) => setMemo(e.target.value)}
+                            autoComplete="off"
+                            hint={MEMO_HINT}
+                            error={memoTooLong || (/[|;]/.test(memo) ? t('send.memoForbiddenChars') : undefined)}
+                        />
+                        <p className={styles.balanceHint} aria-live="polite">
+                            {t('send.memoCount', { used: utf8ByteLength(trimmedMemo), max: MAX_MEMO_LENGTH })}
+                        </p>
+                    </>
                 )}
+                <Switch
+                    className={styles.rbfRow}
+                    label={(
+                        <>
+                            <span aria-hidden="true">{t('send.advanced.coinControl')}</span>
+                            <span id="send-coin-control-enabled-label" className="sr-only">
+                                {t('send.advanced.coinControlEnabled')}
+                            </span>
+                        </>
+                    )}
+                    description={utxoLoadState === 'loading'
+                        ? t('send.advanced.loadingInputs')
+                        : utxoLoadState === 'ready'
+                            ? t('send.advanced.coinControlReady')
+                            : t('send.advanced.coinControlUnavailable')}
+                    aria-label={t('send.advanced.coinControlEnabled')}
+                    aria-labelledby="send-coin-control-enabled-label"
+                    checked={coinControlEnabled}
+                    disabled={utxoLoadState !== 'ready'}
+                    onChange={(e) => setCoinControlEnabled(e.target.checked)}
+                />
+                {coinControlEnabled ? (
+                    <fieldset className={styles.coinControlList}>
+                        <legend>{t('send.advanced.inputs')}</legend>
+                        <div className={styles.coinControlToolbar}>
+                            <span>{t('send.advanced.availableCount', { count: availableUtxos.length })}</span>
+                            <span className={styles.coinControlActions}>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    disabled={availableUtxos.length === 0
+                                        || selectedUtxos.length === availableUtxos.length}
+                                    onClick={() => setSelectedUtxoKeys(
+                                        new Set(availableUtxos.map((utxo) => utxoKey(utxo))),
+                                    )}
+                                >
+                                    {t('send.advanced.selectAll')}
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    disabled={selectedUtxos.length === 0}
+                                    onClick={() => setSelectedUtxoKeys(new Set())}
+                                >
+                                    {t('common.clear')}
+                                </Button>
+                            </span>
+                        </div>
+                        {availableUtxos.length > 0 ? (
+                            <div className={styles.coinControlRows}>
+                                {availableUtxos.map((utxo) => {
+                                    const key = utxoKey(utxo);
+                                    const valueSats = utxoValueSats(utxo);
+                                    const dustFloor = dustThresholdForCoin(descriptor?.coin);
+                                    const isDust = valueSats !== null && dustFloor !== null
+                                        && valueSats < BigInt(dustFloor);
+                                    return (
+                                        <Checkbox
+                                            key={key}
+                                            className={styles.coinControlRow}
+                                            checked={selectedUtxoKeys.has(key)}
+                                            onChange={(e) => setSelectedUtxoKeys((current) => {
+                                                const next = new Set(current);
+                                                if (e.target.checked) next.add(key);
+                                                else next.delete(key);
+                                                return next;
+                                            })}
+                                            label={(
+                                                <span className={styles.coinControlValue}>
+                                                    <span>
+                                                        {utxoAmount(utxo, descriptor)} {nativeTickerFor(descriptor)}
+                                                        {isDust ? (
+                                                            <span
+                                                                className={styles.coinControlDust}
+                                                                title={t('send.advanced.dustTitle', { sats: formatWithThousands(String(dustFloor)) })}
+                                                            >
+                                                                {t('send.advanced.dust')}
+                                                            </span>
+                                                        ) : null}
+                                                    </span>
+                                                    <small>{utxoOutpoint(utxo)}</small>
+                                                </span>
+                                            )}
+                                        />
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <EmptyState title={t('send.advanced.noInputsTitle')} titleAs="p" body={t('send.advanced.noInputs')} />
+                        )}
+                        <dl
+                            className={styles.coinControlSummary}
+                            aria-label={t('send.advanced.summaryLabel')}
+                            aria-live="polite"
+                        >
+                            <div>
+                                <dt>{t('send.advanced.selectedTotal')}</dt>
+                                <dd>
+                                    {decimalStringFromSats(selectedUtxoTotalSats, descriptor)}{' '}
+                                    {nativeTickerFor(descriptor)}
+                                </dd>
+                            </div>
+                            <div>
+                                <dt>{t('send.advanced.approxChange')}</dt>
+                                <dd>{coinControlChange}</dd>
+                            </div>
+                        </dl>
+                    </fieldset>
+                ) : null}
+                <Select
+                    label={t('send.advanced.changeAddress')}
+                    aria-label={t('send.advanced.changeAddress')}
+                    value={changeAddressId}
+                    onChange={(e) => setChangeAddressId(e.target.value)}
+                    hint={t('send.advanced.changeHint')}
+                >
+                    {/* Native options stay raw because Select provides the control wrapper. */}
+                    <option value="">{t('send.advanced.automaticChange', { address: automaticChangeLabel })}</option>
+                    {(addressesByChain?.[chainId] || []).map((address) => (
+                        <option key={address.id} value={address.id}>
+                            {address.label ? `${address.label}: ` : ''}{address.address}
+                        </option>
+                    ))}
+                </Select>
                 {/* §44.3 per-send RBF toggle. Default seeds from
                     settings.fees[chainId].rbfByDefault (see the effect
                     above); the live value flows into the send payload as
                     `rbf: rbfForSend`, off and disabled where the chain has no RBF. */}
-                <label className={styles.rbfRow}>
-                    <span className={styles.rbfLabel}>
-                        <span>
-                            Replace-by-fee
+                <Switch
+                    className={styles.rbfRow}
+                    label={(
+                        <>
+                            {t('send.rbf.label')}
                             <InfoTip
-                                aria="Replace-by-fee help"
-                                label="Replace-by-fee (BIP125) lets you re-broadcast this transaction later at a higher fee, speeding up or cancelling it before it confirms."
+                                aria={t('send.rbf.helpLabel')}
+                                label={t('send.rbf.help')}
                             />
-                        </span>
-                        <span className={styles.rbfHint}>
-                            {rbfSupported
-                                ? 'Keep this on to allow speeding up or cancelling the transaction before it confirms.'
-                                : `Fee bumping is not supported on ${descriptor?.displayName ?? 'this chain'}.`}
-                        </span>
-                    </span>
-                    <input
-                        type="checkbox"
-                        role="switch"
-                        aria-label="Replace-by-fee enabled"
-                        checked={rbfForSend}
-                        disabled={!rbfSupported}
-                        onChange={(e) => setRbfEnabled(e.target.checked)}
-                    />
-                </label>
+                        </>
+                    )}
+                    description={rbfSupported
+                        ? t('send.rbf.enabledHint')
+                        : t('send.rbf.unsupported', {
+                            chain: t('send.rbf.thisChain'),
+                        })}
+                    aria-label={t('send.rbf.label')}
+                    checked={rbfForSend}
+                    disabled={!rbfSupported}
+                    onChange={(e) => setRbfEnabled(e.target.checked)}
+                />
             </details>
             {testSendGateBanner}
-            {formError ? (
-                <StatusMessage
-                    variant="error"
-                    recovery={
-                        /amount/i.test(formError) && sourceBalance && parseFloat(sourceBalance.amount || '0') > 0
-                            ? { label: 'Use Max', onAction: onMax }
-                            : undefined
-                    }
-                >
-                    {formError}
-                </StatusMessage>
-            ) : null}
-        </form>,
-        <div className={`${styles.actionsBar} ${isFull ? styles.actionsBarFull : ''}`.trim()}>
-            <Button
-                type="submit"
-                form="send-form"
-                variant="primary"
-                block
-                disabled={!!testSendGate}
-            >
-                Send
-            </Button>
-        </div>,
+        </FormPage>,
     );
 }
 
@@ -2688,13 +3822,30 @@ function DetailRow({ label, value }) {
     );
 }
 
+function AssetIconPicker({ chainId, tick, label, onOpen, error }) {
+    const accessibleName = tick ? `${label}: ${tick}. Change asset` : `${label}: Choose asset`;
+    return (
+        <div className={styles.assetPickerControl}>
+            <Button
+                variant="ghost"
+                className={styles.assetPickerButton}
+                onClick={onOpen}
+                aria-label={accessibleName}
+                aria-invalid={error ? 'true' : undefined}
+                icon={chainId && tick ? <TickerIcon chainId={chainId} tick={tick} size={40} /> : <Icon.TokenIcon />}
+            />
+            {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
+        </div>
+    );
+}
+
 // Hero badge for the asset being sent. Native = large chain icon.
 // Token with imageUrl = square image + chain-icon overlay. Token without
 // imageUrl = letter badge tinted by `tickerColor` + chain-icon overlay.
 // The prefill's imageUrl only applies when the form's current
 // (chainId, tick) still matches what the user picked; if they retype
 // the tick to something else, fall back to the letter-badge style.
-function SelectedTokenHero({ chainId, tick, descriptor, prefill, onChangeAsset }) {
+function SelectedTokenHero({ chainId, tick, descriptor, prefill, onChangeAsset, allowRemoteImages }) {
     const tickTrim = (tick || '').trim();
     if (!chainId || !tickTrim) return null;
     const nativeTicker = nativeTickerFor(descriptor);
@@ -2704,8 +3855,11 @@ function SelectedTokenHero({ chainId, tick, descriptor, prefill, onChangeAsset }
     const prefillMatches = prefill
         && prefill.chainId === chainId
         && (prefill.tick || '').trim().toUpperCase() === tickTrim.toUpperCase();
-    const imageUrl = prefillMatches && typeof prefill?.imageUrl === 'string' && prefill.imageUrl
+    const candidateImageUrl = prefillMatches && typeof prefill?.imageUrl === 'string' && prefill.imageUrl
         ? prefill.imageUrl
+        : null;
+    const imageUrl = isAssetImageSourceAllowed(candidateImageUrl, allowRemoteImages)
+        ? candidateImageUrl
         : null;
     const heroName = prefillMatches && typeof prefill?.displayName === 'string' && prefill.displayName
         ? prefill.displayName
@@ -2717,46 +3871,45 @@ function SelectedTokenHero({ chainId, tick, descriptor, prefill, onChangeAsset }
             type: 'button',
             onClick: onChangeAsset,
             'aria-label': `Change asset (currently ${heroName})`,
-            className: `${styles.heroIconWrap} ${styles.heroIconWrapInteractive}`,
+            className: `${styles.heroIconWrap} ${styles.heroAsset} ${styles.heroIconWrapInteractive}`,
         }
-        : { className: styles.heroIconWrap, 'aria-hidden': 'true' };
+        : { className: `${styles.heroIconWrap} ${styles.heroAsset}`, 'aria-hidden': 'true' };
     return (
-        <div className={styles.heroWrap}>
-            <IconTag {...iconProps}>
-                {isNative && chainIconLarge ? (
-                    <img
-                        src={chainIconLarge}
-                        alt=""
-                        className={styles.heroIconImg}
-                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                    />
-                ) : imageUrl ? (
-                    <img
-                        src={imageUrl}
-                        alt=""
-                        className={styles.heroIconImg}
-                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                    />
-                ) : (
-                    <span
-                        className={styles.heroIconLetter}
-                        style={{ background: tickerColor(tickTrim), color: '#FFFFFF' }}
-                    >
-                        {tickTrim.slice(0, 1).toUpperCase()}
-                    </span>
-                )}
-                {!isNative && chainIconUrl ? (
-                    <img
-                        src={chainIconUrl}
-                        alt=""
-                        className={styles.heroChainOverlay}
-                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                    />
-                ) : null}
-            </IconTag>
-            {heroName ? (
-                <div className={styles.heroName} title={heroName}>{heroName}</div>
+        <IconTag {...iconProps}>
+            <span
+                className={styles.heroIconLetter}
+                style={{ background: tickerColor(tickTrim), color: '#FFFFFF' }}
+                aria-hidden="true"
+            >
+                {tickTrim.slice(0, 1).toUpperCase()}
+            </span>
+            {isNative && chainIconLarge ? (
+                <img
+                    src={chainIconLarge}
+                    alt=""
+                    aria-hidden="true"
+                    className={styles.heroIconImg}
+                    style={{ position: 'absolute', inset: 0 }}
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                />
+            ) : imageUrl ? (
+                <img
+                    src={imageUrl}
+                    alt=""
+                    aria-hidden="true"
+                    className={styles.heroIconImg}
+                    style={{ position: 'absolute', inset: 0 }}
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                />
             ) : null}
-        </div>
+            {!isNative && chainIconUrl ? (
+                <img
+                    src={chainIconUrl}
+                    alt=""
+                    className={styles.heroChainOverlay}
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                />
+            ) : null}
+        </IconTag>
     );
 }

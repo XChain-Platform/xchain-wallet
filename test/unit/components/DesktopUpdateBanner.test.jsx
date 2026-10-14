@@ -23,6 +23,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import React from 'react';
+import { WALLET_VERSION } from '../../../packages/core/src/buildInfo.js';
 import { DesktopUpdateBanner } from '../../../packages/desktop/renderer/DesktopUpdateBanner.jsx';
 
 /**
@@ -61,19 +62,44 @@ describe('DesktopUpdateBanner', () => {
         expect(container.textContent).toBe('');
     });
 
-    it('offers the update, and the offer calls the verified install path', async () => {
+    it('offers the update and starts the verified download without restarting', async () => {
         const bridge = installBridge();
         render(React.createElement(DesktopUpdateBanner));
 
         bridge.emit({ type: 'available', info: { version: '0.339.0' } });
         expect(screen.getByRole('status').textContent).toContain('0.339.0');
 
-        const button = screen.getByRole('button', { name: /install and restart/i });
+        const button = screen.getByRole('button', { name: /download update/i });
         await act(async () => { button.click(); });
-        // The whole point of the row: a user action reaches
-        // downloadAndInstall(), which is what runs the S5 manifest gate
-        // and then quitAndInstall().
-        expect(bridge.install).toHaveBeenCalledTimes(1);
+        expect(bridge.install).toHaveBeenCalledWith('download');
+        expect(screen.queryByRole('button', { name: /restart to update/i })).toBeNull();
+    });
+
+    it('floats over the page with side margins instead of spanning the full width', () => {
+        const bridge = installBridge();
+        render(React.createElement(DesktopUpdateBanner));
+        bridge.emit({ type: 'available', info: { version: '0.339.0' } });
+
+        const card = screen.getByRole('status');
+        expect(card.style.position).toBe('fixed');
+        expect(card.style.insetInline).toContain('safe-area-inset-left');
+        expect(card.style.insetInline).toContain('safe-area-inset-right');
+        expect(card.style.maxInlineSize).not.toBe('');
+        expect(card.style.left).toBe('');
+        expect(card.style.right).toBe('');
+    });
+
+    it('keeps the floating card inside the device safe-area insets', () => {
+        const bridge = installBridge();
+        render(React.createElement(DesktopUpdateBanner));
+        bridge.emit({ type: 'available', info: { version: '0.339.0' } });
+
+        const card = screen.getByRole('status');
+        // Logical insets keep the card mirrored in RTL while still clearing
+        // both physical side cutouts.
+        expect(card.style.insetBlockStart).toContain('env(safe-area-inset-top');
+        expect(card.style.insetInline).toContain('env(safe-area-inset-left');
+        expect(card.style.insetInline).toContain('env(safe-area-inset-right');
     });
 
     it('shows no version at all rather than a version the feed made up', () => {
@@ -95,20 +121,96 @@ describe('DesktopUpdateBanner', () => {
         render(React.createElement(DesktopUpdateBanner));
         bridge.emit({ type: 'available', info: { version: '0.339.0' } });
 
-        await act(async () => { screen.getByRole('button', { name: /install and restart/i }).click(); });
+        await act(async () => { screen.getByRole('button', { name: /download update/i }).click(); });
 
         const text = screen.getByRole('status').textContent;
-        expect(text).toContain('could not be verified');
+        expect(text).toContain("couldn't be downloaded or verified");
         expect(text).toContain('wallet is untouched');
         expect(text).not.toContain('manifest says');
     });
 
-    // row 148. Everything above drives an event that arrives AFTER the
-    // component mounts, and on a real install that never happens: main checks
-    // the feed at launch and this banner is rendered only once the vault is
-    // unlocked, which is a human typing a passphrase later. Measured on a
-    // packaged build - main logged `Found version 0.339.0`, the banner showed
-    // nothing - so the offer was unreachable rather than merely late.
+    it('shows manual check progress and the up-to-date result', () => {
+        const bridge = installBridge();
+        render(React.createElement(DesktopUpdateBanner));
+
+        bridge.emit({ type: 'checking', userInitiated: true });
+        expect(screen.getByRole('status').textContent).toContain('Checking for updates');
+
+        bridge.emit({ type: 'not-available', userInitiated: true, info: { version: WALLET_VERSION } });
+        expect(screen.getByRole('status').textContent).toContain('XChain Wallet is up to date');
+    });
+
+    it('describes a check failure without claiming an update failed verification', () => {
+        const bridge = installBridge();
+        render(React.createElement(DesktopUpdateBanner));
+
+        bridge.emit({ type: 'checking', userInitiated: true });
+        bridge.emit({ type: 'error', userInitiated: true, info: { message: 'feed unavailable' } });
+
+        const text = screen.getByRole('status').textContent;
+        expect(text).toContain("Couldn't check for updates");
+        expect(text).not.toContain('could not be verified');
+        expect(text).not.toContain('feed unavailable');
+    });
+
+    it('retries a failed check through the updater bridge', async () => {
+        const bridge = installBridge();
+        render(React.createElement(DesktopUpdateBanner));
+
+        bridge.emit({ type: 'checking', userInitiated: true });
+        bridge.emit({ type: 'error', userInitiated: true, info: { message: 'offline' } });
+        await act(async () => { screen.getByRole('button', { name: /retry/i }).click(); });
+
+        expect(bridge.install).toHaveBeenCalledWith('check');
+    });
+
+    it('shows download progress, verification, and a separate ready-to-restart action', async () => {
+        const bridge = installBridge();
+        render(React.createElement(DesktopUpdateBanner));
+        bridge.emit({ type: 'available', info: { version: '0.339.0' } });
+
+        await act(async () => { screen.getByRole('button', { name: /download update/i }).click(); });
+        bridge.emit({ type: 'progress', info: { percent: 42.4 } });
+        expect(screen.getByRole('status').textContent).toContain('42%');
+
+        bridge.emit({ type: 'verifying', info: { version: '0.339.0' } });
+        expect(screen.getByRole('status').textContent).toContain('Verifying');
+
+        bridge.emit({ type: 'ready', info: { version: '0.339.0' } });
+        expect(screen.getByRole('status').textContent).toContain('ready to restart');
+        await act(async () => { screen.getByRole('button', { name: /restart to update/i }).click(); });
+        expect(bridge.install).toHaveBeenLastCalledWith('restart');
+    });
+
+    it('keeps a prepared update ready when restart is blocked by wallet work', async () => {
+        const install = vi.fn(async (action) => (
+            action === 'restart'
+                ? { ok: false, reason: 'wallet operation in progress', retryable: true }
+                : { ok: true }
+        ));
+        const bridge = installBridge({ install });
+        render(React.createElement(DesktopUpdateBanner));
+        bridge.emit({ type: 'ready', info: { version: '0.339.0' } });
+
+        await act(async () => { screen.getByRole('button', { name: /restart to update/i }).click(); });
+
+        expect(screen.getByRole('status').textContent).toContain('Finish the current wallet operation');
+        expect(screen.getByRole('button', { name: /restart to update/i })).toBeTruthy();
+    });
+
+    it('keeps automatic checks quiet unless they find an update', () => {
+        const bridge = installBridge();
+        const { container } = render(React.createElement(DesktopUpdateBanner));
+
+        bridge.emit({ type: 'checking' });
+        bridge.emit({ type: 'not-available', info: { version: WALLET_VERSION } });
+        bridge.emit({ type: 'error', info: { message: 'feed unavailable' } });
+
+        expect(container.textContent).toBe('');
+    });
+
+    // Main begins its launch check before it creates the renderer, so an
+    // available offer must also survive an event that arrives before mount.
     it('shows an offer main made before it existed', async () => {
         const bridge = installBridge({ retained: { type: 'available', info: { version: '0.339.0' } } });
         render(React.createElement(DesktopUpdateBanner));
@@ -139,7 +241,7 @@ describe('DesktopUpdateBanner', () => {
 
         bridge.emit({ type: 'verifying' });
 
-        expect(screen.getByRole('status').textContent).toContain('Downloading');
+        expect(screen.getByRole('status').textContent).toContain('Verifying');
     });
 
     it('renders against a preload with no state channel rather than throwing', async () => {

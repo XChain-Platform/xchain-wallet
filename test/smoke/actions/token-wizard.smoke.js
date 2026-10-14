@@ -17,7 +17,7 @@
 //      and Step 6 is file-local (not exported from the module's
 //      public surface; we don't want wallet callers composing params
 //      directly; they go through messaging.issueToken).
-//   2. The 5 wizard stages + 'done' + 'error' are present as state
+//   2. The four guided wizard stages plus 'done' are present as state
 //      literals; each stage wires to the next via setStage.
 //   3. All six templates appear in the TEMPLATES table and every one of
 //      them is interactive. "Community" is NOT one of them.
@@ -26,10 +26,10 @@
 //      confer it, when DIVIDEND has no per-token opt-in at all.
 //   4. Preview stage consumes decoder.decodeAction with action: 'ISSUE'
 //      and the composed params; that's the contract with Piece 2a.
-//   5. Sign stage calls messaging.issueToken; the helper lands in
-//      Step 5 (piece 2c) but the call-site wiring is in place today.
-//   6. Ticker is uppercased before passing to the decoder / backend.
-//   7. The CSS module ships matching class names for the stage UIs.
+//   5. Review continues into the shared confirmation flow, whose approval
+//      calls messaging.issueToken with the prebuilt transaction.
+//   6. Ticker text passes through unchanged to the decoder and backend.
+//   7. The CSS module ships the stage UI, card, and responsive grid styles.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync, existsSync } from 'node:fs';
@@ -60,21 +60,20 @@ assert.ok(
     'composeIssueParams stays file-local (not exported)',
 );
 
-// --- 2. Five stages + done + error ------------------------------------
+// --- 2. Four guided stages + done --------------------------------------
 
-for (const stage of ['template', 'chain', 'details', 'preview', 'sign', 'done']) {
+for (const stage of ['template', 'chain', 'details', 'preview', 'done']) {
     assert.ok(
         src.includes(`'${stage}'`),
         `wizard tracks stage "${stage}"`,
     );
 }
-// State transitions: template → chain, chain → details, details →
-// preview, preview → sign, sign → done (the setStage calls).
+// State transitions: template to chain, chain to details, details to
+// preview, and successful shared confirmation to done.
 for (const transition of [
     "setStage('chain')",
     "setStage('details')",
     "setStage('preview')",
-    "setStage('sign')",
     "setStage('done')",
 ]) {
     assert.ok(src.includes(transition), `wizard performs ${transition}`);
@@ -127,7 +126,7 @@ assert.ok(
     'utility tagline says dividends work on every token',
 );
 assert.ok(
-    /Any token you create here can pay dividends/.test(src),
+    /Any token you issue here can pay dividends/.test(src),
     'template stage states dividends are available on any token',
 );
 
@@ -263,27 +262,23 @@ assert.ok(
     'wizard renders the decoder warnings array',
 );
 
-// --- 5. Sign wires through messaging.issueToken -----------------------
+// --- 5. Shared confirmation wires through messaging.issueToken --------
 
 assert.ok(
     /messaging\.issueToken\s*\(/.test(src),
-    'wizard calls messaging.issueToken from the sign stage',
+    'wizard calls messaging.issueToken from shared confirmation approval',
 );
-// The password → sign flow mirrors Send.jsx's review→submit pattern.
 assert.ok(
-    src.includes("'InvalidPasswordError'"),
-    'wizard distinguishes wrong-password from other errors',
+    /prebuiltPsbt/.test(src) && /actionConfirm\.run/.test(src),
+    'wizard signs the same prebuilt transaction shown by shared confirmation',
 );
 
 // --- 6. ISSUE v0 composer --------------------------------------------
 
-// Ticker must be uppercased before hitting the decoder / backend;
-// protocol §ISSUE rules require A-Z / 0-9 / period. The wizard does
-// it in two places: the Input's onChange (so the user sees it) AND
-// the composer (belt-and-suspenders).
+// The chain records ticker case verbatim, so the wizard must not rewrite it.
 assert.ok(
-    /\.toUpperCase\(\)/.test(src),
-    'wizard uppercases the ticker',
+    /TICK:\s*String\(form\.name \|\| ''\)\.trim\(\)/.test(src),
+    'wizard preserves ticker case in the composer',
 );
 // MINT_SUPPLY defaults to MAX_SUPPLY on create so the initial supply
 // lands in the creator's wallet. Shared across Meme/Utility/Subtoken/
@@ -318,20 +313,34 @@ assert.ok(
 // --- 7. CSS module -----------------------------------------------------
 
 for (const cls of [
-    '.card',
+    '.progress',
     '.templateGrid',
     '.templateCard',
-    '.templateCardDisabled',
     '.detailsList',
     '.warnings',
     '.actions',
-    '.successTitle',
 ]) {
     assert.ok(
         css.includes(cls),
         `TokenWizard.module.css defines ${cls}`,
     );
 }
+assert.ok(src.includes('<FormPage'), 'TokenWizard delegates its page card to FormPage');
+assert.ok(
+    /<ListRow[\s\S]*?styles\.templateCard[\s\S]*?title={t\.name}[\s\S]*?subtitle={t\.tagline}/.test(src),
+    'TokenWizard delegates template cards to ListRow',
+);
+assert.ok(
+    /\.templateCard\s*\{[^}]*border:\s*1px solid var\(--xc-border-strong\)/s.test(css),
+    'template cards use the shared strong border token',
+);
+assert.ok(
+    /\.templateGrid\s*\{[^}]*grid-template-columns:\s*1fr/s.test(css)
+        && /@media \(min-width: 480px\)[\s\S]*?\.templateGrid\s*\{[^}]*grid-template-columns:\s*repeat\(2, 1fr\)/.test(css),
+    'template cards use one phone column and two wide-screen columns',
+);
+assert.ok(!/<button\b/.test(src), 'TokenWizard has no route-level raw button');
+assert.ok(!/(^|\n)\.card\s*\{/.test(css), 'TokenWizard has no route-level page card');
 
 // --- 8. Uses the shared messaging + shell context ---------------------
 
@@ -351,8 +360,10 @@ const home = readFileSync(
     'utf8',
 );
 assert.ok(
-    /onCreateToken/.test(home) && /onClick=\{onCreateToken\}/.test(home),
-    'Home accepts + wires onCreateToken for the wizard entry',
+    /onCreateToken/.test(home)
+        && /onClick=\{\(\) => runNetworkAction\('Creating a token', onCreateToken\)\}/.test(home)
+        && /t\('home.createTokenOffline'\)/.test(home),
+    'Home wires onCreateToken through the offline network-action gate',
 );
 
 for (const [shell, appPath] of [
@@ -376,5 +387,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK: token wizard smoke (file exists, 5 stages, 6 templates all interactive, no Community card + legacy alias, dividend copy present, per-template composers + field-visibility map, decoder wiring, messaging.issueToken call-site, Home entry + both App.jsx sub-routes, CSS classes present)',
+    'OK: token wizard smoke (file exists, 4 guided stages, accurate progress, 6 templates all interactive, no Community card + legacy alias, dividend copy present, per-template composers + field-visibility map, decoder wiring, shared confirmation issueToken call-site, Home entry + both App.jsx sub-routes, CSS classes present)',
 );

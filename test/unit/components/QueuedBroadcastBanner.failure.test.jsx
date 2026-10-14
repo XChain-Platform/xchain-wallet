@@ -8,22 +8,24 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// A failed "Broadcast now" re-lists the queue, so a row the host removed
+// A failed send re-lists the queue, so a row the host removed
 // before throwing leaves at once, and the user reads plain words for what happened.
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, waitFor, act } from '@testing-library/react';
 import React from 'react';
 
 let queue = [];
 let broadcastImpl = async () => {};
 let discardImpl = async () => {};
+let listImpl = async () => queue;
+let reachabilityOverall = 'normal';
 const toasts = [];
 
 // One stable messaging object, as the provider gives: a fresh one per render
 // re-arms the banner's list effect on every render.
 const messaging = {
-    listQueuedBroadcasts: async () => queue,
+    listQueuedBroadcasts: (req) => listImpl(req),
     broadcastQueuedRequest: (req) => broadcastImpl(req),
     discardQueuedRequest: (req) => discardImpl(req),
 };
@@ -34,7 +36,7 @@ vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
 }));
 
 vi.mock('../../../packages/core/src/shared/hooks/useReachability.js', () => ({
-    useReachability: () => ({ overall: 'normal' }),
+    useReachability: () => ({ overall: reachabilityOverall }),
 }));
 
 vi.mock('../../../packages/core/src/shared/components/ToastHost.jsx', () => ({
@@ -46,10 +48,13 @@ const { QueuedBroadcastBanner, queuedBroadcastFailure } = await import(
 
 afterEach(() => {
     cleanup();
+    document.documentElement.removeAttribute('data-xc-reduced-motion');
     queue = [];
     toasts.length = 0;
     broadcastImpl = async () => {};
     discardImpl = async () => {};
+    listImpl = async () => queue;
+    reachabilityOverall = 'normal';
 });
 
 function entry(id, summary) {
@@ -69,7 +74,7 @@ async function renderWith(rows) {
 }
 
 function pressBroadcast(index = 0) {
-    fireEvent.click(screen.getAllByRole('button', { name: /broadcast now/i })[index]);
+    fireEvent.click(screen.getAllByRole('button', { name: /send now/i })[index]);
 }
 
 describe('QueuedBroadcastBanner after a failed broadcast', () => {
@@ -101,6 +106,21 @@ describe('QueuedBroadcastBanner after a failed broadcast', () => {
         expect(toasts).toHaveLength(0);
     });
 
+    it('states the retry delay without exposing the node error', async () => {
+        await renderWith([entry('a', 'Send 1 XCP')]);
+        broadcastImpl = async () => {
+            const err = named('BroadcastFailedTransientError', 'Encoder RPC error: ETIMEDOUT');
+            err.retryAfterMs = 2_100;
+            throw err;
+        };
+        pressBroadcast();
+        const alert = await screen.findByRole('alert');
+        expect(alert.textContent).toBe(
+            'Sending failed, and the transaction is still queued. Try again in 3 seconds.',
+        );
+        expect(alert.textContent).not.toMatch(/Encoder RPC|ETIMEDOUT/);
+    });
+
     it('drops a row the host refused as no longer queued without telling the user to compose again', async () => {
         await renderWith([entry('a', 'Send 1 XCP')]);
         broadcastImpl = async ({ id }) => {
@@ -114,12 +134,12 @@ describe('QueuedBroadcastBanner after a failed broadcast', () => {
         expect(toasts[0].message).not.toMatch(/broadcast\.queue:|compose/i);
     });
 
-    it('shows an unrelated error as before while the row is still queued', async () => {
+    it('hides an unrelated host error while the row is still waiting to send', async () => {
         await renderWith([entry('a', 'Send 1 XCP')]);
         broadcastImpl = async () => { throw new Error('boom'); };
         pressBroadcast();
         const alert = await screen.findByRole('alert');
-        expect(alert.textContent).toBe('boom');
+        expect(alert.textContent).toBe('Could not send this transaction. It is still waiting to send. Try again.');
         expect(screen.getByText('Send 1 XCP')).toBeTruthy();
     });
 
@@ -129,9 +149,135 @@ describe('QueuedBroadcastBanner after a failed broadcast', () => {
             queue = queue.filter((e) => e.id !== id);
             throw new Error('vault refused');
         };
-        fireEvent.click(screen.getAllByRole('button', { name: /discard/i })[0]);
+        fireEvent.click(screen.getAllByRole('button', { name: /remove from queue/i })[0]);
         await waitFor(() => expect(screen.queryByText('Send 1 XCP')).toBeNull());
         expect(screen.getByText('Send 2 XCP')).toBeTruthy();
+        expect(toasts.at(-1)?.message).toBe('Transaction removed from the queue.');
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+});
+
+describe('QueuedBroadcastBanner actions and announcements', () => {
+    it('renders only one action row for a duplicate queue id', async () => {
+        await renderWith([entry('same', 'First copy'), entry('same', 'Duplicate copy')]);
+        expect(screen.getByText('First copy')).toBeTruthy();
+        expect(screen.queryByText('Duplicate copy')).toBeNull();
+        expect(screen.getAllByRole('button', { name: /send now/i })).toHaveLength(1);
+    });
+
+    it('admits only one broadcast when clicks are batched before a rerender', async () => {
+        let finish;
+        broadcastImpl = vi.fn(() => new Promise((resolve) => { finish = resolve; }));
+        await renderWith([entry('a', 'Send 1 XCP')]);
+        const button = screen.getByRole('button', { name: 'Send now: Send 1 XCP' });
+
+        act(() => {
+            button.click();
+            button.click();
+        });
+
+        expect(broadcastImpl).toHaveBeenCalledTimes(1);
+        finish();
+        await waitFor(() => expect(toasts.some((toast) => toast.message === 'Transaction sent.')).toBe(true));
+    });
+
+    it('does not let an old wallet refresh replace the current wallet queue', async () => {
+        let resolveFirst;
+        let resolveSecond;
+        listImpl = ({ walletId }) => new Promise((resolve) => {
+            if (walletId === 'w1') resolveFirst = resolve;
+            else resolveSecond = resolve;
+        });
+        const view = render(<QueuedBroadcastBanner walletId="w1" intervalMs={0} />);
+        view.rerender(<QueuedBroadcastBanner walletId="w2" intervalMs={0} />);
+
+        await act(async () => { resolveSecond([entry('new', 'Current wallet send')]); });
+        expect(screen.getByText('Current wallet send')).toBeTruthy();
+        await act(async () => { resolveFirst([entry('old', 'Old wallet send')]); });
+
+        expect(screen.getByText('Current wallet send')).toBeTruthy();
+        expect(screen.queryByText('Old wallet send')).toBeNull();
+    });
+
+    it('hides the previous wallet queue while the next wallet list is pending', async () => {
+        let resolveSecond;
+        listImpl = ({ walletId }) => walletId === 'w1'
+            ? Promise.resolve([entry('old', 'Old wallet send')])
+            : new Promise((resolve) => { resolveSecond = resolve; });
+        const view = render(<QueuedBroadcastBanner walletId="w1" intervalMs={0} />);
+        expect(await screen.findByText('Old wallet send')).toBeTruthy();
+
+        view.rerender(<QueuedBroadcastBanner walletId="w2" intervalMs={0} />);
+
+        expect(screen.queryByText('Old wallet send')).toBeNull();
+        await act(async () => { resolveSecond([]); });
+    });
+
+    it('does not refresh or toast after a broadcast finishes following unmount', async () => {
+        let finish;
+        let listCalls = 0;
+        listImpl = async () => {
+            listCalls += 1;
+            return queue;
+        };
+        broadcastImpl = () => new Promise((resolve) => { finish = resolve; });
+        queue = [entry('a', 'Send 1 XCP')];
+        const view = render(<QueuedBroadcastBanner walletId="w1" intervalMs={0} />);
+        await screen.findByText('Send 1 XCP');
+        pressBroadcast();
+        view.unmount();
+
+        await act(async () => { finish(); });
+
+        expect(listCalls).toBe(1);
+        expect(toasts).toHaveLength(0);
+    });
+
+    it('keeps the static queue count out of a competing live region', async () => {
+        await renderWith([entry('a', 'Send 1 XCP')]);
+        expect(screen.getByText('Waiting to send (1)')).not.toHaveAttribute('aria-live');
+        expect(screen.queryByRole('status')).toBeNull();
+        expect(screen.getByRole('button', { name: 'Send now: Send 1 XCP' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: 'Remove from queue: Send 1 XCP' })).toBeEnabled();
+    });
+
+    it('disables every row action while one transaction is being sent', async () => {
+        let finish;
+        broadcastImpl = () => new Promise((resolve) => { finish = resolve; });
+        await renderWith([entry('a', 'Send 1 XCP'), entry('b', 'Send 2 XCP')]);
+        pressBroadcast();
+        await waitFor(() => {
+            for (const button of screen.getAllByRole('button')) expect(button).toBeDisabled();
+        });
+        expect(screen.getByRole('button', { name: 'Sending: Send 1 XCP' })).toBeDisabled();
+        finish();
+        await waitFor(() => expect(toasts.some((toast) => toast.message === 'Transaction sent.')).toBe(true));
+    });
+
+    it('removes a successfully handled row when the follow-up list cannot be read', async () => {
+        await renderWith([entry('a', 'Send 1 XCP')]);
+        listImpl = async () => { throw new Error('list unavailable'); };
+        pressBroadcast();
+        await waitFor(() => expect(screen.queryByText('Send 1 XCP')).toBeNull());
+        expect(toasts.at(-1)).toMatchObject({ message: 'Transaction sent.', variant: 'success' });
+    });
+
+    it('moves focus without smooth scrolling when app reduced motion is active', async () => {
+        document.documentElement.setAttribute('data-xc-reduced-motion', 'reduce');
+        reachabilityOverall = 'offline';
+        queue = [entry('a', 'Send 1 XCP')];
+        const view = render(<QueuedBroadcastBanner walletId="w1" intervalMs={0} />);
+        await screen.findByText('Send 1 XCP');
+        const scrollIntoView = vi.fn();
+        HTMLElement.prototype.scrollIntoView = scrollIntoView;
+
+        reachabilityOverall = 'normal';
+        view.rerender(<QueuedBroadcastBanner walletId="w1" intervalMs={0} />);
+        await waitFor(() => expect(toasts.at(-1)?.actionLabel).toBe('Review'));
+        toasts.at(-1).onAction();
+
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Send now: Send 1 XCP' }));
+        expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center', behavior: 'auto' });
     });
 });
 
@@ -143,6 +289,9 @@ describe('queuedBroadcastFailure', () => {
 
     it('trusts a re-listed queue that still holds the row', () => {
         const out = queuedBroadcastFailure(named('BroadcastFailedPermanentError', 'x'), [{ id: 'a' }], 'a');
-        expect(out).toEqual({ removed: false, message: 'x' });
+        expect(out).toEqual({
+            removed: false,
+            message: 'Could not send this transaction. It is still waiting to send. Try again.',
+        });
     });
 });

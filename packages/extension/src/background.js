@@ -32,10 +32,13 @@ import {
     notifications as notificationsLib,
 } from '@xchain-wallet/core';
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
+import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import {
+    ChromeMetaBackend,
     ChromeSessionBackend,
     ChromeStorageBackend,
 } from './storage/index.js';
+import { createVaultKeyring } from './background/vaultKeyring.js';
 import {
     ApprovalBroker,
     attachChromeRuntime,
@@ -66,22 +69,44 @@ import {
     shouldAutoLock,
 } from './background/autoLockState.js';
 import { createLockBackstop, createHostBuildFlight, createKeepaliveTick } from './background/walletLock.js';
-import { createBridgeEventBroadcaster } from './bridge/bridgeEvents.js';
+import {
+    createBridgeEventBroadcaster,
+    notifyDisconnectedSites,
+} from './bridge/bridgeEvents.js';
 import {
     applyLayoutMode,
     attachLayoutModeListener,
+    currentLayoutMode,
     readLayoutMode,
 } from './background/layoutMode.js';
+import { attachExtensionCommandListener } from './background/extensionCommands.js';
+import { restoreLabelSyncBestEffort } from './background/walletCreate.js';
+import { startLabelSyncRestoreTask } from './background/labelSyncRestoreTasks.js';
+import { createSurfaceStateBroadcaster } from './shared/surfaceStateSync.js';
+import { createChromeNotifier } from './background/chromeNotifications.js';
+import { createRestartStringSetStorage } from './background/restartStateStorage.js';
+
+logConsole.attach();
 
 // Apply the user's saved layout mode (popup vs sidepanel) at worker
 // boot, then watch storage for live changes from the in-wallet
-// settings UI. The user's preference is honoured the next time they
-// click the toolbar icon; no extension reload needed.
+// settings UI. The controller keeps the applied mode in memory so a
+// keyboard gesture can call chrome.sidePanel.open synchronously.
 (async () => {
     const mode = await readLayoutMode();
     await applyLayoutMode(mode);
-})();
+})().catch((err) => {
+    console.warn('[xchain-wallet/extension] layout mode initialization failed:', err);
+});
 attachLayoutModeListener();
+
+const surfaceStateBroadcaster = createSurfaceStateBroadcaster();
+const surfaceStateEvents = {
+    async publish(kind, payload) {
+        if (kind === 'network') await restartNetworkWatchers();
+        return surfaceStateBroadcaster.publish(kind, payload);
+    },
+};
 
 // --- Lazy wiring --------------------------------------------------------
 // The service worker starts with no master key; it's in ChromeSessionBackend
@@ -162,6 +187,9 @@ export const sdkResolved = resolveSdkFactory({ devMockFactory: createDevMockSdk,
         }
         return 'dev-mock';
     });
+// Keep the exported promise rejected for callers while marking the boot-time
+// branch handled when production SDK resolution fails before any caller joins it.
+void sdkResolved.catch(() => {});
 
 // Module-scoped so the broker survives across unlock / lock cycles;
 // rejecting any pending approval on window-close continues to work even
@@ -178,6 +206,13 @@ const connectedTabs = createConnectedTabRegistry();
 if (typeof chrome !== 'undefined' && chrome.tabs) {
     connectedTabs.attach(chrome.tabs);
 }
+const bridgeEvents = typeof chrome !== 'undefined' && chrome.tabs
+    ? createBridgeEventBroadcaster({
+        tabs: chrome.tabs,
+        runtime: chrome.runtime,
+        connectedTabs,
+    })
+    : undefined;
 
 let host = null;
 let vault = null;
@@ -203,23 +238,30 @@ let dispenserEscrowWatcher = null;
 const GOV_POLL_SEEN_KEY = 'governancePollsSeen';
 const DEADLINE_SEEN_KEY = 'deadlinesSeen';
 const DISPENSER_ESCROW_SEEN_KEY = 'dispenserEscrowSeen';
+const PRICE_ALERT_FIRED_KEY = 'priceAlertsFired';
+const COINPAY_AUTOPAY_NOTIFIED_KEY = 'coinpayAutopayNotified';
+const EXTENSION_AUTOPAY_INSTANCE_ID = 'extension-service-worker';
+const priceAlertFiredStore = createRestartStringSetStorage(PRICE_ALERT_FIRED_KEY);
+const coinpayAutopayNotifiedStore = createRestartStringSetStorage(COINPAY_AUTOPAY_NOTIFIED_KEY);
 
-// §46 delivery adapter for the extension: chrome.notifications works with the
-// popup closed (it's the service worker firing, not a page). type 'basic'
-// requires an iconUrl; reuse the packaged action icon.
-function chromeNotify({ kind, title, body }) {
-    try {
-        if (typeof chrome === 'undefined' || !chrome.notifications || !chrome.notifications.create) return;
-        chrome.notifications.create(`xchain-${kind}-${Date.now()}`, {
-            type: 'basic',
-            iconUrl: chrome.runtime.getURL('icons/icon-128.png'),
-            title,
-            message: body,
-        });
-    } catch (err) {
-        console.error('[xchain] chrome.notifications failed:', err);
+async function restartNetworkWatchers() {
+    await notificationService?.refresh();
+    for (const watcher of [governancePollWatcher, deadlineWatcher, dispenserEscrowWatcher]) {
+        if (!watcher) continue;
+        watcher.stop();
+        watcher.start();
+    }
+    if (coinpayAutopayWatcher) {
+        coinpayAutopayWatcher.stop();
+        coinpayAutopayWatcher.start();
+        await coinpayAutopayWatcher.refresh();
     }
 }
+
+// chrome.notifications works while every wallet surface is closed.
+const chromeNotify = createChromeNotifier(
+    typeof chrome === 'undefined' ? undefined : chrome,
+);
 // SignerPool persists across the unlocked session. Populated by the
 // pre-host `wallet.unlock` handler while the password is in scope, so
 // account.create / receive.getAddress (etc.) can derive without a
@@ -334,8 +376,16 @@ async function buildHost() {
         chainRegistry,
         sdkRegistry,
         signerPool,
+        // A password change re-seals the vault and must move the cached
+        // session key and signing password with it (vaultKeyring.js).
+        vaultKeyring: createVaultKeyring({
+            metaBackend: new ChromeMetaBackend(),
+            sessionBackend: new ChromeSessionBackend(),
+            signingSecretBackend: new ChromeSessionBackend({ key: SIGNING_SECRET_SESSION_KEY }),
+        }),
         broadcastQueueStore,
         approvals: approvalBroker,
+        surfaceStateEvents,
         // §43.2 / Cluster F FOLLOWUP 1: fan-out for bridge events so
         // dApps subscribed via provider.on(...) get accountsChanged /
         // chainChanged / disconnect when the wallet mutates connected
@@ -343,13 +393,7 @@ async function buildHost() {
         // from chrome.tabs.query: MV3 withholds Tab.url from a manifest
         // holding no "tabs" or host permission, which left the URL match
         // skipping every tab and delivering nothing.
-        bridgeEvents: typeof chrome !== 'undefined' && chrome.tabs
-            ? createBridgeEventBroadcaster({
-                tabs: chrome.tabs,
-                runtime: chrome.runtime,
-                connectedTabs,
-            })
-            : undefined,
+        bridgeEvents,
         // §50 / Cluster L FOLLOWUP 4: shell-specific diagnostic env + build.
         getDiagnosticContext: async () => ({
             env: {
@@ -409,6 +453,8 @@ async function buildHost() {
             getSettings: () => flowsLib.getSettings(vault),
             notify: chromeNotify,
             markTriggered: (id) => flowsLib.markAlertTriggered({ vault, id }),
+            loadFired: () => priceAlertFiredStore.load(),
+            saveFired: (ids) => priceAlertFiredStore.save(ids),
             logger: console,
         });
         priceAlertWatcher.start();
@@ -514,9 +560,13 @@ async function buildHost() {
             sdkRegistry,
             chainRegistry,
             getSigner: (walletId) => signerPool.get(walletId),
+            getSettings: () => flowsLib.getSettings(vault),
             reservationLedger: host.reservationLedger,
             notify: chromeNotify,
             shellKind: 'extension',
+            instanceId: EXTENSION_AUTOPAY_INSTANCE_ID,
+            loadNotified: () => coinpayAutopayNotifiedStore.load(),
+            saveNotified: (keys) => coinpayAutopayNotifiedStore.save(keys),
             logger: console,
         });
         coinpayAutopayWatcher.start();
@@ -530,9 +580,16 @@ async function buildHost() {
  * Release the host + close the vault so a subsequent unlock starts from
  * a clean slate. Called by the wallet.lock handler via the onLocked
  * callback; also safe to call from any cleanup path (e.g. panic mode).
+ *
+ * @returns {Promise<void>}
  */
 function tearDownHost() {
     hostEpoch += 1;
+    const cancelApprovals = approvalBroker.cancelAll();
+    let connectedSites = Promise.resolve([]);
+    if (vault) {
+        connectedSites = vault.connectedSites.list().catch(() => []);
+    }
     if (notificationService) {
         try { notificationService.stop(); } catch (_err) { /* best-effort */ }
         notificationService = null;
@@ -574,6 +631,12 @@ function tearDownHost() {
     signerPool = new signersLib.SignerPool();
     // The queue store stays: a lock drops the host, not the queue it served.
     host = null;
+    const disconnectSites = connectedSites.then((sites) => notifyDisconnectedSites({
+        events: bridgeEvents,
+        sites,
+        reason: 'wallet-locked',
+    }));
+    return Promise.all([cancelApprovals, disconnectSites]).then(() => undefined);
 }
 
 /**
@@ -609,13 +672,23 @@ function renewBroadcastQueueStore() {
 // keepalive alarm checks + locks.
 
 let lastActivityStampAt = 0;
+let activeUiRequests = 0;
 function noteAutoLockActivity() {
+    activeUiRequests += 1;
+    let finished = false;
+    const finish = () => {
+        if (finished) return;
+        finished = true;
+        activeUiRequests = Math.max(0, activeUiRequests - 1);
+    };
     const now = Date.now();
     // Throttle persisted writes to at most once per 10s; a message burst from
     // the open popup only needs to keep the idle clock roughly fresh.
-    if (now - lastActivityStampAt < 10_000) return;
-    lastActivityStampAt = now;
-    stampAutoLockActivity(now).catch(() => { /* best-effort */ });
+    if (now - lastActivityStampAt >= 10_000) {
+        lastActivityStampAt = now;
+        stampAutoLockActivity(now).catch(() => { /* best-effort */ });
+    }
+    return finish;
 }
 
 // Lock sequencing (retry record kept across a lock that left a secret behind)
@@ -627,14 +700,33 @@ const lockBackstop = createLockBackstop({
         sessionBackend: new ChromeSessionBackend(),
         signingSecretBackend: new ChromeSessionBackend({ key: SIGNING_SECRET_SESSION_KEY }),
     }),
-    tearDownHost: () => tearDownHost(),
+    tearDownHost: () => {
+        const teardown = tearDownHost();
+        void surfaceStateEvents.publish('session', { state: 'locked' });
+        return teardown;
+    },
     isUnlocked: () => Boolean(host && vault),
+    isRequestActive: () => activeUiRequests > 0,
     readAutoLockState,
     clearAutoLockState,
     shouldAutoLock,
 });
 
 const { lockWalletNow, maybeAutoLock } = lockBackstop;
+
+attachExtensionCommandListener({
+    commandsApi: typeof chrome === 'undefined' ? null : chrome.commands,
+    openWallet: (tab) => {
+        if (currentLayoutMode() === 'sidepanel' && chrome.sidePanel?.open) {
+            const windowId = Number.isInteger(tab?.windowId)
+                ? tab.windowId
+                : chrome.windows?.WINDOW_ID_CURRENT;
+            if (Number.isInteger(windowId)) return chrome.sidePanel.open({ windowId });
+        }
+        return chrome.action.openPopup();
+    },
+    lockWallet: lockWalletNow,
+});
 
 // The idle-lock check runs before the notification refresh, never behind its network I/O.
 const keepaliveTick = createKeepaliveTick({
@@ -661,10 +753,16 @@ attachSessionMetaListener({
         clearAutoLockState().catch(() => { /* best-effort */ });
         lastActivityStampAt = 0;
         lockBackstop.noteUnlocked();
-        return ensureHost().catch((err) => {
-            console.error('[xchain] ensureHost after unlock failed:', err);
-        });
+        return ensureHost()
+            .then(() => surfaceStateEvents.publish('session', { state: 'unlocked' }))
+            .catch((err) => {
+                console.error('[xchain] ensureHost after unlock failed:', err);
+            });
     },
+    startLabelSyncRestore: (opts) => startLabelSyncRestoreTask({
+        walletId: opts.walletId,
+        run: () => restoreLabelSyncBestEffort({ ...opts, vault }),
+    }),
     // Keeps the auto-lock record (and tears the host down) per the backstop's
     // rule: a secret that survived the clear leaves the idle alarm the job.
     onLocked: (result) => lockBackstop.onLocked(result),
@@ -685,9 +783,10 @@ attachSignerBridgeListener();
 // wiped wallet serving.
 attachWipeStorageListener({
     beforeWipe: () => sealBroadcastQueues(),
-    onWiped: () => {
-        tearDownHost();
+    onWiped: async () => {
+        await tearDownHost();
         renewBroadcastQueueStore();
+        void surfaceStateEvents.publish('session', { state: 'no-wallet' });
     },
 });
 

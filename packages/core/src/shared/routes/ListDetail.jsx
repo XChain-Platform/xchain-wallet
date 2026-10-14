@@ -9,15 +9,29 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { AddressText, Button, ChainBadge, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import {
+    AddressText,
+    Button,
+    ChainBadge,
+    EmptyState,
+    ListPage,
+    PageHeader,
+    Screen,
+    SectionHeader,
+    StatusMessage,
+} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { TickMemberName } from '../components/TickMemberName.jsx';
 import { neutralizeControlText } from '../utils/textHardening.js';
+import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { listMetaSupported } from '../../flows/listFormatSupport.js';
+import { findListOwner } from '../../flows/listMembership.js';
+import { uniqueRows } from '../utils/pagedRows.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const MEMBERS_PAGE_SIZE = 25;
 
 /**
  * PC-10 "My Lists" detail page: membership + lineage + a best-effort
@@ -48,6 +62,7 @@ const chainRegistry = registryLib.defaultRegistry();
  * rather than pretending to.
  *
  * @param {object} props
+ * @param {string} [props.walletId]
  * @param {string} props.chainId
  * @param {string} props.actionIndex
  * @param {() => void} props.onBack
@@ -56,24 +71,51 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {(ref: { chainId: string, actionIndex: string }) => void} [props.onRename]    shows "Rename list" when passed and supported
  * @param {(ref: { chainId: string, actionIndex: string }) => void} [props.onTransfer]  shows "Transfer list" when passed
  */
-export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRename, onTransfer }) {
+export function ListDetail({ walletId, chainId, actionIndex, onBack, onFork, onShare, onRename, onTransfer }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
-    const [data, setData] = useState(/** @type {any | null} */ (null));
+    const [data, setData] = useState(/** @type {any | null | undefined} */ (undefined));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [metaSupported, setMetaSupported] = useState(false);
+    const [owner, setOwner] = useState(/** @type {string | null | undefined} */ (undefined));
+    const [walletAddresses, setWalletAddresses] = useState(/** @type {any[] | null | undefined} */ (undefined));
+    const [reload, setReload] = useState(0);
 
     useEffect(() => {
         let cancelled = false;
-        setData(null);
+        setData(undefined);
+        setOwner(undefined);
         setLoadError(null);
-        messaging.getListByActionIndex({ chainId, actionIndex })
-            .then((row) => { if (!cancelled) setData(row || null); })
-            .catch((err) => { if (!cancelled) setLoadError(err?.message || 'Failed to load list.'); });
+        const readList = (index) => messaging.getListByActionIndex({ chainId, actionIndex: index });
+        readList(actionIndex)
+            .then(async (row) => {
+                const nextOwner = row ? await findListOwner({ detail: row, readList }) : null;
+                if (!cancelled) {
+                    setData(row || null);
+                    setOwner(nextOwner);
+                }
+            })
+            .catch((err) => {
+                if (!cancelled) setLoadError(readFailureMessage(err, 'load this list'));
+            });
         return () => { cancelled = true; };
-    }, [chainId, actionIndex, messaging]);
+    }, [chainId, actionIndex, messaging, reload]);
+
+    useEffect(() => {
+        let cancelled = false;
+        if (!walletId) {
+            setWalletAddresses(null);
+            return () => { cancelled = true; };
+        }
+        setWalletAddresses(undefined);
+        messaging.getAddressesByChain(walletId)
+            .then((byChain) => {
+                if (!cancelled) setWalletAddresses(Array.isArray(byChain?.[chainId]) ? byChain[chainId] : []);
+            })
+            .catch(() => { if (!cancelled) setWalletAddresses(null); });
+        return () => { cancelled = true; };
+    }, [walletId, chainId, messaging]);
 
     useEffect(() => {
         let cancelled = false;
@@ -93,7 +135,10 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const isTick = data ? String(data.type) === '1' : false;
     const isFork = data ? (data.list_action_index != null && data.list_action_index !== '') : false;
-    const items = useMemo(() => (Array.isArray(data?.list) ? data.list : []), [data]);
+    const items = useMemo(
+        () => uniqueRows(Array.isArray(data?.list) ? data.list : [], memberIdentity),
+        [data],
+    );
     const edits = useMemo(() => (Array.isArray(data?.edits) ? data.edits : []), [data]);
     // Items the network recorded invalid and left out (an unknown TICK, a
     // malformed or wrong-network ADDRESS); the LIST itself stays valid.
@@ -103,35 +148,62 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
     const resolution = state && typeof state.edit_resolution_active === 'boolean'
         ? state.edit_resolution_active : null;
     const currentItems = useMemo(
-        () => (resolution === true && Array.isArray(state?.current_list) ? state.current_list : null),
+        () => (resolution === true && Array.isArray(state?.current_list)
+            ? uniqueRows(state.current_list, memberIdentity)
+            : null),
         [resolution, state],
     );
     const membershipIndex = state?.membership_action_index != null ? String(state.membership_action_index) : null;
     const name = typeof data?.name === 'string' && data.name.length > 0 ? data.name : null;
     const description = typeof data?.description === 'string' && data.description.length > 0
         ? data.description : null;
+    const permissionCheckEnabled = Boolean(walletId);
+    const walletOwnsList = Boolean(owner && walletAddresses?.some((record) => record?.address === owner));
+    const canManage = !permissionCheckEnabled || walletOwnsList;
+    const readOnlyReason = !permissionCheckEnabled || canManage
+        ? null
+        : owner === undefined || walletAddresses === undefined
+            ? 'Checking whether this wallet owns the list.'
+            : owner === null || walletAddresses === null
+                ? 'Ownership could not be verified, so this list is read-only.'
+                : 'This list is owned by another address, so it is read-only in this wallet.';
 
     const header = (
         <PageHeader onBack={onBack} title={isTick ? 'Token list' : 'Address list'} />
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            <ListPage>{children}</ListPage>
         </Screen>
     );
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+        return wrap(
+            <StatusMessage
+                variant="error"
+                className={styles.error}
+                recovery={{ label: 'Try again', onAction: () => setReload((value) => value + 1) }}
+            >
+                {loadError}
+            </StatusMessage>,
+        );
     }
-    if (!data) {
-        return wrap(<p className={styles.hint}>Loading…</p>);
+    if (data === undefined) {
+        return wrap(
+            <div role="status" aria-label="Loading list details" aria-busy="true">
+                Loading list…
+            </div>,
+        );
+    }
+    if (data === null) {
+        return wrap(<EmptyState title="List not found" body="It may have been removed or not indexed yet." />);
     }
 
     return wrap(
         <>
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>Chain</dt>
-                <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
+                <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected chain'}</dd>
                 <dt className={styles.detailsLabel}>List index</dt>
                 <dd className={styles.detailsValue}>#{actionIndex}</dd>
                 {name !== null ? (
@@ -148,8 +220,14 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
                 ) : null}
                 <dt className={styles.detailsLabel}>Type</dt>
                 <dd className={styles.detailsValue}>{isTick ? 'Token list' : 'Address list'}</dd>
-                <dt className={styles.detailsLabel}>Created by</dt>
+                <dt className={styles.detailsLabel}>Published by</dt>
                 <dd className={styles.detailsValue}>{data.source ? <AddressText address={data.source} /> : '?'}</dd>
+                {owner !== undefined ? (
+                    <>
+                        <dt className={styles.detailsLabel}>Current owner</dt>
+                        <dd className={styles.detailsValue}>{owner ? <AddressText address={owner} /> : 'Unavailable'}</dd>
+                    </>
+                ) : null}
                 <dt className={styles.detailsLabel}>Status</dt>
                 <dd className={styles.detailsValue}>{data.status === 'valid' ? 'Valid' : String(data.status || '?')}</dd>
                 {data.block_index != null ? (
@@ -162,7 +240,7 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
                     <>
                         <dt className={styles.detailsLabel}>Forked from</dt>
                         <dd className={styles.detailsValue}>
-                            #{data.list_action_index} ({data.edit === '2' ? 'removed items' : 'added items'})
+                            #{data.list_action_index} ({String(data.edit) === '2' ? 'removed items' : 'added items'})
                         </dd>
                     </>
                 ) : null}
@@ -170,35 +248,55 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
 
             {currentItems ? (
                 <>
-                    <h3 className={styles.successLabel}>Current members ({currentItems.length})</h3>
-                    <p className={styles.hint}>
-                        {membershipIndex && membershipIndex !== String(actionIndex)
+                    <SectionHeader
+                        title={`Current members (${currentItems.length})`}
+                        description={membershipIndex && membershipIndex !== String(actionIndex)
                             ? `From edit #${membershipIndex}, the newest valid edit of this list. Everything that references #${actionIndex} uses these members.`
                             : `No edits yet. Everything that references #${actionIndex} uses these members.`}
-                    </p>
-                    <MemberList items={currentItems} isTick={isTick} messaging={messaging} chainId={chainId} />
-                    <h3 className={styles.successLabel}>As created ({items.length})</h3>
-                    <p className={styles.hint}>The members this action was published with.</p>
-                    <MemberList items={items} isTick={isTick} messaging={messaging} chainId={chainId} />
+                    />
+                    <MemberList
+                        key={`current:${actionIndex}:${membershipIndex || ''}`}
+                        items={currentItems}
+                        isTick={isTick}
+                        messaging={messaging}
+                        chainId={chainId}
+                    />
+                    <SectionHeader
+                        title={`As created (${items.length})`}
+                        description="The members this action was published with."
+                    />
+                    <MemberList
+                        key={`created:${actionIndex}`}
+                        items={items}
+                        isTick={isTick}
+                        messaging={messaging}
+                        chainId={chainId}
+                    />
                 </>
             ) : (
                 <>
-                    <h3 className={styles.successLabel}>
-                        {resolution === false ? `Current members (${items.length})` : `Members as published (${items.length})`}
-                    </h3>
-                    <MemberList items={items} isTick={isTick} messaging={messaging} chainId={chainId} />
+                    <SectionHeader
+                        title={resolution === false ? `Current members (${items.length})` : `Members as published (${items.length})`}
+                    />
+                    <MemberList
+                        key={`published:${actionIndex}`}
+                        items={items}
+                        isTick={isTick}
+                        messaging={messaging}
+                        chainId={chainId}
+                    />
                 </>
             )}
 
             {!isFork && rejected.length > 0 ? (
                 <>
-                    <h3 className={styles.successLabel}>Left out by the network ({rejected.length})</h3>
-                    <p className={styles.hint}>
-                        These items were sent but are not on the list: the network checks each item on its own.
-                    </p>
+                    <SectionHeader
+                        title={`Left out by the network (${rejected.length})`}
+                        description="These items were sent but are not on the list: the network checks each item on its own."
+                    />
                     <ul className={styles.detailsList} style={{ display: 'block' }}>
                         {rejected.map((e, i) => (
-                            <li key={i} style={{ padding: '2px 0' }}>
+                            <li key={i} style={{ padding: '2px 0', overflowWrap: 'anywhere' }}>
                                 <code>{e.tick ?? e.address}</code>{` (${e.status})`}
                             </li>
                         ))}
@@ -208,10 +306,10 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
 
             {isFork && edits.length > 0 ? (
                 <>
-                    <h3 className={styles.successLabel}>This fork's edit</h3>
+                    <SectionHeader title="This fork's edit" />
                     <ul className={styles.detailsList} style={{ display: 'block' }}>
                         {edits.map((e, i) => (
-                            <li key={i} style={{ padding: '2px 0' }}>
+                            <li key={i} style={{ padding: '2px 0', overflowWrap: 'anywhere' }}>
                                 <code>{e.tick ?? e.address}</code>
                                 {e.status && e.status !== 'valid' ? ` (${e.status})` : ''}
                             </li>
@@ -220,49 +318,49 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
                 </>
             ) : null}
 
-            <h3 className={styles.successLabel}>Used by</h3>
-            <p className={styles.hint}>
-                The explorer has no reverse lookup from a list index to the
-                airdrops, dispensers, gates, or orders that reference it today,
-                so the wallet can't show what uses this list. If you know a
-                specific airdrop, dispenser, gate, or order references it,
-                check that item directly.
-            </p>
+            <SectionHeader
+                title="Used by"
+                description="The explorer has no reverse lookup from a list index to the airdrops, dispensers, gates, or orders that reference it today, so the wallet can't show what uses this list. If you know a specific airdrop, dispenser, gate, or order references it, check that item directly."
+            />
 
-            <div className={styles.actions}>
-                <Button
-                    variant="primary"
-                    onClick={() => onFork({
-                        chainId,
-                        actionIndex,
-                        type: String(data.type),
-                        // An edit applies to the membership a reference resolves
-                        // to, so fork from the current members under resolution.
-                        items: currentItems || items,
-                        editResolutionActive: resolution,
-                        // Where the fork form starts its walk to the list's owner.
-                        source: data.source ? String(data.source) : null,
-                        parentIndex: isFork ? String(data.list_action_index) : null,
-                    })}
-                >
-                    Fork &amp; edit
-                </Button>
-                {onShare ? (
-                    <Button variant="secondary" onClick={() => onShare({ chainId, actionIndex })}>
-                        Share list
+            <SectionHeader title="Actions" />
+            {readOnlyReason ? <StatusMessage variant="warning">{readOnlyReason}</StatusMessage> : null}
+            {canManage ? (
+                <div className={styles.actions}>
+                    {onShare ? (
+                        <Button variant="secondary" onClick={() => onShare({ chainId, actionIndex })}>
+                            Share list
+                        </Button>
+                    ) : null}
+                    {onTransfer ? (
+                        <Button variant="secondary" onClick={() => onTransfer({ chainId, actionIndex })}>
+                            Transfer list
+                        </Button>
+                    ) : null}
+                    {onRename && metaSupported ? (
+                        <Button variant="secondary" onClick={() => onRename({ chainId, actionIndex })}>
+                            Rename list
+                        </Button>
+                    ) : null}
+                    <Button
+                        variant="primary"
+                        onClick={() => onFork({
+                            chainId,
+                            actionIndex,
+                            type: String(data.type),
+                            // An edit applies to the membership a reference resolves
+                            // to, so fork from the current members under resolution.
+                            items: currentItems || items,
+                            editResolutionActive: resolution,
+                            // Where the fork form starts its walk to the list's owner.
+                            source: data.source ? String(data.source) : null,
+                            parentIndex: isFork ? String(data.list_action_index) : null,
+                        })}
+                    >
+                        Fork &amp; edit
                     </Button>
-                ) : null}
-                {onTransfer ? (
-                    <Button variant="secondary" onClick={() => onTransfer({ chainId, actionIndex })}>
-                        Transfer list
-                    </Button>
-                ) : null}
-                {onRename && metaSupported ? (
-                    <Button variant="secondary" onClick={() => onRename({ chainId, actionIndex })}>
-                        Rename list
-                    </Button>
-                ) : null}
-            </div>
+                </div>
+            ) : null}
         </>,
     );
 }
@@ -273,18 +371,37 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onShare, onRe
  * @param {{ items: string[], isTick: boolean, messaging: object, chainId: string }} props
  */
 function MemberList({ items, isTick, messaging, chainId }) {
+    const [visibleLimit, setVisibleLimit] = useState(MEMBERS_PAGE_SIZE);
     if (items.length === 0) {
-        return <p className={styles.hint}>This list has no members.</p>;
+        return <EmptyState title="No list members" body="Addresses added to this list appear here." titleAs="h3" />;
     }
+    const visibleItems = items.slice(0, visibleLimit);
     return (
-        <ul className={styles.detailsList} style={{ display: 'block' }}>
-            {items.map((item, i) => (
-                <li key={i} style={{ padding: '2px 0' }}>
-                    {isTick
-                        ? <TickMemberName item={item} messaging={messaging} chainId={chainId} />
-                        : <AddressText address={item} truncate={false} />}
-                </li>
-            ))}
-        </ul>
+        <>
+            <ul className={styles.detailsList} style={{ display: 'block' }}>
+                {visibleItems.map((item) => (
+                    <li key={String(item)} style={{ padding: '2px 0' }}>
+                        {isTick
+                            ? <TickMemberName item={item} messaging={messaging} chainId={chainId} />
+                            : <AddressText address={item} truncate={false} />}
+                    </li>
+                ))}
+            </ul>
+            {visibleItems.length < items.length ? (
+                <div className={styles.actions}>
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => setVisibleLimit((limit) => limit + MEMBERS_PAGE_SIZE)}
+                    >
+                        Load more members
+                    </Button>
+                </div>
+            ) : null}
+        </>
     );
+}
+
+function memberIdentity(item) {
+    return item == null ? null : String(item);
 }

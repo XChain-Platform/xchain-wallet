@@ -18,11 +18,18 @@
 // is read as no information, not as "not settled", and falls through to
 // the existing expiration/open logic unchanged.
 
-import { describe, it, expect, afterEach } from 'vitest';
-import { render, cleanup, act as domAct, within } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { render, cleanup, act as domAct, fireEvent, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import { MySwapsView, deriveStatus } from '../../../packages/core/src/shared/routes/MySwapsView.jsx';
+import {
+    MySwapsView,
+    deriveStatus,
+    swapExpiryLabel,
+} from '../../../packages/core/src/shared/routes/MySwapsView.jsx';
+import { formatLocalDateTime } from '../../../packages/core/src/shared/utils/dateTime.js';
 
 const CHAIN = 'dogecoin-testnet';
 const OWN = 'ndDEAAyn7DcGeaQ6chBWH2vaSdYAXVGNhc';
@@ -37,6 +44,29 @@ const HD_ADDRESS = Object.freeze({
 });
 
 const FUTURE = Math.floor(Date.now() / 1000) + 3600;
+const swapViewCss = readFileSync(join(
+    process.cwd(),
+    'packages/core/src/shared/routes/MySwapsView.module.css',
+), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+
+function ruleBody(text, selector) {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\:]/g, '\\$&');
+    const match = new RegExp(`(^|[}\\s])${escaped}\\s*\\{([^}]*)\\}`).exec(text);
+    return match?.[2] || '';
+}
+
+function mediaBlock(text, query) {
+    const start = text.indexOf(`@media ${query}`);
+    if (start < 0) return '';
+    const openBrace = text.indexOf('{', start);
+    let depth = 0;
+    for (let index = openBrace; index < text.length; index += 1) {
+        if (text[index] === '{') depth += 1;
+        if (text[index] === '}') depth -= 1;
+        if (depth === 0) return text.slice(openBrace + 1, index);
+    }
+    return '';
+}
 
 // A swap row as the list feed serves it. `swap_status` is the indexer's
 // lifecycle status, absent on an older explorer's reader.
@@ -68,13 +98,15 @@ function swapDetail(actionIndex, status, expiration) {
     return { action: 'SWAP', action_index: String(actionIndex), state: { status, expiration } };
 }
 
-function harness({ swaps = [], cancels = [], details = {} } = {}) {
+function harness({ swaps = [], cancels = [], details = {}, detailReader, cancelReader } = {}) {
+    const composeForConfirm = vi.fn(async () => ({ psbt: 'aa00', encoding: 'psbt', actionString: 'ACT' }));
     const target = {
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: [HD_ADDRESS] }),
         getSwapsForAddress: () => Promise.resolve({ data: swaps }),
-        getSwapCancelsForAddress: () => Promise.resolve({ data: cancels }),
-        getSwapDetail: ({ actionIndex }) => Promise.resolve(details[String(actionIndex)] ?? null),
+        getSwapCancelsForAddress: cancelReader || (() => Promise.resolve({ data: cancels })),
+        getSwapDetail: detailReader || (({ actionIndex }) => Promise.resolve(details[String(actionIndex)] ?? null)),
         getSignerStatus: () => Promise.resolve({ status: 'locked' }),
+        composeForConfirm,
     };
     const messaging = new Proxy(target, {
         get(t, prop) {
@@ -82,7 +114,7 @@ function harness({ swaps = [], cancels = [], details = {} } = {}) {
             return () => Promise.resolve({});
         },
     });
-    return { messaging };
+    return { messaging, composeForConfirm };
 }
 
 async function drain(rounds = 24) {
@@ -115,6 +147,44 @@ function rowFor(list, actionIndex) {
 afterEach(() => cleanup());
 
 describe('MySwapsView: settled status', () => {
+    it.each([320, 360])('keeps the swap row and edit detail usable at %ipx', async (viewportWidth) => {
+        const widthDescriptor = Object.getOwnPropertyDescriptor(window, 'innerWidth');
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: viewportWidth });
+
+        try {
+            const longAmount = '12345678901234567890.12345678901234567890';
+            const { messaging } = harness({
+                swaps: [swapRow(640, { give_amount: longAmount, get_amount: longAmount })],
+            });
+            const utils = await open(messaging);
+            const row = rowFor(section(utils, 'Open swaps'), 640);
+
+            expect(within(row).getByLabelText(`Give ${longAmount} DOGESWAP; get ${longAmount} DOGE`))
+                .toBeTruthy();
+            expect(within(row).getByLabelText('Status: Open').textContent).toBe('Open');
+            for (const label of ['Timeline', 'Edit', 'Cancel']) {
+                expect(within(row).getByRole('button', { name: label })).toBeTruthy();
+            }
+
+            fireEvent.click(within(row).getByRole('button', { name: 'Edit' }));
+            const detail = utils.getByLabelText('Swap amounts');
+            expect(detail.textContent).toContain(`Give ${longAmount} DOGESWAP`);
+            expect(detail.textContent).toContain(`Get ${longAmount} DOGE`);
+            expect(utils.getByRole('button', { name: 'Set allow-list' })).toBeTruthy();
+            expect(utils.getByRole('button', { name: 'Set block-list' })).toBeTruthy();
+
+            const narrow = mediaBlock(swapViewCss, '(max-width: 420px)');
+            expect(ruleBody(narrow, '.rowHead')).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\)/);
+            expect(ruleBody(narrow, '.amounts')).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\)/);
+            expect(ruleBody(narrow, '.rowActions'))
+                .toMatch(/grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);
+            expect(ruleBody(swapViewCss, '.side')).toMatch(/overflow-wrap:\s*anywhere/);
+            expect(ruleBody(swapViewCss, '.statusBadge')).toMatch(/max-width:\s*100%/);
+        } finally {
+            if (widthDescriptor) Object.defineProperty(window, 'innerWidth', widthDescriptor);
+        }
+    });
+
     it('files a swap_status "complete" row under Closed as Settled with no Edit or Cancel', async () => {
         const { messaging } = harness({
             swaps: [swapRow(665, { swap_status: 'complete' })],
@@ -155,7 +225,76 @@ describe('MySwapsView: settled status', () => {
 
         const row = rowFor(section(utils, 'Open swaps'), 702);
         expect(within(row).getByText('Open')).toBeTruthy();
-        expect(within(row).getByText(`Expires ${new Date(FUTURE * 1000).toLocaleString()}`)).toBeTruthy();
+        expect(within(row).getByText(/^Expires .* \(.+ left\)$/)).toBeTruthy();
+    });
+
+    it('lets fresh detail lifecycle close an offer whose list row is stale', async () => {
+        const { messaging } = harness({
+            swaps: [swapRow(703, { swap_status: 'open' })],
+            details: { 703: swapDetail(703, 'complete', FUTURE) },
+        });
+        const utils = await open(messaging);
+
+        expect(section(utils, 'Open swaps')).toBeNull();
+        const row = rowFor(section(utils, 'Closed swaps'), 703);
+        expect(within(row).getByText('Settled')).toBeTruthy();
+        expect(within(row).queryByRole('button', { name: 'Edit' })).toBeNull();
+        expect(within(row).queryByRole('button', { name: 'Cancel' })).toBeNull();
+    });
+
+    it('refuses an action when a fresh detail says the listed swap settled', async () => {
+        const detailReader = vi.fn()
+            .mockResolvedValueOnce(swapDetail(705, 'open', FUTURE))
+            .mockResolvedValueOnce(swapDetail(705, 'complete', FUTURE));
+        const { messaging, composeForConfirm } = harness({
+            swaps: [swapRow(705, { swap_status: 'open' })],
+            detailReader,
+        });
+        const utils = await open(messaging);
+        const row = rowFor(section(utils, 'Open swaps'), 705);
+        fireEvent.click(within(row).getByRole('button', { name: 'Cancel' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Cancel swap' }));
+
+        expect(await utils.findByText('This swap is no longer open. Refresh My swaps and try again.')).toBeTruthy();
+        expect(detailReader).toHaveBeenCalledTimes(2);
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('refuses an action when a fresh cancel feed closes the listed swap', async () => {
+        const cancelReader = vi.fn()
+            .mockResolvedValueOnce({ data: [] })
+            .mockResolvedValueOnce({ data: [cancelRow(9000, 706, 'valid')] });
+        const { messaging, composeForConfirm } = harness({
+            swaps: [swapRow(706, { swap_status: 'open' })],
+            details: { 706: swapDetail(706, 'open', FUTURE) },
+            cancelReader,
+        });
+        const utils = await open(messaging);
+        const row = rowFor(section(utils, 'Open swaps'), 706);
+        fireEvent.click(within(row).getByRole('button', { name: 'Edit' }));
+        fireEvent.change(utils.getByLabelText('New expiration (optional)'), {
+            target: { value: '2099-01-02T03:04' },
+        });
+        fireEvent.click(utils.getByRole('button', { name: 'Edit swap' }));
+
+        expect(await utils.findByText('This swap is no longer open. Refresh My swaps and try again.')).toBeTruthy();
+        expect(cancelReader).toHaveBeenCalledTimes(2);
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('labels an expired offer in the past tense and removes its actions', async () => {
+        const past = Math.floor(Date.now() / 1000) - 60;
+        const { messaging } = harness({
+            swaps: [swapRow(704, { swap_status: 'open' })],
+            details: { 704: swapDetail(704, 'open', past) },
+        });
+        const utils = await open(messaging);
+
+        const row = rowFor(section(utils, 'Closed swaps'), 704);
+        expect(within(row).getByText('Expired')).toBeTruthy();
+        expect(within(row).getByText(`Expired ${formatLocalDateTime(past)}`)).toBeTruthy();
+        expect(within(row).queryByRole('button', { name: 'Edit' })).toBeNull();
+        expect(within(row).queryByRole('button', { name: 'Cancel' })).toBeNull();
     });
 
     it('treats a missing swap_status as no information (older explorer compatibility)', async () => {
@@ -200,5 +339,30 @@ describe('deriveStatus with swap_status', () => {
         const row = swapRow(9, { expiration: 1 });
         delete row.swap_status;
         expect(deriveStatus({ ...base, row }, new Set(), 1000)).toBe('expired');
+    });
+});
+
+describe('MySwapsView expiration display', () => {
+    it('formats a deterministic countdown without changing the absolute deadline', () => {
+        const now = 2_000_000_000;
+        const expiration = now + 3661;
+        expect(swapExpiryLabel(expiration, now)).toBe(
+            `Expires ${formatLocalDateTime(expiration)} (1h 01m left)`,
+        );
+        expect(swapExpiryLabel(now + 2 * 86400 + 3 * 3600, now)).toBe(
+            `Expires ${formatLocalDateTime(now + 2 * 86400 + 3 * 3600)} (2d 3h left)`,
+        );
+    });
+
+    it('does not render a millisecond value as an expiration thousands of years away', async () => {
+        const { messaging } = harness({
+            swaps: [swapRow(730)],
+            details: { 730: swapDetail(730, 'open', String(Date.now())) },
+        });
+        const utils = await open(messaging);
+        const list = section(utils, 'Open swaps');
+        const row = rowFor(list, 730);
+
+        expect(within(row).queryByText(/^Expires /)).toBeNull();
     });
 });

@@ -46,7 +46,7 @@ function makeHarness({ outputs, decoded, inputs } = {}) {
         },
     };
     const sdkRegistry = { get: () => sdk };
-    const chainRegistry = { get: () => ({ coin: 'BTC', networkKind: 'regtest', adsDonationAddress: 'XXXX' }) };
+    const chainRegistry = { get: () => ({ coin: 'bitcoin', networkKind: 'regtest', adsDonationAddress: 'XXXX' }) };
     const vault = { settings: { get: async () => ({ ads: { enabled: false, perChain: {} } }) } };
     return { sdk, sdkRegistry, chainRegistry, vault };
 }
@@ -84,6 +84,68 @@ describe('composeActionForConfirm', () => {
         const composed = await composeActionForConfirm(ARGS(h));
         // 6000 in - (0 carrier + 100 change) out = 5900.
         expect(composed.networkFeeSats).toBe(5900);
+    });
+
+    for (const { coin, ticker, floor } of [
+        { coin: 'bitcoin', ticker: 'BTC', floor: 546 },
+        { coin: 'litecoin', ticker: 'LTC', floor: 5_460 },
+        { coin: 'dogecoin', ticker: 'DOGE', floor: 100_000 },
+    ]) {
+        it(`marks a ${ticker} payment whose sub-dust remainder is folded into its exact fee`, async () => {
+            const destination = `${ticker.toLowerCase()}-recipient`;
+            const paymentSats = floor * 2;
+            const requestedFee = 600;
+            const remainder = floor - 1;
+            const h = makeHarness({
+                inputs: [{ value: paymentSats + requestedFee + remainder }],
+                outputs: [
+                    { address: destination, scriptPubKeyHex: '0014aa', scriptType: 'p2wpkh', value: paymentSats },
+                ],
+            });
+            h.chainRegistry.get = () => ({ coin, networkKind: 'regtest', adsDonationAddress: 'XXXX' });
+            h.sdk.wallet.getBitcoinNetwork = () => ({ dustThreshold: floor });
+            h.sdk.encoder.createTx.mockResolvedValue({ psbt: 'PSBTHEX', encoding: null });
+            const amount = (paymentSats / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
+
+            const composed = await composeActionForConfirm({
+                ...ARGS(h),
+                actionData: {
+                    action: 'SEND',
+                    params: { TICK: ticker, AMOUNT: amount, DESTINATION: destination },
+                },
+                encoderOpts: { pubkey: 'pub', fee: requestedFee },
+            });
+
+            // The requested fee plus every unreturned input satoshi is the fee
+            // of the bytes the user reviews. The remainder is one unit below
+            // this chain's floor, so a change output would itself be dust.
+            expect(composed.networkFeeSats).toBe(requestedFee + remainder);
+            expect(composed.dustChangeLimitSats).toBe(floor);
+        });
+    }
+
+    it('does not report folded change when the PSBT has a spendable change output', async () => {
+        const destination = 'bc1qrecipient';
+        const h = makeHarness({
+            inputs: [{ value: 20_000 }],
+            outputs: [
+                { address: destination, scriptPubKeyHex: '0014aa', scriptType: 'p2wpkh', value: 9_000 },
+                { address: 'chg', scriptPubKeyHex: '0014bb', scriptType: 'p2wpkh', value: 10_000 },
+            ],
+        });
+        h.sdk.encoder.createTx.mockResolvedValue({ psbt: 'PSBTHEX', encoding: null });
+
+        const composed = await composeActionForConfirm({
+            ...ARGS(h),
+            actionData: {
+                action: 'SEND',
+                params: { TICK: 'BTC', AMOUNT: '0.00009', DESTINATION: destination },
+            },
+            encoderOpts: { pubkey: 'pub', fee: 1_000 },
+        });
+
+        expect(composed.networkFeeSats).toBe(1_000);
+        expect(composed.dustChangeLimitSats).toBe(null);
     });
 
     // §5.2.3: deltas are computed host-side from the PARSED COMPOSED action, so

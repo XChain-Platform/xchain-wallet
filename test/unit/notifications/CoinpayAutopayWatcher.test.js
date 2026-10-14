@@ -120,8 +120,9 @@ const chainRegistry = {
 function makeWatcher(over = {}) {
     const vault = over.vault ?? makeVault();
     const { registry } = over.sdkRegistryPair ?? makeSdkRegistry();
-    const ledger = { reserve: vi.fn(async () => {}), release: vi.fn(async () => {}) };
+    const ledger = over.ledger ?? { reserve: vi.fn(async () => {}), release: vi.fn(async () => {}) };
     const notify = vi.fn(async () => {});
+    const settings = over.settings ?? { notifications: { incomingReceipts: true } };
     const signer = over.signer === undefined ? { id: 'signer-1' } : over.signer;
     const coinpayAction = over.coinpayAction ?? vi.fn(async ({ onProgress }) => {
         onProgress?.('broadcast');
@@ -132,14 +133,18 @@ function makeWatcher(over = {}) {
         sdkRegistry: over.sdkRegistry ?? registry,
         chainRegistry,
         getSigner: vi.fn(() => signer),
+        getSettings: vi.fn(async () => settings),
         reservationLedger: ledger,
         notify,
         shellKind: over.shellKind ?? 'web',
         intervalMs: 60_000,
         now: () => over.now ?? NOW,
         coinpayAction,
+        instanceId: over.instanceId,
+        loadNotified: over.loadNotified,
+        saveNotified: over.saveNotified,
     });
-    return { watcher, vault, ledger, notify, coinpayAction };
+    return { watcher, vault, ledger, notify, coinpayAction, settings };
 }
 
 describe('happy path', () => {
@@ -165,7 +170,11 @@ describe('happy path', () => {
         expect(consent.payments).toHaveLength(1);
         expect(consent.payments[0]).toMatchObject({ orderMatchActionIndex: '900', txid: 'paytx1' });
 
-        expect(notify).toHaveBeenCalledWith(expect.objectContaining({ kind: 'coinpaid'.replace('coinpaid', 'coinpay-autopaid') }));
+        expect(notify).toHaveBeenCalledWith(expect.objectContaining({
+            kind: 'coinpay-autopaid',
+            title: 'Auto-pay complete',
+            body: 'Paid 0.005 BTC for order #500.',
+        }));
         // Broadcast alone never releases the hold.
         expect(ledger.release).not.toHaveBeenCalled();
     });
@@ -198,6 +207,83 @@ describe('happy path', () => {
         expect(lease.shellKind).toBe('web');
         await watcher.pollOnce();
         expect(vault.leaseStore.get(PAYER_LEASE_ID).holderId).toBe(lease.holderId);
+    });
+});
+
+describe('service-worker restart recovery', () => {
+    it('renews the extension payer lease immediately with its stable identity', async () => {
+        const vault = makeVault({
+            lease: {
+                schemaVersion: 1,
+                id: PAYER_LEASE_ID,
+                holderId: 'extension-service-worker',
+                shellKind: 'extension',
+                renewedAt: new Date(NOW).toISOString(),
+            },
+        });
+        const { watcher, coinpayAction } = makeWatcher({
+            vault,
+            shellKind: 'extension',
+            instanceId: 'extension-service-worker',
+        });
+
+        await watcher.pollOnce();
+
+        expect(watcher.statusSnapshot()?.payer).toBe(true);
+        expect(coinpayAction).toHaveBeenCalledTimes(1);
+    });
+
+    it('restores and releases a persisted auto-pay reservation', async () => {
+        const hold = {
+            id: 'autopay:bitcoin-regtest:900',
+            chainId: 'bitcoin-regtest',
+            tick: 'BTC',
+            amount: '0.0051',
+        };
+        const ledger = {
+            all: vi.fn(async () => [hold]),
+            reserve: vi.fn(async () => {}),
+            release: vi.fn(async () => {}),
+        };
+        const { registry } = makeSdkRegistry({
+            obligations: [obligationRow({ coinpay_status: 'completed' })],
+        });
+        const { watcher } = makeWatcher({ vault: makeVault(), sdkRegistry: registry, ledger });
+
+        await watcher.pollOnce();
+
+        expect(ledger.release).toHaveBeenCalledWith(hold.id);
+    });
+
+    it('restores CoinPay notification markers without repeating attention alerts', async () => {
+        const vault = makeVault();
+        let stored = [];
+        const loadNotified = vi.fn(async () => stored);
+        const saveNotified = vi.fn(async (keys) => { stored = [...keys]; });
+        const first = makeWatcher({
+            vault,
+            signer: null,
+            shellKind: 'extension',
+            instanceId: 'extension-service-worker',
+            loadNotified,
+            saveNotified,
+        });
+        await first.watcher.pollOnce();
+        expect(first.notify).toHaveBeenCalledTimes(1);
+        expect(stored).toEqual(['bitcoin-regtest:900:locked']);
+
+        const restarted = makeWatcher({
+            vault,
+            signer: null,
+            shellKind: 'extension',
+            instanceId: 'extension-service-worker',
+            loadNotified,
+            saveNotified,
+        });
+        await restarted.watcher.pollOnce();
+
+        expect(restarted.watcher.statusSnapshot()?.payer).toBe(true);
+        expect(restarted.notify).not.toHaveBeenCalled();
     });
 });
 
@@ -305,6 +391,8 @@ describe('signing fallbacks', () => {
         expect(ledger.reserve).not.toHaveBeenCalled();
         expect(notify).toHaveBeenCalledWith(expect.objectContaining({
             kind: 'coinpay-autopay-manual',
+            title: 'Auto-pay is disarmed',
+            body: '0.005 BTC is due for order #500. Unlock to use auto-pay, or open Payments due.',
             data: expect.objectContaining({ reason: 'locked', urgency: 'high' }),
         }));
         expect(watcher.statusSnapshot()).toMatchObject({ payer: true, armed: 1, unsignable: ['w1'] });
@@ -317,6 +405,20 @@ describe('signing fallbacks', () => {
         expect(coinpayAction).not.toHaveBeenCalled();
         expect(notify).toHaveBeenCalledWith(expect.objectContaining({
             data: expect.objectContaining({ reason: 'source-missing' }),
+        }));
+    });
+
+    it('gates CoinPay status notifications on incoming receipts and honors a live toggle change', async () => {
+        const settings = { notifications: { incomingReceipts: false } };
+        const { watcher, notify } = makeWatcher({ signer: null, settings });
+
+        await watcher.pollOnce();
+        expect(notify).not.toHaveBeenCalled();
+
+        settings.notifications.incomingReceipts = true;
+        await watcher.pollOnce();
+        expect(notify).toHaveBeenCalledWith(expect.objectContaining({
+            kind: 'coinpay-autopay-manual',
         }));
     });
 });
@@ -362,7 +464,8 @@ describe('duplicate and failure defenses', () => {
         expect(ledger.reserve).toHaveBeenCalledTimes(1);
         expect(ledger.release).toHaveBeenCalledTimes(1); // nothing left the wallet
         expect(notify).toHaveBeenCalledWith(expect.objectContaining({
-            title: 'Match found, balance short',
+            title: 'Not enough BTC for auto-pay',
+            body: 'Order #500 needs 0.005 BTC. Fund its address or open Payments due.',
             data: expect.objectContaining({ reason: 'balance-short' }),
         }));
         // Retry allowed on the next cycle (attempt freed); notification deduped.

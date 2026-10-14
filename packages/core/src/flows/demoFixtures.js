@@ -8,6 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { decimalFromBaseUnits } from '../shared/utils/amountFormat.js';
+
 // §25.2 / Cluster J FOLLOWUP 1: synthesized fixture data for demo
 // wallets so Home / History / TokenDetail surfaces feel populated
 // without requiring the user to fund the wallet.
@@ -33,19 +35,15 @@ function nftImg(label, bgFrom, bgTo, fg = '#FFFFFF') {
     return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
-// Real icon URLs mirrored from DEMO_TIS_BY_TICK in tokenInfo.js so the
-// Home / SendPicker / TokenDetail rows show the published artwork
-// instead of the colored-letter placeholder. Tickers that don't appear
-// here fall back to `nftImg(...)`.
-const DEMO_TOKEN_ICONS = {
-    // Matches the icon in demoExampleTis.json so the holdings tile and the
-    // token-info gallery show the same artwork.
-    EXAMPLE: 'https://placehold.co/128x128/1E90C7/FFFFFF/png?text=EX',
-    PEPECREATURE: 'https://gousue3rn3uppml5r5hloc4wqmojl2cqxyhvhnceairxkccnw7vq.ar.io/M6kqE3Fu6PexfY9OtwuWgxyV6FC-D1O0RAIjdQhNt-s/pepecreature_thumb.png',
-    RAREPEPE: 'https://rarepepedirectory.com/pepe/NAKAMOTOCARD.png',
-    PEPECASH: 'https://rarepepedirectory.com/pepe/PEPECASH.png',
-    XCP: 'https://counterparty.io/static/images/counterparty-logo.png',
-    DOGINAL: 'https://upload.wikimedia.org/wikipedia/en/d/d0/Dogecoin_Logo.png',
+// Inline tiles keep demo holdings available under the app's `img-src 'self'`
+// policy and avoid third-party requests from an otherwise synthetic wallet.
+export const DEMO_TOKEN_ICONS = {
+    EXAMPLE: nftImg('EX', '#1E90C7', '#7B2C8F'),
+    PEPECREATURE: nftImg('PEPE', '#15803D', '#713F12'),
+    RAREPEPE: nftImg('RARE', '#166534', '#854D0E'),
+    PEPECASH: nftImg('CASH', '#16A34A', '#A16207'),
+    XCP: nftImg('XCP', '#1E90C7', '#7B2C8F'),
+    DOGINAL: nftImg('DOGE', '#EAB308', '#92400E'),
 };
 //
 // Demo wallets are real BIP39 wallets. They have real addresses on
@@ -153,7 +151,7 @@ const PER_CHAIN_DEFAULTS = /** @type {Record<string, BalanceFixture>} */ ({
         ],
     },
     'dogecoin-regtest': {
-        native: { tick: 'DOGE', divisibility: 8, quantity: '1000000000000', fiatRate: 0.15 }, // 10000 rDOGE @ $0.15
+        native: { tick: 'DOGE', divisibility: 8, quantity: '1000000000000', fiatRate: 0.08 }, // 10000 rDOGE @ $0.08
         tokens: [
             // Divisible DRC-20-style tokens
             { tick: 'DOGI', displayName: 'Dogi Coin', divisibility: 8, quantity: '500000000000', fiatRate: 0.01 },
@@ -189,7 +187,10 @@ export function synthesizeDemoBalances(addressesByChain) {
             addressType: a.addressType,
             derivationPath: a.derivationPath ?? null,
             balances: idx === 0 && fixture
-                ? { native: fixture.native, tokens: fixture.tokens }
+                ? {
+                    native: fixture.native ? { ...fixture.native } : null,
+                    tokens: fixture.tokens.map((token) => ({ ...token })),
+                }
                 : { native: fixture?.native ? { ...fixture.native, quantity: '0' } : null, tokens: [] },
             error: null,
             // The typed failure fields beside `error` (see `AddressBalancesEntry`
@@ -269,6 +270,11 @@ export function synthesizeDemoHistory(chainId, address, opts = {}) {
     const fixture = PER_CHAIN_DEFAULTS[chainId];
     if (!fixture || !fixture.native) return [];
     const tick = fixture.native.tick;
+    const nativeAmount = decimalFromBaseUnits(
+        fixture.native.quantity,
+        fixture.native.divisibility,
+    );
+    const outgoingAmount = decimalFromBaseUnits('5000000', fixture.native.divisibility);
     const sec = (deltaSec) => Math.floor(now / 1000) - deltaSec;
 
     // Pick a representative divisible token and a representative
@@ -302,13 +308,13 @@ export function synthesizeDemoHistory(chainId, address, opts = {}) {
         source: 'demo-faucet-1xchainpubdemoxchain',
         destination: address,
         tick,
-        amount: fixture.native.quantity,
-        quantity: fixture.native.quantity,
+        amount: nativeAmount,
+        quantity: nativeAmount,
         memo: 'Welcome to the demo wallet',
         params: {
             source: 'demo-faucet-1xchainpubdemoxchain',
             destination: address,
-                amount: fixture.native.quantity,
+            amount: nativeAmount,
             memo: 'Welcome to the demo wallet',
         },
     });
@@ -318,7 +324,8 @@ export function synthesizeDemoHistory(chainId, address, opts = {}) {
     // Activity so the icon swaps to the token's image / tinted letter
     // instead of the chain icon.
     if (divisibleToken) {
-        const tokenAmount = '100000000'; // 1.0 of an 8-divisibility token
+        // History rows carry whole-token units, like the native receive above.
+        const tokenAmount = decimalFromBaseUnits('100000000', divisibleToken.divisibility);
         rows.push({
             action_index: 100011,
             tx_hash: `demo-${chainId}-token-recv-1`,
@@ -378,13 +385,13 @@ export function synthesizeDemoHistory(chainId, address, opts = {}) {
             source: address,
             destination: 'demo-friend-1xchainpubrecipient',
             tick,
-            amount: '5000000', // 0.05 of the native coin
-            quantity: '5000000',
+            amount: outgoingAmount, // 0.05 of the native coin
+            quantity: outgoingAmount,
             memo: 'thanks for lunch',
             params: {
                 source: address,
                 destination: 'demo-friend-1xchainpubrecipient',
-                    amount: '5000000',
+                amount: outgoingAmount,
                 memo: 'thanks for lunch',
             },
         },
@@ -869,18 +876,15 @@ const DEMO_COIN_UNIT_PRICE = { BTC: 0.00002, LTC: 0.004, DOGE: 0.6 };
  * by {@link synthesizeDemoHistory} so the demo wallet shows a populated
  * Marketplace instead of hitting a live explorer it has no backend for.
  *
- * The token is matched against the mainnet balance fixtures; searching
- * any token the demo wallet can hold (e.g. PEPECASH, RAREPEPE, XCP on
- * Bitcoin; OMNILITE, MWEB on Litecoin; DOGI, WOW on Dogecoin) returns
- * activity on that token's home chain. An unrecognized ticker returns
- * empty feeds, exactly as a real explorer would for a token with no
- * market.
+ * The token is matched against the caller's visible chain fixtures, or
+ * mainnet when no chain list is supplied. Tokens without a matching holding
+ * use the visible Bitcoin chain so the demo marketplace remains populated.
  *
  * Each feed entry is already wrapped as `{ chainId, row }`, the shape
  * MarketActivity builds per-chain, so the caller can set state directly.
  *
  * @param {string} token  ticker the user searched for
- * @param {{ now?: number }} [opts]
+ * @param {{ now?: number, chainIds?: string[] }} [opts]
  * @returns {{ offers: Array<{chainId: string, row: any}>, sales: Array<{chainId: string, row: any}>, dexOrders: Array<{chainId: string, row: any}>, dexSwaps: Array<{chainId: string, row: any}> }}
  */
 export function synthesizeDemoMarketActivity(token, opts = {}) {
@@ -891,12 +895,17 @@ export function synthesizeDemoMarketActivity(token, opts = {}) {
     const now = typeof opts.now === 'number' ? opts.now : Date.now();
     const sec = (deltaSec) => Math.floor(now / 1000) - deltaSec;
 
-    // Locate the mainnet chain whose fixture lists this token. Mainnet
-    // only; that's the network the demo balances (and the chain badge
-    // the user is looking at) are on.
+    const requestedChainIds = Array.isArray(opts.chainIds)
+        ? opts.chainIds.filter((chainId) => (
+            typeof chainId === 'string' && PER_CHAIN_DEFAULTS[chainId]
+        ))
+        : Object.keys(PER_CHAIN_DEFAULTS).filter((chainId) => chainId.endsWith('-mainnet'));
+
+    // Locate a visible chain whose fixture lists this token so the rows and
+    // badges stay on the network the caller is currently displaying.
     let chainId = null;
-    for (const [cid, fix] of Object.entries(PER_CHAIN_DEFAULTS)) {
-        if (!cid.endsWith('-mainnet')) continue;
+    for (const cid of requestedChainIds) {
+        const fix = PER_CHAIN_DEFAULTS[cid];
         if ((fix.tokens || []).some((t) => t.tick.toUpperCase() === tick)) {
             chainId = cid;
             break;
@@ -906,9 +915,8 @@ export function synthesizeDemoMarketActivity(token, opts = {}) {
     // doesn't hold still get a demo market, homed on Bitcoin, so the
     // Marketplace landing page is never empty in the demo.
     if (!chainId) {
-        chainId = PER_CHAIN_DEFAULTS['bitcoin-mainnet']
-            ? 'bitcoin-mainnet'
-            : Object.keys(PER_CHAIN_DEFAULTS).find((cid) => cid.endsWith('-mainnet'));
+        chainId = requestedChainIds.find((cid) => cid.startsWith('bitcoin-'))
+            || requestedChainIds[0];
     }
     if (!chainId) return empty;
 

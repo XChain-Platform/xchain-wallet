@@ -29,8 +29,8 @@
 
 import {
     bytesToBase64,
-    calibrateKdfParams,
-    deriveMasterKey,
+    calibrateKdfParamsAsync,
+    deriveMasterKeyAsync,
     encrypt,
     makeFreshKdfParams,
 } from '../crypto/index.js';
@@ -124,12 +124,12 @@ export async function importSingleWif({
     const derivedAddress = sdk.wallet.deriveAddress(keyInfo.publicKeyHex, { type });
 
     const params = kdfParams ?? (typeof performance !== 'undefined'
-        ? calibrateKdfParams({ targetMs: 1000 })
+        ? await calibrateKdfParamsAsync({ targetMs: 1000 })
         : makeFreshKdfParams());
 
     // Encrypt the WIF under the freshly-derived master key. No seed blob
     // to produce; encryptedSeed stays empty.
-    const masterKey = deriveMasterKey(password, params);
+    const masterKey = await deriveMasterKeyAsync(password, params);
     let encryptedWif;
     try {
         const wifBytes = new TextEncoder().encode(wif);
@@ -181,8 +181,39 @@ export async function importSingleWif({
         },
     ];
 
-    await vault.wallets.put(walletRecord);
-    await vault.addresses.put(addressRecord);
+    // New records must not replace an existing secret if an id generator
+    // collision occurs.
+    if (await vault.wallets.get(walletRecord.id)) {
+        throw new Error(`importSingleWif: wallet id collision "${walletRecord.id}"`);
+    }
+    if (await vault.addresses.get(addressRecord.id)) {
+        throw new Error(`importSingleWif: address id collision "${addressRecord.id}"`);
+    }
+
+    let walletPutAttempted = false;
+    let addressPutAttempted = false;
+    try {
+        walletPutAttempted = true;
+        await vault.wallets.put(walletRecord);
+        addressPutAttempted = true;
+        await vault.addresses.put(addressRecord);
+    } catch (error) {
+        const rollbackErrors = [];
+        if (addressPutAttempted) {
+            try { await vault.addresses.delete(addressRecord.id); } catch (e) { rollbackErrors.push(e); }
+        }
+        if (walletPutAttempted) {
+            try { await vault.wallets.delete(walletRecord.id); } catch (e) { rollbackErrors.push(e); }
+        }
+        if (rollbackErrors.length > 0) {
+            throw new AggregateError(
+                [error, ...rollbackErrors],
+                'importSingleWif: persistence and rollback failed',
+                { cause: error },
+            );
+        }
+        throw error;
+    }
 
     return { wallet: walletRecord, address: addressRecord };
 }

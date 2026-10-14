@@ -27,7 +27,7 @@ const schemaSrc = readFileSync(schemaPath, 'utf8');
 assert.match(src, /import \{ useSettings \}/, 'imports useSettings');
 assert.match(
     src,
-    /import \{ registry as registryLib \} from '@xchain-wallet\/core'/,
+    /import \{ flows as flowsLib, registry as registryLib \} from '@xchain-wallet\/core'/,
     'imports chain registry',
 );
 assert.match(

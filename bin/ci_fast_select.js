@@ -21,6 +21,8 @@ const GROUPS = [
     { name: 'smoke', pattern: /^test\/smoke\/.+\.smoke\.js$/ }
 ];
 
+const EXPLICIT_FAST_TIERS = /^test\/(?:a11y|boundary|chaos)\//;
+
 function runGit(args) {
     return execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 }
@@ -127,7 +129,9 @@ export function selectFastTests(changedFiles, { listTests, findRequirers }) {
     const selected = new Set();
     for (const file of changed) {
         if (groupFor(file) && existing.has(file)) selected.add(file);
-        else if (file.startsWith('test/')) reasons.push(`deferred: ${file}`);
+        else if (file.startsWith('test/') && !EXPLICIT_FAST_TIERS.test(file)) {
+            reasons.push(`deferred: ${file}`);
+        }
         if (/^(?:src|packages\/[^/]+\/src)\//.test(file) && /\.jsx?$/.test(file)) {
             addSourceTests(file, candidates, selected, findRequirers);
         }

@@ -43,7 +43,18 @@ const GROUP_HEADER = {
     marginTop: 'var(--xc-space-3)',
     marginBottom: 'var(--xc-space-1)',
 };
+const INTRO = { ...ROW_LABEL, color: 'var(--xc-text-muted)', margin: 0 };
+const SHORTCUT_ROW = {
+    ...ROW,
+    boxSizing: 'border-box',
+    minHeight: 'var(--xc-control-h-lg)',
+    paddingBlock: 'var(--xc-space-1)',
+};
 const KBD = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: '7rem',
     fontFamily: 'var(--xc-font-sans)',
     fontSize: 'var(--xc-text-xs)',
     color: 'var(--xc-text)',
@@ -60,7 +71,13 @@ const CAPTURING = {
     borderColor: 'var(--xc-accent)',
     color: 'var(--xc-accent)',
 };
-const ACTIONS = { display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)', flexShrink: 0 };
+const ACTIONS = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 'var(--xc-space-2)',
+    flexShrink: 0,
+};
 
 function isMac() {
     if (typeof navigator === 'undefined') return false;
@@ -122,7 +139,9 @@ export function KeyboardSection() {
                 setStatus({ kind: 'error', text: `${formatBinding(binding, mac)} is already used by "${other?.label || conflict}".` });
                 return;
             }
-            const next = { ...overrides, [capturingId]: binding };
+            const next = { ...overrides };
+            if (binding === defaultBinding) delete next[capturingId];
+            else next[capturingId] = binding;
             update({ keyboard: { bindings: next } })
                 .then(() => setStatus({ kind: 'ok', text: `${target.label} is now ${formatBinding(binding, mac)}.` }))
                 .catch((err) => setStatus({ kind: 'error', text: err?.message || 'Failed to save the binding.' }));
@@ -152,30 +171,53 @@ export function KeyboardSection() {
             .then(() => setStatus({ kind: 'ok', text: 'Shortcut reset to its default.' }))
             .catch((err) => setStatus({ kind: 'error', text: err?.message || 'Failed to reset.' }));
     };
+    const resetAll = () => {
+        setCapturingId(null);
+        setLeaderLead(null);
+        update({ keyboard: { bindings: {} } })
+            .then(() => setStatus({ kind: 'ok', text: 'All shortcuts reset to defaults.' }))
+            .catch((err) => setStatus({ kind: 'error', text: err?.message || 'Failed to reset shortcuts.' }));
+    };
 
     if (loading) return <p style={ROW_LABEL}>Loading…</p>;
     if (error) return <p role="alert" style={ROW_LABEL}>{settingsLoadErrorText(error)}</p>;
 
     return (
         <div style={STACK}>
-            <p style={{ ...ROW_LABEL, color: 'var(--xc-text-muted)' }}>
-                Click Rebind, then press the new key combination. Screen-specific
+            <p style={INTRO}>
+                Select Rebind, then press the new key combination. Screen-specific
                 shortcuts are fixed and only work on their screen.
             </p>
             {status ? <Status text={status.text} tone={status.kind === 'error' ? 'error' : 'muted'} /> : null}
             {SHORTCUT_GROUPS.map((group) => (
                 <section key={group}>
-                    <h3 style={GROUP_HEADER}>{group}</h3>
+                    <h2 style={GROUP_HEADER}>{group}</h2>
                     {shortcuts.filter((s) => s.group === group).map((s) => {
                         const capturing = capturingId === s.id;
+                        const availability = s.id === 'balances-pin' && settings.showPinAffordance !== true
+                            ? 'Requires “Show pin button on rows” in Display.'
+                            : s.id === 'balances-hide' && settings.showHideAffordance !== true
+                                ? 'Requires “Show hide button on rows” in Display.'
+                                : null;
                         return (
-                            <div key={s.id} style={ROW}>
-                                <span style={ROW_LABEL}>{s.label}</span>
+                            <div key={s.id} style={SHORTCUT_ROW}>
+                                <span style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                                    <span style={ROW_LABEL}>{s.label}</span>
+                                    {availability ? <span style={{ ...ROW_LABEL, fontSize: 'var(--xc-text-xs)' }}>{availability}</span> : null}
+                                </span>
                                 <span style={ACTIONS}>
+                                    {s.overridden ? (
+                                        <Button size="sm" variant="ghost" onClick={() => resetOne(s.id)}>
+                                            Reset
+                                        </Button>
+                                    ) : null}
                                     <kbd style={capturing ? CAPTURING : KBD} aria-live={capturing ? 'polite' : undefined}>
                                         {capturing
                                             ? (leaderLead ? `${leaderLead.toUpperCase()} then …` : 'Press keys…')
-                                            : formatBinding(s.binding, mac)}
+                                            : [s.binding, s.altBinding]
+                                                .filter(Boolean)
+                                                .map((binding) => formatBinding(binding, mac))
+                                                .join(' / ')}
                                     </kbd>
                                     {isRebindable(s) ? (
                                         <>
@@ -190,11 +232,6 @@ export function KeyboardSection() {
                                             >
                                                 {capturing ? 'Cancel' : 'Rebind'}
                                             </Button>
-                                            {s.overridden ? (
-                                                <Button size="sm" variant="ghost" onClick={() => resetOne(s.id)}>
-                                                    Reset
-                                                </Button>
-                                            ) : null}
                                         </>
                                     ) : null}
                                 </span>
@@ -203,6 +240,20 @@ export function KeyboardSection() {
                     })}
                 </section>
             ))}
+            <section>
+                <h3 style={GROUP_HEADER}>Defaults</h3>
+                <div style={ROW}>
+                    <span style={ROW_LABEL}>Restore every custom shortcut to its built-in binding.</span>
+                    <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={resetAll}
+                        disabled={Object.keys(overrides).length === 0}
+                    >
+                        Reset all shortcuts
+                    </Button>
+                </div>
+            </section>
         </div>
     );
 }

@@ -33,11 +33,25 @@
 // persisted dismissal has to remember WHICH version was dismissed, and
 // getting that wrong silences the next one too.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Button } from '@xchain-wallet/core/ui';
+import { t } from '../../core/src/i18n/index.js';
 
 const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
+// A floating card over the current page, with side margins, rather than a
+// full-width bar that pushes the scroll area down.
 const WRAP = {
+    position: 'fixed',
+    // Fixed content does not inherit the body's safe-area padding, so each
+    // logical inset is the largest of the app's page gutter and the physical
+    // safe-area margins.
+    insetBlockStart: 'max(var(--xc-page-top), env(safe-area-inset-top, 0px))',
+    insetInline: 'max(var(--xc-page-gutter), env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px))',
+    zIndex: 'var(--xc-z-modal)',
+    maxInlineSize: '480px',
+    margin: '0 auto',
+    boxShadow: 'var(--xc-shadow-popover)',
     display: 'flex',
     alignItems: 'flex-start',
     gap: 'var(--xc-space-2)',
@@ -49,16 +63,8 @@ const WRAP = {
     color: 'var(--xc-text)',
 };
 
-const LINK_BUTTON = {
-    background: 'none',
-    border: 'none',
-    color: 'var(--xc-text-muted)',
-    cursor: 'pointer',
-    fontSize: 'var(--xc-text-sm)',
-};
-
 /**
- * @returns {{ onEvent: (cb: (e: any) => void) => () => void, install: () => Promise<any> } | null}
+ * @returns {{ onEvent: (cb: (e: any) => void) => () => void, install: (action?: string) => Promise<any> } | null}
  */
 function updaterBridge() {
     const bridge = typeof window === 'undefined' ? null : window.xchainWalletUpdater;
@@ -66,10 +72,16 @@ function updaterBridge() {
 }
 
 export function DesktopUpdateBanner() {
-    // 'idle' | 'available' | 'installing' | 'refused'
+    // 'idle' | 'checking' | 'current' | 'available' | 'downloading' | 'verifying' | 'ready' | 'restart-blocked' | 'install-failed' | 'error'
     const [state, setState] = useState('idle');
     const [version, setVersion] = useState(/** @type {string | null} */ (null));
+    const [progress, setProgress] = useState(/** @type {number | null} */ (null));
     const [dismissed, setDismissed] = useState(false);
+    // Why a verified update failed to install: 'read-only' | 'permission' | null.
+    // Main sends one of a fixed set of words and anything else is ignored.
+    const [installCause, setInstallCause] = useState(/** @type {string | null} */ (null));
+    const operationInProgress = useRef(/** @type {null | 'check' | 'download' | 'restart'} */ (null));
+    const retryAction = useRef(/** @type {'check' | 'download' | 'restart'} */ ('check'));
 
     useEffect(() => {
         const bridge = updaterBridge();
@@ -78,46 +90,72 @@ export function DesktopUpdateBanner() {
         // to and nothing to show.
         if (!bridge) return undefined;
 
-        // ASK FIRST, THEN LISTEN (row 148).
-        //
-        // Subscribing was never enough. Main checks the feed at launch and
-        // this component only exists in the unlocked branch of the app, so
-        // on any install with a vault the `available` broadcast happens
-        // while the user is still at the Locked screen and no listener is
-        // alive to hear it. Measured on a packaged 0.338.1 build against a
-        // staging feed serving 0.339.0: main logged `Found version 0.339.0`
-        // and the banner, mounted afterwards, showed nothing.
-        //
-        // Only `available` is hydrated. The retained state can also be an
-        // `error` from a check that failed at launch, and opening a wallet
-        // to be told an update "could not be verified" - about a download
-        // that was never offered, let alone attempted - would be alarming
-        // and wrong. A failure is worth showing when the user asked for
-        // something; a stale one is not.
-        let cancelled = false;
-        if (typeof bridge.getState === 'function') {
-            Promise.resolve(bridge.getState()).then((event) => {
-                if (cancelled || event?.type !== 'available') return;
-                const next = String(event?.info?.version ?? '');
-                setVersion(SEMVER.test(next) ? next : null);
-                setState((current) => (current === 'idle' ? 'available' : current));
-            }).catch(() => { /* no offer to show */ });
-        }
-
-        const unsubscribe = bridge.onEvent((event) => {
+        const applyEvent = (event, retained = false) => {
             const type = event?.type;
+            if (type === 'checking') {
+                if (!event?.userInitiated || retained) return;
+                operationInProgress.current = 'check';
+                setState('checking');
+                setDismissed(false);
+                return;
+            }
+            if (type === 'not-available') {
+                if (!event?.userInitiated || retained) return;
+                operationInProgress.current = null;
+                setState('current');
+                return;
+            }
             if (type === 'available') {
                 const next = String(event?.info?.version ?? '');
+                operationInProgress.current = null;
                 setVersion(SEMVER.test(next) ? next : null);
                 setState('available');
                 setDismissed(false);
                 return;
             }
-            // `verifying` is the S5 gate reading the signed manifest. It is
-            // shown rather than hidden because it is the one step that can
-            // take a visible moment after the download finishes.
-            if (type === 'verifying') setState('installing');
-            if (type === 'rejected' || type === 'error') setState('refused');
+            if (type === 'progress') {
+                const percent = Number(event?.info?.percent);
+                setProgress(Number.isFinite(percent) ? Math.round(Math.min(100, Math.max(0, percent))) : null);
+                setState('downloading');
+                return;
+            }
+            if (type === 'downloaded' || type === 'verifying') {
+                setState('verifying');
+                return;
+            }
+            if (type === 'ready') {
+                operationInProgress.current = null;
+                setState('ready');
+                setDismissed(false);
+                return;
+            }
+            if (type === 'rejected') {
+                operationInProgress.current = null;
+                retryAction.current = 'download';
+                setState('error');
+                return;
+            }
+            if (type === 'error' && event?.userInitiated && !retained) {
+                const failedOperation = operationInProgress.current;
+                operationInProgress.current = null;
+                retryAction.current = failedOperation === 'download' ? 'download' : 'check';
+                setState('error');
+            }
+        };
+
+        // Main starts the launch check before creating a renderer. Hydrate
+        // durable update work, while a quiet launch-check error stays silent.
+        let cancelled = false;
+        let liveEventSeen = false;
+        if (typeof bridge.getState === 'function') {
+            Promise.resolve(bridge.getState()).then((event) => {
+                if (!cancelled && !liveEventSeen) applyEvent(event, true);
+            }).catch(() => { /* no offer to show */ });
+        }
+
+        const unsubscribe = bridge.onEvent((event) => {
+            liveEventSeen = true;
+            applyEvent(event);
         });
 
         return () => {
@@ -126,15 +164,40 @@ export function DesktopUpdateBanner() {
         };
     }, []);
 
-    const install = useCallback(() => {
+    const runAction = useCallback((action) => {
         const bridge = updaterBridge();
-        if (!bridge) return;
-        setState('installing');
-        // A successful install quits and relaunches the app, so the only
-        // resolutions observed here are refusals.
-        bridge.install()
-            .then((result) => { if (!result?.ok) setState('refused'); })
-            .catch(() => setState('refused'));
+        if (!bridge || operationInProgress.current) return;
+        operationInProgress.current = action;
+        retryAction.current = action;
+        setDismissed(false);
+        if (action === 'check') setState('checking');
+        if (action === 'download') {
+            setProgress(null);
+            setState('downloading');
+        }
+        bridge.install(action)
+            .then((result) => {
+                operationInProgress.current = null;
+                if (result?.ok) return;
+                if (action === 'restart') {
+                    const cause = result?.cause;
+                    if (cause === 'read-only' || cause === 'permission') {
+                        setInstallCause(cause);
+                        setState('install-failed');
+                        return;
+                    }
+                    setInstallCause(null);
+                    if (result?.retryable) {
+                        setState('restart-blocked');
+                        return;
+                    }
+                }
+                setState('error');
+            })
+            .catch(() => {
+                operationInProgress.current = null;
+                setState('error');
+            });
     }, []);
 
     if (dismissed || state === 'idle') return null;
@@ -143,31 +206,69 @@ export function DesktopUpdateBanner() {
         <div role="status" aria-live="polite" style={WRAP}>
             <span aria-hidden="true">⬆</span>
             <div style={{ flex: 1 }}>
+                {state === 'checking' ? t('desktopUpdate.checking') : null}
+                {state === 'current' ? t('desktopUpdate.current') : null}
                 {state === 'available' ? (
                     version
-                        ? `Version ${version} is available.`
-                        : 'A newer version is available.'
+                        ? t('desktopUpdate.availableVersion', { version })
+                        : t('desktopUpdate.available')
                 ) : null}
-                {state === 'installing' ? 'Downloading and checking the signature...' : null}
-                {state === 'refused' ? (
-                    'This update could not be verified, so it was not installed. '
-                    + 'Your wallet is untouched. Check docs.xchain.io for how to verify a release by hand.'
+                {state === 'downloading' ? (
+                    progress == null
+                        ? t('desktopUpdate.downloading')
+                        : t('desktopUpdate.downloadProgress', { progress })
+                ) : null}
+                {state === 'verifying' ? t('desktopUpdate.verifying') : null}
+                {state === 'ready' ? t('desktopUpdate.ready') : null}
+                {state === 'restart-blocked' ? (
+                    t('desktopUpdate.restartBlocked')
+                ) : null}
+                {state === 'install-failed' ? (
+                    installCause === 'read-only'
+                        ? 'The update was verified but could not be installed because XChain Wallet is '
+                          + 'running from a read-only location. Move the app to your Applications or '
+                          + 'programs folder, open it from there, and try again.'
+                        : 'The update was verified but could not be installed because this account '
+                          + 'does not have permission to replace the app. Run it from a location you '
+                          + 'can write to, or ask an administrator, and try again.'
+                ) : null}
+                {state === 'error' && retryAction.current === 'check' ? (
+                    t('desktopUpdate.checkError')
+                ) : null}
+                {state === 'error' && retryAction.current !== 'check' ? (
+                    t('desktopUpdate.installError')
                 ) : null}
             </div>
             {state === 'available' ? (
-                <button type="button" onClick={install} style={LINK_BUTTON}>
-                    Install and restart
-                </button>
+                <Button type="button" variant="ghost" size="sm" onClick={() => runAction('download')}>
+                    {t('desktopUpdate.download')}
+                </Button>
             ) : null}
-            {state === 'installing' ? null : (
-                <button
+            {state === 'ready' || state === 'restart-blocked' ? (
+                <Button type="button" variant="ghost" size="sm" onClick={() => runAction('restart')}>
+                    {t('desktopUpdate.restart')}
+                </Button>
+            ) : null}
+            {state === 'install-failed' && installCause !== 'read-only' ? (
+                <Button type="button" variant="ghost" size="sm" onClick={() => runAction('restart')}>
+                    {t('desktopUpdate.retry')}
+                </Button>
+            ) : null}
+            {state === 'error' ? (
+                <Button type="button" variant="ghost" size="sm" onClick={() => runAction(retryAction.current)}>
+                    {t('desktopUpdate.retry')}
+                </Button>
+            ) : null}
+            {['checking', 'downloading', 'verifying'].includes(state) ? null : (
+                <Button
                     type="button"
+                    variant="ghost"
+                    size="sm"
                     onClick={() => setDismissed(true)}
-                    aria-label="Dismiss update notice"
-                    style={LINK_BUTTON}
+                    aria-label={t('desktopUpdate.dismissLabel')}
                 >
-                    Dismiss
-                </button>
+                    {t('desktopUpdate.dismiss')}
+                </Button>
             )}
         </div>
     );

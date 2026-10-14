@@ -8,24 +8,22 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
-import { AddressText, Button, Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, CopyButton, Icon, Input, ListPage, PageHeader, Screen } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useSettings } from '../hooks/useSettings.js';
+import { configureClipboardAutoClear } from '../clipboard.js';
+import { PRIVATE_KEY_WARNING } from '../utils/securityMomentCopy.js';
 import styles from './ViewPrivateKey.module.css';
+
+const REVEAL_TIMEOUT_MS = 30_000;
 
 /**
  * ViewPrivateKey: §17.7. Shows the WIF for an address the wallet owns.
- * Reveal is gated by the "Before you continue" warning plus the wallet
- * already being unlocked: the WIF is exported straight from the unlocked
- * session signer, so no password is re-entered (the §17.7.3
- * password-every-time ceremony was retired by product decision). The
- * other guardrails stay: tap-to-reveal and auto-hide on window blur.
- *
- * There is no Copy button, and no clipboard auto-clear behind it, since
- * (2026-08-01) made key material uncopyable on every shell. The QR
- * is the transfer path. NOTE: that leaves the Settings → Privacy
- * "clipboard auto-clear" control with no consumer; see the item filed for it.
+ * Reveal requires the wallet password, an explicit tap after confirmation,
+ * and automatic hiding on timeout or window blur. Sensitive copies use the
+ * guarded clipboard path and the wallet's selected expiry.
  *
  * HW-wallet + watch-only addresses route to an informational panel
  * per §17.7.2: no reveal path. Protocol-level refusal is the
@@ -49,64 +47,115 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
     useProtectedScreen();
 
     const { messaging, shell } = useMessaging();
+    const { settings } = useSettings();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
     const [stage, setStage] = useState(
-        /** @type {'warning' | 'submitting' | 'revealed'} */ ('warning'),
+        /** @type {'warning' | 'password' | 'submitting' | 'revealed'} */ ('warning'),
     );
+    const [password, setPassword] = useState('');
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [revealed, setRevealed] = useState(false);
-    const [wif, setWif] = useState(/** @type {string | null} */ (null));
+    const [wif, setWif] = useState(/** @type {{ addressId: string, value: string } | null} */ (null));
+    const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const exportRequestRef = useRef(0);
+    const clipboardAutoClearSeconds = configureClipboardAutoClear(
+        settings?.privacy?.clipboardAutoClearSeconds,
+    );
 
     const sourceInfo = useMemo(() => classifySource(address), [address]);
+    const currentWif = wif?.addressId === address.id ? wif.value : null;
 
-    // §17.7.1: auto-hide on window blur. Wipes the revealed flag
-    // but keeps the WIF in closure so the reveal button can bring
-    // it back without re-exporting within the session.
+    const clearSensitiveState = useCallback(() => {
+        exportRequestRef.current += 1;
+        setStage('warning');
+        setPassword('');
+        setSubmitError(null);
+        setRevealed(false);
+        setWif(null);
+    }, []);
+
+    const leaveScreen = useCallback(() => {
+        clearSensitiveState();
+        onBack();
+    }, [clearSensitiveState, onBack]);
+
+    useEffect(() => {
+        if (stage !== 'password') return undefined;
+        const id = setTimeout(() => passwordRef.current?.focus(), 0);
+        return () => clearTimeout(id);
+    }, [stage]);
+
+    // Window blur covers accidental exposure during screen sharing.
     useEffect(() => {
         const handler = () => setRevealed(false);
         window.addEventListener('blur', handler);
         return () => window.removeEventListener('blur', handler);
     }, []);
 
+    // A reveal expires even when the window remains focused.
+    useEffect(() => {
+        if (!revealed) return undefined;
+        const id = setTimeout(() => setRevealed(false), REVEAL_TIMEOUT_MS);
+        return () => clearTimeout(id);
+    }, [revealed]);
 
-    // Export the WIF from the already-unlocked session signer (no
-    // password). The shared host injects the pool signer into the
-    // `wallet.exportPrivateKey` route.
-    async function reveal() {
-        if (stage === 'submitting') return;
+    useEffect(() => {
+        clearSensitiveState();
+    }, [walletId, address.id, clearSensitiveState]);
+
+    useEffect(() => {
+        // The shell emits this event as an unlocked session becomes active.
+        // Clearing before that session paints prevents a key exported by the
+        // previous session from becoming revealable after a lock cycle.
+        window.addEventListener('xc:session-changed', clearSensitiveState);
+        return () => {
+            window.removeEventListener('xc:session-changed', clearSensitiveState);
+            exportRequestRef.current += 1;
+        };
+    }, [clearSensitiveState]);
+
+    async function handleSubmit(event) {
+        event.preventDefault();
+        if (stage === 'submitting' || password.length === 0) return;
+        const requestId = ++exportRequestRef.current;
         setStage('submitting');
         setSubmitError(null);
         try {
             const res = await messaging.exportPrivateKey({
                 walletId,
+                password,
                 addressId: address.id,
             });
-            setWif(res.wif);
-            setRevealed(true);
+            if (exportRequestRef.current !== requestId) return;
+            setPassword('');
+            setWif({ addressId: address.id, value: res.wif });
+            setRevealed(false);
             setStage('revealed');
         } catch (err) {
+            if (exportRequestRef.current !== requestId) return;
             const name = err?.name;
-            if (name === 'NoKeyForAddressError') {
+            if (name === 'WrongPasswordError' || name === 'InvalidPasswordError'
+                || name === 'AeadAuthError') {
+                setSubmitError('Incorrect password. Try again.');
+            } else if (name === 'NoKeyForAddressError') {
                 setSubmitError('This address has no exportable private key.');
             } else {
-                setSubmitError(err?.message || 'Could not show the private key. Make sure the wallet is unlocked.');
+                setSubmitError('Could not confirm the password or load this private key.');
             }
-            setStage('warning');
+            setStage('password');
         }
     }
 
-
     const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={leaveScreen}
             title="Show private key"
             titleIcon={<Icon.LockIcon />}
         />
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            <ListPage>{children}</ListPage>
         </Screen>
     );
 
@@ -121,7 +170,7 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
                 </p>
                 <p className={styles.paragraph}>
                     To recover this key, use your {sourceInfo.deviceLabel}'s own recovery
-                    tools (seed phrase, recovery card, or vendor recovery app).
+                    tools (recovery phrase, recovery card, or vendor recovery app).
                 </p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Address</dt>
@@ -130,7 +179,7 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
                     </dd>
                 </dl>
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Close</Button>
+                    <Button variant="primary" onClick={leaveScreen}>Close</Button>
                 </div>
             </>,
         );
@@ -144,13 +193,13 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
                     private key is stored here and nothing can be signed from it.
                 </p>
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Close</Button>
+                    <Button variant="primary" onClick={leaveScreen}>Close</Button>
                 </div>
             </>,
         );
     }
 
-    if (stage === 'warning' || stage === 'submitting') {
+    if (stage === 'warning') {
         return wrap(
             <>
                 <h2 className={styles.warningTitle}>Before you continue</h2>
@@ -158,40 +207,68 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
                     <li>
                         This is the private key for
                         {' '}<AddressText address={address.address} />.
-                        Anyone with it can spend from this address.
                     </li>
-                    <li>Do not share it with anyone, including XChain support.</li>
+                    <li>{PRIVATE_KEY_WARNING}</li>
                     <li>
-                        If you are screen-sharing or recording, <strong>cancel that now</strong>{' '}
+                        If you are screen-sharing or recording, <strong>stop now</strong>{' '}
                         before you reveal the key.
                     </li>
                     {sourceInfo.kind === 'hd' ? (
                         <li>
-                            This key is derived from your seed phrase. If you have your
-                            seed phrase backed up, you don't need to back up this key
+                            This key is derived from your recovery phrase. If you have your
+                            recovery phrase backed up, you don't need to back up this key
                             separately.
                         </li>
                     ) : (
                         <li>
                             This key was imported separately. It is included in encrypted
-                            backups but is <strong>not</strong> recoverable from your seed phrase.
+                            backups but is <strong>not</strong> recoverable from your recovery phrase.
                         </li>
                     )}
                 </ul>
-                {submitError ? (
-                    <StatusMessage variant="error" className={styles.errorText}>{submitError}</StatusMessage>
-                ) : null}
                 <div className={styles.actions}>
                     <Button
                         variant="primary"
-                        onClick={reveal}
-                        loading={stage === 'submitting'}
-                        disabled={stage === 'submitting'}
+                        onClick={() => setStage('password')}
                     >
-                        I understand, show key
+                        I understand, continue
                     </Button>
                 </div>
             </>,
+        );
+    }
+
+    if (stage === 'password' || stage === 'submitting') {
+        return wrap(
+            <form onSubmit={handleSubmit} noValidate>
+                <p className={styles.paragraph}>
+                    Confirm your wallet password. The key stays hidden until you tap to reveal it.
+                </p>
+                <Input
+                    ref={passwordRef}
+                    type="password"
+                    label="Wallet password"
+                    hint="Required every time you view a private key."
+                    value={password}
+                    onChange={(event) => {
+                        setPassword(event.target.value);
+                        if (submitError) setSubmitError(null);
+                    }}
+                    autoComplete="current-password"
+                    disabled={stage === 'submitting'}
+                    error={submitError || undefined}
+                />
+                <div className={styles.actions}>
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={stage === 'submitting'}
+                        disabled={stage === 'submitting' || password.length === 0}
+                    >
+                        Confirm password
+                    </Button>
+                </div>
+            </form>,
         );
     }
 
@@ -214,46 +291,48 @@ export function ViewPrivateKey({ walletId, address, renderQR, onBack }) {
             </dl>
             <div className={styles.revealRow}>
                 {revealed ? (
-                    <code className={styles.wif}>{wif}</code>
+                    <code className={styles.wif}>{currentWif}</code>
                 ) : (
-                    <button
+                    <Button
                         type="button"
-                        className={styles.revealButton}
+                        variant="secondary"
+                        icon={null}
+                        style={{ flex: 1 }}
                         onClick={() => setRevealed(true)}
                     >
                         Tap to reveal private key
-                    </button>
+                    </Button>
                 )}
                 <Button
                     variant="ghost"
-                    size="sm"
                     onClick={() => setRevealed(false)}
                     disabled={!revealed}
                 >
                     Hide
                 </Button>
             </div>
-            {revealed && renderQR && wif ? (
+            {revealed && renderQR && currentWif ? (
                 <div className={styles.qrRow}>
-                    {renderQR({ value: wif })}
+                    {renderQR({ value: currentWif })}
                 </div>
             ) : null}
-            {/*, decided 2026-08-01: a private key is not copyable,
-                on any shell, for the same reasons the recovery phrase is not -
-                a clipboard is readable by other apps, kept by clipboard
-                managers, and synced across devices by default on iOS. The QR
-                above is the transfer path, and it is the better one anyway:
-                it moves the key to one scanning device rather than into a
-                buffer every app on this one can read. */}
             <div className={styles.copyRow}>
+                {revealed && currentWif ? (
+                    <CopyButton
+                        value={currentWif}
+                        label="Copy private key"
+                        sensitive
+                        onCopied={() => {}}
+                    />
+                ) : null}
                 <span className={styles.clipboardNote}>
-                    {renderQR
-                        ? 'Scan the code to move this key. It cannot be copied to the clipboard.'
-                        : 'Write this key down. It cannot be copied to the clipboard.'}
+                    {clipboardAutoClearSeconds === 0
+                        ? 'Sensitive clipboard copies remain until replaced.'
+                        : `Sensitive clipboard copies expire after ${clipboardAutoClearSeconds} seconds.`}
                 </span>
             </div>
             <div className={styles.actions}>
-                <Button variant="primary" onClick={onBack}>Done</Button>
+                <Button variant="primary" onClick={leaveScreen}>Done</Button>
             </div>
         </>,
     );

@@ -95,7 +95,29 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     // MARK: - Snapshot cover
 
     func sceneWillResignActive(_ scene: UIScene) {
-        guard let window = window, privacyCover == nil else { return }
+        showPrivacyCover()
+    }
+
+    func sceneDidEnterBackground(_ scene: UIScene) {
+        // Reassert the cover so view changes during the transition cannot
+        // become the app-switcher snapshot.
+        showPrivacyCover()
+    }
+
+    func sceneDidBecomeActive(_ scene: UIScene) {
+        hidePrivacyCover()
+    }
+
+    private func showPrivacyCover() {
+        guard let window = window else { return }
+        if let cover = privacyCover {
+            if cover.superview !== window {
+                window.addSubview(cover)
+            }
+            window.bringSubviewToFront(cover)
+            return
+        }
+
         let cover = UIView(frame: window.bounds)
         cover.backgroundColor = UIColor(red: 0.05, green: 0.07, blue: 0.12, alpha: 1.0)
         cover.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -115,7 +137,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         privacyCover = cover
     }
 
-    func sceneDidBecomeActive(_ scene: UIScene) {
+    private func hidePrivacyCover() {
         privacyCover?.removeFromSuperview()
         privacyCover = nil
     }

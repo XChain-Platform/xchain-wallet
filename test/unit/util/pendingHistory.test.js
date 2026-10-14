@@ -18,6 +18,7 @@ import {
     firstSeenToMs,
     isLivePendingStatus,
     mempoolRowToEntry,
+    mergeMonotonicChainHeights,
     mergePendingEntries,
     NETWORK_SEEN_WINDOW_MS,
     pendingDisplayState,
@@ -211,6 +212,18 @@ describe('mergePendingEntries', () => {
         expect(out.pending).toHaveLength(0);
     });
 
+    it('deduplicates one confirmed action returned for two wallet addresses', () => {
+        const out = mergePendingEntries({
+            confirmed: [
+                confirmed('', { address: OURS }),
+                confirmed('AABBCC', { address: 'secondOwnAddress' }),
+            ],
+            pending: [fromMempool()],
+        });
+        expect(out.pending).toHaveLength(0);
+        expect(out.entries).toEqual([confirmed('', { address: OURS })]);
+    });
+
     it('keeps a pending entry whose hash confirmed on a DIFFERENT chain', () => {
         const out = mergePendingEntries({
             confirmed: [confirmed('aabbcc', { chainId: 'dogecoin-regtest' })],
@@ -284,9 +297,17 @@ describe('a merged pending entry satisfies the contracts History already has', (
         expect(kept).toHaveLength(1);
     });
 
-    it('is offered for RBF replacement', () => {
+    it('offers RBF only when the local signing record says it was enabled', () => {
         const descriptor = { displayName: 'Bitcoin', feeStrategy: { rbfSupported: true } };
-        expect(isEntryReplaceable(fromMempool(), { descriptor }).ok).toBe(true);
+        const merged = mergePendingEntries({
+            confirmed: [],
+            pending: [fromMempool(), fromLocal({ txid: 'AABBCC', rbf: true })],
+        }).pending[0];
+        expect(isEntryReplaceable(merged, { descriptor }).ok).toBe(true);
+        expect(isEntryReplaceable(fromMempool(), { descriptor })).toEqual({
+            ok: false,
+            reason: 'This transaction did not allow fee replacement.',
+        });
     });
 
     it('is not offered for RBF when the action is not coin-moving', () => {
@@ -348,6 +369,12 @@ describe('pendingDisplayState', () => {
     it('reports a vanished row as dropped once the grace window passes', () => {
         const gone = local({ lastMempoolSeenMs: NOW });
         expect(pendingDisplayState(gone, NOW + DROPPED_GRACE_MS + 1)).toBe('dropped');
+        expect(classifyEntryStatus(gone, NOW + DROPPED_GRACE_MS + 1)).toBe('failed');
+    });
+
+    it('keeps a recently vanished row pending during the grace window', () => {
+        const gone = local({ lastMempoolSeenMs: NOW });
+        expect(classifyEntryStatus(gone, NOW + DROPPED_GRACE_MS)).toBe('pending');
     });
 
     it('never reports "not seen" for something that WAS seen', () => {
@@ -376,6 +403,25 @@ describe('pendingDisplayState', () => {
     it('does not throw on an entry with no pending metadata', () => {
         expect(pendingDisplayState({}, NOW)).toBe('awaiting-network');
         expect(pendingDisplayState(null, NOW)).toBe('awaiting-network');
+    });
+});
+
+describe('mergeMonotonicChainHeights', () => {
+    it('keeps the highest observed height through lagging and missing indexer reads', () => {
+        const previous = { [CHAIN]: 500, 'bitcoin-mainnet': 900 };
+        expect(mergeMonotonicChainHeights(previous, {
+            [CHAIN]: 498,
+            'dogecoin-mainnet': 1200,
+        })).toEqual({
+            [CHAIN]: 500,
+            'bitcoin-mainnet': 900,
+            'dogecoin-mainnet': 1200,
+        });
+    });
+
+    it('advances a chain when the indexer reports a higher height', () => {
+        expect(mergeMonotonicChainHeights({ [CHAIN]: 500 }, { [CHAIN]: 503 }))
+            .toEqual({ [CHAIN]: 503 });
     });
 });
 

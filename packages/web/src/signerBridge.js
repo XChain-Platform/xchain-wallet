@@ -39,11 +39,18 @@ export function registerSigner(signerId, signer) {
     if (typeof signerId !== 'string' || signerId.length === 0) {
         throw new Error('signerBridge.registerSigner: signerId is required');
     }
-    if (!signer || typeof signer.signPsbt !== 'function') {
+    const requiredMethods = [
+        'getStatus',
+        'getAddresses',
+        'getPublicKey',
+        'signPsbt',
+        'signMessage',
+    ];
+    if (!signer || requiredMethods.some((method) => typeof signer[method] !== 'function')) {
         throw new Error('signerBridge.registerSigner: signer must implement Signer');
     }
     liveSigners.set(signerId, signer);
-    bgSignerBridge.setTransport(signerId, inProcessTransport);
+    bgSignerBridge.setTransport(signerId, makeInProcessTransport(signerId, signer));
 }
 
 /**
@@ -61,33 +68,44 @@ export function registeredIds() {
 }
 
 /**
- * Shared transport: all signerIds route through this single
- * function (it reads signerId off the payload). Saves allocating a
- * closure per signer; the identity also makes the signerBridge
- * registry's Map-ness trivially observable in tests.
- *
- * @type {import('@xchain-wallet/core/signers/RemoteSigner.js').RemoteSignerTransport}
+ * Bind a transport to one registration so a request cannot select a
+ * different live signer by changing its payload.
+ * @param {string} registeredSignerId
+ * @param {import('@xchain-wallet/core/signers/Signer.js').Signer} registeredSigner
+ * @returns {import('@xchain-wallet/core/signers/RemoteSigner.js').RemoteSignerTransport}
  */
-async function inProcessTransport({ op, payload }) {
-    const signerId = payload?.signerId;
-    const signer = liveSigners.get(signerId);
-    if (!signer) {
-        const err = new Error(`signerBridge: no web signer registered for id "${signerId}"`);
-        err.name = 'SignerNotRegisteredError';
-        throw err;
-    }
-    switch (op) {
-        case 'status':
-            return signer.getStatus(payload);
-        case 'getAddresses':
-            return signer.getAddresses(payload);
-        case 'getPublicKey':
-            return signer.getPublicKey(payload);
-        case 'signPsbt':
-            return signer.signPsbt(payload);
-        case 'signMessage':
-            return signer.signMessage(payload);
-        default:
-            throw new Error(`signerBridge: unknown op "${op}"`);
-    }
+function makeInProcessTransport(registeredSignerId, registeredSigner) {
+    return async ({ op, payload }) => {
+        if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+            throw new Error('signerBridge: payload must be an object');
+        }
+        if (payload.signerId !== registeredSignerId) {
+            const err = new Error(
+                `signerBridge: payload signerId "${payload.signerId}" does not match registered id "${registeredSignerId}"`,
+            );
+            err.name = 'SignerNotRegisteredError';
+            throw err;
+        }
+        if (liveSigners.get(registeredSignerId) !== registeredSigner) {
+            const err = new Error(
+                `signerBridge: registration for id "${registeredSignerId}" is no longer active`,
+            );
+            err.name = 'SignerNotRegisteredError';
+            throw err;
+        }
+        switch (op) {
+            case 'status':
+                return registeredSigner.getStatus(payload);
+            case 'getAddresses':
+                return registeredSigner.getAddresses(payload);
+            case 'getPublicKey':
+                return registeredSigner.getPublicKey(payload);
+            case 'signPsbt':
+                return registeredSigner.signPsbt(payload);
+            case 'signMessage':
+                return registeredSigner.signMessage(payload);
+            default:
+                throw new Error(`signerBridge: unknown op "${op}"`);
+        }
+    };
 }

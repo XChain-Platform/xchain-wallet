@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, ChainPicker, FeeSelector, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, ChainPicker, Checkbox, EmptyState, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -31,7 +31,8 @@ import { preferredSourceId } from '../addressSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { MEMO_HINT } from '../utils/memoLimit.js';
+import { MEMO_HINT, memoLengthError } from '../utils/memoLimit.js';
+import { imagePreviewDataUrl, publishFeeValidationError, publishFileType } from '../utils/publishingFile.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -79,7 +80,6 @@ export function PublishFileForm({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
     const { isWatcherMode } = useWalletMode();
 
     const [mode, setMode] = useState(/** @type {'public' | 'gated'} */ ('public'));
@@ -112,9 +112,11 @@ export function PublishFileForm({ walletId, onBack }) {
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const fileInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const fileReadIdRef = useRef(0);
 
     // Gated mode: ticks this wallet owns (issuer-only protocol rule).
     const [ownedTokens, setOwnedTokens] = useState(/** @type {any[] | null} */ (null));
+    const [ownedTokensError, setOwnedTokensError] = useState(/** @type {string | null} */ (null));
     const [gatePick, setGatePick] = useState(
         /** @type {{ chainId: string, tick: string, ownerAddress: string } | null} */ (null),
     );
@@ -152,7 +154,11 @@ export function PublishFileForm({ walletId, onBack }) {
     // switch to Encrypted mode (same aggregation MyTokens uses).
     useEffect(() => {
         if (mode !== 'gated' || ownedTokens !== null || !addressesByChain) return undefined;
-        if (typeof messaging.getOwnedTokens !== 'function') { setOwnedTokens([]); return undefined; }
+        if (typeof messaging.getOwnedTokens !== 'function') {
+            setOwnedTokens([]);
+            setOwnedTokensError('This wallet cannot look up tokens for gated publishing.');
+            return undefined;
+        }
         let cancelled = false;
         const calls = [];
         for (const [cid, addrs] of Object.entries(addressesByChain)) {
@@ -164,18 +170,19 @@ export function PublishFileForm({ walletId, onBack }) {
                     messaging.getOwnedTokens({ chainId: cid, address })
                         .then((rows) => (Array.isArray(rows) ? rows : []).map((r) => ({
                             ...r, chainId: cid, ownerAddress: address,
-                        })))
-                        .catch(() => []),
+                        })).filter((r) => typeof r.tick === 'string' && r.tick.length > 0))
+                        .then((rows) => ({ rows, failed: false }))
+                        .catch(() => ({ rows: [], failed: true })),
                 );
             }
         }
         if (calls.length === 0) { setOwnedTokens([]); return undefined; }
-        Promise.all(calls).then((batches) => {
+        Promise.all(calls).then((results) => {
             if (cancelled) return;
             const seen = new Set();
             const merged = [];
-            for (const batch of batches) {
-                for (const row of batch) {
+            for (const result of results) {
+                for (const row of result.rows) {
                     const key = `${row.chainId}:${row.tick}`;
                     if (seen.has(key)) continue;
                     seen.add(key);
@@ -184,6 +191,13 @@ export function PublishFileForm({ walletId, onBack }) {
             }
             merged.sort((a, b) => a.tick.localeCompare(b.tick));
             setOwnedTokens(merged);
+            if (results.some((result) => result.failed)) {
+                setOwnedTokensError(
+                    results.every((result) => result.failed)
+                        ? 'Could not look up tokens for gated publishing. Check your connection and reopen this screen.'
+                        : 'Some token ownership checks failed. The list below may be incomplete.',
+                );
+            }
         });
         return () => { cancelled = true; };
     }, [mode, ownedTokens, addressesByChain, messaging]);
@@ -275,7 +289,10 @@ export function PublishFileForm({ walletId, onBack }) {
         const file = event.target.files && event.target.files[0];
         setFormError(null);
         if (!file) return;
-        const type = file.type || 'application/octet-stream';
+        const readId = ++fileReadIdRef.current;
+        setFileMeta(null);
+        const { type, error: typeError } = publishFileType(file);
+        if (typeError) { setFormError(typeError); return; }
         const cap = publicCapFor(file.name, type);
         if (file.size === 0) { setFormError('That file is empty.'); return; }
         if (file.size > cap) {
@@ -288,10 +305,25 @@ export function PublishFileForm({ walletId, onBack }) {
         }
         const reader = new FileReader();
         reader.onload = () => {
-            const bytes = new Uint8Array(/** @type {ArrayBuffer} */ (reader.result));
+            if (readId !== fileReadIdRef.current) return;
+            if (!(reader.result instanceof ArrayBuffer)) {
+                setFormError('Could not read that file.');
+                return;
+            }
+            const bytes = new Uint8Array(reader.result);
+            if (bytes.length === 0) { setFormError('That file is empty.'); return; }
+            if (bytes.length > cap) {
+                setFormError(
+                    `That file is ${bytes.length.toLocaleString()} bytes; with this metadata the `
+                    + `on-chain ceiling is ${cap.toLocaleString()} bytes.`,
+                );
+                return;
+            }
             setFileMeta({ name: file.name || 'file', type, bytes });
         };
-        reader.onerror = () => setFormError('Could not read that file.');
+        reader.onerror = () => {
+            if (readId === fileReadIdRef.current) setFormError('Could not read that file.');
+        };
         reader.readAsArrayBuffer(file);
     }
 
@@ -384,6 +416,10 @@ export function PublishFileForm({ walletId, onBack }) {
             setFormError('File name, title, and memo cannot contain | or ; characters.');
             return;
         }
+        const memoError = memoLengthError(memo);
+        if (memoError) { setFormError(memoError); return; }
+        const feeError = publishFeeValidationError(feePick, feeCustomEstimate);
+        if (feeError) { setFormError(feeError); return; }
         // Re-check with the FINAL metadata: a title/memo typed after the
         // pick shrinks the byte budget.
         const cap = publicCapFor(fileMeta.name, fileMeta.type);
@@ -499,8 +535,12 @@ export function PublishFileForm({ walletId, onBack }) {
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+        <Screen
+            variant={variant}
+            header={header}
+            restoreScroll={!(stage === 'review' || stage === 'submitting')}
+        >
+            {children}
         </Screen>
     );
 
@@ -589,24 +629,69 @@ export function PublishFileForm({ walletId, onBack }) {
     }
 
     if (stage === 'review' || stage === 'submitting') {
+        const reviewPreviewUrl = imagePreviewDataUrl(fileMeta?.bytes);
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
-                <p className={styles.summary}>
-                    Publish <strong>{fileMeta?.name}</strong> on-chain, readable by anyone.
-                </p>
+            <FormPage
+                label="Review publish"
+                onSubmit={handleSubmit}
+                status={(isWatcherMode || hw) && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <>
+                        {/* Prevent the reconciled button from submitting the compose form. */}
+                        <Button variant="secondary" type="button" onClick={(event) => { event.preventDefault(); setStage('compose'); }} disabled={stage === 'submitting'}>
+                            Back
+                        </Button>
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            loading={stage === 'submitting'}
+                            disabled={isWatcherMode
+                                ? false
+                                : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
+                        >
+                            {isWatcherMode
+                                ? 'Create unsigned transaction'
+                                : hw
+                                    ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                    : 'Sign and publish'}
+                        </Button>
+                    </>
+                )}
+            >
+                {reviewPreviewUrl ? (
+                    <img
+                        src={reviewPreviewUrl}
+                        alt={`Preview of ${fileMeta?.name || 'file'}`}
+                        width={160}
+                        height={160}
+                        loading="lazy"
+                        decoding="async"
+                        style={{ maxWidth: 160, maxHeight: 160, objectFit: 'contain', borderRadius: 8, display: 'block', margin: '0 auto var(--xc-space-3)' }}
+                    />
+                ) : null}
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>File</dt>
                     <dd className={styles.detailsValue}>
-                        {fileMeta?.name} · {fileMeta?.bytes.length.toLocaleString()} bytes · {fileMeta?.type}
+                        {fileMeta?.name.trim()} · {fileMeta?.bytes.length.toLocaleString()} bytes · {fileMeta?.type}
                     </dd>
                     {title.trim() ? (
                         <>
                             <dt className={styles.detailsLabel}>Title</dt>
                             <dd className={styles.detailsValue}>{title.trim()}</dd>
+                        </>
+                    ) : null}
+                    {memo ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Memo</dt>
+                            <dd className={styles.detailsValue}>{memo}</dd>
                         </>
                     ) : null}
                     <dt className={styles.detailsLabel}>Publishing from</dt>
@@ -637,29 +722,7 @@ export function PublishFileForm({ walletId, onBack }) {
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 )}
-                {(isWatcherMode || hw) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
-                ) : null}
-                <div className={styles.actions}>
-                    <Button variant="secondary" type="button" onClick={() => setStage('compose')} disabled={stage === 'submitting'}>
-                        Back
-                    </Button>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={isWatcherMode
-                            ? false
-                            : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
-                    >
-                        {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : hw
-                                ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : 'Sign and publish'}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -668,16 +731,31 @@ export function PublishFileForm({ walletId, onBack }) {
         .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
         .map(([cid]) => cid);
     const capHint = publicCapFor(fileMeta?.name || 'file.bin', fileMeta?.type || 'application/octet-stream');
+    const previewUrl = imagePreviewDataUrl(fileMeta?.bytes);
 
     return wrap(
-        <form onSubmit={handleReview} noValidate>
-            <p className={styles.summary}>
-                Store a file on the chain itself: publicly readable, or
-                encrypted so only holders of your token can open it.
-            </p>
-
+        <FormPage
+            label="Publish file"
+            onSubmit={handleReview}
+            status={mode === 'public' && formError ? (
+                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+            ) : null}
+            actions={mode === 'public' ? (
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={actionConfirm.composing}
+                    disabled={actionConfirm.composing}
+                >
+                    {actionConfirm.composing
+                        ? 'Preparing review…'
+                        : singleEncode ? 'Publish file' : 'Review publish'}
+                </Button>
+            ) : null}
+        >
             <div role="radiogroup" aria-label="Publish mode">
                 <label className={styles.checkRow}>
+                    {/* The kit has no radio primitive, so the native control preserves radiogroup behavior. */}
                     <input
                         type="radio"
                         name="publish-mode"
@@ -691,6 +769,7 @@ export function PublishFileForm({ walletId, onBack }) {
                     </span>
                 </label>
                 <label className={styles.checkRow}>
+                    {/* The kit has no radio primitive, so the native control preserves radiogroup behavior. */}
                     <input
                         type="radio"
                         name="publish-mode"
@@ -709,16 +788,19 @@ export function PublishFileForm({ walletId, onBack }) {
                 <div style={{ marginTop: 'var(--xc-space-3)' }}>
                     {ownedTokens === null ? (
                         <p className={styles.hint}>Looking up tokens you own…</p>
+                    ) : ownedTokensError && ownedTokens.length === 0 ? (
+                        <StatusMessage variant="error" className={styles.error}>{ownedTokensError}</StatusMessage>
                     ) : ownedTokens.length === 0 ? (
-                        <p className={styles.hint}>
-                            This wallet doesn't own any tokens. Only a token's
-                            owner can publish gated files against it (that's a
-                            protocol rule, it stops strangers gating spam to your
-                            token). Create a token first, then publish gated
-                            content for its holders.
-                        </p>
+                        <EmptyState
+                            title="No owned tokens"
+                            titleAs="h3"
+                            body="Only a token's owner can publish gated files for it, so create a token first and then publish gated content for its holders."
+                        />
                     ) : (
                         <>
+                            {ownedTokensError ? (
+                                <StatusMessage variant="error" className={styles.error}>{ownedTokensError}</StatusMessage>
+                            ) : null}
                             <p className={styles.hint}>
                                 Pick the token whose holders can unlock the file:
                             </p>
@@ -726,12 +808,12 @@ export function PublishFileForm({ walletId, onBack }) {
                                 {ownedTokens.map((t) => {
                                     const d = chainRegistry.get(t.chainId);
                                     return (
-                                        <button
+                                        <Button
                                             key={`${t.chainId}:${t.tick}`}
                                             type="button"
                                             role="listitem"
-                                            className={styles.checkRow}
-                                            style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 'var(--xc-space-2)', cursor: 'pointer' }}
+                                            variant="secondary"
+                                            block
                                             onClick={() => setGatePick({
                                                 chainId: t.chainId,
                                                 tick: t.tick,
@@ -740,8 +822,8 @@ export function PublishFileForm({ walletId, onBack }) {
                                         >
                                             <TickerIcon tick={t.tick} chainId={t.chainId} size={20} />
                                             <code>{t.tick}</code>
-                                            {d ? <ChainBadge descriptor={d} size="sm" /> : t.chainId}
-                                        </button>
+                                            {d ? <ChainBadge descriptor={d} size="sm" showName={false} /> : null}
+                                        </Button>
                                     );
                                 })}
                             </div>
@@ -756,10 +838,11 @@ export function PublishFileForm({ walletId, onBack }) {
                         onChange={setChainId}
                         chainIds={chainIds}
                         chainRegistry={chainRegistry}
+                        hideNetworkKind
                     />
 
                     <div style={{ margin: 'var(--xc-space-3) 0' }}>
-                        <input
+                        <Input
                             ref={fileInputRef}
                             type="file"
                             onChange={handlePickFile}
@@ -775,14 +858,27 @@ export function PublishFileForm({ walletId, onBack }) {
                         </Button>
                     </div>
                     {fileMeta ? (
-                        <dl className={styles.detailsList}>
-                            <dt className={styles.detailsLabel}>File</dt>
-                            <dd className={styles.detailsValue}>{fileMeta.name}</dd>
-                            <dt className={styles.detailsLabel}>Type</dt>
-                            <dd className={styles.detailsValue}>{fileMeta.type}</dd>
-                            <dt className={styles.detailsLabel}>Size</dt>
-                            <dd className={styles.detailsValue}>{fileMeta.bytes.length.toLocaleString()} bytes</dd>
-                        </dl>
+                        <>
+                            {previewUrl ? (
+                                <img
+                                    src={previewUrl}
+                                    alt={`Preview of ${fileMeta.name}`}
+                                    width={160}
+                                    height={160}
+                                    loading="lazy"
+                                    decoding="async"
+                                    style={{ maxWidth: 160, maxHeight: 160, objectFit: 'contain', borderRadius: 8, display: 'block', margin: '0 auto var(--xc-space-3)' }}
+                                />
+                            ) : null}
+                            <dl className={styles.detailsList}>
+                                <dt className={styles.detailsLabel}>File</dt>
+                                <dd className={styles.detailsValue}>{fileMeta.name}</dd>
+                                <dt className={styles.detailsLabel}>Type</dt>
+                                <dd className={styles.detailsValue}>{fileMeta.type}</dd>
+                                <dt className={styles.detailsLabel}>Size</dt>
+                                <dd className={styles.detailsValue}>{fileMeta.bytes.length.toLocaleString()} bytes</dd>
+                            </dl>
+                        </>
                     ) : (
                         <p className={styles.hint}>
                             Up to about {capHint.toLocaleString()} bytes with the
@@ -817,17 +913,11 @@ export function PublishFileForm({ walletId, onBack }) {
                         autoComplete="off"
                     />
 
-                    <label className={styles.checkRow}>
-                        <input
-                            type="checkbox"
-                            checked={ackForever}
-                            onChange={(e) => setAckForever(e.target.checked)}
-                        />
-                        <span>
-                            I understand the published bytes are on-chain forever
-                            and cannot be deleted.
-                        </span>
-                    </label>
+                    <Checkbox
+                        label="I understand the published bytes are on-chain forever and cannot be deleted."
+                        checked={ackForever}
+                        onChange={(e) => setAckForever(e.target.checked)}
+                    />
 
                     {feeTiers ? (
                         <FeeSelector
@@ -843,24 +933,8 @@ export function PublishFileForm({ walletId, onBack }) {
                         {...nativeFee.toggleProps}
                         coinTicker={descriptor ? ({ bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' })[descriptor.coin] || '' : ''}
                     />
-
-                    {formError ? (
-                        <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
-                    ) : null}
-                    <div className={styles.actions}>
-                        <Button
-                            type="submit"
-                            variant="primary"
-                            loading={actionConfirm.composing}
-                            disabled={actionConfirm.composing}
-                        >
-                            {actionConfirm.composing
-                                ? 'Preparing review…'
-                                : singleEncode ? 'Publish file' : 'Review publish'}
-                        </Button>
-                    </div>
                 </>
             )}
-        </form>,
+        </FormPage>,
     );
 }

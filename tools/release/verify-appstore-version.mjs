@@ -198,8 +198,8 @@ export function pinnedListingDigests(wsRoot = WS_ROOT) {
 /**
  * The bundle id, read from the Xcode project rather than restated.
  *
- * The project declares it TWICE and the uitests target comes FIRST, so a
- * first-match read picks `io.xchain.wallet.ios.uitests` and this gate would
+ * The project declares it TWICE beside the uitests and AppTests bundle ids,
+ * and the uitests target comes FIRST, so a first-match read picks `io.xchain.wallet.ios.uitests` and this gate would
  * query an app that does not exist - reporting a missing app record for a
  * listing that is fine.
  *
@@ -211,7 +211,7 @@ export function bundleIdFromProject(wsRoot = WS_ROOT) {
     const text = readFileSync(pbx, 'utf8');
     const ids = [...text.matchAll(/PRODUCT_BUNDLE_IDENTIFIER = ([^;]+);/g)]
         .map((m) => m[1].trim().replace(/^"|"$/g, ''))
-        .filter((id) => !id.endsWith('.uitests'));
+        .filter((id) => !id.endsWith('.uitests') && !id.endsWith('.tests'));
     const unique = [...new Set(ids)];
     if (unique.length !== 1) {
         throw new Error(

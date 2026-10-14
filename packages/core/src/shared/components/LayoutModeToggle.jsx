@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { Icon } from '@xchain-wallet/core/ui';
 import styles from './LayoutModeToggle.module.css';
 
@@ -43,21 +43,32 @@ function isExtensionContext() {
 export function LayoutModeToggle() {
     const [mode, setMode] = useState(/** @type {'popup' | 'sidepanel'} */ ('popup'));
     const [available, setAvailable] = useState(false);
+    const groupId = useId();
+    const labelId = `${groupId}-label`;
+    const descriptionId = `${groupId}-description`;
 
     useEffect(() => {
         if (!isExtensionContext()) return;
+        let active = true;
+        let storageChanged = false;
         setAvailable(true);
+        const onChanged = (changes, area) => {
+            if (area !== 'local') return;
+            if (!Object.prototype.hasOwnProperty.call(changes, STORAGE_KEY)) return;
+            storageChanged = true;
+            const next = changes[STORAGE_KEY]?.newValue;
+            if (active && (next === 'popup' || next === 'sidepanel')) setMode(next);
+        };
+        chrome.storage.onChanged.addListener(onChanged);
         chrome.storage.local.get(STORAGE_KEY, (items) => {
+            if (!active || storageChanged) return;
             const v = items?.[STORAGE_KEY];
             if (v === 'popup' || v === 'sidepanel') setMode(v);
         });
-        const onChanged = (changes, area) => {
-            if (area !== 'local') return;
-            const next = changes[STORAGE_KEY]?.newValue;
-            if (next === 'popup' || next === 'sidepanel') setMode(next);
+        return () => {
+            active = false;
+            chrome.storage.onChanged.removeListener(onChanged);
         };
-        chrome.storage.onChanged.addListener(onChanged);
-        return () => chrome.storage.onChanged.removeListener(onChanged);
     }, []);
 
     if (!available) return null;
@@ -65,17 +76,30 @@ export function LayoutModeToggle() {
     function pick(next) {
         if (next === mode) return;
         setMode(next);
-        chrome.storage.local.set({ [STORAGE_KEY]: next });
+        try {
+            const pending = chrome.storage.local.set({ [STORAGE_KEY]: next });
+            if (typeof pending?.catch === 'function') void pending.catch(() => {});
+        } catch {
+            // Extension reloads can invalidate the storage context between render and click.
+        }
     }
 
     return (
         <div className={styles.wrap}>
-            <span className={styles.label}>Open as</span>
-            <div className={styles.buttons} role="radiogroup" aria-label="Open as">
+            <span id={labelId} className={styles.label}>Open as</span>
+            <span id={descriptionId} className={styles.description}>
+                Choose how the wallet opens from the extension toolbar.
+            </span>
+            <div
+                className={styles.buttons}
+                role="radiogroup"
+                aria-labelledby={labelId}
+                aria-describedby={descriptionId}
+            >
                 <button
                     type="button"
                     role="radio"
-                    aria-checked={mode === 'popup' ? 'true' : 'false'}
+                    aria-checked={mode === 'popup'}
                     className={`${styles.btn} ${mode === 'popup' ? styles.btnActive : ''}`}
                     onClick={() => pick('popup')}
                 >
@@ -85,7 +109,7 @@ export function LayoutModeToggle() {
                 <button
                     type="button"
                     role="radio"
-                    aria-checked={mode === 'sidepanel' ? 'true' : 'false'}
+                    aria-checked={mode === 'sidepanel'}
                     className={`${styles.btn} ${mode === 'sidepanel' ? styles.btnActive : ''}`}
                     onClick={() => pick('sidepanel')}
                 >

@@ -12,10 +12,10 @@
 //
 // submitAction tracks the PendingTx lifecycle through the onProgress callback it
 // hands to submitWithSigner: the 'broadcasting' phase is where it durably puts
-// `status: 'broadcasting'` with the txid. That callback is async, and it used to
-// be fired and forgotten one line above `broadcastTx`, so the network could accept
-// a transaction while the durable row still said 'awaiting-signature' - and a crash
-// in that window left a record claiming nothing had ever been sent.
+// `status: 'broadcasting'` with the txid and signed bytes. That callback is async,
+// and it runs one line above `broadcastTx`, so the network cannot accept a
+// transaction before restart recovery has everything needed to retry those exact
+// bytes.
 //
 // These pin ORDER, and the fail-closed half: a record that cannot be written must
 // stop the send, exactly as recordPendingCommit already does for the envelope
@@ -72,6 +72,10 @@ describe('submitWithSigner durably records the broadcast before making it', () =
         const h = harness({ progressDelayMs: 5 });
         await call(h);
         expect(h.trace).toEqual(['durable-broadcasting', 'broadcast']);
+        expect(h.onProgress).toHaveBeenCalledWith('broadcasting', {
+            txid: 'TXID',
+            txHex: 'signed-hex',
+        });
     });
 
     it('a durable write that fails stops the send (no money moves unrecorded)', async () => {

@@ -31,6 +31,10 @@ const LOCAL_DELTA_HEADLINE = 'The network accepted this action on its own, but c
 
 const WARNING_FALLBACK = 'The checks flagged something to review before you sign.';
 
+// Keep the protocol-fee forfeiture as one warning because the producer's
+// message restates the same consequence in protocol-facing words.
+const HEADLINE_ONLY_WARNINGS = new Set(['NATIVE_FEE_FORFEIT']);
+
 export const WARNING_COPY = Object.freeze({
     // Also raised for a dispense against a dispenser whose own price is not
     // positive, so the line names neither whose amount it is nor a certain outcome.
@@ -63,7 +67,10 @@ export function warningText(f) {
     const headline = f?._downgradedBy === LOCAL_DELTA_DOWNGRADE
         ? LOCAL_DELTA_HEADLINE
         : (WARNING_COPY[f?.code] || WARNING_FALLBACK);
-    return { headline, detail: f?.message && f.message !== headline ? f.message : null };
+    const detail = !HEADLINE_ONLY_WARNINGS.has(f?.code) && f?.message && f.message !== headline
+        ? f.message
+        : null;
+    return { headline, detail };
 }
 
 // Each entry names WHAT was not checked, so it stays true whatever the reason

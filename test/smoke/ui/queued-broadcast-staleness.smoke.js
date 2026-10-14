@@ -57,11 +57,11 @@ assert.ok(/listQueuedBroadcasts\(/.test(qb)
     && /broadcastQueuedRequest\(/.test(qb)
     && /discardQueuedRequest\(/.test(qb),
     'QueuedBroadcastBanner uses all three messaging endpoints');
-// Per-row Broadcast/Discard buttons.
-assert.ok(/Broadcast now/.test(qb),
-    'QueuedBroadcastBanner exposes Broadcast now action');
-assert.ok(/Discard/.test(qb),
-    'QueuedBroadcastBanner exposes Discard action');
+// Per-row Send/Remove buttons.
+assert.ok(/Send now/.test(qb),
+    'QueuedBroadcastBanner exposes Send now action');
+assert.ok(/Remove/.test(qb),
+    'QueuedBroadcastBanner exposes Remove action');
 
 // --- 3. Background handlers register the queue routes -------------------
 

@@ -8,23 +8,38 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, Screen } from '@xchain-wallet/core/ui';
+import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import styles from './Loading.module.css';
 
 /**
  * @param {object} props
- * @param {string} [props.error]
+ * @param {unknown} [props.error]
+ * @param {() => void} [props.onRetry] defaults to reloading the app
  */
-export function Loading({ error }) {
+export function Loading({ error, onRetry }) {
     const { shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const centerClass = variant === 'small' ? styles.centerPopup : styles.centerFull;
+
+    function handleRetry() {
+        if (onRetry) { onRetry(); return; }
+        if (typeof window !== 'undefined') window.location.reload();
+    }
+
     return (
         <Screen variant={variant}>
             <div className={centerClass}>
                 {error ? (
-                    <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>
+                    <div role="alert" className={styles.errorPanel}>
+                        <h1 className={styles.title}>{t('loading.error.title')}</h1>
+                        <p className={styles.error}>{t('loading.error.body')}</p>
+                        <p className={styles.nextStep}>{t('loading.error.recovery')}</p>
+                        <Button type="button" variant="primary" block onClick={handleRetry}>
+                            {t('common.tryAgain')}
+                        </Button>
+                    </div>
                 ) : (
                     <div aria-live="polite" className={styles.dots}>
                         <span /> <span /> <span />

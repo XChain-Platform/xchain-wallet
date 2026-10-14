@@ -21,10 +21,9 @@
 // does lives in the shared section, so the standalone route and the
 // Settings drilldown can never drift apart.
 
-import { Screen, PageHeader } from '@xchain-wallet/core/ui';
+import { ListPage, PageHeader, Screen } from '@xchain-wallet/core/ui';
 import { screenVariantFor, useMessaging } from '../useMessaging.js';
 import { ConnectedSitesSection } from '../components/settings/ConnectedSitesSection.jsx';
-import styles from './ActionsMenu.module.css';
 
 /**
  * @param {object} props
@@ -33,12 +32,12 @@ import styles from './ActionsMenu.module.css';
 export function ConnectedSites({ onBack }) {
     const { shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const header = <PageHeader onBack={onBack} title="Connected Sites" />;
+    const header = <PageHeader onBack={onBack} title="Connected sites" />;
     return (
         <Screen variant={variant} header={header}>
-            <div className={styles.listPopup}>
+            <ListPage>
                 <ConnectedSitesSection />
-            </div>
+            </ListPage>
         </Screen>
     );
 }

@@ -1,11 +1,36 @@
 .field {
+    --xc-control-height: var(--xc-control-h-md);
+    --xc-control-font-size: var(--xc-control-font-md, 14px);
+    --xc-control-padding-x: var(--xc-control-pad-x-md, 12px);
+    --xc-control-icon-size: var(--xc-control-icon-md, 20px);
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-1);
-    margin-bottom: var(--xc-space-3);
+    min-width: 0;
+}
+
+.sm {
+    --xc-control-height: var(--xc-control-h-sm);
+    --xc-control-font-size: var(--xc-control-font-sm, 13px);
+    --xc-control-padding-x: var(--xc-control-pad-x-sm, 8px);
+    --xc-control-icon-size: var(--xc-control-icon-sm, 16px);
+}
+
+.md {
+    --xc-control-height: var(--xc-control-h-md);
+    --xc-control-font-size: var(--xc-control-font-md, 14px);
+    --xc-control-padding-x: var(--xc-control-pad-x-md, 12px);
+    --xc-control-icon-size: var(--xc-control-icon-md, 20px);
+}
+
+.lg {
+    --xc-control-height: var(--xc-control-h-lg);
+    --xc-control-font-size: var(--xc-control-font-lg, 16px);
+    --xc-control-padding-x: var(--xc-control-pad-x-lg, 16px);
+    --xc-control-icon-size: var(--xc-control-icon-lg, 24px);
 }
 
 .label {
+    margin-block-end: var(--xc-label-gap);
     font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
     font-weight: 500;
@@ -14,14 +39,39 @@
 .input {
     padding: var(--xc-space-2) var(--xc-space-3);
     font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-md);
+    font-size: var(--xc-control-font-size, 14px);
+    line-height: var(--xc-control-line, 1.25);
     color: var(--xc-text);
     background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
-    min-height: 36px;
+    border: 1px solid var(--xc-control-border);
+    border-radius: var(--xc-control-radius, 8px);
+    min-width: 0;
+    max-width: 100%;
     width: 100%;
+    scroll-margin-block: var(--xc-space-3);
     transition: border-color var(--xc-transition), box-shadow var(--xc-transition);
+}
+
+.input:not(textarea) {
+    height: var(--xc-control-height);
+    padding-block: 0;
+    padding-inline: var(--xc-control-padding-x, 12px);
+}
+
+.input:is([type='number'], [inputmode='decimal'], [inputmode='numeric']) {
+    direction: ltr;
+}
+
+.controlHitArea {
+    position: relative;
+    width: 100%;
+}
+
+/* Positioned so the input paints over the earlier ::before hit area. No
+   z-index: an overlay drawn on the field (an address preview, an icon
+   button) must keep painting above the input's opaque background. */
+.controlHitArea > .input {
+    position: relative;
 }
 
 .input:focus {
@@ -30,16 +80,35 @@
     box-shadow: 0 0 0 3px var(--xc-focus-ring);
 }
 
-/* Size contract. `.md` (36px) is the default and lives on `.input`/`.label`
-   above, so the md path needs no extra class. `.lg` is the "hero field"
-   treatment (Send's Amount/To): larger type, taller box, weightier label.
-   This is the single source of truth for the big-field look; AmountField
-   and Send used to duplicate these values inline. Applied to the `.field`
-   wrapper so it can size both the label and the input together. */
-.lg .input {
-    font-size: var(--xc-text-lg);
-    padding: var(--xc-space-3) var(--xc-space-4);
-    min-height: 48px;
+.input:is([type='date'], [type='datetime-local'], [type='time']) {
+    -webkit-appearance: none;
+    appearance: none;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+}
+
+.input:is([type='date'], [type='datetime-local'], [type='time'])::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.7;
+    width: var(--xc-tap-min, 24px);
+    height: var(--xc-tap-min, 24px);
+    background-size: var(--xc-control-icon-size, 20px) var(--xc-control-icon-size, 20px);
+    margin-inline-start: var(--xc-space-1);
+    min-width: var(--xc-tap-min, 24px);
+    min-height: var(--xc-tap-min, 24px);
+    padding: 0;
+    filter: invert(var(--xc-date-picker-invert, 0));
+}
+
+.input:is([type='date'], [type='datetime-local'], [type='time'])::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+}
+
+@media (prefers-color-scheme: dark) {
+    .input:is([type='date'], [type='datetime-local'], [type='time'])::-webkit-calendar-picker-indicator {
+        --xc-date-picker-invert: 1;
+    }
 }
 
 .lg .label {
@@ -47,24 +116,71 @@
     font-weight: 600;
 }
 
+/* Compact controls keep a 44px coarse-pointer target without enlarging the
+   painted control box. The wrapper routes the transparent area to its field. */
+@media (pointer: coarse), (hover: none) {
+    .controlHitArea::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        inset-inline: 0;
+        height: max(100%, var(--xc-control-hit-min, 24px));
+        transform: translateY(-50%);
+    }
+}
+
 .invalid {
     border-color: var(--xc-danger);
 }
 .invalid:focus {
-    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.2);
+    box-shadow: 0 0 0 3px var(--xc-danger-bg);
 }
 
 .hint {
+    margin-block-start: var(--xc-help-gap);
+    max-width: var(--xc-prose-max-width);
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
 }
 
 .error {
+    margin-block-start: var(--xc-help-gap);
+    display: flex;
+    align-items: flex-start;
+    gap: var(--xc-space-1);
+    max-width: var(--xc-prose-max-width);
     font-size: var(--xc-text-xs);
-    color: var(--xc-danger);
+    line-height: 1.4;
+    color: var(--xc-danger-fg);
+    overflow-wrap: anywhere;
+}
+
+.error::before {
+    content: '!';
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 1.2em;
+    width: 1.2em;
+    height: 1.2em;
+    margin-block-start: 0.1em;
+    border: 1px solid currentColor;
+    border-radius: 50%;
+    font-size: 0.8em;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.counter {
+    margin-block-start: var(--xc-help-gap);
+    align-self: flex-end;
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
 }
 
 .capsLock {
+    margin-block-start: var(--xc-help-gap);
+    max-width: var(--xc-prose-max-width);
     font-size: var(--xc-text-xs);
     color: var(--xc-warning, var(--xc-text-muted));
     display: flex;

@@ -8,8 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { copyText } from '../clipboard.js';
 import styles from './RawPsbtViewer.module.css';
+import { useHapticFeedback } from '../hooks/useHaptic.js';
+import { useToast } from './ToastHost.jsx';
 
 /**
  * Developer-Mode-gated raw view (§21.3 / §48.4) for sign screens.
@@ -28,8 +31,7 @@ import styles from './RawPsbtViewer.module.css';
  *     PSBT parser (BIP-174); until then the section reads "(parser not
  *     wired yet)" so the disclosure remains honest about its limits.
  *
- * Read-only. The Copy button copies the displayed payload (PSBT hex
- * when present, otherwise the action-fields JSON) to the clipboard.
+ * Read-only. Each displayed payload has its own clipboard control.
  *
  * @param {object} props
  * @param {boolean} props.developerMode
@@ -37,27 +39,74 @@ import styles from './RawPsbtViewer.module.css';
  * @param {Record<string, unknown>} [props.actionFields]
  */
 export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
-    const [copied, setCopied] = useState(false);
-
-    if (!developerMode) return null;
-
+    const [copyState, setCopyState] = useState(/** @type {{ target: string|null, status: 'idle'|'copied'|'failed' }} */ ({
+        target: null,
+        status: 'idle',
+    }));
+    const haptic = useHapticFeedback();
+    const { announce } = useToast();
     const hasPsbt = typeof psbtHex === 'string' && psbtHex.length > 0;
     const hasFields = actionFields && typeof actionFields === 'object' && Object.keys(actionFields).length > 0;
+    const fieldsJson = hasFields ? safeJson(actionFields) : '';
+    const mountedRef = useRef(false);
+    const copyAttemptRef = useRef(0);
+    const resetTimerRef = useRef(null);
+
+    useEffect(() => {
+        mountedRef.current = true;
+        copyAttemptRef.current += 1;
+        if (resetTimerRef.current !== null) {
+            clearTimeout(resetTimerRef.current);
+            resetTimerRef.current = null;
+        }
+        setCopyState((current) => current.status === 'idle'
+            ? current
+            : { target: null, status: 'idle' });
+
+        return () => {
+            mountedRef.current = false;
+            copyAttemptRef.current += 1;
+            if (resetTimerRef.current !== null) {
+                clearTimeout(resetTimerRef.current);
+                resetTimerRef.current = null;
+            }
+        };
+    }, [developerMode, fieldsJson, psbtHex]);
+
+    if (!developerMode) return null;
     if (!hasPsbt && !hasFields) return null;
 
-    const fieldsJson = hasFields ? safeJson(actionFields) : '';
-    const copyTarget = hasPsbt ? psbtHex : fieldsJson;
-
-    async function handleCopy() {
-        try {
-            await navigator.clipboard?.writeText(copyTarget);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
-        } catch (_err) {
-            // Clipboard write can fail in approval popup contexts
-            // without permissions; the textarea above stays
-            // selectable as a fallback.
+    async function handleCopy(target, value) {
+        const attempt = ++copyAttemptRef.current;
+        if (resetTimerRef.current !== null) {
+            clearTimeout(resetTimerRef.current);
+            resetTimerRef.current = null;
         }
+        let ok = false;
+        try {
+            ({ ok } = await copyText(value));
+        } catch {
+            // Clipboard adapters are expected to return failures, but a rejected
+            // platform promise still produces the same safe, visible result.
+        }
+        if (!mountedRef.current || copyAttemptRef.current !== attempt) return;
+
+        setCopyState({ target, status: ok ? 'copied' : 'failed' });
+        announce(ok ? 'Copied' : 'Copy failed: clipboard unavailable');
+        if (ok) haptic.tap();
+        else haptic.error();
+        resetTimerRef.current = setTimeout(() => {
+            resetTimerRef.current = null;
+            if (!mountedRef.current || copyAttemptRef.current !== attempt) return;
+            setCopyState((current) => current.target === target
+                ? { target: null, status: 'idle' }
+                : current);
+        }, 1500);
+    }
+
+    function copyLabel(target, label) {
+        if (copyState.target !== target || copyState.status === 'idle') return `Copy ${label}`;
+        return copyState.status === 'copied' ? 'Copied' : 'Copy failed: clipboard unavailable';
     }
 
     return (
@@ -78,6 +127,14 @@ export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
                             spellCheck={false}
                             aria-label="Unsigned transaction hex"
                         />
+                        <button
+                            type="button"
+                            className={styles.copyBtn}
+                            onClick={() => handleCopy('psbt', psbtHex)}
+                            aria-live="polite"
+                        >
+                            {copyLabel('psbt', 'unsigned transaction hex')}
+                        </button>
                     </section>
                 ) : null}
 
@@ -85,6 +142,14 @@ export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
                     <section className={styles.section} aria-label="Action fields">
                         <p className={styles.label}>Action fields</p>
                         <pre className={styles.json}>{fieldsJson}</pre>
+                        <button
+                            type="button"
+                            className={styles.copyBtn}
+                            onClick={() => handleCopy('fields', fieldsJson)}
+                            aria-live="polite"
+                        >
+                            {copyLabel('fields', 'action fields')}
+                        </button>
                     </section>
                 ) : null}
 
@@ -95,13 +160,6 @@ export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
                     </p>
                 </section>
 
-                <button
-                    type="button"
-                    className={styles.copyBtn}
-                    onClick={handleCopy}
-                >
-                    {copied ? 'Copied' : `Copy ${hasPsbt ? 'unsigned transaction hex' : 'action fields'}`}
-                </button>
             </div>
         </details>
     );

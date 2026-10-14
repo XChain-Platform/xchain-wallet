@@ -17,6 +17,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { AddAddressModal } from '../../../packages/core/src/shared/routes/AddAddressModal.jsx';
+import { expectNoSeriousAxeViolations } from '../../a11y/helpers/axe.js';
 
 const REGTEST_SETTINGS = {
     schemaVersion: 1,
@@ -44,6 +45,16 @@ function renderModal(messaging, props = {}) {
 }
 
 describe('Add address on an account with no addresses', () => {
+    it('has no serious axe violations in its open state', async () => {
+        const view = renderModal({
+            getSettings: async () => REGTEST_SETTINGS,
+            generateReceiveAddress: vi.fn(async () => ({ address: 'bcrt1qexample' })),
+        });
+
+        await waitFor(() => expect(screen.getByRole('button', { name: /Generate/ })).toBeTruthy());
+        await expectNoSeriousAxeViolations(view.container);
+    });
+
     it('offers the chains active on the current network', async () => {
         const messaging = {
             getSettings: async () => REGTEST_SETTINGS,
@@ -52,10 +63,11 @@ describe('Add address on an account with no addresses', () => {
         renderModal(messaging);
 
         // The dead end: no options at all, only a Close button.
-        await waitFor(() => expect(screen.queryByText(/No coins are available/)).toBeNull());
+        await waitFor(() => expect(screen.queryByText(/No coins available/)).toBeNull());
         expect(screen.getByRole('button', { name: /Generate/ })).toBeTruthy();
         // The picker preselects the first active chain rather than nothing.
         expect(screen.getByText('Bitcoin')).toBeTruthy();
+        expect(document.body.textContent).not.toMatch(/regtest|testnet|not mainnet/i);
     });
 
     it('generates the first address on an active chain', async () => {
@@ -74,6 +86,64 @@ describe('Add address on an account with no addresses', () => {
         // The address type must be the chain default, never blank: an empty
         // type would be handed straight to the derive flow.
         expect(generateReceiveAddress.mock.calls[0][0].addressType).toBeTruthy();
+    });
+
+    it('generates the requested number of addresses sequentially', async () => {
+        let inFlight = 0;
+        let maxInFlight = 0;
+        const generateReceiveAddress = vi.fn(async () => {
+            inFlight += 1;
+            maxInFlight = Math.max(maxInFlight, inFlight);
+            await Promise.resolve();
+            inFlight -= 1;
+            return { address: `bcrt1qexample${generateReceiveAddress.mock.calls.length}` };
+        });
+        const onGenerated = vi.fn();
+        const onClose = vi.fn();
+        renderModal(
+            { getSettings: async () => REGTEST_SETTINGS, generateReceiveAddress },
+            { onGenerated, onClose },
+        );
+
+        fireEvent.change(await screen.findByLabelText('Number of addresses'), { target: { value: '3' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Generate 3' }));
+
+        await waitFor(() => expect(generateReceiveAddress).toHaveBeenCalledTimes(3));
+        expect(maxInFlight).toBe(1);
+        expect(onGenerated).toHaveBeenCalledWith(3);
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('rejects a fractional address count instead of rounding it down', async () => {
+        const generateReceiveAddress = vi.fn(async () => ({ address: 'bcrt1qexample' }));
+        renderModal({ getSettings: async () => REGTEST_SETTINGS, generateReceiveAddress });
+
+        const count = await screen.findByLabelText('Number of addresses');
+        fireEvent.change(count, { target: { value: '1.5' } });
+        fireEvent.click(screen.getByRole('button', { name: /^Generate$/ }));
+
+        expect(await screen.findByText(/Enter a number between 1 and 25/)).toBeTruthy();
+        expect(generateReceiveAddress).not.toHaveBeenCalled();
+    });
+
+    it('reports addresses persisted before a later batch item fails', async () => {
+        const generateReceiveAddress = vi.fn()
+            .mockResolvedValueOnce({ address: 'bcrt1qfirst' })
+            .mockRejectedValueOnce(new Error('device disconnected'));
+        const onGenerated = vi.fn();
+        const onClose = vi.fn();
+        renderModal(
+            { getSettings: async () => REGTEST_SETTINGS, generateReceiveAddress },
+            { onGenerated, onClose },
+        );
+
+        fireEvent.change(await screen.findByLabelText('Number of addresses'), { target: { value: '3' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Generate 3' }));
+
+        expect(await screen.findByText('device disconnected')).toBeTruthy();
+        expect(generateReceiveAddress).toHaveBeenCalledTimes(2);
+        expect(onGenerated).toHaveBeenCalledWith(1);
+        expect(onClose).not.toHaveBeenCalled();
     });
 
     it('keeps offering the chains the account already occupies', async () => {
@@ -98,6 +168,6 @@ describe('Add address on an account with no addresses', () => {
             generateReceiveAddress: vi.fn(),
         }, { chainIds: [] });
 
-        await waitFor(() => expect(screen.getByText(/No coins are available/)).toBeTruthy());
+        await waitFor(() => expect(screen.getByText(/No coins available/)).toBeTruthy());
     });
 });

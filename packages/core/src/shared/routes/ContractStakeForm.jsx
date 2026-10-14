@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { isDemoWallet, synthesizeDemoContractMeta } from '@xchain-wallet/core/flows';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -17,7 +17,7 @@ import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hook
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
-import { formatWithThousands, sumDecimalStrings, trimAmountTail } from '../utils/amountFormat.js';
+import { formatWithThousands, sumDecimalStrings, trimAmountTail, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
@@ -40,6 +40,8 @@ import styles from './IssueTokenForm.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { effectiveStakingRows } from '../../flows/stakingDashboard.js';
 import { compareAmounts } from '../../market/orderMath.js';
+import { useTokenInfo } from '../hooks/useTokenInfo.js';
+import { readFailureMessage } from '../utils/readFailureMessage.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -198,7 +200,7 @@ export function ContractStakeForm({
                 });
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load contract metadata.');
+                if (!cancelled) setLoadError(readFailureMessage(err, 'load contract metadata'));
             });
         return () => { cancelled = true; };
     }, [walletId, chainId, contractActionIndex, messaging]);
@@ -221,6 +223,8 @@ export function ContractStakeForm({
         address: fromAddress?.address,
         tick: tick,
     });
+    const tokenInfo = useTokenInfo({ chainId, tick, skip: !tick.trim() });
+    const tokenDivisibility = tokenInfo?.divisibility ?? 8;
 
     // Unstake mode's "available" is the STAKED balance on this contract
     // (per pubkey when one is entered), not the wallet token balance;
@@ -320,6 +324,10 @@ export function ContractStakeForm({
             setFormError('No Bitcoin address available to stake from.');
             return;
         }
+        if (!/^[1-9]\d*$/.test(String(contractActionIndex ?? '').trim())) {
+            setFormError('Contract ID must be a positive whole number.');
+            return;
+        }
         if (!contractMeta?.valid) {
             setFormError('Target contract is not stakeable (no cooldown configured at deploy time).');
             return;
@@ -338,11 +346,34 @@ export function ContractStakeForm({
                 setFormError('Amount must be a positive decimal.');
                 return;
             }
+            const precisionError = tokenAmountPrecisionError(actionParams.AMOUNT, {
+                divisibility: tokenDivisibility,
+                tick,
+            });
+            if (precisionError) {
+                setFormError(precisionError);
+                return;
+            }
+            if (tickAmtBalance != null && compareAmounts(actionParams.AMOUNT, tickAmtBalance) === 1) {
+                setFormError(
+                    `Amount exceeds the ${formatWithThousands(String(tickAmtBalance))} `
+                    + `${tick.trim().toUpperCase()} available.`,
+                );
+                return;
+            }
         }
         if (mode === 'unstake' && amount.trim() !== '') {
             const amt = amount.trim();
             if (!/^[0-9]+(\.[0-9]+)?$/.test(amt) || compareAmounts(amt, '0') !== 1) {
                 setFormError('Amount must be a positive decimal (or leave it blank to unstake everything).');
+                return;
+            }
+            const precisionError = tokenAmountPrecisionError(amt, {
+                divisibility: tokenDivisibility,
+                tick,
+            });
+            if (precisionError) {
+                setFormError(precisionError);
                 return;
             }
             if (stakedAvailable != null && compareAmounts(amt, stakedAvailable) === 1) {
@@ -492,13 +523,16 @@ export function ContractStakeForm({
 
     const header = (
         <PageHeader
-            onBack={onBack}
-            backLabel="Back to contract"
+            onBack={stage === 'review'
+                ? () => { setSubmitError(null); setStage('form'); }
+                : onBack}
+            backDisabled={stage === 'submitting'}
+            backLabel={stage === 'review' ? 'Back to edit' : 'Back to contract'}
             title={`Stake on contract #${contractActionIndex}`}
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>
             {children}
         </Screen>
     );
@@ -562,7 +596,31 @@ export function ContractStakeForm({
     if (stage === 'review' || stage === 'submitting') {
         const verb = mode === 'stake' ? 'Stake' : mode === 'unstake' ? 'Unstake' : 'Delegate';
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
+            <FormPage
+                label={`${verb} review`}
+                onSubmit={handleSubmit}
+                status={(isWatcherMode || isHwSource) && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={stage === 'submitting'}
+                        disabled={stage === 'submitting' || (
+                            isWatcherMode
+                                ? false
+                                : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)
+                        )}
+                    >
+                        {isWatcherMode
+                            ? 'Create unsigned transaction'
+                            : isHwSource
+                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                : `${verb}`}
+                    </Button>
+                )}
+            >
                 <p className={styles.summary}>
                     {verb}
                     {mode === 'stake'
@@ -573,10 +631,14 @@ export function ContractStakeForm({
                     {' '}on contract #{contractActionIndex}.
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dd className={styles.detailsValue}>
+                                <ChainBadge descriptor={descriptor} size="sm" />
+                            </dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -616,8 +678,8 @@ export function ContractStakeForm({
                             valueClassName={styles.detailsValue}
                         />
                     ) : null}
-                    <dt className={styles.detailsLabel} style={{ color: '#b94a48' }}>Slash risk</dt>
-                    <dd className={styles.detailsValue} style={{ color: '#b94a48' }}>
+                    <dt className={styles.detailsLabel} style={{ color: 'var(--xc-danger-text)' }}>Slash risk</dt>
+                    <dd className={styles.detailsValue} style={{ color: 'var(--xc-danger-text)' }}>
                         Funds slashed by this contract are sent to{' '}
                         {contractMeta.slashDestination
                             ? <AddressText address={contractMeta.slashDestination} />
@@ -647,28 +709,7 @@ export function ContractStakeForm({
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 )}
-                {(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
-                ) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={
-                            isWatcherMode
-                                ? false
-                                : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)
-                        }
-                    >
-                        {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : `${verb}`}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -733,15 +774,35 @@ export function ContractStakeForm({
     }
 
     return wrap(
-        <form onSubmit={handleReview} noValidate>
-            <div className={styles.summary} style={{ marginBottom: '0.5rem' }}>
-                Target: contract #{contractActionIndex},{' '}
-                <strong>{contractMeta.cooldown}-block cooldown</strong>.{' '}
-                Slashed funds are routed to{' '}
-                {contractMeta.slashDestination
-                    ? <AddressText address={contractMeta.slashDestination} />
-                    : '(configured at deploy)'}.
-            </div>
+        <FormPage
+            label="Contract stake"
+            onSubmit={handleReview}
+            status={formError ? (
+                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={actionConfirm.composing}
+                    disabled={!fromAddress || actionConfirm.composing}
+                >
+                    {singleEncode ? (mode === 'stake' ? 'Stake' : mode === 'unstake' ? 'Unstake' : 'Delegate') : 'Preview'}
+                </Button>
+            )}
+        >
+            <dl className={styles.detailsList}>
+                <dt className={styles.detailsLabel}>Target</dt>
+                <dd className={styles.detailsValue}>Contract #{contractActionIndex}</dd>
+                <dt className={styles.detailsLabel}>Cooldown</dt>
+                <dd className={styles.detailsValue}>{contractMeta.cooldown} blocks</dd>
+                <dt className={styles.detailsLabel}>Slashed funds</dt>
+                <dd className={styles.detailsValue}>
+                    {contractMeta.slashDestination
+                        ? <AddressText address={contractMeta.slashDestination} truncate={false} />
+                        : '(configured at deploy)'}
+                </dd>
+            </dl>
 
             {fromAddress ? (
                 <AddressField
@@ -759,33 +820,20 @@ export function ContractStakeForm({
                 </StatusMessage>
             )}
 
-            <fieldset style={{ border: 'none', padding: 0, marginBottom: '0.75rem' }}>
-                <legend style={{ fontWeight: 'bold' }}>Action</legend>
-                <label style={{ marginRight: '1rem' }}>
-                    <input
-                        type="radio"
-                        name="contract-stake-mode"
-                        checked={mode === 'stake'}
-                        onChange={() => { setMode('stake'); setAmount(''); }}
-                    /> Stake
-                </label>
-                <label style={{ marginRight: '1rem' }}>
-                    <input
-                        type="radio"
-                        name="contract-stake-mode"
-                        checked={mode === 'unstake'}
-                        onChange={() => { setMode('unstake'); setAmount(''); }}
-                    /> Unstake
-                </label>
-                <label>
-                    <input
-                        type="radio"
-                        name="contract-stake-mode"
-                        checked={mode === 'delegate'}
-                        onChange={() => setMode('delegate')}
-                    /> Delegate (rotate key)
-                </label>
-            </fieldset>
+            <RadioGroup
+                legend="Action"
+                name="contract-stake-mode"
+                value={mode}
+                onChange={(value) => {
+                    setMode(value);
+                    if (value !== 'delegate') setAmount('');
+                }}
+                options={[
+                    { value: 'stake', label: 'Stake' },
+                    { value: 'unstake', label: 'Unstake' },
+                    { value: 'delegate', label: 'Delegate (rotate key)' },
+                ]}
+            />
 
             <TokenField
                 label="Token"
@@ -801,11 +849,13 @@ export function ContractStakeForm({
                         : 'How much to unstake. Leave blank (or use Max) to unstake the full staked balance; the rest stays staked.'}
                     amount={amount}
                     tick={tick}
+                    divisibility={tokenDivisibility}
                     onAmountFieldChange={(rawValue) => {
-                    const stripped = String(rawValue).replace(/,/g, '');
-                    if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
-                    setAmount(stripped);
-                }}
+                        const stripped = String(rawValue).replace(/,/g, '');
+                        if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
+                        setAmount(stripped);
+                        setFormError(null);
+                    }}
                     onMax={mode === 'stake'
                         ? (tickAmtBalance && compareAmounts(tickAmtBalance, '0') === 1
                             ? () => setAmount(tickAmtBalance)
@@ -832,9 +882,9 @@ export function ContractStakeForm({
                         ? '64-character hex-encoded Ed25519 public key identifying which contract-stake to begin cooldown for.'
                         : '64-character hex-encoded Ed25519 public key to associate with this stake. Re-staking with the same key tops up.'}
                 value={signingPubkey}
-                onChange={(e) => setSigningPubkey(e.target.value.trim())}
+                onChange={(e) => { setSigningPubkey(e.target.value.trim()); setFormError(null); }}
                 autoComplete="off"
-                autoCapitalize="none"
+                autoCapitalize="off"
                 autoCorrect="off"
                 spellCheck={false}
             />
@@ -850,20 +900,6 @@ export function ContractStakeForm({
                 />
             ) : null}
 
-            {formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
-            ) : null}
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    block
-                    loading={actionConfirm.composing}
-                    disabled={!fromAddress || actionConfirm.composing}
-                >
-                    {singleEncode ? (mode === 'stake' ? 'Stake' : mode === 'unstake' ? 'Unstake' : 'Delegate') : 'Preview'}
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }

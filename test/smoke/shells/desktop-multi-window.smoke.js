@@ -18,14 +18,15 @@
 //      registers itself with the `windows` Set and unregisters on
 //      `closed`. Show on `ready-to-show`.
 //   3. `buildApplicationMenu()` wires `File → New Window` with
-//      CmdOrCtrl+N → `openWindowAfterIdleCheck()` so the user can open
+//      CmdOrCtrl+Shift+N → `openWindowAfterIdleCheck()` so the user can open
 //      additional windows without restarting the app.
 //   4. Deep-link forwarder targets the focused window (or last-created
 //      fallback) instead of a singleton; updater events broadcast to
 //      every live window.
-//   5. `app.activate` (macOS dock click) opens a window when none exist,
-//      matching the §24.6 single/multi-window contract, and both windowless
-//      reopen paths run the idle auto-lock check before the renderer exists.
+//   5. macOS close hides the window, dock activation reveals it, and a fully
+//      closed app opens a window through the idle auto-lock gate.
+//   6. Successful session and wallet-selection changes notify sibling
+//      renderers, and normal window bounds survive close and reopen.
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
@@ -35,9 +36,13 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 const mainPath = join(wsRoot, 'packages', 'desktop', 'main', 'index.js');
+const preloadPath = join(wsRoot, 'packages', 'desktop', 'preload.cjs');
+const rendererPath = join(wsRoot, 'packages', 'desktop', 'renderer', 'App.jsx');
 assert.ok(existsSync(mainPath), 'packages/desktop/main/index.js exists');
 
 const src = readFileSync(mainPath, 'utf8');
+const preload = readFileSync(preloadPath, 'utf8');
+const renderer = readFileSync(rendererPath, 'utf8');
 
 // --- 1. windows Set replaces singleton ----------------------------------
 
@@ -67,8 +72,8 @@ assert.ok(/function buildApplicationMenu\(\)/.test(src),
     'buildApplicationMenu() exists');
 assert.ok(/Menu\.setApplicationMenu\(Menu\.buildFromTemplate\(template\)\)/.test(src),
     'application menu is installed from the template');
-assert.ok(/label:\s*'New Window',\s*accelerator:\s*'CmdOrCtrl\+N',\s*click:\s*\(\)\s*=>\s*\{\s*void openWindowAfterIdleCheck\(\);\s*\}/.test(src),
-    'File → New Window (Cmd/Ctrl+N) opens through the idle-check helper');
+assert.ok(/label:\s*'New Window',\s*accelerator:\s*'CmdOrCtrl\+Shift\+N',\s*click:\s*\(\)\s*=>\s*\{\s*void openWindowAfterIdleCheck\(\);\s*\}/.test(src),
+    'File → New Window (Cmd/Ctrl+Shift+N) opens through the idle-check helper');
 // macOS-aware app-name submenu shape.
 assert.ok(/process\.platform === 'darwin'/.test(src),
     'menu template branches on macOS for the app-name submenu');
@@ -79,8 +84,8 @@ assert.ok(/function forwardDeepLink\(event\)\s*\{[\s\S]*?pickDeepLinkTarget\(liv
     'forwardDeepLink targets the focused window that is not detached (pickDeepLinkTarget)');
 assert.ok(/if \(opts\.initialView \|\| opts\.initialContext\) detachedWindows\.add\(win\)/.test(src),
     'createWindow marks a window opened on a pinned view as detached');
-assert.ok(/function broadcastToWindows\(channel,\s*payload\)/.test(src),
-    'broadcastToWindows() helper iterates every live window');
+assert.ok(/function broadcastToWindows\(channel,\s*payload,\s*excludedContents = null\)/.test(src),
+    'broadcastToWindows() helper iterates live sibling windows with optional sender exclusion');
 // The handler retains the event before broadcasting it (row 148), so
 // what this pins is that every live window still gets it - not that the
 // broadcast is the first statement in the body. `[^}]` keeps that loose
@@ -90,24 +95,51 @@ assert.ok(/onEvent:\s*\(event\)\s*=>\s*\{[^}]*?broadcastToWindows\('xchain:updat
 
 // --- 5. activate hook + first-window bootstrap --------------------------
 
-assert.ok(/buildApplicationMenu\(\);\s*\n\s*createWindow\(\);/.test(src),
+assert.ok(/buildApplicationMenu\(\);[\s\S]*?canCreateWindows = true;\s*\n\s*createWindow\(\);/.test(src),
     'whenReady installs the menu, then opens the primary window');
-assert.ok(/app\.on\('activate',\s*\(\)\s*=>\s*\{\s*if \(BrowserWindow\.getAllWindows\(\)\.length === 0\) void openWindowAfterIdleCheck\(\)/.test(src),
-    'app.activate (dock click on macOS) opens a window when none exist, through the idle-check helper');
+assert.ok(/app\.on\('activate',[\s\S]*?restoreWindowAfterIdleCheck\(\)/.test(src),
+    'app.activate reveals a hidden window or opens one through the idle-check helper');
 
 // A windowless macOS app keeps the vault open, and a new renderer re-stamps
 // the idle clock on its first message, so the check must finish first.
 const helper = src.slice(src.indexOf('function openWindowAfterIdleCheck('));
 assert.ok(helper.length > 0 && src.includes('function openWindowAfterIdleCheck('),
     'openWindowAfterIdleCheck() exists');
-assert.ok(helper.indexOf('await enforceIdleAutoLock(runtime)') !== -1
-    && helper.indexOf('await enforceIdleAutoLock(runtime)') < helper.indexOf('createWindow();\n    })()'),
-    'the windowless reopen awaits the idle check before it creates the window');
-assert.ok(/app\.on\('window-all-closed',[\s\S]*?startWindowlessIdleLock\(\);/.test(src),
-    'closing the last window on macOS starts the windowless idle check');
+const idleGate = src.slice(src.indexOf('function runWindowlessIdleGate('));
+assert.ok(idleGate.indexOf('await enforceIdleAutoLock(runtime)') !== -1
+    && idleGate.indexOf('await enforceIdleAutoLock(runtime)') < idleGate.indexOf('action();'),
+    'the shared windowless gate awaits the idle check before its window action');
+assert.ok(/function openWindowAfterIdleCheck\([\s\S]*?runWindowlessIdleGate\([\s\S]*?createWindow\(\)/.test(src),
+    'the windowless reopen creates its window through the idle gate');
+const restoreHelper = src.slice(src.indexOf('function restoreWindowAfterIdleCheck('));
+assert.ok(restoreHelper.indexOf('runWindowlessIdleGate(') !== -1
+    && restoreHelper.indexOf('runWindowlessIdleGate(') < restoreHelper.indexOf('revealWindow(target)'),
+    'restoring a hidden macOS window reveals it through the idle gate');
+assert.ok(/applyWindowCloseConvention\(win,\s*event\)[\s\S]*?startWindowlessIdleLock\(\)/.test(src),
+    'hiding the last visible macOS window starts the windowless idle check');
+assert.ok(/platform !== 'darwin' \|\| quitting[\s\S]*?event\.preventDefault\(\);[\s\S]*?win\.hide\(\)/.test(src),
+    'macOS close hides unless the application is explicitly quitting');
 assert.ok(/function createWindow\([^)]*\)\s*\{\s*\/\/[^\n]*\n\s*stopWindowlessIdleLock\(\);/.test(src),
     'a live window stops the windowless idle check');
 
+// --- 6. shared state + remembered bounds -------------------------------
+
+assert.ok(/stateChangeForMessage\(message,\s*response\)/.test(src)
+    && /broadcastToWindows\('xchain:state-changed',\s*change,\s*event\.sender\)/.test(src),
+    'successful state-changing messages notify every sibling window');
+assert.ok(/onStateChange\(listener\)[\s\S]*?ipcRenderer\.on\(STATE_CHANGE_CHANNEL,\s*wrapped\)/.test(preload),
+    'the preload exposes a narrow state-change subscription');
+assert.ok(/bridge\.onStateChange\(\(change\)[\s\S]*?change\?\.kind === 'session'[\s\S]*?refresh\(\)/.test(renderer),
+    'a sibling session change refreshes the renderer state machine');
+assert.ok(/messaging\.setActiveWallet\(id\)/.test(renderer)
+    && /change\?\.kind !== 'active-wallet'[\s\S]*?setActiveWalletId\(walletId\)/.test(renderer),
+    'wallet selection announces through main and applies in sibling renderers');
+assert.ok(/new FileWindowBoundsStore\(windowBoundsPathFor\(app\.getPath\('userData'\)\)\)/.test(src)
+    && /win\.getNormalBounds\(\)/.test(src)
+    && /cascadeWindowBounds\(rememberedWindowBounds,\s*displays\)/.test(src)
+    && /restoreWindowBounds\(rememberedWindowBounds,\s*displays\)/.test(src),
+    'normal window bounds persist, restore, and cascade against the current displays');
+
 console.log(
-    'OK: desktop-multi-window smoke (§24.6 / G057 windows Set replaces singleton mainWindow; createWindow factory + register-on-add / unregister-on-closed; File > New Window menu (Cmd/Ctrl+N) calls createWindow; deep-link forwarder + updater event multiplex over live windows; activate-hook reopens when none remain)',
+    'OK: desktop-multi-window smoke (§24.6 / G057 window creation, routing, sibling state sync, macOS reopen, and remembered bounds)',
 );

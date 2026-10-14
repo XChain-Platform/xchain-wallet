@@ -26,9 +26,9 @@ const ADDRESSES = {
     [DOGE]: [addr('addr-doge', 'DHy1Qk7Zx8dCn4eW1sT9pVb2xKq3rLm5Ns', "m/44'/3'/0'/0/0")],
 };
 
-function mount({ settings = {}, props = {} } = {}) {
+function mount({ settings = {}, props = {}, addresses = ADDRESSES } = {}) {
     const target = {
-        getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
+        getAddressesByChain: vi.fn().mockResolvedValue(addresses),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full', activeNetwork: 'mainnet', ...settings }),
         signerReady: () => Promise.resolve({ ready: true }),
@@ -51,23 +51,35 @@ function mount({ settings = {}, props = {} } = {}) {
     );
 }
 
-const chainButton = () => screen.findByRole('button', { name: /^Chain: / });
+const chainButton = () => screen.findByRole('button', { name: /^Give and get chain: / });
 
 afterEach(() => cleanup());
 
 describe('SwapForm opens on the last-used chain', () => {
+    it('does not render the selected network kind', async () => {
+        const chainId = 'bitcoin-regtest';
+        mount({
+            settings: { activeNetwork: 'regtest' },
+            props: { initialChainId: chainId },
+            addresses: { [chainId]: ADDRESSES[BTC] },
+        });
+
+        await screen.findByRole('button', { name: 'Give and get chain: Bitcoin' });
+        expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
+    });
+
     it('opens on Dogecoin when Bitcoin was created first and Dogecoin was used last', async () => {
         mount({ settings: { lastUsedChain: { mainnet: DOGE } } });
-        await waitFor(async () => expect((await chainButton()).getAttribute('aria-label')).toBe('Chain: Dogecoin'));
+        await waitFor(async () => expect((await chainButton()).getAttribute('aria-label')).toBe('Give and get chain: Dogecoin'));
     });
 
     it('a caller-seeded chain wins over the last-used chain', async () => {
         mount({ settings: { lastUsedChain: { mainnet: DOGE } }, props: { initialChainId: BTC } });
-        await waitFor(async () => expect((await chainButton()).getAttribute('aria-label')).toBe('Chain: Bitcoin'));
+        await waitFor(async () => expect((await chainButton()).getAttribute('aria-label')).toBe('Give and get chain: Bitcoin'));
     });
 
     it('falls back to the first chain when the last-used chain has no addresses', async () => {
         mount({ settings: { lastUsedChain: { mainnet: LTC } } });
-        await waitFor(async () => expect((await chainButton()).getAttribute('aria-label')).toBe('Chain: Bitcoin'));
+        await waitFor(async () => expect((await chainButton()).getAttribute('aria-label')).toBe('Give and get chain: Bitcoin'));
     });
 });

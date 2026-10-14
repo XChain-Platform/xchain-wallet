@@ -8,32 +8,19 @@
  * license (without AGPL source-disclosure terms) is available -
  * contact legal@dankest.llc. */
 
-/* Addresses page toolbar: search + network filter, each 50% wide, matching
-   the contacts list and the Send address-book picker. */
-.toolbar {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: var(--xc-space-2);
-    width: 100%;
-    margin-bottom: var(--xc-space-2);
-}
-
-.search {
+.searchField {
     flex: 1 1 0;
     min-width: 0;
-    box-sizing: border-box;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
 }
 
-.search::placeholder {
-    color: var(--xc-text-muted);
+.searchField > * {
+    margin-bottom: 0;
+}
+
+.searchField input {
+    height: var(--xc-control-h-md);
+    font-size: var(--xc-control-font-md, var(--xc-control-font));
+    border-radius: var(--xc-control-radius);
 }
 
 /* Header "+" button + its Add/Import dropdown menu. */
@@ -106,6 +93,14 @@
     background: var(--xc-bg-muted);
 }
 
+.addMenuItem > span {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: var(--xc-space-2);
+    width: 100%;
+}
+
 .addMenuIcon {
     display: inline-flex;
     flex: 0 0 auto;
@@ -117,9 +112,10 @@
 .segmented {
     display: flex;
     width: 100%;
+    height: var(--xc-control-h-md);
     margin-bottom: var(--xc-space-3);
     border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
+    border-radius: var(--xc-control-radius);
     overflow: hidden;
 }
 
@@ -131,7 +127,7 @@
     border-inline-start: 1px solid var(--xc-border);
     padding: var(--xc-space-2) var(--xc-space-1);
     font: inherit;
-    font-size: var(--xc-text-sm);
+    font-size: var(--xc-control-font-md, var(--xc-control-font));
     font-weight: 600;
     color: var(--xc-text-muted);
     cursor: pointer;
@@ -153,16 +149,6 @@
 
 /* Empty state shown when the filter matches no addresses: a calm card so it
    reads as intentional, not a glitch. */
-.emptyCard {
-    margin: var(--xc-space-2) 0;
-    padding: var(--xc-space-6) var(--xc-space-4);
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-lg);
-    text-align: center;
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-sm);
-}
 
 /* One card wrapping all addresses, mirroring the contacts list / Home
    balances list: rows separated by a hairline divider, highlighted on hover. */
@@ -175,27 +161,17 @@
     background: var(--xc-surface);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-md);
-    overflow: hidden;
 }
 
-.addrRow {
-    appearance: none;
-    width: 100%;
+.addrList li + li {
+    border-top: 1px solid var(--xc-border);
+}
+
+.addrRowMain {
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-1);
-    padding: var(--xc-space-3);
-    border: none;
-    border-top: 1px solid var(--xc-border);
-    background: transparent;
-    color: inherit;
-    text-align: start;
-    font: inherit;
-    cursor: pointer;
-}
-
-.addrList li:first-child .addrRow {
-    border-top: none;
+    width: 100%;
 }
 
 /* Picker-action rows (picker mode only): even space-2 breathing room on
@@ -204,15 +180,6 @@
 .pickerActionsList {
     margin-top: calc(-1 * var(--xc-space-1));
     margin-bottom: var(--xc-space-2);
-}
-
-.addrRow:hover {
-    background: var(--xc-bg-muted);
-}
-
-.addrRow:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: -2px;
 }
 
 /* Top line: optional label (left) + address-type bubble (right). */
@@ -235,6 +202,44 @@
     white-space: nowrap;
 }
 
+.addrBadges {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+}
+
+.addrHidden {
+    flex: 0 0 auto;
+    padding: 2px var(--xc-space-2);
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    color: var(--xc-text-muted);
+    background: var(--xc-bg-muted);
+    text-transform: uppercase;
+}
+
+.hiddenToggle {
+    appearance: none;
+    width: 100%;
+    margin-top: var(--xc-space-2);
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    background: transparent;
+    color: var(--xc-text-muted);
+    font: inherit;
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.hiddenToggle:hover {
+    background: var(--xc-bg-muted);
+    color: var(--xc-text);
+}
+
 /* Line 1: network icon + address. Line 2: native amount (left), fiat (right). */
 .addrLine1 {
     display: flex;
@@ -243,20 +248,19 @@
     min-width: 0;
 }
 
-.chainIcon {
-    flex: 0 0 auto;
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    display: block;
-    margin-top: 2px;
-}
-
 .addrLine2 {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: var(--xc-space-2);
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+.addrAmount,
+.addrFiat {
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .addrAmount {
@@ -283,9 +287,9 @@
     font-size: 10px;
     font-weight: 800;
     letter-spacing: 0.06em;
-    color: #FFFFFF;
+    color: var(--xc-text-inverted);
     text-transform: uppercase;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+    box-shadow: var(--xc-shadow-sm);
     background: linear-gradient(180deg, #22c55e, #16a34a);
 }
 
@@ -302,11 +306,8 @@
     border-radius: var(--xc-radius-lg);
 }
 
-.detailHead {
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    margin-bottom: var(--xc-space-1);
+.detailCardSpaced {
+    margin-top: var(--xc-space-3);
 }
 
 .detailName {
@@ -327,39 +328,6 @@
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
     word-break: break-all;
-}
-
-/* Plain copy icon inline at the end of the address text (no button chrome). */
-.copyIcon {
-    appearance: none;
-    border: none;
-    background: transparent;
-    padding: 0;
-    margin-inline-start: var(--xc-space-1);
-    color: var(--xc-text-muted);
-    cursor: pointer;
-    display: inline-flex;
-    vertical-align: middle;
-    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
-       inheriting it from whichever line box the platform font produces. */
-    min-height: var(--xc-tap-min);
-    min-width: var(--xc-tap-min);
-    align-items: center;
-    justify-content: center;
-}
-
-.copyIcon:hover {
-    color: var(--xc-text);
-}
-
-.copyIcon:focus-visible {
-    outline: none;
-    color: var(--xc-text);
-}
-
-.copyIcon svg {
-    width: 14px;
-    height: 14px;
 }
 
 /* About-section tab strip on the address detail view. */
@@ -385,7 +353,7 @@
 }
 
 .tabActive {
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     border-bottom-color: var(--xc-accent-primary);
 }
 
@@ -417,10 +385,6 @@
     word-break: break-all;
 }
 
-.detailFooter {
-    margin-top: var(--xc-space-4);
-}
-
 /* Inline label editor: input grows, Save button hugs the right. */
 .labelRow {
     display: flex;
@@ -444,7 +408,7 @@
 /* Four-up action row under the detail card, mirroring the contacts detail. */
 .quickActions {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
     gap: var(--xc-space-2);
     margin-top: var(--xc-space-2);
 }
@@ -483,12 +447,19 @@
     cursor: not-allowed;
 }
 
+.quickAction > span {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--xc-space-1);
+}
+
 .quickActionIcon {
     width: 32px;
     height: 32px;
     border-radius: 50%;
     background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -496,12 +467,6 @@
 
 /* Box-shadow focus rings are not painted in forced-colors mode, so give
  * this control a real outline there (WCAG 2.4.7). */
-@media (forced-colors: active) {
-    .copyIcon:focus-visible {
-        outline: 2px solid Highlight;
-        outline-offset: 2px;
-    }
-}
 
 /* Engines disagree on whether gradients survive forced-colors mode, so pin
  * the surface and its label to one system pair instead of guessing. */

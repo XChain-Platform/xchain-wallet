@@ -1,6 +1,7 @@
 .wrap {
     display: flex;
     flex-direction: column;
+    /* The compact chart-stack gap has no spacing-token equivalent. */
     gap: 2px;
     background: var(--xc-surface);
     /* Blue accent border so the chart pops against neutral surface, the
@@ -8,20 +9,21 @@
     border: 1px solid var(--xc-accent-primary);
     border-radius: var(--xc-radius-md);
     padding: var(--xc-space-2) var(--xc-space-3);
-    /* Pulls the chart up under the TotalBalanceHero's box-shadow halo
-       so the visible gap above the chart matches the gap to the action
-       buttons below it. */
+    /* The halo overlap has no spacing-token equivalent. */
     margin-top: -6px;
+    min-width: 0;
+    overflow: hidden;
 }
 
 .change {
     font-size: var(--xc-text-sm);
     font-weight: 700;
     line-height: 1.2;
+    overflow-wrap: anywhere;
 }
 
-.changePositive { color: var(--xc-success, #14b86c); }
-.changeNegative { color: var(--xc-danger,  #d93838); }
+.changePositive { color: var(--xc-success); }
+.changeNegative { color: var(--xc-danger-fg); }
 .changeNeutral  { color: var(--xc-text-muted); }
 
 .chart {
@@ -37,6 +39,7 @@
 
 .ranges {
     display: flex;
+    flex-wrap: wrap;
     gap: var(--xc-space-1);
     justify-content: center;
     padding-top: 0;
@@ -46,10 +49,8 @@
     appearance: none;
     background: transparent;
     border: none;
-    padding: 4px 10px;
-    /* slice 2: 11px uppercase text in 4px padding measured 20px
-       tall, under the 24px pointer-target floor. The pill grows in the
-       block axis only, so the range row keeps its shape. */
+    padding: var(--xc-space-1) var(--xc-control-pad-x);
+    /* The tap-min floor keeps the compact uppercase pill accessible. */
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -61,7 +62,7 @@
     text-transform: uppercase;
     color: var(--xc-text-muted);
     cursor: pointer;
-    border-radius: var(--xc-radius-pill, 999px);
+    border-radius: var(--xc-radius-pill);
     transition: color var(--xc-transition), background var(--xc-transition);
 }
 
@@ -71,6 +72,7 @@
 
 .range:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
+    /* The compact focus gap has no spacing-token equivalent. */
     outline-offset: 2px;
 }
 
@@ -80,5 +82,5 @@
 }
 
 .rangeActive:hover {
-    color: #FFFFFF;
+    color: var(--xc-on-accent);
 }

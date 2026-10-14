@@ -67,6 +67,9 @@ import { serializeError } from '@xchain-wallet/extension/src/background/MessageH
 import { shouldAutoLock } from '@xchain-wallet/extension/src/background/autoLockState.js';
 import { createBroadcastQueueStore, sealBroadcastQueueStore } from '@xchain-wallet/extension/src/background/broadcastQueueStore.js';
 import { createBroadcastQueueStorage } from '@xchain-wallet/extension/src/background/broadcastQueueStorage.js';
+import { restoreLabelSyncBestEffort } from '@xchain-wallet/extension/src/background/walletCreate.js';
+import { startLabelSyncRestoreTask } from '@xchain-wallet/extension/src/background/labelSyncRestoreTasks.js';
+import { createVaultKeyring } from '@xchain-wallet/extension/src/background/vaultKeyring.js';
 
 import { createDesktopMessageHost } from './messageHost.js';
 import { applyAutoLockReport, hasEnforceableWindow, stampAutoLockActivity } from './autoLockState.js';
@@ -112,6 +115,7 @@ export const AUTO_LOCK_REPORT_TYPE = 'session.autolock';
  *   coinpayAutopayWatcher: import('@xchain-wallet/core').notifications.CoinpayAutopayWatcher | null,
  *   signerPool: import('@xchain-wallet/core').signers.SignerPool,
  *   idleLockInFlight: Promise<{ locked: boolean, reason: string }> | null,
+ *   systemLockInFlight: Promise<{ locked: boolean, reason: string }> | null,
  *   broadcastQueueStore: ReturnType<typeof createBroadcastQueueStore>,
  * }} DesktopRuntime
  */
@@ -155,14 +159,14 @@ export function createRuntime(deps) {
         dispenserEscrowWatcher: null,
         coinpayAutopayWatcher: null,
         // PC-16: pre-unlocked software signers, populated by the shared
-        // wallet.unlock handler while the password is in scope (wallet
-        // seeds have their own per-wallet KDF, so the keychain-cached
-        // master key alone cannot sign). A keychain auto-unlock leaves
-        // this pool empty: the wallet works with per-op passwords and
-        // auto-pay stays disarmed until one password unlock arms it.
+        // wallet.unlock handler while the password is in scope. A keychain
+        // restore can also populate wallets sealed under the vault key; any
+        // wallet with independent KDF params still requires a password.
         signerPool: new signersLib.SignerPool(),
         // The windowless idle check in flight, shared by concurrent callers.
         idleLockInFlight: null,
+        // OS lock and suspend can arrive together, so they share one lock.
+        systemLockInFlight: null,
         // One broadcast-queue store for every host this process builds, as the
         // extension and web shells hold: a lock keeps it (a broadcast still on
         // the network owes its persist and journal entry to the NEXT host),
@@ -287,13 +291,49 @@ async function runIdleAutoLock(runtime, now) {
     if (!hasEnforceableWindow(state)) return { locked: false, reason: 'no-window' };
     if (!shouldAutoLock(state, now)) return { locked: false, reason: 'within-window' };
 
-    // Stop the watchers first so nothing signs from the pool while the key goes.
+    return lockRuntimeForAutoLock(runtime, store, 'idle-window-elapsed');
+}
+
+/**
+ * Lock an armed desktop wallet immediately for an OS screen lock or suspend.
+ * The existing Never setting remains the opt-out; enabled timeout lengths do
+ * not delay an OS event because the user is no longer at the machine.
+ *
+ * @param {DesktopRuntime} runtime
+ * @returns {Promise<{ locked: boolean, reason: string }>}
+ */
+export function enforceSystemAutoLock(runtime) {
+    if (!runtime) return Promise.resolve({ locked: false, reason: 'no-runtime' });
+    if (!runtime.systemLockInFlight) {
+        runtime.systemLockInFlight = runSystemAutoLock(runtime)
+            .catch((err) => {
+                console.error('[xchain] system auto-lock check failed:', err);
+                return { locked: false, reason: 'check-failed' };
+            })
+            .finally(() => { runtime.systemLockInFlight = null; });
+    }
+    return runtime.systemLockInFlight;
+}
+
+async function runSystemAutoLock(runtime) {
+    const store = runtime.autoLockStore;
+    if (!store) return { locked: false, reason: 'no-store' };
+    let state = null;
+    try { state = await store.load(); } catch { state = null; }
+    if (!state) return { locked: false, reason: 'no-record' };
+    if (state.armed !== true) return { locked: false, reason: 'disarmed' };
+    if (!hasEnforceableWindow(state)) return { locked: false, reason: 'no-window' };
+    return lockRuntimeForAutoLock(runtime, store, 'system-event');
+}
+
+async function lockRuntimeForAutoLock(runtime, store, reason) {
+    // Stop watchers first so nothing signs while the cached key is removed.
     tearDownHost(runtime);
     try { await runtime.sessionBackend.clear(); } catch (err) {
         console.error('[xchain] auto-lock could not clear the cached session key:', err);
     }
     try { await store.clear(); } catch { /* best-effort */ }
-    return { locked: true, reason: 'idle-window-elapsed' };
+    return { locked: true, reason };
 }
 
 /**
@@ -317,6 +357,27 @@ export async function ensureHost(runtime) {
         await vault.open();
         runtime.vault = vault;
 
+        // The keychain restores the already-derived vault key rather than a
+        // password. Reuse it only for wallet records carrying identical KDF
+        // params, which is the primary wallet created with the vault. Added
+        // wallets with independent params remain unpooled and require unlock.
+        try {
+            const meta = await runtime.metaBackend.load();
+            if (meta?.kdfParams) {
+                await runtime.signerPool.populate({
+                    vault,
+                    masterKey,
+                    masterKeyKdfParams: meta.kdfParams,
+                    chainRegistry: runtime.chainRegistry,
+                    sdkRegistry: runtime.sdkRegistry,
+                });
+            }
+        } catch {
+            // Best-effort restoration. The network switch locks before reload
+            // when its wallet has no signer, so this cannot leave a false
+            // unlocked state with address derivation unavailable.
+        }
+
         // Apply the egress policy before the host or any watcher can reach
         // the network (both boot and the `onUnlocked` path land here).
         if (runtime.onPrivacySettingsChanged) {
@@ -335,11 +396,37 @@ export async function ensureHost(runtime) {
             chainRegistry: runtime.chainRegistry,
             sdkRegistry: runtime.sdkRegistry,
             signerPool: runtime.signerPool,
+            // A password change re-seals the vault; the keychain-cached
+            // session key must follow it or the next launch opens nothing.
+            vaultKeyring: createVaultKeyring({
+                metaBackend: runtime.metaBackend,
+                sessionBackend: runtime.sessionBackend,
+            }),
             broadcastQueueStore: runtime.broadcastQueueStore,
             getDiagnosticContext: runtime.getDiagnosticContext,
             // Re-applies routing on any settings.update touching `privacy`,
             // so the toggle takes effect on the next request.
             onPrivacySettingsChanged: runtime.onPrivacySettingsChanged,
+            surfaceStateEvents: {
+                async publish(kind) {
+                    if (kind !== 'network') return;
+                    await runtime.notificationService?.refresh();
+                    for (const watcher of [
+                        runtime.governancePollWatcher,
+                        runtime.deadlineWatcher,
+                        runtime.dispenserEscrowWatcher,
+                    ]) {
+                        if (!watcher) continue;
+                        watcher.stop();
+                        watcher.start();
+                    }
+                    if (runtime.coinpayAutopayWatcher) {
+                        runtime.coinpayAutopayWatcher.stop();
+                        runtime.coinpayAutopayWatcher.start();
+                        await runtime.coinpayAutopayWatcher.refresh();
+                    }
+                },
+            },
         });
 
         // §46: start the live notification watcher. main/index.js injects the
@@ -450,6 +537,7 @@ export async function ensureHost(runtime) {
                 sdkRegistry: runtime.sdkRegistry,
                 chainRegistry: runtime.chainRegistry,
                 getSigner: (walletId) => runtime.signerPool.get(walletId),
+                getSettings: () => flowsLib.getSettings(vault),
                 reservationLedger: runtime.host.host.reservationLedger,
                 notify: runtime.notify,
                 shellKind: 'desktop',
@@ -656,6 +744,10 @@ export async function handleIpcMessage(runtime, message) {
                         console.error('[xchain] ensureHost after unlock failed:', err);
                     }
                 },
+                startLabelSyncRestore: (opts) => startLabelSyncRestoreTask({
+                    walletId: opts.walletId,
+                    run: () => restoreLabelSyncBestEffort({ ...opts, vault: runtime.vault }),
+                }),
                 onLocked: () => {
                     tearDownHost(runtime);
                     // An explicit lock ends the window the stamp described.

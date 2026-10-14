@@ -104,7 +104,7 @@ async function openScan(page) {
 async function classifyPaste(page, text) {
     const box = page.getByRole('textbox').first();
     await box.fill(text);
-    await page.getByRole('button', { name: 'Classify pasted payload' }).click();
+    await page.getByRole('button', { name: 'Use pasted text' }).click();
 
     // 'Routed' = the scan route handed off and unmounted. Anchored on the route
     // itself rather than on any one destination, so this works for send, receive
@@ -120,13 +120,16 @@ async function classifyPaste(page, text) {
     // (Second time this screen has punished an any-alert assertion; see the Send
     // refusal step further down.)
     const failed = page.getByTestId('scan-route').locator(':scope > [role="alert"]');
-    const deadline = Date.now() + 30_000;
-    for (;;) {
-        if (await routed.count() === 0) return 'routed';
-        if (await failed.count() > 0) return (await failed.first().innerText()).trim();
-        if (Date.now() > deadline) throw new Error('the scan route neither routed nor reported');
-        await page.waitForTimeout(200);
-    }
+    let outcome = null;
+    await expect.poll(async () => {
+        if (await routed.count() === 0) outcome = 'routed';
+        else if (await failed.count() > 0) outcome = (await failed.first().innerText()).trim();
+        return outcome;
+    }, {
+        timeout: 30_000,
+        message: 'the scan route neither routed nor reported',
+    }).not.toBeNull();
+    return outcome;
 }
 
 /** A browser whose camera shows `qrText`, already onboarded and unlocked. */

@@ -5,43 +5,17 @@
 
 .quickActions {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
     gap: var(--xc-space-2);
     /* Pull up against .detailsList's space-4 bottom margin so the grid
        sits tight under the stats card. */
     margin: calc(var(--xc-space-2) - var(--xc-space-4)) 0 var(--xc-space-3);
 }
 
-.quickAction {
-    appearance: none;
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-accent-primary);
-    border-radius: var(--xc-radius-md);
+.quickActions > button,
+.quickActionMoreWrap > button {
     padding: var(--xc-space-3) var(--xc-space-1);
-    display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: var(--xc-space-1);
-    cursor: pointer;
-    color: var(--xc-text);
-    font-family: inherit;
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-}
-
-.quickAction:hover:not(:disabled) {
-    background: var(--xc-bg-muted);
-}
-
-.quickAction:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-
-.quickAction:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
 }
 
 .quickActionIcon {
@@ -49,7 +23,7 @@
     height: 32px;
     border-radius: 50%;
     background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -61,7 +35,7 @@
     align-self: stretch;
 }
 
-.quickActionMoreWrap > .quickAction {
+.quickActionMoreWrap > button {
     flex: 1 1 auto;
     width: 100%;
 }
@@ -81,29 +55,8 @@
     flex-direction: column;
 }
 
-.quickActionMoreItem {
-    appearance: none;
-    background: transparent;
-    border: none;
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: var(--xc-radius-sm);
-    color: var(--xc-text);
-    font-family: inherit;
-    font-size: var(--xc-text-sm);
-    text-align: start;
-    cursor: pointer;
-}
-
-.quickActionMoreItem:hover:not(:disabled) {
-    background: var(--xc-bg-muted);
-}
-
-.quickActionMoreItem:disabled {
-    color: var(--xc-text-muted);
-    cursor: default;
+.quickActionMoreMenu > button {
+    justify-content: flex-start;
 }
 
 /* Tab strip, shaped like the home tabs. */
@@ -147,31 +100,22 @@
     overflow: hidden;
 }
 
-.eventRow {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--xc-space-2);
-    padding: var(--xc-space-3);
+.eventList li + li {
     border-top: 1px solid var(--xc-border);
-    font-size: var(--xc-text-sm);
-}
-
-.eventList li:first-child .eventRow {
-    border-top: none;
 }
 
 .eventAmount {
     font-weight: 600;
-    white-space: nowrap;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .eventMeta {
     flex: 1 1 auto;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
     color: var(--xc-text-muted);
 }
 
@@ -180,20 +124,18 @@
     white-space: nowrap;
     color: var(--xc-text-muted);
     font-size: var(--xc-text-xs);
-}
-
-.eventEmpty {
-    padding: var(--xc-space-5) var(--xc-space-3);
-    text-align: center;
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-sm);
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 /* Slash events read as warnings. */
 .slashAmount {
     font-weight: 600;
-    white-space: nowrap;
-    color: var(--xc-danger);
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: var(--xc-danger-fg);
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 /* Status pill in the hero, tinted per state (mirrors the list chips). */
@@ -216,6 +158,26 @@
 }
 
 .statusCooldown {
-    background: color-mix(in srgb, var(--xc-warning, #B45309) 14%, transparent);
-    color: var(--xc-warning, #B45309);
+    background: color-mix(in srgb, var(--xc-warning) 14%, transparent);
+    color: var(--xc-warning);
+}
+
+@media not all and (min-width: 400px) {
+    .quickActions {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .tabBar {
+        gap: var(--xc-space-3);
+        overflow-x: auto;
+    }
+
+    .eventAmount,
+    .eventMeta,
+    .eventWhen,
+    .slashAmount {
+        max-width: 100%;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
 }

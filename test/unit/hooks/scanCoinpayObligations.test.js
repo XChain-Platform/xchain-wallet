@@ -95,6 +95,22 @@ describe('hooks/scanCoinpayObligations', () => {
         expect(out[0].chainId).toBe('ltc-regtest');
     });
 
+    it('rejects when every address lookup fails instead of reporting an empty queue', async () => {
+        const messaging = messagingWith({
+            byChain: {
+                'btc-regtest': [{ address: A1 }],
+                'ltc-regtest': [{ address: A2 }],
+            },
+            obligations: {
+                [`btc-regtest:${A1}`]: new Error('explorer down'),
+                [`ltc-regtest:${A2}`]: new Error('explorer down'),
+            },
+        });
+
+        await expect(scanCoinpayObligations({ messaging, walletId: 'w1' }))
+            .rejects.toThrow('explorer down');
+    });
+
     it('sorts by soonest deadline first, sinking rows with no usable expiration', async () => {
         const messaging = messagingWith({
             byChain: { 'btc-regtest': [{ address: A1 }] },

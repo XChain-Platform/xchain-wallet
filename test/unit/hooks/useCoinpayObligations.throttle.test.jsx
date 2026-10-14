@@ -42,6 +42,7 @@ const { useCoinpayObligations } = await import(
 const CHAIN = 'litecoin-regtest';
 const ADDR = 'mtkx2FQ7QhPPZmVyLKVWMkfmYmvQRUXCmi';
 const POLL_MS = 60_000;
+let testNow = new Date('2026-01-01T00:00:00Z').getTime();
 
 /** Scans, counted at the one call every scan makes exactly once. */
 const scanCount = () => messaging.getAddressesByChain.mock.calls.length;
@@ -52,6 +53,8 @@ const fireVisible = () => act(() => {
 
 beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] });
+    testNow += POLL_MS * 2;
+    vi.setSystemTime(testNow);
     messaging.getAddressesByChain.mockReset()
         .mockResolvedValue({ [CHAIN]: [{ address: ADDR }] });
     messaging.getCoinpayObligationsForAddress.mockReset().mockResolvedValue([]);
@@ -122,6 +125,23 @@ describe('useCoinpayObligations re-poll throttle', () => {
         // Landed, so the slot is free and the next beat scans again.
         await act(async () => { await vi.advanceTimersByTimeAsync(POLL_MS); });
         expect(scanCount()).toBe(2);
+    });
+
+    it('pauses every beat while hidden and catches up once visible', async () => {
+        vi.useRealTimers();
+        vi.useFakeTimers();
+        Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+
+        renderHook(() => useCoinpayObligations('hidden-wallet', 'a1', { pollMs: POLL_MS }));
+        await act(async () => { await vi.advanceTimersByTimeAsync(POLL_MS * 2); });
+        expect(scanCount()).toBe(0);
+
+        Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+        await act(async () => {
+            document.dispatchEvent(new Event('visibilitychange'));
+            await vi.advanceTimersByTimeAsync(0);
+        });
+        expect(scanCount()).toBe(1);
     });
 
     it('scans at once for a manual refresh, however fresh the rows are', async () => {

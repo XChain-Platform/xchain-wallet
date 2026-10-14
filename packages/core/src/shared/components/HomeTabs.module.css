@@ -5,70 +5,132 @@
     width: 100%;
 }
 
-/* ───── Tab strip ───── */
-
-.tabs {
+.tabsRow {
     display: flex;
-    gap: var(--xc-space-1);
-    overflow-x: auto;
-    overflow-y: hidden;
-    border-bottom: 1px solid var(--xc-border);
-    padding-bottom: 1px;          /* pull active underline below the rule */
-    margin-bottom: -1px;
-    scrollbar-width: none;
+    align-items: flex-start;
+    gap: var(--xc-space-2);
+    min-width: 0;
 }
 
-.tabs::-webkit-scrollbar { display: none; }
+.tabsRow > [role='tablist'] {
+    flex: 1 1 auto;
+    width: auto;
+}
 
-.tab {
-    appearance: none;
-    background: transparent;
-    border: none;
-    padding: var(--xc-space-3) var(--xc-space-3);
+.tabsRow [role='tab'] {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+.sortControl {
+    display: flex;
+    box-sizing: border-box;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--xc-space-2);
+    height: var(--xc-control-h-md);
+    color: var(--xc-text-muted);
     font-size: var(--xc-text-sm);
     font-weight: 600;
-    color: var(--xc-text-muted);
-    cursor: pointer;
-    white-space: nowrap;
-    display: inline-flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    border-bottom: 2px solid transparent;
-    transition: color var(--xc-transition), border-color var(--xc-transition);
-    flex: 0 0 auto;
 }
 
-.tab:hover {
+.sortCompactValue,
+.sortCompactIcon {
+    display: none;
+}
+
+.sortSelect {
+    height: 100%;
+    min-height: 0;
+    box-sizing: border-box;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-control-radius);
+    background: var(--xc-surface);
     color: var(--xc-text);
+    font: inherit;
 }
 
-.tab:focus-visible {
+.sortSelect:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
-    outline-offset: -2px;
+    outline-offset: 2px;
 }
 
-.tabActive {
-    color: var(--xc-accent-primary);
-    border-bottom-color: var(--xc-accent-primary);
+@media not all and (min-width: 600px) {
+    .tabsRow {
+        flex-direction: column;
+        gap: var(--xc-space-2);
+    }
+
+    .tabsRow > [role='tablist'] {
+        width: 100%;
+    }
+
+    .sortControl {
+        align-self: flex-end;
+    }
 }
 
-.tabLabel {
-    font-weight: 700;
-}
+@media (max-width: 420px) {
+    .sortControl {
+        position: relative;
+        justify-content: center;
+        gap: var(--xc-space-1);
+        padding: 0 var(--xc-space-2);
+        border: 1px solid var(--xc-border-strong);
+        border-radius: var(--xc-control-radius);
+        background: var(--xc-surface);
+        color: var(--xc-text);
+    }
 
-.tabCount {
-    font-size: 11px;
-    font-weight: 700;
-    padding: 1px 7px;
-    border-radius: 999px;
-    background: var(--xc-bg-muted);
-    color: var(--xc-text-muted);
-    line-height: 1.4;
-}
+    .sortControl:focus-within {
+        outline: 2px solid var(--xc-focus-ring);
+        outline-offset: -2px;
+    }
 
-.tabActive .tabCount {
-    background: var(--xc-accent-primary);
-    color: var(--xc-on-accent);
+    .sortLabel {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+    }
+
+    .sortCompactValue,
+    .sortCompactIcon {
+        display: inline-flex;
+        align-items: center;
+        pointer-events: none;
+    }
+
+    .sortCompactIcon {
+        width: var(--xc-control-icon-sm, var(--xc-icon-sm));
+        height: var(--xc-control-icon-sm, var(--xc-icon-sm));
+    }
+
+    .sortCompactIcon > svg {
+        width: 100%;
+        height: 100%;
+    }
+
+    .sortSelect {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        min-height: 0;
+        opacity: 0;
+        cursor: pointer;
+        font-size: 16px;
+    }
+
+    .sortSelect:focus-visible {
+        outline: none;
+    }
 }
 
 /* ───── Tab panel ───── */
@@ -77,12 +139,6 @@
     display: flex;
     flex-direction: column;
     min-height: 0;
-}
-
-.staleness {
-    display: flex;
-    justify-content: flex-end;
-    padding: var(--xc-space-1) 0 var(--xc-space-2);
 }
 
 /* One-line rule statement above a tab's content. Muted and small: it
@@ -103,24 +159,32 @@
 }
 
 .placeholderTitle {
-    font-size: var(--xc-text-md);
-    font-weight: 700;
+    font-size: var(--xc-type-card-title-size);
+    font-weight: var(--xc-type-card-title-weight);
     color: var(--xc-text);
     margin-bottom: var(--xc-space-2);
 }
 
 .placeholderBody {
-    font-size: var(--xc-text-sm);
+    font-size: var(--xc-type-body-size);
+    font-weight: var(--xc-type-body-weight);
     color: var(--xc-text-muted);
     line-height: 1.5;
     margin: 0;
-    text-align: justify;
+    text-align: center;
 }
 
 .placeholderAction {
     display: flex;
     justify-content: center;
     margin-top: var(--xc-space-3);
+}
+
+.firstFundingActions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--xc-space-2);
 }
 
 /* Demo activity / defi list: single rounded card with row dividers,
@@ -142,13 +206,14 @@
    Activity and DeFi rows. Accent-coloured 16px square that aligns
    with the row's first-line text. */
 .activityActionIcon {
+    --xc-icon-size: var(--xc-icon-sm);
     flex: 0 0 auto;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    color: var(--xc-accent-primary);
-    width: 16px;
-    height: 16px;
+    color: var(--xc-accent-text);
+    width: var(--xc-icon-sm);
+    height: var(--xc-icon-sm);
 }
 
 /* Square token icon for any non-native token (XCHAIN, XCP, NFTs,
@@ -181,35 +246,20 @@
     text-transform: uppercase;
 }
 .statusValid {
-    background: color-mix(in srgb, var(--xc-success, #14b86c) 18%, transparent);
-    color: var(--xc-success, #14b86c);
+    background: color-mix(in srgb, var(--xc-success) 18%, transparent);
+    color: var(--xc-success);
 }
 .statusInvalid {
-    background: color-mix(in srgb, var(--xc-danger, #d93838) 18%, transparent);
-    color: var(--xc-danger, #d93838);
+    background: color-mix(in srgb, var(--xc-danger) 18%, transparent);
+    color: var(--xc-danger-fg);
 }
 .statusPending {
-    background: color-mix(in srgb, var(--xc-warning, #d99000) 18%, transparent);
-    color: var(--xc-warning, #d99000);
+    background: color-mix(in srgb, var(--xc-warning) 18%, transparent);
+    color: var(--xc-warning);
 }
 
-.demoRow {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: var(--xc-space-3);
-    padding: var(--xc-space-3);
-    background: transparent;
-    border: none;
-    border-top: 1px solid var(--xc-border);
-}
-.demoRow:first-of-type { border-top: none; }
-
-/* Button variant of `.demoRow` for DeFi rows that navigate to ActionDetail
-   on click. Resets default button chrome and lines up with `.demoRow` so
-   the visual stays identical. Divider lives on the button (not the parent
-   `<li>`) so we can anchor on the list's first `<li>` to skip the top
-   border, the same trick the Activity list uses. */
+/* DeFi rows navigate to ActionDetail. The divider lives on the button so
+   the list's first item can skip the top border. */
 .demoRowButton {
     appearance: none;
     background: transparent;
@@ -242,45 +292,6 @@
     gap: 4px;
 }
 
-.demoIconWrap {
-    position: relative;
-    flex: 0 0 auto;
-    width: 48px;
-    height: 48px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.demoIconInner {
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--xc-bg-muted);
-    color: var(--xc-text-muted);
-}
-
-.demoIconInner svg {
-    width: 24px;
-    height: 24px;
-}
-
-.demoIconChainOverlay {
-    position: absolute;
-    bottom: -2px;
-    inset-inline-end: -2px;
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background: #FFFFFF;
-    box-shadow: 0 0 0 1.5px var(--xc-surface);
-    object-fit: cover;
-    display: block;
-}
-
 .demoRowMain {
     display: flex;
     align-items: center;
@@ -298,38 +309,6 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: var(--xc-text);
-}
-
-.tag_stake {
-    background: rgba(16, 185, 129, 0.15);
-    color: #10B981;
-}
-
-.tag_dispenser {
-    background: rgba(245, 158, 11, 0.15);
-    color: #F59E0B;
-}
-
-.tag_contract {
-    background: rgba(99, 102, 241, 0.18);
-    color: #818CF8;
-}
-
-.demoRowTitle {
-    flex: 1 1 auto;
-    min-width: 0;
-    font-weight: 600;
-    color: var(--xc-text);
-    overflow-wrap: anywhere;
-}
-
-.demoRowBadge {
-    flex: 0 0 auto;
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: 6px;
-    padding: 1px 6px;
 }
 
 .demoRowPrimary {
@@ -355,7 +334,7 @@
     padding: 0 var(--xc-space-2);
     border-radius: var(--xc-radius-pill, 999px);
     background: color-mix(in srgb, var(--xc-accent-primary) 22%, transparent);
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     font-size: 11px;
     font-weight: 700;
     line-height: 1.7;
@@ -371,51 +350,4 @@
     font-weight: 400;
     letter-spacing: 0;
     text-transform: none;
-}
-
-.demoActivityIcon {
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    background: var(--xc-bg-muted);
-    color: var(--xc-text-muted);
-}
-
-.demoActivityIcon svg {
-    width: 16px;
-    height: 16px;
-}
-
-.activity_receive {
-    background: rgba(16, 185, 129, 0.18);
-    color: #10B981;
-}
-
-.activity_send {
-    background: rgba(220, 38, 38, 0.18);
-    color: #EF4444;
-}
-
-.activity_issue {
-    background: rgba(99, 102, 241, 0.18);
-    color: #818CF8;
-}
-
-.activity_dividend {
-    background: rgba(245, 158, 11, 0.18);
-    color: #F59E0B;
-}
-
-.activity_order {
-    background: rgba(56, 189, 248, 0.18);
-    color: #38BDF8;
-}
-
-.activity_execute {
-    background: rgba(168, 85, 247, 0.18);
-    color: #A855F7;
 }

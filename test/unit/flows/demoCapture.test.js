@@ -32,14 +32,24 @@ import {
 } from '../../../packages/core/src/flows/demoCapture.js';
 import { isValidBip39Mnemonic } from '../../../packages/core/src/crypto/mnemonic.js';
 import {
+    DEMO_TOKEN_ICONS,
     synthesizeDemoBalances,
     synthesizeDemoDefiPositions,
+    synthesizeDemoDispensers,
     synthesizeDemoDispenses,
     synthesizeDemoHistory,
     synthesizeDemoMarketActivity,
     synthesizeDemoMessages,
     synthesizeDemoNativePrices,
 } from '../../../packages/core/src/flows/demoFixtures.js';
+import { tokenInfoFor } from '../../../packages/core/src/flows/tokenInfo.js';
+import {
+    DEMO_DEFAULT_TTL_MS,
+    getDemoWalletExpiry,
+    getDemoWalletId,
+    getDemoWalletPassword,
+    markDemoWallet,
+} from '../../../packages/core/src/flows/demoMode.js';
 
 function arm() {
     globalThis.localStorage.setItem(DEMO_CAPTURE_FLAG_KEY, '1');
@@ -78,6 +88,7 @@ describe('demo capture mode', () => {
             expect(demoCaptureMnemonic()).toBe(null);
         } finally {
             if (real) Object.defineProperty(globalThis, 'localStorage', real);
+            else delete globalThis.localStorage;
         }
     });
 
@@ -184,6 +195,93 @@ describe('demo fixtures are clock-injectable', () => {
 });
 
 describe('demo balances have the aggregator\'s entry shape', () => {
+    it('returns fresh balance objects that cannot alter later demo wallets', () => {
+        const input = {
+            'bitcoin-mainnet': [
+                { address: 'bc1qfirst', label: '', addressType: 'p2wpkh', derivationPath: null },
+            ],
+        };
+        const first = synthesizeDemoBalances(input)['bitcoin-mainnet'][0].balances;
+        first.native.quantity = '0';
+        first.tokens[0].quantity = '0';
+        first.tokens.push({ tick: 'INJECTED', quantity: '1', divisibility: 0 });
+
+        const second = synthesizeDemoBalances(input)['bitcoin-mainnet'][0].balances;
+        expect(second.native.quantity).toBe('12345678');
+        expect(second.tokens[0].quantity).toBe('10000000000');
+        expect(second.tokens.some(({ tick }) => tick === 'INJECTED')).toBe(false);
+    });
+
+    it('gives every indivisible fixture the locked-supply metadata required by the NFTs tab', async () => {
+        const chainIds = [
+            'bitcoin-mainnet',
+            'bitcoin-testnet',
+            'bitcoin-regtest',
+            'litecoin-mainnet',
+            'litecoin-regtest',
+            'dogecoin-mainnet',
+            'dogecoin-regtest',
+        ];
+        const balances = synthesizeDemoBalances(Object.fromEntries(chainIds.map((chainId) => [
+            chainId,
+            [{ address: `${chainId}-address`, label: '', addressType: 'p2pkh', derivationPath: null }],
+        ])));
+        const collectibles = Object.entries(balances).flatMap(([chainId, entries]) => (
+            entries.flatMap((entry) => entry.balances.tokens
+                .filter((token) => token.divisibility === 0)
+                .map((token) => ({ chainId, tick: token.tick })))
+        ));
+        const sdkRegistry = { get: () => ({ getToken: async () => null }) };
+
+        expect(collectibles.length).toBeGreaterThan(0);
+        for (const collectible of collectibles) {
+            const info = await tokenInfoFor({
+                sdkRegistry,
+                ...collectible,
+                demo: true,
+                metadataFetchEnabled: false,
+            });
+            expect(info.locks.max_supply, `${collectible.chainId}:${collectible.tick}`).toBe(true);
+        }
+
+        const liveInfo = await tokenInfoFor({
+            sdkRegistry,
+            chainId: collectibles[0].chainId,
+            tick: collectibles[0].tick,
+            metadataFetchEnabled: false,
+        });
+        expect(liveInfo.locks.max_supply).not.toBe(true);
+    });
+
+    it('keeps every demo fixture image URL off remote origins', () => {
+        const chainIds = [
+            'bitcoin-mainnet',
+            'bitcoin-testnet',
+            'bitcoin-regtest',
+            'litecoin-mainnet',
+            'litecoin-regtest',
+            'dogecoin-mainnet',
+            'dogecoin-regtest',
+        ];
+        const addressesByChain = Object.fromEntries(chainIds.map((chainId) => [
+            chainId,
+            [{ address: `${chainId}-address`, label: '', addressType: 'p2pkh', derivationPath: null }],
+        ]));
+        const balances = synthesizeDemoBalances(addressesByChain);
+        const balanceImages = Object.values(balances).flatMap((entries) => (
+            entries.flatMap((entry) => entry.balances.tokens.map((token) => token.imageUrl).filter(Boolean))
+        ));
+        const dispenserImages = chainIds.flatMap((chainId) => (
+            synthesizeDemoDispensers(chainId, `${chainId}-address`)
+                .map((dispenser) => dispenser.imageUrl)
+                .filter(Boolean)
+        ));
+        const icons = [...Object.values(DEMO_TOKEN_ICONS), ...balanceImages, ...dispenserImages];
+        expect(icons.length).toBeGreaterThan(Object.keys(DEMO_TOKEN_ICONS).length);
+        expect(icons.every((url) => url.startsWith('data:image/svg+xml;utf8,'))).toBe(true);
+        expect(icons.some((url) => /^https?:\/\//i.test(url))).toBe(false);
+    });
+
     it('gives every entry the typed failure fields beside `error`, all null', () => {
         // `AddressBalancesEntry` (flows/balances.js) carries `errorCode` and
         // `retryAfterSeconds` next to `error`. A demo read never fails, so the
@@ -199,6 +297,118 @@ describe('demo balances have the aggregator\'s entry shape', () => {
         for (const entry of out['bitcoin-mainnet']) {
             expect(Object.keys(entry)).toEqual(expect.arrayContaining(['error', 'errorCode', 'retryAfterSeconds']));
             expect(entry).toMatchObject({ error: null, errorCode: null, retryAfterSeconds: null });
+        }
+    });
+});
+
+describe('demo fixture network isolation', () => {
+    it('expresses pending native receives in whole-coin history units', () => {
+        const address = 'demo-wallet-address';
+        const cases = [
+            ['bitcoin-mainnet', '0.12345678'],
+            ['bitcoin-regtest', '100'],
+            ['dogecoin-regtest', '10000'],
+        ];
+
+        for (const [chainId, expectedAmount] of cases) {
+            const pending = synthesizeDemoHistory(chainId, address, {
+                now: DEMO_CAPTURE_CLOCK_MS,
+            })[0];
+            expect(pending).toMatchObject({
+                source: 'demo-faucet-1xchainpubdemoxchain',
+                destination: address,
+                amount: expectedAmount,
+                quantity: expectedAmount,
+                params: { amount: expectedAmount },
+            });
+        }
+    });
+
+    it('prices the 10,000 DOGE regtest holding at $0.08 per coin', () => {
+        const chainId = 'dogecoin-regtest';
+        const balances = synthesizeDemoBalances({
+            [chainId]: [{ address: 'demo-wallet-address' }],
+        });
+        const native = balances[chainId][0].balances.native;
+        const price = synthesizeDemoNativePrices([chainId])[chainId].priceFiat;
+
+        expect(native).toMatchObject({
+            quantity: '1000000000000',
+            divisibility: 8,
+            fiatRate: 0.08,
+        });
+        expect(price).toBe(0.08);
+        expect((Number(native.quantity) / (10 ** native.divisibility)) * price).toBe(800);
+    });
+
+    it('keeps market activity on the caller\'s visible network', () => {
+        const activity = synthesizeDemoMarketActivity('XCHAIN', {
+            chainIds: ['bitcoin-regtest', 'litecoin-regtest', 'dogecoin-regtest'],
+            now: DEMO_CAPTURE_CLOCK_MS,
+        });
+        const rows = Object.values(activity).flat();
+
+        expect(rows.length).toBeGreaterThan(0);
+        expect(rows.every(({ chainId }) => chainId === 'bitcoin-regtest')).toBe(true);
+    });
+
+    it('returns no market rows when no valid visible chains are supplied', () => {
+        expect(synthesizeDemoMarketActivity('XCHAIN', { chainIds: ['unknown-chain'] }))
+            .toEqual({ offers: [], sales: [], dexOrders: [], dexSwaps: [] });
+    });
+});
+
+describe('demo metadata isolation', () => {
+    afterEach(() => {
+        globalThis.localStorage.clear();
+    });
+
+    it('does not carry one demo wallet password into the next', () => {
+        markDemoWallet('demo-one', { password: 'first-password', now: 1000 });
+        markDemoWallet('demo-two', { now: 2000 });
+
+        expect(getDemoWalletId()).toBe('demo-two');
+        expect(getDemoWalletPassword()).toBe(null);
+    });
+
+    it('keeps non-finite clock inputs out of persisted expiry metadata', () => {
+        markDemoWallet('demo-one', { now: Number.NaN, ttlMs: Number.POSITIVE_INFINITY });
+
+        const expiry = getDemoWalletExpiry();
+        expect(Number.isFinite(expiry.createdAt)).toBe(true);
+        expect(expiry.ttlMs).toBe(DEMO_DEFAULT_TTL_MS);
+        expect(Number.isFinite(expiry.expiresAt)).toBe(true);
+    });
+
+    it('restores the prior complete record when a metadata write fails', () => {
+        const real = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+        const values = new Map();
+        let failTtlWrite = false;
+        Object.defineProperty(globalThis, 'localStorage', {
+            configurable: true,
+            value: {
+                getItem: (key) => values.get(key) ?? null,
+                setItem: (key, value) => {
+                    if (failTtlWrite && key === 'xc:demoWalletTtlMs') {
+                        failTtlWrite = false;
+                        throw new Error('quota exceeded');
+                    }
+                    values.set(key, String(value));
+                },
+                removeItem: (key) => values.delete(key),
+                clear: () => values.clear(),
+            },
+        });
+        try {
+            markDemoWallet('demo-one', { password: 'first-password', now: 1000, ttlMs: 5000 });
+            failTtlWrite = true;
+            markDemoWallet('demo-two', { password: 'second-password', now: 2000, ttlMs: 9000 });
+
+            expect(getDemoWalletId()).toBe('demo-one');
+            expect(getDemoWalletPassword()).toBe('first-password');
+            expect(getDemoWalletExpiry()).toEqual({ createdAt: 1000, ttlMs: 5000, expiresAt: 6000 });
+        } finally {
+            if (real) Object.defineProperty(globalThis, 'localStorage', real);
         }
     });
 });

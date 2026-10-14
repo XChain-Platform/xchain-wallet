@@ -152,8 +152,8 @@ assert.ok(
     'BackupSection no longer carries the "Coming soon" placeholder copy',
 );
 assert.ok(
-    /encoder.*FILE/i.test(bs) || /FILE action/.test(bs),
-    'BackupSection mentions the FILE-action publish path in user-facing copy',
+    /labels \+ contacts are encrypted[\s\S]*stored on the blockchain[\s\S]*seed can decrypt them/.test(bs),
+    'BackupSection explains the encrypted on-chain publish path in user-facing copy',
 );
 assert.ok(
     /Encrypted size/.test(bs)

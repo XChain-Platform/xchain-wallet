@@ -41,7 +41,7 @@ function shortAddress(addr) {
 // A coin-paid dispenser priced in fiat rather than a fixed coin amount:
 // no GET_TICK (token-paid dispensers set one and always carry a real
 // GET_AMOUNT), a GET_COIN, and GET_AMOUNT 0.
-export function isFiatPricedRow(row) {
+function isFiatPricedRow(row) {
     return !row?.get_tick && Boolean(row?.get_coin) && !(Number(row?.get_amount) > 0);
 }
 
@@ -63,15 +63,17 @@ export function isOraclePricedRow(row) {
  *   while the read is in flight, null when the wallet cannot read one at all
  * @returns {string}
  */
-export function oraclePriceLabel(row, feeds) {
+function oraclePriceLabel(row, feeds) {
     const addr = shortAddress(row.oracle_address);
     const unresolved = `an oracle-set price (oracle ${addr}; open the dispenser for the price)`;
     if (feeds === null) return unresolved;
     if (feeds === undefined) return `an oracle-set price (checking ${addr}…)`;
     const tick = String(row.give_tick || '').toUpperCase();
-    const fiat = String(row.fiat_code || '').toUpperCase();
+    const coin = String(row.get_coin || '').toUpperCase();
+    const fiat = String(row.fiat_code || row.fiat || '').toUpperCase();
     const matches = feeds.filter((f) => f
         && String(f.tick || '').toUpperCase() === tick
+        && (!coin || !f.coin || String(f.coin).toUpperCase() === coin)
         && (!fiat || String(f.fiat || '').toUpperCase() === fiat));
     if (matches.length !== 1) return unresolved;
     const [feed] = matches;
@@ -93,14 +95,24 @@ export function oraclePriceLabel(row, feeds) {
 export function dispenserRateLabel(row, oracleFeeds) {
     if (isDispenserPriceStale(row)) return DISPENSER_PRICE_STALE_MESSAGE;
     const give = `${formatDecimal(row.give_amount)} ${row.give_tick || '?'}`;
+    if (isFiatPricedRow(row) && !isOraclePricedRow(row)
+        && !(row.fiat_amount != null && row.fiat_code)) {
+        return `${give}, priced in fiat: open the dispenser for the current price`;
+    }
+    return `${give} per ${dispenserFillPriceLabel(row, oracleFeeds)}`;
+}
+
+/** Price of one complete fill, without repeating the quantity dispensed. */
+export function dispenserFillPriceLabel(row, oracleFeeds) {
+    if (isDispenserPriceStale(row)) return DISPENSER_PRICE_STALE_MESSAGE;
     if (isFiatPricedRow(row)) {
-        if (isOraclePricedRow(row)) return `${give} per ${oraclePriceLabel(row, oracleFeeds)}`;
+        if (isOraclePricedRow(row)) return oraclePriceLabel(row, oracleFeeds);
         return row.fiat_amount != null && row.fiat_code
-            ? `${give} per ${formatDecimal(row.fiat_amount)} ${row.fiat_code}`
-            : `${give}, priced in fiat: open the dispenser for the current price`;
+            ? `${formatDecimal(row.fiat_amount)} ${row.fiat_code}`
+            : 'priced in fiat: open the dispenser for the current price';
     }
     const payAsset = row.get_tick || row.get_coin || '?';
-    return `${give} per ${formatDecimal(row.get_amount)} ${payAsset}`;
+    return `${formatDecimal(row.get_amount)} ${payAsset}`;
 }
 
 /**
@@ -111,7 +123,7 @@ export function dispenserRateLabel(row, oracleFeeds) {
  * @param {any} detail
  * @returns {any}
  */
-export function mergeOfferState(row, detail) {
+function mergeOfferState(row, detail) {
     const payload = detail?.state ? detail : detail?.data;
     const state = payload?.state;
     if (!state || typeof state !== 'object') return row;

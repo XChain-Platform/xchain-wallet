@@ -9,32 +9,52 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Icon, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
-import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useMessagingUnread } from '../hooks/useMessagingUnread.js';
 import { useSharedCoinpayObligations } from '../hooks/useCoinpayObligations.js';
 import { useSettings } from '../hooks/useSettings.js';
-import { useProofVerification } from '../hooks/useProofVerification.js';
 import { useEscrowedBalances } from '../hooks/useEscrowedBalances.js';
+import { isNavigatorOnline, useOnlineStatus } from '../hooks/useOnlineStatus.js';
+import { useReachability } from '../hooks/useReachability.js';
+import { useWalletFilters } from '../hooks/useWalletFilters.js';
 import { HomeTabs } from '../components/HomeTabs.jsx';
 import { buildBalanceRows, detectSpamCandidates } from '../components/BalanceList.jsx';
+import { hasBackupReminderFunds } from '../../flows/backupReminder.js';
 import { useScreenShortcuts } from '../keyboard/useScreenShortcuts.js';
 import { useToast } from '../components/ToastHost.jsx';
 import { BackupReminderCard } from '../components/BackupReminderCard.jsx';
-import { DemoBanner } from '../components/DemoBanner.jsx';
+import { DemoExitConfirm } from '../components/DemoExitConfirm.jsx';
 import { AlertsOverlay } from '../components/AlertsOverlay.jsx';
 import { buildWalletAlerts } from '../walletAlerts.js';
 import { PanicFreezeNotice } from '../safety/PanicFreezeNotice.jsx';
 import { ResumeConfirmCard } from '../components/ResumeConfirmCard.jsx';
+import { filterConfirmSessionsForAccount } from '../utils/activeAccountScope.js';
 import { Settings } from './Settings.jsx';
 import { AddAddressModal } from './AddAddressModal.jsx';
-import { WALLET_MODE_DEFAULT } from '../../schemas/settings.js';
+import {
+    pinnedTokensForWallet,
+    pinnedTokensPatchForWallet,
+    WALLET_MODE_DEFAULT,
+} from '../../schemas/settings.js';
 import { humanizeError } from '../utils/humanizeError.js';
+import { writeActiveWallet } from '../utils/activeWalletMemory.js';
+import { takeInterruptedView } from '../utils/lastViewMemory.js';
+import { loadDisplayBalances } from '../utils/displayBalances.js';
+import { exitDemoWallet } from '../utils/demoGraduation.js';
+import { readBalanceCache, writeBalanceCache } from '../utils/balanceCache.js';
 import { explorerReadFailure, rateLimitedMessage } from '../../sdk/explorerErrors.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
+import { startVisibleInterval } from '../utils/visibleInterval.js';
 import styles from './Home.module.css';
+import { useBackHandler, useNativeBackRoot } from '../../ui/backStack.js';
+import {
+    hasAvailableChain,
+    NO_CHAINS_BODY,
+    NO_CHAINS_TITLE,
+} from '../utils/chainAvailability.js';
+import { t } from '../../i18n/index.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -119,8 +139,8 @@ const { BALANCE_POLL_INTERVAL_MS } = flowsLib;
 
 /**
  * Home screen: landing view for an unlocked wallet. Header shows the
- * wallet name; body renders a per-chain balance card grid; footer
- * exposes Send / Receive / Create-a-token action buttons.
+ * wallet name; body renders a per-chain balance card grid; the hero
+ * exposes Send / Receive and the footer exposes supplementary actions.
  *
  * When the wallet has pending §40.9 airdrops (LIST signed but AIRDROP
  * still pending, either waiting for the LIST to be indexed or ready
@@ -129,7 +149,9 @@ const { BALANCE_POLL_INTERVAL_MS } = flowsLib;
  *
  * Locking is a shell concern, not a route concern: idle auto-lock runs
  * from each shell's AppInner via `useAutoLockPolicy`, and the manual
- * Lock affordance lives in the shell's menu + keyboard shortcut.
+ * Lock affordance lives in the shell's menu + keyboard shortcut. A shell
+ * with no header or menu (the extension popup) passes `onLockWallet` and
+ * Home renders the button for it.
  * found that wiring the idle timer here meant navigating off
  * Home cancelled it, so a wallet left on Send or Settings never locked.
  *
@@ -157,6 +179,8 @@ const { BALANCE_POLL_INTERVAL_MS } = flowsLib;
  * @param {() => void} [props.onOpenAccountPicker]        Settings row → host navigates to the AccountPicker route
  * @param {string | null} [props.activeAccountId]          App-level active BIP44 account; when supplied, Home is read-only with respect to account selection
  * @param {(accountId: string) => void} [props.onSwitchAccount]   App-level setter for the active account (still used internally if a future inline picker lands)
+ * @param {() => void} [props.onLockWallet]   locks the wallet; only shells with no header (the extension popup and side panel) pass it, and Home then shows a lock button
+ * @param {number} [props.resumeKey]          changes once per unlocked native-app resume
  *
  * §40 actions are NOT a Home prop. Home used to accept an `extraActions`
  * array "for the small-mode drawer" and never rendered it, so the web
@@ -167,10 +191,18 @@ const { BALANCE_POLL_INTERVAL_MS } = flowsLib;
  * "More actions" row (MenuRoute) or the command palette. Add entries
  * there, not here.
  */
-export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onExchange, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onSignPsbt, onSignMessage, onVerifySignature, activeWalletId: activeWalletIdProp, activeAccountId: activeAccountIdProp, onSwitchAccount, onSelectToken, onSelectEntry, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp, tokenQuery: tokenQueryProp, onTokenQueryChange: onTokenQueryChangeProp, onCommandPalette, onOpenSettings, demoBannerInHeader = false }) {
+export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onExchange, onCreateToken, onActions, onMarkets, onResumeAirdrop, onResumeCoinpay, onMessaging, onContracts, onStaking, onHistory, onAddresses, onMigrateToBip39, onOpenWalletPicker, onOpenAccountPicker, onSignPsbt, onSignMessage, onVerifySignature, activeWalletId: activeWalletIdProp, activeAccountId: activeAccountIdProp, onSwitchAccount, onSelectToken, onSelectEntry, networkFilter: networkFilterProp, onNetworkFilterChange: onNetworkFilterChangeProp, tokenQuery: tokenQueryProp, onTokenQueryChange: onTokenQueryChangeProp, onCommandPalette, onOpenSettings, onLockWallet, resumeKey = 0 }) {
+    useNativeBackRoot();
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
+    const browserOnline = useOnlineStatus();
+    const { overall: reachabilityOverall } = useReachability({});
+    // Treat a corroborated service outage as offline even when the device
+    // still has a live Wi-Fi or Ethernet interface.
+    const offline = !browserOnline || reachabilityOverall === 'offline';
+    const networkActionsAvailable = !offline;
+    const { showToast } = useToast();
 
     const [wallets, setWallets] = useState(/** @type {any[] | null} */ (null));
     // The host owns the active wallet when it wires `activeWalletId`; Home's
@@ -183,7 +215,35 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         /** @type {string | null} */ (null),
     );
     const activeWalletId = activeWalletIdProp ?? activeWalletIdLocal;
-    const setActiveWalletId = setActiveWalletIdLocal;
+    const [interruptedAction, setInterruptedAction] = useState(
+        /** @type {'send' | 'swap' | null} */ (null),
+    );
+    useEffect(() => {
+        setInterruptedAction(null);
+        if (!activeWalletId) return undefined;
+        // Normal navigation back to Home clears the marker in the parent
+        // route effect first. A restart does not, so only that marker survives
+        // until this next task and becomes a visible note.
+        const timer = setTimeout(() => {
+            setInterruptedAction(takeInterruptedView(activeWalletId));
+        }, 0);
+        return () => clearTimeout(timer);
+    }, [activeWalletId]);
+    const settings = useSettings();
+    const activeNetwork = settings.loading
+        ? null
+        : (settings.settings?.activeNetwork || 'mainnet');
+    const walletMode = settings.settings?.walletMode || WALLET_MODE_DEFAULT;
+    const isSignerMode = walletMode === 'signer';
+    const isWatcherMode = walletMode === 'watcher';
+    const isDemoActive = flowsLib.isDemoWallet(activeWalletId);
+    const quickActionsReason = isWatcherMode
+        ? 'Watch-only mode builds Send and Swap transactions unsigned for your signer.'
+        : null;
+    const [demoSendNoticeOpen, setDemoSendNoticeOpen] = useState(false);
+    const [demoExitConfirmOpen, setDemoExitConfirmOpen] = useState(false);
+    const [demoExitBusy, setDemoExitBusy] = useState(false);
+    const [demoExitError, setDemoExitError] = useState(/** @type {string | null} */ (null));
     const [accounts, setAccounts] = useState(/** @type {any[] | null} */ (null));
     // Local fallback used only when the host doesn't supply
     // `activeAccountIdProp` (e.g. desktop shell pinned to an older
@@ -193,28 +253,71 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         /** @type {string | null} */ (null),
     );
     const activeAccountId = activeAccountIdProp ?? activeAccountIdLocal;
-    const setActiveAccountId = onSwitchAccount ?? setActiveAccountIdLocal;
     // Unread-message count for the active wallet + account, surfaced as a Home
     // alert and a dot on the Messaging button (see useMessagingUnread).
     const messagingUnread = useMessagingUnread(activeWalletId, activeAccountId);
+    const initialBalanceCacheRef = useRef(/** @type {{ value: ReturnType<typeof readBalanceCache> } | undefined} */ (undefined));
+    if (!initialBalanceCacheRef.current) {
+        initialBalanceCacheRef.current = {
+            value: readBalanceCache(activeWalletId, activeAccountId, activeNetwork),
+        };
+    }
+    const initialBalanceCache = initialBalanceCacheRef.current.value;
     const [balances, setBalances] = useState(
-        /** @type {Record<string, any[]> | null} */ (null),
+        /** @type {Record<string, any[]> | null} */ (initialBalanceCache?.balances || null),
     );
+    const balancesRef = useRef(/** @type {Record<string, any[]> | null} */ (null));
+    balancesRef.current = balances;
+    // Which wallet:account pair the balances on screen belong to; saved rows count.
+    const balancesScopeRef = useRef(/** @type {string | null} */ (
+        initialBalanceCache ? `${activeWalletId}:${activeAccountId || ''}` : null
+    ));
     // Active (operating) address per chain. The headline balance per coin
     // reflects this address only (not the sum across all addresses).
     const [activeByChain, setActiveByChain] = useState(
-        /** @type {Record<string, { id: string, address: string }>} */ ({}),
+        /** @type {Record<string, { id: string, address: string }>} */ (initialBalanceCache?.activeByChain || {}),
     );
     // Cluster G FOLLOWUP 5: Unix-ms timestamp of the most recent
     // successful balance fetch; null until the first one completes.
     // Threaded into HomeTabs → StalenessLabel so the user can tell
     // when the balance view was last live.
     const [balancesFetchedAt, setBalancesFetchedAt] = useState(
-        /** @type {number | null} */ (null),
+        /** @type {number | null} */ (initialBalanceCache?.fetchedAt ?? null),
     );
+    // Cached rows stay visible while their live replacement is in flight.
+    // This flag distinguishes that refresh from a first load with no data.
+    const [cachedBalancesUpdating, setCachedBalancesUpdating] = useState(
+        Boolean(initialBalanceCache) && isNavigatorOnline(),
+    );
+    const balanceScopeRef = useRef({
+        walletId: activeWalletId,
+        accountId: activeAccountId || null,
+        activeNetwork,
+    });
+    const balanceScopeChanged = balanceScopeRef.current.walletId !== activeWalletId
+        || balanceScopeRef.current.accountId !== (activeAccountId || null)
+        || balanceScopeRef.current.activeNetwork !== activeNetwork;
+    if (balanceScopeChanged) {
+        // React discards this render and retries with the next scope's state,
+        // so a wallet, account or network switch never commits stale rows.
+        balanceScopeRef.current = {
+            walletId: activeWalletId,
+            accountId: activeAccountId || null,
+            activeNetwork,
+        };
+        const scopedCache = readBalanceCache(activeWalletId, activeAccountId, activeNetwork);
+        setBalances(scopedCache?.balances || null);
+        setActiveByChain(scopedCache?.activeByChain || {});
+        setBalancesFetchedAt(scopedCache?.fetchedAt ?? null);
+        setCachedBalancesUpdating(Boolean(scopedCache) && isNavigatorOnline());
+        balancesScopeRef.current = scopedCache ? `${activeWalletId}:${activeAccountId || ''}` : null;
+    }
     // What every row consumer reads: the balances plus each shown address's
     // open-offer escrow, so a token escrowed in full keeps its row.
     const balancesView = useEscrowedBalances({ balances, activeByChain, balancesFetchedAt, messaging });
+    const backupReminderHasFunds = useMemo(() => hasBackupReminderFunds(
+        buildBalanceRows(balancesView, chainRegistry, activeByChain),
+    ), [balancesView, activeByChain]);
     const [pendingAirdrops, setPendingAirdrops] = useState(
         /** @type {any[]} */ ([]),
     );
@@ -240,6 +343,11 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     const [loadError, setLoadError] = useState(
         /** @type {string | null} */ (null),
     );
+    // Balance reads resolve with per-address error entries, so loadError alone
+    // cannot distinguish a failed balance refresh from another Home error.
+    // This flag keeps failed data out of the loaded-zero presentation and
+    // marks a retained cache as saved data until a clean read lands.
+    const [balanceLoadFailed, setBalanceLoadFailed] = useState(false);
     // A rate limit is the one load failure that comes with an end time, so it
     // is the one the banner can count down instead of leaving the user to
     // guess (rate-limits spec, M4). `rateLimitRetryAt` is the wall-clock ms the
@@ -254,23 +362,21 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // rather than counting down a number the wallet made up.
     const [rateLimitNamedSeconds, setRateLimitNamedSeconds] = useState(false);
     const [alertsOpen, setAlertsOpen] = useState(false);
-    // Network filter can be controlled by the parent shell (web AppHeader
-    // owns the toolbar filter button) or self-managed when the parent
-    // doesn't pass props (popup renders its own filter button inline).
-    const [networkFilterLocal, setNetworkFilterLocal] = useState('all');
-    const networkFilter = networkFilterProp ?? networkFilterLocal;
-    const setNetworkFilter = onNetworkFilterChangeProp ?? setNetworkFilterLocal;
+    // The full shell controls these values so its header and Home share one
+    // model. Compact shells use the same per-wallet model here directly.
+    const walletFilters = useWalletFilters(activeWalletId);
+    const networkFilter = networkFilterProp ?? walletFilters.networkFilter;
+    const setNetworkFilter = onNetworkFilterChangeProp ?? walletFilters.setNetworkFilter;
     // BTC-only gate: multisig is Bitcoin-only at launch (spec 10.3), so the
     // multisig badge data only flows when Bitcoin is in view.
     const isBtc = networkFilter === 'bitcoin' || networkFilter === 'all';
-    // Free-text token filter follows the same parent-vs-local pattern as
-    // the network filter; popped into the header's filter popover.
-    const [tokenQueryLocal, setTokenQueryLocal] = useState('');
-    const tokenQuery = tokenQueryProp ?? tokenQueryLocal;
-    const setTokenQuery = onTokenQueryChangeProp ?? setTokenQueryLocal;
+    const tokenQuery = tokenQueryProp ?? walletFilters.tokenQuery;
+    const setTokenQuery = onTokenQueryChangeProp ?? walletFilters.setTokenQuery;
     const [settingsOpen, setSettingsOpen] = useState(false);
 
     const [homeMoreOpen, setHomeMoreOpen] = useState(false);
+    // The system Back gesture closes this before it leaves the screen.
+    useBackHandler(homeMoreOpen ? () => setHomeMoreOpen(false) : undefined);
     const homeMoreWrapRef = useRef(/** @type {HTMLDivElement | null} */ (null));
     useEffect(() => {
         if (!homeMoreOpen) return undefined;
@@ -291,18 +397,56 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // DEX-gated, so a build that hides the DEX wires none and used to open
     // the menu onto a dead "No additional actions" row. A future non-DEX
     // entry appends here and keeps More alive on its own.
+    const runNetworkAction = useCallback((label, action) => {
+        if (typeof action !== 'function') return;
+        if (!networkActionsAvailable) {
+            showToast({
+                message: `${label} needs a network connection.`,
+                variant: 'error',
+            });
+            return;
+        }
+        action();
+    }, [networkActionsAvailable, showToast]);
+
     const homeMoreActions = useMemo(() => {
         const out = [];
-        if (onSwap) {
+        if (onSwap && !isDemoActive) {
             out.push({
                 id: 'swap',
                 label: 'Swap',
                 icon: <Icon.SwapIcon />,
-                onSelect: onSwap,
+                onSelect: () => runNetworkAction('Swapping', onSwap),
             });
         }
         return out;
-    }, [onSwap]);
+    }, [isDemoActive, onSwap, runNetworkAction]);
+    const quickActionCount = (isDemoActive ? 1 : 2)
+        + (onExchange ? 1 : 0)
+        + (homeMoreActions.length > 0 ? 1 : 0);
+    useEffect(() => {
+        setDemoSendNoticeOpen(false);
+        setDemoExitConfirmOpen(false);
+        setDemoExitBusy(false);
+        setDemoExitError(null);
+    }, [activeWalletId]);
+
+    const handleExitDemo = useCallback(async () => {
+        if (demoExitBusy || !activeWalletId) return;
+        setDemoExitBusy(true);
+        setDemoExitError(null);
+        try {
+            const { reloaded } = await exitDemoWallet({ messaging, walletId: activeWalletId });
+            if (reloaded) return;
+            setDemoExitConfirmOpen(false);
+            setDemoSendNoticeOpen(false);
+            if (typeof onLocked === 'function') onLocked();
+        } catch {
+            setDemoExitError('Could not exit demo mode. Please try again.');
+        } finally {
+            setDemoExitBusy(false);
+        }
+    }, [activeWalletId, demoExitBusy, messaging, onLocked]);
     // Cluster H FOLLOWUP 7: when "Back up now" lands the user in
     // Settings, this captures which subpage to deep-link into so the
     // user doesn't land on the Settings root + have to re-find Backup.
@@ -314,6 +458,12 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // a wallet switch.
     const [addAddressOpen, setAddAddressOpen] = useState(false);
     const [homeReloadKey, setHomeReloadKey] = useState(0);
+    const [portfolioRefreshing, setPortfolioRefreshing] = useState(false);
+    const portfolioRefreshIdRef = useRef(0);
+    useEffect(() => {
+        portfolioRefreshIdRef.current += 1;
+        setPortfolioRefreshing(false);
+    }, [activeWalletId, activeAccountId, activeNetwork]);
     // §27.3 / G072: pinned tokens. Loaded from Settings on unlock; toggled
     // optimistically in the UI then persisted via messaging.updateSettings.
     const [pinnedTokens, setPinnedTokens] = useState(/** @type {string[]} */ ([]));
@@ -325,7 +475,6 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // Display. The pinned/hidden lists themselves still apply when off.
     const [showPinAffordance, setShowPinAffordance] = useState(false);
     const [showHideAffordance, setShowHideAffordance] = useState(false);
-    const { showToast } = useToast();
     // Cluster I FOLLOWUP 2: auto-hide-spam toast. We only ever nudge
     // once per (wallet, mount) tuple. Re-prompting on every balance
     // refresh would be noisy; the user explicitly opting Hide / dismissing
@@ -341,9 +490,11 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     useEffect(() => {
         let cancelled = false;
         if (typeof messaging?.getSettings !== 'function') return undefined;
+        setPinnedTokens([]);
         messaging.getSettings().then((s) => {
             if (cancelled) return;
-            const pins = Array.isArray(s?.pinnedTokens) ? s.pinnedTokens.filter((k) => typeof k === 'string') : [];
+            const pins = pinnedTokensForWallet(s, activeWalletId)
+                .filter((k) => typeof k === 'string');
             const hides = Array.isArray(s?.hiddenTokens) ? s.hiddenTokens.filter((k) => typeof k === 'string') : [];
             setPinnedTokens(pins);
             setHiddenTokens(hides);
@@ -351,7 +502,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             setShowHideAffordance(s?.showHideAffordance === true);
         }).catch(() => { /* tolerate missing settings; empty pin list is a fine default */ });
         return () => { cancelled = true; };
-    }, [messaging]);
+    }, [messaging, activeWalletId]);
 
     const handleTogglePin = useCallback((key, nextPinned) => {
         if (typeof key !== 'string' || !key) return;
@@ -361,11 +512,13 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             else set.delete(key);
             const next = Array.from(set);
             if (typeof messaging?.updateSettings === 'function') {
-                messaging.updateSettings({ pinnedTokens: next }).catch(() => { /* best-effort */ });
+                messaging.updateSettings(
+                    pinnedTokensPatchForWallet(activeWalletId, next),
+                ).catch(() => { /* best-effort */ });
             }
             return next;
         });
-    }, [messaging]);
+    }, [messaging, activeWalletId]);
 
     // §34.2 Balances context shortcuts: p / h / o act on the balance row that
     // currently has keyboard focus (rows are buttons, so Tab reaches them and
@@ -492,6 +645,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             if (!onSwitchAccount) setActiveAccountIdLocal(null);
             return undefined;
         }
+        setAccounts(null);
         let cancelled = false;
         const walletId = activeWalletId;
         messaging.listAccounts(walletId)
@@ -518,11 +672,9 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     }, [activeWalletId, messaging]);
 
     // Per-wallet load: balances, multisig indicator, pending airdrops and
-    // unfinished confirms. `reset: true` (wallet/account switch,
-    // manual reload key) flushes state to the loading-skeleton first;
-    // `reset: false` (poll / focus refresh below) fetches quietly in the
-    // background and only swaps state in once fresh data lands, so an
-    // incoming token doesn't flash the whole screen back to a skeleton.
+    // unfinished confirms. Scope changes clear data that belongs to another
+    // wallet or account. Same-scope reloads, polls and focus refreshes keep
+    // cached data visible until fresh data lands.
     // Start (or restart) a rate-limit wait: the banner counts down from here
     // and the effect below re-loads when it reaches zero.
     const beginRateLimitWait = useCallback((secondsOrNull) => {
@@ -532,14 +684,34 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         setRateLimitNamedSeconds(named);
         setRateLimitTickNow(now);
         setRateLimitRetryAt(now + seconds * 1000);
+        setBalanceLoadFailed(true);
         setLoadError(`Couldn't ${BALANCES_VERB}. ${rateLimitedMessage(named ? seconds : null)}`);
     }, []);
 
-    const loadHomeData = useCallback(async (walletId, accountId, { reset, isCancelled }) => {
+    const loadHomeData = useCallback(async (walletId, accountId, {
+        reset,
+        isCancelled,
+        reportError = false,
+    }) => {
+        if (!activeNetwork) return;
+        // The saved copy of this pair's balances; only a clean fresh read
+        // replaces it. activeForCache starts from the saved active addresses.
+        let activeForCache = readBalanceCache(walletId, accountId, activeNetwork)?.activeByChain || {};
+        let freshBalances = null;
+        let freshFetchedAt = null;
+        let freshBalancesCacheable = false;
+        // A device-offline signal or corroborated service outage avoids work
+        // that cannot finish and keeps saved balances in place.
+        if (offline || !isNavigatorOnline()) {
+            pollThrottleRef.current.fail();
+            if (!isCancelled()) setCachedBalancesUpdating(false);
+            return;
+        }
         if (reset) {
-            // A switch (or a manual reload) is about to replace everything on
-            // screen, so nothing an earlier wallet polled may hold off the
-            // re-polls that follow.
+            const scopeKey = `${walletId}:${accountId || ''}`;
+            const hasCachedBalances = balancesScopeRef.current === scopeKey;
+            // A reset owns a fresh polling window even when cached rows remain
+            // visible for the same wallet and account.
             pollThrottleRef.current.reset();
             // ...but the load about to run DOES take the in-flight slot, the
             // way an event-driven one does. Without it a cold open that is
@@ -547,43 +719,67 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             // up to 60 s) would be joined by the 20 s beat, which is the burst
             // the limiter counted in the first place.
             pollThrottleRef.current.start();
-            setBalances(null);
-            setBalancesFetchedAt(null);
-            setActiveByChain({});
-            setMultisig(null);
-            setPendingAirdrops([]);
-            setConfirmSessions([]);
+            setBalanceLoadFailed(false);
+            if (!hasCachedBalances) {
+                setBalances(null);
+                setBalancesFetchedAt(null);
+                setActiveByChain({});
+                setCachedBalancesUpdating(false);
+                setMultisig(null);
+                setPendingAirdrops([]);
+                setConfirmSessions([]);
+            } else {
+                setCachedBalancesUpdating(isNavigatorOnline());
+            }
             setLoadError(null);
         }
 
         try {
-            let b;
             // Cluster J FOLLOWUP 1: synthesize fabricated balances
             // for the demo wallet so Home / Send / Receive feel
             // populated. Uses the wallet's real address records so
             // the rest of the app sees the same address-rooted
             // shape it would for a funded wallet.
-            if (flowsLib.isDemoWallet(walletId) && typeof messaging.getAddressesByChain === 'function') {
-                const byChain = await messaging.getAddressesByChain(walletId, accountId);
-                b = flowsLib.synthesizeDemoBalances(byChain);
-            } else {
-                b = await messaging.getWalletBalances(walletId, accountId);
-            }
+            // loadDisplayBalances holds that branch so the palette shows the same.
+            const b = await loadDisplayBalances(messaging, walletId, accountId);
             if (!isCancelled()) {
-                // Fresh balances: this is what restarts the re-poll window,
-                // whichever path asked for them.
-                pollThrottleRef.current.succeed();
-                setBalances(b);
-                setBalancesFetchedAt(Date.now());
                 // A read can LAND and still be rate limited: the aggregator
                 // reports a refused address as that entry's `error` string
                 // rather than throwing, so the banner is decided from what
                 // came back, on the poll path as well as the reset one. The
-                // balances that did land stay on screen either way.
+                // last complete balances stay on screen until every requested
+                // address has a usable answer.
                 const wait = rateLimitWaitFromBalances(b);
-                if (wait) {
-                    beginRateLimitWait(wait.seconds);
+                const hasBalanceFailure = Object.values(b || {}).some((rows) => (
+                    Array.isArray(rows) && rows.some((entry) => entry?.error)
+                ));
+                if (hasBalanceFailure) {
+                    pollThrottleRef.current.fail();
+                    setBalanceLoadFailed(true);
+                    if (wait) beginRateLimitWait(wait.seconds);
+                    else setLoadError("Couldn't load balances. Try again.");
+                    if (reportError && balancesRef.current !== null) {
+                        showToast({
+                            message: wait
+                                ? "Couldn't refresh balances. The service asked the wallet to slow down. Try again in a moment."
+                                : "Couldn't refresh balances. Try again.",
+                            variant: 'error',
+                        });
+                    }
                 } else {
+                    freshBalancesCacheable = true;
+                    // Fresh balances restart the re-poll window, whichever
+                    // path asks for them.
+                    pollThrottleRef.current.succeed();
+                    setBalanceLoadFailed(false);
+                    balancesScopeRef.current = `${walletId}:${accountId || ''}`;
+                    setBalances(b);
+                    setBalancesFetchedAt(Date.now());
+                    freshBalances = b;
+                    freshFetchedAt = Date.now();
+                }
+                setCachedBalancesUpdating(false);
+                if (!hasBalanceFailure) {
                     // Balances landed clean, so whatever the last failure said
                     // is no longer true. Cleared on the poll path too: a wallet
                     // that recovered on its own used to keep the error banner
@@ -597,10 +793,11 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             // Release the window rather than move it: a blip must not pin the
             // screen to stale balances for a whole interval.
             pollThrottleRef.current.fail();
-            // A silent poll that fails (e.g. a transient network blip)
-            // should not stomp a screen the user is already looking at
-            // with an error banner; only surface it on the reset path.
-            if (!isCancelled() && reset) {
+            // A failed poll leaves the last complete rows in place and marks
+            // them as saved data, so they cannot look freshly synchronized.
+            if (!isCancelled()) {
+                setCachedBalancesUpdating(false);
+                setBalanceLoadFailed(true);
                 // The raw SDK message used to go straight on screen here, URL
                 // and all ("Explorer returned HTTP 429 for /RLTC/api/balances/
                 // bcrt1q..."). humanizeError owns the wording for every shape
@@ -609,20 +806,41 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 // channel, a chain-wide fault), and it is the path that used to
                 // print the wire text.
                 const humanized = humanizeError(err, BALANCES_VERB);
-                if (humanized.cause === 'rate_limited') beginRateLimitWait(humanized.retryAfterSeconds ?? null);
-                else setLoadError(humanized.message);
+                if (reportError && balancesRef.current !== null) {
+                    showToast({
+                        message: humanizeError(err, 'refresh balances').message,
+                        variant: 'error',
+                    });
+                }
+                if (humanized.cause === 'rate_limited') {
+                    beginRateLimitWait(humanized.retryAfterSeconds ?? null);
+                } else {
+                    setLoadError(humanized.message);
+                }
             }
         }
 
         if (typeof messaging.getActiveAddresses === 'function') {
             try {
                 const active = await messaging.getActiveAddresses(walletId, accountId);
-                if (!isCancelled()) setActiveByChain(active || {});
+                if (!isCancelled()) {
+                    activeForCache = active || {};
+                    setActiveByChain(activeForCache);
+                }
             } catch { /* fall back to aggregate when unavailable */ }
         }
 
+        if (!isCancelled() && freshBalances && freshBalancesCacheable) {
+            writeBalanceCache(walletId, accountId, {
+                balances: freshBalances,
+                activeByChain: activeForCache,
+                fetchedAt: freshFetchedAt,
+            }, activeNetwork);
+        }
+
         if (typeof messaging.getMultisigReceiveAddress === 'function') {
-            const btcChain = chainRegistry.byCoin('bitcoin')[0]?.id;
+            const btcChain = chainRegistry.byCoin('bitcoin')
+                .find((descriptor) => descriptor.networkKind === activeNetwork)?.id;
             if (btcChain) {
                 messaging.getMultisigReceiveAddress({ walletId, chainId: btcChain })
                     .then((r) => {
@@ -664,25 +882,59 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         if (typeof messaging.listConfirmSessions === 'function') {
             try {
                 const resp = await messaging.listConfirmSessions();
-                if (!isCancelled()) setConfirmSessions(resp?.sessions || []);
+                if (!isCancelled()) {
+                    setConfirmSessions(filterConfirmSessionsForAccount(
+                        resp?.sessions,
+                        walletId,
+                        accountId,
+                    ));
+                }
             } catch { /* non-fatal */ }
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [messaging]);
+    }, [messaging, offline, activeNetwork]);
+
+    // The one manual refresh on Home (the hero's button): reloads balances,
+    // and with them the prices, quietly over what is on screen. A failure is a
+    // toast, never a skeleton or a banner over balances that are still good.
+    // A load already in flight (a poll, a focus refresh) is not doubled up.
+    const refreshPortfolio = useCallback(async () => {
+        if (!activeWalletId || portfolioRefreshing || offline || !isNavigatorOnline()) return;
+        if (pollThrottleRef.current.isInFlight()) return;
+        const refreshId = portfolioRefreshIdRef.current + 1;
+        portfolioRefreshIdRef.current = refreshId;
+        setPortfolioRefreshing(true);
+        pollThrottleRef.current.reset();
+        pollThrottleRef.current.start();
+        try {
+            await loadHomeData(activeWalletId, activeAccountId || undefined, {
+                reset: false,
+                reportError: true,
+                isCancelled: () => portfolioRefreshIdRef.current !== refreshId,
+            });
+        } finally {
+            if (portfolioRefreshIdRef.current === refreshId) setPortfolioRefreshing(false);
+        }
+    }, [activeWalletId, activeAccountId, offline, loadHomeData, portfolioRefreshing]);
+    // Stable across the rate-limit countdown so the memoised portfolio tabs skip those renders.
+    const refreshPortfolioOnline = useCallback(
+        () => runNetworkAction('Refreshing balances', refreshPortfolio),
+        [runNetworkAction, refreshPortfolio],
+    );
 
     // Reruns when the active wallet OR active BIP44 account changes.
     // Switching either flushes stale state and refetches. When
     // `activeAccountId` is null (data layer returned no accounts for this
     // wallet, or pre-load), the calls fall back to wallet-wide aggregation.
     useEffect(() => {
-        if (!activeWalletId) return undefined;
+        if (!activeWalletId || !activeNetwork) return undefined;
         let cancelled = false;
         loadHomeData(activeWalletId, activeAccountId || undefined, {
             reset: true,
             isCancelled: () => cancelled,
         });
         return () => { cancelled = true; };
-    }, [activeWalletId, activeAccountId, homeReloadKey, loadHomeData]);
+    }, [activeWalletId, activeAccountId, activeNetwork, homeReloadKey, resumeKey, loadHomeData]);
 
     // Nothing pushes balance changes to the wallet - an incoming send, a
     // mint landing, a token someone else sent you - so Home has to ask.
@@ -712,6 +964,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         // has not aged", which the beat must ignore.
         const poll = () => {
             if (typeof document !== 'undefined' && document.hidden) return;
+            if (offline || !isNavigatorOnline()) return;
             if (pollThrottleRef.current.isInFlight()) return;
             // Claim the slot the reset path's way. `start()` alone marks a
             // load in flight only once the window has aged, and at beat time
@@ -726,13 +979,16 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             load();
         };
 
-        const intervalId = setInterval(poll, BALANCE_POLL_INTERVAL_MS);
+        const stopPollInterval = startVisibleInterval(poll, BALANCE_POLL_INTERVAL_MS, {
+            runOnVisible: false,
+        });
         // An alt-tab fires `focus` and `visibilitychange` together, so coming
         // back to the wallet used to cost two loads. The first event after the
         // balances have aged past one interval still fires at once; the rest
         // of the burst rides the data the beat already has.
         const onVisibilityOrFocus = () => {
             if (typeof document !== 'undefined' && document.hidden) return;
+            if (offline || !isNavigatorOnline()) return;
             if (!pollThrottleRef.current.start()) return;
             load();
         };
@@ -741,11 +997,29 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
 
         return () => {
             cancelled = true;
-            clearInterval(intervalId);
+            stopPollInterval();
             window.removeEventListener('focus', onVisibilityOrFocus);
             document.removeEventListener('visibilitychange', onVisibilityOrFocus);
         };
-    }, [activeWalletId, activeAccountId, loadHomeData]);
+    }, [activeWalletId, activeAccountId, loadHomeData, offline]);
+
+    // Reconnect immediately after either the device or wallet services recover.
+    // The quiet refresh preserves cached rows until fresh data lands.
+    const wasOfflineRef = useRef(offline);
+    useEffect(() => {
+        const reconnected = wasOfflineRef.current && !offline;
+        wasOfflineRef.current = offline;
+        if (!reconnected || !activeWalletId) return;
+        if (pollThrottleRef.current.isInFlight()) return;
+        pollThrottleRef.current.reset();
+        pollThrottleRef.current.start();
+        let cancelled = false;
+        loadHomeData(activeWalletId, activeAccountId || undefined, {
+            reset: false,
+            isCancelled: () => cancelled,
+        });
+        return () => { cancelled = true; };
+    }, [offline, activeWalletId, activeAccountId, loadHomeData]);
 
     // Cancellation for the re-load the countdown fires, and it deliberately
     // does NOT ride the ticking effect's own flag: reaching zero clears
@@ -757,7 +1031,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     useEffect(() => {
         rateLimitReloadCancelled.current = false;
         return () => { rateLimitReloadCancelled.current = true; };
-    }, [activeWalletId, activeAccountId]);
+    }, [activeWalletId, activeAccountId, activeNetwork]);
 
     // The rate-limit wait, ticking. While `rateLimitRetryAt` is set the banner
     // re-renders once a second off the remaining time, and when it runs out the
@@ -766,7 +1040,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // re-load takes the throttle's in-flight slot the way the beat does, so the
     // next beat does not land on top of it.
     useEffect(() => {
-        if (rateLimitRetryAt === null || !activeWalletId) return undefined;
+        if (rateLimitRetryAt === null || !activeWalletId || !activeNetwork) return undefined;
         let stopped = false;
         const walletId = activeWalletId;
         const accountId = activeAccountId || undefined;
@@ -777,8 +1051,10 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 setRateLimitTickNow(now);
                 return;
             }
+            if (pollThrottleRef.current.isInFlight()) return;
             setRateLimitRetryAt(null);
             setLoadError(`Couldn't ${BALANCES_VERB}. ${rateLimitedMessage(null)}`);
+            pollThrottleRef.current.reset();
             pollThrottleRef.current.start();
             loadHomeData(walletId, accountId, {
                 reset: false,
@@ -786,7 +1062,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             });
         }, 1000);
         return () => { stopped = true; clearInterval(id); };
-    }, [rateLimitRetryAt, activeWalletId, activeAccountId, loadHomeData]);
+    }, [rateLimitRetryAt, activeWalletId, activeAccountId, activeNetwork, loadHomeData]);
 
     // Home does not lock, in either sense. The idle timer lives
     // in each shell's AppInner via `useAutoLockPolicy`, because this
@@ -798,24 +1074,12 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // local `handleLock` that used to sit here had exactly one consumer,
     // the auto-lock hook, and left with it. Do not re-add a
     // `useAutoLock` call to any route.
-    const settings = useSettings();
-    // §20 / G041: wallet-mode aware. The hook's return is the wrapper
-    // `{ settings, loading, error, refresh, update }`, so the actual
-    // Settings record lives at `.settings`. Read with the explicit
-    // default so v2 records without the field behave like 'full'.
-    const walletMode = settings.settings?.walletMode || WALLET_MODE_DEFAULT;
-    const isSignerMode = walletMode === 'signer';
-    // Demo-wallet detection stays here for the proof-verification gate
-    // below (synthetic balances have no real SPV proofs). The auto-lock
-    // side of this check moved to useAutoLockPolicy with the rest.
-    const isDemoActive = flowsLib.isDemoWallet(activeWalletId);
-
+    const hasChains = hasAvailableChain(settings, chainRegistry);
     // §7/§8: SPV proof verification. Off for demo wallets (synthetic
     // balances have no real proofs) and when the user opts out via
     // `verifyProofs` (default on). The map is keyed `chainId:tick` and
-    // fills in progressively; HomeTabs badges the Tokens rows from it.
+    // fills in progressively after the user opens the Tokens tab.
     const verifyProofsEnabled = settings.settings?.verifyProofs !== false && !isDemoActive;
-    const verifyMap = useProofVerification({ messaging, balances, enabled: verifyProofsEnabled });
 
     // `hideSmallBalances` persisted for fourteen sessions without a
     // single reader. HomeTabs forwards it to the Coins and Tokens lists,
@@ -826,6 +1090,12 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         ? wallets.find((w) => w.id === activeWalletId)
         : null;
 
+    useEffect(() => {
+        if (activeWallet?.id && activeWallet?.name) {
+            writeActiveWallet(activeWallet.id, activeWallet.name);
+        }
+    }, [activeWallet?.id, activeWallet?.name]);
+
     // Build the wallet-level alerts from the one shared list (walletAlerts.js);
     // a new alert is added there, never here.
     const alerts = buildWalletAlerts({ activeWallet, messagingUnread }, { onMessaging, onMigrateToBip39 });
@@ -833,7 +1103,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     // Coin families surfaced in the dataset, in canonical order.
     // Drives both the network filter and the per-tab "no balances on
     // this network" empty messages.
-    const coinFamilies = (() => {
+    const coinFamilies = useMemo(() => {
         const seen = new Set();
         if (balances) {
             for (const cid of Object.keys(balances)) {
@@ -844,18 +1114,129 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         const ordered = ['bitcoin', 'litecoin', 'dogecoin'].filter((c) => seen.has(c));
         for (const c of seen) if (!ordered.includes(c)) ordered.push(c);
         return ordered;
-    })();
+    }, [balances]);
+
+    const pinnedKeys = useMemo(() => new Set(pinnedTokens), [pinnedTokens]);
+    const hiddenKeys = useMemo(() => new Set(hiddenTokens), [hiddenTokens]);
+    const handleAddAddress = useCallback(() => setAddAddressOpen(true), []);
+    const quickActions = useMemo(() => (
+        <div>
+            {quickActionsReason ? (
+                <p className={styles.quickActionsReason} id="home-quick-actions-reason">
+                    {quickActionsReason}
+                </p>
+            ) : null}
+            <div
+                className={`${styles.quickActions} ${quickActionCount === 1 ? styles.quickActionsSingle : ''}`}
+                role="group"
+                aria-label={t('home.quickActions')}
+                aria-describedby={quickActionsReason ? 'home-quick-actions-reason' : undefined}
+            >
+                <SendQuickAction
+                    onSend={isDemoActive ? () => setDemoSendNoticeOpen(true) : onSend}
+                    networkActionsAvailable={isDemoActive || networkActionsAvailable}
+                    onOffline={() => runNetworkAction('Sending', onSend)}
+                />
+                {!isDemoActive ? (
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        className={styles.quickAction}
+                        onClick={onReceive}
+                        disabled={!onReceive}
+                        icon={<span className={styles.quickActionIcon}><Icon.ReceiveIcon /></span>}
+                    >
+                        {t('home.receive')}
+                    </Button>
+                ) : null}
+                {onExchange ? (
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        className={styles.quickAction}
+                        onClick={() => runNetworkAction('Exchange', onExchange)}
+                        aria-disabled={!networkActionsAvailable ? 'true' : undefined}
+                        title={!networkActionsAvailable ? t('home.exchangeOffline') : undefined}
+                        icon={<span className={styles.quickActionIcon}><Icon.MarketIcon /></span>}
+                    >
+                        {t('home.exchange')}
+                    </Button>
+                ) : null}
+                {homeMoreActions.length === 1 ? (
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        className={styles.quickAction}
+                        onClick={homeMoreActions[0].onSelect}
+                        aria-label={homeMoreActions[0].label}
+                        icon={<span className={styles.quickActionIcon}>{homeMoreActions[0].icon}</span>}
+                    >
+                        {homeMoreActions[0].label}
+                    </Button>
+                ) : null}
+                {homeMoreActions.length > 1 ? (
+                    <div className={styles.quickActionMoreWrap} ref={homeMoreWrapRef}>
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            className={styles.quickAction}
+                            aria-haspopup="menu"
+                            aria-expanded={homeMoreOpen}
+                            onClick={() => setHomeMoreOpen((o) => !o)}
+                            icon={<span className={styles.quickActionIcon}><Icon.MoreIcon /></span>}
+                        >
+                            {t('history.detail.more')}
+                        </Button>
+                        {homeMoreOpen ? (
+                            <div className={styles.quickActionMoreMenu} role="menu">
+                                {homeMoreActions.map((action) => (
+                                    <Button
+                                        key={action.id}
+                                        type="button"
+                                        role="menuitem"
+                                        className={styles.quickActionMoreItem}
+                                        onClick={() => { setHomeMoreOpen(false); action.onSelect(); }}
+                                        icon={action.icon ? (
+                                            <span className={styles.quickActionMoreItemIcon}>
+                                                {action.icon}
+                                            </span>
+                                        ) : null}
+                                    >
+                                        {action.label}
+                                    </Button>
+                                ))}
+                            </div>
+                        ) : null}
+                    </div>
+                ) : null}
+            </div>
+            {isDemoActive && demoSendNoticeOpen ? (
+                <StatusMessage
+                    recovery={{
+                        label: t('walletDetails.exitDemo'),
+                        onAction: () => { setDemoExitError(null); setDemoExitConfirmOpen(true); },
+                    }}
+                >
+                    {t('home.demoSendBlocked')}
+                </StatusMessage>
+            ) : null}
+            {demoExitConfirmOpen ? (
+                <DemoExitConfirm
+                    busy={demoExitBusy}
+                    error={demoExitError}
+                    onConfirm={handleExitDemo}
+                    onCancel={() => { setDemoExitConfirmOpen(false); setDemoExitError(null); }}
+                />
+            ) : null}
+        </div>
+    ), [
+        demoExitBusy, demoExitConfirmOpen, demoExitError, demoSendNoticeOpen, handleExitDemo,
+        homeMoreActions, homeMoreOpen, isDemoActive, networkActionsAvailable, onExchange,
+        onReceive, onSend, quickActionCount, quickActionsReason, runNetworkAction,
+    ]);
 
     const accountList = Array.isArray(accounts) ? [...accounts].sort((a, b) => a.index - b.index) : [];
     const activeAccount = accountList.find((a) => a.id === activeAccountId) || null;
-    const walletList = Array.isArray(wallets) ? wallets : [];
-    const walletNonDefault = walletList.length > 1 && walletList[0] && activeWalletId !== walletList[0].id;
-    const accountNonDefault = accountList.length > 1
-        && accountList[0]
-        && activeAccountId
-        && activeAccountId !== accountList[0].id;
-
-
     if (settingsOpen) {
         return (
             <Settings
@@ -892,51 +1273,93 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
     const loadErrorText = rateLimitRetryAt === null
         ? loadError
         : `Couldn't ${BALANCES_VERB}. ${rateLimitedMessage(rateLimitSecondsLeft)}`;
+    const balanceStatusText = balanceLoadFailed && balances && loadErrorText
+        ? `${loadErrorText} Showing saved balances from the last successful sync.`
+        : loadErrorText;
+    const retryBalanceLoad = () => {
+        setRateLimitRetryAt(null);
+        setHomeReloadKey((key) => key + 1);
+    };
 
     // §20 / G041: signer-mode home variant. The wallet only signs PSBTs
     // pasted in from a paired Watcher wallet; balances, history, send,
     // and receive are not relevant. Render a stripped-down body with the
     // sign / verify CTAs and a banner explaining the role. Header stays
-    // shared so the user can still lock / switch wallets / open Settings.
+    // shared so the user can still lock / switch wallets / open Settings;
+    // a shell with no header passes onOpenSettings / onLockWallet and the
+    // body offers both itself, since the banner sends the user to Settings.
     if (isSignerMode) {
         return (
             <Screen variant={variant}>
-                <div className={isFull ? styles.bodyFull : styles.bodyPopup}>
-                    {loadErrorText ? (
-                        <StatusMessage variant="error" className={styles.error}>{loadErrorText}</StatusMessage>
-                    ) : null}
-                    {/* §25.2 / Cluster J FOLLOWUP 2: shells that
-                        mount the banner in their layout header say so with
-                        `demoBannerInHeader`, and Home skips its own copy so
-                        the disclosure never renders twice. Shells without a
-                        header slot (the extension popup) get it here. */}
-                    {activeWalletId && !demoBannerInHeader ? (
-                        <DemoBanner
-                            activeWalletId={activeWalletId}
-                            onExited={onLocked}
-                        />
+                <ListPage className={isFull ? styles.bodyFull : undefined}>
+                    <h1 className="sr-only">{t('home.title')}</h1>
+                    {balanceStatusText ? (
+                        <StatusMessage
+                            variant="error"
+                            className={styles.error}
+                            recovery={balanceLoadFailed ? { label: t('home.retryBalances'), onAction: retryBalanceLoad } : undefined}
+                        >
+                            {balanceStatusText}
+                        </StatusMessage>
                     ) : null}
                     <SignerHomeBody
                         onSignPsbt={onSignPsbt}
                         onSignMessage={onSignMessage}
                         onVerifySignature={onVerifySignature}
+                        onOpenSettings={onOpenSettings}
+                        onLockWallet={onLockWallet}
                     />
-                </div>
+                </ListPage>
+            </Screen>
+        );
+    }
+
+    if (!hasChains) {
+        return (
+            <Screen variant={variant}>
+                <ListPage className={isFull ? styles.bodyFull : undefined}>
+                    <h1 className="sr-only">{t('home.title')}</h1>
+                    <EmptyState
+                        title={NO_CHAINS_TITLE}
+                        body={NO_CHAINS_BODY}
+                        actionLabel={t('common.openNetworkSettings')}
+                        onAction={() => { setSettingsSubpage('network'); setSettingsOpen(true); }}
+                        actionIcon={<Icon.GearIcon />}
+                    />
+                </ListPage>
             </Screen>
         );
     }
 
     return (
         <Screen variant={variant}>
-            <div className={isFull ? styles.bodyFull : styles.bodyPopup}>
-                {loadErrorText ? (
-                    <StatusMessage variant="error" className={styles.error}>{loadErrorText}</StatusMessage>
+            <ListPage className={isFull ? styles.bodyFull : undefined}>
+                {/* Home has no PageHeader, so its one h1 is visually hidden. */}
+                <h1 className="sr-only">{t('home.title')}</h1>
+                {interruptedAction ? (
+                    <StatusMessage variant="warning">
+                        {t('home.interruptedAction', { action: interruptedAction })}
+                    </StatusMessage>
+                ) : null}
+                {offline ? (
+                    <StatusMessage variant="warning">
+                        {balances
+                            ? t('home.offline.cached')
+                            : t('home.offline.empty')}
+                    </StatusMessage>
+                ) : null}
+                {balanceStatusText ? (
+                    <StatusMessage
+                        variant="error"
+                        className={styles.error}
+                        recovery={balanceLoadFailed ? { label: t('home.retryBalances'), onAction: retryBalanceLoad } : undefined}
+                    >
+                        {balanceStatusText}
+                    </StatusMessage>
                 ) : null}
 
-                {balances === null && !loadErrorText ? (
-                    <div role="status" aria-label="Loading balances">
-                        <Skeleton.List rows={5} />
-                    </div>
+                {cachedBalancesUpdating ? (
+                    <StatusMessage variant="status">{t('home.updatingBalances')}</StatusMessage>
                 ) : null}
 
                 {/* Inline notice removed; now surfaces in the Alerts panel
@@ -956,29 +1379,36 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 ) : null}
 
                 {pendingAirdrops.length > 0 && onResumeAirdrop ? (
-                    <div role="group" aria-label="Pending airdrops">
+                    <div role="group" aria-label={t('home.pendingAirdrops')}>
                         {pendingAirdrops.map((rec) => (
-                            <button
+                            <Button
                                 key={rec.id}
                                 type="button"
                                 className={styles.pendingAirdropCard}
                                 onClick={() => onResumeAirdrop(rec.id)}
+                                icon={null}
                             >
-                                <span className={styles.pendingAirdropTitle}>
-                                    Resume airdrop: {rec.amountPer} {rec.token} × {rec.recipients.length}
+                                <span className={styles.pendingAirdropContent}>
+                                    <span className={styles.pendingAirdropTitle}>
+                                        {t('home.resumeAirdrop', {
+                                            amount: rec.amountPer,
+                                            token: rec.token,
+                                            count: rec.recipients.length,
+                                        })}
+                                    </span>
+                                    <span className={styles.pendingAirdropHint}>
+                                        {rec.stage === 'waiting-index'
+                                            ? t('home.airdrop.waitingIndex')
+                                            : t('home.airdrop.readyToSign')}
+                                    </span>
                                 </span>
-                                <span className={styles.pendingAirdropHint}>
-                                    {rec.stage === 'waiting-index'
-                                        ? 'Recipient list sent, waiting to be indexed'
-                                        : 'Ready to sign the airdrop'}
-                                </span>
-                            </button>
+                            </Button>
                         ))}
                     </div>
                 ) : null}
 
                 {pendingCoinpays.length > 0 && onResumeCoinpay ? (
-                    <div role="group" aria-label="Pending payments due">
+                    <div role="group" aria-label={t('home.pendingPayments')}>
                         {pendingCoinpays.map((rec) => {
                             // rec.coinAmount is the explorer's own decimal coin
                             // figure (not base units; see obligationStatus.js), so
@@ -987,7 +1417,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                             const chainDescriptor = chainRegistry.get(rec.chainId);
                             const ticker = chainDescriptor ? tickerForCoin(chainDescriptor.coin) : '';
                             return (
-                                <button
+                                <Button
                                     key={`${rec.chainId}-${rec.orderMatchActionIndex}`}
                                     type="button"
                                     className={styles.pendingAirdropCard}
@@ -996,15 +1426,20 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                                         address: rec.address,
                                         orderMatchActionIndex: rec.orderMatchActionIndex,
                                     })}
+                                    icon={null}
                                 >
-                                    <span className={styles.pendingAirdropTitle}>
-                                        Payment due: pay {rec.coinAmount} to complete matched order #{rec.orderMatchActionIndex}
-                                        {ticker ? ` (${ticker})` : ''}
+                                    <span className={styles.pendingAirdropContent}>
+                                        <span className={styles.pendingAirdropTitle}>
+                                            {t('home.paymentDue', {
+                                                amount: rec.coinAmount,
+                                                order: rec.orderMatchActionIndex,
+                                            })}{ticker ? ` (${ticker})` : ''}
+                                        </span>
+                                        <span className={styles.pendingAirdropHint}>
+                                            {t('home.paymentDue.hint')}
+                                        </span>
                                     </span>
-                                    <span className={styles.pendingAirdropHint}>
-                                        Sign to finish paying for your matched order.
-                                    </span>
-                                </button>
+                                </Button>
                             );
                         })}
                     </div>
@@ -1017,25 +1452,6 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                   * component owns that policy) so an observer sees no cue.
                   */}
                 <PanicFreezeNotice surface="home" />
-                {/* the demo disclosure sits above the balances, so a
-                    first-time visitor reads "this is a demo, the forms read 0
-                    because there is nothing to spend" before scrolling into a
-                    seven-figure fixture portfolio. Skipped when the shell
-                    already mounts it in its header (see `demoBannerInHeader`). */}
-                {activeWalletId && !demoBannerInHeader ? (
-                    <DemoBanner
-                        activeWalletId={activeWalletId}
-                        onExited={onLocked}
-                    />
-                ) : null}
-                {activeWalletId ? (
-                    <BackupReminderCard
-                        walletId={activeWalletId}
-                        walletCreatedAt={activeWallet?.createdAt}
-                        onAction={() => { setSettingsSubpage('backup'); setSettingsOpen(true); }}
-                    />
-                ) : null}
-
                 {balances ? (
                     <HomeTabs
                         chainRegistry={chainRegistry}
@@ -1049,148 +1465,60 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         onNetworkFilterChange={setNetworkFilter}
                         onTokenQueryChange={setTokenQuery}
                         multisig={isBtc ? multisig : null}
-                        multisigChainId={chainRegistry.byCoin('bitcoin')[0]?.id}
+                        multisigChainId={chainRegistry.byCoin('bitcoin')
+                            .find((descriptor) => descriptor.networkKind === activeNetwork)?.id}
                         onReceive={onReceive}
+                        onBuy={onExchange}
+                        hasAddresses={Object.keys(balances).length > 0}
+                        onAddAddress={handleAddAddress}
                         onHistory={onHistory}
                         onSelectToken={onSelectToken}
                         onSelectEntry={onSelectEntry}
-                        pinnedKeys={new Set(pinnedTokens)}
+                        pinnedKeys={pinnedKeys}
                         onTogglePin={showPinAffordance ? handleTogglePin : undefined}
-                        hiddenKeys={new Set(hiddenTokens)}
+                        hiddenKeys={hiddenKeys}
                         onToggleHide={showHideAffordance ? handleToggleHide : undefined}
-                        verifyMap={verifyMap}
+                        verifyProofsEnabled={verifyProofsEnabled}
                         hideSmallBalances={hideSmallBalances}
+                        onRefresh={refreshPortfolioOnline}
+                        refreshing={portfolioRefreshing}
                         onCommandPalette={onCommandPalette}
                         // Only shells without a nav surface pass this;
                         // it renders a gear in the hero's control cluster.
                         onOpenSettings={onOpenSettings}
-                        actions={(
-                            <div className={styles.quickActions} role="group" aria-label="Quick actions">
-                                <button
-                                    type="button"
-                                    className={styles.quickAction}
-                                    onClick={onSend}
-                                    disabled={!onSend}
-                                >
-                                    <span className={styles.quickActionIcon} aria-hidden="true"><Icon.SendIcon /></span>
-                                    <span>Send</span>
-                                </button>
-                                <button
-                                    type="button"
-                                    className={styles.quickAction}
-                                    onClick={onReceive}
-                                    disabled={!onReceive}
-                                >
-                                    <span className={styles.quickActionIcon} aria-hidden="true"><Icon.ReceiveIcon /></span>
-                                    <span>Receive</span>
-                                </button>
-                                {/* Not rendered at all when the shell wires no
-                                    handler: a build can have compiled the DEX
-                                    surface out, and a greyed-out
-                                    Exchange button still advertises an
-                                    exchange. Locked-wallet states pass a
-                                    handler and disable elsewhere. */}
-                                {onExchange ? (
-                                    <button
-                                        type="button"
-                                        className={styles.quickAction}
-                                        onClick={onExchange}
-                                    >
-                                        <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MarketIcon /></span>
-                                        <span>Exchange</span>
-                                    </button>
-                                ) : null}
-                                {/* Absent, not greyed and not empty, when the
-                                    list is empty: a "More" that opens onto
-                                    nothing is a dead control on the primary
-                                    surface. */}
-                                {homeMoreActions.length > 0 ? (
-                                    <div className={styles.quickActionMoreWrap} ref={homeMoreWrapRef}>
-                                        <button
-                                            type="button"
-                                            className={styles.quickAction}
-                                            aria-haspopup="menu"
-                                            aria-expanded={homeMoreOpen}
-                                            onClick={() => setHomeMoreOpen((o) => !o)}
-                                        >
-                                            <span className={styles.quickActionIcon} aria-hidden="true"><Icon.MoreIcon /></span>
-                                            <span>More</span>
-                                        </button>
-                                        {homeMoreOpen ? (
-                                            <div className={styles.quickActionMoreMenu} role="menu">
-                                                {homeMoreActions.map((action) => (
-                                                    <button
-                                                        key={action.id}
-                                                        type="button"
-                                                        role="menuitem"
-                                                        className={styles.quickActionMoreItem}
-                                                        onClick={() => { setHomeMoreOpen(false); action.onSelect(); }}
-                                                    >
-                                                        {action.icon ? (
-                                                            <span className={styles.quickActionMoreItemIcon} aria-hidden="true">
-                                                                {action.icon}
-                                                            </span>
-                                                        ) : null}
-                                                        <span>{action.label}</span>
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        ) : null}
-                                    </div>
-                                ) : null}
-                            </div>
-                        )}
+                        // Same rule as the gear: a lock button for shells with no header.
+                        onLockWallet={onLockWallet}
+                        actions={quickActions}
+                    />
+                ) : !offline && !loadErrorText ? (
+                    <HomeLoadingSkeleton actionCount={quickActionCount} />
+                ) : null}
+
+                {activeWalletId ? (
+                    <BackupReminderCard
+                        walletId={activeWalletId}
+                        hasFunds={backupReminderHasFunds}
+                        isDemo={isDemoActive}
+                        walletMode={settings.settings ? walletMode : null}
+                        onAction={() => { setSettingsSubpage('backup'); setSettingsOpen(true); }}
                     />
                 ) : null}
 
-
-                {balances && Object.keys(balances).length === 0 ? (
-                    <div className={styles.emptyState}>
-                        <p className={styles.hint}>
-                            No addresses yet. Generate one to start receiving.
-                        </p>
-                        <Button
-                            variant="primary"
-                            size="md"
-                            onClick={() => setAddAddressOpen(true)}
-                            icon={<Icon.PlusIcon />}
-                        >
-                            Generate an address
-                        </Button>
-                    </div>
-                ) : null}
-
-                {/* Action button grid is full-mode only. In small mode the
-                    actions live in the pancake menu, freeing the body for
+                {/* Supplementary action grid is full-mode only. In small mode
+                    the actions live in the pancake menu, freeing the body for
                     the balance list. */}
                 {isFull ? (
                 <div className={styles.actionsFull}>
                     <Button
-                        variant="primary"
-                        block={!isFull}
-                        onClick={onSend}
-                        disabled={!onSend}
-                        icon={<Icon.SendIcon />}
-                    >
-                        Send
-                    </Button>
-                    <Button
                         variant="secondary"
                         block={!isFull}
-                        onClick={onReceive}
-                        disabled={!onReceive}
-                        icon={<Icon.ReceiveIcon />}
-                    >
-                        Receive
-                    </Button>
-                    <Button
-                        variant="secondary"
-                        block={!isFull}
-                        onClick={onCreateToken}
+                        onClick={() => runNetworkAction('Creating a token', onCreateToken)}
                         disabled={!onCreateToken}
+                        aria-disabled={!networkActionsAvailable ? 'true' : undefined}
+                        title={!networkActionsAvailable ? t('home.createTokenOffline') : undefined}
                         icon={<Icon.TokenIcon />}
                     >
-                        Create token
+                        {t('home.createToken')}
                     </Button>
                     {/* Same rule as Exchange above: absent, not greyed, when
                         this build has no markets to open. */}
@@ -1201,7 +1529,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                             onClick={onMarkets}
                             icon={<Icon.MarketIcon />}
                         >
-                            Markets
+                            {t('home.markets')}
                         </Button>
                     ) : null}
                     <Button
@@ -1211,16 +1539,16 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         disabled={!onMessaging}
                         icon={<Icon.MessageIcon />}
                     >
-                        Messaging
+                        {t('home.messaging')}
                         {messagingUnread > 0 ? (
                             <span
-                                aria-label={`${messagingUnread} unread`}
+                                aria-label={t('alerts.unreadCount', { count: messagingUnread })}
                                 style={{
                                     marginInlineStart: '0.4rem',
                                     padding: '0 0.4rem',
                                     borderRadius: '999px',
-                                    background: 'var(--xc-accent-primary, #0b84ff)',
-                                    color: '#fff',
+                                    background: 'var(--xc-accent-primary)',
+                                    color: 'var(--xc-on-accent)',
                                     fontSize: '0.7rem',
                                     fontWeight: 700,
                                 }}
@@ -1236,7 +1564,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         disabled={!onHistory}
                         icon={<Icon.HistoryIcon />}
                     >
-                        History
+                        {t('history.title')}
                     </Button>
                     <Button
                         variant="secondary"
@@ -1245,7 +1573,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         disabled={!onAddresses}
                         icon={<Icon.AddressIcon />}
                     >
-                        Addresses
+                        {t('home.addresses')}
                     </Button>
                     {onContracts ? (
                         <Button
@@ -1254,7 +1582,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                             onClick={onContracts}
                             icon={<Icon.ContractIcon />}
                         >
-                            Contracts
+                            {t('home.contracts')}
                         </Button>
                     ) : null}
                     {onStaking ? (
@@ -1264,21 +1592,21 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                             onClick={onStaking}
                             icon={<Icon.StakeIcon />}
                         >
-                            Staking
+                            {t('home.staking')}
                         </Button>
                     ) : null}
                     <Button
-                        variant="ghost"
+                        variant="secondary"
                         block={!isFull}
                         onClick={onActions}
                         disabled={!onActions}
                         icon={<Icon.MoreIcon />}
                     >
-                        More actions
+                        {t('actionsMenu.more')}
                     </Button>
                 </div>
                 ) : null}
-            </div>
+            </ListPage>
             {alertsOpen ? (
                 <AlertsOverlay
                     alerts={alerts}
@@ -1286,6 +1614,59 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                 />
             ) : null}
         </Screen>
+    );
+}
+
+function HomeLoadingSkeleton({ actionCount }) {
+    return (
+        <div
+            role="status"
+            aria-label={t('home.loadingBalances')}
+            aria-busy="true"
+            style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-3)', width: '100%' }}
+        >
+            <Skeleton shape="card" height={86} />
+            <Skeleton shape="card" height={96} />
+            <div className={styles.quickActions} aria-hidden="true">
+                {Array.from({ length: actionCount }, (_, index) => (
+                    <Skeleton key={index} shape="card" height={72} />
+                ))}
+            </div>
+            <Skeleton shape="text" height={45} />
+            <Skeleton shape="text" width={160} height={36} style={{ alignSelf: 'flex-end' }} />
+            <Skeleton.List rows={5} rowHeight={72} avatarSize={48} />
+        </div>
+    );
+}
+
+function SendQuickAction({ onSend, networkActionsAvailable, onOffline }) {
+    const icon = <span className={styles.quickActionIcon}><Icon.SendIcon /></span>;
+    if (!networkActionsAvailable && onSend) {
+        return (
+            <Button
+                type="button"
+                variant="secondary"
+                className={styles.quickAction}
+                onClick={onOffline}
+                aria-disabled="true"
+                title={t('home.sendOffline')}
+                icon={icon}
+            >
+                {t('send.title')}
+            </Button>
+        );
+    }
+    return (
+        <Button
+            type="button"
+            variant="secondary"
+            className={styles.quickAction}
+            onClick={onSend}
+            disabled={!onSend}
+            icon={icon}
+        >
+            {t('send.title')}
+        </Button>
     );
 }
 
@@ -1302,9 +1683,9 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
  * @param {() => void} [props.onSignMessage]
  * @param {() => void} [props.onVerifySignature]
  */
-function SignerHomeBody({ onSignPsbt, onSignMessage, onVerifySignature }) {
+function SignerHomeBody({ onSignPsbt, onSignMessage, onVerifySignature, onOpenSettings, onLockWallet }) {
     return (
-        <div role="region" aria-label="Signer-mode home">
+        <div role="region" aria-label={t('home.signer.region')}>
             <div
                 role="status"
                 aria-live="polite"
@@ -1319,11 +1700,8 @@ function SignerHomeBody({ onSignPsbt, onSignMessage, onVerifySignature }) {
                     lineHeight: 1.4,
                 }}
             >
-                <strong style={{ color: 'var(--xc-text)' }}>Signer mode</strong>
-                <span> This wallet only signs transactions from a paired Watcher
-                wallet. Send / Receive / balances are not available.
-                Switch the wallet's mode in Settings → Wallet Mode if you
-                want full-wallet behaviour back.</span>
+                <strong style={{ color: 'var(--xc-text)' }}>{t('home.signer.title')}</strong>
+                <span> {t('home.signer.body')}</span>
             </div>
             <div
                 style={{
@@ -1337,22 +1715,32 @@ function SignerHomeBody({ onSignPsbt, onSignMessage, onVerifySignature }) {
                     onClick={onSignPsbt}
                     disabled={!onSignPsbt}
                 >
-                    Sign a transaction
+                    {t('home.signer.signTransaction')}
                 </Button>
                 <Button
                     variant="secondary"
                     onClick={onSignMessage}
                     disabled={!onSignMessage}
                 >
-                    Sign a message
+                    {t('home.signer.signMessage')}
                 </Button>
                 <Button
                     variant="ghost"
                     onClick={onVerifySignature}
                     disabled={!onVerifySignature}
                 >
-                    Verify a signature
+                    {t('home.signer.verifySignature')}
                 </Button>
+                {onOpenSettings ? (
+                    <Button variant="ghost" onClick={onOpenSettings} icon={<Icon.GearIcon />}>
+                        {t('home.settings')}
+                    </Button>
+                ) : null}
+                {onLockWallet ? (
+                    <Button variant="ghost" onClick={onLockWallet} icon={<Icon.LockIcon />}>
+                        {t('home.lockWallet')}
+                    </Button>
+                ) : null}
             </div>
         </div>
     );

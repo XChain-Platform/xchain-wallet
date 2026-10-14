@@ -28,7 +28,7 @@
     font-weight: 700;
     line-height: 1;
     cursor: help;
-    transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
+    transition: color var(--xc-transition), border-color var(--xc-transition), background var(--xc-transition);
 }
 
 .glyph {
@@ -40,7 +40,7 @@
     border: 1px solid var(--xc-border);
     border-radius: 50%;
     background: var(--xc-bg-muted);
-    transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
+    transition: color var(--xc-transition), border-color var(--xc-transition), background var(--xc-transition);
 }
 
 .trigger:hover,
@@ -67,19 +67,25 @@
 
 .bubble {
     position: absolute;
-    z-index: 50;
-    min-width: 180px;
-    max-width: 260px;
+    inset-inline-start: 50%;
+    z-index: var(--xc-z-dropdown);
+    box-sizing: border-box;
+    min-width: min(180px, calc(100vw - 2 * var(--xc-space-2)));
+    max-width: min(260px, calc(100vw - 2 * var(--xc-space-2)));
     padding: var(--xc-space-2) var(--xc-space-3);
     background: var(--xc-text);
     color: var(--xc-bg);
+    border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-sm);
     font-size: var(--xc-text-xs);
     font-weight: 400;
     line-height: 1.35;
     text-align: start;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    overflow-y: auto;
     pointer-events: none;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+    box-shadow: var(--xc-shadow-md);
 }
 
 .placementTop {
@@ -88,28 +94,6 @@
 
 .placementBottom {
     top: calc(100% + 6px);
-}
-
-/* Cluster P FOLLOWUP 3 - measurement-driven alignment. The default
- * `alignCenter` matches the v0.210.0 layout (bubble centered on the
- * trigger). When the JS measurement detects a viewport overflow, the
- * component swaps in `alignStart` (bubble left edge anchored to the
- * trigger's left) or `alignEnd` (bubble right edge anchored to the
- * trigger's right) so a tooltip near the popup edge stays readable. */
-.alignCenter {
-    inset-inline-start: 50%;
-    transform: translateX(-50%);
-}
-
-.alignStart {
-    inset-inline-start: 0;
-    transform: none;
-}
-
-.alignEnd {
-    inset-inline-end: 0;
-    inset-inline-start: auto;
-    transform: none;
 }
 
 @media (prefers-contrast: more) {

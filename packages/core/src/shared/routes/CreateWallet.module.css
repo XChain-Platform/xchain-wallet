@@ -1,13 +1,3 @@
-.card {
-    max-width: 560px;
-    margin: var(--xc-space-6) auto 0;
-    padding: var(--xc-space-6);
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-lg);
-    box-shadow: var(--xc-shadow-md);
-}
-
 .headPopup {
     margin-bottom: var(--xc-space-3);
 }
@@ -18,23 +8,10 @@
 }
 
 .logo {
+    /* 96px preserves the brand artwork's intended display width. */
     width: 96px;
     height: auto;
     margin-bottom: var(--xc-space-3);
-}
-
-.titlePopup {
-    font-size: var(--xc-text-lg);
-    font-weight: 700;
-    margin: 0 0 var(--xc-space-1);
-    color: var(--xc-text);
-}
-
-.titleFull {
-    font-size: var(--xc-text-xl);
-    font-weight: 700;
-    margin: 0 0 var(--xc-space-2);
-    color: var(--xc-text);
 }
 
 .subtitlePopup {
@@ -49,14 +26,6 @@
     color: var(--xc-text-muted);
     line-height: 1.5;
     margin: 0;
-}
-
-.copyRow {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--xc-space-2);
-    margin: var(--xc-space-3) 0 0;
 }
 
 .copyHint {
@@ -76,7 +45,13 @@
 }
 
 .confirmRow input[type="checkbox"] {
+    /* 2px optically aligns the native checkbox with its first text line. */
     margin-top: 2px;
+}
+
+.confirmRow > span {
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .actionsPopup {
@@ -94,46 +69,24 @@
 }
 
 .wordCountRow {
+    /* 1px keeps the fieldset boundary as a crisp hairline. */
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-md);
     padding: var(--xc-space-2) var(--xc-space-3);
     margin: var(--xc-space-3) 0 0;
+    min-width: 0;
+    width: 100%;
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
 }
 
-.wordCountLegend {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    padding: 0 var(--xc-space-1);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-}
-
-.wordCountOption {
-    display: flex;
-    align-items: baseline;
-    gap: var(--xc-space-2);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    cursor: pointer;
-    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
-       inheriting it from whichever line box the platform font produces. */
-    min-height: var(--xc-tap-min);
-}
-
-.wordCountOption input[type="radio"] {
-    margin: 0;
-}
-
-.wordCountLabel {
-    font-weight: 500;
-}
-
-.wordCountHint {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
+/* The kit legend is full width, so as a rendered legend it sat in the top
+   border and erased all of it but the two corners. Floated, it is an
+   ordinary first item inside the box and the hairline stays whole. */
+.wordCountRow > legend {
+    float: left;
+    margin-block-end: 0;
 }
 
 .advancedRow {
@@ -155,6 +108,11 @@
     min-height: var(--xc-tap-min);
 }
 
+.advancedToggle > span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
 .quizList {
     list-style: none;
     margin: 0 0 var(--xc-space-3);
@@ -170,18 +128,7 @@
     gap: var(--xc-space-2);
 }
 
-.quizIndex {
-    flex: 0 0 48px;
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    font-variant-numeric: tabular-nums;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    padding-bottom: 12px;
-    text-align: end;
-}
-
-.quizRow > :global(*):not(.quizIndex) {
+.quizRow > :global(*) {
     flex: 1;
 }
 
@@ -189,6 +136,7 @@
     font-size: var(--xc-text-xs);
     color: var(--xc-text);
     background: var(--xc-warning-bg, var(--xc-bg-muted));
+    /* 1px keeps the warning boundary as a crisp hairline. */
     border: 1px solid var(--xc-warning, var(--xc-border));
     border-radius: var(--xc-radius-sm);
     padding: var(--xc-space-2) var(--xc-space-3);
@@ -200,6 +148,7 @@
     font-size: var(--xc-text-sm);
     color: var(--xc-on-danger);
     background: var(--xc-danger);
+    /* 1px keeps the error boundary as a crisp hairline. */
     border: 1px solid var(--xc-danger);
     padding: var(--xc-space-2) var(--xc-space-3);
     border-radius: var(--xc-radius-md);
@@ -207,4 +156,18 @@
     text-align: center;
     font-weight: 500;
     line-height: 1.4;
+}
+
+/* 520px targets short landscape viewports without a matching layout token. */
+@media (max-height: 520px) {
+    .headPopup,
+    .headFull {
+        margin-bottom: var(--xc-space-2);
+    }
+
+    .logo {
+        /* 64px preserves the compact artwork size in short viewports. */
+        width: 64px;
+        margin-bottom: var(--xc-space-1);
+    }
 }

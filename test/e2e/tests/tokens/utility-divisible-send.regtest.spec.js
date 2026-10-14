@@ -302,7 +302,8 @@ test.describe(`utility token divisibility on ${REGTEST_CHAIN_LABEL}`, () => {
             // The two fields only this template and Custom expose.
             await main.getByLabel('Divisible (8 decimal places)').check();
             await main.getByLabel('Max mint per transaction (optional)').fill(String(MAX_MINT));
-            await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+            await main.getByRole('button', { name: 'Review token', exact: true }).click();
+            await main.getByRole('button', { name: 'Continue to confirmation', exact: true }).click();
 
             await expectConfirmScreen(page);
             const action = await waitForIndexedAction(await approveAndGetTxid(page));

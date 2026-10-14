@@ -21,10 +21,29 @@
 // detaches; leaving it attached for the rest of the session is
 // cheaper than re-arming on every Developer Mode visit.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { copyText } from '../clipboard.js';
 import { logConsole } from '../utils/logConsole.js';
+import { redactDiagnosticText } from '../utils/diagnosticText.js';
+import { useHapticFeedback } from '../hooks/useHaptic.js';
+import { formatDecimalAmount } from '../utils/amountFormat.js';
 
 const ALL_LEVELS = /** @type {const} */ (['log', 'info', 'warn', 'error']);
+const MAX_VISIBLE_ENTRIES = 200;
+const SAFE_ENTRY_CACHE = new WeakMap();
+
+function safeEntry(entry) {
+    if (!entry || typeof entry !== 'object') return entry;
+    const cached = SAFE_ENTRY_CACHE.get(entry);
+    if (cached) return cached;
+    const safe = {
+        ...entry,
+        source: redactDiagnosticText(entry.source),
+        message: redactDiagnosticText(entry.message),
+    };
+    SAFE_ENTRY_CACHE.set(entry, safe);
+    return safe;
+}
 
 const PANEL = {
     display: 'flex',
@@ -67,6 +86,8 @@ const FILTER_CHIP = {
     background: 'transparent',
     color: 'var(--xc-text)',
     borderRadius: 'var(--xc-radius-sm)',
+    minWidth: 'var(--xc-tap-min)',
+    minHeight: 'var(--xc-tap-min)',
     padding: '2px 8px',
     fontSize: 'var(--xc-text-xs)',
     cursor: 'pointer',
@@ -84,9 +105,23 @@ const ACTION_BTN = {
     border: '1px solid var(--xc-border)',
     color: 'var(--xc-text)',
     borderRadius: 'var(--xc-radius-sm)',
+    minWidth: 'var(--xc-tap-min)',
+    minHeight: 'var(--xc-tap-min)',
     padding: '2px 8px',
     fontSize: 'var(--xc-text-xs)',
     cursor: 'pointer',
+};
+
+const SR_ONLY = {
+    position: 'absolute',
+    width: 1,
+    height: 1,
+    padding: 0,
+    margin: -1,
+    overflow: 'hidden',
+    clip: 'rect(0, 0, 0, 0)',
+    whiteSpace: 'nowrap',
+    border: 0,
 };
 
 function formatTime(ms) {
@@ -98,25 +133,35 @@ function formatTime(ms) {
 }
 
 export function LogConsole() {
-    const [allEntries, setAllEntries] = useState(() => {
-        if (!logConsole.isAttached()) logConsole.attach();
-        return logConsole.entries();
-    });
+    const [allEntries, setAllEntries] = useState(() => logConsole.entries());
     const [enabledLevels, setEnabledLevels] = useState(() => new Set(ALL_LEVELS));
     const [search, setSearch] = useState('');
-    const [copied, setCopied] = useState(false);
+    const [copyState, setCopyState] = useState(/** @type {'idle' | 'copied' | 'failed'} */ ('idle'));
+    const copyAttemptRef = useRef(0);
+    const copyResetTimerRef = useRef(null);
+    const haptic = useHapticFeedback();
 
     useEffect(() => {
         if (!logConsole.isAttached()) logConsole.attach();
         const unsubscribe = logConsole.subscribe(() => {
             setAllEntries(logConsole.entries());
         });
-        return unsubscribe;
+        setAllEntries(logConsole.entries());
+        return () => {
+            unsubscribe();
+            copyAttemptRef.current += 1;
+            if (copyResetTimerRef.current !== null) {
+                clearTimeout(copyResetTimerRef.current);
+                copyResetTimerRef.current = null;
+            }
+        };
     }, []);
+
+    const safeEntries = useMemo(() => allEntries.map(safeEntry), [allEntries]);
 
     const filtered = useMemo(() => {
         const q = search.trim().toLowerCase();
-        return allEntries.filter((e) => {
+        return safeEntries.filter((e) => {
             if (!enabledLevels.has(e.level)) return false;
             if (!q) return true;
             return (
@@ -124,7 +169,8 @@ export function LogConsole() {
                 || e.source.toLowerCase().includes(q)
             );
         });
-    }, [allEntries, enabledLevels, search]);
+    }, [enabledLevels, safeEntries, search]);
+    const visible = filtered.slice(-MAX_VISIBLE_ENTRIES);
 
     const toggleLevel = (level) => {
         setEnabledLevels((prev) => {
@@ -140,17 +186,33 @@ export function LogConsole() {
         setAllEntries([]);
     };
 
-    const onCopy = async () => {
-        const text = filtered.map(
+    const onCopy = () => {
+        const attempt = copyAttemptRef.current + 1;
+        copyAttemptRef.current = attempt;
+        if (copyResetTimerRef.current !== null) {
+            clearTimeout(copyResetTimerRef.current);
+            copyResetTimerRef.current = null;
+        }
+        const text = safeEntries.map(
             (e) => `${formatTime(e.timestamp)} [${e.level}] ${e.source}: ${e.message}`,
         ).join('\n');
-        try {
-            await navigator.clipboard?.writeText(text);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
-        } catch {
-            /* swallow; best effort */
-        }
+        void (async () => {
+            let ok = false;
+            try {
+                const result = await copyText(text);
+                ok = Boolean(result?.ok);
+            } catch {
+                ok = false;
+            }
+            if (copyAttemptRef.current !== attempt) return;
+            setCopyState(ok ? 'copied' : 'failed');
+            if (ok) haptic.tap();
+            else haptic.error();
+            copyResetTimerRef.current = setTimeout(() => {
+                if (copyAttemptRef.current === attempt) setCopyState('idle');
+                copyResetTimerRef.current = null;
+            }, 1500);
+        })();
     };
 
     return (
@@ -172,6 +234,10 @@ export function LogConsole() {
                 })}
                 <input
                     type="search"
+                    enterKeyHint="search"
+                    autoCapitalize="off"
+                    autoCorrect="off"
+                    spellCheck={false}
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="Search messages…"
@@ -183,24 +249,40 @@ export function LogConsole() {
                         color: 'var(--xc-text)',
                         border: '1px solid var(--xc-border)',
                         borderRadius: 'var(--xc-radius-sm)',
+                        minHeight: 'var(--xc-tap-min)',
                         padding: '2px 6px',
                         fontSize: 'var(--xc-text-xs)',
                     }}
                 />
-                <button type="button" onClick={onCopy} style={ACTION_BTN} aria-label="Copy filtered log entries">
-                    {copied ? 'Copied' : 'Copy'}
+                <button
+                    type="button"
+                    onClick={onCopy}
+                    style={ACTION_BTN}
+                    aria-label="Copy all log entries"
+                    title="Copy filtered log entries plus entries hidden by the active filters"
+                >
+                    {copyState === 'copied'
+                        ? 'Copied'
+                        : copyState === 'failed'
+                            ? 'Copy failed: clipboard unavailable'
+                            : 'Copy all'}
                 </button>
                 <button type="button" onClick={onClear} style={ACTION_BTN} aria-label="Clear log buffer">
                     Clear
                 </button>
             </div>
             <div style={LIST} role="log" aria-label="Recent console entries" aria-live="polite">
+                {copyState !== 'idle' ? (
+                    <span style={SR_ONLY}>
+                        {copyState === 'copied' ? 'Copied' : 'Copy failed: clipboard unavailable'}
+                    </span>
+                ) : null}
                 {filtered.length === 0 ? (
                     <div style={{ color: 'var(--xc-text-muted)', padding: 'var(--xc-space-2)' }}>
                         No log entries yet. Trigger an action and recent console output will appear here.
                     </div>
                 ) : (
-                    filtered.map((e) => (
+                    visible.map((e) => (
                         <div key={e.id} style={ROW}>
                             <span style={{ color: 'var(--xc-text-muted)' }}>{formatTime(e.timestamp)}</span>
                             <span style={{ color: LEVEL_COLORS[e.level] || 'var(--xc-text)', fontWeight: 600 }}>
@@ -215,7 +297,8 @@ export function LogConsole() {
                 )}
             </div>
             <div style={{ color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-xs)' }}>
-                Showing {filtered.length} of {allEntries.length} entries.
+                Showing {formatDecimalAmount(visible.length)} of {formatDecimalAmount(filtered.length)} matching entries{' '}
+                ({formatDecimalAmount(allEntries.length)} total).
             </div>
         </div>
     );

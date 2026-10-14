@@ -16,8 +16,8 @@
 // outside your company. Bundling that npm package into a distributed
 // SPA is therefore both a T-RSL violation and incompatible with the
 // wallet's own AGPL. So we do NOT depend on the npm package. Instead
-// we load Trezor Connect at runtime from Trezor's hosted global build
-// (`https://connect.trezor.io/9/trezor-connect.js`), which exposes
+// we load Trezor Connect at runtime from Trezor's configured hosted build
+// (https://connect.trezor.io/9/trezor-connect.js), which exposes
 // `window.TrezorConnect`. The distributed bundle contains zero
 // `@trezor/*` code; the browser fetches it from Trezor at pair time,
 // i.e. a remote service call, not redistribution. (Requires the web
@@ -35,23 +35,24 @@
 // hostBridge.js so Node smoke scripts resolve the module without the
 // pnpm workspace symlink, while Vite still bundles it cleanly.
 import { makeTrezorFactory } from '../../../core/src/signerFactories/index.js';
+import {
+    TREZOR_CONNECT_SCRIPT_URL,
+    TREZOR_MANIFEST,
+} from '../../../core/src/branding/branding.js';
 
 /**
  * Hosted Trezor Connect global build. Pinned to the 9.x line to match
  * the API surface `TrezorSigner` expects (init/getFeatures/getAddress/
  * getPublicKey/signTransaction/signMessage/dispose).
  */
-const TREZOR_CONNECT_SCRIPT_SRC = 'https://connect.trezor.io/9/trezor-connect.js';
+const TREZOR_CONNECT_SCRIPT_SRC = TREZOR_CONNECT_SCRIPT_URL;
 
 /**
  * Manifest handed to Trezor Connect at init. Required: Trezor gates
  * the popup on a recognized manifest. Both fields must be accurate;
  * Trezor Connect may block unknown-origin manifests.
  */
-const MANIFEST = {
-    email: 'support@xchain.io',
-    appUrl: 'https://xchain.io/wallet',
-};
+const MANIFEST = TREZOR_MANIFEST;
 
 /** @type {Promise<{ default: any }> | null} */
 let scriptLoadPromise = null;
@@ -77,31 +78,43 @@ function loadHostedTrezorConnect() {
         );
     }
     if (!scriptLoadPromise) {
-        scriptLoadPromise = new Promise((resolve, reject) => {
+        const pending = new Promise((resolve, reject) => {
             const existing = /** @type {HTMLScriptElement | null} */ (
                 document.querySelector(`script[src="${TREZOR_CONNECT_SCRIPT_SRC}"]`)
             );
             const el = existing ?? document.createElement('script');
-            el.addEventListener('load', () => {
+            const cleanup = () => {
+                el.removeEventListener('load', onLoad);
+                el.removeEventListener('error', onError);
+            };
+            const fail = (error) => {
+                cleanup();
+                el.remove();
+                if (scriptLoadPromise === pending) scriptLoadPromise = null;
+                reject(error);
+            };
+            const onLoad = () => {
+                cleanup();
                 if (window.TrezorConnect) {
                     resolve({ default: window.TrezorConnect });
                 } else {
-                    reject(new Error(
+                    fail(new Error(
                         'trezorFactory: Trezor Connect script loaded but window.TrezorConnect is undefined',
                     ));
                 }
-            }, { once: true });
-            el.addEventListener('error', () => {
-                // Let a later attempt retry the load rather than caching the failure.
-                scriptLoadPromise = null;
-                reject(new Error(`trezorFactory: failed to load Trezor Connect from ${TREZOR_CONNECT_SCRIPT_SRC}`));
-            }, { once: true });
+            };
+            const onError = () => fail(new Error(
+                `trezorFactory: failed to load Trezor Connect from ${TREZOR_CONNECT_SCRIPT_SRC}`,
+            ));
+            el.addEventListener('load', onLoad, { once: true });
+            el.addEventListener('error', onError, { once: true });
             if (!existing) {
                 el.src = TREZOR_CONNECT_SCRIPT_SRC;
                 el.async = true;
                 document.head.appendChild(el);
             }
         });
+        scriptLoadPromise = pending;
     }
     return scriptLoadPromise;
 }
@@ -116,7 +129,7 @@ function loadHostedTrezorConnect() {
  */
 export async function getTrezorConnect(loader = loadHostedTrezorConnect) {
     if (!connectPromise) {
-        connectPromise = (async () => {
+        const pending = (async () => {
             const mod = await loader();
             const TrezorConnect = mod?.default ?? mod;
             if (!TrezorConnect || typeof TrezorConnect.init !== 'function') {
@@ -128,6 +141,11 @@ export async function getTrezorConnect(loader = loadHostedTrezorConnect) {
             });
             return TrezorConnect;
         })();
+        const retryable = pending.catch((err) => {
+            if (connectPromise === retryable) connectPromise = null;
+            throw err;
+        });
+        connectPromise = retryable;
     }
     return connectPromise;
 }

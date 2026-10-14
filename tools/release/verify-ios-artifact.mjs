@@ -121,13 +121,13 @@ export function readExpectations(root = REPO_ROOT) {
     const ios = 'packages/mobile/ios/App';
 
     const pbxproj = read(`${ios}/App.xcodeproj/project.pbxproj`);
-    // The test target's id is a suffix of the app's, so filtering on it rather
+    // The test targets' ids (uitests, tests) extend the app's, so filtering on them rather
     // than taking the first match keeps a reordered pbxproj from silently
     // pinning the artifact to `io.xchain.wallet.ios.uitests`.
     const bundleIds = [...new Set(
         [...pbxproj.matchAll(/PRODUCT_BUNDLE_IDENTIFIER = ([^;]+);/g)]
             .map((m) => m[1].trim())
-            .filter((id) => !id.endsWith('.uitests')),
+            .filter((id) => !id.endsWith('.uitests') && !id.endsWith('.tests')),
     )];
     if (bundleIds.length !== 1) {
         throw new Error(

@@ -1,0 +1,197 @@
+// Copyright © 2025–2026 Dankest, LLC
+// Based on XChain Platform by Dankest, LLC – https://dankest.llc
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of XChain Platform. Licensed under the GNU Affero
+// General Public License v3.0 or later; see LICENSE.md. A commercial
+// license (without AGPL source-disclosure terms) is available -
+// contact legal@dankest.llc.
+
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import {
+    Settings,
+    SETTINGS_SEARCH_ROWS,
+    findMatchingSearchRow,
+} from '../../../packages/core/src/shared/routes/Settings.jsx';
+import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
+import { en } from '../../../packages/core/src/i18n/locales/en/index.js';
+import { ScrollRestoration } from '../../../packages/core/src/ui/Screen.jsx';
+import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
+
+function mount(props = {}, loadedSettings = null) {
+    const messaging = {
+        getSettings: () => loadedSettings ? Promise.resolve(loadedSettings) : new Promise(() => {}),
+        updateSettings: vi.fn().mockImplementation(async () => loadedSettings),
+        listConnectedSites: vi.fn().mockResolvedValue([]),
+    };
+    return render(
+        <MessagingContext.Provider value={{ messaging, shell: 'web' }}>
+            <Settings
+                onBack={() => {}}
+                activeWallet={{ id: 'wallet-1', name: 'Primary Vault' }}
+                {...props}
+            />
+        </MessagingContext.Provider>,
+    );
+}
+
+function searchFor(value) {
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search settings' }), {
+        target: { value },
+    });
+}
+
+afterEach(() => {
+    cleanup();
+    delete window.xchainWalletUpdater;
+});
+
+describe('Settings search', () => {
+    it('uses action-oriented, one-sentence descriptions for inline sections', () => {
+        mount();
+
+        expect(screen.getByText('Choose the theme and motion preference.')).toBeTruthy();
+        expect(screen.getByText('Choose the interface language and fiat currency.')).toBeTruthy();
+        expect(screen.getByText('Choose Mainnet or Testnet to control which chains the wallet queries and displays; changing the network reloads the page.')).toBeTruthy();
+        expect(screen.getByText('Choose which wallet events trigger notifications, sounds, or price alerts.')).toBeTruthy();
+        expect(screen.getByText('Export or import the address book.')).toBeTruthy();
+    });
+
+    it('uses sentence case for Settings references in English copy', () => {
+        expect(en['send.signerMode']).toContain('Settings, Wallet mode');
+    });
+
+    it.each([
+        ['password', 'Backup'],
+        ['lock', 'Safety'],
+        ['backup', 'Backup'],
+        ['network', 'Network'],
+        ['currency', 'Language & region'],
+        ['language', 'Language & region'],
+        ['theme', 'Appearance'],
+        ['fee', 'Fees'],
+        ['fees', 'Fees'],
+        ['network fee', 'Fees'],
+        ['biometric unlock', 'Safety'],
+        ['lock wallet', 'Keyboard'],
+        ['wallet mode', 'Wallet mode'],
+        ['network endpoint', 'Network & endpoints'],
+        ['connected site', 'Connected sites'],
+        ['donation', 'Automatic donation system'],
+        ['saved chain filters', 'Display'],
+        ['quiet hours', 'Notifications'],
+        ['localhost auto sign', 'Developer mode'],
+        ['Primary Vault', 'This wallet'],
+    ])('finds "%s" in %s', (query, sectionTitle) => {
+        mount();
+        searchFor(query);
+
+        expect(screen.getByText(sectionTitle)).toBeTruthy();
+        expect(screen.queryByText('About')).toBeNull();
+    });
+
+    it('finds every cataloged settings row by its title', () => {
+        for (const [sectionId, rows] of Object.entries(SETTINGS_SEARCH_ROWS)) {
+            for (const { title } of rows) {
+                expect(findMatchingSearchRow(sectionId, title), title).toMatchObject({ title });
+            }
+        }
+    });
+
+    it.each([
+        ['wallet', 'This wallet'],
+        ['wallet mode', 'Wallet mode'],
+        ['network endpoint', 'Network & endpoints'],
+        ['connected site', 'Connected sites'],
+        ['donation', 'Automatic donation system'],
+        ['localhost auto sign', 'Developer mode'],
+    ])('exposes the %s drilldown as %s', (query, sectionTitle) => {
+        mount();
+        searchFor(query);
+
+        expect(screen.getByRole('button', {
+            name: new RegExp(`^${sectionTitle}(?:\\s|$)`),
+        })).toBeTruthy();
+    });
+
+    it('opens a matching drilldown section', () => {
+        mount();
+        searchFor('password');
+
+        fireEvent.click(screen.getByRole('button', { name: /Backup/ }));
+
+        expect(screen.getByRole('heading', { name: 'Backup' })).toBeTruthy();
+        expect(screen.getByText('Export encrypted backup')).toBeTruthy();
+    });
+
+    it('opens the matching subpage and highlights its row', async () => {
+        const settings = createDefaultSettings();
+        settings.fees['bitcoin-mainnet'] = { strategy: 'normal', customRate: null, rbfByDefault: false };
+        mount({}, settings);
+        searchFor('network fee');
+
+        fireEvent.click(screen.getByRole('button', { name: /Fees/ }));
+
+        expect(await screen.findByRole('heading', { name: 'Fees' })).toBeTruthy();
+        const match = await screen.findByText('Fee strategy', {
+            selector: '[data-settings-search-match="true"]',
+        });
+        expect(match.closest('[data-settings-search-highlight="true"]')).toBeTruthy();
+    });
+
+    it('describes only the controls available in Appearance', () => {
+        mount();
+
+        expect(screen.getByText('Choose the theme and motion preference.')).toBeTruthy();
+        expect(screen.queryByText(/accent color/i)).toBeNull();
+    });
+
+    it('starts drilldowns at the top and restores the settings list position', () => {
+        const messaging = {
+            getSettings: () => new Promise(() => {}),
+            listConnectedSites: vi.fn().mockResolvedValue([]),
+        };
+        render(
+            <MessagingContext.Provider value={{ messaging, shell: 'web' }}>
+                <ScrollRestoration routeKey="settings">
+                    <Settings onBack={() => {}} />
+                </ScrollRestoration>
+            </MessagingContext.Provider>,
+        );
+        const main = document.getElementById('xc-main');
+        main.scrollTop = 418;
+
+        fireEvent.click(screen.getByRole('button', { name: /Network & endpoints/ }));
+
+        expect(main.scrollTop).toBe(0);
+        main.scrollTop = 73;
+        fireEvent.click(screen.getByRole('button', { name: 'Back to settings' }));
+        expect(main.scrollTop).toBe(418);
+
+        fireEvent.click(screen.getByRole('button', { name: /Network & endpoints/ }));
+        expect(main.scrollTop).toBe(0);
+    });
+
+    it('shows a plain empty state for no match and clearing restores the list', () => {
+        mount();
+        searchFor('no setting has these words');
+
+        expect(screen.getByRole('status')).toHaveTextContent('No settings match "no setting has these words".');
+        expect(screen.queryByText('Backup')).toBeNull();
+
+        searchFor('');
+
+        expect(screen.queryByRole('status')).toBeNull();
+        expect(screen.getByText('Backup')).toBeTruthy();
+        expect(screen.getByText('About')).toBeTruthy();
+    });
+
+    it('shows the empty state when the only text match belongs to an unavailable row', () => {
+        mount({ activeWallet: null, onOpenAccountPicker: undefined });
+        searchFor('signer pairing');
+
+        expect(screen.getByRole('status')).toHaveTextContent('No settings match "signer pairing".');
+    });
+});

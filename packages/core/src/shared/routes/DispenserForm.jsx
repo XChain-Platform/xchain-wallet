@@ -12,11 +12,20 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
     PageHeader,
+    FormPage,
     Button,
     Input,
     ChainBadge,
+    ChainPicker,
     AddressText,
- NetworkField,  Icon, StatusMessage, FeeSelector, AddressField,} from '@xchain-wallet/core/ui';
+    Icon,
+    StatusMessage,
+    FeeSelector,
+    AddressField,
+    FormErrorSummary,
+    Select,
+    RadioGroup,
+} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -37,6 +46,8 @@ import {
     compareDecimalStrings,
     decimalQuotientFloor,
     formatWithThousands,
+    normalizeLocalizedDecimal,
+    tokenAmountPrecisionError,
 } from '../utils/amountFormat.js';
 import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -55,6 +66,9 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { isValidFiatAmount } from '../utils/fiatAmountFormat.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
+import { useFeeFiat } from '../hooks/useFeeFiat.js';
+import { useFormLeaveGuard } from '../hooks/useFormLeaveGuard.js';
+import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import {
@@ -68,12 +82,15 @@ import {
     forgetUnusedDispenserAddress,
 } from '../utils/unusedDispenserAddress.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { DraftDiscardButton } from '../components/DraftDiscardButton.jsx';
 import { useDispenserPriceFloor, PRICE_BELOW_FLOOR_ERROR } from '../hooks/useDispenserPriceFloor.js';
 import { detectAddressCoin, isValidAddressForChain } from '../utils/addressValidation.js';
 import {
     dispenserAddressVerdict,
     readDispenserAddressStanding,
 } from '../../flows/dispenserAddressStanding.js';
+import { listInBothSlots, listInBothSlotsMessage } from '../../flows/accessListSlots.js';
+import { exceedsBalance } from '../utils/dividendPerUnit.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -82,6 +99,11 @@ const PROTOCOL_COIN_TICKER = {
     litecoin: 'LTC',
     dogecoin: 'DOGE',
 };
+
+function isPositiveDecimal(value) {
+    const text = String(value || '').trim();
+    return /^\d+(?:\.\d+)?$/.test(text) && compareDecimalStrings(text, '0') === 1;
+}
 
 // §40.7.1's Mode 1 FIAT dispenser uses the validator oracle (no
 // ORACLE_ADDRESS); Mode 2 uses a user oracle (ORACLE_ADDRESS). For
@@ -123,13 +145,13 @@ function outsideAddressError(address, descriptor) {
     if (!address || !descriptor?.coin || !descriptor?.networkKind) return null;
     if (isValidAddressForChain(address, descriptor.coin, descriptor.networkKind)) return null;
     const chainName = COIN_NAME[descriptor.coin] || descriptor.coin;
-    // Name the coin it does look like, which beats a bare "invalid".
+    // Name the coin it does look like, which beats a bare "invalid". The
+    // network kind stays out of the copy; Settings owns that choice.
     const detected = detectAddressCoin(address);
     if (detected && detected !== descriptor.coin) {
         return `This looks like a ${COIN_NAME[detected] || detected} address, not a ${chainName} address.`;
     }
-    const where = descriptor.networkKind === 'mainnet' ? chainName : `${chainName} ${descriptor.networkKind}`;
-    return `This is not a valid ${where} address. Check it for typos.`;
+    return `This is not a valid ${chainName} address. Check it for typos.`;
 }
 
 /**
@@ -172,7 +194,6 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     const signerReady = useSignerReady(walletId);
     const { settings } = useSettings();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -203,6 +224,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     const [derivingGetAddress, setDerivingGetAddress] = useState(false);
 
     const [ticker, setTicker] = useState((initialTick || reopen?.tick || '').toUpperCase());
+    const giveTokenInfo = useTokenInfo({ chainId, tick: ticker, skip: !ticker.trim() });
     // PC-26: dispenses carry no gated-key handoff; warn when the
     // dispensed token has gated content.
     const gatedGiveNotice = useGatedTickNotice({ messaging, chainId, tick: ticker });
@@ -220,6 +242,11 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     // lane; EXPIRATION + allow/block lists complete the field set.
     const [payWith, setPayWith] = useState(/** @type {'coin' | 'token'} */ (reopen?.payWith === 'token' ? 'token' : 'coin'));
     const [getTick, setGetTick] = useState(reopen?.getTick || '');
+    const paymentTokenInfo = useTokenInfo({
+        chainId,
+        tick: getTick,
+        skip: payWith !== 'token' || !getTick.trim(),
+    });
     const [getTokenAmount, setGetTokenAmount] = useState(reopen?.getTokenAmount || '');
     // Every form starts on the default window, a reopen included: the indexer fills a concrete
     // EXPIRATION into every dispenser, so a reopened one's expiration is usually the old default
@@ -295,13 +322,23 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    const [validationAttempt, setValidationAttempt] = useState(0);
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const reviewInFlightRef = useRef(false);
+    const submitInFlightRef = useRef(false);
+    const routeIdentityRef = useRef('');
+    routeIdentityRef.current = `${walletId}\u0000${activeAccountId || ''}\u0000${chainId || ''}`;
 
     useEffect(() => {
         setFormError(null);
-    }, [addressMode, existingAddressId]);
+    }, [
+        chainId, fromAddressId, ticker, giveAmount, escrow, payWith, getTick,
+        getTokenAmount, triggerPrice, oracleAddress, fiatCode, fiatAmount,
+        expMode, expInput, allowListIdx, blockListIdx, addressMode,
+        existingAddressId, outsideAddress, feePick, payFeeInNativeCoin,
+    ]);
 
     // Cluster P FOLLOWUP 5: form-draft persistence. Persists every
     // user-visible composition field (chain / source / give terms /
@@ -310,21 +347,25 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         ? Number(settings.privacy.formDraftTtlMs)
         : undefined;
     const draft = useFormDraft({ view: 'dispenser', walletId, ttlMs: formDraftTtlMs });
-    const [draftPending, setDraftPending] = useState(() => draft.hasDraft());
+    // A stored draft waits for an explicit Restore. A fresh form starts
+    // saving immediately so an auto-lock unmount cannot erase typed values.
+    const [draftPending, setDraftPending] = useState(() => !draft.hasDraft());
     useEffect(() => {
         if (stage !== 'form' || !draftPending) return;
         draft.save({
             chainId, fromAddressId, ticker, giveAmount, escrow,
             triggerPrice, oracleAddress, fiatCode, fiatAmount,
-            showAdvanced, payFeeInNativeCoin, addressMode, existingAddressId,
-            outsideAddress,
+            showAdvanced, payWith, getTick, getTokenAmount,
+            expMode, expInput, allowListIdx, blockListIdx,
+            feePick, payFeeInNativeCoin, addressMode, existingAddressId, outsideAddress,
         });
     }, [
         stage, draftPending, draft,
         chainId, fromAddressId, ticker, giveAmount, escrow,
         triggerPrice, oracleAddress, fiatCode, fiatAmount,
-        showAdvanced, payFeeInNativeCoin, addressMode, existingAddressId,
-        outsideAddress,
+        showAdvanced, payWith, getTick, getTokenAmount,
+        expMode, expInput, allowListIdx, blockListIdx,
+        feePick, payFeeInNativeCoin, addressMode, existingAddressId, outsideAddress,
     ]);
     const restoreDraft = useCallback(() => {
         const v = draft.load();
@@ -339,6 +380,14 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         if (typeof v.fiatCode === 'string') setFiatCode(v.fiatCode);
         if (typeof v.fiatAmount === 'string') setFiatAmount(v.fiatAmount);
         if (typeof v.showAdvanced === 'boolean') setShowAdvanced(v.showAdvanced);
+        if (v.payWith === 'coin' || v.payWith === 'token') setPayWith(v.payWith);
+        if (typeof v.getTick === 'string') setGetTick(v.getTick);
+        if (typeof v.getTokenAmount === 'string') setGetTokenAmount(v.getTokenAmount);
+        if (v.expMode === 'default' || v.expMode === 'custom') setExpMode(v.expMode);
+        if (typeof v.expInput === 'string') setExpInput(v.expInput);
+        if (typeof v.allowListIdx === 'string') setAllowListIdx(v.allowListIdx);
+        if (typeof v.blockListIdx === 'string') setBlockListIdx(v.blockListIdx);
+        if (v.feePick && ['low', 'normal', 'fast', 'custom'].includes(v.feePick.mode)) setFeePick(v.feePick);
         if (typeof v.payFeeInNativeCoin === 'boolean') setPayFeeInNativeCoin(v.payFeeInNativeCoin);
         if (v.addressMode === 'new' || v.addressMode === 'current' || v.addressMode === 'existing'
             || v.addressMode === 'other') {
@@ -350,8 +399,28 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     }, [draft]);
     const dismissDraft = useCallback(() => {
         draft.clear();
-        setDraftPending(false);
+        setDraftPending(true);
     }, [draft]);
+    const hasRealInput = useMemo(() => (
+        [
+            ticker, giveAmount, escrow, getTick, getTokenAmount, triggerPrice,
+            oracleAddress, fiatCode, fiatAmount, expInput, allowListIdx,
+            blockListIdx, outsideAddress, password,
+        ].some((value) => String(value || '').trim().length > 0)
+        || payWith !== 'coin'
+        || expMode !== 'default'
+        || addressMode !== 'new'
+    ), [
+        ticker, giveAmount, escrow, getTick, getTokenAmount, triggerPrice,
+        oracleAddress, fiatCode, fiatAmount, expInput, allowListIdx,
+        blockListIdx, outsideAddress, password, payWith, expMode, addressMode,
+    ]);
+    const leaveGuard = useFormLeaveGuard({
+        dirty: stage !== 'done' && hasRealInput,
+        submitting: stage === 'submitting',
+        signedUnbroadcast: stage === 'done' && result?.queued === true && result?.unsaved === true,
+        onLeave: onBack,
+    });
 
     // The active map and the settings read are best-effort: a host without
     // `getActiveAddresses` / `getSettings`, or one whose call fails, still
@@ -470,6 +539,13 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
+    const { formatNativeFee, formatProtocolFee } = useFeeFiat({
+        chainId: descriptor?.id,
+        chainCoin: descriptor?.coin,
+        nativeTicker: coinTicker,
+        settings,
+    });
+    const feeFiat = feeEstimate ? formatNativeFee(feeEstimate.coinAmount) : null;
     const priceNotes = useDispenserPriceFloor({
         coin: descriptor?.coin, coinTicker, payWith, triggerPrice, giveAmount, fiatCode, fiatAmount, oracleAddress,
         allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
@@ -655,6 +731,12 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         const tick = ticker.trim().toUpperCase() || 'TOKEN';
         const per = giveAmount.trim() || '?';
         const esc = escrow.trim() || '?';
+        if (payWith === 'token') {
+            const paymentTick = getTick.trim().toUpperCase() || 'TOKEN';
+            const paymentAmount = getTokenAmount.trim() || '?';
+            const fillsNote = fillsEstimate !== null ? ` The dispenser holds about ${fillsEstimate} fills.` : '';
+            return `You will lock ${esc} ${tick}. Each time someone sends ${paymentAmount} ${paymentTick}, they will receive ${per} ${tick}.${fillsNote}`;
+        }
         if (oracleAddress.trim() && fiatCode) {
             // The oracle's usage fee, if it charges one, is a real payment leaving this
             // transaction, so say so here rather than letting it appear only as
@@ -668,7 +750,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         const coin = coinTicker || 'coin';
         const fillsNote = fillsEstimate !== null ? ` The dispenser holds about ${fillsEstimate} fills.` : '';
         return `You will lock ${esc} ${tick}. Each time someone sends ${trig} ${coin}, they will receive ${per} ${tick}.${fillsNote}`;
-    }, [ticker, giveAmount, escrow, triggerPrice, oracleAddress, fiatCode, fiatAmount, coinTicker, fillsEstimate]);
+    }, [ticker, giveAmount, escrow, payWith, getTick, getTokenAmount, triggerPrice, oracleAddress, fiatCode, fiatAmount, coinTicker, fillsEstimate]);
 
     const actionParams = useMemo(() => {
         /** @type {Record<string, string>} */
@@ -752,7 +834,8 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
     async function handleReview(event) {
         event.preventDefault();
-        if (derivingGetAddress) return;
+        setValidationAttempt((attempt) => attempt + 1);
+        if (reviewInFlightRef.current || derivingGetAddress || actionConfirm.composing) return;
         if (!chainId || !fromAddress) {
             setFormError('Pick a source address first.');
             return;
@@ -767,17 +850,42 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             return;
         }
         const ga = giveAmount.trim();
-        if (!ga || Number(ga) <= 0) {
+        if (!isPositiveDecimal(ga)) {
             setFormError('Per-fill give amount must be a positive number.');
             return;
         }
+        const givePrecisionError = tokenAmountPrecisionError(ga, {
+            divisibility: giveTokenInfo?.divisibility,
+            tick: ticker,
+            noun: 'Per-fill give amount',
+        });
+        if (givePrecisionError) {
+            setFormError(givePrecisionError);
+            return;
+        }
         const esc = escrow.trim();
-        if (!esc || Number(esc) <= 0) {
+        if (!isPositiveDecimal(esc)) {
             setFormError('Escrow amount must be a positive number.');
+            return;
+        }
+        const escrowPrecisionError = tokenAmountPrecisionError(esc, {
+            divisibility: giveTokenInfo?.divisibility,
+            tick: ticker,
+            noun: 'Escrow amount',
+        });
+        if (escrowPrecisionError) {
+            setFormError(escrowPrecisionError);
             return;
         }
         if (compareDecimalStrings(esc, ga) === -1) {
             setFormError('Escrow is smaller than a single fill; the dispenser would never dispense.');
+            return;
+        }
+        if (exceedsBalance(esc, sourceTickBalance)) {
+            setFormError(
+                `This address holds only ${formatWithThousands(sourceTickBalance)} ${ticker.trim().toUpperCase()}. `
+                + 'Enter an escrow amount at or below that balance.',
+            );
             return;
         }
         const oracle = oracleAddress.trim();
@@ -785,12 +893,61 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         const trig = triggerPrice.trim();
         if (payWith === 'token') {
             if (!getTick.trim()) { setFormError('Enter the token buyers pay with.'); return; }
-            if (!/^\d+(\.\d+)?$/.test(getTokenAmount.trim()) || Number(getTokenAmount.trim()) <= 0) {
+            const paymentTickerError = tickerReferenceError(getTick, { noun: 'Payment token' });
+            if (paymentTickerError) { setFormError(paymentTickerError); return; }
+            if (!isPositiveDecimal(getTokenAmount)) {
                 setFormError('Enter a positive token amount buyers pay per fill.'); return;
             }
-        } else if (!oracle && !fa && !trig) {
-            setFormError('Set a trigger price, or enable fiat / oracle pricing under Advanced.');
-            return;
+            const paymentPrecisionError = tokenAmountPrecisionError(getTokenAmount, {
+                divisibility: paymentTokenInfo?.divisibility,
+                tick: getTick,
+                noun: 'Payment amount',
+            });
+            if (paymentPrecisionError) { setFormError(paymentPrecisionError); return; }
+        } else {
+            if (!oracle && !fa && !trig) {
+                setFormError('Set a trigger price, or enable fiat / oracle pricing under Advanced.');
+                return;
+            }
+            if (oracle) {
+                const oracleFormatError = outsideAddressError(oracle, descriptor);
+                if (oracleFormatError) { setFormError(`Oracle address: ${oracleFormatError}`); return; }
+                if (!fiatCode) {
+                    setFormError('Oracle pricing needs a fiat currency. Pick one under Advanced.');
+                    return;
+                }
+            }
+            if (fa && !fiatCode) {
+                setFormError('Fiat pricing needs a fiat currency. Pick one under Advanced.');
+                return;
+            }
+            if (fiatCode && !oracle && !fa) {
+                setFormError('Enter a fiat amount, add an oracle address, or set Priced in fiat to none.');
+                return;
+            }
+            if (fa && !isValidFiatAmount(fa)) {
+                setFormError('Fiat amount can have at most 2 decimal places, like 12.34 or 3.');
+                return;
+            }
+            if (!oracle && trig && !isPositiveDecimal(trig)) {
+                setFormError('Trigger price must be a positive number.');
+                return;
+            }
+            const triggerPrecisionError = !oracle && trig
+                ? tokenAmountPrecisionError(trig, {
+                    divisibility: descriptor?.nativeDecimals ?? 8,
+                    tick: coinTicker,
+                    noun: 'Trigger price',
+                })
+                : null;
+            if (triggerPrecisionError) {
+                setFormError(triggerPrecisionError);
+                return;
+            }
+            if (priceNotes.block) {
+                setFormError(PRICE_BELOW_FLOOR_ERROR);
+                return;
+            }
         }
         if (expMode === 'custom') {
             const raw = expInput.trim();
@@ -798,20 +955,8 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             const unix = localInputToUnix(raw);
             if (!unix || unix <= Math.floor(Date.now() / 1000)) { setFormError('Expiration must be in the future.'); return; }
         }
-        if (trig && Number(trig) < 0) {
-            setFormError('Trigger price cannot be negative.');
-            return;
-        }
-        if (priceNotes.block) {
-            setFormError(PRICE_BELOW_FLOOR_ERROR);
-            return;
-        }
-        if (oracle && !fiatCode) {
-            setFormError('Oracle pricing needs a fiat currency. Pick one under Advanced.');
-            return;
-        }
-        if (fa && !isValidFiatAmount(fa)) {
-            setFormError('Fiat amount can have at most 2 decimal places, like 12.34 or 3.');
+        if (listInBothSlots({ allowList: allowListIdx, blockList: blockListIdx })) {
+            setFormError(listInBothSlotsMessage(allowListIdx));
             return;
         }
         if (addressMode === 'existing' && !existingAddress) {
@@ -832,6 +977,8 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             if (!outsideVerdict.allowed) { setFormError(outsideVerdict.message); return; }
         }
         setFormError(null);
+        reviewInFlightRef.current = true;
+        const routeIdentity = routeIdentityRef.current;
         // §16: the dedicated dispenser sub-address (GET_ADDRESS) for mode
         // 'new': the one derived for an earlier unsigned preview while the
         // wallet still holds it, else a fresh derivation, after validation so
@@ -845,8 +992,8 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         // fold `dispenserGetAddress` in. Reading the memo here would submit
         // the dispenser self-open and orphan the address just derived.
         let params = actionParams;
-        if (addressMode === 'new' && !dispenserGetAddress && canDeriveGetAddress) {
-            try {
+        try {
+            if (addressMode === 'new' && !dispenserGetAddress && canDeriveGetAddress) {
                 setDerivingGetAddress(true);
                 const addr = recallUnusedDispenserAddress(dispenserAddressScope, addressesByChain?.[chainId])
                     || await messaging.generateDispenserAddress({
@@ -855,17 +1002,23 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         chainId,
                     });
                 rememberUnusedDispenserAddress(dispenserAddressScope, addr);
+                if (routeIdentity !== routeIdentityRef.current || actionParams !== actionParamsRef.current) return;
                 setDispenserGetAddress(addr);
                 if (addr?.address) params = { ...actionParams, GET_ADDRESS: addr.address };
-            } catch (err) {
-                setFormError(err?.message || 'Could not derive a dispenser address.');
-                return;
-            } finally {
                 setDerivingGetAddress(false);
             }
+            if (singleEncode) { await openConfirmScreen(params, routeIdentity); return; }
+            if (routeIdentity === routeIdentityRef.current && actionParams === actionParamsRef.current) {
+                setStage('review');
+            }
+        } catch (err) {
+            if (routeIdentity === routeIdentityRef.current && actionParams === actionParamsRef.current) {
+                setFormError(err?.message || 'Could not derive a dispenser address.');
+            }
+        } finally {
+            setDerivingGetAddress(false);
+            reviewInFlightRef.current = false;
         }
-        if (singleEncode) { openConfirmScreen(params); return; }
-        setStage('review');
     }
 
     const hw = isHwSource(sourceAddress);
@@ -899,7 +1052,10 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     // `params` is the wire param set to compose AND to sign on Approve; the
     // caller passes it explicitly when it holds a GET_ADDRESS newer than the
     // memoized `actionParams` (see handleReview).
-    async function openConfirmScreen(params = actionParams) {
+    const actionParamsRef = useRef(actionParams);
+    actionParamsRef.current = actionParams;
+
+    async function openConfirmScreen(params = actionParams, routeIdentity = routeIdentityRef.current) {
         const from = {
             address: sourceAddress.address,
             publicKey: sourceAddress.publicKey,
@@ -928,6 +1084,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     prebuiltPsbt,
                 }),
             });
+            if (routeIdentity !== routeIdentityRef.current) return;
             setResult(res);
             setPassword('');
             setStage('done');
@@ -935,6 +1092,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             draft.clear();
             setDraftPending(false);
         } catch (err) {
+            if (routeIdentity !== routeIdentityRef.current) return;
             if (isUserRejection(err)) return;
             // Same mapping the sign path already does: NativeFeeForfeitError's own message is
             // wire wording, and this confirm path is the one the flow actually takes.
@@ -949,9 +1107,11 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
+        if (submitInFlightRef.current || stage === 'submitting') return;
         if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && hw && hwStatus !== 'available') return;
+        submitInFlightRef.current = true;
+        const routeIdentity = routeIdentityRef.current;
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -986,6 +1146,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             } else {
                 res = await messaging.dispenserAction({ ...base, password });
             }
+            if (routeIdentity !== routeIdentityRef.current) return;
             setResult(res);
             setPassword('');
             setStage('done');
@@ -993,6 +1154,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             draft.clear();
             setDraftPending(false);
         } catch (err) {
+            if (routeIdentity !== routeIdentityRef.current) return;
             const isBadPassword = err?.name === 'InvalidPasswordError';
             let submitMsg;
             if (isBadPassword) {
@@ -1011,6 +1173,8 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 passwordRef.current?.focus();
                 passwordRef.current?.select();
             }
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 
@@ -1022,7 +1186,9 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
         const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={stage === 'review'
+                ? () => { setSubmitError(null); setStage('form'); }
+                : leaveGuard.guardedOnBack}
             titleIcon={<Icon.TokenIcon />}
             title={stage === 'review' || stage === 'submitting'
                     ? 'Review dispenser'
@@ -1030,8 +1196,9 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+        <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>
+            {children}
+            {leaveGuard.confirmation}
         </Screen>
     );
 
@@ -1049,13 +1216,13 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 <WatcherResultPanel
                     result={result}
                     onBuildAnother={handleBuildAnother}
-                    onDone={onBack}
+                    onDone={leaveGuard.guardedOnBack}
                 />,
             );
         }
         // Signed but not broadcast, so no dispenser is open yet.
         if (result?.queued) {
-            return wrap(<QueuedResultPanel onDone={onBack} what="dispenser" unsaved={result.unsaved} />);
+            return wrap(<QueuedResultPanel onDone={leaveGuard.guardedOnBack} what="dispenser" unsaved={result.unsaved} />);
         }
         return wrap(
             <>
@@ -1069,22 +1236,56 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     <p className={styles.hint}>Broadcast complete.</p>
                 )}
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Done</Button>
+                    <Button variant="primary" onClick={leaveGuard.guardedOnBack}>Done</Button>
                 </div>
             </>,
         );
     }
 
     if (stage === 'review' || stage === 'submitting') {
+        // Cluster P FOLLOWUP 4: hardware and watcher failures offer Edit
+        // because changing form inputs is the recovery path.
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
+            <FormPage
+                label="Review dispenser"
+                onSubmit={handleSubmit}
+                status={(isWatcherMode || hw) && submitError ? (
+                    <StatusMessage
+                        variant="error"
+                        recovery={{ label: 'Edit', onAction: () => { setSubmitError(null); setStage('form'); } }}
+                    >
+                        {submitError}
+                    </StatusMessage>
+                ) : null}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={stage === 'submitting'}
+                        disabled={
+                            stage === 'submitting'
+                            || (!isWatcherMode && (hw
+                                ? hwStatus !== 'available'
+                                : (!signerReady && password.length === 0)))
+                        }
+                    >
+                        {isWatcherMode
+                            ? 'Create unsigned transaction'
+                            : hw
+                                ? `Sign on ${sourceAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                : 'Sign'}
+                    </Button>
+                )}
+            >
                 <p className={styles.summary}>{decoded?.summary}</p>
                 <p className={styles.hint}>{summaryLine}</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>Source</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={sourceAddress.address} />
@@ -1101,14 +1302,15 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                             <AddressText address={fromAddress.address} />
                         )}
                     </dd>
-                    {(decoded?.details || []).map((d) => (
+                    {(decoded?.details || []).filter((d) => d.label !== 'Dispenser address').map((d) => (
                         <DetailRow key={d.label} label={d.label} value={d.value} />
                     ))}
                     <DetailRow
                         label="Network fee"
                         value={feeEstimate
                             ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
-                            : 'Estimate unavailable'}
+                                + (feeFiat ? ` (${feeFiat})` : '')
+                            : 'Fee estimate unavailable for this chain.'}
                     />
                 </dl>
                 {payFeeInNativeCoin ? (
@@ -1148,44 +1350,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 )}
-                {(isWatcherMode || hw) && submitError ? (
-                    <StatusMessage
-                        variant="error"
-                        recovery={
-                            // Cluster P FOLLOWUP 4: encoder /
-                            // network / device errors are recoverable
-                            // by returning to the form stage and
-                            // adjusting an input or re-staging the HW
-                            // device. Wrong-password isn't reachable
-                            // here (no password input in HW / watcher
-                            // modes).
-                            { label: 'Edit', onAction: () => { setSubmitError(null); setStage('form'); } }
-                        }
-                    >
-                        {submitError}
-                    </StatusMessage>
-                ) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={
-                            isWatcherMode
-                                ? false
-                                : hw
-                                    ? hwStatus !== 'available'
-                                    : (!signerReady && password.length === 0)
-                        }
-                    >
-                        {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : hw
-                                ? `Sign on ${sourceAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : (descriptor ? `Sign on ${descriptor.displayName}` : 'Sign')}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -1279,13 +1444,16 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
-                    : undefined}
+                        + (feeFiat ? ` (${feeFiat})` : '')
+                    : 'Network fee estimate unavailable.'}
                 signerReady={signerReady}
                 password={password}
                 onPasswordChange={setPassword}
+                formatNativeFee={formatNativeFee}
+                formatProtocolFee={formatProtocolFee}
                 // Hardware swaps the password field for the device block
                 // and gates Approve on the device being available (§5.1).
                 hwSource={hw ? sourceAddress : null}
@@ -1347,36 +1515,51 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             variant="status"
             recovery={{ label: 'Restore', onAction: restoreDraft }}
         >
-            You have an unfinished dispenser draft.
-            <button
-                type="button"
-                onClick={dismissDraft}
-                aria-label="Discard saved draft"
-                style={{
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'inherit',
-                    textDecoration: 'underline',
-                    cursor: 'pointer',
-                    padding: 0,
-                    marginInlineStart: 'var(--xc-space-2)',
-                    fontSize: 'var(--xc-text-xs)',
-                }}
-            >
+            Your unfinished dispenser draft was saved. Restore it to continue. Nothing was submitted.
+            <DraftDiscardButton onClick={dismissDraft} label="Discard saved draft">
                 Discard
-            </button>
+            </DraftDiscardButton>
         </StatusMessage>
     ) : null;
 
+    let dispenserErrorTarget;
+    if (/give amount/i.test(formError || '')) dispenserErrorTarget = { id: 'dispenser-give', label: 'Give amount' };
+    else if (/Escrow/i.test(formError || '')) dispenserErrorTarget = { id: 'dispenser-escrow', label: 'Escrow amount' };
+    else if (/positive token amount/i.test(formError || '')) dispenserErrorTarget = { id: 'dispenser-payment-amount', label: 'Payment amount' };
+    else if (/Payment token|token buyers pay/i.test(formError || '')) dispenserErrorTarget = { id: 'dispenser-payment-token', label: 'Payment token' };
+    else if (/trigger price/i.test(formError || '')) dispenserErrorTarget = { id: 'dispenser-trigger-price', label: 'Trigger price' };
+    else if (/Oracle address/i.test(formError || '')) dispenserErrorTarget = { id: 'dispenser-oracle', label: 'Oracle address' };
+    else if (/Fiat amount/i.test(formError || '')) dispenserErrorTarget = { id: 'dispenser-fiat-amount', label: 'Fiat amount' };
+    else if (/fiat currency/i.test(formError || '')) dispenserErrorTarget = { id: 'dispenser-fiat-code', label: 'Fiat currency' };
+    else if (/Expiration/i.test(formError || '')) dispenserErrorTarget = { id: 'dispenser-expiration', label: 'Expiration' };
+    else if (/dispenser address/i.test(formError || '')) dispenserErrorTarget = { id: 'dispenser-address', label: 'Dispenser address' };
+    else if (/Token ticker/i.test(formError || '')) dispenserErrorTarget = { id: 'dispenser-token', label: 'Token' };
+    const dispenserErrors = formError
+        ? [{ ...dispenserErrorTarget, message: formError }]
+        : [];
+
     return wrap(
-        <form onSubmit={handleReview} noValidate>
+        <FormPage
+            label="Create dispenser"
+            onSubmit={handleReview}
+            onChangeCapture={() => { if (formError) setFormError(null); }}
+            status={<FormErrorSummary errors={dispenserErrors} focusKey={validationAttempt} />}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={derivingGetAddress || actionConfirm.composing}
+                    disabled={derivingGetAddress || actionConfirm.composing || outsideBlocked}
+                >
+                    Create
+                </Button>
+            )}
+        >
             {draftBanner}
             {lockedToken && chainId ? (
                 <LockedTokenContext chainId={chainId} tick={ticker} />
             ) : (
-                <>
-                    <NetworkField value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
-                </>
+                <ChainPicker label="Network" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
             )}
 
             {fromAddress ? (
@@ -1384,10 +1567,11 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     {/* Dispenser address: where the dispenser opens (GET_ADDRESS). */}
                     {addressMode === 'other' ? (
                         <AddressField
+                            id="dispenser-address"
                             label="Dispenser address"
                             icon="addresses"
                             value={outsideAddress}
-                            placeholder={descriptor?.displayName ? `Any ${descriptor.displayName} address` : 'Any address on this chain'}
+                            placeholder="Any address on the active chain"
                             onChange={(e) => setOutsideAddress(e.target.value)}
                             error={outsideFormatError || undefined}
                             onIconClick={() => setAddressPickerOpen(true)}
@@ -1442,6 +1626,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
             {lockedToken ? null : (
                 <TokenField
+                    id="dispenser-token"
                     label="Token"
                     value={ticker && chainId ? { chainId, tick: ticker } : null}
                     onOpenPicker={() => setTokenPickerOpen(true)}
@@ -1455,10 +1640,12 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 </div>
             ) : null}
             <AmountField
+                id="dispenser-give"
                 label="Give amount (per fill)"
                 hint="Tokens sent to the buyer every time the dispenser is triggered."
                 amount={giveAmount}
                 tick={ticker}
+                divisibility={giveTokenInfo?.divisibility}
                 onAmountFieldChange={(rawValue) => {
                     const stripped = String(rawValue).replace(/,/g, '');
                     if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
@@ -1473,9 +1660,11 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     : null}
             />
             <AmountField
+                id="dispenser-escrow"
                 label="Escrow amount"
                 amount={escrow}
                 tick={ticker}
+                divisibility={giveTokenInfo?.divisibility}
                 onAmountFieldChange={(rawValue) => {
                     const stripped = String(rawValue).replace(/,/g, '');
                     if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
@@ -1489,33 +1678,38 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     ? `${formatWithThousands(sourceTickBalance)} ${ticker.trim().toUpperCase()} available`
                     : null}
             />
-            <p className={styles.pickerLabel}>Buyers pay with</p>
-            <label className={styles.radioOption}>
-                <input type="radio" name="disp-pay" checked={payWith === 'coin'} onChange={() => setPayWith('coin')} />
-                {' '}Native {coinTicker || 'coin'}
-            </label>
-            <label className={styles.radioOption}>
-                <input type="radio" name="disp-pay" checked={payWith === 'token'} onChange={() => setPayWith('token')} />
-                {' '}A token
-            </label>
+            <RadioGroup
+                legend="Buyers pay with"
+                name="disp-pay"
+                value={payWith}
+                onChange={setPayWith}
+                options={[
+                    { value: 'coin', label: `Native ${coinTicker || 'coin'}` },
+                    { value: 'token', label: 'A token' },
+                ]}
+            />
             {payWith === 'token' ? (
                 <>
                     <Input
+                        id="dispenser-payment-token"
                         label="Payment token"
                         hint="Ticker buyers pay with (a token, not the native coin)."
                         value={getTick}
                         onChange={(e) => setGetTick(e.target.value.toUpperCase())}
                         autoComplete="off"
-                        autoCapitalize="none"
+                        autoCapitalize="off"
                         autoCorrect="off"
                         spellCheck={false}
                     />
                     <Input
+                        id="dispenser-payment-amount"
                         label="Payment amount (per fill)"
                         hint="Amount of the payment token buyers send per fill."
                         inputMode="decimal"
                         value={getTokenAmount}
-                        onChange={(e) => setGetTokenAmount(e.target.value)}
+                        onChange={(e) => setGetTokenAmount(
+                            normalizeLocalizedDecimal(e.target.value) ?? e.target.value,
+                        )}
                         autoComplete="off"
                     />
                 </>
@@ -1525,11 +1719,14 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 </StatusMessage>
             ) : (
                 <Input
+                    id="dispenser-trigger-price"
                     label={`Trigger price${coinTicker ? ` (${coinTicker})` : ''}`}
                     hint={`Native ${coinTicker || 'coin'} amount buyers send per fill.`}
                     inputMode="decimal"
                     value={triggerPrice}
-                    onChange={(e) => setTriggerPrice(e.target.value)}
+                    onChange={(e) => setTriggerPrice(
+                        normalizeLocalizedDecimal(e.target.value) ?? e.target.value,
+                    )}
                     autoComplete="off"
                 />
             )}
@@ -1547,64 +1744,70 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             </StatusMessage>
 
             {payWith === 'coin' ? (
-                <button
-                    type="button"
-                    className={styles.pickerLabel}
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={null}
                     onClick={() => setShowAdvanced((v) => !v)}
-                    style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}
                 >
                     {showAdvanced ? '▾ Advanced options' : '▸ Advanced options (fiat pricing, oracle)'}
-                </button>
+                </Button>
             ) : null}
 
             {showAdvanced && payWith === 'coin' ? (
                 <>
-                    <label className={styles.pickerLabel}>
-                        Priced in fiat (optional)
-                        <select
-                            className={styles.picker}
-                            value={fiatCode}
-                            onChange={(e) => setFiatCode(e.target.value)}
-                        >
-                            <option value="">(none, coin-paid)</option>
-                            {FIAT_CODES.map((c) => (
-                                <option key={c} value={c}>{c}</option>
-                            ))}
-                        </select>
-                    </label>
+                    <Select
+                        id="dispenser-fiat-code"
+                        label="Priced in fiat (optional)"
+                        value={fiatCode}
+                        onChange={(e) => setFiatCode(e.target.value)}
+                    >
+                        {/* Native options supply Select choices because the kit has no option primitive. */}
+                        <option value="">(none, coin-paid)</option>
+                        {FIAT_CODES.map((c) => (
+                            /* Native options supply Select choices because the kit has no option primitive. */
+                            <option key={c} value={c}>{c}</option>
+                        ))}
+                    </Select>
                     <Input
+                        id="dispenser-fiat-amount"
                         label="Fiat amount (e.g. 12.34)"
                         hint="Validator-priced fiat dispenser. Leave blank if using a user oracle."
                         inputMode="decimal"
                         value={fiatAmount}
-                        onChange={(e) => setFiatAmount(e.target.value)}
+                        onChange={(e) => setFiatAmount(
+                            normalizeLocalizedDecimal(e.target.value) ?? e.target.value,
+                        )}
                         autoComplete="off"
                     />
                     <StatusMessage>{priceNotes.fiatWarning}</StatusMessage>
-                    <Input
+                    <AddressField
+                        id="dispenser-oracle"
                         label="Oracle address (optional)"
-                        hint="User-oracle (PRICE v1) address for fiat pricing. Requires a fiat currency. If the oracle charges a usage fee you pay it once, now, from this transaction; the amount scales with the escrow you lock. Paste the full address, not a ^id reference."
+                        hint="Oracle address used for fiat pricing. If it charges a usage fee, you pay it now based on the escrow amount. Enter the full address."
                         value={oracleAddress}
                         onChange={(e) => setOracleAddress(e.target.value)}
                         autoComplete="off"
-                        autoCapitalize="none"
+                        autoCapitalize="off"
                         autoCorrect="off"
                         spellCheck={false}
                     />
                 </>
             ) : null}
 
-            <p className={styles.pickerLabel}>Expiration</p>
-            <label className={styles.radioOption}>
-                <input type="radio" name="disp-exp" checked={expMode === 'default'} onChange={() => setExpMode('default')} />
-                {' '}Default window
-            </label>
-            <label className={styles.radioOption}>
-                <input type="radio" name="disp-exp" checked={expMode === 'custom'} onChange={() => setExpMode('custom')} />
-                {' '}Expire at a specific time
-            </label>
+            <RadioGroup
+                legend="Expiration"
+                name="disp-exp"
+                value={expMode}
+                onChange={setExpMode}
+                options={[
+                    { value: 'default', label: 'Default window' },
+                    { value: 'custom', label: 'Expire at a specific time' },
+                ]}
+            />
             {expMode === 'custom' ? (
                 <Input
+                    id="dispenser-expiration"
                     label="Expires"
                     type="datetime-local"
                     hint="Wall-clock time the dispenser closes. Must be in the future."
@@ -1632,16 +1835,15 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 one click away from the warning. */}
             {allowListWarningNode}
 
-            {feeTiers ? (
-                <FeeSelector
-                    label="Network fee"
-                    coinTicker={coinTicker}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                />
-            ) : null}
+            <FeeSelector
+                label="Network fee"
+                coinTicker={coinTicker}
+                formatFiat={formatNativeFee}
+                tiers={feeTiers}
+                value={feePick}
+                onChange={setFeePick}
+                customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+            />
 
             <div className={styles.feeToggleGap}>
                 <NativeFeeToggle
@@ -1652,21 +1854,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 />
             </div>
 
-            {formError ? (
-                <StatusMessage variant="error">{formError}</StatusMessage>
-            ) : null}
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    block
-                    loading={actionConfirm.composing}
-                    disabled={derivingGetAddress || actionConfirm.composing || outsideBlocked}
-                >
-                    {derivingGetAddress || actionConfirm.composing ? 'Preparing review…' : 'Create'}
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }
 

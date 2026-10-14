@@ -10,7 +10,7 @@
 
 import { useEffect, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
-import { chainIdsWithAction, useChainIdsWithAction } from './useSupportedChains.js';
+import { useChainIdsWithAction } from './useSupportedChains.js';
 
 // Chains whose protocol accepts VOTE (token-weighted governance), asked of the
 // LIVE registry's supportedActions (useGovernanceChainIds below) rather than
@@ -29,11 +29,6 @@ import { chainIdsWithAction, useChainIdsWithAction } from './useSupportedChains.
  */
 export function useGovernanceChainIds() {
     return useChainIdsWithAction('VOTE');
-}
-
-/** Non-hook twin of useGovernanceChainIds, read at call time. */
-export function governanceChainIds() {
-    return chainIdsWithAction('VOTE');
 }
 
 /**

@@ -18,7 +18,34 @@
 // (via txSimulator.simulateAction fed parse() output) and passes them in,
 // keeping this component pure and trivially testable.
 
+import { AddressText } from '@xchain-wallet/core/ui';
+import { formatDisplayAmount } from '../utils/amountFormat.js';
 import styles from './ActionIntentSummary.module.css';
+
+function reviewDetailValue(detail) {
+    if (!/^(Amount|Quantity)$/.test(String(detail?.label || ''))) return detail?.value;
+    return formatDisplayAmount(detail?.value);
+}
+
+function reviewSummary(decoded) {
+    const summary = String(decoded?.summary || '');
+    const destination = decoded?.details?.find((detail) => (
+        /^(?:To(?:\s|$)|Destination|Receive address|Dispenser address|Delegate to|Recipient(?:\s|$))/i
+            .test(String(detail?.label || ''))
+        && typeof detail?.value === 'string'
+        && summary.includes(detail.value)
+    ))?.value;
+    if (!destination) return summary;
+
+    const start = summary.indexOf(destination);
+    return (
+        <>
+            {summary.slice(0, start)}
+            <AddressText address={destination} />
+            {summary.slice(start + destination.length)}
+        </>
+    );
+}
 
 /**
  * @param {object} props
@@ -28,18 +55,7 @@ import styles from './ActionIntentSummary.module.css';
 export function ActionIntentSummary({ decoded, simulation }) {
     return (
         <div className={styles.intent} data-testid="action-intent">
-            <p className={styles.summary}>{decoded.summary}</p>
-
-            {decoded.details.length > 0 ? (
-                <dl className={styles.details}>
-                    {decoded.details.map((d, i) => (
-                        <div key={`${d.label}-${i}`} className={styles.row}>
-                            <dt>{d.label}</dt>
-                            <dd>{d.value}</dd>
-                        </div>
-                    ))}
-                </dl>
-            ) : null}
+            <p className={styles.summary}>{reviewSummary(decoded)}</p>
 
             {decoded.warnings.length > 0 ? (
                 <ul className={styles.warnings}>
@@ -47,8 +63,23 @@ export function ActionIntentSummary({ decoded, simulation }) {
                 </ul>
             ) : null}
 
+            {decoded.details.length > 0 ? (
+                <dl className={styles.details}>
+                    {decoded.details.map((d, i) => (
+                        <div key={`${d.label}-${i}`} className={styles.row}>
+                            <dt>{d.label}</dt>
+                            <dd>{reviewDetailValue(d)}</dd>
+                        </div>
+                    ))}
+                </dl>
+            ) : null}
+
             {simulation && Array.isArray(simulation.deltas) && simulation.deltas.length > 0 ? (
-                <div className={styles.deltas} data-testid="action-intent-deltas">
+                <div
+                    className={styles.deltas}
+                    data-testid="action-intent-deltas"
+                    style={{ fontVariantNumeric: 'tabular-nums' }}
+                >
                     {simulation.deltas.map((d, i) => {
                         // Label-only rows (empty before/after) are paired with
                         // the balance row that already carries the debit, so
@@ -68,12 +99,23 @@ export function ActionIntentSummary({ decoded, simulation }) {
                                 </div>
                             );
                         }
+                        // The balance could not be read at all (issue #74).
+                        if (d.beforeUnknown) {
+                            return (
+                                <div key={`${d.tick}-${i}`} className={styles.delta} data-before-unknown="true">
+                                    <span className={styles.deltaTick}>{d.tick}</span>
+                                    <span className={styles.deltaValues}>balance unknown</span>
+                                </div>
+                            );
+                        }
                         if (d.before === '' && d.after === '') {
                             if (!d.isProtocolFee) return null;
                             return (
                                 <div key={`${d.tick}-${i}`} className={styles.delta}>
                                     <span className={styles.deltaTick}>{d.feeLabel || 'Protocol fee'}</span>
-                                    <span className={styles.deltaValues}>{d.tick} {d.feeAmount}</span>
+                                    <span className={styles.deltaValues}>
+                                        {formatDisplayAmount(d.feeAmount)} {d.tick}
+                                    </span>
                                 </div>
                             );
                         }

@@ -25,30 +25,43 @@
 //   1. settings.privacy.priceDataEnabled !== false  (the telemetry opt-out)
 //   2. settings.notifications.priceAlerts            (the feature toggle)
 //   3. at least one armed alert exists               (nothing to watch)
+//   4. the alert belongs to the active network        (the network filter)
 // With no armed alerts it never touches the network; an idle user with the
 // toggle on but no alerts set leaks nothing.
 
 import { isWithinQuietHours } from './quietHours.js';
+import { taggedLogger } from './taggedLogger.js';
 
 // Align with priceOracle's SPOT_TTL_MS so a poll usually hits the oracle's
 // in-memory cache rather than issuing a fresh CoinGecko request.
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000;
+const FIRED_CAP = 500;
+const MAX_PRICE_AGE_MS = 5 * 60 * 1000;
+const NETWORK_NAMES = new Set(['mainnet', 'testnet', 'regtest']);
 
-const NOOP_LOGGER = { debug() {}, warn() {}, error() {} };
+function isOnActiveNetwork(chainId, activeNetwork) {
+    if (!activeNetwork || typeof chainId !== 'string') return true;
+    const network = chainId.split('-').pop();
+    return !NETWORK_NAMES.has(network) || network === activeNetwork;
+}
 
 export class PriceAlertWatcher {
     /**
      * @param {Object} deps
-     * @param {(opts: { chainIds: string[], fiatCurrency: string }) => Promise<{ prices?: Record<string, { priceFiat: number|null }|null>, disabled?: boolean, error?: string }>} deps.getNativePrices
+     * @param {(opts: { chainIds: string[], fiatCurrency: string }) => Promise<{ prices?: Record<string, { priceFiat: number|null, fetchedAt?: number }|null>, disabled?: boolean, error?: string }>} deps.getNativePrices
      *   the price source (typically a priceOracle.getNativePrices wrapper)
      * @param {() => Promise<import('../schemas/priceAlert.js').PriceAlert[]>} deps.listArmedAlerts
      *   the user's alerts; the watcher filters to status === 'armed'
      * @param {() => Promise<import('../schemas/settings.js').Settings>} deps.getSettings
      *   read live Settings each tick so toggling a flag off takes effect immediately
-     * @param {(n: { kind: string, title: string, body: string, data?: object }) => (void | Promise<void>)} deps.notify
-     *   the shell-specific delivery adapter (shared with NotificationService)
+     * @param {(n: { kind: string, title: string, body: string, data?: object }) => (void | boolean | Promise<void | boolean>)} deps.notify
+     *   the shell-specific delivery adapter (shared with NotificationService); false means delivery was unavailable
      * @param {(id: string) => (void | Promise<void>)} deps.markTriggered
      *   disarm an alert after it fires (one-shot)
+     * @param {() => Promise<string[] | Set<string>>} [deps.loadFired]
+     *   restore delivered alerts whose triggered-state write still needs retrying
+     * @param {(ids: string[]) => (void | Promise<void>)} [deps.saveFired]
+     *   persist delivered alert ids across a worker restart
      * @param {number} [deps.intervalMs]  poll cadence; defaults to 5 min
      * @param {() => number} [deps.now]   injectable clock; defaults to Date.now
      * @param {{ debug: Function, warn: Function, error: Function }} [deps.logger]
@@ -59,6 +72,8 @@ export class PriceAlertWatcher {
         getSettings,
         notify,
         markTriggered,
+        loadFired,
+        saveFired,
         intervalMs,
         now,
         logger,
@@ -74,13 +89,19 @@ export class PriceAlertWatcher {
         this._getSettings = getSettings;
         this._notify = notify;
         this._markTriggered = markTriggered;
+        this._loadFired = typeof loadFired === 'function' ? loadFired : null;
+        this._saveFired = typeof saveFired === 'function' ? saveFired : null;
         this._intervalMs = Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : DEFAULT_INTERVAL_MS;
         this._now = typeof now === 'function' ? now : () => Date.now();
-        this._log = logger || NOOP_LOGGER;
+        this._log = taggedLogger(logger, 'price-alert');
 
         this._timer = null;
         /** @type {Set<string>} alert ids fired this session (guards re-fire before markTriggered persists) */
         this._fired = new Set();
+        /** @type {Set<string>} delivered ids whose triggered-state write has not completed */
+        this._pendingTriggered = new Set();
+        this._firedLoaded = false;
+        this._firedDirty = false;
         this._ticking = false;
     }
 
@@ -104,6 +125,9 @@ export class PriceAlertWatcher {
             this._timer = null;
         }
         this._fired.clear();
+        this._pendingTriggered.clear();
+        this._firedLoaded = false;
+        this._firedDirty = false;
     }
 
     /**
@@ -126,7 +150,7 @@ export class PriceAlertWatcher {
             const featureOn = Boolean(settings && settings.notifications && settings.notifications.priceAlerts);
             if (!privacyOk || !featureOn) return;
 
-            // Gate 3: nothing armed → no network.
+            // Gates 3 + 4: nothing armed on the active network → no request.
             let armed;
             try {
                 armed = (await this._listArmedAlerts()) || [];
@@ -134,7 +158,25 @@ export class PriceAlertWatcher {
                 this._log.error('PriceAlertWatcher: listArmedAlerts failed', e);
                 return;
             }
-            armed = armed.filter((a) => a && a.status === 'armed' && !this._fired.has(a.id));
+            armed = armed.filter((a) => a && a.status === 'armed');
+            await this._restoreFired();
+            const armedIds = new Set(armed.map((a) => a.id));
+            for (const id of this._pendingTriggered) {
+                if (armedIds.has(id)) continue;
+                this._pendingTriggered.delete(id);
+                this._fired.delete(id);
+                this._firedDirty = true;
+            }
+            armed = armed.filter((a) => isOnActiveNetwork(a.chainId, settings?.activeNetwork));
+            for (const alert of armed) {
+                if (!this._pendingTriggered.has(alert.id)) continue;
+                if (await this._persistTriggered(alert.id)) {
+                    this._pendingTriggered.delete(alert.id);
+                    this._firedDirty = true;
+                }
+            }
+            await this._persistFired();
+            armed = armed.filter((a) => !this._fired.has(a.id));
             if (armed.length === 0) return;
 
             // Group by fiat currency (one oracle call per currency; almost
@@ -155,11 +197,11 @@ export class PriceAlertWatcher {
                     this._log.error('PriceAlertWatcher: getNativePrices failed', e);
                     continue;
                 }
-                if (!result || result.disabled || !result.prices) continue;
+                if (!result || result.disabled || result.error || !result.prices) continue;
 
                 for (const alert of alerts) {
                     const entry = result.prices[alert.chainId];
-                    const price = entry && typeof entry.priceFiat === 'number' && Number.isFinite(entry.priceFiat)
+                    const price = this._isFreshPrice(entry)
                         ? entry.priceFiat
                         : null;
                     if (price == null) continue; // no price data for this chain (testnet/regtest/unmapped)
@@ -179,6 +221,14 @@ export class PriceAlertWatcher {
         return false;
     }
 
+    _isFreshPrice(entry) {
+        if (!entry || typeof entry.priceFiat !== 'number' || !Number.isFinite(entry.priceFiat)) return false;
+        if (entry.fetchedAt === undefined) return true;
+        if (typeof entry.fetchedAt !== 'number' || !Number.isFinite(entry.fetchedAt)) return false;
+        const ageMs = this._now() - entry.fetchedAt;
+        return ageMs >= 0 && ageMs <= MAX_PRICE_AGE_MS;
+    }
+
     /**
      * @param {import('../schemas/priceAlert.js').PriceAlert} alert
      * @param {number} price
@@ -196,7 +246,7 @@ export class PriceAlertWatcher {
         // re-arming any other triggered alert.
         if (!isWithinQuietHours(settings)) {
             try {
-                await this._notify({
+                const delivered = await this._notify({
                     kind: 'price-alert',
                     title: 'Price alert',
                     // Privacy-safe: coin + threshold only, no balances or keys.
@@ -209,14 +259,63 @@ export class PriceAlertWatcher {
                         alertId: alert.id,
                     },
                 });
+                if (delivered === false) {
+                    this._fired.delete(alert.id);
+                    return;
+                }
             } catch (e) {
                 this._log.error('PriceAlertWatcher: notify adapter threw', e);
+                this._fired.delete(alert.id);
+                return;
             }
         }
+        this._pendingTriggered.add(alert.id);
+        this._firedDirty = true;
+        await this._persistFired();
+        if (await this._persistTriggered(alert.id)) {
+            this._pendingTriggered.delete(alert.id);
+            this._firedDirty = true;
+            await this._persistFired();
+        }
+    }
+
+    async _persistTriggered(alertId) {
         try {
-            await this._markTriggered(alert.id);
+            await this._markTriggered(alertId);
+            return true;
         } catch (e) {
             this._log.warn('PriceAlertWatcher: markTriggered failed', e);
+            return false;
+        }
+    }
+
+    async _restoreFired() {
+        if (this._firedLoaded) return;
+        this._firedLoaded = true;
+        if (!this._loadFired) return;
+        try {
+            const stored = await this._loadFired();
+            for (const id of stored instanceof Set ? stored : (Array.isArray(stored) ? stored : [])) {
+                if (typeof id === 'string' && id) {
+                    this._fired.add(id);
+                    this._pendingTriggered.add(id);
+                }
+            }
+        } catch (e) {
+            this._log.warn('PriceAlertWatcher: loadFired failed', e);
+        }
+    }
+
+    async _persistFired() {
+        if (!this._firedDirty || !this._saveFired) return;
+        while (this._pendingTriggered.size > FIRED_CAP) {
+            this._pendingTriggered.delete(this._pendingTriggered.values().next().value);
+        }
+        try {
+            await this._saveFired(Array.from(this._pendingTriggered));
+            this._firedDirty = false;
+        } catch (e) {
+            this._log.warn('PriceAlertWatcher: saveFired failed', e);
         }
     }
 }

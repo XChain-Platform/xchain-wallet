@@ -21,6 +21,7 @@ import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/re
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ContractFundsForm } from '../../../packages/core/src/shared/routes/ContractFundsForm.jsx';
+import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
 const ADDRESS = 'bc1qexampleexampleexampleexampleexampleex';
 const ADDRESSES = {
@@ -40,7 +41,7 @@ const ADDRESSES = {
 const WALLET_BALANCE = '635000';
 const CONTRACT_HELD = '5000';
 
-function mountForm(mode, extra = {}) {
+function mountForm(mode, extra = {}, props = {}) {
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
@@ -69,6 +70,7 @@ function mountForm(mode, extra = {}) {
                 chainId: 'bitcoin-mainnet',
                 contractActionIndex: '1632',
                 onBack() {},
+                ...props,
             }),
         ),
     );
@@ -81,13 +83,23 @@ function mountForm(mode, extra = {}) {
 async function pickToken(messaging) {
     const openPicker = await screen.findByRole('button', { name: /Token/i });
     fireEvent.click(openPicker);
-    const row = await screen.findByRole('button', { name: /MEMEVALID/i })
+    // The wallet picker also renders a favorite toggle per row, whose label
+    // names the token too; pick the row itself.
+    const row = await screen.findAllByRole('button', { name: /MEMEVALID/i })
+        .then((buttons) => {
+            const rows = buttons.filter((button) => !/pin|favou?rite/i.test(button.getAttribute('aria-label') || ''));
+            if (rows.length !== 1) throw new Error(`expected one MEMEVALID row, found ${rows.length}`);
+            return rows[0];
+        })
         .catch(() => screen.findByLabelText(/MEMEVALID/i));
     fireEvent.click(row);
     return messaging;
 }
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    __clearTokenInfoCache();
+});
 
 describe('ContractFundsForm withdraw sizes off contract custody (D-23)', () => {
     it('reads the contract balance for the target contract, not just the wallet', async () => {
@@ -115,6 +127,22 @@ describe('ContractFundsForm withdraw sizes off contract custody (D-23)', () => {
             .toHaveTextContent('The contract only holds 5,000 MEMEVALID.');
     });
 
+    it('compares large custody quantities without losing integer precision', async () => {
+        const messaging = mountForm('withdraw', {
+            getContractBalance: vi.fn().mockResolvedValue({
+                data: [{ tick: 'MEMEVALID', quantity: '9007199254740992' }],
+            }),
+        });
+        await pickToken(messaging);
+        fireEvent.change(await screen.findByLabelText(/Quantity/i), {
+            target: { value: '9007199254740993' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: /^(Withdraw|Preview)$/ }));
+
+        expect(await screen.findByRole('alert'))
+            .toHaveTextContent('The contract only holds 9,007,199,254,740,992 MEMEVALID.');
+    });
+
     it('allows a withdrawal the contract can cover', async () => {
         const messaging = mountForm('withdraw');
         await pickToken(messaging);
@@ -133,5 +161,65 @@ describe('ContractFundsForm withdraw sizes off contract custody (D-23)', () => {
         await pickToken(messaging);
         expect(await screen.findByText(/635,000 MEMEVALID available/)).toBeInTheDocument();
         expect(messaging.getContractBalance).not.toHaveBeenCalled();
+    });
+
+    it('blocks a deposit larger than the wallet balance', async () => {
+        const messaging = mountForm('deposit');
+        await pickToken(messaging);
+        expect(await screen.findByText(/635,000 MEMEVALID available/)).toBeInTheDocument();
+        fireEvent.change(screen.getByLabelText(/Quantity/i), { target: { value: '635001' } });
+        fireEvent.click(screen.getByRole('button', { name: /^(Deposit|Preview)$/ }));
+
+        expect(await screen.findByRole('alert'))
+            .toHaveTextContent('Only 635,000 MEMEVALID is available to deposit.');
+    });
+
+    it('shows required token and quantity messages before review', async () => {
+        const messaging = mountForm('deposit');
+        const submit = await screen.findByRole('button', { name: 'Deposit' });
+        expect(submit).toBeEnabled();
+        fireEvent.click(submit);
+        expect(await screen.findByRole('alert')).toHaveTextContent('Token ticker is required.');
+
+        await pickToken(messaging);
+        fireEvent.click(screen.getByRole('button', { name: 'Deposit' }));
+        expect(await screen.findByRole('alert')).toHaveTextContent('Quantity must be a positive decimal.');
+    });
+
+    it('rejects quantity beyond the token precision before review', async () => {
+        const getTokenInfo = vi.fn().mockResolvedValue({ divisibility: 2 });
+        const messaging = mountForm('deposit', { getTokenInfo });
+        await pickToken(messaging);
+        await waitFor(() => expect(getTokenInfo).toHaveBeenCalled());
+        fireEvent.change(screen.getByLabelText(/Quantity/i), { target: { value: '1.234' } });
+
+        expect(await screen.findByText('Amount can have at most 2 decimal places.'))
+            .toBeInTheDocument();
+    });
+
+    it('rejects a malformed contract ID before review', async () => {
+        mountForm('deposit', {}, { contractActionIndex: '0' });
+        fireEvent.click(await screen.findByRole('button', { name: 'Deposit' }));
+
+        expect(await screen.findByRole('alert'))
+            .toHaveTextContent('Contract ID must be a positive whole number.');
+    });
+
+    it('labels the withdrawal recipient and keeps values when Back returns to the form', async () => {
+        const messaging = mountForm('withdraw', {
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+            signerReady: vi.fn().mockResolvedValue({ ready: false }),
+        });
+        await pickToken(messaging);
+        fireEvent.change(screen.getByLabelText(/Quantity/i), { target: { value: '12.5' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+
+        expect(await screen.findByRole('heading', { name: 'Review withdraw' })).toBeInTheDocument();
+        expect(screen.getByText('Recipient')).toBeInTheDocument();
+        expect(screen.getByText('12.5')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+
+        expect(await screen.findByLabelText(/Quantity/i)).toHaveValue('12.5');
+        expect(screen.getByRole('button', { name: /^Token: MEMEVALID/ })).toBeInTheDocument();
     });
 });

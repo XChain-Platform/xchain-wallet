@@ -80,8 +80,11 @@ assert.ok(
 const blSrc = readFileSync(join(components, 'BalanceList.jsx'), 'utf8');
 assert.ok(/onSelectToken\b/.test(blSrc), 'BalanceList accepts onSelectToken');
 assert.ok(/clickable/.test(blSrc), 'BalanceList row has clickable variant');
-assert.ok(/Tag\s*=\s*clickable\s*\?\s*'button'/.test(blSrc),
-    'BalanceList row tag becomes <button> when clickable');
+assert.ok(/<ListRow[\s\S]*?onClick=\{handleClick\}/.test(blSrc),
+    'BalanceList delegates its primary action to ListRow');
+assert.ok(/<button[\s\S]*?onTogglePin\(pinKey, !pinned\)/.test(blSrc)
+    && /<button[\s\S]*?onToggleHide\(pinKey, !hidden\)/.test(blSrc),
+    'BalanceList pin and hide actions use native buttons outside the primary action');
 
 const blCss = readFileSync(join(components, 'BalanceList.module.css'), 'utf8');
 assert.ok(/\.rowClickable\b/.test(blCss),
@@ -118,7 +121,7 @@ assert.ok(/useState\(initialSearchQuery/.test(histSrc),
 // --- 5. Web + extension App.jsx wire the route ---------------------------
 
 const webApp = readFileSync(join(web, 'src', 'App.jsx'), 'utf8');
-assert.ok(/from '@xchain-wallet\/core\/shared\/routes\/TokenDetail\.jsx'/.test(webApp),
+assert.ok(/(from |const\s+TokenDetail\s*=\s*lazyRoute\(\s*\(\)\s*=>\s*import\()'@xchain-wallet\/core\/shared\/routes\/TokenDetail\.jsx'/.test(webApp),
     'web App.jsx imports TokenDetail');
 assert.ok(/'token-detail'/.test(webApp),
     'web App.jsx adds the token-detail view literal');

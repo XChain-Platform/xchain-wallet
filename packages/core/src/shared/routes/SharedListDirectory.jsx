@@ -9,7 +9,16 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, ChainBadge, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import {
+    Button,
+    ChainBadge,
+    EmptyState,
+    Input,
+    ListPage,
+    PageHeader,
+    Screen,
+    StatusMessage,
+} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -22,8 +31,10 @@ import {
     shortOwner,
 } from '../utils/sharedListRows.js';
 import styles from './IssueTokenForm.module.css';
+import local from './SharedListDirectory.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const PAGE_SIZE = 20;
 
 function listType(type) {
     const value = String(type ?? '').toLowerCase();
@@ -72,20 +83,23 @@ function valueOrUnknown(value) {
  * @param {'browse' | 'pick'} props.mode
  * @param {'token' | 'address'} [props.filterType]
  * @param {(selection: { actionIndex: unknown, homeChain: unknown, homeListIndex: unknown, memberCount: unknown, name?: string }) => void} props.onSelect
+ * @param {(chainId: string, actionIndex: string) => void} [props.onOpenList]
  * @param {() => void} props.onBack
  */
-export function SharedListDirectory({ walletId, chainId, mode, filterType, onSelect, onBack }) {
+export function SharedListDirectory({ walletId, chainId, mode, filterType, onSelect, onOpenList, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
     const [directory, setDirectory] = useState(/** @type {{ lists: any[], unavailable: string[] } | null} */ (null));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const [query, setQuery] = useState('');
+    const [visibleLimit, setVisibleLimit] = useState(PAGE_SIZE);
+    const [directoryReload, setDirectoryReload] = useState(0);
 
     useEffect(() => {
         let cancelled = false;
         setDirectory(null);
         setLoadError(null);
-        messaging.getSharedLists({ chainId })
+        Promise.resolve().then(() => messaging.getSharedLists({ chainId }))
             .then((response) => {
                 if (cancelled) return;
                 setDirectory({
@@ -97,7 +111,7 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
                 if (!cancelled) setLoadError(error?.message || 'Failed to load shared lists.');
             });
         return () => { cancelled = true; };
-    }, [chainId, messaging, walletId]);
+    }, [chainId, messaging, walletId, directoryReload]);
 
     const visibleLists = useMemo(() => {
         if (!directory) return [];
@@ -106,58 +120,133 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
             : orderSharedLists(directory.lists);
     }, [directory, filterType, mode]);
 
+    const matchingLists = useMemo(() => {
+        const needle = query.trim().toLowerCase();
+        if (!needle) return visibleLists;
+        return visibleLists.filter((entry) => {
+            const descriptor = homeDescriptor(entry.homeChain, chainId);
+            return [
+                entry.name,
+                entry.owner,
+                entry.homeChain,
+                descriptor?.displayName,
+                tickerForCoin(descriptor?.coin),
+                entry.homeListIndex,
+                entry.bindTarget,
+                entry.type === 'token' ? 'token list' : 'address list',
+                platformBadgeText(entry),
+            ].some((value) => String(value ?? '').toLowerCase().includes(needle));
+        });
+    }, [chainId, query, visibleLists]);
+
+    useEffect(() => {
+        setVisibleLimit(PAGE_SIZE);
+    }, [filterType, mode, directory]);
+
+    const pagedLists = matchingLists.slice(0, visibleLimit);
+
     const header = (
         <PageHeader
             onBack={onBack}
             title={mode === 'pick' ? 'Choose a shared list' : 'Shared lists'}
         />
     );
-    const wrap = (children) => (
+    const wrap = (children, toolbar) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            <ListPage toolbar={toolbar}>{children}</ListPage>
         </Screen>
     );
 
     if (loadError) {
-        return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+        return wrap(
+            <StatusMessage
+                variant="error"
+                className={styles.error}
+                recovery={{ label: 'Try again', onAction: () => setDirectoryReload((value) => value + 1) }}
+            >
+                {loadError}
+            </StatusMessage>,
+        );
     }
     if (!directory) return wrap(<p className={styles.hint}>Loading shared lists…</p>);
 
+    const toolbar = (
+        <div className={local.filterRow}>
+            <div className={local.searchControl}>
+                <Input
+                    type="search"
+                    size="md"
+                    placeholder="Search"
+                    value={query}
+                    onChange={(event) => {
+                        setQuery(event.target.value);
+                        setVisibleLimit(PAGE_SIZE);
+                    }}
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    aria-label="Search shared lists"
+                />
+            </div>
+        </div>
+    );
+
+    const filteredType = listType(filterType);
     return wrap(
         <>
             {directory.unavailable.map((unavailableChain) => {
                 const descriptor = chainRegistry.get(unavailableChain);
                 return (
                     <p className={styles.error} key={unavailableChain}>
-                        Shared lists unavailable from {descriptor?.displayName || unavailableChain}.
+                        Shared lists unavailable{descriptor ? <> from <ChainBadge descriptor={descriptor} size="sm" /></> : null}.
                     </p>
                 );
             })}
 
-            {visibleLists.length === 0 ? (
-                <p className={styles.hint}>
-                    {mode === 'pick'
-                        ? `No shared ${listType(filterType) || ''} lists are available on this chain.`
-                        : 'No shared lists are available.'}
-                </p>
+            {matchingLists.length === 0 ? (
+                <EmptyState
+                    title={query.trim()
+                        ? "No matching shared lists"
+                        : mode === "pick" ? "No shared lists available" : "No shared lists yet"}
+                    body={query.trim()
+                        ? "Matching shared lists appear here after you change or clear the search."
+                        : mode === "pick"
+                            ? `Shared ${filteredType ? `${filteredType} ` : ""}lists appear here after you choose a chain where one is published.`
+                            : "Published shared lists appear here after you or someone else publishes one."}
+                />
             ) : (
-                <div role="list" aria-label="Shared lists">
-                    {visibleLists.map((entry) => (
-                        <SharedListRow
-                            key={`${entry.homeChain}:${entry.homeListIndex}`}
-                            entry={entry}
-                            chainId={chainId}
-                            pickable={mode === 'pick'}
-                            onSelect={onSelect}
-                        />
-                    ))}
-                </div>
+                <>
+                    <div role="list" aria-label="Shared lists">
+                        {pagedLists.map((entry) => (
+                            <SharedListRow
+                                key={`${entry.homeChain}:${entry.homeListIndex}`}
+                                entry={entry}
+                                chainId={chainId}
+                                pickable={mode === 'pick'}
+                                onSelect={onSelect}
+                                onOpenList={onOpenList}
+                            />
+                        ))}
+                    </div>
+                    {pagedLists.length < matchingLists.length ? (
+                        <div className={styles.actions}>
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                onClick={() => setVisibleLimit((limit) => limit + PAGE_SIZE)}
+                            >
+                                Load more
+                            </Button>
+                        </div>
+                    ) : null}
+                </>
             )}
         </>,
+        toolbar,
     );
 }
 
-function SharedListRow({ entry, chainId, pickable, onSelect }) {
+function SharedListRow({ entry, chainId, pickable, onSelect, onOpenList }) {
     const descriptor = homeDescriptor(entry.homeChain, chainId);
     const badge = platformBadgeText(entry);
     const typeLabel = entry.type === 'token' ? 'Token list' : 'Address list';
@@ -173,12 +262,14 @@ function SharedListRow({ entry, chainId, pickable, onSelect }) {
         memberCount: entry.memberCount,
         ...(entry.name ? { name: entry.name } : {}),
     });
+    const canOpen = !pickable && typeof onOpenList === 'function'
+        && descriptor?.id && entry.homeListIndex != null;
 
     return (
         <dl
             role="listitem"
             className={styles.detailsList}
-            aria-label={`${typeLabel} ${valueOrUnknown(entry.homeListIndex)} on ${valueOrUnknown(entry.homeChain)}`}
+            aria-label={`${typeLabel} ${valueOrUnknown(entry.homeListIndex)}`}
         >
             {entry.name ? (
                 <>
@@ -188,7 +279,7 @@ function SharedListRow({ entry, chainId, pickable, onSelect }) {
             ) : null}
             <dt className={styles.detailsLabel}>Home chain</dt>
             <dd className={styles.detailsValue}>
-                {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : valueOrUnknown(entry.homeChain)}
+                {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : '?'}
             </dd>
             <dt className={styles.detailsLabel}>Home list index</dt>
             <dd className={styles.detailsValue}>{valueOrUnknown(entry.homeListIndex)}</dd>
@@ -213,6 +304,20 @@ function SharedListRow({ entry, chainId, pickable, onSelect }) {
                     <dt className={styles.detailsLabel}>Select</dt>
                     <dd className={styles.detailsValue}>
                         <Button type="button" variant="secondary" onClick={choose}>Choose list</Button>
+                    </dd>
+                </>
+            ) : null}
+            {canOpen ? (
+                <>
+                    <dt className={styles.detailsLabel}>Details</dt>
+                    <dd className={styles.detailsValue}>
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            onClick={() => onOpenList(descriptor.id, String(entry.homeListIndex))}
+                        >
+                            Open list
+                        </Button>
                     </dd>
                 </>
             ) : null}

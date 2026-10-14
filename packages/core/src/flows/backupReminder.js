@@ -14,21 +14,40 @@
 // §19.2 word-quiz at creation time, or via a successful encrypted-backup
 // export). The verified-at timestamp is stored in localStorage keyed by
 // walletId so the data survives reload without churning the vault schema.
-// Reminder cadence comes from `settings.backupReminders`:
-//   'off'        - never re-prompt verified wallets
-//   'monthly'    - re-prompt 30+ days after the last verify
-//   'quarterly'  - re-prompt 90+ days after the last verify
+// Home only prompts wallets that have no recorded verification.
+
+import { logConsole } from '../shared/utils/logConsole.js';
 
 const STORAGE_KEY = 'xc:backupVerifiedAt';
+const FUNDED_AT_KEY = 'xc:backupReminderFundedAt';
 const SESSION_DISMISS_KEY = 'xc:backupReminderDismissedUntil';
-const GENTLE_AFTER_DAYS = 1;
 const FIRM_AFTER_DAYS = 7;
 const DISMISS_HOURS = 24;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const memoryStores = new Map();
+let storageFailureLogged = false;
 
-function readStore() {
+const REMINDER_STORAGE_KEYS = Object.freeze([
+    STORAGE_KEY,
+    FUNDED_AT_KEY,
+    SESSION_DISMISS_KEY,
+]);
+
+function keepMemoryStore(key, map) {
+    memoryStores.set(key, { ...map });
+    if (storageFailureLogged) return;
+    storageFailureLogged = true;
+    logConsole.record({
+        source: 'backup-reminder',
+        level: 'warn',
+        message: 'local storage write failed; using in-memory state',
+    });
+}
+
+function readStore(key) {
+    if (memoryStores.has(key)) return { ...memoryStores.get(key) };
     try {
-        const raw = globalThis.localStorage?.getItem(STORAGE_KEY);
+        const raw = globalThis.localStorage?.getItem(key);
         if (!raw) return {};
         const parsed = JSON.parse(raw);
         return parsed && typeof parsed === 'object' ? parsed : {};
@@ -37,10 +56,47 @@ function readStore() {
     }
 }
 
-function writeStore(map) {
+function writeStore(key, map) {
     try {
-        globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify(map));
-    } catch { /* localStorage unavailable; best-effort */ }
+        const storage = globalThis.localStorage;
+        if (!storage) {
+            keepMemoryStore(key, map);
+            return;
+        }
+        storage.setItem(key, JSON.stringify(map));
+        memoryStores.delete(key);
+    } catch {
+        keepMemoryStore(key, map);
+    }
+}
+
+function announceStoreChange(key) {
+    try {
+        if (typeof globalThis.dispatchEvent !== 'function'
+            || typeof globalThis.StorageEvent !== 'function') return;
+        globalThis.dispatchEvent(new globalThis.StorageEvent('storage', { key }));
+    } catch { /* storage event unavailable; best-effort */ }
+}
+
+/** Remove reminder state for one wallet, or every wallet when no id is supplied. */
+export function clearBackupReminderState(walletId = null) {
+    const clearOne = typeof walletId === 'string' && walletId.length > 0;
+    for (const key of REMINDER_STORAGE_KEYS) {
+        if (!clearOne) {
+            memoryStores.delete(key);
+            try { globalThis.localStorage?.removeItem(key); } catch { /* best-effort cleanup */ }
+            continue;
+        }
+        const map = readStore(key);
+        if (!Object.prototype.hasOwnProperty.call(map, walletId)) continue;
+        delete map[walletId];
+        if (Object.keys(map).length > 0) {
+            writeStore(key, map);
+        } else {
+            memoryStores.delete(key);
+            try { globalThis.localStorage?.removeItem(key); } catch { /* best-effort cleanup */ }
+        }
+    }
 }
 
 /**
@@ -49,9 +105,12 @@ function writeStore(map) {
  */
 export function markBackupVerified(walletId, isoTimestamp) {
     if (typeof walletId !== 'string' || !walletId) return;
-    const map = readStore();
+    const map = readStore(STORAGE_KEY);
     map[walletId] = typeof isoTimestamp === 'string' ? isoTimestamp : new Date().toISOString();
-    writeStore(map);
+    writeStore(STORAGE_KEY, map);
+    // Same-document storage writes do not emit a native storage event.
+    // Announcing this write lets an open reminder react to backup completion.
+    announceStoreChange(STORAGE_KEY);
 }
 
 /**
@@ -60,40 +119,62 @@ export function markBackupVerified(walletId, isoTimestamp) {
  */
 export function getBackupVerifiedAt(walletId) {
     if (typeof walletId !== 'string' || !walletId) return null;
-    const map = readStore();
+    const map = readStore(STORAGE_KEY);
     const v = map[walletId];
     return typeof v === 'string' ? v : null;
 }
 
-/** @param {string} walletId */
-export function dismissBackupReminder(walletId) {
+/**
+ * Snooze a gentle reminder for 24 hours.
+ *
+ * @param {string} walletId
+ * @param {number} [now] epoch ms (injectable for tests)
+ */
+export function dismissBackupReminder(walletId, now = Date.now()) {
     if (typeof walletId !== 'string' || !walletId) return;
-    try {
-        const until = Date.now() + DISMISS_HOURS * 60 * 60 * 1000;
-        const raw = globalThis.localStorage?.getItem(SESSION_DISMISS_KEY);
-        const parsed = raw ? JSON.parse(raw) : {};
-        parsed[walletId] = until;
-        globalThis.localStorage?.setItem(SESSION_DISMISS_KEY, JSON.stringify(parsed));
-    } catch { /* best-effort */ }
+    const dismissedAt = typeof now === 'number' && Number.isFinite(now) ? now : Date.now();
+    const map = readStore(SESSION_DISMISS_KEY);
+    map[walletId] = dismissedAt + DISMISS_HOURS * 60 * 60 * 1000;
+    writeStore(SESSION_DISMISS_KEY, map);
 }
 
-function isCurrentlyDismissed(walletId) {
-    try {
-        const raw = globalThis.localStorage?.getItem(SESSION_DISMISS_KEY);
-        if (!raw) return false;
-        const parsed = JSON.parse(raw);
-        const until = parsed?.[walletId];
-        return typeof until === 'number' && Date.now() < until;
-    } catch {
-        return false;
-    }
+function dismissedUntil(walletId, now) {
+    const until = readStore(SESSION_DISMISS_KEY)[walletId];
+    return typeof until === 'number' && now < until ? until : null;
+}
+
+function firstFundedAt(walletId, hasFunds, now) {
+    const map = readStore(FUNDED_AT_KEY);
+    const stored = map[walletId];
+    if (typeof stored === 'number' && Number.isFinite(stored)) return stored;
+    if (!hasFunds) return null;
+    map[walletId] = now;
+    writeStore(FUNDED_AT_KEY, map);
+    return now;
+}
+
+/**
+ * @param {Array<{ quantity?: string | number | bigint, pendingQuantity?: string | number | bigint, escrowed?: string | number | bigint }>} rows
+ * @returns {boolean}
+ */
+export function hasBackupReminderFunds(rows) {
+    return Array.isArray(rows) && rows.some((row) => (
+        ['quantity', 'pendingQuantity', 'escrowed'].some((field) => {
+            try {
+                return BigInt(row?.[field] ?? 0) > 0n;
+            } catch {
+                return false;
+            }
+        })
+    ));
 }
 
 /**
  * @typedef {Object} BackupReminderInput
  * @property {string} walletId
- * @property {string | null | undefined} walletCreatedAt   ISO timestamp from Wallet.createdAt
- * @property {{ backupReminders?: 'off' | 'monthly' | 'quarterly' } | null | undefined} settings
+ * @property {boolean} hasFunds                            current balance includes confirmed, pending, or escrowed funds
+ * @property {boolean} [isDemo]
+ * @property {string | null} [walletMode]
  * @property {number} [now]                                 epoch ms (injectable for tests)
  */
 
@@ -103,6 +184,7 @@ function isCurrentlyDismissed(walletId) {
  * @property {string} [headline]
  * @property {string} [body]
  * @property {boolean} [dismissable]
+ * @property {number} [recheckAt] epoch ms when a temporary hidden state expires
  */
 
 /**
@@ -110,57 +192,39 @@ function isCurrentlyDismissed(walletId) {
  * @returns {BackupReminderState}
  */
 export function computeBackupReminderState(input) {
-    const { walletId, walletCreatedAt, settings } = input || {};
-    const now = typeof input?.now === 'number' ? input.now : Date.now();
-    if (!walletId) return { kind: 'hidden' };
+    const {
+        walletId,
+        hasFunds = false,
+        isDemo = false,
+        walletMode = 'full',
+    } = input || {};
+    const now = typeof input?.now === 'number' && Number.isFinite(input.now)
+        ? input.now
+        : Date.now();
+    if (typeof walletId !== 'string' || !walletId
+        || isDemo || walletMode === null || walletMode === 'watcher') {
+        return { kind: 'hidden' };
+    }
 
     const verifiedAt = getBackupVerifiedAt(walletId);
-    const cadence = settings?.backupReminders ?? 'off';
+    if (verifiedAt) return { kind: 'hidden' };
 
-    if (verifiedAt) {
-        if (cadence === 'off') return { kind: 'hidden' };
-        const verifiedMs = Date.parse(verifiedAt);
-        if (!Number.isFinite(verifiedMs)) return { kind: 'hidden' };
-        const cadenceDays = cadence === 'monthly' ? 30 : 90;
-        if (now - verifiedMs < cadenceDays * MS_PER_DAY) return { kind: 'hidden' };
-        if (isCurrentlyDismissed(walletId)) return { kind: 'hidden' };
+    const recheckAt = dismissedUntil(walletId, now);
+    if (recheckAt !== null) return { kind: 'hidden', recheckAt };
+    const fundedAt = firstFundedAt(walletId, hasFunds, now);
+    const fundedDays = fundedAt === null ? 0 : Math.max(0, now - fundedAt) / MS_PER_DAY;
+    if (fundedAt !== null && fundedDays >= FIRM_AFTER_DAYS) {
         return {
-            kind: 'gentle',
-            headline: cadence === 'monthly' ? 'Monthly backup check' : 'Quarterly backup check',
-            body: 'Time to re-verify your recovery phrase or export a fresh encrypted backup.',
-            dismissable: true,
+            kind: 'firm',
+            headline: 'Back up your wallet',
+            body: 'Save your recovery phrase or export an encrypted backup. Without one, losing or wiping this device can permanently lock you out of this wallet.',
+            dismissable: false,
         };
     }
-
-    // Never-verified wallet.
-    const createdMs = walletCreatedAt ? Date.parse(walletCreatedAt) : NaN;
-    if (Number.isFinite(createdMs)) {
-        const ageDays = (now - createdMs) / MS_PER_DAY;
-        if (ageDays < GENTLE_AFTER_DAYS) return { kind: 'hidden' };
-        if (isCurrentlyDismissed(walletId) && ageDays < FIRM_AFTER_DAYS) {
-            return { kind: 'hidden' };
-        }
-        if (ageDays >= FIRM_AFTER_DAYS) {
-            return {
-                kind: 'firm',
-                headline: 'Back up your recovery phrase',
-                body: 'You haven\'t confirmed your recovery phrase. If this device is lost or wiped, anything in this wallet is gone forever.',
-                dismissable: false,
-            };
-        }
-        return {
-            kind: 'gentle',
-            headline: 'Confirm your recovery phrase',
-            body: 'Take 30 seconds to verify the recovery phrase you wrote down. It\'s the only way to recover this wallet.',
-            dismissable: true,
-        };
-    }
-
-    if (isCurrentlyDismissed(walletId)) return { kind: 'hidden' };
     return {
         kind: 'gentle',
-        headline: 'Confirm your recovery phrase',
-        body: 'Take 30 seconds to verify the recovery phrase you wrote down. It\'s the only way to recover this wallet.',
+        headline: 'Back up your wallet',
+        body: 'Save your recovery phrase or export an encrypted backup so you can restore this wallet if this device is lost or wiped.',
         dismissable: true,
     };
 }

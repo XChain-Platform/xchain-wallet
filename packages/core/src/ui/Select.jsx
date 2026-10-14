@@ -8,8 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { forwardRef, useId } from 'react';
+import { forwardRef, useEffect, useId, useState } from 'react';
 import styles from './Input.module.css';
+import { resolveFieldRequirement } from './fieldRequirement.js';
 
 /**
  * Controlled `<select>` that shares Input's field/label/control styling, so a
@@ -22,42 +23,90 @@ import styles from './Input.module.css';
  * @property {string} [hint]
  * @property {string} [error]
  * @property {string} [id]
- * @property {'md' | 'lg'} [size]   field size, matching Input.
+ * @property {boolean} [optional]   appends the standard "(optional)" suffix and exposes the field as optional to assistive technology.
+ * @property {'sm' | 'md' | 'lg'} [size] field size, matching Input.
  */
 export const Select = forwardRef(function Select(
-    { label, hint, error, id, size = 'md', children, ...rest },
+    {
+        label,
+        hint,
+        error,
+        id,
+        optional = false,
+        size = 'md',
+        children,
+        className,
+        onChange,
+        required = false,
+        'aria-invalid': externalInvalid,
+        'aria-describedby': externalDescribedBy,
+        'aria-required': externalRequired,
+        ...rest
+    },
     ref,
 ) {
     const autoId = useId();
     const selectId = id || autoId;
-    const hintId = hint ? `${selectId}-hint` : undefined;
-    const errorId = error ? `${selectId}-error` : undefined;
-    const describedBy = [hintId, errorId].filter(Boolean).join(' ') || undefined;
-    const selectClass = `${styles.input} ${error ? styles.invalid : ''}`.trim();
+    const requirement = resolveFieldRequirement({
+        label,
+        optional,
+        required,
+        ariaRequired: externalRequired,
+    });
+    const [dismissedError, setDismissedError] = useState(null);
+    const visibleError = error && error !== dismissedError ? error : null;
+    const hintId = hint && !visibleError ? `${selectId}-hint` : undefined;
+    const errorId = visibleError ? `${selectId}-error` : undefined;
+    const describedBy = [externalDescribedBy, hintId, errorId]
+        .filter(Boolean).join(' ') || undefined;
+    const selectClass = [styles.input, visibleError ? styles.invalid : '', className]
+        .filter(Boolean).join(' ');
+
+    useEffect(() => {
+        if (!error) setDismissedError(null);
+    }, [error]);
+
+    const handleChange = (event) => {
+        if (error) setDismissedError(error);
+        onChange?.(event);
+    };
 
     return (
         <div className={`${styles.field} ${styles[size] || ''}`.trim()}>
             {label ? (
                 <label htmlFor={selectId} className={styles.label}>
-                    {label}
+                    {requirement.label}
                 </label>
             ) : null}
-            <select
-                ref={ref}
-                id={selectId}
-                className={selectClass}
-                aria-invalid={error ? 'true' : undefined}
-                aria-describedby={describedBy}
-                {...rest}
-            >
-                {children}
-            </select>
-            {hint && !error ? (
+            <div className={styles.controlHitArea} onPointerDown={activateControlHitArea}>
+                <select
+                    ref={ref}
+                    id={selectId}
+                    className={selectClass}
+                    aria-invalid={visibleError ? 'true' : externalInvalid}
+                    aria-describedby={describedBy}
+                    aria-required={requirement.ariaRequired}
+                    required={required}
+                    onChange={handleChange}
+                    {...rest}
+                >
+                    {children}
+                </select>
+            </div>
+            {hint && !visibleError ? (
                 <div id={hintId} className={styles.hint}>{hint}</div>
             ) : null}
-            {error ? (
-                <div id={errorId} className={styles.error} role="alert">{error}</div>
+            {visibleError ? (
+                <div id={errorId} className={styles.error} role="alert">{visibleError}</div>
             ) : null}
         </div>
     );
 });
+
+function activateControlHitArea(event) {
+    if (event.target !== event.currentTarget) return;
+    event.preventDefault();
+    const control = event.currentTarget.firstElementChild;
+    control?.focus();
+    control?.click();
+}

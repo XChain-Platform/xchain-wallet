@@ -19,7 +19,7 @@
 // whenever the coin or currency changes. The refresh is internally
 // TTL-throttled, so mounting many consumers stays cheap.
 
-import { useEffect, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import {
     getFiatRate,
     getTokenFiatRate,
@@ -27,30 +27,35 @@ import {
     refreshTokenFiatRate,
     subscribeFiatRates,
 } from '../../flows/priceLookup.js';
+import { defaultRegistry } from '../../registry/index.js';
 
 /**
  * @param {object} opts
  * @param {string | null | undefined} opts.chainCoin     coin family, e.g. 'bitcoin'
  * @param {string} [opts.fiatCurrency]                   default 'USD'
  * @param {boolean} [opts.allowCoingeckoFallback]        pass privacy.priceDataEnabled !== false
+ * @param {boolean} [opts.enabled]                       false suppresses cached rates and refreshes
  * @returns {import('../../flows/priceLookup.js').FiatRate | null}
  */
-export function useFiatRate({ chainCoin, fiatCurrency = 'USD', allowCoingeckoFallback = true } = {}) {
+export function useFiatRate({ chainCoin, fiatCurrency = 'USD', allowCoingeckoFallback = true, enabled = true } = {}) {
     const rate = useSyncExternalStore(
         subscribeFiatRates,
-        () => (chainCoin ? getFiatRate({ chainCoin, fiatCurrency }) : null),
+        () => (enabled && chainCoin ? getFiatRate({ chainCoin, fiatCurrency }) : null),
     );
 
     useEffect(() => {
-        if (!chainCoin) return;
+        if (!enabled || !chainCoin) return;
+        const controller = new AbortController();
         refreshFiatRates({
             chainCoins: [chainCoin],
             fiatCurrency,
             allowCoingeckoFallback,
+            signal: controller.signal,
         }).catch(() => { /* cache keeps its last value; UI shows no fiat */ });
-    }, [chainCoin, fiatCurrency, allowCoingeckoFallback]);
+        return () => controller.abort();
+    }, [chainCoin, fiatCurrency, allowCoingeckoFallback, enabled]);
 
-    return rate;
+    return enabled ? rate : null;
 }
 
 /**
@@ -128,6 +133,7 @@ function classifyTick({ tick, nativeTicker }) {
  * @param {string | null | undefined} opts.nativeTicker  e.g. 'BTC'; unknown = fail closed
  * @param {string} [opts.fiatCurrency]                   default 'USD'
  * @param {boolean} [opts.allowCoingeckoFallback]        pass privacy.priceDataEnabled !== false
+ * @param {boolean} [opts.enabled]                       false suppresses cached rates and refreshes
  * @returns {import('../../flows/priceLookup.js').FiatRate | null}
  */
 export function useTickFiatRate({
@@ -136,28 +142,263 @@ export function useTickFiatRate({
     nativeTicker,
     fiatCurrency = 'USD',
     allowCoingeckoFallback = true,
+    enabled = true,
 } = {}) {
-    const coinRate = useFiatRate({ chainCoin, fiatCurrency, allowCoingeckoFallback });
+    const coinRate = useFiatRate({ chainCoin, fiatCurrency, allowCoingeckoFallback, enabled });
     const kind = classifyTick({ tick, nativeTicker });
     const isToken = kind === 'token';
 
     // Same store, so a landed token refresh re-renders exactly like a coin one.
     const tokenRate = useSyncExternalStore(
         subscribeFiatRates,
-        () => (isToken && chainCoin ? getTokenFiatRate({ chainCoin, tick, fiatCurrency }) : null),
+        () => (enabled && isToken && chainCoin ? getTokenFiatRate({ chainCoin, tick, fiatCurrency }) : null),
     );
 
     useEffect(() => {
-        if (!isToken || !chainCoin) return;
+        if (!enabled || !isToken || !chainCoin) return;
+        const controller = new AbortController();
         refreshTokenFiatRate({
             chainCoin,
             tick,
             nativeTicker,
             fiatCurrency,
             allowCoingeckoFallback,
+            signal: controller.signal,
         }).catch(() => { /* cache keeps its last value; UI shows no fiat */ });
-    }, [isToken, chainCoin, tick, nativeTicker, fiatCurrency, allowCoingeckoFallback]);
+        return () => controller.abort();
+    }, [isToken, chainCoin, tick, nativeTicker, fiatCurrency, allowCoingeckoFallback, enabled]);
 
+    if (!enabled) return null;
     if (isToken) return tokenRate;
     return fiatRateForTick({ rate: coinRate, tick, nativeTicker });
+}
+
+/**
+ * Live §45 rates for several coin families at once, keyed by family.
+ *
+ * Home prices one native row per chain the wallet holds, and the set of
+ * chains is only known at render time, so it cannot call `useFiatRate`
+ * once per coin. This reads every requested coin from the same cache in
+ * one store subscription and refreshes them in one batched call.
+ *
+ * `refreshKey` re-runs the refresh when it changes. Home passes its
+ * balance fetch time, so a refresh that failed at launch (offline, a
+ * timeout) is retried on the next balance poll instead of leaving the
+ * rows unpriced until a remount. The refresh is TTL-throttled, so a key
+ * that changes every poll costs nothing while the cached rates are fresh.
+ *
+ * @param {object} opts
+ * @param {string[]} opts.chainCoins                     coin families, e.g. ['bitcoin', 'litecoin']
+ * @param {string} [opts.fiatCurrency]                   default 'USD'
+ * @param {boolean} [opts.allowCoingeckoFallback]        pass privacy.priceDataEnabled !== false
+ * @param {boolean} [opts.refreshEnabled]                false reads cached rates without network work
+ * @param {unknown} [opts.refreshKey]                    any value; a change triggers a refresh
+ * @returns {Record<string, import('../../flows/priceLookup.js').FiatRate>}
+ */
+export function useNativeFiatRates({
+    chainCoins,
+    fiatCurrency = 'USD',
+    allowCoingeckoFallback = true,
+    refreshEnabled = true,
+    refreshKey,
+} = {}) {
+    const coins = Array.isArray(chainCoins)
+        ? Array.from(new Set(chainCoins.filter((c) => typeof c === 'string' && c.length > 0))).sort()
+        : [];
+    const coinKey = coins.join(',');
+
+    // The snapshot is a string so useSyncExternalStore compares it by value;
+    // it changes exactly when a requested coin's cached rate object changes.
+    const snapshot = useSyncExternalStore(
+        subscribeFiatRates,
+        () => coins
+            .map((coin) => {
+                const r = getFiatRate({ chainCoin: coin, fiatCurrency });
+                return r ? `${coin}=${r.rate}@${r.fetchedAt}:${r.stale === true}` : `${coin}=`;
+            })
+            .join('|'),
+    );
+
+    useEffect(() => {
+        if (coinKey.length === 0 || !refreshEnabled) return;
+        const controller = new AbortController();
+        refreshFiatRates({
+            chainCoins: coinKey.split(','),
+            fiatCurrency,
+            allowCoingeckoFallback,
+            signal: controller.signal,
+        }).catch(() => { /* cache keeps its last value; rows stay unpriced */ });
+        return () => controller.abort();
+    }, [coinKey, fiatCurrency, allowCoingeckoFallback, refreshEnabled, refreshKey]);
+
+    return useMemo(() => {
+        /** @type {Record<string, import('../../flows/priceLookup.js').FiatRate>} */
+        const out = {};
+        for (const coin of coinKey.length > 0 ? coinKey.split(',') : []) {
+            const r = getFiatRate({ chainCoin: coin, fiatCurrency });
+            if (r) out[coin] = r;
+        }
+        return out;
+    }, [snapshot, coinKey, fiatCurrency]); // eslint-disable-line react-hooks/exhaustive-deps
+}
+
+/**
+ * Live fiat rates for token rows, keyed by coin family and tick.
+ *
+ * Home cannot call `useTickFiatRate` once per row because its token set changes
+ * between balance polls. This hook subscribes once, refreshes each requested
+ * token through the same per-tick lookup, and returns only rates that actually
+ * exist. Missing token markets therefore remain missing instead of inheriting
+ * the chain coin's rate.
+ *
+ * @param {object} opts
+ * @param {Array<{chainCoin: string, tick: string, nativeTicker: string}>} opts.tokens
+ * @param {string} [opts.fiatCurrency]
+ * @param {boolean} [opts.allowCoingeckoFallback]
+ * @param {boolean} [opts.refreshEnabled]
+ * @param {unknown} [opts.refreshKey]
+ * @returns {Record<string, import('../../flows/priceLookup.js').FiatRate>}
+ */
+export function useTokenFiatRates({
+    tokens,
+    fiatCurrency = 'USD',
+    allowCoingeckoFallback = true,
+    refreshEnabled = true,
+    refreshKey,
+} = {}) {
+    const wanted = Array.isArray(tokens)
+        ? Array.from(new Map(tokens
+            .filter((t) => t?.chainCoin && t?.tick && t?.nativeTicker)
+            .map((t) => [`${t.chainCoin}|${String(t.tick).toUpperCase()}`, {
+                chainCoin: t.chainCoin,
+                tick: String(t.tick).toUpperCase(),
+                nativeTicker: String(t.nativeTicker).toUpperCase(),
+            }])).values())
+            .sort((a, b) => `${a.chainCoin}|${a.tick}`.localeCompare(`${b.chainCoin}|${b.tick}`))
+        : [];
+    const tokenKey = wanted.map((t) => `${t.chainCoin}|${t.tick}|${t.nativeTicker}`).join(',');
+
+    const snapshot = useSyncExternalStore(
+        subscribeFiatRates,
+        () => wanted.map((t) => {
+            const rate = getTokenFiatRate({
+                chainCoin: t.chainCoin,
+                tick: t.tick,
+                fiatCurrency,
+            });
+            return rate
+                ? `${t.chainCoin}|${t.tick}=${rate.rate}@${rate.fetchedAt}:${rate.stale === true}`
+                : `${t.chainCoin}|${t.tick}=`;
+        }).join(','),
+    );
+
+    useEffect(() => {
+        if (wanted.length === 0 || !refreshEnabled) return;
+        const controller = new AbortController();
+        Promise.all(wanted.map((t) => refreshTokenFiatRate({
+            ...t,
+            fiatCurrency,
+            allowCoingeckoFallback,
+            signal: controller.signal,
+        }))).catch(() => { /* individual misses leave their rows unpriced */ });
+        return () => controller.abort();
+    }, [tokenKey, fiatCurrency, allowCoingeckoFallback, refreshEnabled, refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    return useMemo(() => {
+        const out = {};
+        for (const token of wanted) {
+            const rate = getTokenFiatRate({
+                chainCoin: token.chainCoin,
+                tick: token.tick,
+                fiatCurrency,
+            });
+            if (rate) out[`${token.chainCoin}|${token.tick}`] = rate;
+        }
+        return out;
+    }, [snapshot, tokenKey, fiatCurrency]); // eslint-disable-line react-hooks/exhaustive-deps
+}
+
+/**
+ * Attach live coin rates to native balance rows that have none.
+ *
+ * Real balance reads (flows/balances.js) carry no price, so every native
+ * row built from them arrives with `fiatRate: null` and the Home hero
+ * counted it as unpriced. This fills the rate in from the coin's live
+ * §45 rate, keyed by the chain's coin family.
+ *
+ * A numeric `fiatRate` already on a row is kept: demo fixtures price
+ * themselves. A row whose balance could not be read at all
+ * (`unavailable === 'all'`) stays unpriced, because its quantity is a
+ * placeholder zero and pricing it would state a $0.00 the wallet does
+ * not know. Tokens are left alone; a coin rate never prices a token.
+ *
+ * @template {{ kind: string, chainId: string, fiatRate: number | null, unavailable?: string }} R
+ * @param {R[]} rows
+ * @param {Record<string, { rate: number }>} ratesByCoin   coin family -> FiatRate
+ * @returns {R[]}  the same array when nothing changes, else a new one
+ */
+export function priceNativeRows(rows, ratesByCoin) {
+    if (!Array.isArray(rows) || !ratesByCoin) return rows;
+    let changed = false;
+    const out = rows.map((row) => {
+        if (!row || row.kind !== 'native') return row;
+        if (typeof row.fiatRate === 'number') return row;
+        if (row.unavailable === 'all') return row;
+        if (defaultRegistry().get(row.chainId)?.networkKind !== 'mainnet') return row;
+        const id = String(row.chainId || '');
+        const dash = id.indexOf('-');
+        const coin = dash > 0 ? id.slice(0, dash) : id;
+        const fiatRate = ratesByCoin[coin];
+        const rate = fiatRate?.rate;
+        if (typeof rate !== 'number' || !Number.isFinite(rate) || rate <= 0) return row;
+        changed = true;
+        return {
+            ...row,
+            fiatRate: rate,
+            fiatRateSource: fiatRate.source,
+            fiatRateFetchedAt: fiatRate.fetchedAt,
+            fiatRateStale: fiatRate.stale === true,
+        };
+    });
+    return changed ? out : rows;
+}
+
+/**
+ * Attach per-token rates to unpriced token rows.
+ *
+ * Existing numeric rates belong to demo fixtures and remain authoritative.
+ * Native rows are never considered, and a missing per-token rate leaves the
+ * row untouched so neither its fiat display nor the portfolio total can fall
+ * back to a coin-family price.
+ *
+ * @template {{ kind: string, chainId: string, tick: string, fiatRate: number | null }} R
+ * @param {R[]} rows
+ * @param {Record<string, import('../../flows/priceLookup.js').FiatRate>} ratesByToken
+ * @returns {R[]}
+ */
+export function priceTokenRows(rows, ratesByToken) {
+    if (!Array.isArray(rows) || !ratesByToken) return rows;
+    let changed = false;
+    const out = rows.map((row) => {
+        if (!row || row.kind === 'native') return row;
+        if (typeof row.fiatRate === 'number') return row;
+        if (defaultRegistry().get(row.chainId)?.networkKind !== 'mainnet') return row;
+        const id = String(row.chainId || '');
+        const dash = id.indexOf('-');
+        const coin = dash > 0 ? id.slice(0, dash) : id;
+        const rate = ratesByToken[`${coin}|${String(row.tick || '').toUpperCase()}`];
+        if (!rate || typeof rate.rate !== 'number' || !Number.isFinite(rate.rate) || rate.rate <= 0) {
+            return row;
+        }
+        changed = true;
+        return {
+            ...row,
+            fiatRate: rate.rate,
+            fiatRateSource: rate.source,
+            fiatRateFetchedAt: rate.fetchedAt,
+            fiatRateStale: rate.stale === true,
+            change24hPct: Number.isFinite(rate.change24hPct) ? rate.change24hPct : null,
+        };
+    });
+    return changed ? out : rows;
 }

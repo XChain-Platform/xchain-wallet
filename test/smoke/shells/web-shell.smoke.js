@@ -115,9 +115,11 @@ const home = readFileSync(
 // Locking is not in this list: a later change moved both the idle timer and the
 // manual Lock entry out of Home and into the shell, because a route
 // unmounts on navigation and cancelled the auto-lock timer with it.
+// Balances go through loadDisplayBalances, which calls
+// messaging.getWalletBalances for every wallet but the demo one.
 for (const call of [
     'messaging.listWallets',
-    'messaging.getWalletBalances',
+    'loadDisplayBalances(messaging',
 ]) {
     assert.ok(home.includes(call), `shared Home.jsx wires ${call}`);
 }
@@ -142,7 +144,8 @@ assert.ok(
     'ExtensionBanner is wired to the useExtensionWallet hook',
 );
 assert.ok(
-    /Use extension wallet/.test(banner),
+    /t\('extensionBanner\.useExtension'\)/.test(banner)
+        && /'extensionBanner\.useExtension': 'Use extension wallet'/.test(readFileSync(join(wsRoot, 'packages', 'core', 'src', 'i18n', 'locales', 'en', 'index.js'), 'utf8')),
     'ExtensionBanner offers the "Use extension wallet" accept action',
 );
 

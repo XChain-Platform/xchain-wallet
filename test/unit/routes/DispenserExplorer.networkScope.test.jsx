@@ -8,26 +8,30 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// D-34(b): the dispenser explorer's two observed faults, both of which the
-// user meets in the same moment.
+// Pin the dispenser explorer's network scope and user-facing failure copy,
+// which the user meets in the same search.
 //
-//   1. "All chains" fanned out over `chainRegistry.supportedChains()` - EVERY
-//      chain the registry knows - while the wallet was sitting on Regtest. So
-//      a regtest wallet fired searches at mainnet and testnet explorers it is
-//      not configured to reach, on every search.
-//   2. Those requests came back 404, which for this endpoint means "no
-//      dispensers for that token", and the screen rendered the raw string:
-//      "Couldn't search: Explorer returned HTTP 404 for
-//      /BTC/api/dispensers/XCHAIN/token". A user who searched a ticker nobody
-//      dispenses was told the app was broken.
+// Restrict "All chains" to registry entries matching the active network.
+// Otherwise a regtest wallet queries mainnet and testnet explorers that have
+// no configured endpoint for the current wallet.
 //
-// (1) is the cause and (2) is what made it visible, so both are pinned here.
-// The 404 rule is deliberately narrow: every other status still surfaces,
-// because a 500 or a dead host IS a failure and swallowing it would trade a
-// noisy bug for a silent one.
+// Treat a 404 as "no dispensers for that token", which is an empty result.
+// Keep other provider failures visible through fixed copy without exposing
+// status codes or paths.
+//
+// Pin both rules here: the 404 rule is deliberately narrow, while a 500 or a
+// dead host remains a visible failure through the shared message filter.
+
+// Keep the cases separate because an empty result and an unavailable service
+// require different recovery choices even though both return no rows.
+
+// Assert on rendered copy as well as alert state so provider diagnostics cannot
+// pass through while the component still appears structurally correct.
+
+// Exercise all-chain fan-out because one failing network must not hide another.
 
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DispenserExplorer } from '../../../packages/core/src/shared/routes/DispenserExplorer.jsx';
 import { registry as registryLib } from '../../../packages/core/src/index.js';
@@ -58,14 +62,87 @@ function renderExplorer({ activeNetwork, getDispensersForToken }) {
 async function searchFor(token) {
     // The settings load is async; the chain list is empty until it lands, and
     // searching before then would escape the filter - so wait for it.
-    await waitFor(() => expect(screen.getByRole('combobox')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
     const input = screen.getByRole('textbox');
     fireEvent.change(input, { target: { value: token } });
     fireEvent.click(screen.getByRole('button', { name: /search/i }));
 }
 
-describe('DispenserExplorer network scoping (D-34b)', () => {
-    it('an "All chains" search on REGTEST queries only regtest chains', async () => {
+describe('DispenserExplorer network scoping', () => {
+    it('explains that a search term is required once the network is ready', async () => {
+        renderExplorer({ activeNetwork: 'mainnet', getDispensersForToken: vi.fn() });
+        const action = await screen.findByRole('button', { name: /search/i });
+
+        expect(screen.getByRole('form', { name: 'Find open dispensers' })).toBeTruthy();
+        expect(screen.getByRole('region', { name: 'Find open dispensers' })).toBeTruthy();
+        await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
+        expect(screen.queryByText(/Search by token ticker to find open dispensers/)).toBeNull();
+        expect(screen.getByText(/Ticker name, such as MYTOKEN/)).toBeTruthy();
+        expect(action).toBeDisabled();
+        expect(action).toHaveAttribute('aria-describedby', 'dispenser-search-disabled-reason');
+    });
+
+    it('explains and disables search until the active network is loaded', async () => {
+        let resolveSettings;
+        const getDispensersForToken = vi.fn();
+        const messaging = {
+            getSettings: () => new Promise((resolve) => { resolveSettings = resolve; }),
+            updateSettings: async (p) => p,
+            getDispensersForToken,
+            getDispensersForAddress: vi.fn(),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <DispenserExplorer onOpenDispenser={() => {}} onBack={() => {}} />
+            </MessagingProvider>,
+        );
+
+        fireEvent.change(screen.getByRole('textbox'), { target: { value: 'XCHAIN' } });
+        expect(screen.getByText('Loading available networks…')).toBeTruthy();
+        const action = screen.getByRole('button', { name: /search/i });
+        expect(action).toBeDisabled();
+        expect(action).toHaveAttribute('aria-describedby', 'dispenser-search-disabled-reason');
+        expect(getDispensersForToken).not.toHaveBeenCalled();
+
+        await act(async () => resolveSettings({ schemaVersion: 2, activeNetwork: 'mainnet' }));
+        await waitFor(() => expect(screen.getByRole('button', { name: /search/i })).not.toBeDisabled());
+    });
+
+    it('keeps a slower earlier search from replacing newer results', async () => {
+        const pending = new Map();
+        const getDispensersForToken = vi.fn(({ token }) => new Promise((resolve) => {
+            const resolvers = pending.get(token) || [];
+            resolvers.push(resolve);
+            pending.set(token, resolvers);
+        }));
+        renderExplorer({ activeNetwork: 'mainnet', getDispensersForToken });
+
+        await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
+        const input = screen.getByRole('textbox');
+        const form = input.closest('form');
+
+        fireEvent.change(input, { target: { value: 'FIRST' } });
+        fireEvent.submit(form);
+        await waitFor(() => expect(pending.has('FIRST')).toBe(true));
+
+        fireEvent.change(input, { target: { value: 'SECOND' } });
+        fireEvent.submit(form);
+        await waitFor(() => expect(pending.has('SECOND')).toBe(true));
+
+        pending.get('SECOND').forEach((resolve, index) => resolve({
+            rows: index === 0 ? [{ action_index: 2, give_tick: 'SECOND', address: 'new-result' }] : [],
+        }));
+        expect(await screen.findByText(/SECOND @/)).toBeTruthy();
+
+        pending.get('FIRST').forEach((resolve, index) => resolve({
+            rows: index === 0 ? [{ action_index: 1, give_tick: 'FIRST', address: 'old-result' }] : [],
+        }));
+        await Promise.resolve();
+        expect(screen.queryByText(/FIRST @/)).toBeNull();
+        expect(screen.getByText(/SECOND @/)).toBeTruthy();
+    });
+
+    it('a REGTEST search queries only regtest chains', async () => {
         const regtest = chainIdsOn('regtest');
         expect(regtest.length, 'the registry has no regtest chains, so this test proves nothing').toBeGreaterThan(0);
 
@@ -96,13 +173,15 @@ describe('DispenserExplorer network scoping (D-34b)', () => {
     });
 
     it('a 404 reads as "no dispensers", not as a broken app', async () => {
+        // Treat absence as a valid result so a retry prompt does not imply that
+        // the wallet or its connection failed.
         const getDispensersForToken = vi.fn().mockRejectedValue(
             new Error('Explorer returned HTTP 404 for /BTC/api/dispensers/XCHAIN/token'),
         );
         renderExplorer({ activeNetwork: 'mainnet', getDispensersForToken });
         await searchFor('XCHAIN');
 
-        await waitFor(() => expect(screen.getByText(/No open dispensers matched/i)).toBeTruthy());
+        await waitFor(() => expect(screen.getByText(/No matching dispensers/i)).toBeTruthy());
         expect(screen.queryByRole('alert'),
             'the raw explorer error is still on screen for what is an ordinary empty result')
             .toBeNull();
@@ -110,43 +189,67 @@ describe('DispenserExplorer network scoping (D-34b)', () => {
     });
 
     it('a search where EVERY chain fails says so, instead of "no results"', async () => {
-        // Found while fixing the 404 case. `ResultsPane` returned "No open
-        // dispensers matched" on the row count alone, so a totally failed
-        // search - explorer down, wrong endpoint configured - reported an
-        // empty result and dropped every error on the floor. The original
-        // D-34(b) complaint was only ever VISIBLE because one chain returned
-        // rows while the out-of-network ones 404'd.
+        // Distinguish a total request failure from an empty successful search.
+        // ResultsPane receives both as zero rows, so the error flags carry the
+        // difference and must remain visible through the rendering branch.
         const getDispensersForToken = vi.fn().mockRejectedValue(
             new Error('Explorer returned HTTP 503 for /BTC/api/dispensers/XCHAIN/token'),
         );
         renderExplorer({ activeNetwork: 'mainnet', getDispensersForToken });
         await searchFor('XCHAIN');
 
-        // One alert per failing chain: the fan-out is per chain and so is the
-        // report, which is what tells the user WHICH explorer is down.
+        // Keep one alert per failing chain because the fan-out can return
+        // partial results and each failed network remains independently retryable.
         const alerts = await waitFor(() => screen.getAllByRole('alert'));
-        expect(alerts.every((el) => /HTTP 503/.test(el.textContent))).toBe(true);
-        expect(screen.queryByText(/No open dispensers matched/i),
+        expect(alerts.every((el) => /Could not search for dispensers\. Try again\./.test(el.textContent)))
+            .toBe(true);
+        expect(alerts.every((el) => !/HTTP|\/api\//.test(el.textContent))).toBe(true);
+        expect(screen.queryByText(/No matching dispensers/i),
             'every chain failed and the screen still called it an empty result')
             .toBeNull();
     });
 
     it('but a 500 still surfaces, because that one IS a failure', async () => {
+        // Keep the service failure visible while filtering the status code and
+        // request path, which are provider details rather than recovery advice.
         const getDispensersForToken = vi.fn().mockRejectedValue(
             new Error('Explorer returned HTTP 500 for /BTC/api/dispensers/XCHAIN/token'),
         );
         renderExplorer({ activeNetwork: 'mainnet', getDispensersForToken });
         await searchFor('XCHAIN');
 
-        // Matched on the alert ROLE, not the copy: the label and the message
-        // are two text nodes, and what actually matters is that the failure is
-        // announced rather than which words wrap it.
-        // One alert per failing chain: the fan-out is per chain and so is the
-        // report, which is what tells the user WHICH explorer is down.
+        // Match on the alert role because the label and message are separate
+        // text nodes. One alert per chain keeps partial failures visible.
         const alerts = await waitFor(() => screen.getAllByRole('alert'));
         expect(alerts.map((el) => el.textContent).join(' '),
-            'a real explorer failure was swallowed along with the 404s, trading a noisy bug for a '
-            + 'silent one')
-            .toMatch(/HTTP 500/);
+            'a real explorer failure was swallowed along with the 404s')
+            .toMatch(/Could not search for dispensers\. Try again\./);
+        expect(alerts.map((el) => el.textContent).join(' ')).not.toMatch(/HTTP 500|\/api\//);
+    });
+
+    it('shows a search skeleton, retries errors, and resets an empty search', async () => {
+        // Verify the fixed fallback still retains the existing recovery action.
+        let resolveFirst;
+        const getDispensersForToken = vi.fn()
+            .mockImplementationOnce(() => new Promise((resolve, reject) => { resolveFirst = { resolve, reject }; }))
+            .mockResolvedValue({ data: [] });
+        renderExplorer({ activeNetwork: 'mainnet', getDispensersForToken });
+
+        await waitFor(() => expect(screen.getByText('Enter a token ticker to search.')).toBeTruthy());
+        const input = screen.getByRole('textbox');
+        fireEvent.change(input, { target: { value: 'XCHAIN' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+
+        expect(screen.getByRole('status', { name: 'Searching dispensers' })).toBeInTheDocument();
+        await waitFor(() => expect(resolveFirst).toBeTruthy());
+        await act(async () => resolveFirst.reject(new Error('service unavailable')));
+        fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
+
+        expect(await screen.findByText('No matching dispensers')).toBeInTheDocument();
+        expect(getDispensersForToken).toHaveBeenCalledTimes(chainIdsOn('mainnet').length * 2);
+        fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
+        expect(input).toHaveValue('');
+        expect(screen.queryByText(/Search by token ticker to find open dispensers/)).toBeNull();
+        expect(screen.getByText(/Ticker name, such as MYTOKEN/)).toBeInTheDocument();
     });
 });

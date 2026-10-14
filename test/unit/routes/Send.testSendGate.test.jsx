@@ -21,9 +21,23 @@
 // with a threshold configured, and assert the user is actually stopped, i.e.
 // nothing crosses the messaging boundary until the warning is acknowledged.
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
+
+const renderMetrics = vi.hoisted(() => ({ noveltyChecks: vi.fn() }));
+
+vi.mock('../../../packages/core/src/flows/recipientNovelty.js', async (importOriginal) => {
+    const actual = await importOriginal();
+    return {
+        ...actual,
+        checkRecipientNovelty: (...args) => {
+            renderMetrics.noveltyChecks();
+            return actual.checkRecipientNovelty(...args);
+        },
+    };
+});
+
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
 
@@ -92,19 +106,20 @@ async function fillNativeSend({ to = NOVEL, amount = '0.02' } = {}) {
 
 const sendButton = () => screen.getByRole('button', { name: /^Send$/ });
 
+beforeEach(() => renderMetrics.noveltyChecks.mockClear());
 afterEach(() => cleanup());
 
 describe('Send: test-send gate reaches the screen', () => {
     it('warns before a large first send to a never-seen address', async () => {
         mount({ thresholdSats: 1 });
         await fillNativeSend();
-        expect(await screen.findByText(/First send to this address/i)).toBeInTheDocument();
+        expect(await screen.findByText(/First payment to this address/i)).toBeInTheDocument();
     });
 
     it('[REGRESSION] refuses to compose while the warning stands', async () => {
         const messaging = mount({ thresholdSats: 1 });
         await fillNativeSend();
-        await screen.findByText(/First send to this address/i);
+        await screen.findByText(/First payment to this address/i);
 
         fireEvent.click(sendButton());
         // Give the compose path a turn of the event loop to prove it is not
@@ -116,10 +131,10 @@ describe('Send: test-send gate reaches the screen', () => {
     it('composes once the user acknowledges the address', async () => {
         const messaging = mount({ thresholdSats: 1 });
         await fillNativeSend();
-        fireEvent.click(await screen.findByRole('button', { name: /verified/i }));
+        fireEvent.click(await screen.findByRole('button', { name: /full amount/i }));
 
         await waitFor(() => {
-            expect(screen.queryByText(/First send to this address/i)).toBeNull();
+            expect(screen.queryByText(/First payment to this address/i)).toBeNull();
         });
         fireEvent.click(sendButton());
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalled());
@@ -134,7 +149,7 @@ describe('Send: test-send gate reaches the screen', () => {
         await waitFor(() => expect(amountField.value).toBe('0.0002'));
         // 20,000 sats now sits under the 100,000-sat threshold, so the
         // warning must retire on its own.
-        expect(screen.queryByText(/First send to this address/i)).toBeNull();
+        expect(screen.queryByText(/First payment to this address/i)).toBeNull();
     });
 
     it('stays quiet for an amount under the threshold', async () => {
@@ -142,13 +157,13 @@ describe('Send: test-send gate reaches the screen', () => {
         await fillNativeSend({ amount: '0.02' });
         fireEvent.click(sendButton());
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalled());
-        expect(screen.queryByText(/First send to this address/i)).toBeNull();
+        expect(screen.queryByText(/First payment to this address/i)).toBeNull();
     });
 
     it('warns when amount and threshold differ above 2^53 sats', async () => {
         mount({ thresholdSats: '9007199254740992' });
         await fillNativeSend({ amount: '90071992.54740993' });
-        expect(await screen.findByText(/First send to this address/i)).toBeInTheDocument();
+        expect(await screen.findByText(/First payment to this address/i)).toBeInTheDocument();
     });
 
     it('stays quiet for an address the user has already sent to', async () => {
@@ -159,6 +174,24 @@ describe('Send: test-send gate reaches the screen', () => {
         await fillNativeSend();
         fireEvent.click(sendButton());
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalled());
-        expect(screen.queryByText(/First send to this address/i)).toBeNull();
+        expect(screen.queryByText(/First payment to this address/i)).toBeNull();
+    });
+
+    it('does not rescan contacts and history on amount keystrokes', async () => {
+        const history = Array.from({ length: 5_000 }, (_, index) => ({
+            action: 'SEND',
+            destination: `past-recipient-${index}`,
+        }));
+        mount({ thresholdSats: 1, history });
+        await fillNativeSend({ amount: '0.02' });
+        await screen.findByText(/First payment to this address/i);
+        const checksAfterRecipient = renderMetrics.noveltyChecks.mock.calls.length;
+        const amountField = screen.getByLabelText(/^Amount \(/);
+
+        fireEvent.change(amountField, { target: { value: '0.021' } });
+        fireEvent.change(amountField, { target: { value: '0.0212' } });
+        fireEvent.change(amountField, { target: { value: '0.02123' } });
+
+        expect(renderMetrics.noveltyChecks).toHaveBeenCalledTimes(checksAfterRecipient);
     });
 });

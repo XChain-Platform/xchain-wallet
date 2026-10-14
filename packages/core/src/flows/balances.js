@@ -26,7 +26,11 @@
 // not survive. Both are plain JSON values, so they do.
 
 import { tickerForCoin } from '../registry/coinTicker.js';
+import { decimalToBaseUnits, roundDecimalString } from '../shared/utils/amountFormat.js';
 import { importedAddressIdsFor } from './_importedAddressIds.js';
+import { UNCONFIRMED_COMMITTED_STATUSES } from './pendingDeltas.js';
+
+const LIVE_PENDING_STATUSES = new Set(UNCONFIRMED_COMMITTED_STATUSES);
 
 /**
  * Most addresses one batch request may carry.
@@ -138,16 +142,23 @@ export const BALANCE_POLL_INTERVAL_MS = 20000;
 // below builds BOTH: `native` from `/address/` (getAddress) and `tokens` from
 // `/balances/` (getBalances). Without this a funded wallet shows "No coins yet".
 
-// `/address/` returns balances.confirmed as a plain decimal string; convert to
-// a base-unit (satoshi) integer string at 8-decimal native scale, BigInt-exact.
+// `/address/` returns confirmed and pending as separate decimal strings.
+// Preserve that distinction while converting both to base-unit integer strings
+// at 8-decimal native scale, BigInt-exact. `quantity` remains confirmed and is
+// the only amount spendability and fiat calculations consume.
 function nativeFromAddress(addrResp, nativeTicker) {
-    const confirmed = addrResp && addrResp.balances && addrResp.balances.confirmed;
+    const balances = addrResp && addrResp.balances;
+    const confirmed = atomicFromHumanAmount(balances?.confirmed, 8);
     if (confirmed == null || !nativeTicker) return null;
-    const m = /^(\d+)(?:\.(\d+))?$/.exec(String(confirmed).trim());
-    if (!m) return null;
-    const frac = (m[2] || '').slice(0, 8).padEnd(8, '0');
-    const sats = (BigInt(m[1]) * 100000000n + BigInt(frac)).toString();
-    return { tick: nativeTicker, quantity: sats, divisibility: 8 };
+    const pending = balances?.pending == null
+        ? null
+        : atomicFromHumanAmount(balances.pending, 8);
+    return {
+        tick: nativeTicker,
+        quantity: confirmed,
+        divisibility: 8,
+        ...(pending == null ? {} : { pendingQuantity: pending }),
+    };
 }
 
 // `/balances/` returns { data: [...token rows], total }. Map the rows to the
@@ -186,16 +197,77 @@ export function tokensFromBalances(balResp) {
         .filter((t) => t.tick);
 }
 
-// Human-scale decimal string -> atomic-unit integer string, BigInt-exact
-// (same conversion nativeFromAddress applies at fixed 8-decimal scale).
-// Fractional digits beyond `decimals` are truncated; anything that isn't a
-// plain non-negative decimal returns null so the caller can fall back.
+// Human-scale decimal string -> atomic-unit integer string, BigInt-exact.
+// Explorer aggregates can carry more fractional places than the asset allows,
+// so the boundary rounds half away from zero before applying the atomic scale.
 function atomicFromHumanAmount(amount, decimals) {
-    const m = /^(\d+)(?:\.(\d+))?$/.exec(String(amount).trim());
-    if (!m) return null;
-    const d = Number.isFinite(decimals) && decimals > 0 ? Math.floor(decimals) : 0;
-    const frac = (m[2] || '').slice(0, d).padEnd(d, '0');
-    return (BigInt(m[1]) * 10n ** BigInt(d) + BigInt(frac || '0')).toString();
+    const scale = Number(decimals);
+    if (!Number.isInteger(scale) || scale < 0 || scale > 100) return null;
+    const rounded = roundDecimalString(amount, scale);
+    if (rounded === null) return null;
+    const atomic = decimalToBaseUnits(rounded, scale);
+    return atomic === null ? null : atomic.toString();
+}
+
+function subtractAtomic(quantity, debit) {
+    try {
+        const remaining = BigInt(String(quantity)) - BigInt(String(debit));
+        return (remaining > 0n ? remaining : 0n).toString();
+    } catch {
+        return String(quantity);
+    }
+}
+
+/**
+ * Project locally committed sends onto explorer balances that still describe
+ * the pre-send chain state. Terminal and indexed records contribute nothing,
+ * so a failed or dropped send restores the fetched balance and confirmation
+ * cannot subtract the same spend twice.
+ *
+ * @param {Record<string, AddressBalancesEntry[]>} byChain
+ * @param {Array<import('../schemas/pendingTx.js').PendingTx>} pendingTxs
+ * @param {import('../registry/index.js').ChainRegistry} chainRegistry
+ * @returns {Record<string, AddressBalancesEntry[]>}
+ */
+export function applyPendingBalanceDeltas(byChain, pendingTxs, chainRegistry) {
+    if (!byChain || !Array.isArray(pendingTxs)) return byChain;
+    for (const pending of pendingTxs) {
+        if (!pending || !LIVE_PENDING_STATUSES.has(pending.status)) continue;
+        const chainId = chainRegistry.chainIdFor(pending.chain, pending.network);
+        const entries = chainId && Array.isArray(byChain[chainId]) ? byChain[chainId] : [];
+        for (const entry of entries) {
+            if (entry?.address !== pending.fromAddress || !entry.balances) continue;
+            const native = entry.balances.native;
+            const nativeTick = String(native?.tick || '').toUpperCase();
+            let appliedExactNativeDebit = false;
+            if (native && /^\d+$/.test(String(pending.nativeDebitSats ?? ''))) {
+                native.quantity = subtractAtomic(native.quantity, pending.nativeDebitSats);
+                appliedExactNativeDebit = true;
+            }
+            const debits = Array.isArray(pending.balanceDebits) && pending.balanceDebits.length > 0
+                ? pending.balanceDebits
+                : (pending.tick && pending.amount != null
+                    ? [{ tick: pending.tick, amount: pending.amount }]
+                    : []);
+            for (const debit of debits) {
+                const tick = String(debit?.tick || '').toUpperCase();
+                if (!tick) continue;
+                if (native && tick === nativeTick) {
+                    if (!appliedExactNativeDebit) {
+                        const atomic = atomicFromHumanAmount(debit.amount, native.divisibility ?? 8);
+                        if (atomic !== null) native.quantity = subtractAtomic(native.quantity, atomic);
+                    }
+                    continue;
+                }
+                for (const token of Array.isArray(entry.balances.tokens) ? entry.balances.tokens : []) {
+                    if (String(token?.tick || '').toUpperCase() !== tick) continue;
+                    const atomic = atomicFromHumanAmount(debit.amount, token.divisibility ?? 0);
+                    if (atomic !== null) token.quantity = subtractAtomic(token.quantity, atomic);
+                }
+            }
+        }
+    }
+    return byChain;
 }
 
 // D-6: fetch the { native, tokens } shape for ONE address: the TOKEN ledger
@@ -231,27 +303,48 @@ function shapeFromReads({ balResp, addrResp, nativeTicker }) {
         throw balResp instanceof Error ? balResp : new Error(String(balResp));
     }
     // D-152: degrading independently is right; degrading SILENTLY is not. A
-    // failed token read used to return `tokens: []`, which is byte-identical to
+    // failed token read must not return `tokens: []`, which is byte-identical to
     // "this address holds no tokens" - so a hiccup on one endpoint presented as
     // a confident empty wallet: no rows on Home, and an asset picker that says
     // "Nothing matches" for a token the address is holding. `unavailable` names
     // which half is missing so a surface can say "could not read" instead of
     // "you have none". Nothing reads the field yet except the surfaces that
     // choose to; every existing consumer of `.native` / `.tokens` is unchanged.
+    //
+    // Issue #74: an `/address/` read can also SUCCEED and still not know the
+    // balance. The explorer answers 200 with `tracker_available: false` and
+    // null amounts when its UTXO tracker is not answering, and that body is
+    // "could not read", not "holds nothing". It is marked the same way a
+    // thrown read is, so Home says Unavailable and the Confirm preview stops
+    // projecting the coin from zero.
+    const addrUnreadable = addrOk && nativeAnswerUnreadable(addrResp);
     const unavailable = [
         ...(balOk ? [] : ['tokens']),
-        ...(addrOk ? [] : ['native']),
+        ...(addrOk && !addrUnreadable ? [] : ['native']),
     ];
+    const reason = !balOk
+        ? balResp?.message
+        : (addrUnreadable ? NATIVE_BALANCE_UNREADABLE_REASON : addrResp?.message);
     return {
-        native: addrOk ? nativeFromAddress(addrResp, nativeTicker) : null,
+        native: addrOk && !addrUnreadable ? nativeFromAddress(addrResp, nativeTicker) : null,
         tokens: balOk ? tokensFromBalances(balResp) : [],
         ...(unavailable.length > 0 ? {
             unavailable,
-            unavailableReason: String(
-                (balOk ? addrResp : balResp)?.message || 'balance read failed',
-            ),
+            unavailableReason: String(reason || 'balance read failed'),
         } : {}),
     };
+}
+
+/** Reason shown when `/address/` answered but carried no coin balance. */
+export const NATIVE_BALANCE_UNREADABLE_REASON = 'balance service unavailable';
+
+// An `/address/` body that answered without a coin balance: the explorer's own
+// "tracker not answering" flag, or a confirmed amount that is missing. A body
+// whose confirmed amount is present (including "0") is a real reading.
+function nativeAnswerUnreadable(addrResp) {
+    if (!addrResp || typeof addrResp !== 'object') return true;
+    if (addrResp.tracker_available === false) return true;
+    return addrResp.balances?.confirmed == null;
 }
 
 /**
@@ -377,11 +470,21 @@ export async function addressMempool({ sdkRegistry, chainId, address, opts }) {
 export async function indexerWatermark({ sdkRegistry, chainId }) {
     if (!sdkRegistry) throw new Error('indexerWatermark: sdkRegistry is required');
     if (!chainId) throw new Error('indexerWatermark: chainId is required');
-    const sdk = sdkRegistry.get(chainId);
+    let sdk;
+    try {
+        sdk = sdkRegistry.get(chainId);
+    } catch {
+        return { chainId, watermark: null };
+    }
     if (!sdk || typeof sdk.getStatus !== 'function') {
         return { chainId, watermark: null };
     }
-    const status = await sdk.getStatus();
+    let status;
+    try {
+        status = await sdk.getStatus();
+    } catch {
+        return { chainId, watermark: null };
+    }
     const lastBlock = status && typeof status === 'object' ? status.last_block : null;
     if (!lastBlock || typeof lastBlock !== 'object') {
         return { chainId, watermark: null };
@@ -746,5 +849,11 @@ export async function walletBalances({
             result[cid] = perChunk.flat();
         }),
     );
-    return result;
+    let pendingTxs = [];
+    try {
+        pendingTxs = await vault.pendingTxs.list();
+    } catch {
+        pendingTxs = [];
+    }
+    return applyPendingBalanceDeltas(result, pendingTxs, chainRegistry);
 }

@@ -115,10 +115,11 @@ export function clearAllChainFilters() {
                 toRemove.push(k);
             }
         }
+        let failed = 0;
         for (const k of toRemove) {
-            try { localStorage.removeItem(k); } catch { /* tolerate */ }
+            try { localStorage.removeItem(k); } catch { failed++; }
         }
-        return toRemove.length;
+        return toRemove.length - failed;
     } catch {
         return 0;
     }

@@ -8,6 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { getFormatLocale } from '../../i18n/index.js';
+import {
+    compareDecimalStrings,
+    expandDecimalNotation,
+    formatDecimalAmount,
+} from './amountFormat.js';
+
 /**
  * Whether a FIAT_AMOUNT is a price the CHAIN will accept.
  *
@@ -35,4 +42,92 @@
  */
 export function isValidFiatAmount(amount) {
     return /^\d+(\.\d{1,2})?$/.test(String(amount ?? ''));
+}
+
+function fiatDisplayState(value) {
+    const raw = expandDecimalNotation(value);
+    if (!raw) return null;
+    const numericValue = Number(raw);
+    const zeroComparison = compareDecimalStrings(raw, '0');
+    if (zeroComparison === null && !Number.isFinite(numericValue)) return null;
+    const compare = (target) => compareDecimalStrings(raw, target)
+        ?? (numericValue === Number(target) ? 0 : numericValue < Number(target) ? -1 : 1);
+    const direction = zeroComparison ?? (numericValue === 0 ? 0 : numericValue < 0 ? -1 : 1);
+    const tinyPositive = direction === 1 && compare('0.01') === -1;
+    const tinyNegative = direction === -1 && compare('-0.01') === 1;
+    return {
+        displayValue: tinyPositive ? '0.01' : tinyNegative ? '-0.01' : direction === 0 ? '0' : raw,
+        threshold: tinyPositive ? '< ' : tinyNegative ? '> ' : '',
+    };
+}
+
+/** Format an exact decimal value in the selected currency and language. */
+export function formatFiatAmount(value, currency = 'USD', locale, options = {}) {
+    if (value === null || value === undefined) return '';
+    const state = fiatDisplayState(value);
+    if (!state) return '';
+    const code = String(currency || 'USD').toUpperCase();
+    const omitCodeSymbol = options?.omitCodeSymbol === true;
+    let formatter;
+    try {
+        formatter = new Intl.NumberFormat(getFormatLocale(locale), {
+            style: 'currency',
+            currency: code,
+            currencyDisplay: 'symbol',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        });
+    } catch {
+        const formatted = formatDecimalAmount(state.displayValue, locale, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        });
+        return `${state.threshold}${formatted}${omitCodeSymbol ? '' : ` ${code}`}`;
+    }
+    let formatted = formatter.format(state.displayValue);
+    if (omitCodeSymbol) {
+        const parts = formatter.formatToParts(state.displayValue);
+        const currencyIsCode = parts.some(
+            (part) => part.type === 'currency' && part.value.toUpperCase() === code,
+        );
+        if (currencyIsCode) {
+            formatted = parts
+                .filter((part) => part.type !== 'currency')
+                .map((part) => part.value)
+                .join('')
+                .trim();
+        }
+    }
+    return `${state.threshold}${formatted}`;
+}
+
+/** Format a fiat value with a currency name for assistive technology. */
+export function formatFiatAmountForSpeech(value, currency = 'USD', locale) {
+    if (value === null || value === undefined) return '';
+    const state = fiatDisplayState(value);
+    if (!state) return '';
+    const code = String(currency || 'USD').toUpperCase();
+    let formatter;
+    try {
+        formatter = new Intl.NumberFormat(getFormatLocale(locale), {
+            style: 'currency',
+            currency: code,
+            currencyDisplay: 'name',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        });
+    } catch {
+        const formatted = formatDecimalAmount(state.displayValue, locale, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        });
+        const threshold = state.threshold === '< '
+            ? 'less than '
+            : state.threshold === '> ' ? 'more than ' : '';
+        return `${threshold}${formatted} ${code}`;
+    }
+    const threshold = state.threshold === '< '
+        ? 'less than '
+        : state.threshold === '> ' ? 'more than ' : '';
+    return `${threshold}${formatter.format(state.displayValue)}`;
 }

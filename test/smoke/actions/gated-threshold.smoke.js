@@ -93,7 +93,10 @@ const form = read('packages', 'core', 'src', 'shared', 'routes', 'GatedPublishFo
 assert.match(form, /gateMinAmountScheduledHeight\(chainId\)/, 'form reads the scheduled height (null = hidden)');
 assert.match(form, /getIndexerWatermark\(\{ chainId \}\)/, 'scheduled chains check the live watermark');
 assert.match(form, /\{thresholdActive \? \(/, 'threshold input renders only when ACTIVE');
-assert.match(form, /first-access lock, not\s*\n?\s*copy protection/, 'honest security-model copy present');
+// The copy lives in the English locale; the form renders it through t().
+const { en } = await import(join(wsRoot, 'packages', 'core', 'src', 'i18n', 'locales', 'en', 'index.js'));
+assert.match(form, /t\('gatedPublish\.thresholdHint'/, 'threshold hint renders through t()');
+assert.match(en['gatedPublish.thresholdHint'], /first-access lock, not copy protection/, 'honest security-model copy present');
 assert.match(form, /thresholdActive && gateMinAmount\.trim\(\)\s*\n?\s*\? \{ gateMinAmount: gateMinAmount\.trim\(\) \}/,
     'threshold submitted only when active and set');
 

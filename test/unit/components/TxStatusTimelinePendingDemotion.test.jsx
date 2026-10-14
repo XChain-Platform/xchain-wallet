@@ -21,13 +21,14 @@
 // A test that only checks the healthy case would have passed against the bug.
 
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { act, render, screen, cleanup } from '@testing-library/react';
 import React from 'react';
 
 import { TxStatusTimeline } from '../../../packages/core/src/shared/components/TxStatusTimeline.jsx';
 import {
     NETWORK_SEEN_WINDOW_MS,
     DROPPED_GRACE_MS,
+    pendingDisplayState,
 } from '../../../packages/core/src/shared/utils/pendingHistory.js';
 
 const NOW = Date.UTC(2026, 7, 27, 12, 10, 0);
@@ -111,6 +112,20 @@ describe('TxStatusTimeline: the mempool stage only claims what it knows', () => 
         expect(row.className).not.toContain('rowDone');
     });
 
+    it('updates to "Not seen by the network" when the window expires while mounted', () => {
+        const staleInOneTick = pendingEntry({
+            broadcastAtMs: NOW - (NETWORK_SEEN_WINDOW_MS - 1000),
+        });
+        const { unmount } = render(<TxStatusTimeline entry={staleInOneTick} />);
+        expect(mempoolRow().textContent).toContain('Broadcast, awaiting network');
+
+        act(() => vi.advanceTimersByTime(30_000));
+        expect(mempoolRow().textContent).toContain('Not seen by the network');
+
+        unmount();
+        expect(vi.getTimerCount()).toBe(0);
+    });
+
     it('holds "Broadcast, awaiting network" right up to the window edge', () => {
         // One millisecond inside: a window that trips on a healthy send is the
         // thing I-17 doubled the measured worst case to avoid.
@@ -119,14 +134,16 @@ describe('TxStatusTimeline: the mempool stage only claims what it knows', () => 
         expect(mempoolRow().textContent).toContain('Broadcast, awaiting network');
     });
 
-    it('asks "Dropped or replaced?" when a node stopped reporting it past the grace window', () => {
+    it('shows a plain failure when a node stopped reporting it past the grace window', () => {
         const gone = pendingEntry({
             origin: 'local',
             lastMempoolSeenMs: NOW - (DROPPED_GRACE_MS + 1000),
         });
         render(<TxStatusTimeline entry={gone} />);
         const row = mempoolRow();
-        expect(row.textContent).toContain('Dropped or replaced?');
+        expect(row.textContent).toContain('Failed');
+        expect(row.textContent).toContain('The network stopped reporting this transaction and it did not confirm');
+        expect(row.textContent).not.toContain('replaced?');
         expect(row.className).toContain('rowWarn');
     });
 
@@ -142,9 +159,17 @@ describe('TxStatusTimeline: the mempool stage only claims what it knows', () => 
     });
 
     it('labels an RBF replacement as replaced, not as a warning', () => {
-        render(<TxStatusTimeline entry={pendingEntry({ replaced: true, localStatus: 'rbf-replaced' })} />);
+        render(<TxStatusTimeline entry={pendingEntry({
+            replaced: true,
+            localStatus: 'rbf-replaced',
+            replacementTxHash: 'replacement-hash',
+        })} />);
         const row = mempoolRow();
         expect(row.textContent).toContain('Replaced');
+        expect(pendingDisplayState(pendingEntry({
+            replaced: true,
+            replacementTxHash: 'replacement-hash',
+        }), NOW)).toBe('replaced');
         expect(row.className).not.toContain('rowWarn');
     });
 
@@ -194,14 +219,16 @@ describe('TxStatusTimeline: confirmed rows are untouched', () => {
     });
 
     it('a confirmed entry keeps its confirmation count and indexed stage', () => {
+        const blockIndex = 812345;
+        const watermark = 812347;
         render(<TxStatusTimeline
-            entry={{ txHash: TX, blockIndex: 812345, timestamp: NOW - 60000, action: 'SEND' }}
-            chainTip={812347}
-            indexerWatermark={812347}
+            entry={{ txHash: TX, blockIndex, timestamp: NOW - 60000, action: 'SEND' }}
+            chainTip={watermark}
+            indexerWatermark={watermark}
         />);
-        expect(screen.getByText('Confirmed at block 812,345')).toBeTruthy();
+        expect(screen.getByText(`Confirmed at block ${blockIndex.toLocaleString()}`)).toBeTruthy();
         expect(screen.getByText(/3 confirmations/)).toBeTruthy();
-        expect(screen.getByText(/the service has reached block 812,347/)).toBeTruthy();
+        expect(screen.getByText(`Fully processed · the service has reached block ${watermark.toLocaleString()}`)).toBeTruthy();
     });
 
     it('a confirmed entry that STILL carries stale pending metadata reads as confirmed', () => {

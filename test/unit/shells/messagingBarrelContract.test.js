@@ -26,7 +26,7 @@
 // The transports are mocked, because what is under test is the envelope,
 // not chrome.runtime or the in-page host.
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 
 const { webSend, desktopSend, popupSend, webLocals } = vi.hoisted(() => {
     const webLocals = {
@@ -101,11 +101,63 @@ const ARG = Object.freeze({
     offset: 0,
 });
 
+const SOURCE = Object.freeze({
+    address: '1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2',
+    publicKey: `02${'ab'.repeat(32)}`,
+    derivationPath: "m/84'/0'/0'/0/0",
+});
+const DESTINATION = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
+
+// Fixed valid requests pin the message name and full payload independently of
+// shell parity, so the same accidental edit in every barrel still fails.
+const ACTION_SEND_CASES = [
+    ['composeForConfirm', 'action.composeForConfirm', {
+        walletId: 'w-1',
+        chainId: 'bitcoin-mainnet',
+        from: SOURCE,
+        actionData: { action: 'SEND', params: { TICK: 'PEPE', AMOUNT: '1', DESTINATION } },
+        encoderOpts: { rbf: true },
+    }],
+    ['sendToken', 'action.send', {
+        walletId: 'w-1', password: 'secret', chainId: 'bitcoin-mainnet',
+        from: SOURCE, to: DESTINATION, tick: 'PEPE', amount: '1', memo: 'hello',
+    }],
+    ['dispenserAction', 'action.dispenser', {
+        walletId: 'w-1', password: 'secret', chainId: 'bitcoin-mainnet', from: SOURCE,
+        params: {
+            VERSION: '0', GIVE_TICK: 'PEPE', GIVE_AMOUNT: '10',
+            GIVE_ESCROW: '100', GET_TICK: 'XCHAIN', GET_AMOUNT: '2',
+        },
+    }],
+    ['orderAction', 'action.order', {
+        walletId: 'w-1', password: 'secret', chainId: 'bitcoin-mainnet', from: SOURCE,
+        params: {
+            VERSION: '0', GIVE_TICK: 'XCHAIN', GIVE_AMOUNT: '2',
+            GET_TICK: 'PEPE', GET_AMOUNT: '10',
+        },
+    }],
+    ['issueToken', 'action.issue', {
+        walletId: 'w-1', password: 'secret', chainId: 'bitcoin-mainnet', from: SOURCE,
+        params: { VERSION: '0', TICK: 'PEPE', MAX_SUPPLY: '1000000', TRANSFER: DESTINATION },
+    }],
+    ['dividendAction', 'action.dividend', {
+        walletId: 'w-1', password: 'secret', chainId: 'bitcoin-mainnet', from: SOURCE,
+        params: { VERSION: '0', TICK: 'PEPE', DIVIDEND_TICK: 'XCHAIN', AMOUNT: '0.1' },
+    }],
+    ['sweepToken', 'action.sweep', {
+        walletId: 'w-1', password: 'secret', chainId: 'bitcoin-mainnet', from: SOURCE,
+        to: DESTINATION, balances: true, ownerships: true,
+        orders: false, swaps: false, dispensers: false,
+    }],
+];
+
 /**
  * Call one helper with the fixture in three positions and report the single
  * `sendMessage` envelope it produced, or how it declined to produce one.
+ * The web barrel loads its host bridge lazily, so a helper reaches the
+ * transport only after its returned promise settles; wait for that first.
  */
-function dispatch(shell, fnName) {
+async function dispatch(shell, fnName, args = [ARG, ARG, ARG]) {
     shell.send.mockReset();
     shell.send.mockReturnValue(Promise.resolve({ ok: true }));
     for (const local of Object.values(webLocals)) {
@@ -114,10 +166,10 @@ function dispatch(shell, fnName) {
     }
     let threw = null;
     try {
-        const out = shell.mod[fnName](ARG, ARG, ARG);
+        const out = shell.mod[fnName](...args);
         // Swallow the settled sentinel; an unhandled rejection here would
         // fail an unrelated test file, not this one.
-        if (out && typeof out.then === 'function') out.then(() => {}, () => {});
+        if (out && typeof out.then === 'function') await out.then(() => {}, () => {});
     } catch (err) {
         threw = err;
     }
@@ -144,10 +196,10 @@ beforeEach(() => {
 
 describe('messaging barrels: every helper dispatches exactly one envelope', () => {
     for (const shell of SHELLS) {
-        it(`${shell.name} sends one message per helper and forwards its argument`, () => {
+        it(`${shell.name} sends one message per helper and forwards its argument`, async () => {
             const bad = [];
             for (const fnName of helpersOf(shell)) {
-                const r = dispatch(shell, fnName);
+                const r = await dispatch(shell, fnName);
                 if (r.threw) {
                     bad.push(`${fnName}: threw ${r.threw.message}`);
                     continue;
@@ -181,17 +233,19 @@ describe('messaging barrels: every helper dispatches exactly one envelope', () =
 describe('messaging barrels: the shells agree on the wire', () => {
     // Built once: helper name -> { shellName -> [type, payload] }.
     const wire = new Map();
-    for (const shell of SHELLS) {
-        for (const fnName of helpersOf(shell)) {
-            if (shell.name === 'web' && WEB_LOCAL_HELPERS.has(fnName)) continue;
-            const r = dispatch(shell, fnName);
-            if (r.threw || r.calls.length !== 1) continue;
-            if (!wire.has(fnName)) wire.set(fnName, {});
-            wire.get(fnName)[shell.name] = r.calls[0];
+    let shared = [];
+    beforeAll(async () => {
+        for (const shell of SHELLS) {
+            for (const fnName of helpersOf(shell)) {
+                if (shell.name === 'web' && WEB_LOCAL_HELPERS.has(fnName)) continue;
+                const r = await dispatch(shell, fnName);
+                if (r.threw || r.calls.length !== 1) continue;
+                if (!wire.has(fnName)) wire.set(fnName, {});
+                wire.get(fnName)[shell.name] = r.calls[0];
+            }
         }
-    }
-
-    const shared = [...wire.entries()].filter(([, byShell]) => Object.keys(byShell).length > 1);
+        shared = [...wire.entries()].filter(([, byShell]) => Object.keys(byShell).length > 1);
+    });
 
     it('has helpers implemented by more than one shell', () => {
         // Guards the check below against passing because it compared nothing.
@@ -227,4 +281,17 @@ describe('messaging barrels: the shells agree on the wire', () => {
         expect(Object.keys(byShell || {}).sort()).toEqual(['desktop', 'extension popup', 'web']);
         for (const [type] of Object.values(byShell)) expect(type).toBe('wallet.passphrase.capture');
     });
+});
+
+describe('messaging barrels: action send arguments stay fixed', () => {
+    for (const shell of SHELLS) {
+        it(`${shell.name} records the expected compose and submit arguments`, async () => {
+            for (const [fnName, expectedType, request] of ACTION_SEND_CASES) {
+                const expectedRequest = JSON.parse(JSON.stringify(request));
+                const result = await dispatch(shell, fnName, [request]);
+                expect(result.threw, fnName).toBeNull();
+                expect(result.calls, fnName).toEqual([[expectedType, expectedRequest]]);
+            }
+        });
+    }
 });

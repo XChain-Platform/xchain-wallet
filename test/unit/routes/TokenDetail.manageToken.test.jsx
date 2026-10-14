@@ -8,15 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// A user who issued a token had no way from the holder
-// view (TokenDetail) into the issuer surface (ManageToken); the only
-// path was Menu -> My Tokens. The "Manage token" entry in the quick-
-// actions "More" menu is gated on the same all-addresses ownership
-// check ManageToken itself uses (useIsTokenIssuer.js), never on the
-// active address alone.
+// TokenDetail gates its direct Manage action on the same all-addresses
+// ownership check ManageToken itself uses, never on the active address alone.
 
 import { describe, it, expect, vi, afterEach, beforeAll, afterAll } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { TokenDetail } from '../../../packages/core/src/shared/routes/TokenDetail.jsx';
@@ -25,7 +21,11 @@ import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/u
 // Both cases share a (chainId, tick) pair with different creators, and
 // useTokenInfo caches by that pair across the whole module, so a stale
 // hit from case 1 would otherwise leak into case 2's assertions.
-afterEach(() => { cleanup(); __clearTokenInfoCache(); });
+afterEach(() => {
+    cleanup();
+    __clearTokenInfoCache();
+    localStorage.removeItem('xc:activeAccount:w1');
+});
 
 // jsdom has no ResizeObserver; TokenDetail's balance hero uses one to
 // auto-shrink the amount text. Same stub as test/unit/routes-render.test.jsx.
@@ -46,12 +46,21 @@ const CHAIN = 'bitcoin-regtest';
 const MINE = 'bcrt1qmineminemineminemineminemineminemine0';
 const OTHER = 'bcrt1qotherotherotherotherotherotherotherot';
 
-function renderDetail({ creator, onManageToken = vi.fn() } = {}) {
+function renderDetail({
+    creator,
+    kind = 'token',
+    onManageToken = vi.fn(),
+    withPrimaryActions = false,
+    quantity = '100',
+    balances,
+} = {}) {
     const messaging = {
-        getTokenInfo: vi.fn().mockResolvedValue({ creator }),
+        getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+        getTokenInfo: vi.fn().mockResolvedValue({ creator, divisibility: 8 }),
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [{ address: MINE }] }),
         getHoldersForToken: vi.fn().mockResolvedValue({ data: [] }),
         listGatedContent: vi.fn().mockResolvedValue([]),
+        getWalletBalances: vi.fn().mockResolvedValue(balances),
     };
     render(React.createElement(
         MessagingProvider,
@@ -60,9 +69,12 @@ function renderDetail({ creator, onManageToken = vi.fn() } = {}) {
             walletId: 'w1',
             chainId: CHAIN,
             tick: 'S18PROBE',
-            kind: 'token',
-            quantity: '100',
+            kind,
+            quantity,
             onBack() {},
+            onSend: withPrimaryActions ? vi.fn() : undefined,
+            onReceive: withPrimaryActions ? vi.fn() : undefined,
+            onBuy: withPrimaryActions ? vi.fn() : undefined,
             onManageToken,
         }),
     ));
@@ -70,16 +82,33 @@ function renderDetail({ creator, onManageToken = vi.fn() } = {}) {
 }
 
 describe('TokenDetail "Manage token" action', () => {
-    it('renders and navigates for the issuing wallet', async () => {
-        const { onManageToken } = renderDetail({ creator: MINE });
+    it('keeps the balance label and amount ahead of the hero actions in DOM reading order', () => {
+        renderDetail({ creator: OTHER });
 
-        // The gate starts at null (owner-gate fetch in flight), so the
-        // "More" button stays disabled until it resolves true.
-        const moreButton = screen.getByRole('button', { name: 'More' });
-        await waitFor(() => expect(moreButton).not.toBeDisabled());
-        fireEvent.click(moreButton);
-        const entry = await screen.findByRole('menuitem', { name: 'Manage token' });
-        fireEvent.click(entry);
+        const hero = screen.getByRole('region', { name: 'S18PROBE balance' });
+        const label = within(hero).getByText('Total balance');
+        const amountUnit = within(hero).getByText('S18PROBE');
+        const action = within(hero).getByRole('button', { name: 'Hide balance' });
+
+        expect(label.compareDocumentPosition(amountUnit) & Node.DOCUMENT_POSITION_FOLLOWING)
+            .toBeTruthy();
+        expect(amountUnit.compareDocumentPosition(action) & Node.DOCUMENT_POSITION_FOLLOWING)
+            .toBeTruthy();
+    });
+
+    it('renders and navigates for the issuing wallet', async () => {
+        const { onManageToken } = renderDetail({ creator: MINE, withPrimaryActions: true });
+
+        const manage = await screen.findByRole('button', { name: 'Manage' });
+        const actions = within(screen.getByRole('group', { name: 'Quick actions' }))
+            .getAllByRole('button');
+        expect(actions.map((button) => button.getAttribute('aria-label') || button.textContent)).toEqual([
+            'Send',
+            'Receive',
+            'Trade',
+            'Manage',
+        ]);
+        fireEvent.click(manage);
 
         expect(onManageToken).toHaveBeenCalledTimes(1);
     });
@@ -87,12 +116,32 @@ describe('TokenDetail "Manage token" action', () => {
     it('does not render for a wallet that only holds (never issued) the tick', async () => {
         const { messaging } = renderDetail({ creator: OTHER });
 
-        // Let the owner-gate fetch settle (isOwner: null -> false) before
-        // asserting absence; with no other "More" entries wired in this
-        // test, the button itself stays disabled rather than opening an
-        // empty menu, so the absence check does not depend on a click.
         await waitFor(() => expect(messaging.getAddressesByChain).toHaveBeenCalled());
-        expect(screen.queryByText('Manage token')).toBeNull();
-        expect(screen.getByRole('button', { name: 'More' })).toBeDisabled();
+        expect(screen.queryByRole('button', { name: 'Manage' })).toBeNull();
+    });
+
+    it('does not render Manage for a native coin', () => {
+        renderDetail({ creator: MINE, kind: 'native' });
+
+        expect(screen.queryByRole('button', { name: 'Manage' })).toBeNull();
+    });
+
+    it('refetches a balance when restored route state omits quantity', async () => {
+        localStorage.setItem('xc:activeAccount:w1', 'account-2');
+        const { messaging } = renderDetail({
+            creator: OTHER,
+            quantity: null,
+            balances: {
+                [CHAIN]: [{
+                    address: MINE,
+                    balances: { tokens: [{ tick: 'S18PROBE', quantity: '250000000' }] },
+                }],
+            },
+        });
+
+        await waitFor(() => expect(messaging.getWalletBalances).toHaveBeenCalledWith('w1', 'account-2'));
+        await waitFor(() => expect(
+            within(screen.getByRole('region', { name: 'S18PROBE balance' })).getByText('2.50000000'),
+        ).toBeInTheDocument());
     });
 });

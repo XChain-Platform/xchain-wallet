@@ -281,7 +281,7 @@ test.describe(`fiat-priced dispensers on ${REGTEST_CHAIN_LABEL}`, () => {
 
         await test.step('the BUYER pays the dollar price, in coin, from the Send form', async () => {
             await gotoPalette(page, 'Switch wallet');
-            await page.getByRole('button', { name: 'Add Wallet' }).click();
+            await page.getByRole('button', { name: 'Add wallet' }).click();
             await createWallet(page, { password: PASSWORD, name: 'Fiat Buyer', navigate: false });
             await gotoPalette(page, 'Switch wallet');
             await page.getByRole('button', { name: /Fiat Buyer/ }).first().click();

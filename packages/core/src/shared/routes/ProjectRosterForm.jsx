@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, FeeSelector, FormPage, InfoTip, Input, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -28,7 +28,8 @@ import { extractActionIndex } from '../utils/actionIndexFromTx.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { MEMO_HINT } from '../utils/memoLimit.js';
+import { classifyTickItems } from '../utils/listTickItems.js';
+import { memoLengthError, MEMO_HINT } from '../utils/memoLimit.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
@@ -72,7 +73,6 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -88,12 +88,14 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
     // The project's ISSUE action index (the LINK's second leg).
     const [issueActionIndex, setIssueActionIndex] = useState(/** @type {string | null} */ (null));
     const [genesisChecked, setGenesisChecked] = useState(false);
+    const [genesisError, setGenesisError] = useState(false);
 
     // Current published roster (prefill + context line). null = still
     // loading; { members: [] } shape from the explorer; absent roster
     // resolves to null from the host.
     const [currentRoster, setCurrentRoster] = useState(/** @type {any | null} */ (null));
     const [rosterChecked, setRosterChecked] = useState(false);
+    const [rosterLoadError, setRosterLoadError] = useState(/** @type {string | null} */ (null));
 
     const [membersText, setMembersText] = useState('');
     const [prefilled, setPrefilled] = useState(false);
@@ -116,6 +118,10 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
     // one whose call fails, still yields a usable form (newest-HD fallback).
     useEffect(() => {
         let cancelled = false;
+        setAddressesByChain(null);
+        setActiveByChain(null);
+        setFromAddressId(null);
+        setLoadError(null);
         Promise.all([
             messaging.getAddressesByChain(walletId),
             typeof messaging.getActiveAddresses === 'function'
@@ -138,7 +144,14 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
 
     // Resolve the project's ISSUE action index.
     useEffect(() => {
-        if (typeof messaging?.getGenesisForToken !== 'function') { setGenesisChecked(true); return undefined; }
+        setIssueActionIndex(null);
+        setGenesisChecked(false);
+        setGenesisError(false);
+        if (typeof messaging?.getGenesisForToken !== 'function') {
+            setGenesisChecked(true);
+            setGenesisError(true);
+            return undefined;
+        }
         let cancelled = false;
         messaging.getGenesisForToken({ chainId, tick })
             .then((row) => {
@@ -147,14 +160,27 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 if (info?.actionIndex) setIssueActionIndex(String(info.actionIndex));
                 setGenesisChecked(true);
             })
-            .catch(() => { if (!cancelled) setGenesisChecked(true); });
+            .catch(() => {
+                if (cancelled) return;
+                setGenesisError(true);
+                setGenesisChecked(true);
+            });
         return () => { cancelled = true; };
     }, [messaging, chainId, tick]);
 
     // Fetch the current roster for prefill. A project with no published
     // list yet resolves to null (normal for first-time publishing).
     useEffect(() => {
-        if (typeof messaging?.getProjectForToken !== 'function') { setRosterChecked(true); return undefined; }
+        setCurrentRoster(null);
+        setRosterChecked(false);
+        setRosterLoadError(null);
+        setMembersText('');
+        setPrefilled(false);
+        if (typeof messaging?.getProjectForToken !== 'function') {
+            setRosterLoadError('Current official-token list lookup is unavailable.');
+            setRosterChecked(true);
+            return undefined;
+        }
         let cancelled = false;
         messaging.getProjectForToken({ chainId, tick })
             .then((project) => {
@@ -162,7 +188,11 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                 setCurrentRoster(project || null);
                 setRosterChecked(true);
             })
-            .catch(() => { if (!cancelled) setRosterChecked(true); });
+            .catch(() => {
+                if (cancelled) return;
+                setRosterLoadError('Failed to load the current official-token list. Try again in a moment.');
+                setRosterChecked(true);
+            });
         return () => { cancelled = true; };
     }, [messaging, chainId, tick]);
 
@@ -290,23 +320,9 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
         };
     }
 
-    // Parse the textarea into validated, deduplicated, uppercased ticks.
-    const memberTicks = useMemo(() => {
-        const seen = new Set();
-        const out = [];
-        for (const raw of membersText.split(/[\n,]+/)) {
-            const t = raw.trim().toUpperCase();
-            if (!t || seen.has(t)) continue;
-            seen.add(t);
-            out.push(t);
-        }
-        return out;
-    }, [membersText]);
-
-    const invalidTicks = useMemo(
-        () => memberTicks.filter((t) => !/^[A-Z0-9.^]+$/.test(t)),
-        [memberTicks],
-    );
+    const tickItems = useMemo(() => classifyTickItems(membersText), [membersText]);
+    const memberTicks = tickItems.valid;
+    const invalidTicks = tickItems.invalid;
 
     function handleReviewList(event) {
         event.preventDefault();
@@ -314,17 +330,23 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
             setFormError('No signing address available on this chain.');
             return;
         }
-        if (memberTicks.length === 0) {
-            setFormError('Add at least one token to the list.');
+        if (!rosterChecked) {
+            setFormError('Still loading the current official-token list. One moment.');
             return;
         }
         if (invalidTicks.length > 0) {
             setFormError(`These don't look like token names: ${invalidTicks.join(', ')}`);
             return;
         }
+        if (memberTicks.length === 0) {
+            setFormError('Add at least one token to the list.');
+            return;
+        }
         if (!issueActionIndex) {
             setFormError(
-                genesisChecked
+                genesisError
+                    ? `Couldn't load the creation record for ${tick}. Try again in a moment.`
+                    : genesisChecked
                     ? `The creation record for ${tick} isn't indexed yet. Try again in a minute.`
                     : 'Still looking up the project\'s creation record. One moment.',
             );
@@ -332,6 +354,11 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
         }
         if (memo && /[|;]/.test(memo)) {
             setFormError('Memo cannot contain | or ; characters.');
+            return;
+        }
+        const memoTooLong = memoLengthError(memo.trim());
+        if (memoTooLong) {
+            setFormError(memoTooLong);
             return;
         }
         setFormError(null);
@@ -453,8 +480,12 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+        <Screen
+            variant={variant}
+            header={header}
+            restoreScroll={stage !== 'review-list' && stage !== 'review-link'}
+        >
+            {children}
         </Screen>
     );
 
@@ -479,6 +510,9 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
     }
     if (!addressesByChain) {
         return wrap(<p className={styles.hint}>Loading wallet…</p>);
+    }
+    if (rosterLoadError) {
+        return wrap(<StatusMessage variant="error" className={styles.error}>{rosterLoadError}</StatusMessage>);
     }
 
     if (actionConfirm.open) {
@@ -561,16 +595,40 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
 
     if (stage === 'review-list' && fromAddress) {
         return wrap(
-            <form onSubmit={handleSignList} noValidate>
+            <FormPage
+                label="Review official token list"
+                onSubmit={handleSignList}
+                status={hw && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <>
+                        {/* Prevent the reconciled button from submitting the compose form. */}
+                        <Button variant="ghost" type="button" onClick={(event) => { event.preventDefault(); setStage('compose'); }} disabled={submitting}>
+                            Back
+                        </Button>
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            loading={submitting}
+                            disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
+                        >
+                            Publish list
+                        </Button>
+                    </>
+                )}
+            >
                 <p className={styles.summary}>
                     Publish the official-token list for {tick}
                     {' '}({memberTicks.length} token{memberTicks.length === 1 ? '' : 's'}).
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -600,38 +658,40 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                     disabled={submitting}
                     getSignerStatus={messaging.getSignerStatus}
                 />
-                {hw && submitError ? (
+            </FormPage>,
+        );
+    }
+
+    if (stage === 'review-link' && fromAddress) {
+        return wrap(
+            <FormPage
+                label="Review official token link"
+                onSubmit={handleSignLink}
+                status={hw && submitError ? (
                     <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
                 ) : null}
-                <div className={styles.actions}>
-                    <Button variant="ghost" type="button" onClick={() => setStage('compose')} disabled={submitting}>
-                        Back
-                    </Button>
+                actions={(
                     <Button
                         type="submit"
                         variant="primary"
                         loading={submitting}
                         disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
                     >
-                        Publish list
+                        Make it official
                     </Button>
-                </div>
-            </form>,
-        );
-    }
-
-    if (stage === 'review-link' && fromAddress) {
-        return wrap(
-            <form onSubmit={handleSignLink} noValidate>
+                )}
+            >
                 <p className={styles.summary}>
                     Link the published list to {tick}. This makes it the
                     project's official-token list.
                 </p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -671,33 +731,29 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                     disabled={submitting}
                     getSignerStatus={messaging.getSignerStatus}
                 />
-                {hw && submitError ? (
-                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
-                ) : null}
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={submitting}
-                        disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
-                    >
-                        Make it official
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
     // stage === 'compose'
     const hasRoster = Array.isArray(currentRoster?.members) && currentRoster.members.length > 0;
     return wrap(
-        <form onSubmit={handleReviewList} noValidate>
-            <p className={styles.summary}>
-                The official-token list is {tick}'s on-chain seal of
-                approval: tokens on it show an "Official" badge in the
-                explorer and wallets. Publishing a new list replaces the
-                old one.
-            </p>
+        <FormPage
+            label="Official token list"
+            onSubmit={handleReviewList}
+            status={formError ? (
+                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                >
+                    Review list
+                </Button>
+            )}
+        >
+            <InfoTip label={`Tokens on ${tick}'s official-token list show an "Official" badge in explorers and wallets. Publishing a new list replaces the old one.`} />
             {rosterChecked && hasRoster ? (
                 <p className={styles.hint}>
                     Current list ({currentRoster.members.length} token{currentRoster.members.length === 1 ? '' : 's'})
@@ -709,31 +765,29 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                     No list published yet. This will be the first.
                 </p>
             ) : null}
-            <label className={styles.pickerLabel} htmlFor="roster-members">
-                Tokens (one per line)
-            </label>
-            <textarea
+            {!rosterChecked ? (
+                <p className={styles.hint}>Loading the current official-token list…</p>
+            ) : null}
+            <Textarea
                 id="roster-members"
+                label="Tokens (one per line)"
                 value={membersText}
                 onChange={(e) => setMembersText(e.target.value)}
                 rows={6}
                 spellCheck={false}
-                autoCapitalize="characters"
+                autoCapitalize="none"
                 aria-label="Tokens (one per line)"
-                style={{
-                    width: '100%',
-                    fontFamily: 'var(--xc-font-mono, monospace)',
-                    fontSize: 'var(--xc-text-sm)',
-                    padding: 'var(--xc-space-2)',
-                    borderRadius: 'var(--xc-radius-md)',
-                    border: '1px solid var(--xc-border)',
-                    background: 'var(--xc-bg-input, transparent)',
-                    color: 'var(--xc-text)',
-                    resize: 'vertical',
-                    boxSizing: 'border-box',
-                    marginBottom: 'var(--xc-space-3)',
-                }}
             />
+            {membersText.trim() ? (
+                <p className={styles.hint}>
+                    {memberTicks.length} valid token name{memberTicks.length === 1 ? '' : 's'}
+                    {tickItems.duplicates > 0 ? ` · ${tickItems.duplicates} duplicate${tickItems.duplicates === 1 ? '' : 's'} removed` : ''}
+                    {invalidTicks.length > 0 ? ` · ${invalidTicks.length} invalid` : ''}
+                </p>
+            ) : null}
+            {invalidTicks.length > 0 ? (
+                <p className={styles.hint}>Not a token name: {invalidTicks.join(', ')}</p>
+            ) : null}
             <Input
                 label="Memo (optional)"
                 hint={MEMO_HINT}
@@ -760,17 +814,6 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
                     customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                 />
             ) : null}
-            {formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
-            ) : null}
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                >
-                    Review list
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }

@@ -62,6 +62,8 @@ import { InvalidMnemonicError, normalizeMnemonic } from './importMnemonic.js';
 export const DEFAULT_GAP_LIMIT = 20;
 export const DEFAULT_PER_QUERY_TIMEOUT_MS = 5000;
 export const DEFAULT_CHAIN_TIMEOUT_MS = 60000;
+const MAX_DERIVATION_INDEX = 0x7fffffff;
+const MAX_TIMEOUT_MS = 0x7fffffff;
 
 /**
  * @typedef {Object} DiscoveredAddress
@@ -110,6 +112,7 @@ export const DEFAULT_CHAIN_TIMEOUT_MS = 60000;
  * @property {number} [chainTimeoutMs]        default {@link DEFAULT_CHAIN_TIMEOUT_MS}
  * @property {IsUsedProbe} [isUsedProbe]      default uses `sdk.explorer.getHistory(address, 'address')`
  * @property {DiscoverProgressCallback} [onProgress]
+ * @property {AbortSignal} [signal]            cancels the scan with an AbortError
  */
 
 /**
@@ -123,6 +126,9 @@ export const DEFAULT_CHAIN_TIMEOUT_MS = 60000;
  * @returns {Promise<DiscoverUsedAddressesResult>}
  */
 export async function discoverUsedAddresses(opts) {
+    if (!opts || typeof opts !== 'object') {
+        throw new Error('discoverUsedAddresses: options are required');
+    }
     const {
         mnemonic,
         format = 'bip39',
@@ -139,16 +145,53 @@ export async function discoverUsedAddresses(opts) {
         chainTimeoutMs = DEFAULT_CHAIN_TIMEOUT_MS,
         isUsedProbe = defaultIsUsedProbe,
         onProgress = () => {},
+        signal,
     } = opts;
 
-    if (typeof mnemonic !== 'string' || !mnemonic.length) {
+    if (typeof mnemonic !== 'string' || !mnemonic.trim().length) {
         throw new Error('discoverUsedAddresses: mnemonic is required');
     }
     if (!chainRegistry) throw new Error('discoverUsedAddresses: chainRegistry is required');
     if (!sdkRegistry) throw new Error('discoverUsedAddresses: sdkRegistry is required');
+    if (typeof bip39Passphrase !== 'string') {
+        throw new Error('discoverUsedAddresses: bip39Passphrase must be a string');
+    }
+    if (chainIds !== undefined && (
+        !Array.isArray(chainIds)
+        || chainIds.length === 0
+        || chainIds.some((id) => typeof id !== 'string' || id.length === 0)
+    )) {
+        throw new Error('discoverUsedAddresses: chainIds must be a non-empty string array');
+    }
+    if (!Number.isInteger(accountIndex) || accountIndex < 0 || accountIndex > MAX_DERIVATION_INDEX) {
+        throw new Error(`discoverUsedAddresses: accountIndex must be an integer in [0, ${MAX_DERIVATION_INDEX}]`);
+    }
+    if (change !== 0 && change !== 1) {
+        throw new Error('discoverUsedAddresses: change must be 0 or 1');
+    }
+    if (!Number.isInteger(startIndex) || startIndex < 0 || startIndex > MAX_DERIVATION_INDEX) {
+        throw new Error(`discoverUsedAddresses: startIndex must be an integer in [0, ${MAX_DERIVATION_INDEX}]`);
+    }
     if (!Number.isInteger(gapLimit) || gapLimit < 1 || gapLimit > 200) {
         throw new Error('discoverUsedAddresses: gapLimit must be an integer in [1, 200]');
     }
+    if (!Number.isInteger(perQueryTimeoutMs)
+        || perQueryTimeoutMs < 1
+        || perQueryTimeoutMs > MAX_TIMEOUT_MS) {
+        throw new Error(`discoverUsedAddresses: perQueryTimeoutMs must be an integer in [1, ${MAX_TIMEOUT_MS}]`);
+    }
+    if (!Number.isInteger(chainTimeoutMs)
+        || chainTimeoutMs < 1
+        || chainTimeoutMs > MAX_TIMEOUT_MS) {
+        throw new Error(`discoverUsedAddresses: chainTimeoutMs must be an integer in [1, ${MAX_TIMEOUT_MS}]`);
+    }
+    if (typeof isUsedProbe !== 'function') {
+        throw new Error('discoverUsedAddresses: isUsedProbe must be a function');
+    }
+    if (typeof onProgress !== 'function') {
+        throw new Error('discoverUsedAddresses: onProgress must be a function');
+    }
+    throwIfAborted(signal);
 
     // Seed derivation, mirrors dryRunRestore.
     const normalized = normalizeMnemonic(mnemonic);
@@ -173,6 +216,7 @@ export async function discoverUsedAddresses(opts) {
     }
 
     try {
+        throwIfAborted(signal);
         const hdRoot = hdKeyFromSeed(seed);
         const chains = chainIds ?? chainRegistry.supportedChains().map((d) => d.id);
 
@@ -181,6 +225,7 @@ export async function discoverUsedAddresses(opts) {
         let totalUsedFound = 0;
 
         for (const chainId of chains) {
+            throwIfAborted(signal);
             const descriptor = chainRegistry.get(chainId);
             if (!descriptor) {
                 throw new Error(`discoverUsedAddresses: unknown chain "${chainId}"`);
@@ -205,8 +250,10 @@ export async function discoverUsedAddresses(opts) {
                         chainTimeoutMs,
                         isUsedProbe,
                         onProgress,
+                        signal,
                     });
                 } catch (e) {
+                    if (signal?.aborted) throw e;
                     // Type-level failure (e.g. SDK doesn't support this
                     // address type, derivation returned no path, etc.).
                     // Record an incomplete result for this type and move
@@ -253,9 +300,11 @@ async function scanChainType({
     chainTimeoutMs,
     isUsedProbe,
     onProgress,
+    signal,
 }) {
     const sdk = sdkRegistry.get(chainId);
     safeCallback(onProgress, { phase: 'chain-start', chainId, addressType });
+    throwIfAborted(signal);
 
     /** @type {DiscoveredAddress[]} */
     const addresses = [];
@@ -268,7 +317,8 @@ async function scanChainType({
     const chainDeadline = Date.now() + chainTimeoutMs;
 
     for (let index = startIndex; ; index++) {
-        if (Date.now() > chainDeadline) {
+        throwIfAborted(signal);
+        if (Date.now() >= chainDeadline) {
             incomplete = true;
             error = `chain scan exceeded ${chainTimeoutMs}ms`;
             break;
@@ -301,10 +351,15 @@ async function scanChainType({
         try {
             const probeResult = await runWithTimeout(
                 () => isUsedProbe(sdk, address),
-                perQueryTimeoutMs,
+                Math.min(perQueryTimeoutMs, Math.max(1, chainDeadline - Date.now())),
+                signal,
             );
-            used = !!probeResult?.used;
+            if (typeof probeResult?.used !== 'boolean') {
+                throw new Error('probe returned an invalid result');
+            }
+            used = probeResult.used;
         } catch (e) {
+            if (signal?.aborted) throw e;
             unknown = true;
             // A single probe failure doesn't fail the whole chain:
             // record the address as `unknown` (doesn't reset gap count
@@ -333,8 +388,14 @@ async function scanChainType({
             index,
             data: { used, unknown, consecutiveUnused },
         });
+        throwIfAborted(signal);
 
         if (consecutiveUnused >= gapLimit) break;
+        if (index === MAX_DERIVATION_INDEX) {
+            incomplete = true;
+            error = `derivation index limit ${MAX_DERIVATION_INDEX} reached before the gap limit`;
+            break;
+        }
     }
 
     if (incomplete) {
@@ -390,32 +451,44 @@ function safeCallback(fn, event) {
     try { fn(event); } catch { /* caller bugs do not derail the scan */ }
 }
 
-function runWithTimeout(fn, timeoutMs) {
+function runWithTimeout(fn, timeoutMs, signal) {
     return new Promise((resolve, reject) => {
         let settled = false;
+        const finish = (callback, value) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            signal?.removeEventListener('abort', onAbort);
+            callback(value);
+        };
+        const onAbort = () => finish(reject, abortError(signal));
         const timer = setTimeout(() => {
-            if (!settled) {
-                settled = true;
-                reject(new Error(`probe timed out after ${timeoutMs}ms`));
-            }
+            finish(reject, new Error(`probe timed out after ${timeoutMs}ms`));
         }, timeoutMs);
+        if (signal?.aborted) {
+            onAbort();
+            return;
+        }
+        signal?.addEventListener('abort', onAbort, { once: true });
         Promise.resolve()
             .then(fn)
-            .then((v) => {
-                if (!settled) {
-                    settled = true;
-                    clearTimeout(timer);
-                    resolve(v);
-                }
-            })
-            .catch((e) => {
-                if (!settled) {
-                    settled = true;
-                    clearTimeout(timer);
-                    reject(e);
-                }
-            });
+            .then((value) => finish(resolve, value))
+            .catch((error) => finish(reject, error));
     });
+}
+
+function throwIfAborted(signal) {
+    if (signal?.aborted) throw abortError(signal);
+}
+
+function abortError(signal) {
+    if (signal?.reason?.name === 'AbortError') return signal.reason;
+    const message = typeof signal?.reason === 'string'
+        ? signal.reason
+        : 'Address discovery cancelled.';
+    const error = new Error(message);
+    error.name = 'AbortError';
+    return error;
 }
 
 /** @type {IsUsedProbe} */

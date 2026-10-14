@@ -8,7 +8,10 @@
 // wallet's own address. The first case is that exact live payload.
 
 import { describe, it, expect } from 'vitest';
-import { extractHolderRows } from '../../../packages/core/src/shared/utils/holderRows.js';
+import {
+    extractHolderCount,
+    extractHolderRows,
+} from '../../../packages/core/src/shared/utils/holderRows.js';
 
 describe('extractHolderRows', () => {
     it('unwraps the explorer envelope /RBTC/api/holders/<tick> returns', () => {
@@ -40,5 +43,19 @@ describe('extractHolderRows', () => {
         expect(extractHolderRows({})).toEqual([]);
         expect(extractHolderRows({ data: 'nope' })).toEqual([]);
         expect(extractHolderRows({ error: 'TICK_NOT_FOUND' })).toEqual([]);
+    });
+});
+
+describe('extractHolderCount', () => {
+    it('uses the envelope total instead of the current page length', () => {
+        expect(extractHolderCount({
+            total: '9007199254740993',
+            data: [{ address: 'first-page-row' }],
+        })).toBe('9007199254740993');
+    });
+
+    it('preserves an empty result and falls back to row length', () => {
+        expect(extractHolderCount({ total: 0, data: [] })).toBe('0');
+        expect(extractHolderCount([{ address: 'a' }, { address: 'b' }])).toBe('2');
     });
 });

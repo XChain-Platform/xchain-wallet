@@ -6,11 +6,18 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 
-vi.mock('@xchain-wallet/core/ui', async () => {
+vi.mock('@xchain-wallet/core/ui', async (importOriginal) => {
     const React = await import('react');
+    const actual = await importOriginal();
     return {
-        Button: ({ variant, onClick, children }) =>
-            React.createElement('button', { 'data-variant': variant, onClick }, children),
+        StatusMessage: actual.StatusMessage,
+        Button: ({ variant, onClick, children, disabled, loading }) =>
+            React.createElement('button', {
+                'data-variant': variant,
+                'aria-busy': loading ? 'true' : 'false',
+                disabled: disabled || loading,
+                onClick,
+            }, children),
     };
 });
 
@@ -19,6 +26,7 @@ import { ConfirmModal } from '../../../../packages/core/src/shared/components/Co
 
 afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     vi.restoreAllMocks();
 });
 
@@ -32,8 +40,16 @@ describe('NoticeModal', () => {
     it('exposes a modal dialog labelled by the title', () => {
         setup();
         const dialog = screen.getByRole('dialog');
+        const title = screen.getByText('Sent');
         expect(dialog.getAttribute('aria-modal')).toBe('true');
-        expect(dialog.getAttribute('aria-label')).toBe('Sent');
+        expect(dialog.getAttribute('aria-labelledby')).toBe(title.id);
+        expect(dialog.getAttribute('aria-describedby')).toBeNull();
+    });
+
+    it('ties the optional detail to the dialog description', () => {
+        setup({ message: 'Message went out' });
+        expect(screen.getByRole('dialog').getAttribute('aria-describedby'))
+            .toBe(screen.getByText('Message went out').id);
     });
 
     it('renders the message paragraph only when given', () => {
@@ -76,6 +92,18 @@ describe('NoticeModal', () => {
         fireEvent.keyDown(window, { key: 'Escape' });
         expect(onClose).toHaveBeenCalledTimes(1);
     });
+
+    it('keeps background content inert while mounted', () => {
+        const onClose = vi.fn();
+        const view = render(
+            <>
+                <button type="button">Outside</button>
+                <NoticeModal title="Sent" onClose={onClose} />
+            </>,
+        );
+        expect(screen.getByText('Outside').hasAttribute('inert')).toBe(true);
+        view.unmount();
+    });
 });
 
 describe('ConfirmModal', () => {
@@ -107,6 +135,20 @@ describe('ConfirmModal', () => {
         expect(onCancel).not.toHaveBeenCalled();
     });
 
+    it('clears a pending confirmation release timer on unmount', () => {
+        vi.useFakeTimers();
+        const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+        const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
+        const { unmount } = setup();
+        const timersBeforeConfirm = setTimeoutSpy.mock.calls.length;
+        fireEvent.click(screen.getByText('Confirm'));
+        expect(setTimeoutSpy).toHaveBeenCalledTimes(timersBeforeConfirm + 1);
+        const releaseTimer = setTimeoutSpy.mock.results.at(-1).value;
+
+        unmount();
+        expect(clearTimeoutSpy).toHaveBeenCalledWith(releaseTimer);
+    });
+
     it('cancel button calls onCancel only', () => {
         const { onConfirm, onCancel } = setup();
         fireEvent.click(screen.getByText('Cancel'));
@@ -128,15 +170,49 @@ describe('ConfirmModal', () => {
         expect(onConfirm).not.toHaveBeenCalled();
     });
 
+    it('cycles keyboard focus between its two actions', () => {
+        setup();
+        const cancel = screen.getByText('Cancel');
+        const confirm = screen.getByText('Confirm');
+        confirm.focus();
+        fireEvent.keyDown(confirm, { key: 'Tab' });
+        expect(document.activeElement).toBe(cancel);
+        fireEvent.keyDown(cancel, { key: 'Tab', shiftKey: true });
+        expect(document.activeElement).toBe(confirm);
+    });
+
+    it('uses visible content for its accessible name and description', () => {
+        setup({ message: 'This cannot be undone.' });
+        const dialog = screen.getByRole('dialog');
+        expect(dialog.getAttribute('aria-labelledby')).toBe(screen.getByText('Delete?').id);
+        expect(dialog.getAttribute('aria-describedby')).toBe(screen.getByText('This cannot be undone.').id);
+    });
+
     it('styles cancel secondary and confirm primary', () => {
         setup();
         expect(screen.getByText('Cancel').dataset.variant).toBe('secondary');
         expect(screen.getByText('Confirm').dataset.variant).toBe('primary');
     });
 
-    it('turns the confirm variant to error when danger', () => {
+    it('turns the confirm variant to danger when danger', () => {
         setup({ danger: true });
         expect(screen.getByText('Cancel').dataset.variant).toBe('secondary');
-        expect(screen.getByText('Confirm').dataset.variant).toBe('error');
+        expect(screen.getByText('Confirm').dataset.variant).toBe('danger');
+    });
+
+    it('shows an error and keeps both exits disabled while confirmation is busy', () => {
+        const { onCancel } = setup({ busy: true, error: 'Wipe failed' });
+        expect(screen.getByRole('dialog')).toHaveAttribute('aria-busy', 'true');
+        expect(screen.getByRole('alert')).toHaveTextContent('Wipe failed');
+        expect(screen.getByText('Cancel')).toBeDisabled();
+        expect(screen.getByText('Confirm')).toBeDisabled();
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(onCancel).not.toHaveBeenCalled();
+    });
+
+    it('does not render an internal error code', () => {
+        setup({ error: 'ERR_STORAGE_WRITE' });
+        expect(screen.getByRole('alert')).toHaveTextContent('Could not complete this request. Try again.');
+        expect(screen.getByRole('alert')).not.toHaveTextContent('ERR_STORAGE_WRITE');
     });
 });

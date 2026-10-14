@@ -24,11 +24,28 @@
 
 import { describe, it, expect, vi } from 'vitest';
 
+vi.mock('../../../packages/core/src/crypto/kdf.js', async (importOriginal) => {
+    const actual = await importOriginal();
+    return {
+        ...actual,
+        calibrateKdfParamsAsync: vi.fn(actual.calibrateKdfParamsAsync),
+        deriveMasterKey: vi.fn(actual.deriveMasterKey),
+        deriveMasterKeyAsync: vi.fn(actual.deriveMasterKeyAsync),
+        makeFreshKdfParams: vi.fn(actual.makeFreshKdfParams),
+    };
+});
+
 import { ARGON2ID_TEST_TIMEOUT_MS } from '../../helpers/argon2idTimeout.js';
 import { persistHdWallet } from '../../../packages/core/src/flows/_persistHdWallet.js';
 import { unlockWalletRecord } from '../../../packages/core/src/flows/unlockWallet.js';
 import { decryptWalletPassphrase } from '../../../packages/core/src/crypto/walletBlob.js';
 import { generateBip39Mnemonic } from '../../../packages/core/src/crypto/mnemonic.js';
+import {
+    calibrateKdfParamsAsync,
+    deriveMasterKey,
+    deriveMasterKeyAsync,
+    makeFreshKdfParams,
+} from '../../../packages/core/src/crypto/kdf.js';
 import { Vault } from '../../../packages/core/src/storage/Vault.js';
 import { InMemoryBackend } from '../../../packages/core/src/storage/backend.js';
 
@@ -81,6 +98,28 @@ async function persist(vault, overrides = {}) {
 }
 
 describe('flows/_persistHdWallet passphrase capture (§15.6)', () => {
+    it('derives once while persisting and still supports a later password unlock', async () => {
+        const vault = await openVault();
+        vi.mocked(deriveMasterKeyAsync).mockClear();
+        vi.mocked(deriveMasterKey).mockClear();
+
+        const { wallet } = await persist(vault);
+        expect(deriveMasterKeyAsync).toHaveBeenCalledTimes(1);
+
+        const signer = await unlockWalletRecord({
+            wallet,
+            password: 'correct-horse-battery-staple',
+            ...REG,
+        });
+        try {
+            expect(await signer.getStatus()).toBe('available');
+            expect(deriveMasterKeyAsync).toHaveBeenCalledTimes(2);
+            expect(deriveMasterKey).not.toHaveBeenCalled();
+        } finally {
+            signer.lock();
+        }
+    });
+
     it('a passphrase wallet lands with a non-null encryptedPassphrase that decrypts back to the typed passphrase', async () => {
         const vault = await openVault();
         const passphrase = 'the fifth element';
@@ -141,5 +180,16 @@ describe('flows/_persistHdWallet passphrase capture (§15.6)', () => {
             expect(putSpy).toHaveBeenCalledTimes(1);
             putSpy.mockRestore();
         }
+    });
+
+    it('uses the existing minimum parameters when device calibration fails', async () => {
+        const vault = await openVault();
+        vi.mocked(calibrateKdfParamsAsync).mockRejectedValueOnce(new Error('calibration failed'));
+        vi.mocked(makeFreshKdfParams).mockReturnValueOnce(LOW_COST_KDF_PARAMS);
+
+        const { wallet } = await persist(vault, { kdfParams: undefined });
+
+        expect(makeFreshKdfParams).toHaveBeenCalledWith();
+        expect(wallet.kdfParams).toEqual(LOW_COST_KDF_PARAMS);
     });
 });

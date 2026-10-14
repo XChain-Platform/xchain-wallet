@@ -20,7 +20,7 @@
 // read project files via relative paths get a stable base.
 
 import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { noteDocsTreeState } from './_docs-repo.js';
@@ -43,6 +43,30 @@ export function formatSmokeSummary(passed, skipped) {
 
 export function smokeRunFailed(failures, skipped, env = process.env) {
     return failures > 0 || (env.XCHAIN_REQUIRE_SIBLINGS === '1' && skipped.length > 0);
+}
+
+export function resolveDocsRoot({
+    env = process.env,
+    repoRoot = wsRoot,
+    exists = existsSync,
+    getGitCommonDir = () => execFileSync(
+        'git', ['rev-parse', '--path-format=absolute', '--git-common-dir'],
+        { cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
+    ).trim(),
+} = {}) {
+    if (env.XCHAIN_DOCS_ROOT) {
+        return { root: env.XCHAIN_DOCS_ROOT, source: 'XCHAIN_DOCS_ROOT' };
+    }
+
+    const sibling = resolve(repoRoot, '..', 'xchain-documentation');
+    if (exists(sibling)) return { root: sibling, source: 'adjacent checkout' };
+
+    try {
+        const platform = resolve(getGitCommonDir(), '..', '..', 'xchain-documentation');
+        if (exists(platform)) return { root: platform, source: 'platform checkout' };
+    } catch { /* a non-git checkout keeps the adjacent default */ }
+
+    return { root: sibling, source: 'adjacent checkout' };
 }
 
 /**
@@ -121,6 +145,10 @@ function* walkSmokes(dir) {
 }
 
 export function runSmokes() {
+    const docs = resolveDocsRoot();
+    process.env.XCHAIN_DOCS_ROOT = docs.root;
+    console.log(`DOCS: using ${docs.source} at ${docs.root}\n`);
+
     for (const note of venueNotes()) {
         console.log(`VENUE: ${note}\n`);
     }
@@ -134,7 +162,7 @@ export function runSmokes() {
     // the same hazard for THIS process; the flag is what keeps every child smoke
     // from re-announcing it, since they are separate processes and cannot see
     // each other's notice.
-    noteDocsTreeState();
+    noteDocsTreeState({ root: docs.root });
     process.env.XCHAIN_DOCS_TREE_NOTED = '1';
 
     // Name the node_modules tree the workspace specifiers resolve through when it

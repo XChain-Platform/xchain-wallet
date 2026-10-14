@@ -47,7 +47,7 @@ const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
 const INSTRUMENTED = process.argv.some((a) => a === '--coverage'
     || a.startsWith('--coverage=') || a.startsWith('--coverage.'));
 
-// The three files that pay a real Argon2id derivation, and the ONLY ones the
+// The files that pay a real Argon2id derivation, and the ONLY ones the
 // instrumented run does not execute.
 //
 // WHY, because "we skip tests under coverage" deserves a hard justification.
@@ -76,6 +76,8 @@ const ARGON2ID_DERIVING_TESTS = [
     'test/unit/crypto/kdf.test.js',
     'test/unit/crypto/backup.test.js',
     'test/unit/crypto/walletBlob.test.js',
+    // The golden Argon2id vectors, three of them at the 64 MiB production cost.
+    'test/unit/crypto/kdf-native.test.js',
 ];
 
 // The config is evaluated before the `test.env` it sets can apply, so it

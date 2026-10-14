@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainPicker, FeeSelector, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { AmountField } from '../components/AmountField.jsx';
@@ -29,7 +29,11 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { activeSourceId, externalIndexOf } from '../addressSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { formatWithThousands } from '../utils/amountFormat.js';
+import { formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import { addressValidationError } from '../utils/addressValidation.js';
+import { memoLengthError } from '../utils/memoLimit.js';
+import { invalidateTokenInfo } from '../utils/tokenInfoCache.js';
+import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import {
@@ -47,7 +51,6 @@ import {
     belowFeeWarning,
     quotedProtocolFee,
     xbridgeActionString,
-    coinDisplay,
     compareDecimal,
 } from './BridgeTick.js';
 import styles from './IssueTokenForm.module.css';
@@ -104,7 +107,6 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
     const { isWatcherMode } = useWalletMode();
 
     const [addressesByChain, setAddressesByChain] = useState(
@@ -120,6 +122,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
     const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
     const [tick, setTick] = useState(initialTick || GAS_TICK);
     const [amount, setAmount] = useState('');
+    const [amountInputError, setAmountInputError] = useState(/** @type {string | null} */ (null));
     const [memo, setMemo] = useState('');
     const [password, setPassword] = useState('');
 
@@ -134,6 +137,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
     const [stage, setStage] = useState(/** @type {'form' | 'submitting' | 'done'} */ ('form'));
     const [hwStatus, setHwStatus] = useState('idle');
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const submitInFlightRef = useRef(false);
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 
     useEffect(() => {
@@ -155,8 +159,8 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                 }
                 setSourceChainId((current) => (current && chains.includes(current) ? current : chains[0]));
             })
-            .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load wallet.');
+            .catch(() => {
+                if (!cancelled) setLoadError('Could not load your addresses. Try again.');
             });
         return () => { cancelled = true; };
     }, [walletId, accountId, messaging]);
@@ -202,7 +206,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
     // thing that knows which is which.
     const destChainIds = useMemo(() => {
         if (!addressesByChain || !sourceDescriptor) return [];
-        return Object.keys(addressesByChain)
+        return chainsWithAddresses(addressesByChain)
             .filter((cid) => cid !== sourceChainId)
             .filter((cid) => chainRegistry.get(cid)?.networkKind === sourceDescriptor.networkKind);
     }, [addressesByChain, sourceChainId, sourceDescriptor]);
@@ -327,11 +331,16 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
     }, [sourceChainId, actionString, fromAddress?.address, messaging]);
 
     const noDestinationAccount = destChainIds.length === 0;
+    const requiredDestinationMissing = destChainIds.length > 0
+        && offeredDestChainIds.length === 0
+        && !!leg.fixedDestination;
+    const destinationUnavailable = noDestinationAccount || requiredDestinationMissing;
     const destinationError = useMemo(() => {
         if (!sourceCoin || !destCoin) return null;
-        return bridgeDestinationError({
+        const error = bridgeDestinationError({
             tick, sourceCoin, destCoin, bridgeChains,
         });
+        return error ? 'This token cannot move to the selected destination chain.' : null;
     }, [tick, sourceCoin, destCoin, bridgeChains]);
 
     const overBalanceError = useMemo(() => {
@@ -339,16 +348,57 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
         if (!amt || balance === null) return null;
         const cmp = compareDecimal(amt, balance);
         if (cmp === null || cmp <= 0) return null;
-        return `You hold ${formatWithThousands(balance)} ${shown.label} on ${chainLabel(sourceDescriptor, sourceChainId)}.`
+        return `You hold ${formatWithThousands(balance)} ${shown.label} at the source address.`
             + ' A bridge move cannot be partly funded: reduce the amount or move a different token.';
     }, [amount, balance, shown.label, sourceDescriptor, sourceChainId]);
+
+    const amountError = useMemo(() => {
+        const value = String(amount).trim();
+        if (!value) return null;
+        if (compareDecimal(value, '0') !== 1) return 'Enter a positive amount to move.';
+        return tokenAmountPrecisionError(value, {
+            divisibility: tick.toUpperCase() === GAS_TICK ? 8 : tokenInfo?.divisibility,
+            tick: shown.label,
+        });
+    }, [amount, shown.label, tick, tokenInfo?.divisibility]);
+
+    const sourceAddressError = fromAddress
+        ? addressValidationError(fromAddress.address, sourceDescriptor)
+        : sourceChainId && (addressesByChain?.[sourceChainId] || []).length > 0
+            ? 'No usable source address is available. Choose another source address.'
+            : null;
+    const destinationAddressError = destAddress
+        ? addressValidationError(destAddress, destDescriptor)
+        : null;
+    const tokenError = tick.toUpperCase() === GAS_TICK
+        ? null
+        : tickerReferenceError(tick, { noun: 'Token', allowRef: true });
+    const customFeeError = feePick.mode !== 'custom'
+        ? null
+        : feePerKb === null
+            ? Number(feePick.customRate) > 0
+                ? 'Custom fee rate can have at most 8 decimal places and must fit the supported range.'
+                : 'Enter a custom fee rate greater than zero.'
+            : null;
+    const memoError = memo.includes('|') || memo.includes(';')
+        ? 'Memo cannot contain "|" or ";".'
+        : memoLengthError(memo.trim());
 
     const feeWarning = useMemo(
         () => belowFeeWarning({ amount, fee: feeQuote, tick: shown.label }),
         [amount, feeQuote, shown.label],
     );
 
-    const blockingError = leg.reason || destinationError || overBalanceError || null;
+    const blockingError = leg.reason
+        || sourceAddressError
+        || destinationAddressError
+        || tokenError
+        || destinationError
+        || amountError
+        || overBalanceError
+        || memoError
+        || customFeeError
+        || null;
 
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
     const passwordValueRef = useRef('');
@@ -415,20 +465,47 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
     async function handleSubmit(event) {
         event.preventDefault();
         if (stage === 'submitting') return;
-        if (!fromAddress || !sourceChainId || !destChainId || !actionParams) return;
-        if (blockingError) return;
+        if (!fromAddress || !sourceChainId) {
+            setFormError('No usable source address is available. Choose another source address.');
+            return;
+        }
+        if (!destChainId || !actionParams) {
+            setFormError('Pick a destination chain for this bridge move.');
+            return;
+        }
+        if (blockingError || amountInputError) return;
         if (!destAddress) {
-            setFormError(`Pick one of your own ${chainLabel(destDescriptor, destChainId)} addresses to receive the transfer.`);
+            setFormError('Pick one of your own destination addresses to receive the transfer.');
             return;
         }
         if (!String(amount).trim()) {
             setFormError('Enter an amount to move.');
             return;
         }
+        if (submitInFlightRef.current) return;
+        submitInFlightRef.current = true;
         setFormError(null);
-        if (isWatcherMode) {
-            setStage('submitting');
-            try {
+        try {
+            if (tick.toUpperCase() !== GAS_TICK && typeof messaging.getTokenInfo === 'function') {
+                let freshTokenInfo;
+                try {
+                    freshTokenInfo = await messaging.getTokenInfo({
+                        chainId: sourceChainId,
+                        tick,
+                        demo: false,
+                    });
+                } catch {
+                    setFormError('Could not refresh this token\'s bridge settings. Check your connection and try again.');
+                    return;
+                }
+                if (bridgeSettingsSnapshot(freshTokenInfo) !== bridgeSettingsSnapshot(tokenInfo)) {
+                    invalidateTokenInfo(sourceChainId, tick);
+                    setFormError('This token\'s bridge settings changed. The form is refreshing them; review the route and try again.');
+                    return;
+                }
+            }
+            if (isWatcherMode) {
+                setStage('submitting');
                 const r = await messaging.buildActionPsbtRequest({
                     chainId: sourceChainId,
                     from: {
@@ -446,21 +523,33 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                 });
                 setResult(r);
                 setStage('done');
-            } catch (err) {
-                setSubmitError(err?.message || 'Could not build the unsigned transaction.');
-                setStage('form');
+                return;
             }
-            return;
+            await openConfirmScreen();
+        } catch (err) {
+            setSubmitError(submitFailureMessage(err, {
+                chainId: sourceChainId,
+                coinTicker: sourceCoin,
+                mandatory: nativeFee.mandatory,
+                fallback: 'Could not build the unsigned transaction. Review the form and try again.',
+            }));
+            setStage('form');
+        } finally {
+            submitInFlightRef.current = false;
         }
-        await openConfirmScreen();
     }
 
+    const doneTitle = result?.queued
+        ? 'Bridge transfer queued'
+        : result?.psbtHex && !result?.txid
+            ? 'Unsigned bridge transfer'
+            : 'Bridge transfer pending';
     const header = (
-        <PageHeader onBack={onBack} title={stage === 'done' ? 'Transfer sent' : 'Move across chains'} />
+        <PageHeader onBack={onBack} title={stage === 'done' ? doneTitle : 'Move across chains'} />
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            {children}
         </Screen>
     );
 
@@ -496,8 +585,8 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                 leg={leg}
                 amount={amount}
                 tickLabel={shown.label}
-                sourceLabel={chainLabel(sourceDescriptor, sourceChainId)}
-                destLabel={chainLabel(destDescriptor, destChainId)}
+                sourceDescriptor={sourceDescriptor}
+                destDescriptor={destDescriptor}
                 destAddress={destAddress}
                 minDepth={minDepth}
                 onDone={onBack}
@@ -510,7 +599,6 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                chainLabel={chainLabel(sourceDescriptor, sourceChainId)}
                 coinTicker={sourceCoin}
                 signerReady={signerReady}
                 password={password}
@@ -564,7 +652,11 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                 // here would be offering an action consensus refuses.
                 kindFilter="tokens"
                 kindLocked
-                onSelect={(sel) => { setTick(String(sel.tick || '')); setTokenPickerOpen(false); }}
+                onSelect={(sel) => {
+                    setTick(String(sel.tick || ''));
+                    setAmountInputError(null);
+                    setTokenPickerOpen(false);
+                }}
                 onBack={() => setTokenPickerOpen(false)}
             />
         );
@@ -573,13 +665,66 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
     const sourceChainIds = chainsWithAddresses(addressesByChain);
 
     return wrap(
-        <form onSubmit={handleSubmit} noValidate>
+        <FormPage
+            label="Move across chains"
+            onSubmit={handleSubmit}
+            status={(feeWarning || blockingError || formError || submitError) ? (
+                <>
+                    {/* A warning, not a refusal: base D13 ruled there is NO dust floor in
+                        consensus, so a below-fee move is legal and the user may have a
+                        reason. `status` rather than `error` is deliberate - an alert role
+                        on a legal choice trains people to ignore the real refusals below
+                        it. */}
+                    {feeWarning ? (
+                        <StatusMessage variant="status">{feeWarning}</StatusMessage>
+                    ) : null}
+                    {blockingError ? (
+                        <StatusMessage variant="error" className={styles.error}>{blockingError}</StatusMessage>
+                    ) : null}
+                    {formError ? (
+                        <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                    ) : null}
+                    {submitError ? (
+                        <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    ) : null}
+                </>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={actionConfirm.composing || stage === 'submitting'}
+                    disabled={
+                        !!blockingError
+                        || !!amountInputError
+                        || destinationUnavailable
+                        || !fromAddress
+                        || !leg.version
+                        || actionConfirm.composing
+                    }
+                >
+                    {leg.leg === 'burn' ? 'Review move back' : 'Review move'}
+                </Button>
+            )}
+        >
             <ChainPicker
                 label="Move from"
                 value={sourceChainId || ''}
-                onChange={setSourceChainId}
+                onChange={(cid) => {
+                    if (cid === sourceChainId) return;
+                    setSourceChainId(cid);
+                    setTick(GAS_TICK);
+                    setAmount('');
+                    setAmountInputError(null);
+                    setDestChainId(null);
+                    setDestAddress('');
+                    setFeeQuote(null);
+                    setFormError(null);
+                    setSubmitError(null);
+                }}
                 chainIds={sourceChainIds}
                 chainRegistry={chainRegistry}
+                hideNetworkKind
             />
             {fromAddress ? (
                 <AddressField
@@ -599,24 +744,41 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
             />
             {shown.origin ? (
                 <p className={styles.hint}>
-                    {shown.label} here is a bridged copy of a {coinDisplay(shown.origin)} asset.
+                    {shown.label} here is a bridged copy of its origin-chain asset.
                 </p>
             ) : null}
 
             {noDestinationAccount ? (
                 <StatusMessage variant="error" className={styles.error}>
-                    {`You have no address on another ${sourceDescriptor?.networkKind || ''} chain yet.`
-                        + ' Use Receive to create one first: a bridge transfer credits an address you control,'
-                        + ' and the credit cannot be redirected once it applies.'}
+                    {leg.fixedDestination
+                        ? 'You have no address on the required destination chain in this wallet yet.'
+                            + ' Use Receive to create one first: this bridged copy can only move back to its origin chain,'
+                            + ' and the release cannot be redirected once it applies.'
+                        : 'You have no address on another chain yet.'
+                            + ' Use Receive to create one first: a bridge transfer credits an address you control,'
+                            + ' and the credit cannot be redirected once it applies.'}
+                </StatusMessage>
+            ) : requiredDestinationMissing ? (
+                <StatusMessage variant="error" className={styles.error}>
+                    This bridge route is unavailable because this wallet has no address on
+                    the required destination chain. Use Receive there to create one first.
                 </StatusMessage>
             ) : (
                 <>
                     <ChainPicker
                         label="Move to"
                         value={destChainId || ''}
-                        onChange={setDestChainId}
+                        onChange={(cid) => {
+                            if (cid === destChainId) return;
+                            setDestChainId(cid);
+                            setDestAddress('');
+                            setFeeQuote(null);
+                            setFormError(null);
+                            setSubmitError(null);
+                        }}
                         chainIds={offeredDestChainIds}
                         chainRegistry={chainRegistry}
+                        hideNetworkKind
                     />
                     <AddressField
                         label="Receive at"
@@ -628,7 +790,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                         iconLabel="Choose receiving address"
                     />
                     <p className={styles.hint}>
-                        One of your own {chainLabel(destDescriptor, destChainId)} addresses. The bridge
+                        One of your own destination-chain addresses. The bridge
                         cannot redirect a credit after it applies, so this is never typed by hand.
                     </p>
                 </>
@@ -638,11 +800,13 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                 label="Amount"
                 amount={amount}
                 tick={shown.label}
+                divisibility={tick.toUpperCase() === GAS_TICK ? 8 : tokenInfo?.divisibility}
                 onAmountFieldChange={(rawValue) => {
                     const stripped = String(rawValue).replace(/,/g, '');
                     if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
                     setAmount(stripped);
                 }}
+                onValidationError={setAmountInputError}
                 onMax={balance && Number(balance) > 0 ? () => setAmount(balance) : undefined}
                 maxDisabled={!balance}
                 balanceText={balance != null
@@ -668,29 +832,34 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
             ) : null}
             <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={sourceCoin} fee={feeQuote} />
 
-            {/* A warning, not a refusal: base D13 ruled there is NO dust floor in
-                consensus, so a below-fee move is legal and the user may have a
-                reason. `status` rather than `error` is deliberate - an alert role
-                on a legal choice trains people to ignore the real refusals below
-                it. */}
-            {feeWarning ? (
-                <StatusMessage variant="status">{feeWarning}</StatusMessage>
-            ) : null}
-            {blockingError ? (
-                <StatusMessage variant="error" className={styles.error}>{blockingError}</StatusMessage>
-            ) : null}
-            {formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
-            ) : null}
-            {submitError ? (
-                <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+            {destChainId ? (
+                <dl className={styles.detailsList} aria-label="Bridge route">
+                    {sourceDescriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Source chain</dt>
+                            <dd className={styles.detailsValue}>
+                                <ChainBadge descriptor={sourceDescriptor} size="sm" showName={false} />
+                            </dd>
+                        </>
+                    ) : null}
+                    {destDescriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Destination chain</dt>
+                            <dd className={styles.detailsValue}>
+                                <ChainBadge descriptor={destDescriptor} size="sm" showName={false} />
+                            </dd>
+                        </>
+                    ) : null}
+                    <dt className={styles.detailsLabel}>Expected arrival</dt>
+                    <dd className={styles.detailsValue}>{expectedArrivalText(minDepth)}</dd>
+                </dl>
             ) : null}
 
             {!blockingError && destChainId && leg.version ? (
                 <p className={styles.hint}>
                     {leg.leg === 'lock'
-                        ? `This locks ${shown.label} on ${chainLabel(sourceDescriptor, sourceChainId)} and credits it on ${chainLabel(destDescriptor, destChainId)}. The credit cannot be undone or redirected.`
-                        : `This burns the copy on ${chainLabel(sourceDescriptor, sourceChainId)} and releases the original on ${chainLabel(destDescriptor, destChainId)}. The release cannot be undone or redirected.`}
+                        ? `This locks ${shown.label} on the source chain and credits it on the destination chain. The credit cannot be undone or redirected.`
+                        : 'This burns the copy on the source chain and releases the original on the destination chain. The release cannot be undone or redirected.'}
                 </p>
             ) : null}
 
@@ -709,25 +878,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
                 />
             ) : null}
 
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    loading={actionConfirm.composing || stage === 'submitting'}
-                    disabled={
-                        !!blockingError
-                        || noDestinationAccount
-                        || !fromAddress
-                        || !destAddress
-                        || !String(amount).trim()
-                        || !leg.version
-                        || actionConfirm.composing
-                    }
-                >
-                    {leg.leg === 'burn' ? 'Move back' : 'Move'}
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }
 
@@ -744,34 +895,52 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
  * that invented "about 6 confirmations" would be wrong the first time an
  * operator raised it, and silently.
  */
-function BridgePendingPanel({
-    txid, leg, amount, tickLabel, sourceLabel, destLabel, destAddress, minDepth, onDone,
+export function BridgePendingPanel({
+    txid, leg, amount, tickLabel, sourceDescriptor, destDescriptor, destAddress, minDepth, onDone,
 }) {
     const moved = `${String(amount).trim()} ${tickLabel}`;
     return (
         <>
-            <p className={styles.successTitle}>
-                {leg.leg === 'lock' ? 'Lock broadcast' : 'Burn broadcast'}
+            <p className={styles.successTitle} role="status">
+                Bridge transfer pending
             </p>
             {txid ? (
                 <>
-                    <p className={styles.successLabel}>{sourceLabel} transaction</p>
+                    <p className={styles.successLabel}>Source transaction</p>
                     <code className={styles.txid}>{txid}</code>
                 </>
             ) : null}
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>Moving</dt>
                 <dd className={styles.detailsValue}>{moved}</dd>
-                <dt className={styles.detailsLabel}>To</dt>
+                {sourceDescriptor ? (
+                    <>
+                        <dt className={styles.detailsLabel}>Source chain</dt>
+                        <dd className={styles.detailsValue}>
+                            <ChainBadge descriptor={sourceDescriptor} size="sm" showName={false} />
+                        </dd>
+                    </>
+                ) : null}
+                {destDescriptor ? (
+                    <>
+                        <dt className={styles.detailsLabel}>Destination chain</dt>
+                        <dd className={styles.detailsValue}>
+                            <ChainBadge descriptor={destDescriptor} size="sm" showName={false} />
+                        </dd>
+                    </>
+                ) : null}
+                <dt className={styles.detailsLabel}>Receive at</dt>
                 <dd className={styles.detailsValue}><AddressText address={destAddress} /></dd>
                 <dt className={styles.detailsLabel}>Status</dt>
                 <dd className={styles.detailsValue}>
-                    {`Pending on ${destLabel}`}
+                    {`${leg.leg === 'lock' ? 'Lock' : 'Burn'} broadcast; destination pending`}
                 </dd>
+                <dt className={styles.detailsLabel}>Expected arrival</dt>
+                <dd className={styles.detailsValue}>{expectedArrivalText(minDepth)}</dd>
             </dl>
             <p className={styles.hint}>
-                {`This transfer is in flight. The ${leg.leg === 'lock' ? 'credit' : 'release'} appears on ${destLabel}`
-                    + ` once the validators have seen this transaction confirmed on ${sourceLabel} and signed the transfer`
+                {`This transfer is in flight. The ${leg.leg === 'lock' ? 'credit' : 'release'} appears on the destination chain`
+                    + ' once the validators have seen the source transaction confirmed and signed the transfer'
                     + (minDepth ? `, which this token requires to be at least ${minDepth} confirmations deep` : '')
                     + '. Nothing further is needed from you, and it cannot be cancelled or redirected.'}
             </p>
@@ -788,8 +957,12 @@ function chainsWithAddresses(byChain) {
         .map(([cid]) => cid);
 }
 
-function chainLabel(descriptor, chainId) {
-    return descriptor?.displayName || chainId || '';
+function expectedArrivalText(minDepth) {
+    const confirmationNote = minDepth
+        ? ` This token requires at least ${minDepth} confirmations.`
+        : '';
+    return 'After the source transaction reaches its required confirmation depth and validators sign the transfer.'
+        + confirmationNote;
 }
 
 // The issuer-raised confirmation depth off the origin token row, when the venue
@@ -800,5 +973,12 @@ function readMinDepth(info) {
     const raw = info?.minDepth ?? info?.min_depth ?? null;
     if (raw === null || raw === undefined) return null;
     const n = Number(raw);
-    return Number.isInteger(n) && n > 0 ? n : null;
+    return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
+
+function bridgeSettingsSnapshot(info) {
+    return JSON.stringify({
+        chains: bridgeChainsList(info?.bridgeChains ?? info?.bridge_chains ?? null),
+        minDepth: readMinDepth(info),
+    });
 }

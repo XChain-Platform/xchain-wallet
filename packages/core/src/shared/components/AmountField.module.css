@@ -1,7 +1,5 @@
-/* Shared "big amount" field used by Send and Receive. Source of truth
-   for the visual contract; both routes mount <AmountField/> with the
-   same look. CSS values mirror what previously lived in Send.module.css
-   under .amountBlock / .amountFooter / .amountMaxInline / etc. */
+/* Shared amount-field layout used by Send and Receive around the shared
+   Input and Button controls. */
 
 .amountBlock {
     display: flex;
@@ -17,49 +15,96 @@
     margin-bottom: 0;
 }
 
-/* The field size (font/padding/height) is owned by the shared Input via its
-   `size` prop ('md' default / 'lg' hero). AmountField no longer duplicates the
-   big-field values here; it just forwards `size` and reserves the right gutter
-   for the Max button via a small inline paddingRight. */
+/* The shared controls own their dimensions through the same `size` prop. */
 
 .amountFieldWrap {
+    --amount-control-height: var(--xc-control-h-md);
+    --amount-action-width: calc(var(--amount-control-height) + var(--xc-space-8));
+    display: flex;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: var(--xc-space-2);
     position: relative;
 }
 
-.amountMaxInline {
+.sm {
+    --amount-control-height: var(--xc-control-h-sm);
+}
+
+.md {
+    --amount-control-height: var(--xc-control-h-md);
+}
+
+.lg {
+    --amount-control-height: var(--xc-control-h-lg);
+}
+
+.amountFieldWrap label {
+    line-height: var(--xc-space-5);
+}
+
+.amountFieldWrap > div:first-child {
+    flex: 1 1 12rem;
+    min-width: 0;
+}
+
+.pasteAction,
+.pasteAction > span {
+    display: contents !important;
+}
+
+/* The wrapper class lifts these above the kit Button's own position rule,
+   which would otherwise win whenever its stylesheet loads later. */
+.amountFieldWrap .pasteAction button,
+.amountFieldWrap .maxAction {
     position: absolute;
-    inset-inline-end: var(--xc-space-2);
-    /* Vertically center the pill in the input box. The input sits at the
-       bottom of the wrap (label above it), so anchoring to the BOTTOM keeps
-       the position independent of label height and holds at both sizes. The
-       per-size bottom offset centers a 24px pill in the 36px (md) / 48px (lg)
-       input: (inputHeight - 24) / 2. */
-    bottom: 6px;
-    height: 24px;
-    display: inline-flex;
-    align-items: center;
-    padding: 0 var(--xc-space-3);
-    border: 1px solid var(--xc-accent-primary);
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-accent-primary);
-    color: var(--xc-on-accent);
-    font-size: var(--xc-text-xs);
-    font-weight: 700;
-    cursor: pointer;
+    z-index: calc(var(--xc-z-base) + 1);
+    /* Inside the field box at its inner height, clear of the border. */
+    top: calc(var(--xc-space-5) + var(--xc-space-2));
+    flex: none;
+    width: auto;
+    min-width: max-content;
+    max-width: none;
+    height: calc(var(--amount-control-height) - var(--xc-space-2));
+    min-height: calc(var(--amount-control-height) - var(--xc-space-2));
+    white-space: nowrap;
 }
 
-.amountFieldWrap[data-size='lg'] .amountMaxInline {
-    bottom: 12px;
+.pasteAction button {
+    inset-inline-end: var(--xc-space-1);
+    gap: var(--xc-space-1);
+    padding-inline: calc(var(--xc-space-1) / 2);
 }
 
-.amountMaxInline:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--xc-accent-primary) 85%, white 15%);
-    border-color: color-mix(in srgb, var(--xc-accent-primary) 85%, white 15%);
+.hasMax .pasteAction button {
+    inset-inline-end: calc(var(--amount-action-width) + var(--xc-space-1));
 }
 
-.amountMaxInline:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+.amountFieldWrap .maxAction {
+    inset-inline-end: var(--xc-space-1);
+    padding-inline: var(--xc-space-2);
+}
+
+.pasteAction button > span,
+.maxAction > span {
+    min-width: max-content;
+    white-space: nowrap;
+}
+
+.pasteAction [role='alert'] {
+    flex: 1 0 100%;
+    margin-block-start: var(--xc-help-gap);
+}
+
+.amountFieldWrap input,
+.amountSwapValue,
+.amountFooterRight > span {
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
+.amountFieldWrap input {
+    min-width: 0;
 }
 
 .amountFooter {
@@ -69,7 +114,7 @@
     gap: var(--xc-space-3);
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
-    margin-top: 4px;
+    margin-top: var(--xc-space-1);
 }
 
 .amountFooterRight {
@@ -78,30 +123,16 @@
     gap: var(--xc-space-2);
 }
 
-.amountUnitSwap {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--xc-space-1);
-    background: transparent;
-    border: none;
-    /* slice 2: the fiat/coin swap is a daily control that measured
-       14px tall. Padding (not a fixed height) so the text stays where it
-       sits and only the target grows to the 24px floor. */
-    padding: var(--xc-space-1) 0;
-    min-height: var(--xc-tap-min);
-    font: inherit;
-    color: var(--xc-text-muted);
-    cursor: pointer;
-    font-size: var(--xc-text-xs);
-}
+@media not all and (min-width: 400px) {
+    .amountFooter {
+        align-items: stretch;
+        flex-direction: column;
+        gap: var(--xc-space-1);
+    }
 
-.amountUnitSwap:hover,
-.amountUnitSwap:focus-visible {
-    color: var(--xc-text);
-}
-
-.amountUnitSwap svg {
-    width: 14px;
-    height: 14px;
-    flex-shrink: 0;
+    .amountFooterRight {
+        align-self: flex-end;
+        max-width: 100%;
+        text-align: end;
+    }
 }

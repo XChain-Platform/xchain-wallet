@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, ChainPicker, FeeSelector, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Icon, Input, ListPage, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
@@ -33,7 +33,7 @@ import { pickDefaultChainId } from '../chainSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
+import { MAX_MEMO_LENGTH, memoLengthError, utf8ByteLength } from '../utils/memoLimit.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -81,7 +81,6 @@ export function LinkForm({ walletId, onBack }) {
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -111,6 +110,12 @@ export function LinkForm({ walletId, onBack }) {
     const [hwStatus, setHwStatus] = useState('idle');
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
+    const mountedRef = useRef(true);
+
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => { mountedRef.current = false; };
+    }, []);
 
     const [previewCache, setPreviewCache] = useState(
         /** @type {Record<string, { loading: boolean, action: any | null, error: string | null }>} */ ({}),
@@ -195,36 +200,40 @@ export function LinkForm({ walletId, onBack }) {
     useEffect(() => {
         if (!chain1Id || !/^\d+$/.test(actionIndex1)) return;
         const key = `${chain1Id}:${actionIndex1}`;
-        if (previewCache[key]) return;
+        if (previewCache[key]?.loading || previewCache[key]?.action) return;
         const t = setTimeout(() => {
             setPreviewCache((p) => ({ ...p, [key]: { loading: true, action: null, error: null } }));
             messaging.getActionByIndex({ chainId: chain1Id, actionIndex: actionIndex1 })
                 .then((action) => {
+                    if (!mountedRef.current) return;
                     setPreviewCache((p) => ({ ...p, [key]: { loading: false, action, error: null } }));
                 })
                 .catch((err) => {
+                    if (!mountedRef.current) return;
                     setPreviewCache((p) => ({ ...p, [key]: { loading: false, action: null, error: err?.message || String(err) } }));
                 });
         }, 350);
         return () => clearTimeout(t);
-    }, [chain1Id, actionIndex1, messaging, previewCache]);
+    }, [chain1Id, actionIndex1, messaging]);
 
     useEffect(() => {
         if (!chain2Id || !/^\d+$/.test(actionIndex2)) return;
         const key = `${chain2Id}:${actionIndex2}`;
-        if (previewCache[key]) return;
+        if (previewCache[key]?.loading || previewCache[key]?.action) return;
         const t = setTimeout(() => {
             setPreviewCache((p) => ({ ...p, [key]: { loading: true, action: null, error: null } }));
             messaging.getActionByIndex({ chainId: chain2Id, actionIndex: actionIndex2 })
                 .then((action) => {
+                    if (!mountedRef.current) return;
                     setPreviewCache((p) => ({ ...p, [key]: { loading: false, action, error: null } }));
                 })
                 .catch((err) => {
+                    if (!mountedRef.current) return;
                     setPreviewCache((p) => ({ ...p, [key]: { loading: false, action: null, error: err?.message || String(err) } }));
                 });
         }, 350);
         return () => clearTimeout(t);
-    }, [chain2Id, actionIndex2, messaging, previewCache]);
+    }, [chain2Id, actionIndex2, messaging]);
 
     // Focus the password field when we land on the review stage so the
     // user can sign without reaching for the mouse.
@@ -236,6 +245,17 @@ export function LinkForm({ walletId, onBack }) {
 
     const trimmedMemo = memo.trim();
     const memoTooLong = memoLengthError(trimmedMemo);
+    const preview1 = chain1Id && /^\d+$/.test(actionIndex1)
+        ? previewCache[`${chain1Id}:${actionIndex1}`]
+        : null;
+    const preview2 = chain2Id && /^\d+$/.test(actionIndex2)
+        ? previewCache[`${chain2Id}:${actionIndex2}`]
+        : null;
+    const previewPending = Boolean(
+        actionIndex1 && actionIndex2
+        && /^\d+$/.test(actionIndex1) && /^\d+$/.test(actionIndex2)
+        && (!preview1 || preview1.loading || !preview2 || preview2.loading),
+    );
 
     const validationError = useMemo(() => {
         if (memoTooLong) return memoTooLong;
@@ -243,11 +263,15 @@ export function LinkForm({ walletId, onBack }) {
         if (!actionIndex1 || !actionIndex2) return null;
         if (!/^\d+$/.test(actionIndex1)) return 'The action number on chain A must be a whole number.';
         if (!/^\d+$/.test(actionIndex2)) return 'The action number on chain B must be a whole number.';
-        if (ticker1 === ticker2 && actionIndex1 === actionIndex2) {
+        if (ticker1 === ticker2 && BigInt(actionIndex1) === BigInt(actionIndex2)) {
             return 'Cannot link an action to itself.';
         }
+        if (preview1?.error) return 'Could not verify the action on chain A. Check the number and try again.';
+        if (preview2?.error) return 'Could not verify the action on chain B. Check the number and try again.';
+        if (preview1 && !preview1.loading && !preview1.action) return 'No action was found on chain A at that number.';
+        if (preview2 && !preview2.loading && !preview2.action) return 'No action was found on chain B at that number.';
         return null;
-    }, [ticker1, ticker2, actionIndex1, actionIndex2, memoTooLong]);
+    }, [ticker1, ticker2, actionIndex1, actionIndex2, memoTooLong, preview1, preview2]);
 
     const { isWatcherMode } = useWalletMode();
 
@@ -378,6 +402,10 @@ export function LinkForm({ walletId, onBack }) {
             setFormError(validationError);
             return;
         }
+        if (previewPending) {
+            setFormError('Wait for both action previews to finish loading.');
+            return;
+        }
         if (!actionIndex1 || !actionIndex2) {
             setFormError('Provide both action indices before reviewing.');
             return;
@@ -468,9 +496,10 @@ export function LinkForm({ walletId, onBack }) {
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            <ListPage>{children}</ListPage>
         </Screen>
     );
+    const wrapForm = (form) => <Screen variant={variant} header={header} restoreScroll={!isReviewOrSubmitting}>{form}</Screen>;
 
     if (loadError) {
         return wrap(
@@ -531,7 +560,7 @@ export function LinkForm({ walletId, onBack }) {
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 screenVariant={variant}
-                chainLabel={submitDescriptor?.displayName || submitChainId}
+                chainLabel={null}
                 feeText={feeEstimate?.coinAmount && feeCoinTicker
                     ? `Network fee: ${feeEstimate.coinAmount} ${feeCoinTicker}`
                     : undefined}
@@ -558,18 +587,53 @@ export function LinkForm({ walletId, onBack }) {
         const preview1 = preview1Key ? previewCache[preview1Key] : null;
         const preview2 = preview2Key ? previewCache[preview2Key] : null;
 
-        return wrap(
-            <form onSubmit={handleSubmit} noValidate>
+        return wrapForm(
+            <FormPage
+                label="Review link"
+                onSubmit={handleSubmit}
+                status={(isWatcherMode || hw) && submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <>
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            disabled={stage === 'submitting'}
+                            onClick={(event) => {
+                                event.preventDefault();
+                                setStage('form');
+                            }}
+                        >
+                            Back
+                        </Button>
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            loading={stage === 'submitting'}
+                            disabled={isWatcherMode
+                                ? false
+                                : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
+                        >
+                            {isWatcherMode
+                                ? 'Create unsigned transaction'
+                                : hw
+                                    ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
+                                    : 'Sign link'}
+                        </Button>
+                    </>
+                )}
+            >
                 <p className={styles.summary}>
-                    Link {ticker1} #{actionIndex1} to {ticker2} #{actionIndex2}
+                    Link action #{actionIndex1} to action #{actionIndex2}
                     {memo.trim() ? `, memo: "${memo.trim()}"` : ''}
                 </p>
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Chain</dt>
                     <dd className={styles.detailsValue}>
                         {submitDescriptor
-                            ? <ChainBadge descriptor={submitDescriptor} size="sm" />
-                            : submitChainId}
+                            ? <ChainBadge descriptor={submitDescriptor} size="sm" showName={false} />
+                            : 'Selected chain'}
                     </dd>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
@@ -577,7 +641,7 @@ export function LinkForm({ walletId, onBack }) {
                     </dd>
                     <dt className={styles.detailsLabel}>Linking</dt>
                     <dd className={styles.detailsValue}>
-                        {ticker1} #{actionIndex1} {'↔'} {ticker2} #{actionIndex2}
+                        Action #{actionIndex1} {'↔'} action #{actionIndex2}
                     </dd>
                     <dt className={styles.detailsLabel}>Side A decoded</dt>
                     <dd className={styles.detailsValue} style={{ fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)' }}>
@@ -630,37 +694,7 @@ export function LinkForm({ walletId, onBack }) {
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 )}
-                {(isWatcherMode || hw) && submitError ? (
-                    <p role="alert" style={{ margin: '0.25rem 0 0', color: '#ef5350', fontSize: '0.75rem' }}>
-                        {submitError}
-                    </p>
-                ) : null}
-
-                <div className={styles.actions}>
-                    <Button
-                        type="button"
-                        variant="secondary"
-                        disabled={stage === 'submitting'}
-                        onClick={() => setStage('form')}
-                    >
-                        Back
-                    </Button>
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={isWatcherMode
-                            ? false
-                            : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
-                    >
-                        {isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : hw
-                                ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                : 'Sign link'}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -668,79 +702,96 @@ export function LinkForm({ walletId, onBack }) {
         .filter(([, addrs]) => Array.isArray(addrs) && addrs.length > 0)
         .map(([cid]) => cid);
 
-    return wrap(
-        <form onSubmit={handleReview} noValidate>
+    return wrapForm(
+        <FormPage
+            label="Link two actions across chains"
+            onSubmit={handleReview}
+            onChangeCapture={() => { if (formError) setFormError(null); }}
+            status={validationError || formError ? (
+                <>
+                    {validationError ? (
+                        <StatusMessage variant="error" className={styles.error}>
+                            {validationError}
+                        </StatusMessage>
+                    ) : null}
+                    {formError ? (
+                        <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+                    ) : null}
+                </>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={actionConfirm.composing || previewPending}
+                    disabled={actionConfirm.composing || previewPending}
+                >
+                    {actionConfirm.composing
+                        ? 'Preparing review…'
+                        : previewPending ? 'Looking up actions…'
+                        : singleEncode ? 'Link' : 'Review'}
+                </Button>
+            )}
+        >
             <div style={{
                 display: 'grid',
-                gridTemplateColumns: isFull ? '1fr 1fr' : '1fr',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(min(14rem, 100%), 1fr))',
                 gap: 'var(--xc-space-3)',
             }}>
                 <SidePanel
                     title="Chain A"
                     chainIds={chainIds}
                     chainId={chain1Id}
-                    onChainChange={setChain1Id}
+                    onChainChange={(value) => { setChain1Id(value); setFormError(null); }}
                     actionIndex={actionIndex1}
-                    onActionIndexChange={setActionIndex1}
+                    onActionIndexChange={(value) => { setActionIndex1(value); setFormError(null); }}
                     previewCache={previewCache}
                 />
                 <SidePanel
                     title="Chain B"
                     chainIds={chainIds}
                     chainId={chain2Id}
-                    onChainChange={setChain2Id}
+                    onChainChange={(value) => { setChain2Id(value); setFormError(null); }}
                     actionIndex={actionIndex2}
-                    onActionIndexChange={setActionIndex2}
+                    onActionIndexChange={(value) => { setActionIndex2(value); setFormError(null); }}
                     previewCache={previewCache}
                 />
             </div>
 
             <Input
                 label="Memo (optional)"
-                hint={`${trimmedMemo.length} / ${MAX_MEMO_LENGTH} characters.`}
+                hint={`${utf8ByteLength(trimmedMemo)} / ${MAX_MEMO_LENGTH} bytes.`}
                 error={memoTooLong || undefined}
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
             />
 
-            <div role="group" aria-label="Submit the link on" className={styles.checkRow}>
-                <span style={{ marginRight: 'var(--xc-space-2)' }}>Submit the link on:</span>
-                <label className={styles.checkRow}>
-                    <input
-                        type="radio"
-                        name="submitOn"
-                        value="chain1"
-                        checked={submitOn === 'chain1'}
-                        onChange={() => setSubmitOn('chain1')}
-                    />
-                    <span>{descriptor1?.displayName || 'Chain A'}</span>
-                </label>
-                <label className={styles.checkRow}>
-                    <input
-                        type="radio"
-                        name="submitOn"
-                        value="chain2"
-                        checked={submitOn === 'chain2'}
-                        onChange={() => setSubmitOn('chain2')}
-                        disabled={!chain2Id || chain2Id === chain1Id}
-                    />
-                    <span>{descriptor2?.displayName || 'Chain B'}</span>
-                </label>
-            </div>
-
-            {validationError ? (
-                <StatusMessage variant="error" className={styles.error}>
-                    {validationError}
-                </StatusMessage>
-            ) : null}
+            <RadioGroup
+                legend="Submit the link on:"
+                aria-label="Submit the link on"
+                name="submitOn"
+                value={submitOn}
+                onChange={(nextValue) => setSubmitOn(nextValue)}
+                options={[
+                    {
+                        value: 'chain1',
+                        label: descriptor1 ? <ChainBadge descriptor={descriptor1} size="sm" showName /> : 'Chain A',
+                    },
+                    {
+                        value: 'chain2',
+                        label: descriptor2 ? <ChainBadge descriptor={descriptor2} size="sm" showName /> : 'Chain B',
+                        disabled: !chain2Id || chain2Id === chain1Id,
+                    },
+                ]}
+            />
 
             {fromAddress && submitChainId ? (
                 <dl className={styles.detailsList}>
                     <dt className={styles.detailsLabel}>Submit on</dt>
                     <dd className={styles.detailsValue}>
                         {chainRegistry.get(submitChainId)
-                            ? <ChainBadge descriptor={chainRegistry.get(submitChainId)} size="sm" />
-                            : submitChainId}
+                            ? <ChainBadge descriptor={chainRegistry.get(submitChainId)} size="sm" showName={false} />
+                            : 'Selected chain'}
                     </dd>
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
@@ -767,23 +818,7 @@ export function LinkForm({ walletId, onBack }) {
             ) : null}
             <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={feeCoinTicker || ''} />
 
-            {formError ? (
-                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
-            ) : null}
-
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    loading={actionConfirm.composing}
-                    disabled={actionConfirm.composing}
-                >
-                    {actionConfirm.composing
-                        ? 'Preparing review…'
-                        : singleEncode ? 'Link' : 'Review'}
-                </Button>
-            </div>
-        </form>,
+        </FormPage>,
     );
 }
 
@@ -813,6 +848,7 @@ function SidePanel({ title, chainIds, chainId, onChainChange, actionIndex, onAct
                 onChange={onChainChange}
                 chainIds={chainIds}
                 chainRegistry={chainRegistry}
+                hideNetworkKind
             />
 
             <Input

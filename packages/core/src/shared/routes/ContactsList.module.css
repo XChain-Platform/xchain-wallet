@@ -8,12 +8,8 @@
  * license (without AGPL source-disclosure terms) is available -
  * contact legal@dankest.llc. */
 
-/* Contacts list view. Mirrors the Send/Receive TokenPicker toolbar
-   (search left, control right) so the address book feels identical to
-   the picker users meet during a send. The control on the right is a
-   custom network dropdown (chain icon + name) rather than a native select,
-   because native selects can't render images inside options. */
-
+/* Search, network picker and sort share one row and wrap on narrow phones
+   instead of clipping the network name. */
 .toolbar {
     display: flex;
     flex-direction: row;
@@ -21,38 +17,39 @@
     gap: var(--xc-space-2);
     width: 100%;
     margin-bottom: var(--xc-space-2);
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
 }
 
-/* Search and network picker each take exactly 50% of the toolbar. */
+/* Search and network picker share the space left beside the sort control. */
 .search {
     flex: 1 1 0;
     min-width: 0;
-    box-sizing: border-box;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
 }
 
-.search::placeholder {
-    color: var(--xc-text-muted);
+.search > *,
+.sort > * {
+    margin-bottom: 0;
+}
+
+.search input {
+    height: var(--xc-control-h-md);
+    font-size: var(--xc-control-font-md, var(--xc-control-font));
+    border-radius: var(--xc-control-radius);
 }
 
 /* Sort sits beside the two half-width controls at its natural width. */
 .sort {
     flex: 0 0 auto;
-    box-sizing: border-box;
-    padding: var(--xc-space-2) var(--xc-space-2);
-    font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
+}
+
+@media (max-width: 420px) {
+    .search {
+        flex: 1 1 100%;
+    }
+
+    .sort {
+        flex: 1 1 100%;
+    }
 }
 
 /* Circular plus button in the header trailing slot, matching the
@@ -106,6 +103,9 @@
     gap: var(--xc-space-3);
     width: 100%;
     padding: var(--xc-space-3);
+    /* The row is a <button>: without the reset its other three sides keep
+       the user agent's dark outset border. */
+    border: none;
     border-top: 1px solid var(--xc-border);
     background: transparent;
     text-align: start;
@@ -167,17 +167,6 @@
     line-height: 1;
 }
 
-/* Tab strip used in the contact detail view. Canonical underline pattern.
-   space-between pushes the trailing add-address button to the right edge. */
-.tabsRow {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0;
-    border-bottom: 1px solid var(--xc-border);
-    margin: var(--xc-space-4) 0 0;
-}
-
 /* Plus button on the Addresses tab line, right-justified. Matches the
    sub-header icon buttons but sized to sit on the tab row. */
 .addAddressBtn {
@@ -205,38 +194,6 @@
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: 2px;
 }
-
-.tab {
-    appearance: none;
-    background: transparent;
-    border: none;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
-    padding: var(--xc-space-3) var(--xc-space-3);
-    color: var(--xc-text-muted);
-    font: inherit;
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    transition: color 160ms ease, border-color 160ms ease;
-}
-
-.tab:hover { color: var(--xc-text); }
-
-.tab:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: -2px;
-}
-
-.tabActive {
-    color: var(--xc-accent-primary);
-    border-bottom-color: var(--xc-accent-primary);
-}
-
-.tabLabel { font-weight: 700; }
 
 .tabPanel {
     padding: var(--xc-space-3) 0;
@@ -346,7 +303,7 @@
     height: 32px;
     border-radius: 50%;
     background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -381,6 +338,8 @@
 .addressText {
     flex: 1 1 auto;
     min-width: 0;
+    direction: ltr;
+    unicode-bidi: isolate;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -408,7 +367,7 @@
     border: 1px solid var(--xc-danger);
     border-radius: var(--xc-radius-sm);
     background: transparent;
-    color: var(--xc-danger);
+    color: var(--xc-danger-fg);
     cursor: pointer;
 }
 
@@ -424,18 +383,29 @@
 /* Add-address modal: centered card over a dimmed full-screen backdrop. */
 .modalOverlay {
     position: fixed;
+    box-sizing: border-box;
     inset: 0;
     z-index: 1000;
     background: rgba(15, 23, 42, 0.55);
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: var(--xc-space-4);
+    padding: calc(var(--xc-space-4) + env(safe-area-inset-top, 0px))
+        calc(var(--xc-space-4) + env(safe-area-inset-right, 0px))
+        calc(var(--xc-space-4) + env(safe-area-inset-bottom, 0px))
+        calc(var(--xc-space-4) + env(safe-area-inset-left, 0px));
 }
 
 .modalCard {
+    box-sizing: border-box;
     width: 100%;
     max-width: 420px;
+    /* Overlay-relative bound first; the safe-area-aware viewport cap below wins. */
+    max-height: 100%;
+    max-height: calc(var(--xc-viewport-h, 100vh) - var(--xc-space-4) - var(--xc-space-4));
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     background: var(--xc-surface-raised);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-lg);
@@ -457,82 +427,3 @@
     margin-top: var(--xc-space-3);
 }
 
-/* Textarea used in the new contact form notes field, styled to match Input. */
-.notesField {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-1);
-    margin-bottom: var(--xc-space-2);
-}
-
-/* Save row on the create/edit contact forms. Tighter top margin than the
-   shared .actions so the button sits close under the notes textarea. */
-.formActions {
-    margin-top: var(--xc-space-2);
-}
-
-.notesLabel {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-    font-weight: 500;
-}
-
-.notesTextarea {
-    padding: var(--xc-space-2) var(--xc-space-3);
-    font-family: var(--xc-font-sans);
-    font-size: var(--xc-text-md);
-    color: var(--xc-text);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
-    width: 100%;
-    box-sizing: border-box;
-    resize: vertical;
-    min-height: 80px;
-    transition: border-color var(--xc-transition), box-shadow var(--xc-transition);
-}
-
-.notesTextarea:focus {
-    outline: none;
-    border-color: var(--xc-accent-primary);
-    box-shadow: 0 0 0 3px var(--xc-focus-ring);
-}
-
-/* Empty state shown when no contacts exist or none match the filter.
-   Rendered as a card so the emptiness is clearly intentional, not a
-   loading glitch. */
-.emptyCard {
-    margin: var(--xc-space-2) 0;
-    padding: var(--xc-space-6) var(--xc-space-4);
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-lg);
-    text-align: center;
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-sm);
-}
-
-/* "Not now" inside the publish nudge: reads as a link so the row keeps one
-   real button (Open Backup). */
-.linkButton {
-    display: inline-flex;
-    align-items: center;
-    min-height: var(--xc-tap-min);
-    background: transparent;
-    border: 0;
-    color: var(--xc-accent-primary);
-    font: inherit;
-    cursor: pointer;
-    padding: 0;
-}
-
-.linkButton:hover { text-decoration: underline; }
-
-/* Box-shadow focus rings are not painted in forced-colors mode, so give
- * this control a real outline there (WCAG 2.4.7). */
-@media (forced-colors: active) {
-    .notesTextarea:focus {
-        outline: 2px solid Highlight;
-        outline-offset: 2px;
-    }
-}

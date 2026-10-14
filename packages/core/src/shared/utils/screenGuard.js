@@ -18,8 +18,9 @@
 // sitting in a recents snapshot is a seed phrase on the flash of a device
 // that gets sold, stolen, or repaired.
 //
-// So it goes on for: the recovery phrase, private-key export, mnemonic
-// entry, and the unlock screen. It stays OFF everywhere else, because:
+// So it goes on for: the recovery phrase, private-key export,
+// mnemonic/private-key entry, and the unlock screen. It stays OFF
+// everywhere else, because:
 //
 //   - screenshotting your own receive address QR is ordinary wallet use,
 //     and users do it constantly;

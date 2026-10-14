@@ -43,4 +43,30 @@ test('keeps the fast selector wired without moving Playwright into the fast tier
     const fullOnly = script.match(/CI_TIER_FULL_ONLY=\(([\s\S]*?)\n\)/)?.[1] || '';
     assert(fullOnly.includes('"e2e: Playwright browsers"'));
     assert(fullOnly.includes('"e2e suite (test:e2e)"'));
+    for (const [name, command] of [
+        ['boundary suite (test:boundary)', 'pnpm test:boundary'],
+        ['chaos suite (test:chaos)', 'pnpm test:chaos'],
+        ['accessibility suite (test:a11y)', 'pnpm test:a11y']
+    ]) {
+        assert(script.includes(`run_tier "${name}" ${command}`), `${name} is a standalone tier`);
+        assert(!fullOnly.includes(name), `${name} stays in the fast gate`);
+    }
+    assert(script.includes('export XCHAIN_CI_FULL_VITEST_TIERS=1'));
+
+    const e2eSetup = fs.readFileSync('test/e2e/global-setup.ci.js', 'utf8');
+    assert(e2eSetup.includes("process.env.XCHAIN_CI_FULL_VITEST_TIERS === '1'"),
+        'Playwright skips suites already graded by ci-full');
+});
+
+test('does not report tests covered by explicit fast tiers as deferred', () => {
+    for (const file of [
+        'test/a11y/App.a11y.test.jsx',
+        'test/boundary/network.test.js',
+        'test/chaos/retry.test.js'
+    ]) {
+        const plan = select([file]);
+        assert.equal(plan.consensus, false, file);
+        assert.deepEqual(plan.reasons, [], file);
+        assert.deepEqual(plan.tests, [], file);
+    }
 });

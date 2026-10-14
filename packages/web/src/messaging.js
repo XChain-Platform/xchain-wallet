@@ -13,17 +13,24 @@
 // `packages/extension/src/popup/messaging.js`; keeps shared route
 // layouts (once extracted) swap-compatible across shells.
 
-import {
-    sendMessage,
-    getSessionStatus,
-    unlockWalletLocal,
-    lockWalletLocal,
-    createWalletLocal,
-    importMnemonicLocal,
-    importBackupLocal,
-} from './hostBridge.js';
+import { getRecentShellErrors } from './errorCapture.js';
+import { memoizeRetryablePromise } from './retryablePromise.js';
 
-export { sendMessage, getSessionStatus };
+const loadHostBridge = memoizeRetryablePromise(() => import('./hostBridge.js'));
+
+// An arrow binding exported by name: the host route-table test reads a
+// declared parameter list as a computed send type, and the shell parity
+// smoke reads exports from declarations or an export list.
+const sendMessage = async (type, request) => {
+    const { sendMessage: sendToHost } = await loadHostBridge();
+    return sendToHost(type, request);
+};
+export { sendMessage };
+
+export async function getSessionStatus() {
+    const { getSessionStatus: getStatus } = await loadHostBridge();
+    return getStatus();
+}
 
 /**
  * @param {string} password
@@ -39,10 +46,12 @@ export async function unlockWallet(password, opts) {
     const bip39Passphrase = typeof opts?.bip39Passphrase === 'string' && opts.bip39Passphrase.length > 0
         ? opts.bip39Passphrase
         : undefined;
+    const { unlockWalletLocal } = await loadHostBridge();
     return unlockWalletLocal(bip39Passphrase ? { password, bip39Passphrase } : { password });
 }
 
 export async function lockWallet() {
+    const { lockWalletLocal } = await loadHostBridge();
     return lockWalletLocal();
 }
 
@@ -58,6 +67,7 @@ export async function lockWallet() {
  * @returns {Promise<{ mnemonic: string, walletName: string }>}
  */
 export async function createWallet(opts) {
+    const { createWalletLocal } = await loadHostBridge();
     return createWalletLocal(opts);
 }
 
@@ -72,6 +82,7 @@ export async function createWallet(opts) {
  * @returns {Promise<{ format: 'bip39' | 'counterwallet-legacy', walletName: string }>}
  */
 export async function importMnemonic(opts) {
+    const { importMnemonicLocal } = await loadHostBridge();
     return importMnemonicLocal(opts);
 }
 
@@ -83,6 +94,7 @@ export async function importMnemonic(opts) {
  * @param {{ password: string, backupPassword: string, walletPassword: string, fileContent?: string, pointer?: object }} opts
  */
 export async function importBackupFresh(opts) {
+    const { importBackupLocal } = await loadHostBridge();
     return importBackupLocal(opts);
 }
 
@@ -90,9 +102,19 @@ export function listWallets() {
     return /** @type {any} */ (sendMessage('wallet.list'));
 }
 
+/** @param {{ walletId: string, currentPassword: string, newPassword: string }} opts */
+export function changePassword(opts) {
+    return /** @type {any} */ (sendMessage('wallet.changePassword', opts));
+}
+
 /** @param {object} opts */
 export function addImportedWallet(opts) {
     return /** @type {any} */ (sendMessage('wallet.add.import', opts));
+}
+
+/** @param {{ token: string }} opts */
+export function labelSyncRestoreResult(opts) {
+    return /** @type {any} */ (sendMessage('wallet.labelSyncRestoreResult', opts));
 }
 
 /**
@@ -161,6 +183,11 @@ export function getAddressBalances(chainId, address) {
     return /** @type {any} */ (sendMessage('balances.address', { chainId, address }));
 }
 
+/** Fetch spendable outputs for Send coin control. */
+export function getAddressUtxos(chainId, address) {
+    return /** @type {any} */ (sendMessage('utxos.address', { chainId, address }));
+}
+
 /**
  * §7/§8 SPV: verify a single token balance against a quorum-signed
  * checkpoint. Resolves to a normalized `{ status, amount, height, reason }`
@@ -197,6 +224,11 @@ export function getNewestAddress(walletId, chainId, accountId) {
 /** Rename an address (set its label). @param {string} id @param {string} label */
 export function setAddressLabel(id, label) {
     return /** @type {any} */ (sendMessage('addresses.setLabel', { id, label }));
+}
+
+/** Hide or unhide an address. @param {string} id @param {boolean} hidden */
+export function setAddressHidden(id, hidden) {
+    return /** @type {any} */ (sendMessage('addresses.setHidden', { id, hidden }));
 }
 
 /** Delete an address record by id. @param {string} id */
@@ -240,6 +272,8 @@ export function setActiveAddress(accountId, chainId, addressId) {
  * @param {number} [opts.fee]
  * @param {number} [opts.feePerKb]
  * @param {boolean} [opts.rbf]
+ * @param {string} [opts.holdId]
+ * @param {number} [opts.undoSeconds]
  * @param {string} [opts.bip39Passphrase]
  * @returns {Promise<any>}
  */
@@ -663,7 +697,7 @@ export function activateChainRequest(opts) {
 
 /** §50 / G156: diagnostic dump for support copy-paste. */
 export function getDiagnosticDump() {
-    return /** @type {any} */ (sendMessage('diagnostic.dump'));
+    return /** @type {any} */ (sendMessage('diagnostic.dump', { recentErrors: getRecentShellErrors() }));
 }
 
 /**
@@ -1276,6 +1310,10 @@ export function editBetFeedListsActionHw(opts) {
  */
 export function composeBetForConfirm(opts) {
     return /** @type {any} */ (sendMessage('action.bet.composeForConfirm', opts));
+}
+
+export function buildBetActionPsbtRequest(opts) {
+    return /** @type {any} */ (sendMessage('action.bet.psbt', opts));
 }
 
 // BET reads (no signing): market list / one market with pools + timeline / placed

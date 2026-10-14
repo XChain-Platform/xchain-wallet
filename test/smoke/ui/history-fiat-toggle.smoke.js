@@ -34,12 +34,13 @@ assert.match(schemaSrc, /showFiatInHistory/, 'schema documents/defines showFiatI
 // History reads + writes it through the standard useSettings() nested patch.
 assert.match(src, /showFiatInHistory\s*=\s*Boolean\(proofSettings\.settings\?\.showFiatInHistory\)/, 'reads showFiatInHistory from settings');
 assert.match(src, /proofSettings\.update\(\{\s*showFiatInHistory:\s*!showFiatInHistory\s*\}\)/, 'toggle writes through the nested-patch pattern');
-assert.match(src, /Show fiat/, 'renders a Show-fiat control');
+assert.match(src, /t\('history\.filters\.showFiatOff'\)/, 'renders a Show-fiat control that names its off state');
 
 // The fiat rate uses the existing price-lookup plumbing (§45), not a
 // bespoke fetch.
 assert.match(src, /import \{ useFiatRate \}/, 'imports the shared useFiatRate hook');
-assert.match(src, /import \{ coinToFiat \}/, 'imports coinToFiat from priceLookup');
+assert.match(src, /import \{ coinToFiatExact \}/, 'imports exact fiat conversion from priceLookup');
+assert.match(src, /formatFiat\(nativeFiatValue, fiatCurrency\)/, 'renders the selected fiat currency');
 
 // Native-only gate: nativeAmountFieldOf must reject anything with a
 // non-native tick (a token movement), so a token amount can never be

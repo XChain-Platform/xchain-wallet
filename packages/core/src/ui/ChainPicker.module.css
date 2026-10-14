@@ -1,4 +1,8 @@
 .wrap {
+    --chain-picker-control-height: var(--xc-control-h-md);
+    --chain-picker-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
+    --chain-picker-padding-x: var(--xc-control-pad-x-md, var(--xc-control-pad-x));
+    --chain-picker-font-size: var(--xc-control-font-md, var(--xc-control-font));
     position: relative;
     width: 100%;
     display: flex;
@@ -7,29 +11,56 @@
     margin-bottom: var(--xc-space-3);
 }
 
+.sm {
+    --chain-picker-control-height: var(--xc-control-h-sm);
+    --chain-picker-icon-size: var(--xc-control-icon-sm, var(--xc-icon-sm));
+    --chain-picker-padding-x: var(--xc-control-pad-x-sm, var(--xc-control-pad-x));
+    --chain-picker-font-size: var(--xc-control-font-sm, var(--xc-control-font));
+}
+
+.md {
+    --chain-picker-control-height: var(--xc-control-h-md);
+    --chain-picker-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
+    --chain-picker-padding-x: var(--xc-control-pad-x-md, var(--xc-control-pad-x));
+    --chain-picker-font-size: var(--xc-control-font-md, var(--xc-control-font));
+}
+
+.lg {
+    --chain-picker-control-height: var(--xc-control-h-lg);
+    --chain-picker-icon-size: var(--xc-control-icon-lg, var(--xc-icon-lg));
+    --chain-picker-padding-x: var(--xc-control-pad-x-lg, var(--xc-control-pad-x));
+    --chain-picker-font-size: var(--xc-control-font-lg, var(--xc-control-font));
+}
+
 .label {
     font-size: var(--xc-text-sm);
     font-weight: 500;
     color: var(--xc-text-muted);
 }
 
-/* Trigger matches the shared Input chrome (border / background / radius) and
-   the size contract: md (36px) sits inline with a form's other inputs; lg
-   (48px) for hero screens. One line: icon + chain name + optional
-   network-kind suffix + caret (the fuller ticker/kind detail lives in the
-   dropdown rows below). */
+/* The trigger follows the shared text-control dimensions while keeping the
+   fuller ticker and network-kind detail in the dropdown rows. */
 .trigger {
+    /* The pointer target never drops below the WCAG 2.5.8 floor; a later
+       min-height or height here may raise it. */
+    min-block-size: var(--xc-tap-min);
     appearance: none;
+    box-sizing: border-box;
     width: 100%;
     display: flex;
     align-items: center;
     gap: var(--xc-space-2);
     min-height: 36px;
+    min-height: var(--chain-picker-control-height);
+    height: var(--chain-picker-control-height);
     padding: var(--xc-space-2) var(--xc-space-3);
-    font-size: var(--xc-text-md);
+    padding: 0 var(--chain-picker-padding-x);
+    font-family: var(--xc-font-sans);
+    font-size: var(--chain-picker-font-size);
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-radius-md);
+    border-radius: var(--xc-control-radius);
     color: var(--xc-text);
     cursor: pointer;
     text-align: start;
@@ -53,16 +84,16 @@
 
 .triggerIcon {
     flex: 0 0 auto;
-    width: 20px;
-    height: 20px;
+    width: var(--chain-picker-icon-size, var(--xc-icon-md));
+    height: var(--chain-picker-icon-size, var(--xc-icon-md));
     display: inline-flex;
     align-items: center;
     justify-content: center;
 }
 
 .triggerIcon img {
-    width: 20px;
-    height: 20px;
+    width: 100%;
+    height: 100%;
     display: block;
     border-radius: 50%;
 }
@@ -76,20 +107,15 @@
     overflow: hidden;
 }
 
+/* The chain name gives way before the network tag: without min-width: 0
+   it cannot shrink, so a narrow form cut "regtest" off instead. */
 .triggerLabel {
+    min-width: 0;
     font-size: inherit;
     color: var(--xc-text);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-}
-
-.triggerKind {
-    flex: 0 0 auto;
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    font-family: var(--xc-font-mono);
-    letter-spacing: 0.04em;
 }
 
 .triggerPlaceholder {
@@ -102,13 +128,12 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    height: 100%;
 }
 
-/* lg (hero) size, matching Input.module.css `.lg`. */
 .lg .trigger {
     min-height: 48px;
-    padding: var(--xc-space-3) var(--xc-space-4);
-    font-size: var(--xc-text-lg);
+    min-height: var(--chain-picker-control-height);
 }
 
 .lg .label {
@@ -116,10 +141,8 @@
     font-weight: 600;
 }
 
-.lg .triggerIcon,
-.lg .triggerIcon img {
-    width: 24px;
-    height: 24px;
+.sm .label {
+    font-size: var(--xc-text-xs);
 }
 
 /* Popover */
@@ -129,11 +152,11 @@
     top: calc(100% + 6px);
     inset-inline-start: 0;
     inset-inline-end: 0;
-    z-index: 50;
+    z-index: var(--xc-z-dropdown);
     background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
+    border: 1px solid var(--xc-border);
     border-radius: 12px;
-    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+    box-shadow: var(--xc-shadow-md);
     max-height: 320px;
     display: flex;
     flex-direction: column;
@@ -193,9 +216,10 @@
 }
 
 .itemIcon {
+    --xc-icon-size: var(--xc-icon-md);
     flex: 0 0 auto;
-    width: 28px;
-    height: 28px;
+    width: var(--xc-icon-size);
+    height: var(--xc-icon-size);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -205,8 +229,8 @@
 }
 
 .itemIcon img {
-    width: 22px;
-    height: 22px;
+    width: 100%;
+    height: 100%;
     display: block;
 }
 

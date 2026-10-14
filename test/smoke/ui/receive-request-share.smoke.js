@@ -27,6 +27,10 @@ const recvCss = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'Receive.module.css'),
     'utf8',
 );
+const shareSrc = readFileSync(
+    join(wsRoot, 'packages', 'core', 'src', 'shared', 'share.js'),
+    'utf8',
+);
 
 // QR-first redesign: the request-payment fields are now inline (no
 // "Request payment" accordion, no memo/expiry). The user sets an amount
@@ -49,16 +53,12 @@ for (const s of ['reqAmount', 'reqTick', 'amountInputMode', 'fiatAmount']) {
 assert.match(recvSrc, /qrUri = useMemo/, 'qrUri memo');
 assert.match(
     recvSrc,
-    /uriLib\.buildXchainUri\(/,
-    'encodes an xchain: send URI carrying the requested amount + tick',
-);
-assert.match(recvSrc, /amount: amount \|\| undefined/, 'request URI uses the entered amount');
-assert.match(recvSrc, /tick: tick \|\| undefined/, 'request URI carries the token tick');
-assert.match(
-    recvSrc,
     /uriLib\.encodeBip21Uri\(/,
-    'falls back to a bare BIP21 URI for non-xchain wallets',
+    'encodes a BIP21-style URI carrying the requested amount',
 );
+assert.match(recvSrc, /amount,/, 'request URI uses the entered amount');
+assert.match(recvSrc, /chain: activeChainId/, 'request URI preserves the selected network');
+assert.match(recvSrc, /\.\.\.\(tick \? \{ tick \} : \{\}\)/, 'request URI carries the token tick');
 
 // --- QR generation ---------------------------------------------------
 
@@ -68,14 +68,15 @@ assert.match(recvSrc, /QRCode\.toDataURL\(qrUri/, 'request URI rendered to QR');
 
 assert.match(recvSrc, /copyQrImage = useCallback/, 'copy callback memoized');
 assert.match(recvSrc, /shareQrImage = useCallback/, 'share callback memoized');
-// Every shell's CSP pins connect-src to the wallet's own hosts, so a
-// `fetch(dataUrl)` is refused and both buttons failed with "Failed to
-// fetch" (user report, 2026-09-07). The PNG is decoded in-process.
+assert.match(recvSrc, /import \{ shareContent, ShareOutcome \}/, 'imports platform share selection');
+// Every shell's CSP limits connect-src to wallet hosts, so the PNG decoder
+// stays in-process instead of relying on `fetch(dataUrl)`.
 assert.doesNotMatch(recvSrc, /fetch\(qrDataUrl\)/, 'never fetches the QR data URL');
 assert.match(recvSrc, /dataUrlToBlob\(qrDataUrl\)/, 'decodes the QR data URL in-process');
-// Same report: the read-only address needed a manual select + copy.
-assert.match(recvSrc, /copyAddress = useCallback/, 'single-tap address copy callback');
+// The read-only address also provides a direct copy action.
+assert.match(recvSrc, /copyAddress = useCallback/, 'single-tap request copy callback');
 assert.match(recvSrc, /onClick=\{copyAddress\}/, 'tapping the address field copies it');
+assert.match(recvSrc, /copyText\(address\.address\)/, 'address copy matches the visible address');
 assert.match(
     recvSrc,
     /navigator\.clipboard\.write\(\[new ClipboardItem/,
@@ -83,20 +84,34 @@ assert.match(
 );
 assert.match(
     recvSrc,
-    /navigator\.share\(\{[\s\S]*?files: \[file\]/,
-    'shares the QR image file via the Web Share API',
+    /await shareContent\(data, \{ fallbackText: qrUri \}\)/,
+    'uses native share before platform fallbacks',
 );
-assert.match(recvSrc, /canShareFiles/, 'feature-detects file-share support');
+assert.match(recvSrc, /title: `Receive \$\{asset\} with XChain`/, 'shares a useful title');
+assert.match(recvSrc, /url: qrUri/, 'shares the exact payment request URL');
 assert.match(
     recvSrc,
-    /navigator\.canShare\(\{ files:/,
-    'probes navigator.canShare with a file before offering Share',
+    /nav\.canShare\(withFile\)/,
+    'attaches the QR image only when file sharing is supported',
 );
+assert.match(recvSrc, /fallbackText: qrUri/, 'provides the payment request as the share fallback');
+assert.match(recvSrc, /ShareOutcome\.CANCELED/, 'treats share-sheet cancellation quietly');
+const nativeShare = shareSrc.indexOf("getNativePlugin('App'");
+const webShare = shareSrc.indexOf('await nav.share(data)');
+const copyFallback = shareSrc.indexOf('await copyText(fallbackText');
+assert.ok(nativeShare >= 0, 'platform share finds the native App bridge');
+assert.ok(nativeShare < webShare, 'native share precedes Web Share');
+assert.ok(webShare < copyFallback, 'Web Share precedes clipboard fallback');
 
 // --- buttons ---------------------------------------------------------
 
 assert.match(recvSrc, /Copy QR/, 'Copy QR button');
-assert.match(recvSrc, /Share QR/, 'Share QR button (shown when file-share is supported)');
+assert.match(recvSrc, /Share QR/, 'Share QR button is always offered for a rendered request');
+assert.doesNotMatch(
+    recvSrc,
+    /\{canShareFiles \? \(/,
+    'Share QR does not disappear when file sharing is unsupported',
+);
 
 // --- CSS hooks -------------------------------------------------------
 

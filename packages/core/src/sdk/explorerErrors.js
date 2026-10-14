@@ -51,6 +51,13 @@ const MESSAGE_TO_CODE = [
     [/Explorer returned HTTP (\d{3})/i, 'EXPLORER_HTTP_$1'],
     [/Explorer request timed out:/i, 'EXPLORER_TIMEOUT'],
     [/Explorer request failed:/i, 'EXPLORER_NETWORK'],
+    [/Explorer data for \S+ is behind the chain/i, 'COIN_DATA_STALE'],
+    [/WebSocket closed before WELCOME/i, 'WS_CONNECTION_CLOSED'],
+    [/WebSocket (?:connection failed|error:)/i, 'WS_CONNECTION_FAILED'],
+    [/No response for request id:/i, 'WS_TIMEOUT'],
+    [/Unknown network:/i, 'INVALID_NETWORK'],
+    [/addresses must be a non-empty array/i, 'INVALID_ADDRESSES'],
+    [/Explorer does not serve \S+/i, 'EXPLORER_BATCH_UNSUPPORTED'],
 ];
 
 // A 429 the SDK could not ride out (rate-limits spec, M4). The SDK honours
@@ -70,6 +77,8 @@ const MESSAGE_TO_CODE = [
 // message prefix (across the messaging boundary, where the fields are gone)
 // can. Hence both tests below rather than a name check alone.
 const EXPLORER_429_RE = /Explorer returned HTTP 429\b/i;
+// The sentence the shared rate-limit layer puts on a 429 it gave up on.
+const EXPLORER_BUSY_RE = /The XChain explorer is busy\b/;
 const RETRY_AFTER_RE = /;\s*retry after (\d+) seconds?/i;
 
 /**
@@ -90,28 +99,26 @@ export function explorerErrorCode(err) {
     // neither field left is recognised by the "; retry after N seconds" suffix,
     // which only the new class writes.
     if (code === 'RATE_LIMITED' || name === 'SDKRateLimitedError') {
-        if (e.service === 'explorer' || EXPLORER_429_RE.test(message)) return 'RATE_LIMITED';
+        if (e.service === 'explorer' || EXPLORER_429_RE.test(message) || EXPLORER_BUSY_RE.test(message)) return 'RATE_LIMITED';
     }
     if (EXPLORER_429_RE.test(message) && RETRY_AFTER_RE.test(message)) return 'RATE_LIMITED';
-    // Only codes the SDK actually mints count. A raw axios error also carries a
-    // `code` (ECONNABORTED, ENOTFOUND), and the SDK's own WS_* / INVALID_NETWORK
-    // codes are deliberately NOT claimed here: they are not a failed read of a
-    // submit's data and their sentences would be different ones.
-    if (code.startsWith('EXPLORER_')) return code;
+    if (EXPLORER_BUSY_RE.test(message)) return 'RATE_LIMITED';
+    // Only a typed SDK explorer error may contribute a code outside the
+    // EXPLORER_* family. Raw transport errors also carry codes such as
+    // ECONNABORTED and ENOTFOUND.
+    if (code.startsWith('EXPLORER_') || (name === 'SDKExplorerError' && code)) return code;
     for (const [pattern, mapped] of MESSAGE_TO_CODE) {
         const m = pattern.exec(message);
         if (m) return mapped.replace('$1', m[1] || '');
     }
-    return null;
+    return name === 'SDKExplorerError' ? 'EXPLORER_UNKNOWN' : null;
 }
 
 /**
  * True when this error came from the SDK explorer client.
  *
- * Deliberately does NOT trust `name` alone: SDKExplorerError is also what the
- * websocket client throws (WS_CONNECTION_FAILED, WS_TIMEOUT) and what an
- * unknown-network programming error is minted as, and neither is the read
- * failure this module has sentences for.
+ * The class name is enough for a generic safe answer when a newly added code
+ * crosses a boundary without its own fields.
  *
  * @param {unknown} err
  * @returns {boolean}
@@ -136,6 +143,8 @@ export function rateLimitRetryAfterSeconds(err) {
     if (!err || typeof err !== 'object') return null;
     const e = /** @type {any} */ (err);
     if (Number.isInteger(e.retryAfterSeconds) && e.retryAfterSeconds >= 0) return e.retryAfterSeconds;
+    // retryAfterMs is the copy the messaging envelope carries across the boundary.
+    if (Number.isFinite(e.retryAfterMs) && e.retryAfterMs >= 0) return Math.ceil(e.retryAfterMs / 1000);
     const m = RETRY_AFTER_RE.exec(String(e.message || ''));
     if (!m) return null;
     const seconds = Number.parseInt(m[1], 10);
@@ -173,13 +182,12 @@ export function explorerErrorMessage(err) {
 
     if (code === 'EXPLORER_TIMEOUT') {
         return 'The service that reads the chain did not answer in time, so the wallet could not check '
-            + 'this action before sending it. Nothing was signed or sent, so nothing was spent. Try '
-            + 'again in a moment.';
+            + 'this action, but nothing was signed or sent, and nothing was spent. Try again in a moment.';
     }
 
     if (code === 'EXPLORER_NETWORK') {
-        return 'The wallet could not reach the service that reads the chain. Nothing was signed or sent, '
-            + 'so nothing was spent. Check your connection and try again.';
+        return 'The wallet could not reach the service that reads the chain, but nothing was signed or sent, '
+            + 'and nothing was spent. Check your connection and try again.';
     }
 
     if (code === 'EXPLORER_BAD_FEEQUOTE') {
@@ -187,10 +195,34 @@ export function explorerErrorMessage(err) {
         // answer was unusable - but the wallet REFUSING to size a fee output
         // from it is the correct outcome, so the sentence says that plainly
         // rather than implying a fault the user can clear by trying harder.
-        return 'The protocol fee for this action could not be read: the service answered with a price '
-            + 'the wallet could not use, and it will not guess at a fee it would send on-chain. Nothing '
-            + 'was signed or sent, so nothing was spent. Try again in a moment, and report it if it '
-            + 'keeps happening.';
+        return 'The protocol fee for this action could not be read, and the wallet will not guess at an '
+            + 'on-chain amount; nothing was signed or sent, and nothing was spent. Try again in a moment, and report it '
+            + 'if it keeps happening.';
+    }
+
+    if (code === 'COIN_DATA_STALE') {
+        return 'The service that reads the chain is still catching up, but nothing was signed or sent, and '
+            + 'nothing was spent. Wait a few minutes and try again.';
+    }
+
+    if (code === 'INVALID_NETWORK') {
+        return 'The wallet does not recognize the selected network, but nothing was signed or sent, and nothing was spent. '
+            + 'Choose a supported network in Settings and try again.';
+    }
+
+    if (code === 'INVALID_ADDRESSES') {
+        return 'The wallet could not check one or more addresses for this action, but nothing was signed or '
+            + 'sent, and nothing was spent. Check the addresses and try again.';
+    }
+
+    if (code === 'EXPLORER_BATCH_UNSUPPORTED') {
+        return 'The service that reads the chain does not support this wallet request, but nothing was signed '
+            + 'or sent, and nothing was spent. Update the wallet and try again, or report it if it continues.';
+    }
+
+    if (code === 'WS_CONNECTION_CLOSED' || code === 'WS_CONNECTION_FAILED' || code === 'WS_TIMEOUT') {
+        return 'The wallet lost its live connection to the chain service, but nothing was signed or sent, and '
+            + 'nothing was spent. Check your connection and try again.';
     }
 
     if (code === 'RATE_LIMITED' || code === 'EXPLORER_HTTP_429') {
@@ -212,17 +244,17 @@ export function explorerErrorMessage(err) {
         // left this branch for the rate-limit copy above.
         const retryable = status.startsWith('5');
         return retryable
-            ? `The service that reads the chain is temporarily unavailable (error ${status}). Nothing was `
-              + 'signed or sent, so nothing was spent. Try again in a moment.'
-            : `The service that reads the chain refused this request (error ${status}). Nothing was signed `
-              + 'or sent, so nothing was spent. If it keeps happening, please report it.';
+            ? `The service that reads the chain is temporarily unavailable (error ${status}), but nothing `
+              + 'was signed or sent, and nothing was spent. Try again in a moment.'
+            : `The service that reads the chain refused this request (error ${status}), but nothing was `
+              + 'signed or sent, and nothing was spent. If it keeps happening, please report it.';
     }
 
     // An EXPLORER_* code minted after this mapper was written. Say the safe,
     // true thing rather than fall through to the wire wording, which is the
     // whole failure this module exists to end.
-    return 'The service that reads the chain could not answer, so the wallet could not check this action '
-        + 'before sending it. Nothing was signed or sent, so nothing was spent. Try again in a moment.';
+    return 'The service that reads the chain could not answer, so the wallet could not check this action, '
+        + 'but nothing was signed or sent, and nothing was spent. Try again in a moment.';
 }
 
 /**
@@ -264,6 +296,36 @@ export function explorerReadFailure(err, verb = 'complete this') {
         return {
             message: `${opener} The service that reads the chain did not answer in time. Try again in a moment.`,
             cause: 'backend_behind',
+        };
+    }
+    if (code === 'COIN_DATA_STALE') {
+        return {
+            message: `${opener} The service that reads the chain is still catching up. Wait a few minutes and try again.`,
+            cause: 'backend_behind',
+        };
+    }
+    if (code === 'INVALID_NETWORK') {
+        return {
+            message: `${opener} The wallet does not recognize the selected network. Choose a supported network in Settings and try again.`,
+            cause: 'unknown',
+        };
+    }
+    if (code === 'INVALID_ADDRESSES') {
+        return {
+            message: `${opener} The wallet could not check one or more addresses. Check the addresses and try again.`,
+            cause: 'unknown',
+        };
+    }
+    if (code === 'EXPLORER_BATCH_UNSUPPORTED') {
+        return {
+            message: `${opener} The chain service does not support this wallet request. Update the wallet and try again, or report it if it continues.`,
+            cause: 'unknown',
+        };
+    }
+    if (code === 'WS_CONNECTION_CLOSED' || code === 'WS_CONNECTION_FAILED' || code === 'WS_TIMEOUT') {
+        return {
+            message: `${opener} The wallet lost its live connection to the chain service. Check your connection and try again.`,
+            cause: 'network',
         };
     }
     if (code === 'RATE_LIMITED' || code === 'EXPLORER_HTTP_429') {

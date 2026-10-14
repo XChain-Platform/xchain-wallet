@@ -111,3 +111,18 @@ it('starts visible when reading local storage throws', () => {
 
     expect(result.current[0]).toBe(false);
 });
+
+it('starts visible when accessing local storage throws', () => {
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+    Object.defineProperty(globalThis, 'localStorage', {
+        configurable: true,
+        get: () => { throw new Error('storage disabled'); },
+    });
+
+    try {
+        const { result } = renderHook(() => useBalancesHidden());
+        expect(result.current[0]).toBe(false);
+    } finally {
+        Object.defineProperty(globalThis, 'localStorage', descriptor);
+    }
+});

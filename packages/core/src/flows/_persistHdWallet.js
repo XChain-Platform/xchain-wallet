@@ -15,9 +15,12 @@
 // Not exported from the flows barrel. Flow modules import it directly.
 
 import {
-    calibrateKdfParams,
+    calibrateKdfParamsAsync,
+    copyMasterKey,
+    deriveMasterKeyAsync,
     encryptWalletSeed,
     encryptWalletPassphrase,
+    makeFreshKdfParams,
     COUNTERWALLET_DEFAULT_ADDRESS_TYPE,
 } from '../crypto/index.js';
 import { createWallet as createWalletRecord } from '../schemas/wallet.js';
@@ -39,6 +42,7 @@ import { unlockWalletRecord } from './unlockWallet.js';
  * @property {string} accountName
  * @property {string} [initialAddressLabel]         default '<TICKER> Address #1' per chain (e.g. 'BTC Address #1'); an explicit value is used as-is for every chain
  * @property {import('../crypto/kdf.js').KdfParams} [kdfParams]
+ * @property {Uint8Array} [masterKey]                    key the caller already derived from `password` under `kdfParams` (the vault key at onboarding); requires `kdfParams`. Copied on receipt, never zeroed here: the caller zeroes its own
  * @property {import('../storage/Vault.js').Vault} vault
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
  * @property {import('../sdk/SDKRegistry.js').SDKRegistry} sdkRegistry
@@ -60,72 +64,143 @@ export async function persistHdWallet({
     accountName,
     initialAddressLabel,
     kdfParams,
+    masterKey: suppliedMasterKey,
     vault,
     chainRegistry,
     sdkRegistry,
     activeChainIds,
     activeNetwork,
 }) {
-    // 1. Pick KDF params; shells/tests override to skip calibration.
-    const effectiveKdfParams = kdfParams ?? calibrateKdfParams();
+    // A supplied key belongs to the params it was derived with; calibrating
+    // fresh ones beside it would seal a seed no password opens.
+    if (suppliedMasterKey !== undefined && kdfParams === undefined) {
+        throw new Error('persistHdWallet: a supplied masterKey needs the kdfParams it was derived with');
+    }
+    // 1. Pick KDF params; shells/tests override to skip calibration. The timed
+    // probe only tunes above the supported floor, so a probe failure uses a
+    // freshly salted set of the existing minimum parameters.
+    let effectiveKdfParams = kdfParams;
+    if (effectiveKdfParams === undefined) {
+        try {
+            effectiveKdfParams = await calibrateKdfParamsAsync();
+        } catch {
+            effectiveKdfParams = makeFreshKdfParams();
+        }
+    }
+    // Derive once (or copy the caller's key for these same params) and hand
+    // it to the encrypt (step 2) and the unlock (step 5); each copies it, and
+    // this flow zeroes its own.
+    const masterKey = suppliedMasterKey === undefined
+        ? await deriveMasterKeyAsync(password, effectiveKdfParams)
+        : copyMasterKey(suppliedMasterKey);
+    let walletRecord;
+    let account;
+    let signer;
+    let previousSettings;
+    let accountPutAttempted = false;
+    let walletPutAttempted = false;
+    let settingsPutAttempted = false;
+    const addressPutIds = [];
+    const rollback = async (error) => {
+        const rollbackErrors = [];
+        if (settingsPutAttempted) {
+            try {
+                if (previousSettings) await vault.settings.put(previousSettings);
+                else if (typeof vault.settings.clear === 'function') await vault.settings.clear();
+            } catch (e) {
+                rollbackErrors.push(e);
+            }
+        }
+        for (const id of addressPutIds.reverse()) {
+            try { await vault.addresses.delete(id); } catch (e) { rollbackErrors.push(e); }
+        }
+        if (walletPutAttempted && walletRecord) {
+            try { await vault.wallets.delete(walletRecord.id); } catch (e) { rollbackErrors.push(e); }
+        }
+        if (accountPutAttempted && account) {
+            try { await vault.accounts.delete(account.id); } catch (e) { rollbackErrors.push(e); }
+        }
+        if (rollbackErrors.length > 0) {
+            throw new AggregateError(
+                [error, ...rollbackErrors],
+                'persistHdWallet: persistence and rollback failed',
+                { cause: error },
+            );
+        }
+        throw error;
+    };
 
-    // 2. Encrypt the mnemonic bytes.
-    const mnemonicBytes = new TextEncoder().encode(mnemonic);
-    let encryptedSeed;
-    let storedKdfParams;
+    let setupFailed = false;
+    let setupError;
     try {
-        const enc = await encryptWalletSeed({
-            password,
-            seed: mnemonicBytes,
-            kdfParams: effectiveKdfParams,
+        // 2. Encrypt the mnemonic bytes.
+        const mnemonicBytes = new TextEncoder().encode(mnemonic);
+        let encryptedSeed;
+        let storedKdfParams;
+        try {
+            const enc = await encryptWalletSeed({
+                password,
+                seed: mnemonicBytes,
+                kdfParams: effectiveKdfParams,
+                masterKey,
+            });
+            encryptedSeed = enc.encryptedSeed;
+            storedKdfParams = enc.kdfParams;
+        } finally {
+            mnemonicBytes.fill(0);
+        }
+
+        // 3. Build (do not yet persist) the Wallet record. It is not put
+        //    until step 7, once it carries its final shape.
+        walletRecord = createWalletRecord({
+            name,
+            origin,
+            format,
+            passphraseEnabled,
+            encryptedSeed,
+            kdfParams: storedKdfParams,
         });
-        encryptedSeed = enc.encryptedSeed;
-        storedKdfParams = enc.kdfParams;
+
+        // A create or import adds a wallet; it never replaces one. A stored
+        // record under the same id is refused before any write, so an
+        // existing encrypted seed cannot be clobbered.
+        if (await vault.wallets.get(walletRecord.id)) {
+            throw new Error(`persistHdWallet: wallet "${walletRecord.id}" already exists; refusing to overwrite its stored secret`);
+        }
+        previousSettings = await vault.settings.get();
+
+        // 4. Build the first Account. Persistence waits until the wallet
+        //    and every initial address are ready.
+        account = createAccount({
+            walletId: walletRecord.id,
+            name: accountName,
+            index: 0,
+        });
+        if (await vault.accounts.get(account.id)) {
+            throw new Error(`persistHdWallet: account id collision "${account.id}"`);
+        }
+
+        // 5. Unlock the in-memory wallet record via the shared primitive
+        //    so address derivation uses the exact same path as a
+        //    subsequent unlock. No duplicate signer logic, and this is
+        //    also where the master key needed to seal a 25th-word
+        //    passphrase (step 6) comes from: the signer keeps its own
+        //    session copy, zeroed at lock().
+        signer = await unlockWalletRecord({
+            wallet: walletRecord,
+            password,
+            masterKey,
+            bip39Passphrase,
+            chainRegistry,
+            sdkRegistry,
+        });
+    } catch (error) {
+        setupFailed = true;
+        setupError = error;
     } finally {
-        mnemonicBytes.fill(0);
+        masterKey.fill(0);
     }
-
-    // 3. Build (do not yet persist) the Wallet record. It is not put
-    //    until step 7, once it carries its final shape.
-    const walletRecord = createWalletRecord({
-        name,
-        origin,
-        format,
-        passphraseEnabled,
-        encryptedSeed,
-        kdfParams: storedKdfParams,
-    });
-
-    // A create or import adds a wallet; it never replaces one. A stored
-    // record under the same id is refused before any write, so an
-    // existing encrypted seed cannot be clobbered.
-    if (await vault.wallets.get(walletRecord.id)) {
-        throw new Error(`persistHdWallet: wallet "${walletRecord.id}" already exists; refusing to overwrite its stored secret`);
-    }
-
-    // 4. Build & persist the first Account. `validateAccount` checks
-    //    only that walletId is a non-empty string, no foreign-key
-    //    lookup against the vault, so this is safe before the wallet
-    //    itself is stored.
-    const account = createAccount({
-        walletId: walletRecord.id,
-        name: accountName,
-        index: 0,
-    });
-    await vault.accounts.put(account);
-
-    // 5. Unlock the in-memory wallet record via the shared primitive
-    //    so address derivation uses the exact same path as a
-    //    subsequent unlock. No duplicate signer logic, and this is
-    //    also where the master key needed to seal a 25th-word
-    //    passphrase (step 6) comes from.
-    const signer = await unlockWalletRecord({
-        wallet: walletRecord,
-        password,
-        bip39Passphrase,
-        chainRegistry,
-        sdkRegistry,
-    });
+    if (setupFailed) await rollback(setupError);
 
     try {
         // 6. Seal the BIP39 passphrase under this wallet's own master
@@ -139,12 +214,8 @@ export async function persistHdWallet({
             });
         }
 
-        // 7. Persist the Wallet record, now in its final shape. One
-        //    put instead of two: there is no window in which the
-        //    record exists without its passphrase already sealed.
-        await vault.wallets.put(walletRecord);
-
-        // 8. First address per active chain.
+        // 7. Build the first address per active chain before any wallet
+        //    records are persisted.
         const addresses = [];
         for (const chainId of activeChainIds) {
             const descriptor = chainRegistry.get(chainId);
@@ -174,17 +245,37 @@ export async function persistHdWallet({
                 label: initialAddressLabel ?? `${tickerForCoin(descriptor.coin)} Address #1`,
                 signerId: signer.id,
             });
-            await vault.addresses.put(record);
+            if (await vault.addresses.get(record.id)) {
+                throw new Error(`persistHdWallet: address id collision "${record.id}"`);
+            }
             addresses.push({ chainId, address: record });
         }
 
-        // 9. Seed per-chain Settings entries (fees + ADS) for any
+        // 8. Seed per-chain Settings entries (fees + ADS) for any
         //    active chain not already configured. Idempotent: a user's
         //    customized fee strategy on an earlier wallet is preserved
-        //    if they create a second wallet in the same vault.
+        //    if they create a second wallet in the same vault. This runs
+        //    before wallet records so a settings failure cannot leave an
+        //    incomplete wallet behind; rollback restores the prior settings.
+        settingsPutAttempted = true;
         await ensureSettings(vault, chainRegistry, activeChainIds, { activeNetwork });
 
+        // 9. Persist the complete wallet graph. Every generated id is new,
+        //    so removing these records restores the pre-call graph if a
+        //    collection write fails after mutating the in-memory vault.
+        //    A failure here is undone by rollback() in the catch below.
+        walletPutAttempted = true;
+        await vault.wallets.put(walletRecord);
+        accountPutAttempted = true;
+        await vault.accounts.put(account);
+        for (const { address } of addresses) {
+            addressPutIds.push(address.id);
+            await vault.addresses.put(address);
+        }
+
         return { wallet: walletRecord, account, addresses };
+    } catch (error) {
+        await rollback(error);
     } finally {
         signer.lock();
     }

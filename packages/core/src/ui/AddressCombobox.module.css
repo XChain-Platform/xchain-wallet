@@ -1,38 +1,98 @@
 .wrap {
+    --address-control-height: var(--xc-control-h-md);
+    --address-paste-width: calc(var(--address-control-height) + var(--xc-space-8));
+    --xc-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
     position: relative;
+    min-width: 0;
+}
+
+.sm {
+    --address-control-height: var(--xc-control-h-sm);
+    --xc-icon-size: var(--xc-control-icon-sm, var(--xc-icon-sm));
+}
+
+.md {
+    --address-control-height: var(--xc-control-h-md);
+    --xc-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
+}
+
+.lg {
+    --address-control-height: var(--xc-control-h-lg);
+    --xc-icon-size: var(--xc-control-icon-lg, var(--xc-icon-lg));
 }
 
 /* Trailing in-field icon button, anchored over the input box only (never
  * the hint/error lines below it), keyed to the pinned label metrics
- * (20px label line + space-1 gap) and the Input size contract
- * (36px md / 48px lg). Mirrors AddressField.iconButton. */
+ * (20px label line + space-1 gap) and the selected Input size contract.
+ * Mirrors AddressField.iconButton. */
 .wrap label {
     line-height: 20px;
 }
 
 .iconButton {
+    /* The pointer target never drops below the WCAG 2.5.8 floor; a later
+       min-height or height here may raise it. */
+    min-block-size: var(--xc-tap-min);
     position: absolute;
-    inset-inline-end: 4px;
+    z-index: calc(var(--xc-z-base) + 1);
+    inset-inline-end: var(--address-paste-width);
     top: calc(20px + var(--xc-space-1));
-    height: 36px;
+    width: var(--address-control-height);
+    height: var(--address-control-height);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 44px;
     padding: 0;
     border: none;
-    border-radius: var(--xc-radius-sm);
+    border-radius: var(--xc-control-radius);
     background: transparent;
     color: var(--xc-text-muted);
     cursor: pointer;
 }
 
-.lg .iconButton {
-    height: 48px;
+.pasteAction,
+.pasteAction > span {
+    display: contents !important;
+}
+
+/* Paste sits inside the field box: inset from the field's end edge and
+   vertically, at the field's inner height, so it never meets the border. */
+.pasteAction button {
+    position: absolute;
+    z-index: calc(var(--xc-z-base) + 1);
+    inset-inline-end: var(--xc-space-1);
+    top: calc(20px + var(--xc-space-2));
+    flex: none;
+    width: auto;
+    min-width: max-content;
+    max-width: none;
+    height: calc(var(--address-control-height) - var(--xc-space-2));
+    min-height: calc(var(--address-control-height) - var(--xc-space-2));
+    gap: var(--xc-space-1);
+    padding-inline: calc(var(--xc-space-1) / 2);
+    white-space: nowrap;
+}
+
+.pasteAction button > span {
+    min-width: max-content;
+    white-space: nowrap;
+}
+
+.pasteAction [role='alert'] {
+    display: block;
+    margin-block-start: var(--xc-help-gap);
+}
+
+.wrap input {
+    min-width: 0;
 }
 
 .noLabel .iconButton {
     top: 0;
+}
+
+.noLabel .pasteAction button {
+    top: var(--xc-space-1);
 }
 
 .iconButton:hover:not(:disabled) {
@@ -49,12 +109,12 @@
     top: 100%;
     inset-inline-start: 0;
     inset-inline-end: 0;
-    z-index: 50;
+    z-index: var(--xc-z-dropdown);
     margin-top: 4px;
-    background: var(--surface, #fff);
-    border: 1px solid var(--border, #d0d4da);
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border);
     border-radius: 8px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+    box-shadow: var(--xc-shadow-md);
     max-height: 280px;
     overflow-y: auto;
     list-style: none;
@@ -75,17 +135,17 @@
 
 .option:hover,
 .option[aria-selected="true"] {
-    background: var(--surface-hover, #eef2f7);
+    background: var(--xc-bg-muted);
 }
 
 .label {
     font-size: 0.95em;
-    color: var(--text, #1a1f25);
+    color: var(--xc-text);
 }
 
 .sublabel {
     font-size: 0.78em;
-    color: var(--text-muted, #6b7180);
+    color: var(--xc-text-muted);
 }
 
 .badge {
@@ -96,13 +156,13 @@
     font-size: 0.7em;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    background: var(--badge-bg, #e6ecf3);
-    color: var(--badge-fg, #3a4250);
+    background: var(--xc-bg-muted);
+    color: var(--xc-text);
 }
 
 .empty {
     padding: 10px 12px;
     font-size: 0.85em;
-    color: var(--text-muted, #6b7180);
+    color: var(--xc-text-muted);
     list-style: none;
 }

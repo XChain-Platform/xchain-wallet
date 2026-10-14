@@ -73,10 +73,10 @@ assert.ok(
     'AnimatedQrFrames suspends setInterval when reducedMotion is true',
 );
 
-// 5. Prev / Next buttons render only in reduced-motion + multi-frame mode.
+// 5. Prev / Next buttons render in manual mode, including reduced motion.
 assert.ok(
-    /reducedMotion && multiFrame/.test(src),
-    'AnimatedQrFrames gates manual controls on reducedMotion && multiFrame',
+    /const manual = reducedMotion \|\| paused/.test(src) && /\{manual \? \(/.test(src),
+    'AnimatedQrFrames gates manual controls on reduced motion or a user pause',
 );
 assert.ok(
     /aria-label="Previous frame"/.test(src),
@@ -87,16 +87,16 @@ assert.ok(
     'AnimatedQrFrames Next button has an aria-label',
 );
 
-// 6. The cadence label changes from "<fps> fps" to "manual" when reduced.
+// 6. The cadence label changes from "<fps> fps" to "manual" in manual mode.
 assert.ok(
-    /reducedMotion[\s\S]*?'manual'[\s\S]*?:\s*`\$\{fps\} fps`/.test(src),
-    'AnimatedQrFrames cadence label flips to "manual" under reduced motion',
+    /manual[\s\S]*?\? 'manual'[\s\S]*?:\s*`\$\{normalizedFps\} fps`/.test(src),
+    'AnimatedQrFrames cadence label flips to "manual" when animation is suspended',
 );
 
-// 7. The aria-label on the wrapper announces the manual-advance affordance.
+// 7. Pause/resume remains available when automatic motion is allowed.
 assert.ok(
-    /advance manually/.test(src),
-    'AnimatedQrFrames wrapper aria-label communicates the manual-advance state',
+    /aria-label=\{paused \? 'Resume animation' : 'Pause animation'\}/.test(src),
+    'AnimatedQrFrames exposes a named pause/resume control',
 );
 
 // 8. data-reduced-motion attribute is rendered for downstream tests/styling.
@@ -106,5 +106,5 @@ assert.ok(
 );
 
 console.log(
-    'OK: AnimatedQrFrames reduced-motion smoke (matchMedia subscription + change listener with Safari fallback + interval suspension + prev/next manual controls + aria-labels + cadence label flip + wrapper aria announcement + data-reduced-motion attribute)',
+    'OK: AnimatedQrFrames reduced-motion smoke (matchMedia subscription + change listener with Safari fallback + interval suspension + prev/next manual controls + pause/resume + cadence label flip + data-reduced-motion attribute)',
 );

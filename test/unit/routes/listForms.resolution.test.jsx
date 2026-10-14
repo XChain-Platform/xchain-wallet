@@ -35,6 +35,8 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ListDetail } from '../../../packages/core/src/shared/routes/ListDetail.jsx';
 import { ListForkForm } from '../../../packages/core/src/shared/routes/ListForkForm.jsx';
+import { ListShareForm } from '../../../packages/core/src/shared/routes/ListShareForm.jsx';
+import { ListTransferForm } from '../../../packages/core/src/shared/routes/ListTransferForm.jsx';
 import { ListCreateForm } from '../../../packages/core/src/shared/routes/ListCreateForm.jsx';
 import { ProjectRosterForm } from '../../../packages/core/src/shared/routes/ProjectRosterForm.jsx';
 import { AirdropForm } from '../../../packages/core/src/shared/routes/AirdropForm.jsx';
@@ -146,6 +148,50 @@ describe('ListDetail membership under list-edit resolution', () => {
         expect(await screen.findByText('Left out by the network (1)')).toBeTruthy();
         expect(screen.getByText('NOSUCHTICKQA')).toBeTruthy();
     });
+
+    it('labels a numeric remove edit as removed items', async () => {
+        mountDetail({
+            ...LIST_2700,
+            action_index: 2703,
+            list_action_index: 2700,
+            edit: 2,
+            edits: [{ tick: 'MGRTEST', status: 'valid' }],
+        });
+
+        expect(await screen.findByText('#2700 (removed items)')).toBeTruthy();
+    });
+
+    it('shows a confirmed owner change and makes a list owned outside the wallet read-only', async () => {
+        const owner = 'nexternalownerexternalownerexternal';
+        const onFork = vi.fn();
+        const onShare = vi.fn();
+        const onTransfer = vi.fn();
+        const onRename = vi.fn();
+        mount(ListDetail, {
+            walletId: 'w',
+            chainId: DOGE,
+            actionIndex: '2700',
+            onBack() {},
+            onFork,
+            onShare,
+            onTransfer,
+            onRename,
+        }, messagingWith({
+            getListByActionIndex: vi.fn().mockResolvedValue({
+                ...LIST_2700,
+                state: { ...ACTIVE_STATE, owner },
+            }),
+            getActionFormats: vi.fn().mockResolvedValue({ 4: {}, 5: {} }),
+        }));
+
+        expect(await screen.findByText('Current owner')).toBeTruthy();
+        expect(screen.getByText(/owned by another address.*read-only/i)).toBeTruthy();
+        await waitFor(() => expect(screen.queryByRole('button', { name: 'Rename list' })).toBeNull());
+        expect(screen.queryByRole('button', { name: 'Fork & edit' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Share list' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Transfer list' })).toBeNull();
+        expect(onFork).not.toHaveBeenCalled();
+    });
 });
 
 const forkRef = (editResolutionActive) => ({
@@ -212,10 +258,8 @@ describe('ListForkForm copy follows list-edit resolution', () => {
     });
 });
 
-// Fork & edit signed from the active address even when the list belonged to
-// another address in the wallet. Once owner-only list edits are armed on a
-// chain, only the root create's SOURCE may edit, so FROM defaults to that
-// address when the wallet holds it and warns when it does not.
+// Fork and edit signs from the owner when this wallet holds it and stays
+// read-only when the owner is outside this wallet.
 describe('ListForkForm signs from the list owner', () => {
     const OWNER = { ...hd('nowner', 3), id: 'doge-owner', address: 'nownerownerownerownerownerownerown' };
     const byChainWithOwner = { [BTC]: [hd('bc', 0)], [DOGE]: [hd('doge', 3), OWNER] };
@@ -245,12 +289,58 @@ describe('ListForkForm signs from the list owner', () => {
         expect(messaging.buildActionPsbtRequest.mock.calls[0][0].from.address).toBe(OWNER.address);
     });
 
-    it('warns when the wallet does not hold the list owner', async () => {
+    it('refuses to edit when the wallet does not hold the list owner', async () => {
         mountOwnerFork({ ...BY_CHAIN });
-        await screen.findByText(/Forking token list #3069/);
-        const warning = await screen.findByText(/which is not an address in this wallet/);
-        expect(warning.textContent).toContain(`created by ${OWNER.address.slice(0, 8)}`);
-        expect(warning.textContent).toMatch(/only the list's creator can edit it/);
+        const warning = await screen.findByText(/not an address in this wallet/);
+        expect(warning.textContent).toContain(OWNER.address.slice(0, 8));
+        expect(warning.textContent).toMatch(/This wallet cannot edit it/);
+        expect(screen.queryByRole('button', { name: 'Review' })).toBeNull();
+        expect(screen.queryByLabelText(/Add tokens/)).toBeNull();
+    });
+});
+
+describe('owner-only list actions', () => {
+    const externalOwner = 'bc1qexternalownerexternalownerexternalowner';
+    const listDetail = {
+        action_index: 2700,
+        type: 2,
+        source: BY_CHAIN[BTC][0].address,
+        list_action_index: null,
+        list: ['bc1qmember'],
+        state: { owner: externalOwner, edit_resolution_active: true, current_list: ['bc1qmember'] },
+    };
+    const formats = {
+        0: 'VERSION|TYPE|MEMO|...ITEM',
+        2: 'VERSION|LIST_ACTION_INDEX|MEMO',
+        3: 'VERSION|LIST_ACTION_INDEX|DESTINATION|MEMO',
+    };
+
+    function ownerActionMessaging() {
+        return messagingWith({
+            getListByActionIndex: vi.fn().mockResolvedValue(listDetail),
+            getSharedLists: vi.fn().mockResolvedValue({ lists: [] }),
+            getActionFormats: vi.fn().mockResolvedValue(formats),
+        });
+    }
+
+    it('keeps direct share navigation disabled for an external owner', async () => {
+        mount(ListShareForm, {
+            walletId: 'w', listRef: { chainId: BTC, actionIndex: '2700' }, onBack() {},
+        }, ownerActionMessaging());
+
+        expect(await screen.findByText(/this wallet cannot share it/i)).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
+        expect(screen.getByLabelText('Memo (optional)').disabled).toBe(true);
+    });
+
+    it('keeps direct transfer navigation disabled for an external owner', async () => {
+        mount(ListTransferForm, {
+            walletId: 'w', listRef: { chainId: BTC, actionIndex: '2700' }, onBack() {},
+        }, ownerActionMessaging());
+
+        expect(await screen.findByText(/this wallet cannot transfer it/i)).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
+        expect(screen.getByLabelText('Destination').disabled).toBe(true);
     });
 });
 
@@ -259,7 +349,10 @@ describe('ListForkForm signs from the list owner', () => {
 // An edit published in between (by anyone, while owner-only edits are not
 // armed) was carried into the new version unseen, so the form re-reads first.
 describe('ListForkForm refuses to build on members that changed since it loaded', () => {
-    const rowWith = (current) => ({ ...LIST_2700, state: { ...ACTIVE_STATE, current_list: current } });
+    const rowWith = (current) => ({
+        ...LIST_2700,
+        state: { ...ACTIVE_STATE, current_list: current, owner: BY_CHAIN[DOGE][0].address },
+    });
 
     it('stops at Review when the list gained a member the screen never showed', async () => {
         const messaging = mountFork(true, {
@@ -397,11 +490,11 @@ describe('ListCreateForm checks token items before publishing', () => {
             target: { value: 'SWAPTEST\nNOSUCHTICKQA\nswaptest\nBAD TICK' },
         });
         const counts = await screen.findByText(/2 valid token names/);
-        expect(counts.textContent).toMatch(/1 duplicate removed/);
+        expect(counts.textContent).toMatch(/1 duplicate ignored/);
         expect(counts.textContent).toMatch(/1 invalid/);
         await waitFor(() => expect(counts.textContent).toMatch(/1 found · 1 not found/), { timeout: 3000 });
-        expect(screen.getByRole('alert').textContent).toMatch(/Not found on Dogecoin.*NOSUCHTICKQA/);
-        expect(getTokenInfo).toHaveBeenCalledWith({ chainId: DOGE, tick: 'NOSUCHTICKQA' });
+        expect(screen.getByRole('alert').textContent).toMatch(/Not found on the selected chain: NOSUCHTICKQA/);
+        expect(getTokenInfo).toHaveBeenCalledWith({ chainId: DOGE, tick: 'NOSUCHTICKQA', demo: false });
     });
 
     it('classifyTickItems and tickLookupVerdict keep the three verdicts apart', () => {

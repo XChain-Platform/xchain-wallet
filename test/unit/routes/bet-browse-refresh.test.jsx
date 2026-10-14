@@ -183,6 +183,28 @@ describe('BetFeedsList refresh', () => {
             .not.toContain('explorer unreachable');
     });
 
+    it('keeps the newest refresh when an older request resolves last', async () => {
+        let releaseOlder;
+        const older = new Promise((resolve) => { releaseOlder = resolve; });
+        const { messaging } = harness([
+            [market(1248, 'open')],
+            () => older,
+            [market(1300, 'open')],
+        ]);
+        const { container } = await renderList(messaging);
+        expect(container.textContent).toContain('#1248');
+
+        await tick(30_000);
+        await tick(30_000);
+        expect(container.textContent).toContain('#1300');
+
+        releaseOlder({ data: [market(1252, 'open')] });
+        await domAct(async () => { await drain(); });
+
+        expect(container.textContent).toContain('#1300');
+        expect(container.textContent).not.toContain('#1252');
+    });
+
     // Campaign §10.1's negative, which cannot be driven in a browser on this
     // stack: switching to regtest derives an address on ALL THREE chains, so a
     // wallet with none on any BET-capable chain does not exist there. The state
@@ -193,12 +215,44 @@ describe('BetFeedsList refresh', () => {
         messaging.getAddressesByChain = () => Promise.resolve({});
         const { container } = await renderList(messaging);
 
-        expect(container.textContent).toContain('No address on a chain that supports betting');
+        expect(container.textContent).toContain('No betting address');
         expect(container.textContent,
             'the no-chain state reads as a chain with no markets on it')
             .not.toContain('No markets are taking bets');
         expect(calls.length,
             'the list was fetched with no chain to fetch it for').toBe(0);
+    });
+
+    it('leaves the no-address empty state when a different wallet has a betting address', async () => {
+        const { messaging } = harness([[market(1248, 'open')]]);
+        messaging.getAddressesByChain = vi.fn()
+            .mockResolvedValueOnce({})
+            .mockResolvedValue({ [CHAIN]: [HD_ADDRESS] });
+        let utils;
+        await domAct(async () => {
+            utils = render(React.createElement(
+                MessagingProvider,
+                { shell: 'web', messaging },
+                React.createElement(BetFeedsList, {
+                    walletId: 'empty-wallet', onOpenMarket() {}, onBack() {},
+                }),
+            ));
+            await drain();
+        });
+        expect(utils.container.textContent).toContain('No betting address');
+
+        await domAct(async () => {
+            utils.rerender(React.createElement(
+                MessagingProvider,
+                { shell: 'web', messaging },
+                React.createElement(BetFeedsList, {
+                    walletId: 'funded-wallet', onOpenMarket() {}, onBack() {},
+                }),
+            ));
+            await drain();
+        });
+        expect(utils.container.textContent).not.toContain('No betting address');
+        expect(utils.container.textContent).toContain('#1248');
     });
 
     it('stops refreshing once the screen is gone', async () => {

@@ -9,9 +9,12 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef, useState } from 'react';
-import { Screen, Input, Icon, PageHeader } from '@xchain-wallet/core/ui';
+import { Button, FormPage, Screen, Input, Icon, PageHeader } from '@xchain-wallet/core/ui';
+import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
-import styles from './CreateWallet.module.css';
+
+const NAME_MAX_LENGTH = 64;
+const nameLength = (value) => Array.from(value).length;
 
 /**
  * RenameAccountForm: change an Account record's `name` field. No
@@ -24,16 +27,17 @@ import styles from './CreateWallet.module.css';
  *
  * @param {object} props
  * @param {string} props.accountId
+ * @param {string} props.walletId
  * @param {string} [props.initialName]   pre-fill the input with the current name
  * @param {() => void} props.onBack
- * @param {() => void} props.onRenamed   refresh callers and return to the previous screen
+ * @param {(account: any) => void} props.onRenamed   refresh callers and return to the previous screen
  */
-export function RenameAccountForm({ accountId, initialName = '', onBack, onRenamed }) {
+export function RenameAccountForm({ accountId, walletId, initialName = '', onBack, onRenamed }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [name, setName] = useState(initialName);
+    const [accounts, setAccounts] = useState(/** @type {any[]} */ ([]));
     const [error, setError] = useState(/** @type {string | null} */ (null));
     const [busy, setBusy] = useState(false);
     const nameRef = useRef(/** @type {HTMLInputElement | null} */ (null));
@@ -46,12 +50,32 @@ export function RenameAccountForm({ accountId, initialName = '', onBack, onRenam
         }, 0);
     }, []);
 
+    useEffect(() => {
+        let cancelled = false;
+        if (!walletId || typeof messaging.listAccounts !== 'function') return undefined;
+        messaging.listAccounts(walletId)
+            .then((list) => {
+                if (!cancelled) setAccounts(Array.isArray(list) ? list : []);
+            })
+            .catch(() => { /* the rename flow performs the authoritative check */ });
+        return () => { cancelled = true; };
+    }, [walletId, messaging]);
+
     async function handleSubmit(event) {
         if (event && typeof event.preventDefault === 'function') event.preventDefault();
         if (busy) return;
         const trimmed = name.trim();
         if (trimmed.length === 0) {
             setError('Account name is required.');
+            return;
+        }
+        if (nameLength(trimmed) > NAME_MAX_LENGTH) {
+            setError(`Account name must be ${NAME_MAX_LENGTH} characters or fewer.`);
+            return;
+        }
+        if (accounts.some((account) => account?.id !== accountId
+            && account?.name?.trim().toLocaleLowerCase() === trimmed.toLocaleLowerCase())) {
+            setError(`An account named "${trimmed}" already exists.`);
             return;
         }
         if (typeof messaging.renameAccount !== 'function') {
@@ -61,51 +85,61 @@ export function RenameAccountForm({ accountId, initialName = '', onBack, onRenam
         setError(null);
         setBusy(true);
         try {
-            await messaging.renameAccount({ accountId, name: trimmed });
-            onRenamed();
+            const result = await messaging.renameAccount({ accountId, name: trimmed });
+            onRenamed(result?.account || result);
         } catch (err) {
             setError(err?.message || 'Failed to rename account.');
             setBusy(false);
         }
     }
 
-    const saveDisabled = busy || name.trim().length === 0;
+    const saveDisabled = busy || name.trim().length === 0
+        || nameLength(name.trim()) > NAME_MAX_LENGTH;
 
     const header = (
         <PageHeader
             onBack={onBack}
             backDisabled={busy}
-            title="Rename account"
+            title={t('accountPicker.renameTitle')}
             trailing={(
-                <button
-                    type="button"
+                <Button
+                    variant="secondary"
+                    size="sm"
+                    icon={null}
                     onClick={() => handleSubmit()}
-                    aria-label="Save"
-                    title="Save"
+                    aria-label={t('history.contact.save')}
+                    title={t('history.contact.save')}
                     disabled={saveDisabled}
                 >
                     <Icon.CheckIcon />
-                </button>
+                </Button>
             )}
         />
     );
 
     const formBody = (
-        <form ref={formRef} onSubmit={handleSubmit} noValidate>
+        <FormPage ref={formRef} label={t('accountPicker.renameTitle')} onSubmit={handleSubmit}>
             <Input
                 ref={nameRef}
-                label="Account name"
+                label={t('renameAccount.name')}
                 value={name}
-                onChange={(e) => { setName(e.target.value); if (error) setError(null); }}
+                onChange={(e) => {
+                    const nextName = e.target.value;
+                    setName(nextName);
+                    setError(nameLength(nextName.trim()) > NAME_MAX_LENGTH
+                        ? `Account name must be ${NAME_MAX_LENGTH} characters or fewer.`
+                        : null);
+                }}
                 autoComplete="off"
+                disabled={busy}
                 error={error || undefined}
             />
-        </form>
+        </FormPage>
     );
 
     return (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{formBody}</div> : formBody}
+            {formBody}
         </Screen>
     );
 }

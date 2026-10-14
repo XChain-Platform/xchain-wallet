@@ -1,51 +1,3 @@
-/* Header for WalletPicker / AccountPicker - back arrow on the left,
-   title centered, plus icon on the right. Compact icon-only buttons
-   at the edges replace the text "← Back" / bottom "Add" row in the
-   ActionsMenu shape. */
-.header {
-    display: grid;
-    grid-template-columns: 40px 1fr 40px;
-    align-items: center;
-    gap: var(--xc-space-2);
-    width: 100%;
-    max-width: 1080px;
-    margin: 0 auto;
-}
-
-.iconBtn {
-    appearance: none;
-    background: transparent;
-    border: none;
-    width: 40px;
-    height: 40px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--xc-text);
-    cursor: pointer;
-    border-radius: var(--xc-radius-sm);
-}
-
-.iconBtn:hover:not(:disabled) { background: var(--xc-bg-muted); }
-
-.iconBtn:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-
-.iconBtn:disabled {
-    color: var(--xc-text-muted);
-    opacity: 0.4;
-    cursor: not-allowed;
-}
-
-.title {
-    font-weight: 700;
-    font-size: var(--xc-text-lg);
-    color: var(--xc-text);
-    text-align: center;
-}
-
 /* WalletDetails read-only metadata list. */
 .detailList {
     display: flex;
@@ -100,7 +52,63 @@
     width: 100%;
 }
 
-.rowMenuBtn {
+.rowLabel {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+}
+
+.rowName {
+    min-width: 0;
+    /* Clipping for the ellipsis also cuts the 4px active-identity ring on every
+       side, so pad it back in and cancel the padding with the same margin. */
+    padding-block: var(--xc-space-1);
+    padding-inline: var(--xc-space-1);
+    margin-block: calc(0px - var(--xc-space-1));
+    margin-inline: calc(var(--xc-space-1) * -1);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.currentMark {
+    flex: 0 0 auto;
+    display: inline-flex;
+    color: var(--xc-accent-text);
+}
+
+.rowCurrent {
+    border-color: var(--xc-accent-primary);
+    background: color-mix(in srgb, var(--xc-accent-primary) 8%, var(--xc-surface-raised));
+}
+
+.footerActions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--xc-space-2);
+}
+
+.footerActions > :only-child {
+    grid-column: 1 / -1;
+}
+
+.footerActions button {
+    min-height: var(--xc-control-h-md, 40px);
+}
+
+.footerActions button > span:last-child {
+    white-space: nowrap;
+}
+
+@media not all and (min-width: 360px) {
+    .footerActions {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Scoped to the row so the absolute placement outranks the kit Button's
+   position and variant whatever order the stylesheets load in. */
+.rowWrap .rowMenuBtn {
     appearance: none;
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
@@ -109,8 +117,9 @@
     inset-inline-end: 8px;
     transform: translateY(-50%);
     z-index: 1;
-    width: 32px;
-    height: 32px;
+    width: var(--xc-button-height);
+    height: var(--xc-button-height);
+    min-height: var(--xc-tap-min);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -121,43 +130,13 @@
     line-height: 1;
 }
 
-.rowMenuBtn:hover {
+.rowWrap .rowMenuBtn:hover {
     background: var(--xc-bg-muted);
     color: var(--xc-text);
     border-color: var(--xc-accent-primary);
 }
 
-.rowMenuBtn:focus-visible {
+.rowWrap .rowMenuBtn:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: 2px;
 }
-
-.rowMenu {
-    position: absolute;
-    top: 100%;
-    inset-inline-end: 0;
-    z-index: 10;
-    min-width: 180px;
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-radius-md);
-    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
-    padding: var(--xc-space-1);
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
-.rowMenuItem {
-    appearance: none;
-    background: transparent;
-    border: none;
-    text-align: start;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    cursor: pointer;
-    border-radius: var(--xc-radius-sm);
-}
-
-.rowMenuItem:hover { background: var(--xc-bg-muted); }

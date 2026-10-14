@@ -8,8 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The one URI to view mapping for `xchain:` links, shared by the desktop
-// shell and the web/native shell so the two cannot drift: turn the raw URI main handed over
+// The one external-link to view mapping, shared by the desktop, extension and
+// web/native shells so they cannot drift: turn the raw URI a shell hands over
 // into the form it prefills. A link is attacker-controlled input, so the
 // only thing it can ever do is land the user on a prefilled form they still
 // have to act on: nothing here unlocks, signs or submits.
@@ -17,30 +17,98 @@
 import { useEffect, useState } from 'react';
 import { uri as coreUri } from '@xchain-wallet/core';
 
+const COIN_SCHEMES = Object.freeze({
+    bitcoin: { coin: 'bitcoin', tick: 'BTC' },
+    litecoin: { coin: 'litecoin', tick: 'LTC' },
+    dogecoin: { coin: 'dogecoin', tick: 'DOGE' },
+});
+
+const ROUTABLE_XCHAIN_ACTIONS = new Set(['send', 'receive', 'execute']);
+
+export const INVALID_DEEP_LINK_MESSAGE = 'This link is invalid or unsupported.';
+
+function invalidRoute() {
+    return { view: 'deep-link-error', message: INVALID_DEEP_LINK_MESSAGE };
+}
+
+function unwrapProtocolHandler(raw) {
+    if (!raw.toLowerCase().startsWith('web+xchain:')) return raw;
+    const carried = raw.slice('web+xchain:'.length);
+    if (!carried) return '';
+    const colon = carried.indexOf(':');
+    const scheme = colon > 0 ? carried.slice(0, colon).toLowerCase() : '';
+    return scheme === 'xchain' || COIN_SCHEMES[scheme] ? carried : `xchain:${carried}`;
+}
+
 /**
- * Map an OS-delivered `xchain:` link to the form it prefills, or null when it
- * names nothing this shell routes. Re-parsed from `raw` with the renderer's
- * registry so coin-code links resolve a chainId, and hardened before any of
- * it becomes state.
+ * Map an externally delivered link to its prefilled form. Claimed links that
+ * cannot be parsed return a plain-message route; unrelated input returns null.
+ * The renderer registry resolves every accepted link to a chainId, and text is
+ * hardened before any of it becomes state.
  *
  * @param {unknown} raw
  * @param {any} chainRegistry
- * @returns {{ view: 'send' | 'receive' | 'contract-execute', sendPrefill?: { address?: string, amount?: string, tick?: string, chainId?: string, memo?: string }, contractRef?: { chainId: string, contractActionIndex: string }, executePrefill?: { method: string, paramsText: string } } | null}
+ * @returns {{ view: 'send' | 'receive' | 'contract-execute', sendPrefill?: { address?: string, amount?: string, tick?: string, chainId?: string, memo?: string }, contractRef?: { chainId: string, contractActionIndex: string }, executePrefill?: { method: string, paramsText: string } } | { view: 'deep-link-error', message: string } | null}
  */
 export function deepLinkRoute(raw, chainRegistry) {
     if (typeof raw !== 'string' || !raw) return null;
+    const trimmed = raw.trim();
+    const fromProtocolHandler = trimmed.toLowerCase().startsWith('web+xchain:');
+    const normalized = unwrapProtocolHandler(trimmed);
+    if (!normalized && fromProtocolHandler) return invalidRoute();
+    const colon = normalized.indexOf(':');
+    const scheme = colon > 0 ? normalized.slice(0, colon).toLowerCase() : '';
+    const coinScheme = COIN_SCHEMES[scheme];
+
+    if (coinScheme) {
+        try {
+            const parts = coreUri.parseBip21Uri(normalized);
+            if (parts.required?.length > 0) return invalidRoute();
+            const memo = parts.message ?? parts.label;
+            const hardened = coreUri.hardenUriIntentText({ kind: 'send', memo });
+            const chainId = chainRegistry?.chainIdFor?.(coinScheme.coin, 'mainnet') || undefined;
+            if (!chainId) return invalidRoute();
+            return {
+                view: 'send',
+                sendPrefill: {
+                    address: parts.address,
+                    amount: parts.amount,
+                    tick: coinScheme.tick,
+                    chainId,
+                    memo: hardened.memo,
+                },
+            };
+        } catch {
+            return invalidRoute();
+        }
+    }
+
+    const lower = normalized.toLowerCase();
+    const isXchainLink = scheme === 'xchain'
+        || lower.startsWith('https://xchain.io/wallet/link/');
+    if (!isXchainLink) return null;
     let intent;
     try {
-        intent = coreUri.hardenUriIntentText(coreUri.parseXchainUri(raw, { chainRegistry }));
+        intent = coreUri.hardenUriIntentText(coreUri.parseXchainUri(normalized, { chainRegistry }));
     } catch {
-        return null;
+        return invalidRoute();
     }
+    // The parser preserves unknown actions as send-shaped intents for generic
+    // URI tooling. External links accept only screens that require an explicit
+    // review action, so a typo or future privileged action fails closed here.
+    if (intent?.action && !ROUTABLE_XCHAIN_ACTIONS.has(intent.action)) return invalidRoute();
     if (intent?.kind === 'send') {
+        let amount = intent.amount;
+        try {
+            amount = coreUri.normalizeBip21Amount(amount);
+        } catch {
+            return invalidRoute();
+        }
         return {
             view: 'send',
             sendPrefill: {
                 address: intent.address,
-                amount: intent.amount,
+                amount,
                 tick: intent.tick,
                 chainId: intent.chainId,
                 memo: intent.memo,
@@ -59,7 +127,21 @@ export function deepLinkRoute(raw, chainRegistry) {
             },
         };
     }
-    return null;
+    return invalidRoute();
+}
+
+/**
+ * Route a payload received through a registered protocol boundary. Unlike a
+ * scanner or paste field, every nonempty value here claims to be a wallet link,
+ * so an unrelated scheme is an invalid-link message rather than a no-op.
+ *
+ * @param {unknown} raw
+ * @param {any} chainRegistry
+ * @returns {ReturnType<typeof deepLinkRoute>}
+ */
+export function claimedDeepLinkRoute(raw, chainRegistry) {
+    if (typeof raw !== 'string' || raw.trim().length === 0) return null;
+    return deepLinkRoute(raw, chainRegistry) ?? invalidRoute();
 }
 
 /**
@@ -77,7 +159,7 @@ export function watchDeepLinks({ bridge, detached, chainRegistry, onRoute }) {
         Promise.resolve()
             .then(() => bridge.takePending())
             .then((event) => {
-                const route = live ? deepLinkRoute(event?.raw, chainRegistry) : null;
+                const route = live ? claimedDeepLinkRoute(event?.raw, chainRegistry) : null;
                 if (route) onRoute(route);
             })
             .catch(() => { /* a failed claim is dropped; the next nudge claims again */ });

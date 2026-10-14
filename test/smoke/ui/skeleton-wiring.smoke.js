@@ -26,6 +26,7 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withEnglishCopy } from '../_localized-source.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
@@ -53,7 +54,7 @@ const ROUTES = [
 ];
 
 for (const r of ROUTES) {
-    const src = readFileSync(r.path, 'utf8');
+    const src = withEnglishCopy(readFileSync(r.path, 'utf8'));
     assert.ok(
         /import\s*\{[^}]*\bSkeleton\b[^}]*\}\s*from\s*['"]@xchain-wallet\/core\/ui['"]/.test(src),
         `${r.name}.jsx imports Skeleton from @xchain-wallet/core/ui`,
@@ -63,7 +64,7 @@ for (const r of ROUTES) {
         `${r.name}.jsx renders <Skeleton.List>`,
     );
     assert.ok(
-        new RegExp(`role="status"[\\s\\S]*aria-label="${r.ariaLabel}"`).test(src),
+        (r.ariaPattern || new RegExp(`role="status"[\\s\\S]*aria-label="${r.ariaLabel}"`)).test(src),
         `${r.name}.jsx wraps the skeleton in role="status" + aria-label="${r.ariaLabel}"`,
     );
     assert.ok(

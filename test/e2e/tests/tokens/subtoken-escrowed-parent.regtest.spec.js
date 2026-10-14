@@ -220,7 +220,8 @@ async function fillSubtoken(page, { parent, child, supply }) {
     await main.getByLabel('Parent ticker').fill(parent);
     await main.getByLabel('Subtoken name').fill(child);
     await main.getByLabel('Supply', { exact: true }).fill(String(supply));
-    await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+    await main.getByRole('button', { name: 'Review token', exact: true }).click();
+    await main.getByRole('button', { name: 'Continue to confirmation', exact: true }).click();
 }
 
 test.describe(`subtoken under an escrowed parent on ${REGTEST_CHAIN_LABEL}`, () => {

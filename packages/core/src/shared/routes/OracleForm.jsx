@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Input, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, FormSection, InfoTip, Input, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -36,7 +36,10 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
+import { oraclePriceFeeError, oraclePriceValueError } from '../../flows/oraclePriceAction.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { memoLengthError } from '../utils/memoLimit.js';
+import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import styles from './IssueTokenForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 
@@ -115,7 +118,6 @@ function staleAgeText(seconds) {
 export function OracleForm({ walletId, onBack, initialChainId, initialFromAddress, initialTick }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const {
         addressesByChain,
@@ -178,7 +180,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
 
     useEffect(() => {
         if (!chainId || !oracleAddress) { setFeeds(null); return undefined; }
-        if (flowsLib.isDemoWallet(walletId)) return undefined;
+        if (flowsLib.isDemoWallet(walletId)) { setFeeds([]); return undefined; }
         if (typeof messaging?.oracleFeeds !== 'function') { setFeeds([]); return undefined; }
         let cancelled = false;
         setFeedsError(null);
@@ -201,7 +203,10 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
     );
     useEffect(() => {
         if (!chainId || !oracleAddress) { setConsumers(null); return undefined; }
-        if (flowsLib.isDemoWallet(walletId)) return undefined;
+        if (flowsLib.isDemoWallet(walletId)) {
+            setConsumers({ supported: false, dispensers: [] });
+            return undefined;
+        }
         if (typeof messaging?.oracleConsumers !== 'function') {
             setConsumers({ supported: false, dispensers: [] });
             return undefined;
@@ -304,19 +309,19 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
     function guardBeforeSign() {
         if (!chainId || !fromAddress) { setFormError('Pick a publishing address first.'); return false; }
         if (!tick) { setFormError('Enter the token ticker this oracle prices.'); return false; }
+        const tickerError = tickerReferenceError(tick, { noun: 'Token ticker', allowRef: true });
+        if (tickerError) { setFormError(tickerError); return false; }
         if (!FIAT_CODES.includes(fiat)) { setFormError('Pick a supported currency.'); return false; }
         const v = value.trim();
-        if (!/^[0-9]+(\.[0-9]{1,8})?$/.test(v) || Number(v) <= 0) {
-            setFormError('Enter a positive price with at most 8 decimal places.');
-            return false;
-        }
+        const valueError = oraclePriceValueError(v);
+        if (valueError) { setFormError(valueError); return false; }
         const f = fee.trim();
-        if (f.length > 0 && (!/^[0-9]+(\.[0-9]{1,18})?$/.test(f) || Number(f) > 1)) {
-            setFormError('The usage fee is a fraction between 0 and 1 (0.01 = 1%).');
-            return false;
-        }
+        const feeError = oraclePriceFeeError(f);
+        if (feeError) { setFormError(feeError); return false; }
         const m = memo.trim();
         if (m.includes('|') || m.includes(';')) { setFormError('Memo cannot contain "|" or ";".'); return false; }
+        const memoError = memoLengthError(m);
+        if (memoError) { setFormError(memoError); return false; }
         return true;
     }
 
@@ -408,13 +413,22 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
 
     const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={stage === 'review'
+                ? () => { setSubmitError(null); setStage('form'); }
+                : onBack}
+            backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting' ? 'Review price publish' : 'My oracle'}
         />
     );
+    // The review always opens at its top instead of inheriting how far the
+    // form was scrolled; the form keeps its own position for Back.
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+        <Screen
+            variant={variant}
+            header={header}
+            restoreScroll={!(stage === 'review' || stage === 'submitting')}
+        >
+            {children}
         </Screen>
     );
 
@@ -505,11 +519,31 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
 
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
-                <p className={styles.summary}>{decoded?.summary}</p>
+            <FormPage
+                label="Review price publish"
+                onSubmit={handleSubmit}
+                intro={decoded?.summary}
+                status={submitError ? (
+                    <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                ) : null}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant={needsTypedConfirm ? 'danger' : 'primary'}
+                        loading={stage === 'submitting'}
+                        disabled={!typedConfirmOk}
+                    >
+                        Create unsigned transaction
+                    </Button>
+                )}
+            >
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>Publishing as</dt>
                     <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
                     {/* The decoder's rows, so Memo and the fee as a percent show
@@ -533,19 +567,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                     Watcher mode: this wallet will build an unsigned transaction. Sign it on your
                     Signer-mode wallet, then broadcast from a Full-mode wallet.
                 </p>
-                {submitError ? <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage> : null}
-
-                <div className={styles.actions}>
-                    <Button
-                        type="submit"
-                        variant={needsTypedConfirm ? 'danger' : 'primary'}
-                        loading={stage === 'submitting'}
-                        disabled={!typedConfirmOk}
-                    >
-                        Create unsigned transaction
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -571,25 +593,41 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
     };
 
     return wrap(
-        <form onSubmit={handleReview} noValidate>
-            <p className={styles.hint}>
-                An oracle publishes what one unit of a token is worth in a traditional currency.
-                Dispensers can then price in that currency, and a buyer pays in {priceCoin || 'the chain coin'} at
-                the going rate. Anyone can run one; whoever opens a dispenser against your oracle
-                pays you the usage fee you set below.
-            </p>
+        <FormPage
+            label="Publish oracle price"
+            onSubmit={handleReview}
+            sectioned
+            status={formError ? (
+                <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage>
+            ) : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={actionConfirm.composing}
+                    disabled={actionConfirm.composing}
+                >
+                    {actionConfirm.composing ? 'Preparing review…' : isWatcherMode ? 'Preview' : 'Publish price'}
+                </Button>
+            )}
+        >
 
+            <InfoTip label={`Dispensers can use an oracle's token price in traditional currency so buyers pay the equivalent in ${priceCoin || 'the chain coin'}. Anyone can publish prices, and the publisher can set a usage fee below.`} />
+
+            <FormSection title="My published prices">
             {/*
               * Pick the PUBLISHING chain: it decides which address signs, pays
               * the fee and becomes the oracle's identity. The priced token's
               * chain is the separate COIN field below, and dispensers on any
               * chain may read this oracle, so the two need not match.
               */}
-            <NetworkField
+            <ChainPicker
+                label="Network"
                 value={chainId}
                 onChange={setChainId}
                 chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])}
                 chainRegistry={chainRegistry}
+                hideNetworkKind
             />
 
             {fromAddress ? (
@@ -606,9 +644,10 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                 <StatusMessage variant="error" className={styles.error}>No address on this chain. Use Receive to generate one first.</StatusMessage>
             )}
 
-            <p className={styles.successLabel}>My published prices</p>
             {feeds == null ? (
                 <p className={styles.hint}>Loading…</p>
+            ) : feedsError ? (
+                <StatusMessage variant="error" className={styles.error}>{feedsError}</StatusMessage>
             ) : feeds.length === 0 ? (
                 <p className={styles.hint}>
                     This address has not published any prices yet. The first one you publish starts
@@ -623,9 +662,9 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                         const count = consumerCountFor(f);
                         return (
                             <li key={f.key} className={styles.hint}>
-                                <button type="button" onClick={() => prefillFromFeed(f)}>
+                                <Button variant="secondary" size="sm" onClick={() => prefillFromFeed(f)}>
                                     {f.coin && f.coin !== coinTicker ? `${f.coin}:` : ''}{f.tick} in {f.fiat}
-                                </button>
+                                </Button>
                                 {': '}
                                 {f.live
                                     ? `${f.live.value} ${f.fiat} live`
@@ -642,9 +681,9 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                     })}
                 </ul>
             )}
-            {feedsError ? <p className={styles.hint}>{feedsError}</p> : null}
+            </FormSection>
 
-            <p className={styles.successLabel}>Publish a price</p>
+            <FormSection title="Publish a price">
             <Select
                 label="Token's chain"
                 hint={crossChain
@@ -698,7 +737,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
             ) : null}
             <Input
                 label="Usage fee (optional)"
-                hint="A fraction, not a percentage: 0.01 means 1%. Charged once to whoever opens a dispenser against this oracle, sized from the escrow they fund. Leave empty to charge nothing."
+                hint="Fraction charged when someone opens a dispenser with this oracle. For example, 0.01 means 1%. The fee scales with escrow. Leave blank for none."
                 inputMode="decimal"
                 value={fee}
                 onChange={(e) => setFee(e.target.value)}
@@ -717,19 +756,8 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                 />
             ) : null}
             <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} />
-            {formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    block
-                    loading={actionConfirm.composing}
-                    disabled={actionConfirm.composing}
-                >
-                    {actionConfirm.composing ? 'Preparing review…' : isWatcherMode ? 'Preview' : 'Publish price'}
-                </Button>
-            </div>
-        </form>,
+            </FormSection>
+        </FormPage>,
     );
 }
 

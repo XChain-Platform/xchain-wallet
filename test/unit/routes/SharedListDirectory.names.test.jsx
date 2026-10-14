@@ -56,7 +56,7 @@ describe('SharedListDirectory names', () => {
     it('shows a Name row directly before Home chain for a named entry', async () => {
         mount({ entries: [entry({ name: 'Treasury assets' })] });
 
-        const row = await screen.findByRole('listitem', { name: 'Token list 12 on BTC' });
+        const row = await screen.findByRole('listitem', { name: 'Token list 12' });
         const terms = within(row).getAllByRole('term');
         expect(terms[0].textContent).toBe('Name');
         expect(terms[1].textContent).toBe('Home chain');
@@ -93,7 +93,7 @@ describe('SharedListDirectory names', () => {
             filterType: 'token',
         });
 
-        const row = await screen.findByRole('listitem', { name: 'Token list 12 on BTC' });
+        const row = await screen.findByRole('listitem', { name: 'Token list 12' });
         fireEvent.click(within(row).getByRole('button', { name: 'Choose list' }));
 
         expect(state.onSelect).toHaveBeenCalledWith({

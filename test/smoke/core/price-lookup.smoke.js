@@ -20,6 +20,7 @@ import {
     subscribeFiatRates,
     _resetPriceLookupForTests,
     coinToFiat,
+    coinToFiatExact,
     fiatToCoin,
 } from '../../../packages/core/src/flows/priceLookup.js';
 
@@ -131,6 +132,7 @@ assert.equal(getFiatRate({ chainCoin: 'monero' }), null);
 const rate40k = { rate: 40000, chainCoin: 'bitcoin', fiatCurrency: 'USD', source: 'oracle', fetchedAt: new Date(NOW).toISOString() };
 assert.equal(coinToFiat('1', rate40k), 40000);
 assert.equal(coinToFiat('0.5', rate40k), 20000);
+assert.equal(coinToFiatExact('9007199254740993.01', { ...rate40k, rate: 1 }), '9007199254740993.01');
 assert.equal(coinToFiat(0.001, rate40k), 40, 'numeric input accepted');
 assert.equal(coinToFiat('not a number', rate40k), null);
 assert.equal(coinToFiat('1', null), null);

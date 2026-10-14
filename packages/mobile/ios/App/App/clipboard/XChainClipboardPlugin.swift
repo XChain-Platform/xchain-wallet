@@ -53,10 +53,9 @@ public class XChainClipboardPlugin: CAPPlugin, CAPBridgedPlugin {
 
     /// Upper bound on a sensitive clip's life, in seconds.
     ///
-    /// The JS side asks for 60. This clamps whatever it asks for, because a
-    /// caller that passed a huge TTL - by bug or by a tampered bundle - would
-    /// otherwise turn "expiring" into "permanent" for a seed phrase.
-    private static let maxSensitiveTTL: TimeInterval = 300
+    /// This clamps the selected TTL so a tampered bundle cannot turn an
+    /// expiring copy into a long-lived secret.
+    private static let maxSensitiveTTL: TimeInterval = 600
 
     @objc func write(_ call: CAPPluginCall) {
         let value = call.getString("value") ?? ""
@@ -66,17 +65,18 @@ public class XChainClipboardPlugin: CAPPlugin, CAPBridgedPlugin {
         DispatchQueue.main.async {
             let board = UIPasteboard.general
             if sensitive {
-                let ttl = min(max(requested, 1), Self.maxSensitiveTTL)
+                let ttl = min(max(requested, 0), Self.maxSensitiveTTL)
                 // setItems with options, NOT `.string =`: the options are the
                 // only way to say local-only and expiring, and assigning
                 // `.string` afterwards would silently replace the item and
                 // drop both.
+                var options: [UIPasteboard.OptionsKey: Any] = [.localOnly: true]
+                if ttl > 0 {
+                    options[.expirationDate] = Date().addingTimeInterval(ttl)
+                }
                 board.setItems(
                     [[UTType.utf8PlainText.identifier: value]],
-                    options: [
-                        .localOnly: true,
-                        .expirationDate: Date().addingTimeInterval(ttl)
-                    ]
+                    options: options
                 )
                 // `marked` mirrors the Android twin's reply, which reports
                 // whether the sensitivity mark was actually APPLIED (its
@@ -103,12 +103,17 @@ public class XChainClipboardPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func clear(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
+            let expectedValue = call.getString("expectedValue")
+            let board = UIPasteboard.general
+            if let expectedValue, board.string != expectedValue {
+                call.resolve(["ok": true, "cleared": false])
+                return
+            }
             // Empty ITEMS, not an empty string: assigning "" leaves a pasteboard
             // item behind, and on a device with Universal Clipboard that empty
             // item is itself synced. `items = []` removes the contents.
-            UIPasteboard.general.items = []
-            call.resolve(["ok": true])
+            board.items = []
+            call.resolve(["ok": true, "cleared": true])
         }
     }
 }
-

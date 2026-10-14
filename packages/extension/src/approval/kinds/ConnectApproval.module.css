@@ -1,12 +1,7 @@
 .identity {
-    margin: 0 0 var(--xc-space-3);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-surface-raised);
+    margin-bottom: var(--xc-space-3);
 }
 
-.identityLabel,
 .declaredNameLabel {
     margin: 0;
     color: var(--xc-text-muted);
@@ -14,14 +9,6 @@
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-}
-
-.identityOrigin {
-    margin: var(--xc-space-1) 0 0;
-    color: var(--xc-text);
-    font-family: var(--xc-font-mono);
-    font-size: var(--xc-text-sm);
-    overflow-wrap: anywhere;
 }
 
 .declaredNameLabel {
@@ -41,10 +28,31 @@
     margin: 0 0 var(--xc-space-3);
 }
 
+.permissions {
+    margin: 0 0 var(--xc-space-3);
+}
+
+.permissionsTitle {
+    margin: 0 0 var(--xc-space-2);
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    font-weight: 700;
+}
+
+.permissionsList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    margin: 0;
+    padding-inline-start: var(--xc-space-4);
+    color: var(--xc-text);
+    font-size: var(--xc-text-xs);
+}
+
 .fieldset {
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    padding: var(--xc-space-3);
+    min-width: 0;
+    border: 0;
+    padding: 0;
     margin: 0 0 var(--xc-space-3);
 }
 
@@ -54,7 +62,7 @@
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    padding: 0 var(--xc-space-1);
+    padding: 0;
 }
 
 .hint {
@@ -77,17 +85,5 @@
 }
 
 .chainLabel {
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    font-size: var(--xc-text-sm);
-    cursor: pointer;
-    padding: var(--xc-space-1) 0;
-    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
-       inheriting it from whichever line box the platform font produces. */
-    min-height: var(--xc-tap-min);
-}
-
-.chainLabel input[type="checkbox"] {
-    margin: 0;
+    width: 100%;
 }

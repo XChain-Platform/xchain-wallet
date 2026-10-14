@@ -19,15 +19,14 @@
 //      The "More" button toggles a bottom sheet via aria-expanded.
 //   3. The sheet lists Receive + the rest of the §24.2 nav (DEX,
 //      Dispensers, Contracts, Messaging, Contacts) plus the optional
-//      footer items (Switch wallet / Settings / Lock); Contracts is
+//      footer items (Switch wallet / Settings / Lock wallet); Contracts is
 //      gated on hasVmAddress (DEPLOY sits in COMMON_ACTIONS, so the
 //      row is not BTC-exclusive).
-//   4. CSS module declares a 56px fixed bar that respects the iOS
-//      safe-area inset.
-//   5. FullLayoutWithNav grew a `bottomBar` slot; web + desktop
+//   4. CSS module declares a scalable absolutely positioned bar that respects
+//      the iOS safe-area inset.
+//   5. FullLayoutWithNav grew a `bottomBar` slot; web, desktop and extension
 //      App.jsx pass a `<BottomTabBar>` to that slot. The main pane
-//      reserves bottom-padding below 600px so the bar doesn't cover
-//      content. Extension popup is intentionally untouched.
+//      reserves bottom-padding below 600px so the bar doesn't cover content.
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
@@ -78,10 +77,12 @@ assert.ok(/requiresVm:\s*true[\s\S]*?hasVmAddress/.test(barSrc),
     'Contracts row requires hasVmAddress to render');
 assert.ok(!/requiresBtc|hasBtcAddress/.test(barSrc),
     'BottomTabBar no longer carries a BTC gate for the Contracts row');
-for (const label of ['Switch wallet', 'Settings', 'Lock']) {
+for (const label of ['Switch wallet', 'Settings', 'Lock wallet']) {
     assert.ok(barSrc.includes(`>${label}</span>`),
         `Bottom sheet footer renders ${label} when callback supplied`);
 }
+assert.ok(/<h2 className=\{styles\.sheetTitle\}>More<\/h2>/.test(barSrc),
+    'Bottom sheet has a visible accessible heading');
 
 // Esc closes the sheet.
 assert.ok(/e\.key === 'Escape'[\s\S]*?setSheetOpen\(false\)/.test(barSrc),
@@ -90,27 +91,29 @@ assert.ok(/e\.key === 'Escape'[\s\S]*?setSheetOpen\(false\)/.test(barSrc),
 assert.ok(/if \(sheetOpen\) setSheetOpen\(false\)/.test(barSrc),
     'Sheet closes when the user navigates (currentView changes)');
 
-// --- 4. CSS: fixed 56px bar + safe-area inset ---------------------------
+// --- 4. CSS: scalable absolute bar + safe-area inset --------------------
 
 const cssSrc = readFileSync(cssPath, 'utf8');
-assert.ok(/\.bar\s*\{[\s\S]*?position:\s*fixed/.test(cssSrc),
-    '.bar is fixed-positioned at the bottom of the viewport');
-assert.ok(/\.bar\s*\{[\s\S]*?height:\s*56px/.test(cssSrc),
-    '.bar reserves a 56px row');
+assert.ok(/\.bar\s*\{[\s\S]*?position:\s*absolute/.test(cssSrc),
+    '.bar is positioned at the bottom of the measured shell');
+assert.ok(/\.bar\s*\{[\s\S]*?min-height:\s*3\.5rem/.test(cssSrc),
+    '.bar reserves a scalable row');
 assert.ok(/env\(safe-area-inset-bottom/.test(cssSrc),
     '.bar respects the iOS safe-area inset');
 assert.ok(/\.sheet\s*\{[\s\S]*?max-height:\s*70vh/.test(cssSrc),
     '.sheet caps at 70vh so the route stays partially visible');
+assert.ok(/calc\(var\(--xc-space-3\) \+ env\(safe-area-inset-bottom, var\(--xc-space-3\)\)\)/.test(cssSrc),
+    '.sheet keeps base bottom padding in addition to the safe-area inset');
 
 // --- 5. FullLayoutWithNav slot + App.jsx wiring -------------------------
 
 const navJsxPath = join(core, 'src', 'shared', 'components', 'LeftNav.jsx');
 const navJsxSrc = readFileSync(navJsxPath, 'utf8');
-// Cluster G FOLLOWUP 4 added a `header` slot; accept both the original
-// signature and the post-FOLLOWUP one so each cluster's smoke stays
+// Cluster G FOLLOWUP 4 added a `header` slot and the banner split a
+// `notices` slot; accept each signature so each cluster's smoke stays
 // independent.
 assert.ok(
-    /FullLayoutWithNav\(\{ nav, bottomBar(?:, header)?, children \}\)/.test(navJsxSrc),
+    /FullLayoutWithNav\(\{ nav, bottomBar(?:, header)?(?:, notices)?, children \}\)/.test(navJsxSrc),
     'FullLayoutWithNav exposes a bottomBar slot',
 );
 // The slot's contents are now filtered through the layout tier
@@ -124,7 +127,7 @@ assert.ok(/\{bar \? <div className=\{styles\.bottomBarSlot\}>\{bar\}<\/div>/.tes
 const navCssPath = join(core, 'src', 'shared', 'components', 'LeftNav.module.css');
 const navCssSrc = readFileSync(navCssPath, 'utf8');
 assert.ok(/\.bottomBarSlot\b[\s\S]*?display:\s*contents/.test(navCssSrc),
-    'bottomBar slot uses display:contents so the fixed bar stays at viewport');
+    'bottomBar slot uses display:contents so the absolute bar stays anchored to the layout');
 // Visibility is JS-gated (FullLayoutWithNav withholds the bottomBar above the
 // compact tier); CSS uses display:contents so the fixed bar sits at the
 // viewport level when the slot IS rendered. No viewport media query.
@@ -132,8 +135,8 @@ assert.ok(/\.bottomBarSlot\s*\{[\s\S]*?display:\s*contents/.test(navCssSrc),
     'bottomBar slot collapses above 600px');
 // Padding is applied via a class on the layout div (JS-added when bottomBar
 // is non-null) rather than a viewport-keyed media query.
-assert.ok(/\.layoutWithBottomBar > \.main\s*\{[\s\S]*?padding-bottom:\s*calc\(56px/.test(navCssSrc),
-    'main pane reserves 56px bottom-padding below 600px when bottomBar is present');
+assert.ok(/\.layoutWithBottomBar > \.main\s*\{[\s\S]*?padding-bottom:\s*calc\(3\.5rem/.test(navCssSrc),
+    'main pane reserves scalable bottom-padding when bottomBar is present');
 
 const webApp = readFileSync(
     join(wsRoot, 'packages', 'web', 'src', 'App.jsx'),
@@ -148,7 +151,7 @@ const popupApp = readFileSync(
     'utf8',
 );
 
-for (const [label, src] of [['web', webApp], ['desktop', desktopApp]]) {
+for (const [label, src] of [['web', webApp], ['desktop', desktopApp], ['extension', popupApp]]) {
     assert.ok(
         /import\s*\{\s*BottomTabBar\s*\}\s*from\s*'@xchain-wallet\/core\/shared\/components\/BottomTabBar\.jsx'/.test(src),
         `${label} App imports BottomTabBar`,
@@ -159,9 +162,6 @@ for (const [label, src] of [['web', webApp], ['desktop', desktopApp]]) {
         `${label} App passes <BottomTabBar> into FullLayoutWithNav.bottomBar`);
 }
 
-assert.ok(!/BottomTabBar/.test(popupApp),
-    'Extension popup intentionally does NOT mount BottomTabBar (always compact per §24.1)');
-
 console.log(
-    'OK: bottom-tab-bar smoke (§24.3 / G054 BottomTabBar with Home/History/Send/Scan primary tabs + More-toggled sheet listing Receive/DEX/Dispensers/Contracts(VM-gated)/Messaging/Contacts + Switch wallet/Settings/Lock; 56px fixed bar with iOS safe-area inset; FullLayoutWithNav.bottomBar slot collapses above 600px; web + desktop App.jsx wire it through; popup left compact)',
+    'OK: bottom-tab-bar smoke (§24.3 / G054 BottomTabBar with Home/History/Send/Scan primary tabs + labelled More sheet listing Receive/DEX/Dispensers/Contracts(VM-gated)/Messaging/Contacts + Switch wallet/Settings/Lock wallet; scalable absolute bar and padded sheet with safe-area insets; FullLayoutWithNav.bottomBar slot collapses above 600px; web + desktop + extension App.jsx wire it through)',
 );

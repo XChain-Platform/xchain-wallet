@@ -90,6 +90,17 @@ afterEach(() => {
 });
 
 describe('UnionListForm', () => {
+    it('explains that a member list is required when Review is pressed empty', async () => {
+        const messaging = mount();
+        const review = await screen.findByRole('button', { name: 'Review' });
+
+        expect(review.disabled).toBe(false);
+        fireEvent.click(review);
+
+        expect(await screen.findByText('Choose at least one member list.')).toBeTruthy();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
     it('locks the picker to the first type and excludes union lists', async () => {
         mount({
             owned: [row(101, 1), row(102, 2), row(103, 3)],
@@ -170,11 +181,12 @@ describe('UnionListForm', () => {
     });
 
     it('refuses Review when the known merged membership exceeds 10,000', async () => {
-        mount({ owned: [row(101, 1, Array.from({ length: 10001 }, (_, index) => `T${index}`))] });
+        const memberCount = 10001;
+        mount({ owned: [row(101, 1, Array.from({ length: memberCount }, (_, index) => `T${index}`))] });
 
         fireEvent.click(await screen.findByRole('checkbox', { name: 'Token list #101' }));
 
-        expect(screen.getByText('Estimated merged membership: 10,001')).toBeTruthy();
+        expect(screen.getByText(`Estimated merged membership: ${memberCount.toLocaleString()}`)).toBeTruthy();
         expect(screen.getByText('The estimated merged membership is over 10,000.')).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
     });

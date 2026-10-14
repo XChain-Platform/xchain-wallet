@@ -12,26 +12,31 @@
 // derivation index beside it, and the numbered name as a subtitle only when a
 // custom name would otherwise hide it.
 
-import { describe, it, expect, afterEach } from 'vitest';
-import { render, cleanup, act as domAct } from '@testing-library/react';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { render, cleanup, act as domAct, fireEvent, screen } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { AccountPicker } from '../../../packages/core/src/shared/routes/AccountPicker.jsx';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
+
+const pickerCss = readFileSync('packages/core/src/shared/routes/WalletPicker.module.css', 'utf8');
 
 afterEach(() => cleanup());
 
-async function mountWith(accounts) {
-    const messaging = { listAccounts: () => Promise.resolve(accounts) };
+async function mountWith(accounts, overrides = {}) {
+    const messaging = overrides.messaging || { listAccounts: () => Promise.resolve(accounts) };
     let utils;
     await domAct(async () => {
         utils = render(
             <MessagingProvider shell="web" messaging={messaging}>
                 <AccountPicker
                     walletId="w1"
-                    activeAccountId={null}
-                    onSwitch={() => {}}
-                    onAddAccount={() => {}}
-                    onBack={() => {}}
+                    activeAccountId={overrides.activeAccountId ?? null}
+                    onSwitch={overrides.onSwitch || (() => {})}
+                    onAddAccount={overrides.onAddAccount || (() => {})}
+                    onRenameAccount={overrides.onRenameAccount}
+                    onBack={overrides.onBack || (() => {})}
                 />
             </MessagingProvider>,
         );
@@ -40,29 +45,31 @@ async function mountWith(accounts) {
     return utils;
 }
 
-/** The row button whose title contains `name`. */
-function rowFor(container, name) {
-    return Array.from(container.querySelectorAll('button'))
-        .find((b) => (b.textContent || '').includes(name));
+/** The row button whose accessible name starts with `name`. */
+function rowFor(name) {
+    const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return screen.getByRole('button', { name: new RegExp(`^${escapedName}`) });
 }
 
 describe('AccountPicker row subtitle', () => {
     it('shows an unnamed account by its one-based name with no index subtitle', async () => {
-        const { container } = await mountWith([{ id: 'a1', index: 0, name: '' }]);
-        const row = rowFor(container, 'Account 1');
+        await mountWith([{ id: 'a1', index: 0, name: '' }]);
+        const row = rowFor('Account 1');
         expect(row).toBeTruthy();
         expect(row.textContent).not.toMatch(/BIP44|index|Account 0/i);
     });
 
     it('keeps the numbered name under a custom name', async () => {
-        const { container } = await mountWith([{ id: 'a3', index: 2, name: 'Savings' }]);
-        const row = rowFor(container, 'Savings');
+        await mountWith([{ id: 'a3', index: 2, name: 'Savings' }]);
+        const row = rowFor('Savings');
         expect(row.textContent).toContain('Account 3');
+        expect(row.children).toHaveLength(1);
+        expect(row.firstElementChild.children).toHaveLength(2);
     });
 
     it('does not repeat a name that already equals the numbered one', async () => {
-        const { container } = await mountWith([{ id: 'a2', index: 1, name: 'Account 2' }]);
-        const row = rowFor(container, 'Account 2');
+        await mountWith([{ id: 'a2', index: 1, name: 'Account 2' }]);
+        const row = rowFor('Account 2');
         expect(row.textContent.match(/Account 2/g)).toHaveLength(1);
     });
 
@@ -72,5 +79,91 @@ describe('AccountPicker row subtitle', () => {
             { id: 'a2', index: 1, name: 'Trading' },
         ]);
         expect(container.textContent).not.toMatch(/BIP44/);
+    });
+
+    it('passes the selected record to the rename route', async () => {
+        const account = { id: 'a3', index: 2, name: 'Savings' };
+        const onRenameAccount = vi.fn();
+        await mountWith([account], { onRenameAccount });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Rename Savings' }));
+
+        expect(onRenameAccount).toHaveBeenCalledWith(account);
+    });
+
+    it('marks the current account and puts compact actions after the list', async () => {
+        const account = { id: 'a3', index: 2, name: 'Savings' };
+        const onAddAccount = vi.fn();
+        const onRenameAccount = vi.fn();
+        await mountWith([account], {
+            activeAccountId: account.id,
+            onAddAccount,
+            onRenameAccount,
+        });
+
+        expect(rowFor(account.name)).toHaveAttribute('aria-current', 'true');
+        const add = screen.getByRole('button', { name: 'Add account' });
+        const manage = screen.getByRole('button', { name: 'Manage' });
+        expect(add.closest('main')).toBeTruthy();
+        expect(manage.closest('main')).toBeTruthy();
+        expect(add.closest('footer')).toBeNull();
+        expect(pickerCss).toMatch(/\.footerActions button > span:last-child\s*{[^}]*white-space:\s*nowrap/);
+
+        fireEvent.click(add);
+        fireEvent.click(manage);
+        expect(onAddAccount).toHaveBeenCalledOnce();
+        expect(onRenameAccount).toHaveBeenCalledWith(account);
+    });
+
+    it('renders the row edit affordance as an icon-only kit button', async () => {
+        await mountWith(
+            [{ id: 'a1', index: 0, name: 'Savings' }],
+            { onRenameAccount: () => {} },
+        );
+
+        const rename = screen.getByRole('button', { name: 'Rename Savings' });
+        expect(rename).toHaveClass(buttonStyles.iconOnly);
+        expect(rename.querySelector('svg[data-xc-icon]')).toBeInTheDocument();
+        expect(rename.querySelectorAll(':scope > span')).toHaveLength(1);
+    });
+
+    it('switches an inactive account and returns through the supplied route', async () => {
+        const onSwitch = vi.fn();
+        const onBack = vi.fn();
+        await mountWith(
+            [{ id: 'a2', index: 1, name: 'Savings' }],
+            { activeAccountId: 'a1', onSwitch, onBack },
+        );
+
+        fireEvent.click(rowFor('Savings'));
+
+        expect(onSwitch).toHaveBeenCalledWith('a2');
+        expect(onBack).toHaveBeenCalledOnce();
+    });
+
+    it('closes without switching when the current account or Back is selected', async () => {
+        const account = { id: 'a2', index: 1, name: 'Savings' };
+        const onSwitch = vi.fn();
+        const onBack = vi.fn();
+        await mountWith([account], {
+            activeAccountId: account.id,
+            onSwitch,
+            onBack,
+        });
+
+        fireEvent.click(rowFor(account.name));
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+
+        expect(onSwitch).not.toHaveBeenCalled();
+        expect(onBack).toHaveBeenCalledTimes(2);
+    });
+
+    it('reports a list failure without rendering an empty account state', async () => {
+        await mountWith([], {
+            messaging: { listAccounts: () => Promise.reject(new Error('Accounts unavailable')) },
+        });
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('Accounts unavailable');
+        expect(screen.queryByText('No accounts yet.')).toBeNull();
     });
 });

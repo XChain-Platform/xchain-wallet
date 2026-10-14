@@ -15,12 +15,26 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { BroadcastForm } from '../../../packages/core/src/shared/routes/BroadcastForm.jsx';
 import { CallbackForm } from '../../../packages/core/src/shared/routes/CallbackForm.jsx';
+import { ComposeMessage } from '../../../packages/core/src/shared/routes/ComposeMessage.jsx';
 import { LinkForm } from '../../../packages/core/src/shared/routes/LinkForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
+import {
+    MAX_MESSAGE_ATTACHMENT_BYTES,
+    parseMessageContent,
+    serializeMessageContent,
+} from '../../../packages/core/src/shared/utils/messageContent.js';
+import {
+    memoLengthError,
+    utf8ByteLength,
+} from '../../../packages/core/src/shared/utils/memoLimit.js';
+import {
+    MAX_MESSAGE_BYTES,
+    messageWireByteLength,
+} from '../../../packages/core/src/flows/messageAction.js';
 
 const MAX_TEXT_LENGTH = 250;
-const AT_LIMIT = 'm'.repeat(MAX_TEXT_LENGTH);
-const OVER_LIMIT = 'm'.repeat(MAX_TEXT_LENGTH + 1);
+const AT_LIMIT = 'é'.repeat(MAX_TEXT_LENGTH / 2);
+const OVER_LIMIT = `${AT_LIMIT}a`;
 const BTC = 'bitcoin-mainnet';
 const DOGE = 'dogecoin-mainnet';
 const SOURCE = Object.freeze({
@@ -38,7 +52,7 @@ const DOGE_SOURCE = Object.freeze({
     derivationPath: "m/44'/3'/0'/0/0",
 });
 
-function messagingFor() {
+function messagingFor(overrides = {}) {
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue({ [BTC]: [SOURCE], [DOGE]: [DOGE_SOURCE] }),
         getActiveAddresses: vi.fn().mockResolvedValue({
@@ -48,20 +62,27 @@ function messagingFor() {
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full', activeNetwork: 'mainnet' }),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
+        getRecipientPubkey: vi.fn().mockResolvedValue('02' + 'ab'.repeat(32)),
         getTokenInfo: vi.fn().mockResolvedValue({
             tick: 'CALLABLE',
             creator: SOURCE.address,
             callbackTick: 'XCHAIN',
             callbackAmount: '1',
-            callbackBlock: null,
+            callbackBlock: '1',
         }),
         tokenHolderSummary: vi.fn().mockResolvedValue({ recipientCount: 1, totalPayout: '1' }),
         getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 100 }),
+        getActionByIndex: vi.fn().mockResolvedValue({ action: 'SEND', tick: 'JDOG', amount: '1' }),
         composeForConfirm: vi.fn().mockResolvedValue({
             psbt: 'aa00', encoding: 'psbt', actionString: 'ACT', version: 0,
         }),
+        composeMessageForConfirm: vi.fn().mockResolvedValue({
+            psbt: 'aa00', encoding: 'psbt', actionString: 'MESSAGE', version: 2,
+            messageParams: {},
+        }),
         preflight: vi.fn().mockResolvedValue({ verdict: 'pass', findings: [] }),
     };
+    Object.assign(target, overrides);
     return new Proxy(target, {
         get(value, prop) {
             if (prop in value) return value[prop];
@@ -70,8 +91,8 @@ function messagingFor() {
     });
 }
 
-function mount(Component, props = {}) {
-    const messaging = messagingFor();
+function mount(Component, props = {}, messagingOverrides = {}) {
+    const messaging = messagingFor(messagingOverrides);
     render(React.createElement(
         MessagingProvider,
         { shell: 'web', messaging },
@@ -86,20 +107,195 @@ afterEach(() => {
     __clearTokenInfoCache();
 });
 
+describe('UTF-8 transaction text measurement', () => {
+    it('counts encoded bytes and gives an explicit memo refusal', () => {
+        expect(utf8ByteLength('aé📦')).toBe(7);
+        expect(memoLengthError(AT_LIMIT)).toBeNull();
+        expect(memoLengthError(OVER_LIMIT)).toBe(
+            `Memo is ${MAX_TEXT_LENGTH + 1} bytes; the network accepts at most ${MAX_TEXT_LENGTH} bytes.`,
+        );
+    });
+});
+
 describe('BroadcastForm text limits', () => {
+    it('passes a valid multibyte message to compose without changing it', async () => {
+        const messaging = mount(BroadcastForm, { initialChainId: BTC });
+        const message = await screen.findByLabelText('Message (optional)');
+
+        fireEvent.change(message, { target: { value: AT_LIMIT } });
+        fireEvent.click(screen.getByRole('button', { name: 'Broadcast' }));
+
+        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
+        expect(messaging.composeForConfirm.mock.calls[0][0].actionData.params.MESSAGE).toBe(AT_LIMIT);
+    });
+
     it('shows a live counter and disables Broadcast past the message limit', async () => {
         const messaging = mount(BroadcastForm, { initialChainId: BTC });
-        const message = await screen.findByLabelText('Message');
+        const message = await screen.findByLabelText('Message (optional)');
         const submit = screen.getByRole('button', { name: 'Broadcast' });
 
         fireEvent.change(message, { target: { value: AT_LIMIT } });
-        expect(screen.getByText(`${MAX_TEXT_LENGTH} / ${MAX_TEXT_LENGTH} characters.`)).toBeTruthy();
+        expect(screen.getByText(`${MAX_TEXT_LENGTH} / ${MAX_TEXT_LENGTH} bytes.`)).toBeTruthy();
         await waitFor(() => expect(submit.disabled).toBe(false));
 
         fireEvent.change(message, { target: { value: OVER_LIMIT } });
-        expect(screen.getByText(`Message is ${MAX_TEXT_LENGTH + 1} characters; the network accepts at most ${MAX_TEXT_LENGTH}.`)).toBeTruthy();
+        expect(screen.getByText(`Message is ${MAX_TEXT_LENGTH + 1} bytes; the network accepts at most ${MAX_TEXT_LENGTH} bytes.`)).toBeTruthy();
         expect(submit.disabled).toBe(true);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+});
+
+describe('ComposeMessage text limit', () => {
+    it('shows a live counter and blocks review past the protocol limit', async () => {
+        const recipient = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
+        const messaging = mount(ComposeMessage, {
+            chainId: BTC,
+            fixedEncryption: 'plaintext',
+            toAddress: recipient,
+        });
+        const message = await screen.findByLabelText('Message');
+        const submit = screen.getByRole('button', { name: 'Send message' });
+
+        fireEvent.change(message, { target: { value: '📦' } });
+        expect(screen.getByText(`4 / ${MAX_MESSAGE_BYTES.toLocaleString()} bytes.`)).toBeTruthy();
+        expect(submit.disabled).toBe(false);
+
+        fireEvent.change(message, { target: { value: `${'é'.repeat(MAX_MESSAGE_BYTES / 2)}a` } });
+        expect(screen.getByText(
+            `Message is ${(MAX_MESSAGE_BYTES + 1).toLocaleString()} bytes; the network accepts at most ${MAX_MESSAGE_BYTES.toLocaleString()} bytes.`,
+        )).toBeTruthy();
+        expect(submit.disabled).toBe(true);
+        expect(messaging.composeMessageForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('counts the encrypted protocol field and blocks ECIES ciphertext past its limit', async () => {
+        const recipient = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
+        const messaging = mount(ComposeMessage, { chainId: BTC, toAddress: recipient });
+        const message = await screen.findByLabelText('Message');
+        const submit = screen.getByRole('button', { name: 'Send message' });
+        const atLimit = 'é'.repeat((MAX_MESSAGE_BYTES / 2 - 62) / 2);
+
+        fireEvent.change(message, { target: { value: atLimit } });
+        expect(messageWireByteLength(atLimit, 1)).toBe(MAX_MESSAGE_BYTES);
+        expect(screen.getByText(
+            `${MAX_MESSAGE_BYTES.toLocaleString()} / ${MAX_MESSAGE_BYTES.toLocaleString()} encrypted bytes.`,
+        )).toBeTruthy();
+        expect(submit.disabled).toBe(false);
+
+        fireEvent.change(message, { target: { value: `${atLimit}a` } });
+        expect(screen.getByText(
+            `Encrypted message is ${(MAX_MESSAGE_BYTES + 2).toLocaleString()} bytes; the network accepts at most ${MAX_MESSAGE_BYTES.toLocaleString()} bytes.`,
+        )).toBeTruthy();
+        expect(submit.disabled).toBe(true);
+        expect(messaging.composeMessageForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('requires confirmation before selecting the missing-key plaintext fallback', async () => {
+        const recipient = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
+        mount(
+            ComposeMessage,
+            { chainId: BTC, toAddress: recipient },
+            { getRecipientPubkey: vi.fn().mockResolvedValue(null) },
+        );
+
+        expect(await screen.findByText(/we can't encrypt/i)).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: /Encryption: Standard/ }));
+        fireEvent.click(screen.getByRole('option', { name: /Plain text/ }));
+
+        expect(screen.getByRole('button', { name: /Encryption: Standard/ })).toBeTruthy();
+        expect(screen.getByText(/Send this message as plain text/)).toBeTruthy();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Send as plain text' }));
+        expect(screen.getByRole('button', { name: /Encryption: Plain text/ })).toBeTruthy();
+    });
+
+    it('refuses a whitespace-only message before compose', async () => {
+        const recipient = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
+        const messaging = mount(ComposeMessage, {
+            chainId: BTC,
+            fixedEncryption: 'plaintext',
+            toAddress: recipient,
+        });
+        const message = await screen.findByLabelText('Message');
+
+        fireEvent.change(message, { target: { value: '   \n  ' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+
+        expect(await screen.findByText('Write a message to send, or attach a file.')).toBeTruthy();
+        expect(messaging.composeMessageForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('does not look up a key or offer a session request for an invalid recipient', async () => {
+        const messaging = mount(ComposeMessage, { chainId: BTC });
+        const address = await screen.findByLabelText('Address');
+
+        fireEvent.change(address, { target: { value: 'not an address' } });
+
+        expect(await screen.findByText('Enter a valid address')).toBeTruthy();
+        expect(messaging.getRecipientPubkey).not.toHaveBeenCalled();
+        expect(screen.queryByRole('button', { name: /Request encrypted session/i })).toBeNull();
+    });
+
+    it('refuses unsupported and oversized attachments with specific limits', async () => {
+        mount(ComposeMessage, { chainId: BTC, fixedEncryption: 'plaintext' });
+        const input = await screen.findByLabelText('Attachment (optional)');
+
+        fireEvent.change(input, {
+            target: { files: [new File(['#!/bin/sh'], 'run.sh', { type: 'application/x-sh' })] },
+        });
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Unsupported attachment type. Choose a PNG, JPEG, GIF, WebP, PDF, or plain-text file.',
+        );
+
+        fireEvent.change(input, {
+            target: {
+                files: [new File(
+                    [new Uint8Array(MAX_MESSAGE_ATTACHMENT_BYTES + 1)],
+                    'large.png',
+                    { type: 'image/png' },
+                )],
+            },
+        });
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            `Attachments can be at most ${MAX_MESSAGE_ATTACHMENT_BYTES.toLocaleString()} bytes.`,
+        );
+    });
+
+    it('accepts a supported attachment and reports its exact size', async () => {
+        mount(ComposeMessage, { chainId: BTC, fixedEncryption: 'plaintext' });
+        const input = await screen.findByLabelText('Attachment (optional)');
+
+        fireEvent.change(input, {
+            target: { files: [new File(['hello'], 'note.txt', { type: 'text/plain' })] },
+        });
+
+        expect(await screen.findByText(/Attached: note\.txt \(5 bytes\)/)).toBeTruthy();
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    it('round-trips supported attachment metadata without mixing it into visible text', () => {
+        const wire = serializeMessageContent('See the file', {
+            name: 'photo.png',
+            type: 'image/png',
+            dataUrl: 'data:image/png;base64,iVBORw0KGgo=',
+            size: 8,
+        });
+
+        expect(parseMessageContent(wire)).toEqual({
+            text: 'See the file',
+            attachment: {
+                name: 'photo.png',
+                type: 'image/png',
+                dataUrl: 'data:image/png;base64,iVBORw0KGgo=',
+                size: 8,
+            },
+        });
+        expect(parseMessageContent('javascript:alert(1)')).toEqual({
+            text: 'javascript:alert(1)',
+            attachment: null,
+        });
+        const falseSize = wire.replace('"size":8', '"size":7');
+        expect(parseMessageContent(falseSize)).toEqual({ text: falseSize, attachment: null });
     });
 });
 
@@ -110,17 +306,17 @@ describe('LinkForm memo limit', () => {
         fireEvent.change(firstIndex, { target: { value: '11' } });
         fireEvent.change(secondIndex, { target: { value: '22' } });
         const memo = screen.getByLabelText('Memo (optional)');
-        const submit = screen.getByRole('button', { name: 'Link' });
+        const submit = await screen.findByRole('button', { name: 'Link' });
 
         fireEvent.change(memo, { target: { value: AT_LIMIT } });
-        expect(screen.getByText(`${MAX_TEXT_LENGTH} / ${MAX_TEXT_LENGTH} characters.`)).toBeTruthy();
+        expect(screen.getByText(`${MAX_TEXT_LENGTH} / ${MAX_TEXT_LENGTH} bytes.`)).toBeTruthy();
         await waitFor(() => expect(submit.disabled).toBe(false));
 
         fireEvent.change(memo, { target: { value: OVER_LIMIT } });
-        expect(screen.getAllByText(/Memo is 251 characters/).length).toBeGreaterThan(0);
+        expect(screen.getAllByText(/Memo is 251 bytes/).length).toBeGreaterThan(0);
         expect(submit.disabled).toBe(false);
         fireEvent.click(submit);
-        expect(screen.getAllByText(/Memo is 251 characters/).length).toBeGreaterThan(1);
+        expect(screen.getAllByText(/Memo is 251 bytes/).length).toBeGreaterThan(1);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 });
@@ -136,11 +332,11 @@ describe('CallbackForm memo limit', () => {
         const submit = await screen.findByRole('button', { name: 'Execute callback' });
 
         fireEvent.change(memo, { target: { value: AT_LIMIT } });
-        expect(screen.getByText(`${MAX_TEXT_LENGTH} / ${MAX_TEXT_LENGTH} characters.`)).toBeTruthy();
+        expect(screen.getByText(`${MAX_TEXT_LENGTH} / ${MAX_TEXT_LENGTH} bytes.`)).toBeTruthy();
         await waitFor(() => expect(submit.disabled).toBe(false));
 
         fireEvent.change(memo, { target: { value: OVER_LIMIT } });
-        expect(screen.getByText(/Memo is 251 characters/)).toBeTruthy();
+        expect(screen.getByText(/Memo is 251 bytes/)).toBeTruthy();
         expect(submit.disabled).toBe(true);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });

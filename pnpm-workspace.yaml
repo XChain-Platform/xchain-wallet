@@ -9,9 +9,8 @@ packages:
 # symptom was root-level tests failing to resolve `@scure/*` because the
 # packages sat in pnpm's private hoist directory instead of at the root.
 #
-# `.npmrc` keeps its copies for the same reason the package.json `pnpm`
-# block below keeps its: whichever the pinned pnpm reads is the live one,
-# and a settings home that goes unread must not read as "unset".
+# `.npmrc` keeps its copies so a settings home that goes unread must not read
+# as "unset".
 #
 # supportedArchitectures is the one with teeth beyond convenience. It
 # decides which platform binaries are fetched, so losing it changes what a
@@ -43,22 +42,9 @@ supportedArchitectures:
     - arm64
     - x64
 
-# WHY THIS FILE DUPLICATES package.json's `pnpm` BLOCK.
-#
-# pnpm moved these settings between two homes. pnpm 9 (the version pinned
-# in `packageManager`) reads `pnpm.*` from the root package.json and
-# IGNORES the blocks below. pnpm 10 does the reverse: it reads these and
-# warns that "the pnpm field in package.json is no longer read".
-#
-# Neither errors on the one it ignores. So while the two disagree, the
-# effective configuration flips silently the day anyone bumps pnpm. That
-# is not hypothetical: pnpm-lock.yaml's own `overrides:` block records
-# package.json's values verbatim, which is how it was proven that the
-# package.json copy is the live one today.
-#
-# Both copies must therefore stay IDENTICAL, and
-# test/smoke/audits/pnpm-config-parity.smoke.js fails the build if they
-# drift. Change one, change the other, in the same commit.
+# pnpm 11 reads dependency overrides and install-script policy from this file.
+# test/smoke/audits/pnpm-config-parity.smoke.js rejects package.json copies so
+# these settings keep one authoritative home.
 
 # Security pins on transitive dependencies. Kept at `^` rather than `>=`:
 # an uncapped `>=4.0.6` permits a future 5.x major to be pulled in
@@ -96,13 +82,11 @@ overrides:
   # WHATWG URL parser does not, so two parsers disagree about the HOST of the
   # same string (GHSA-7p8r-x3mc-p8w7). It arrives under the SDK, transitively,
   # and this repo does not choose its version - which is exactly what an
-  # override is for. Pinned in BOTH homes because pnpm 9 reads package.json and
-  # pnpm 10 reads this file, neither errors on the copy it ignores, and
-  # pnpm-config-parity.smoke.js fails the build if they drift.
+  # override is for.
   # 3.1.6 closes four more (GHSA-5jgf-p345-68v8, -f65p-4m7j-42xc, -fph4-wmhf-6fwf,
   # -jqff-g426-hqxp: host confusion and SSRF through skipped IDN
   # canonicalization), all published 2026-09-02 and all high.
-  fast-uri: ^3.1.6
+  fast-uri: ^3.1.8
   # hono arrives under the SDK's @modelcontextprotocol/sdk dependency;
   # 4.12.33 carries CVE-2026-71848/-71849/-71850 (language-middleware DoS,
   # Connection-header passthrough in the proxy helper, memo() retaining SSR
@@ -121,6 +105,7 @@ overrides:
   # (GHSA-jqcg-44mw-7w3h); express pulls it in under the SDK and the MCP SDK.
   proxy-addr: ^2.0.8
   ip-address: ^10.5.1
+  http-cache-semantics: ^4.3.0
   # GHSA-6qxp-vccf-f47h: high advisory in the MCP SDK that xchain-sdk pulls in; patched in 1.31.0.
   '@modelcontextprotocol/sdk': ^1.31.0
   'undici@7': ^7.29.1
@@ -153,11 +138,9 @@ onlyBuiltDependencies:
 # "set this to true or false" in every value, and that is what a fresh
 # clone hits.
 #
-# BOTH forms are kept on purpose, which is the same reasoning that kept the
-# root package.json copy: whichever one the pinned pnpm reads is the live
-# one, and a major bump must not silently disarm the allowlist by finding
-# nothing where it looked. `onlyBuiltDependencies` above is the pnpm 9
-# form; this is the pnpm 11 form. Keep them in agreement.
+# Both workspace forms stay in agreement. `onlyBuiltDependencies` is the
+# allowlist requested by this repository; `allowBuilds` records pnpm 11's
+# explicit decisions for packages whose build scripts it detects.
 #
 # secp256k1 is FALSE deliberately, and it is the one entry that is a
 # decision rather than a transcription. pnpm 11 surfaces it because it asks
@@ -193,8 +176,8 @@ allowBuilds:
 # 2026-09-07 on pnpm 11.8.0 with a two-hour-old publish: '@dankest-llc/*'
 # passes install and the deps-status check that guards every script;
 # 'xchain-sdk' fails both. Keep it spelled by scope, never by alias.
-# Mirrored in package.json's pnpm block for the same reason every other key
-# is (release-management.md section 6, amendment v12).
+# Mirrored in package.json's pnpm block for release tooling compatibility
+# (release-management.md section 6, amendment v12).
 minimumReleaseAgeExclude:
   - '@dankest-llc/*'
 

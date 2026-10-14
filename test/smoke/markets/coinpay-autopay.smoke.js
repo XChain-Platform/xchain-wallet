@@ -67,7 +67,7 @@ assert.match(extBg, /new notificationsLib\.CoinpayAutopayWatcher\(\{/, 'extensio
 assert.match(extBg, /reservationLedger: host\.reservationLedger/, 'extension engine uses the host ledger');
 assert.match(extBg, /shellKind: 'extension'/, 'extension shellKind');
 const webBridge = read('packages', 'web', 'src', 'hostBridge.js');
-assert.match(webBridge, /new notificationsLib\.CoinpayAutopayWatcher\(\{/, 'web starts the engine');
+assert.match(webBridge, /new (?:notificationsLib\.)?CoinpayAutopayWatcher\(\{/, 'web starts the engine');
 assert.match(webBridge, /shellKind: 'web'/, 'web shellKind');
 const desktopRuntime = read('packages', 'desktop', 'main', 'runtime.js');
 assert.match(desktopRuntime, /new notificationsLib\.CoinpayAutopayWatcher\(\{/, 'desktop starts the engine');

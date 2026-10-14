@@ -38,9 +38,10 @@
  */
 
 import { clearDemoWalletId } from '../../flows/demoMode.js';
+import { clearActiveWallet, writeActiveWallet } from './activeWalletMemory.js';
 import { clearLastView } from './lastViewMemory.js';
 import { sweepMsgMemoryForWallet } from './msgReadMemory.js';
-import { wipeWalletStorage } from './wipeWalletStorage.js';
+import { clearRemovedWalletStorage, wipeWalletStorage } from './wipeWalletStorage.js';
 
 /** localStorage slot holding the onboarding lane to resume after a demo wipe. */
 export const POST_DEMO_INTENT_KEY = 'xc:postDemoOnboardingStep';
@@ -104,14 +105,19 @@ export function demoOwnsVaultPassword({ mode, demoWalletId } = {}) {
  * @returns {Promise<'empty' | 'occupied' | 'unknown'>}
  */
 export async function readVaultOccupancy(messaging) {
-    if (typeof messaging?.listWallets !== 'function') return 'unknown';
+    const wallets = await readWalletList(messaging);
+    if (!wallets) return 'unknown';
+    return wallets.length === 0 ? 'empty' : 'occupied';
+}
+
+async function readWalletList(messaging) {
+    if (typeof messaging?.listWallets !== 'function') return null;
     try {
         const list = await messaging.listWallets();
-        const arr = Array.isArray(list) ? list : list?.wallets;
-        if (!Array.isArray(arr)) return 'unknown';
-        return arr.length === 0 ? 'empty' : 'occupied';
+        const wallets = Array.isArray(list) ? list : list?.wallets;
+        return Array.isArray(wallets) ? wallets : null;
     } catch {
-        return 'unknown';
+        return null;
     }
 }
 
@@ -170,25 +176,47 @@ export async function exitDemoWallet({
     if (typeof walletId !== 'string' || walletId.length === 0) {
         throw new Error('exitDemoWallet: walletId is required');
     }
-    if (typeof messaging?.removeWallet === 'function') {
-        await messaging.removeWallet({ walletId });
-    } else if (typeof messaging?.sendMessage === 'function') {
-        await messaging.sendMessage('wallet.remove', { walletId });
+    let removeError = null;
+    try {
+        if (typeof messaging?.removeWallet === 'function') {
+            await messaging.removeWallet({ walletId });
+        } else if (typeof messaging?.sendMessage === 'function') {
+            await messaging.sendMessage('wallet.remove', { walletId });
+        }
+    } catch (err) {
+        removeError = err;
     }
-    clearDemoWalletId();
-    clearLastView(walletId);
-    // sweep this wallet's messaging read marks/unread counts
-    // too, or they orphan in localStorage forever.
-    sweepMsgMemoryForWallet(walletId);
 
     // Only when nothing else is left: a real wallet alongside the demo
     // means the vault is still the user's, and wiping it would destroy
     // it. An unreadable list reads as 'unknown' and never triggers a
     // wipe either.
-    const remaining = await readVaultOccupancy(messaging);
-    if (remaining !== 'empty') return { wiped: false, reloaded: false, remaining };
+    const remainingWallets = await readWalletList(messaging);
+    const remaining = remainingWallets === null
+        ? 'unknown'
+        : (remainingWallets.length === 0 ? 'empty' : 'occupied');
+    // An empty vault despite a removeWallet rejection is the retry state:
+    // only the wipe remains.
+    if (removeError && remaining !== 'empty') throw removeError;
+    if (remaining === 'unknown') {
+        throw new Error('Could not verify that the demo wallet was removed. Try again.');
+    }
+    if (remaining === 'occupied') {
+        const nextWallet = remainingWallets.find((wallet) => wallet?.id && wallet.id !== walletId);
+        if (!nextWallet) {
+            throw new Error('Could not select a wallet after removing the demo. Try again.');
+        }
+        clearDemoWalletId();
+        clearLastView(walletId);
+        sweepMsgMemoryForWallet(walletId);
+        clearRemovedWalletStorage(walletId);
+        writeActiveWallet(nextWallet.id, nextWallet.name);
+        return { wiped: false, reloaded: false, remaining };
+    }
 
-    if (intent) setPostDemoIntent(intent);
     await wipe();
+    clearDemoWalletId();
+    clearActiveWallet();
+    if (intent) setPostDemoIntent(intent);
     return { wiped: true, reloaded: reload(), remaining };
 }

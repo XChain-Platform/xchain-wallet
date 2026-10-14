@@ -38,6 +38,59 @@ export const NOTIFICATION_EVENT = 'xchain:notification';
 /** Where the palette files live, relative to the app's base URL. */
 export const SOUND_DIR = 'sounds/';
 
+const DELIVERY_CLAIM_PREFIX = 'xc:notification-delivery:';
+const DELIVERY_CLAIM_TTL_MS = 60 * 60_000;
+
+function stableDeliveryIdentity(kind, data) {
+    if (!data || typeof data !== 'object') return null;
+    const txHash = data.txHash || data.txid;
+    if (txHash && ['incoming-pending', 'incoming-receipt', 'tx-confirmed'].includes(kind)) {
+        return `fund:${data.chainId || ''}:${String(txHash).toLowerCase()}`;
+    }
+    const parts = [
+        kind,
+        data.chainId,
+        data.alertId,
+        data.pollIndex,
+        data.actionIndex,
+        data.orderMatchActionIndex,
+        data.reason,
+    ];
+    if (parts.slice(2).every((value) => value == null)) return null;
+    return parts.map((value) => value == null ? '' : String(value)).join(':');
+}
+
+function hashIdentity(value) {
+    let hash = 2166136261;
+    for (let index = 0; index < value.length; index += 1) {
+        hash ^= value.charCodeAt(index);
+        hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(36);
+}
+
+function claimDelivery(kind, data, now) {
+    const identity = stableDeliveryIdentity(kind, data);
+    if (!identity) return null;
+    try {
+        const storage = globalThis.localStorage;
+        if (!storage) return null;
+        const key = `${DELIVERY_CLAIM_PREFIX}${hashIdentity(identity)}`;
+        const timestamp = now();
+        const expiresAt = Number(storage.getItem(key));
+        if (Number.isFinite(expiresAt) && expiresAt > timestamp) return false;
+        storage.setItem(key, String(timestamp + DELIVERY_CLAIM_TTL_MS));
+        return key;
+    } catch {
+        return null;
+    }
+}
+
+function releaseDeliveryClaim(key) {
+    if (!key) return;
+    try { globalThis.localStorage?.removeItem(key); } catch { /* storage is best-effort */ }
+}
+
 /**
  * The URL a palette file is served from. Built on the app's base so a
  * sub-path deploy keeps working; the default base is `/`.
@@ -83,15 +136,21 @@ function tabVisible() {
 }
 
 /**
- * @returns {((n: { kind: string, title: string, body: string, sound?: { id: string, file: string } | null }) => void) & { playSound: (soundId: string) => boolean }}
+ * @param {{ now?: () => number, locks?: LockManager | null }} [deps]
+ * @returns {((n: { kind: string, title: string, body: string, data?: object, sound?: { id: string, file: string } | null }) => (boolean | Promise<boolean>)) & { playSound: (soundId: string) => boolean }}
  */
-export function createWebNotifyAdapter() {
-    function notify({ kind, title, body, sound }) {
+export function createWebNotifyAdapter({ now = Date.now, locks = globalThis.navigator?.locks } = {}) {
+    function deliver({ kind, title, body, sound, data }) {
+        const visible = tabVisible();
+        const claim = claimDelivery(kind, data, now);
+        if (claim === false) return false;
+        let inAppDelivered = false;
         // In-app channel: always dispatched; the React listener decides
         // whether to show it (it only toasts when the tab is focused).
         try {
             if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
                 window.dispatchEvent(new CustomEvent(NOTIFICATION_EVENT, { detail: { kind, title, body } }));
+                inAppDelivered = visible;
             }
         } catch {
             // Non-DOM environment (e.g. a Node smoke run); nothing to do.
@@ -99,9 +158,10 @@ export function createWebNotifyAdapter() {
 
         // Sound: the in-app path only, so it accompanies the toast and never
         // an OS notification (which has the system's sound) or nothing at all.
-        if (sound && tabVisible()) playFile(sound);
+        if (sound && visible) playFile(sound);
 
         // OS channel: only when backgrounded and permission is granted.
+        let osDelivered = false;
         try {
             if (typeof document !== 'undefined'
                 && document.visibilityState === 'hidden'
@@ -109,10 +169,25 @@ export function createWebNotifyAdapter() {
                 && Notification.permission === 'granted') {
                 // eslint-disable-next-line no-new
                 new Notification(title, { body });
+                osDelivered = true;
             }
         } catch {
             // Permission revoked mid-session / unsupported; silently skip.
         }
+        const delivered = inAppDelivered || osDelivered;
+        if (!delivered) releaseDeliveryClaim(claim);
+        return delivered;
+    }
+
+    function notify(payload) {
+        const identity = stableDeliveryIdentity(payload?.kind, payload?.data);
+        if (identity && typeof locks?.request === 'function') {
+            return locks.request(
+                `${DELIVERY_CLAIM_PREFIX}${hashIdentity(identity)}`,
+                () => deliver(payload),
+            );
+        }
+        return deliver(payload);
     }
 
     /**

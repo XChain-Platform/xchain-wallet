@@ -8,19 +8,38 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useMemo, useState } from 'react';
-import * as branding from '@xchain-wallet/core/branding/branding.js';
-import { MultisigBadge, VerifiedBadge, Icon } from '@xchain-wallet/core/ui';
-import { EmptyStateNudge } from './EmptyStateNudge.jsx';
+import { memo, useCallback, useMemo, useState } from 'react';
+import { Button, EmptyState, MultisigBadge, VerifiedBadge, Icon, ListRow } from '@xchain-wallet/core/ui';
+import { AssetMark } from '../../ui/AssetMark.jsx';
+export { tickerColor } from '../../ui/AssetMark.jsx';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
+import { t } from '../../i18n/index.js';
 import styles from './BalanceList.module.css';
 import { addPlainDecimals } from '../../flows/escrowedTokens.js';
 import {
-    compareDecimalStrings,
     decimalFromBaseUnits,
+    formatAtomicAmount,
+    formatDecimalAmount,
     multiplyDecimalStrings,
     sumDecimalStrings,
 } from '../utils/amountFormat.js';
+import {
+    formatFiatAmount,
+    formatFiatAmountForSpeech,
+} from '../utils/fiatAmountFormat.js';
+import {
+    smallBalanceBaseUnitsFor,
+    tickerForDescriptor,
+} from '../../registry/coinTicker.js';
+import { defaultRegistry } from '../../registry/index.js';
+
+const chainRegistry = defaultRegistry();
+
+export function isAssetImageSourceAllowed(src, allowRemoteImages = true) {
+    if (typeof src !== 'string' || src.length === 0) return false;
+    if (allowRemoteImages) return true;
+    return /^(?:data:|blob:)/i.test(src);
+}
 
 /**
  * Renders a flat list of balance rows. Filtering, tab selection, and
@@ -37,63 +56,76 @@ import {
  * @param {() => void} [props.onReceive]             when supplied, the empty-state shows a Receive CTA
  * @param {string} [props.emptyActionLabel]          label for a caller-defined empty-state action; takes the button over from Receive
  * @param {() => void} [props.onEmptyAction]         runs that action (e.g. clearing the filter that emptied the list)
- * @param {(token: { chainId: string, tick: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, quantity: string }) => void} [props.onSelectToken]
+ * @param {(token: { chainId: string, tick: string, kind: string, displayName: string, divisibility: number, fiatRate: number | null, fiatRateSource?: string, quantity: string }) => void} [props.onSelectToken]
  *        Click handler for a balance row. Surfaces the §27.6 Token detail page (G071) when supplied.
+ * @param {(row: BalanceRow) => string} [props.getRowActionLabel]  overrides the default "Open ... details" accessible label for selector uses
  * @param {Set<string> | null} [props.pinnedKeys]    `chainId:tick` keys pinned by the user. Pinned rows sort to the top (§27.3 / G072).
  * @param {(key: string, nextPinned: boolean) => void} [props.onTogglePin]   per-row pin/unpin callback; when supplied each row renders a star button
  * @param {Set<string> | null} [props.hiddenKeys]    `chainId:tick` keys hidden by the user. Hidden rows collapse into the Hidden footer section (§27.4 / G073).
+ * @param {Set<string> | null} [props.automaticHiddenKeys] `chainId:tick` keys collapsed by a display preference. These rows stay reachable but have no per-row unhide action because the preference owns their visibility.
  * @param {(key: string, nextHidden: boolean) => void} [props.onToggleHide]  per-row hide/unhide callback; when supplied, each row gains a "hide" entry in its overflow menu
  * @param {Record<string, { status: 'verified' | 'failed' | 'unavailable' | 'pending', reason: string | null }> | null} [props.verifyMap]   SPV proof verdict per `chainId:tick`; token rows render a `<VerifiedBadge>` when an entry exists (§7/§8). Native rows are never badged.
  * @param {boolean} [props.hideSmallBalances]: `settings.privacy.hideSmallBalances`. Collapses dust rows into their own footer section instead of listing them inline.
- * @param {boolean} [props.showChain]: name each row's chain in the subtitle. Off by default, because in a single-chain list the network is already set globally and repeating it is noise. Turn it on for any CROSS-CHAIN list, where the same tick appears once per chain and the rows are otherwise indistinguishable.
+ * @param {'dust'|'0.0001'|'0.01'|'1'} [props.smallBalanceThreshold] threshold in whole asset units, or the chain-aware dust heuristic
+ * @param {'full'|'trim'|'plain'} [props.numberFormat] exact balance amount presentation
+ * @param {boolean} [props.showChain]: force each row's chain into the subtitle. Multi-chain row sets enable this automatically; callers can still force it for a single-chain context that needs an explicit label.
+ * @param {boolean} [props.allowRemoteImages] permits issuer-selected image URLs. Privacy-sensitive callers pass false until settings explicitly allow them.
+ * @param {(row: BalanceRow) => number} [props.getRowTabIndex] assigns the single tab stop for a composite picker
  */
-export function BalanceList({
+export const BalanceList = memo(function BalanceList({
     rows,
     multisig,
     multisigChainId,
     emptyTitle = 'No balances yet',
-    emptyBody,
+    emptyBody = 'XChain Platform coins and tokens appear here after this wallet receives funds on Bitcoin, Litecoin, or Dogecoin.',
     onReceive,
     emptyActionLabel,
     onEmptyAction,
     onSelectToken,
+    getRowActionLabel,
     pinnedKeys,
     onTogglePin,
     hiddenKeys,
+    automaticHiddenKeys,
     onToggleHide,
     verifyMap,
     hideSmallBalances = false,
+    smallBalanceThreshold = 'dust',
+    numberFormat = 'full',
     showChain = false,
+    fiatCurrency = 'USD',
+    allowRemoteImages = true,
+    getRowTabIndex,
 }) {
     const [hiddenExpanded, setHiddenExpanded] = useState(false);
     const [smallExpanded, setSmallExpanded] = useState(false);
     if (!rows || rows.length === 0) {
         const hasEmptyAction = Boolean(emptyActionLabel) && typeof onEmptyAction === 'function';
         return (
-            <EmptyStateNudge
+            <EmptyState
                 title={emptyTitle}
                 body={emptyBody}
                 actionLabel={hasEmptyAction ? emptyActionLabel : (onReceive ? 'Receive' : undefined)}
                 onAction={hasEmptyAction ? onEmptyAction : onReceive}
-                icon={!hasEmptyAction && onReceive ? <Icon.ReceiveIcon /> : undefined}
+                actionIcon={!hasEmptyAction && onReceive ? <Icon.ReceiveIcon /> : undefined}
             />
         );
     }
     // Stable sort: pinned rows first (preserving each section's existing
     // chain/tick order), then unpinned. Caller already sorted within each
     // group via sortByChainThenAsset.
-    const notHidden = hiddenKeys
-        ? rows.filter((r) => !hiddenKeys.has(`${r.chainId}:${r.tick}`))
-        : rows;
-    const hidden = hiddenKeys
-        ? rows.filter((r) => hiddenKeys.has(`${r.chainId}:${r.tick}`))
-        : [];
+    const isHidden = (row) => {
+        const key = `${row.chainId}:${row.tick}`;
+        return Boolean(hiddenKeys?.has(key) || automaticHiddenKeys?.has(key));
+    };
+    const notHidden = rows.filter((row) => !isHidden(row));
+    const hidden = rows.filter(isHidden);
     //A row the user explicitly pinned is never dust to them, so the
     // pin wins over the dust threshold; everything else under the threshold
     // moves into its own collapsed section. Collapsed, not dropped: a balance
     // the wallet knows about but will not show anywhere is a support ticket.
     const small = hideSmallBalances
-        ? notHidden.filter((r) => !pinnedKeys?.has(`${r.chainId}:${r.tick}`) && isSmallBalanceRow(r))
+        ? notHidden.filter((r) => !pinnedKeys?.has(`${r.chainId}:${r.tick}`) && isSmallBalanceRow(r, smallBalanceThreshold))
         : [];
     const smallSet = new Set(small.map((r) => `${r.chainId}:${r.tick}`));
     const visible = small.length > 0
@@ -105,7 +137,10 @@ export function BalanceList({
             ...visible.filter((r) => !pinnedKeys.has(`${r.chainId}:${r.tick}`)),
         ]
         : visible;
+    const labelChains = showChain || new Set(rows.map((row) => row.chainId).filter(Boolean)).size > 1;
     return (
+        // Every row is a listitem wrapper around its details button and its
+        // pin and hide controls, so the container stays a list in both modes.
         <div className={styles.list} role="list" aria-label="Balances">
             {sortedRows.map((r) => {
                 const key = `${r.chainId}:${r.tick}`;
@@ -114,14 +149,19 @@ export function BalanceList({
                     <BalanceRowEl
                         key={key}
                         row={r}
+                        numberFormat={numberFormat}
+                        fiatCurrency={fiatCurrency}
                         multisig={r.chainId === multisigChainId ? multisig : null}
                         onSelect={onSelectToken}
+                        getActionLabel={getRowActionLabel}
                         pinned={pinned}
                         onTogglePin={onTogglePin}
                         hidden={false}
                         onToggleHide={onToggleHide}
                         verify={verifyMap ? verifyMap[key] : null}
-                        showChain={showChain}
+                        showChain={labelChains}
+                        allowRemoteImages={allowRemoteImages}
+                        getTabIndex={getRowTabIndex}
                     />
                 );
             })}
@@ -134,23 +174,29 @@ export function BalanceList({
                         aria-expanded={hiddenExpanded}
                     >
                         {hiddenExpanded
-                            ? `Hide ${hidden.length} hidden token${hidden.length === 1 ? '' : 's'}`
-                            : `Show ${hidden.length} hidden token${hidden.length === 1 ? '' : 's'}`}
+                            ? t('balanceList.hiddenTokens.hide', { count: hidden.length })
+                            : t('balanceList.hiddenTokens.show', { count: hidden.length })}
                     </button>
                     {hiddenExpanded ? hidden.map((r) => {
                         const key = `${r.chainId}:${r.tick}`;
+                        const pinned = pinnedKeys ? pinnedKeys.has(key) : false;
                         return (
                             <BalanceRowEl
                                 key={`hidden:${key}`}
                                 row={r}
+                                numberFormat={numberFormat}
+                                fiatCurrency={fiatCurrency}
                                 multisig={r.chainId === multisigChainId ? multisig : null}
                                 onSelect={onSelectToken}
-                                pinned={false}
+                                getActionLabel={getRowActionLabel}
+                                pinned={pinned}
                                 onTogglePin={onTogglePin}
                                 hidden
-                                onToggleHide={onToggleHide}
+                                onToggleHide={automaticHiddenKeys?.has(key) ? undefined : onToggleHide}
                                 verify={verifyMap ? verifyMap[key] : null}
-                                showChain={showChain}
+                                showChain={labelChains}
+                                allowRemoteImages={allowRemoteImages}
+                                getTabIndex={getRowTabIndex}
                             />
                         );
                     }) : null}
@@ -166,8 +212,8 @@ export function BalanceList({
                         data-testid="small-balances-toggle"
                     >
                         {smallExpanded
-                            ? `Hide ${small.length} small balance${small.length === 1 ? '' : 's'}`
-                            : `Show ${small.length} small balance${small.length === 1 ? '' : 's'}`}
+                            ? t('balanceList.smallBalances.hide', { count: small.length })
+                            : t('balanceList.smallBalances.show', { count: small.length })}
                     </button>
                     {smallExpanded ? small.map((r) => {
                         const key = `${r.chainId}:${r.tick}`;
@@ -175,14 +221,19 @@ export function BalanceList({
                             <BalanceRowEl
                                 key={`small:${key}`}
                                 row={r}
+                                numberFormat={numberFormat}
+                                fiatCurrency={fiatCurrency}
                                 multisig={r.chainId === multisigChainId ? multisig : null}
                                 onSelect={onSelectToken}
+                                getActionLabel={getRowActionLabel}
                                 pinned={false}
                                 onTogglePin={onTogglePin}
                                 hidden={false}
                                 onToggleHide={onToggleHide}
                                 verify={verifyMap ? verifyMap[key] : null}
-                                showChain={showChain}
+                                showChain={labelChains}
+                                allowRemoteImages={allowRemoteImages}
+                                getTabIndex={getRowTabIndex}
                             />
                         );
                     }) : null}
@@ -190,11 +241,13 @@ export function BalanceList({
             ) : null}
         </div>
     );
-}
+});
 
-function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, onToggleHide, verify, showChain }) {
+const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onTogglePin, hidden, onToggleHide, verify, showChain, allowRemoteImages, getTabIndex, fiatCurrency = 'USD', numberFormat = 'full' }) {
     const isNative = row.kind === 'native';
-    const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
+    const tokenImageUrl = isAssetImageSourceAllowed(row.imageUrl, allowRemoteImages)
+        ? row.imageUrl
+        : null;
     // App-wide privacy toggle: when on, replace the per-row qty and
     // fiat values with dots so navigating to / from the row leaks
     // nothing. Distinct from the per-row `hidden` prop above, which
@@ -214,181 +267,211 @@ function BalanceRowEl({ row, multisig, onSelect, pinned, onTogglePin, hidden, on
     // re-targets the calling form's network. So callers that show a
     // cross-chain list opt into naming the chain.
     //
-    // D-60: that reasoning holds only on MAINNET. Off it, the user may not
-    // have chosen the network at all - demo mode is started with
-    // `activeNetwork: 'regtest'` by `Onboarding.jsx` and never says so - and
-    // the row then reads "Bitcoin / BTC" priced at $7,000,000 for coins that
-    // are worth nothing. The first time the word regtest reached the user was
-    // an error message from the Send form. So a non-mainnet row names its
-    // network, always: this is the one case where repeating it is not noise.
-    const networkSuffix = row.networkKind && row.networkKind !== 'mainnet'
-        ? ` · ${row.networkKind}`
-        : '';
-    const subtitle = (showChain && row.chainDisplayName
+    // The active network is never repeated on a row: the wallet runs on one
+    // network at a time and Settings is where it is chosen.
+    const subtitle = showChain && row.chainDisplayName
         ? `${row.tick} · ${row.chainDisplayName}`
-        : row.tick) + networkSuffix;
+        : row.tick;
     const fiat = useMemo(
         () => fiatValue(row.quantity, row.divisibility, row.fiatRate),
         [row.quantity, row.divisibility, row.fiatRate],
     );
+    const hasPending = safeBigInt(row.pendingQuantity) > 0n;
     const clickable = typeof onSelect === 'function';
-    const handleClick = clickable
-        ? () => onSelect({
+    const actionLabel = clickable && typeof getActionLabel === 'function'
+        ? getActionLabel(row)
+        : `Open ${row.displayName || row.tick} details`;
+    const handleClickCallback = useCallback(() => {
+        onSelect({
             chainId: row.chainId,
             tick: row.tick,
             kind: row.kind,
             displayName: row.displayName,
             divisibility: row.divisibility,
             fiatRate: row.fiatRate,
+            fiatRateSource: row.fiatRateSource,
             quantity: row.quantity,
-            imageUrl: row.imageUrl,
-        })
-        : undefined;
+            imageUrl: tokenImageUrl,
+        });
+    }, [clickable, onSelect, row.chainId, row.tick, row.kind, row.displayName,
+        row.divisibility, row.fiatRate, row.fiatRateSource, row.quantity, tokenImageUrl]);
+    const handleClick = clickable ? handleClickCallback : undefined;
     const showPin = typeof onTogglePin === 'function';
     const pinKey = `${row.chainId}:${row.tick}`;
-    const Tag = clickable ? 'button' : 'div';
+    const handleTogglePin = useCallback((event) => {
+        event.stopPropagation();
+        event.preventDefault();
+        onTogglePin(pinKey, !pinned);
+    }, [onTogglePin, pinKey, pinned]);
+    const handleToggleHide = useCallback((event) => {
+        event.stopPropagation();
+        event.preventDefault();
+        onToggleHide(pinKey, !hidden);
+    }, [onToggleHide, pinKey, hidden]);
+    const roving = typeof getTabIndex === 'function';
+    const quantityLabel = formatAmount(row.quantity, row.divisibility, numberFormat);
+    const escrowLabel = row.escrowed ? escrowLine(row) : null;
+    const fiatLabel = row.unavailable === 'partial'
+        ? `At least ${formatRowFiat(row, fiat, fiatCurrency)}`
+        : formatRowFiat(row, fiat, fiatCurrency);
+    const quantitySpeech = row.unavailable === 'all'
+        ? 'Balance unavailable'
+        : `${row.unavailable === 'partial' ? 'At least ' : ''}${quantityLabel} ${row.tick}${hasPending ? ' confirmed' : ''}`;
+    const pendingSpeech = hasPending
+        ? `${formatAmount(row.pendingQuantity, row.divisibility, numberFormat)} ${row.tick} pending`
+        : '';
+    const fiatSpeechValue = formatFiatAmountForSpeech(fiat, fiatCurrency);
+    const fiatSpeech = fiatSpeechValue
+        ? `${row.unavailable === 'partial' ? 'At least ' : ''}${fiatSpeechValue}${!isNative && row.fiatRateSource === 'market' ? ', DEX price' : ''}`
+        : '';
+    const rowAccessibleLabel = balancesHidden
+        ? `${actionLabel}, balance hidden`
+        : [actionLabel, quantitySpeech, pendingSpeech, fiatSpeech].filter(Boolean).join(', ');
     return (
-        <Tag
-            className={`${styles.row} ${clickable ? styles.rowClickable : ''} ${pinned ? styles.rowPinned : ''}`}
+        <div
+            className={`${styles.row} ${pinned ? styles.rowPinned : ''}`}
             role="listitem"
-            type={clickable ? 'button' : undefined}
             data-balance-key={pinKey}
-            onClick={handleClick}
-            aria-label={clickable
-                ? `Open ${row.displayName || row.tick} details`
-                : undefined}
         >
-            <div className={styles.iconWrap}>
-                {isNative && chainIconUrl ? (
-                    <img src={chainIconUrl} alt="" aria-hidden="true" className={styles.iconImg} />
-                ) : row.imageUrl ? (
-                    <img
-                        src={row.imageUrl}
-                        alt=""
-                        aria-hidden="true"
-                        className={styles.iconImg}
-                        onError={(e) => {
-                            // If the published image 404s, fall back to
-                            // the letter chip by hiding the broken img;
-                            // the next render still has imageUrl set, so
-                            // we can't swap to <span>, so just hide.
-                            e.currentTarget.style.display = 'none';
-                        }}
+            <ListRow
+                className={`${styles.rowContent} ${clickable ? styles.rowClickable : ''}`}
+                onClick={handleClick}
+                aria-label={clickable ? rowAccessibleLabel : undefined}
+                tabIndex={roving ? getTabIndex(row) : undefined}
+                data-balance-option={roving ? pinKey : undefined}
+                leading={(
+                    <AssetMark
+                        chainId={row.chainId}
+                        tick={row.tick}
+                        imageUrl={tokenImageUrl}
+                        isNative={isNative}
                     />
-                ) : (
-                    <span
-                        className={styles.iconLetter}
-                        style={{ background: tickerColor(row.tick), color: '#FFFFFF' }}
-                        aria-hidden="true"
-                    >
-                        {row.tick.slice(0, 1)}
+                )}
+                title={(
+                    <span className={styles.title}>
+                        <span className={styles.name} title={row.displayName}>{row.displayName}</span>
+                        {multisig ? (
+                            <MultisigBadge
+                                threshold={multisig.threshold}
+                                cosignerCount={multisig.cosignerCount}
+                                scheme={multisig.scheme}
+                                size="sm"
+                            />
+                        ) : null}
+                        {!isNative && verify ? (
+                            <VerifiedBadge status={verify.status} reason={verify.reason} size="sm" details={!clickable} />
+                        ) : null}
                     </span>
                 )}
-                {!isNative && chainIconUrl ? (
-                    <img
-                        src={chainIconUrl}
-                        alt=""
-                        aria-hidden="true"
-                        title={row.chainDisplayName}
-                        className={styles.chainOverlay}
-                    />
-                ) : null}
-            </div>
-            <div className={styles.body}>
-                <div className={styles.title}>
-                    <span className={styles.name} title={row.displayName}>{row.displayName}</span>
-                    {multisig ? (
-                        <MultisigBadge
-                            threshold={multisig.threshold}
-                            cosignerCount={multisig.cosignerCount}
-                            scheme={multisig.scheme}
-                            size="sm"
-                        />
+                subtitle={<span className={styles.subtitle} title={subtitle}>{subtitle}</span>}
+                trailing={<span className={styles.amounts}>
+                    <span className={styles.qty} aria-label={balancesHidden ? 'Balance hidden' : quantitySpeech}>
+                        {/* Q-1 residual: an unread balance is not a zero, and a
+                            fiat figure derived from one is not a value. When
+                            nothing answered, say so instead of printing 0; when
+                            only part answered, show the figure but mark it as less
+                            than the whole. The privacy toggle still wins, since it
+                            exists to keep numbers off the screen entirely. */}
+                        {balancesHidden
+                            ? '•••••'
+                            : row.unavailable === 'all'
+                                ? <span className={styles.unavailable} title={row.unavailableReason || undefined}>Unavailable</span>
+                                : (
+                                    <FitAmount title={quantityLabel}>
+                                        {quantityLabel}
+                                        {hasPending ? <span className={styles.subtitle}> confirmed</span> : null}
+                                    </FitAmount>
+                                )}
+                    </span>
+                    {hasPending ? (
+                        <span
+                            className={styles.fiat}
+                            data-testid="balance-pending"
+                            aria-label={balancesHidden ? 'Pending balance hidden' : pendingSpeech}
+                        >
+                            {balancesHidden
+                                ? '••• pending'
+                                : `${formatAmount(row.pendingQuantity, row.divisibility, numberFormat)} pending`}
+                        </span>
                     ) : null}
-                    {!isNative && verify ? (
-                        <VerifiedBadge status={verify.status} reason={verify.reason} size="sm" />
+                    {row.escrowed ? (
+                        <span className={styles.fiat} data-testid="balance-escrowed">
+                            {balancesHidden ? '•••' : <FitAmount title={escrowLabel}>{escrowLabel}</FitAmount>}
+                        </span>
                     ) : null}
-                </div>
-                <div className={styles.subtitle}>{subtitle}</div>
-            </div>
-            <div className={styles.amounts}>
-                <div className={styles.qty}>
-                    {/* Q-1 residual: an unread balance is not a zero, and a
-                        fiat figure derived from one is not a value. When
-                        nothing answered, say so instead of printing 0; when
-                        only part answered, show the figure but mark it as less
-                        than the whole. The privacy toggle still wins, since it
-                        exists to keep numbers off the screen entirely. */}
-                    {balancesHidden
-                        ? '•••••'
-                        : row.unavailable === 'all'
-                            ? <span className={styles.unavailable} title={row.unavailableReason || undefined}>Unavailable</span>
-                            : formatAmount(row.quantity, row.divisibility)}
-                </div>
-                {row.escrowed ? (
-                    <div className={styles.fiat} data-testid="balance-escrowed">
-                        {balancesHidden ? '•••' : escrowLine(row)}
-                    </div>
-                ) : null}
-                <div className={styles.fiat}>
-                    {balancesHidden
-                        ? '•••'
-                        : row.unavailable === 'all'
-                            ? <span title={row.unavailableReason || undefined}>Balance couldn&apos;t be loaded</span>
-                            : row.unavailable === 'partial'
-                                ? <span title={row.unavailableReason || undefined}>At least {formatFiat(fiat)}</span>
-                                : formatFiat(fiat)}
-                </div>
-            </div>
+                    <span
+                        className={styles.fiat}
+                        aria-label={balancesHidden
+                            ? 'Fiat value hidden'
+                            : row.unavailable === 'all'
+                                ? 'Fiat value unavailable'
+                                : (fiatSpeech || undefined)}
+                    >
+                        {balancesHidden
+                            ? '•••'
+                            : row.unavailable === 'all'
+                                ? <span title={row.unavailableReason || undefined}>Balance couldn&apos;t be loaded</span>
+                                : row.unavailable === 'partial'
+                                    ? <FitAmount title={`${fiatLabel}. ${row.unavailableReason || ''}`.trim()}>{fiatLabel}</FitAmount>
+                                    : <FitAmount title={fiatLabel}>{fiatLabel}</FitAmount>}
+                    </span>
+                </span>}
+            />
             {showPin ? (
-                <span
-                    role="button"
-                    tabIndex={0}
-                    className={`${styles.pinBtn} ${pinned ? styles.pinBtnActive : ''}`}
+                <Button
+                    className={styles.pinBtn}
+                    size="sm"
+                    variant={pinned ? 'primary' : 'secondary'}
+                    icon={<span aria-hidden="true">{pinned ? '★' : '☆'}</span>}
                     aria-pressed={pinned}
                     aria-label={pinned ? `Unpin ${row.tick}` : `Pin ${row.tick}`}
                     title={pinned ? 'Unpin' : 'Pin to top'}
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        onTogglePin(pinKey, !pinned);
-                    }}
-                    onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            onTogglePin(pinKey, !pinned);
-                        }
-                    }}
-                >
-                    {pinned ? '★' : '☆'}
-                </span>
+                    onClick={handleTogglePin}
+                />
             ) : null}
             {typeof onToggleHide === 'function' ? (
-                <span
-                    role="button"
-                    tabIndex={0}
-                    className={`${styles.hideBtn} ${hidden ? styles.hideBtnActive : ''}`}
+                <Button
+                    className={styles.hideBtn}
+                    size="sm"
+                    variant={hidden ? 'primary' : 'secondary'}
+                    icon={<span aria-hidden="true">{hidden ? '⊕' : '⊘'}</span>}
                     aria-pressed={hidden}
                     aria-label={hidden ? `Unhide ${row.tick}` : `Hide ${row.tick}`}
                     title={hidden ? 'Unhide' : 'Hide'}
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        onToggleHide(pinKey, !hidden);
-                    }}
-                    onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            onToggleHide(pinKey, !hidden);
-                        }
-                    }}
-                >
-                    {hidden ? '⊕' : '⊘'}
-                </span>
+                    onClick={handleToggleHide}
+                />
             ) : null}
-        </Tag>
+        </div>
+    );
+}, balanceRowPropsEqual);
+
+function balanceRowPropsEqual(previous, next) {
+    const previousKeys = Object.keys(previous);
+    const nextKeys = Object.keys(next);
+    if (previousKeys.length !== nextKeys.length) return false;
+    for (const key of previousKeys) {
+        if (key === 'row') continue;
+        if (!Object.hasOwn(next, key)) return false;
+        if (!Object.is(previous[key], next[key])) return false;
+    }
+    return shallowEqualRow(previous.row, next.row);
+}
+
+function shallowEqualRow(previous, next) {
+    if (Object.is(previous, next)) return true;
+    if (!previous || !next) return false;
+    const previousKeys = Object.keys(previous);
+    const nextKeys = Object.keys(next);
+    if (previousKeys.length !== nextKeys.length) return false;
+    return previousKeys.every((key) => Object.hasOwn(next, key)
+        && Object.is(previous[key], next[key]));
+}
+
+function FitAmount({ children, title }) {
+    return (
+        <span className={styles.amountFit} title={title}>
+            {children}
+        </span>
     );
 }
 
@@ -423,45 +506,48 @@ export function detectSpamCandidates(rows) {
     return flagged;
 }
 
-/*. Display dust thresholds in each chain's smallest unit. These decide
- * whether a ROW is worth listing, nothing else: they never gate a send, a fee
- * or a change output, so being a little generous here costs the user nothing.
- * Bitcoin's 546 is the familiar relay dust limit; Litecoin's relay floor sits
- * an order of magnitude higher per byte; Dogecoin Core carries an explicit
- * DEFAULT_DUST_LIMIT of 0.01 DOGE. */
-const SMALL_BALANCE_BASE_UNITS = Object.freeze({
-    bitcoin: 546n,
-    litecoin: 5460n,
-    dogecoin: 1000000n,
-});
-const DEFAULT_SMALL_BALANCE_BASE_UNITS = 546n;
-
 /**
  * Whether a balance row counts as dust for `settings.privacy.hideSmallBalances`.
  *
- * Zero is always dust, which is the case the user actually hits: an empty
- * LTC / DOGE row on a Bitcoin-only wallet. Above zero, native rows compare
- * against their chain's threshold, and divisible tokens against a ten-thousandth
- * of a unit (the same magnitude the spam heuristic already calls airdrop dust).
- * An indivisible token is never dust: one unit is one whole thing, usually an NFT.
+ * Zero confirmed quantity is dust only when no pending native funds exist.
+ * Above zero, native rows compare against their chain's threshold, and
+ * divisible tokens against a ten-thousandth of a unit (the same magnitude the
+ * spam heuristic already calls airdrop dust). An indivisible token is never
+ * dust: one unit is one whole thing, usually an NFT.
  *
  * @param {{ chainId: string, tick: string, kind: string, quantity: string | bigint, divisibility: number }} row
+ * @param {'dust'|'0.0001'|'0.01'|'1'} [threshold]
  * @returns {boolean}
  */
-export function isSmallBalanceRow(row) {
+export function isSmallBalanceRow(row, threshold = 'dust') {
     if (!row) return false;
-    if (row.escrowed) return false;
+    if (row.escrowed || row.unavailable || safeBigInt(row.pendingQuantity) > 0n) return false;
     const q = safeBigInt(row.quantity);
     if (q < 0n) return false;
     if (q === 0n) return true;
+    if (threshold !== 'dust') {
+        return q < decimalUnitsToBaseUnits(threshold, row.divisibility);
+    }
     if (row.kind === 'native') {
-        const threshold = SMALL_BALANCE_BASE_UNITS[coinFromChainId(row.chainId)]
-            ?? DEFAULT_SMALL_BALANCE_BASE_UNITS;
-        return q < threshold;
+        const descriptor = chainRegistry.get(row.chainId);
+        const chainThreshold = smallBalanceBaseUnitsFor(
+            descriptor || row.coin || coinFromChainId(row.chainId),
+        );
+        return q < chainThreshold;
     }
     const div = Number(row.divisibility) || 0;
     if (div <= 0) return false;
     return q < (10n ** BigInt(div)) / 10000n;
+}
+
+function decimalUnitsToBaseUnits(value, divisibility) {
+    const div = Math.max(0, Number(divisibility) || 0);
+    const [whole, fraction = ''] = String(value).split('.');
+    const scale = 10n ** BigInt(div);
+    const kept = fraction.slice(0, div).padEnd(div, '0');
+    let result = BigInt(whole || '0') * scale + BigInt(kept || '0');
+    if (fraction.slice(div).replace(/0/g, '')) result += 1n;
+    return result;
 }
 
 /**
@@ -541,6 +627,10 @@ export function buildBalanceRows(balances, chainRegistry, activeByChain = null) 
                     });
                 }
                 nativeAcc.quantity += safeBigInt(b.native.quantity);
+                if (b.native.pendingQuantity != null) {
+                    nativeAcc.pendingQuantity = (nativeAcc.pendingQuantity || 0n)
+                        + safeBigInt(b.native.pendingQuantity);
+                }
             }
 
             if (Array.isArray(b.tokens)) {
@@ -597,7 +687,11 @@ export function buildBalanceRows(balances, chainRegistry, activeByChain = null) 
         if (nativeAcc) out.push(nativeAcc);
         for (const acc of tokenAcc.values()) out.push(acc);
     }
-    return out.map((r) => ({ ...r, quantity: r.quantity.toString() }));
+    return out.map((r) => ({
+        ...r,
+        quantity: r.quantity.toString(),
+        ...(r.pendingQuantity == null ? {} : { pendingQuantity: r.pendingQuantity.toString() }),
+    }));
 }
 
 /**
@@ -695,6 +789,7 @@ function mkRow({ kind, chainId, descriptor, tick, displayName, divisibility, fia
     return {
         kind,
         chainId,
+        coin: descriptor.coin,
         chainShort: shortLabelForCoin(descriptor.coin),
         chainDisplayName: descriptor.displayName,
         chainColor: descriptor.color,
@@ -709,15 +804,14 @@ function mkRow({ kind, chainId, descriptor, tick, displayName, divisibility, fia
 }
 
 function shortLabelForCoin(coin) {
-    const map = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
-    return map[coin] || coin.toUpperCase();
+    return tickerForDescriptor({ coin });
 }
 
 const CHAIN_ORDER = { bitcoin: 0, litecoin: 1, dogecoin: 2 };
 export function sortByChainThenAsset(rows) {
     return rows.slice().sort((a, b) => {
-        const ax = CHAIN_ORDER[coinFromChainId(a.chainId)] ?? 99;
-        const bx = CHAIN_ORDER[coinFromChainId(b.chainId)] ?? 99;
+        const ax = CHAIN_ORDER[a.coin || coinFromChainId(a.chainId)] ?? 99;
+        const bx = CHAIN_ORDER[b.coin || coinFromChainId(b.chainId)] ?? 99;
         return (ax - bx) || a.tick.localeCompare(b.tick);
     });
 }
@@ -738,20 +832,27 @@ function safeBigInt(v) {
     return 0n;
 }
 
-export function formatAmount(quantityStr, divisibility) {
-    const q = String(quantityStr || '0');
-    if (!divisibility || divisibility <= 0) return groupThousands(q);
-    const negative = q.startsWith('-');
-    const abs = negative ? q.slice(1) : q;
-    const padded = abs.padStart(divisibility + 1, '0');
-    const whole = padded.slice(0, padded.length - divisibility);
-    const frac = padded.slice(padded.length - divisibility);
-    const out = `${groupThousands(whole)}.${frac}`;
-    return negative ? `-${out}` : out;
-}
-
-function groupThousands(s) {
-    return String(s).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+/**
+ * Atomic quantity at its divisibility, grouped for the selected language.
+ * numberFormat: 'full' keeps every place, 'trim' drops trailing zeros, and
+ * 'plain' skips grouping and locale entirely.
+ */
+export function formatAmount(quantityStr, divisibility, numberFormat = 'full') {
+    if (numberFormat === 'plain') {
+        const q = String(quantityStr || '0');
+        if (!divisibility || divisibility <= 0) return q;
+        const negative = q.startsWith('-');
+        const abs = negative ? q.slice(1) : q;
+        const padded = abs.padStart(divisibility + 1, '0');
+        const whole = padded.slice(0, padded.length - divisibility);
+        const frac = padded.slice(padded.length - divisibility);
+        const out = frac ? `${whole}.${frac}` : whole;
+        return negative ? `-${out}` : out;
+    }
+    if (numberFormat !== 'trim') return formatAtomicAmount(quantityStr, divisibility);
+    const plain = formatAmount(quantityStr, divisibility, 'plain');
+    const trimmed = plain.includes('.') ? plain.replace(/0+$/, '').replace(/\.$/, '') : plain;
+    return formatDecimalAmount(trimmed);
 }
 
 export function fiatValue(quantityStr, divisibility, fiatRate) {
@@ -781,29 +882,20 @@ export function sumFiatValue(rows) {
     return { total, priced, unpriced };
 }
 
-export function formatFiat(usd) {
-    if (usd === null || usd === undefined) return '';
-    if (compareDecimalStrings(usd, '0') === 0) return '$0.00';
-    if (compareDecimalStrings(usd, '0') === 1 && compareDecimalStrings(usd, '0.01') === -1) {
-        return '<$0.01';
-    }
-    return new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: 'USD',
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    }).format(String(usd));
+/**
+ * Format a fiat value in the user's currency. The rows were USD-only, so a
+ * wallet set to euros showed "€0.00 EUR" on the balance card and "$0.00" on
+ * every coin row beneath it.
+ *
+ * @param {string | number | null | undefined} value
+ * @param {string} [currency]   ISO code; defaults to USD
+ */
+export function formatFiat(value, currency = 'USD') {
+    return formatFiatAmount(value, currency);
 }
 
-const PALETTE = [
-    '#1E90C7', '#7B2C8F', '#0EA5E9', '#10B981', '#F59E0B',
-    '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316',
-    '#6366F1', '#84CC16', '#06B6D4', '#A855F7', '#F43F5E',
-];
-export function tickerColor(tick) {
-    let h = 0;
-    for (let i = 0; i < tick.length; i += 1) {
-        h = (h * 31 + tick.charCodeAt(i)) >>> 0;
-    }
-    return PALETTE[h % PALETTE.length];
+function formatRowFiat(row, value, currency) {
+    const formatted = formatFiat(value, currency);
+    if (!formatted || row?.kind === 'native' || row?.fiatRateSource !== 'market') return formatted;
+    return `${formatted} · DEX price`;
 }

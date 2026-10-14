@@ -182,7 +182,7 @@ describe('the message key-request reports its failures', () => {
         expect(alertText(utils)).not.toMatch(/25th-word passphrase/i);
     });
 
-    it('surfaces a REFUSED send instead of swallowing it', async () => {
+    it('surfaces a refused send as plain copy instead of swallowing it', async () => {
         const messaging = stubMessaging({
             sendHandshake: () => Promise.reject(new Error('the chain refused the handshake')),
         });
@@ -197,7 +197,30 @@ describe('the message key-request reports its failures', () => {
             await drainMicrotasks();
         });
 
-        expect(alertText(utils)).toMatch(/the chain refused the handshake/);
+        expect(alertText(utils)).toMatch(/Could not send the key request/i);
+        expect(alertText(utils)).not.toMatch(/the chain refused the handshake/i);
+    });
+
+    it('translates an encoder failure into actionable key-request copy', async () => {
+        const failure = new Error('no spendable UTXOs found for the funding address');
+        failure.name = 'SDKEncoderError';
+        failure.code = 'ENCODER_NETWORK';
+        const messaging = stubMessaging({
+            sendHandshake: () => Promise.reject(failure),
+        });
+        const utils = await openHandshakeBox(messaging);
+
+        await domAct(async () => {
+            fireEvent.click(requestButton(utils));
+            await drainMicrotasks();
+        });
+        await domAct(async () => {
+            fireEvent.click(utils.getByTestId('confirm-approve'));
+            await drainMicrotasks();
+        });
+
+        expect(alertText(utils)).toMatch(/could not reach the transaction service/i);
+        expect(alertText(utils)).not.toMatch(/no spendable UTXOs/i);
     });
 
     it('shows nothing before the button is pressed, and confirms a send that works', async () => {

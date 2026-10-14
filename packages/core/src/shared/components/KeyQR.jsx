@@ -25,6 +25,7 @@
 
 import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
+import qrStyles from '../../ui/QrDisplay.module.css';
 
 /**
  * @param {object} props
@@ -40,12 +41,13 @@ export function KeyQR({ value, size = 200, alt = 'QR code' }) {
             setDataUrl(null);
             return undefined;
         }
+        setDataUrl(null);
         let cancelled = false;
         QRCode.toDataURL(value, {
             errorCorrectionLevel: 'M',
-            margin: 2,
+            margin: 4,
             width: size,
-            color: { dark: '#0F172A', light: '#FFFFFF' },
+            color: { dark: '#000000', light: '#FFFFFF' },
         })
             .then((url) => { if (!cancelled) setDataUrl(url); })
             .catch(() => { if (!cancelled) setDataUrl(null); });
@@ -54,12 +56,27 @@ export function KeyQR({ value, size = 200, alt = 'QR code' }) {
 
     if (!dataUrl) return null;
     return (
-        <img
-            src={dataUrl}
-            alt={alt}
-            width={size}
-            height={size}
-            style={{ borderRadius: 'var(--xc-radius-md)', display: 'block' }}
-        />
+        <div
+            className={qrStyles.frame}
+            style={{
+                '--xc-qr-frame-size': `calc(${size}px + (2 * var(--xc-space-3)))`,
+            }}
+        >
+            <img
+                src={dataUrl}
+                alt={alt}
+                width={size}
+                height={size}
+                style={{
+                    display: 'block',
+                    width: '100%',
+                    maxWidth: size,
+                    height: 'auto',
+                    aspectRatio: '1 / 1',
+                    background: '#FFFFFF',
+                    borderRadius: 'var(--xc-radius-sm)',
+                }}
+            />
+        </div>
     );
 }

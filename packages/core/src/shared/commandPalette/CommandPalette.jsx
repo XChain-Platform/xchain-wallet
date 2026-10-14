@@ -18,18 +18,17 @@
 // Keyboard (§33.4):
 //   ↑ / ↓    move the selection through the flat result list (wrapping)
 //   Enter    run the selected command and close
-//   Tab      jump the selection to the first result of the next category
-//   Shift+Tab   ... previous category
+//   Tab      stays within the modal search control
 //   Esc      close
-// The search input keeps focus the whole time (it is the only tab stop),
-// so the arrow keys drive a `aria-activedescendant` selection rather than
-// roving DOM focus. That keeps the combobox pattern accessible and avoids a
-// focus-trap dance.
+// The search input keeps focus while the palette is active, so the arrow keys
+// drive an `aria-activedescendant` selection rather than roving DOM focus.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Icon } from '../../ui/index.js';
+import { Button, Icon } from '../../ui/index.js';
 import { filterCommands } from './fuzzyMatch.js';
 import styles from './CommandPalette.module.css';
+import { useBackHandler } from '../../ui/backStack.js';
+import { useFocusTrap } from '../utils/focusTrap.js';
 
 /**
  * @param {object} props
@@ -45,16 +44,34 @@ import styles from './CommandPalette.module.css';
 export function CommandPalette({ open, onClose, commands, placeholder, parseQuery }) {
     const [query, setQuery] = useState('');
     const [activeIndex, setActiveIndex] = useState(0);
+    const [recentCommandIds, setRecentCommandIds] = useState(/** @type {string[]} */ ([]));
+    // The system Back gesture closes this before it leaves the screen.
+    useBackHandler(open ? onClose : undefined);
     const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const listRef = useRef(/** @type {HTMLUListElement | null} */ (null));
+    const dialogRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+    // Search is the only tab stop, so Tab loops there until the palette closes.
+    useFocusTrap(dialogRef, { active: open, initialFocusRef: inputRef });
 
     const results = useMemo(() => {
         const base = filterCommands(commands || [], query);
         const q = (query || '').trim();
-        if (!q || typeof parseQuery !== 'function') return base;
+        if (!q) {
+            // Resolve IDs against the current catalogue so recent rows always
+            // use fresh route closures and disappear when their command does.
+            const commandById = new Map(base.map((command) => [command.id, command]));
+            const recent = recentCommandIds
+                .map((id) => commandById.get(id))
+                .filter(Boolean)
+                .map((command) => ({ ...command, category: 'Recent' }));
+            if (recent.length === 0) return base;
+            const recentIds = new Set(recent.map((command) => command.id));
+            return [...recent, ...base.filter((command) => !recentIds.has(command.id))];
+        }
+        if (typeof parseQuery !== 'function') return base;
         const freeform = parseQuery(q) || [];
         return freeform.length ? [...freeform, ...base] : base;
-    }, [commands, query, parseQuery]);
+    }, [commands, query, parseQuery, recentCommandIds]);
 
     // Reset to a clean slate every time the palette opens, and focus the
     // input. Without the reset a re-open shows the previous query + stale
@@ -67,6 +84,17 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
         const id = requestAnimationFrame(() => inputRef.current?.focus());
         return () => cancelAnimationFrame(id);
     }, [open]);
+
+    // Escape closes the palette wherever focus sits, as ShortcutHelp does. It
+    // was handled on the search input alone, so a click on the panel's
+    // heading, padding or Esc hint moved focus to the page and Escape stopped
+    // closing it.
+    useEffect(() => {
+        if (!open) return undefined;
+        const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); onClose(); } };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [open, onClose]);
 
     // Keep the selection in range as the result set shrinks under typing.
     useEffect(() => {
@@ -87,28 +115,18 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
     const runAt = (index) => {
         const command = results[index];
         if (!command) return;
+        // Synthetic free-form commands are query-specific and do not exist in
+        // the catalogue on the next open, so only catalogue rows become recent.
+        if ((commands || []).some((candidate) => candidate.id === command.id)) {
+            setRecentCommandIds((ids) => [
+                command.id,
+                ...ids.filter((id) => id !== command.id),
+            ].slice(0, 5));
+        }
         // Close first so a command that navigates doesn't render behind an
         // open palette for a frame.
         onClose();
         command.run();
-    };
-
-    // First index of the category that follows (or precedes) the currently
-    // selected result. Used by Tab / Shift+Tab (§33.4 "Tab cycles result
-    // categories"). Wraps around the ends.
-    const jumpCategory = (dir) => {
-        if (results.length === 0) return;
-        const current = results[activeIndex]?.category;
-        // Ordered list of distinct categories as they appear in results.
-        const order = [];
-        for (const r of results) {
-            if (!order.includes(r.category)) order.push(r.category);
-        }
-        if (order.length <= 1) return;
-        const ci = order.indexOf(current);
-        const nextCat = order[(ci + dir + order.length) % order.length];
-        const target = results.findIndex((r) => r.category === nextCat);
-        if (target >= 0) setActiveIndex(target);
     };
 
     const onKeyDown = (e) => {
@@ -124,14 +142,6 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
             case 'Enter':
                 e.preventDefault();
                 runAt(activeIndex);
-                break;
-            case 'Tab':
-                e.preventDefault();
-                jumpCategory(e.shiftKey ? -1 : 1);
-                break;
-            case 'Escape':
-                e.preventDefault();
-                onClose();
                 break;
             default:
                 break;
@@ -156,10 +166,11 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
 
     return (
         <div
+            ref={dialogRef}
             className={styles.overlay}
             role="dialog"
             aria-modal="true"
-            aria-label="Command palette"
+            aria-labelledby="xc-command-palette-title"
             onMouseDown={onClose}
         >
             <div
@@ -167,6 +178,20 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
                 role="presentation"
                 onMouseDown={(e) => e.stopPropagation()}
             >
+                <header className={styles.header}>
+                    <span className={styles.handle} aria-hidden="true" />
+                    <h2 id="xc-command-palette-title" className={styles.title}>Command palette</h2>
+                    <span className={styles.close}>
+                        <Button
+                            variant="secondary"
+                            size="md"
+                            icon={<Icon.XIcon />}
+                            onClick={onClose}
+                            aria-label="Close command palette"
+                            tabIndex={-1}
+                        />
+                    </span>
+                </header>
                 <div className={styles.searchRow}>
                     <span className={styles.searchIcon} aria-hidden="true">
                         <Icon.SearchIcon />
@@ -175,7 +200,9 @@ export function CommandPalette({ open, onClose, commands, placeholder, parseQuer
                         is a transient modal; focusing search is the whole point */}
                     <input
                         ref={inputRef}
-                        type="text"
+                        type="search"
+                        enterKeyHint="search"
+                        autoCapitalize="off"
                         className={styles.input}
                         value={query}
                         onChange={(e) => { setQuery(e.target.value); setActiveIndex(0); }}

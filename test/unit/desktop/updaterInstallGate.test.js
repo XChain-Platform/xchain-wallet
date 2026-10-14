@@ -57,6 +57,65 @@ const attach = (mod, extra = {}) => attachUpdater({
 });
 
 describe('the install gate', () => {
+    it.each([
+        {
+            name: 'an unpackaged app',
+            isPackaged: false,
+            updateConfigExists: () => true,
+        },
+        {
+            name: 'a packaged app without app-update.yml',
+            isPackaged: true,
+            updateConfigExists: () => false,
+        },
+    ])('skips $name without emitting an update error', async ({ isPackaged, updateConfigExists }) => {
+        const { mod, calls } = fakeModule();
+        const loader = vi.fn(async () => mod);
+        const onEvent = vi.fn();
+        const log = vi.fn();
+
+        const updater = await attachUpdater({
+            loader,
+            onEvent,
+            isPackaged,
+            resourcesPath: '/app/Resources',
+            updateConfigExists,
+            log,
+        });
+        await updater.checkForUpdates();
+
+        expect(updater.isActive).toBe(false);
+        expect(loader).not.toHaveBeenCalled();
+        expect(calls).not.toContain('checkForUpdates');
+        expect(onEvent).not.toHaveBeenCalled();
+        expect(log).toHaveBeenCalledExactlyOnceWith(
+            '[xchain] updater skipped: this build has no update configuration',
+        );
+    });
+
+    it('loads electron-updater for a packaged app with update configuration', async () => {
+        const { mod } = fakeModule();
+        const loader = vi.fn(async () => mod);
+        const updateConfigExists = vi.fn(() => true);
+        const log = vi.fn();
+
+        const updater = await attachUpdater({
+            loader,
+            onEvent: () => {},
+            isPackaged: true,
+            resourcesPath: '/app/Resources',
+            updateConfigExists,
+            log,
+        });
+
+        expect(updater.isActive).toBe(true);
+        expect(updateConfigExists).toHaveBeenCalledExactlyOnceWith(
+            '/app/Resources/app-update.yml',
+        );
+        expect(loader).toHaveBeenCalledOnce();
+        expect(log).not.toHaveBeenCalled();
+    });
+
     it('disables auto-download and auto-install-on-quit at attach time', async () => {
         const { mod, autoUpdater } = fakeModule();
         await attach(mod);
@@ -138,7 +197,7 @@ describe('the install gate', () => {
         };
 
         const updater = await attach(mod);
-        await updater.downloadAndInstall();
+        await updater.downloadUpdate();
 
         expect(flagsWhenDownloadRan).toEqual({
             autoDownload: false, autoInstallOnAppQuit: false,
@@ -152,7 +211,7 @@ describe('the install gate', () => {
             fetchImpl: async () => ({ ok: false, status: 404 }),
         });
 
-        const result = await updater.downloadAndInstall();
+        const result = await updater.downloadUpdate();
 
         expect(result.ok).toBe(false);
         expect(calls).toContain('downloadUpdate');
@@ -169,7 +228,7 @@ describe('the install gate', () => {
             fetchImpl: async () => ({ ok: false, status: 404 }),
         });
 
-        await updater.downloadAndInstall();
+        await updater.downloadUpdate();
 
         expect(events).toContain('rejected');
     });

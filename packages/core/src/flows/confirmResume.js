@@ -69,12 +69,51 @@ export const RESUME_TTL_MS = 60 * 60 * 1000;
  * @throws {Error} when a credential rode along in a stored body
  */
 export function assertNoCredentials(base) {
-    if (!base || typeof base !== 'object') return;
-    for (const key of CREDENTIAL_KEYS) {
-        if (base[key] != null) {
-            throw new Error(`confirmResume: "${key}" must never be stored in a confirm session`);
+    const seen = new WeakSet();
+    const visit = (value) => {
+        if (!value || typeof value !== 'object' || seen.has(value)) return;
+        seen.add(value);
+        for (const [key, nested] of Object.entries(value)) {
+            if (CREDENTIAL_KEYS.includes(key) && nested != null) {
+                throw new Error(`confirmResume: "${key}" must never be stored in a confirm session`);
+            }
+            visit(nested);
         }
-    }
+    };
+    visit(base);
+}
+
+const FORBIDDEN_PATH_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+function validAfterDescriptor(after) {
+    return !!after
+        && typeof after === 'object'
+        && RESUMABLE_AFTER_METHODS.includes(after.method)
+        && after.base !== null
+        && typeof after.base === 'object'
+        && Array.isArray(after.txidPath)
+        && after.txidPath.length > 0
+        && after.txidPath.every((key) => (
+            (typeof key === 'string' || Number.isSafeInteger(key))
+            && !FORBIDDEN_PATH_KEYS.has(String(key))
+        ));
+}
+
+function hasBoundDispatchScope(session, base) {
+    if (!base || typeof base !== 'object') return false;
+    if (typeof base.walletId !== 'string' || !base.walletId) return false;
+    if (typeof base.chainId !== 'string' || !base.chainId) return false;
+    if (!base.from || typeof base.from !== 'object'
+        || typeof base.from.address !== 'string' || !base.from.address) return false;
+
+    const chains = [session?.composed?.chainId, session?.request?.chainId]
+        .filter((value) => value != null);
+    if (chains.some((value) => typeof value !== 'string' || value !== base.chainId)) return false;
+    const requestWalletId = session?.request?.walletId;
+    if (requestWalletId != null && requestWalletId !== base.walletId) return false;
+    const requestAddress = session?.request?.from?.address;
+    if (requestAddress != null && requestAddress !== base.from.address) return false;
+    return true;
 }
 
 /**
@@ -92,10 +131,16 @@ export function isResumable(session, nowMs) {
     if (!d || typeof d !== 'object') return false;
     if (!RESUMABLE_DISPATCH_METHODS.includes(d.software)) return false;
     if (d.hardware != null && !RESUMABLE_DISPATCH_METHODS.includes(d.hardware)) return false;
-    if (d.after && !RESUMABLE_AFTER_METHODS.includes(d.after.method)) return false;
-    try { assertNoCredentials(d.base); } catch { return false; }
+    if (d.after && !validAfterDescriptor(d.after)) return false;
+    if (!hasBoundDispatchScope(session, d.base)) return false;
+    try {
+        assertNoCredentials(d.base);
+        assertNoCredentials(session.request);
+        assertNoCredentials(d.after?.base);
+    } catch { return false; }
     const createdAt = Number(session.createdAt);
     if (!Number.isFinite(createdAt)) return false;
+    if (createdAt > nowMs) return false;
     if (nowMs - createdAt > RESUME_TTL_MS) return false;
     return true;
 }
@@ -120,7 +165,7 @@ export function resumeDispatch(session, { isHw = false } = {}) {
     if (!RESUMABLE_DISPATCH_METHODS.includes(method)) {
         throw new Error(`confirmResume: "${method}" is not an allow-listed dispatch`);
     }
-    return { method, base: { ...(d.base || {}) } };
+    return { method, base: structuredCloneish(d.base) };
 }
 
 /**
@@ -133,25 +178,16 @@ export function resumeDispatch(session, { isHw = false } = {}) {
  */
 export function resumeAfter(session, txid) {
     const after = session?.dispatch?.after;
-    if (!after || !RESUMABLE_AFTER_METHODS.includes(after.method)) return null;
-    const body = structuredCloneish(after.base || {});
-    const path = Array.isArray(after.txidPath) ? after.txidPath : null;
-    if (path && path.length > 0 && txid) {
-        let cursor = body;
-        for (let i = 0; i < path.length - 1; i += 1) {
-            const key = path[i];
-            // Guard against a malicious/corrupted `txidPath` walking into
-            // Object.prototype (js/prototype-polluting-assignment): each
-            // segment is checked immediately before it is used as a key.
-            if (key === '__proto__' || key === 'constructor' || key === 'prototype') { cursor = null; break; }
-            if (typeof cursor[key] !== 'object' || cursor[key] === null) cursor[key] = {};
-            cursor = cursor[key];
-        }
-        const lastKey = path[path.length - 1];
-        if (cursor && lastKey !== '__proto__' && lastKey !== 'constructor' && lastKey !== 'prototype') {
-            cursor[lastKey] = txid;
-        }
+    if (!validAfterDescriptor(after) || typeof txid !== 'string' || !txid) return null;
+    const body = structuredCloneish(after.base);
+    const path = after.txidPath;
+    let cursor = body;
+    for (let i = 0; i < path.length - 1; i += 1) {
+        const key = path[i];
+        if (typeof cursor[key] !== 'object' || cursor[key] === null) cursor[key] = {};
+        cursor = cursor[key];
     }
+    cursor[path[path.length - 1]] = txid;
     return { method: after.method, body };
 }
 

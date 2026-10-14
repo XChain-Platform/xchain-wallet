@@ -12,7 +12,7 @@
 // persistence via messaging.updateSettings, and reset.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, fireEvent, cleanup, screen, waitFor, act } from '@testing-library/react';
+import { render, fireEvent, cleanup, screen, waitFor, act, within } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { KeyboardSection } from '../../../packages/core/src/shared/components/settings/KeyboardSection.jsx';
 
@@ -49,12 +49,36 @@ const press = (init) => act(() => {
 describe('KeyboardSection', () => {
     it('lists rebindable rows with Rebind buttons and fixed context rows without', () => {
         return setup().then(() => {
+            expect(screen.getByText(
+                'Select Rebind, then press the new key combination. Screen-specific shortcuts are fixed and only work on their screen.',
+            )).toBeTruthy();
+            expect(screen.queryByText(/Click Rebind/)).toBeNull();
             expect(screen.getByText('Export history')).toBeTruthy();
+            expect(screen.getByText('? / Ctrl+/')).toBeTruthy();
+            expect(screen.getByText('Requires “Show pin button on rows” in Display.')).toBeTruthy();
+            expect(screen.getByText('Requires “Show hide button on rows” in Display.')).toBeTruthy();
             const rebinds = screen.getAllByRole('button', { name: 'Rebind' });
             // General (5, incl. palette) + Go to (6) are rebindable; the six
             // context shortcuts are not.
             expect(rebinds).toHaveLength(11);
         });
+    });
+
+    it('uses compact standard-height rows with aligned key and Rebind columns', async () => {
+        await setup({ lock: 'mod+j' });
+
+        const lockRow = screen.getByText('Lock wallet').closest('div');
+        const exportRow = screen.getByText('Export history').closest('div');
+        for (const row of [lockRow, exportRow]) {
+            expect(row.style.boxSizing).toBe('border-box');
+            expect(row.style.minHeight).toBe('var(--xc-control-h-lg)');
+            expect(row.style.paddingBlock).toBe('var(--xc-space-1)');
+            expect(row.querySelector('kbd').style.minWidth).toBe('7rem');
+        }
+
+        const lockActions = lockRow.lastElementChild;
+        expect(lockActions.style.justifyContent).toBe('flex-end');
+        expect(lockActions.lastElementChild).toBe(within(lockRow).getByRole('button', { name: 'Rebind' }));
     });
 
     it('captures a new combo and persists it', async () => {
@@ -85,5 +109,24 @@ describe('KeyboardSection', () => {
             keyboard: { bindings: {} },
         }));
         expect(lockRow).toBeTruthy();
+    });
+
+    it('removes an override when capture returns to the built-in binding', async () => {
+        const messaging = await setup({ lock: 'mod+j' });
+        const lockRow = screen.getByText('Lock wallet').closest('div');
+        fireEvent.click(within(lockRow).getByRole('button', { name: 'Rebind' }));
+        press({ key: 'l', ctrlKey: true });
+        await waitFor(() => expect(messaging.updateSettings).toHaveBeenCalledWith({
+            keyboard: { bindings: {} },
+        }));
+    });
+
+    it('resets every override in one persisted update', async () => {
+        const messaging = await setup({ lock: 'mod+j', settings: 'mod+.' });
+        fireEvent.click(screen.getByRole('button', { name: 'Reset all shortcuts' }));
+        await waitFor(() => expect(messaging.updateSettings).toHaveBeenCalledWith({
+            keyboard: { bindings: {} },
+        }));
+        expect(await screen.findByText('All shortcuts reset to defaults.')).toBeTruthy();
     });
 });

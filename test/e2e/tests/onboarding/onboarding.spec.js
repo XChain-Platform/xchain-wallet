@@ -23,12 +23,14 @@
 // alongside real SDK wiring.
 
 import {
+    acknowledgeImportNotice,
     createWallet,
     expect,
     dismissIntroCarousel,
     lockButton,
     lockWallet,
     nav,
+    revealRecoveryPhrase,
     test,
     unlockWallet,
 } from '../../fixtures/wallet.js';
@@ -69,16 +71,15 @@ test.describe('onboarding', () => {
         await page.getByRole('button', { name: 'Next' }).click();
 
         // Mnemonic display stage
-        await expect(page.getByRole('list', { name: 'Recovery phrase' })).toBeVisible();
-        await page.getByLabel(/i have written down/i).check();
+        await revealRecoveryPhrase(page);
+        await page.getByLabel(/saved my recovery phrase/i).check();
         await page.getByRole('button', { name: 'Verify recovery phrase' }).click();
 
         // Deliberately wrong words: the wallet must not be created.
         const boxes = page.getByRole('textbox', { name: /^Word \d+$/ });
-        const count = await boxes.count();
-        for (let i = 0; i < count; i += 1) {
-            await boxes.nth(i).fill('wrongword');
-        }
+        await expect(boxes, 'the 12-word recovery phrase did not render its three challenges')
+            .toHaveCount(3);
+        for (const box of await boxes.all()) await box.fill('wrongword');
         await page.getByRole('button', { name: 'Create wallet' }).click();
 
         // Still on the verification stage; no wallet, no Home.
@@ -94,7 +95,7 @@ test.describe('onboarding', () => {
         await lockWallet(page);
         // Wrong password
 
-        await page.getByLabel('Password').fill('WRONG');
+        await page.getByLabel('Password', { exact: true }).fill('WRONG');
         await page.getByRole('button', { name: 'Unlock' }).click();
 
         await expect(page.getByRole('alert')).toHaveText(/incorrect password/i);
@@ -105,12 +106,21 @@ test.describe('onboarding', () => {
         await dismissIntroCarousel(page);
         await page.getByRole('button', { name: 'Import wallet' }).click();
 
-        // Import takes a known-good phrase straight to an unlocked wallet.
-        await page.getByLabel('Recovery phrase').fill(KNOWN_BIP39);
+        // Import takes a known-good phrase to the Automatic Donation System
+        // notice, and Continue from there to an unlocked wallet.
+        await page.getByLabel('Recovery phrase', { exact: true }).fill(KNOWN_BIP39);
         await page.getByLabel('Wallet name').fill('Imported E2E');
         await page.getByLabel('Password', { exact: true }).fill('importpassword1');
         await page.getByLabel('Confirm password').fill('importpassword1');
         await page.getByRole('button', { name: 'Import' }).click();
+
+        // Asserted rather than tolerated: this is the golden path, and a
+        // helper that quietly no-opped would let the notice disappear.
+        await expect(
+            page.getByRole('heading', { name: 'Automatic Donation System', exact: true }),
+            'an import did not end on the Automatic Donation System notice',
+        ).toBeVisible({ timeout: 90_000 });
+        await acknowledgeImportNotice(page);
 
         await expect(lockButton(page)).toBeVisible({ timeout: 90_000 });
     });
@@ -121,7 +131,7 @@ test.describe('onboarding', () => {
         await page.getByRole('button', { name: 'Import wallet' }).click();
 
         // 13 words: not a valid BIP39 count.
-        await page.getByLabel('Recovery phrase').fill('word '.repeat(13).trim());
+        await page.getByLabel('Recovery phrase', { exact: true }).fill('word '.repeat(13).trim());
         await page.getByLabel('Password', { exact: true }).fill('xxxxxxxxxx');
         await page.getByLabel('Confirm password').fill('xxxxxxxxxx');
         await page.getByRole('button', { name: 'Import' }).click();

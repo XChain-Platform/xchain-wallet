@@ -47,6 +47,10 @@
     <key>com.apple.security.device.usb</key>
     <true/>
 
+    <!-- The shared QrScanner opens a video stream through getUserMedia. -->
+    <key>com.apple.security.device.camera</key>
+    <true/>
+
     <!-- Encrypted-vault backup export and restore, and PSBT files for the
          air-gapped signing flow. Scoped to files the USER picks in a save
          or open panel; the app gets no ambient filesystem access. -->
@@ -56,7 +60,6 @@
     <!-- Deliberately NOT granted, recorded so nobody adds them by reflex
          while chasing a build error:
            - files.downloads.read-write : the save panel already covers it
-           - device.camera             : QR scanning is a mobile surface
            - print                     : nothing prints
            - network.server            : the wallet never listens
            - cs.allow-jit / allow-unsigned-executable-memory : hardened

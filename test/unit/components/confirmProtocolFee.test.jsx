@@ -24,6 +24,12 @@ const REPORT = (xchainFee) => ({
     quote: { valid: true, status: 'valid', xchainFee, blockIndex: 100 },
 });
 
+const NATIVE_FEE_FINDING = {
+    code: 'NATIVE_FEE_FORFEIT',
+    severity: 'warning',
+    message: 'Any attached native-coin fee output is forfeited.',
+};
+
 function base(overrides = {}) {
     return {
         phase: 'ready',
@@ -64,8 +70,41 @@ describe('confirm screen protocol-fee disclosure', () => {
     it('does not show the XCHAIN row when the fee is paid in the native coin', () => {
         render(<ConfirmActionModal {...base({
             composed: { psbt: 'x', protocolFeeSats: 2000, quote: { requiredFeeSats: 2000 } },
+            nativeTicker: 'BTC',
+            formatNativeFee: () => '≈ $2.00 USD',
         })} />);
         expect(screen.queryByTestId('confirm-protocol-fee')).toBeNull();
+        expect(screen.getByTestId('confirm-native-protocol-fee')).toHaveTextContent(
+            'Protocol fee: 0.00002 BTC (≈ $2.00 USD)',
+        );
+    });
+
+    it('hides the native-fee advisory when ISSUE has no coin fee output', () => {
+        render(<ConfirmActionModal {...base({
+            report: {
+                ...REPORT('0.50000000'),
+                verdict: 'warn',
+                findings: [NATIVE_FEE_FINDING],
+            },
+        })} />);
+
+        expect(screen.queryByTestId('preflight-warning-NATIVE_FEE_FORFEIT')).toBeNull();
+        expect(screen.getByTestId('preflight-chip')).toHaveTextContent('Looks good');
+    });
+
+    it('shows one forfeiture disclosure when ISSUE carries a native fee output', () => {
+        render(<ConfirmActionModal {...base({
+            composed: { psbt: 'x', protocolFeeSats: 2000, quote: { requiredFeeSats: 2000 } },
+            nativeTicker: 'BTC',
+            report: {
+                ...REPORT(null),
+                verdict: 'warn',
+                findings: [NATIVE_FEE_FINDING],
+            },
+        })} />);
+
+        expect(screen.getAllByText(/not refunded if the action is rejected/)).toHaveLength(1);
+        expect(screen.queryByTestId('preflight-warning-NATIVE_FEE_FORFEIT')).toBeNull();
     });
 
     it('shows nothing while the report is still streaming in', () => {
@@ -76,6 +115,17 @@ describe('confirm screen protocol-fee disclosure', () => {
     it('shows nothing for a zero-fee action', () => {
         render(<ConfirmActionModal {...base({ report: REPORT('0.00000000') })} />);
         expect(screen.queryByTestId('confirm-protocol-fee')).toBeNull();
+        expect(screen.queryByTestId('confirm-protocol-fee-unavailable')).toBeNull();
+    });
+
+    it('says when the protocol fee cannot be estimated', () => {
+        render(<ConfirmActionModal {...base({
+            report: { verdict: 'unknown', findings: [] },
+            composed: { psbt: 'x', networkFeeSats: 1176, xchainFee: null },
+        })} />);
+        expect(screen.getByTestId('confirm-protocol-fee-unavailable')).toHaveTextContent(
+            'Protocol fee estimate unavailable.',
+        );
     });
 
     it('does not claim an XCHAIN fee on a caller-supplied PSBT', () => {

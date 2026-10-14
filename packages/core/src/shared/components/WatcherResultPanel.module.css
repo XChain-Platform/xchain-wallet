@@ -1,13 +1,4 @@
-/* §20 / Cluster X Step 3 - extracted from Send.module.css so non-Send
- * action surfaces can render the same watcher-mode result UI. Visual
- * idiom matches the broadcast-success card. */
-
-.successTitle {
-    font-size: var(--xc-text-xl);
-    font-weight: 700;
-    margin: 0 0 var(--xc-space-3);
-    color: var(--xc-success);
-}
+/* §20 / Cluster X Step 3 result details shared by watcher-mode action surfaces. */
 
 .successLabel {
     font-size: var(--xc-text-xs);
@@ -18,22 +9,12 @@
     margin: 0 0 var(--xc-space-1);
 }
 
-.successCard {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-3);
-    align-items: stretch;
-    padding: var(--xc-space-4);
-    border: 1px solid var(--xc-success, #2c7a3d);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-surface-raised);
-}
-
 .successHint {
     margin: 0;
     color: var(--xc-text-muted);
     font-size: var(--xc-text-sm);
     text-align: center;
+    overflow-wrap: anywhere;
 }
 
 .successSummary {
@@ -50,7 +31,7 @@
 .successRow {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--xc-space-1);
     min-width: 0;
 }
 .successRow dt {
@@ -68,41 +49,33 @@
 
 .successMono {
     font-family: var(--xc-font-mono, monospace);
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
+.machineText {
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .successTxidBlock {
     display: flex;
     flex-direction: column;
+    min-width: 0;
     gap: var(--xc-space-1);
+}
+
+.successTxidBlock textarea {
+    box-sizing: border-box;
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
 }
 
 .successTxidRow {
     display: flex;
     align-items: stretch;
     gap: var(--xc-space-2);
-}
-
-.successLink {
-    align-self: flex-start;
-    background: transparent;
-    border: none;
-    color: var(--xc-accent-primary);
-    cursor: pointer;
-    font-size: var(--xc-text-xs);
-    font-family: inherit;
-    text-decoration: underline;
-    padding: var(--xc-space-1) 0;
-    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
-       inheriting it from whichever line box the platform font produces. */
-    min-height: var(--xc-tap-min);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-}
-.successLink:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-    border-radius: var(--xc-radius-sm);
 }
 
 .hint {
@@ -114,6 +87,9 @@
 
 .actions {
     display: flex;
+    flex-wrap: wrap;
+    min-width: 0;
+    max-width: 100%;
     gap: var(--xc-space-2);
     justify-content: flex-end;
     margin-top: var(--xc-space-4);

@@ -56,9 +56,11 @@ assert.ok(
 // HomeTabs/BalanceList).
 const sharedHome = join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'Home.jsx');
 const home = readFileSync(sharedHome, 'utf8');
+// Balances go through loadDisplayBalances, which calls
+// messaging.getWalletBalances for every wallet but the demo one.
 for (const call of [
     'messaging.listWallets',
-    'messaging.getWalletBalances',
+    'loadDisplayBalances(messaging',
 ]) {
     assert.ok(home.includes(call), `shared Home.jsx wires ${call}`);
 }
@@ -77,8 +79,12 @@ for (const rel of [
 ]) {
     const shellSrc = readFileSync(join(wsRoot, ...rel), 'utf8');
     assert.ok(
-        /lockWallet\(\)/.test(shellSrc),
-        `${rel.join('/')} keeps a manual lock path`,
+        /lockImmediately\(\{[\s\S]{0,160}?lockWallet(?:,|:\s*messaging\.lockWallet)/.test(shellSrc),
+        `${rel.join('/')} keeps a manual lock path through lockImmediately`,
+    );
+    assert.ok(
+        /showLocked:\s*\(\)\s*=>\s*setStatus\(\{ state: 'locked' \}\)/.test(shellSrc),
+        `${rel.join('/')} leaves the unlocked tree synchronously`,
     );
 }
 assert.ok(

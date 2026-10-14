@@ -13,11 +13,9 @@
 // (useCommandPalette owns it); this covers the rest of the core set plus the
 // `g`-leader navigation.
 //
-// Focus rules (§34.4 / the "when no input has focus" caveat):
-//   - Modifier combos (Cmd/Ctrl+L, +N, +,, +/) fire regardless of focus.
-//   - Single keys ('?') and leader sequences ('g h') are suppressed while an
-//     editable element (input/textarea/select/contenteditable) has focus, so
-//     typing a memo or a search query never triggers navigation.
+// Focus rules (§34.4 / the "when no input has focus" caveat): all shortcuts
+// are suppressed while an editable element (input/textarea/select/
+// contenteditable) has focus, so typing never triggers a wallet action.
 //
 // `enabled` gates the whole listener: shells pass false while locked, while the
 // command palette is open (its own input owns the keys), and while the shortcut
@@ -25,9 +23,34 @@
 
 import { useEffect, useMemo, useRef } from 'react';
 import { isEditableTarget, parseBinding, resolveBindings } from './shortcuts.js';
+import { useTablistKeys } from './useTablistKeys.js';
+import { useMenuKeys } from './useMenuKeys.js';
 
 // How long a leader key stays armed waiting for the second key.
 const LEADER_WINDOW_MS = 1200;
+
+/**
+ * Global wallet shortcuts stay out of editable controls and modal dialogs,
+ * and `mod` maps to the platform's primary modifier only.
+ *
+ * @param {KeyboardEvent} event
+ * @param {Document | undefined} [documentObject]
+ * @param {string} [platform]
+ * @returns {boolean}
+ */
+export function canHandleGlobalShortcut(
+    event,
+    documentObject = globalThis.document,
+    platform = globalThis.navigator?.platform || globalThis.navigator?.userAgent || '',
+) {
+    if (isEditableTarget(event.target)) return false;
+    if (documentObject?.querySelector?.('dialog[open], [aria-modal="true"]')) return false;
+    if (!event.metaKey && !event.ctrlKey) return true;
+    const mac = /mac|iphone|ipad|ipod/i.test(platform);
+    return mac
+        ? event.metaKey && !event.ctrlKey
+        : event.ctrlKey && !event.metaKey;
+}
 
 /**
  * Build the dispatcher's lookup maps from the effective (default +
@@ -65,6 +88,10 @@ function buildLookups(overrides) {
  * @param {() => void} [opts.handlers.openHelp]
  */
 export function useKeyboardShortcuts({ enabled = true, overrides, handlers }) {
+    // Every shell installs this hook once, so the arrow keys of tab strips and
+    // popup menus ride along with it rather than needing a call in each shell.
+    useTablistKeys();
+    useMenuKeys();
     const lookups = useMemo(() => buildLookups(overrides), [overrides]);
     // Keep the latest handlers in a ref so the listener effect doesn't need to
     // re-bind (and lose leader state) every time the shell re-renders new
@@ -91,19 +118,26 @@ export function useKeyboardShortcuts({ enabled = true, overrides, handlers }) {
         };
 
         const onKey = (e) => {
+            if (!canHandleGlobalShortcut(e)) {
+                clearLeader();
+                return;
+            }
             const mod = e.metaKey || e.ctrlKey;
 
-            // Modifier combos fire anywhere. Never swallow Alt/Shift-modified
-            // combos (none of ours use them) so we don't hijack OS chords.
+            // Modifier combos fire outside editable fields. Never swallow
+            // Alt/Shift-modified combos (none of ours use them) so we don't
+            // hijack OS chords.
             if (mod && !e.altKey && !e.shiftKey) {
                 const action = COMBO.get((e.key || '').toLowerCase());
+                clearLeader();
                 if (action) { e.preventDefault(); run(action); }
                 return;
             }
-            if (mod) return; // some other modifier chord; not ours
+            if (mod || e.altKey) { clearLeader(); return; }
 
-            // From here down: no modifier. Suppress while typing.
-            if (isEditableTarget(e.target)) { clearLeader(); return; }
+            // Shift may produce a catalogued printable key such as '?', but
+            // it does not turn leader keys into additional shortcut chords.
+            if (e.shiftKey && !SINGLE.has(e.key)) { clearLeader(); return; }
 
             const key = (e.key || '').toLowerCase();
 

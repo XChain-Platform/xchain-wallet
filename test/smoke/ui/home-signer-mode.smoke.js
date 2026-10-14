@@ -31,14 +31,15 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withEnglishCopy } from '../_localized-source.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 
-const homeSrc = readFileSync(
+const homeSrc = withEnglishCopy(readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'Home.jsx'),
     'utf8',
-);
+));
 const popupAppSrc = readFileSync(
     join(wsRoot, 'packages', 'extension', 'src', 'popup', 'App.jsx'),
     'utf8',
@@ -56,7 +57,7 @@ const desktopAppSrc = readFileSync(
 
 assert.match(
     homeSrc,
-    /import \{ WALLET_MODE_DEFAULT \} from '\.\.\/\.\.\/schemas\/settings\.js';/,
+    /import \{[^}]*\bWALLET_MODE_DEFAULT\b[^}]*\} from '\.\.\/\.\.\/schemas\/settings\.js';/,
     'Home.jsx imports WALLET_MODE_DEFAULT from schemas/settings',
 );
 assert.match(
@@ -100,7 +101,7 @@ assert.match(
 
 assert.match(
     homeSrc,
-    /function SignerHomeBody\(\{ onSignPsbt, onSignMessage, onVerifySignature \}\)/,
+    /function SignerHomeBody\(\{ onSignPsbt, onSignMessage, onVerifySignature[,}]/,
     'SignerHomeBody defined with the three sign / verify props',
 );
 assert.match(homeSrc, /Sign a transaction/, 'marquee CTA label "Sign a transaction"');

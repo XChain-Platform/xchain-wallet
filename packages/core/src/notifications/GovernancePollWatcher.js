@@ -37,10 +37,11 @@
 // this wallet holds the token, which is the same exposure as the existing
 // incoming-receipt notifications.
 
+import { taggedLogger } from './taggedLogger.js';
+import { ActiveAddressPoll, isVaultLockedError } from './activeAddressPoll.js';
+
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000;
 const SEEN_CAP_PER_CHAIN = 500; // prune guard; open polls per chain stay far below this
-
-const NOOP_LOGGER = { debug() {}, warn() {}, error() {} };
 
 export class GovernancePollWatcher {
     /**
@@ -51,8 +52,8 @@ export class GovernancePollWatcher {
      *   resolve the SDK instance for a chain (e.g. sdkRegistry.get)
      * @param {() => Promise<import('../schemas/settings.js').Settings>} deps.getSettings
      *   read live Settings each tick so toggling the flag off takes effect immediately
-     * @param {(n: { kind: string, title: string, body: string, data?: object }) => (void | Promise<void>)} deps.notify
-     *   the shell-specific delivery adapter (shared with NotificationService)
+     * @param {(n: { kind: string, title: string, body: string, data?: object }) => (void | boolean | Promise<void | boolean>)} deps.notify
+     *   the shell-specific delivery adapter; false means delivery was unavailable
      * @param {() => Promise<object | null>} [deps.loadSeen]
      *   optional: restore the seen-state (`{ [chainId]: string[] }`) persisted by saveSeen
      * @param {(seen: object) => (void | Promise<void>)} [deps.saveSeen]
@@ -82,13 +83,20 @@ export class GovernancePollWatcher {
         this._loadSeen = typeof loadSeen === 'function' ? loadSeen : null;
         this._saveSeen = typeof saveSeen === 'function' ? saveSeen : null;
         this._intervalMs = Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : DEFAULT_INTERVAL_MS;
-        this._log = logger || NOOP_LOGGER;
+        this._log = taggedLogger(logger, 'governance');
+        this._addressPoll = new ActiveAddressPoll({
+            getActiveAddresses: this._getActiveAddresses,
+            intervalMs: this._intervalMs,
+            logger: this._log,
+            owner: 'GovernancePollWatcher',
+        });
 
         this._timer = null;
         this._ticking = false;
         /** @type {Map<string, Set<string>>} chainId → seen open-poll action indices */
         this._seen = new Map();
         this._seenLoaded = false;
+        this._seenDirty = false;
     }
 
     /** Begin polling. Fires an immediate tick, then every intervalMs. Idempotent. */
@@ -111,6 +119,8 @@ export class GovernancePollWatcher {
         }
         this._seen.clear();
         this._seenLoaded = false;
+        this._seenDirty = false;
+        this._addressPoll.reset();
     }
 
     /**
@@ -125,6 +135,10 @@ export class GovernancePollWatcher {
             try {
                 settings = await this._getSettings();
             } catch (e) {
+                if (isVaultLockedError(e)) {
+                    this._addressPoll.reset();
+                    return;
+                }
                 this._log.error('GovernancePollWatcher: getSettings failed', e);
                 return;
             }
@@ -133,6 +147,9 @@ export class GovernancePollWatcher {
             const featureOn = !settings || !settings.notifications ||
                 settings.notifications.governancePolls !== false;
             if (!featureOn) return;
+
+            const addresses = await this._addressPoll.read();
+            if (!addresses || addresses.length === 0) return;
 
             // Restore persisted seen-state once per session, before the first
             // baseline decision, so a persisted chain doesn't re-baseline.
@@ -152,15 +169,6 @@ export class GovernancePollWatcher {
                 }
             }
 
-            let addresses;
-            try {
-                addresses = (await this._getActiveAddresses()) || [];
-            } catch (e) {
-                this._log.error('GovernancePollWatcher: getActiveAddresses failed', e);
-                return;
-            }
-            if (addresses.length === 0) return;
-
             // Group addresses by chain; one open-poll query per chain.
             const byChain = new Map();
             for (const a of addresses) {
@@ -177,11 +185,13 @@ export class GovernancePollWatcher {
                     this._log.warn(`GovernancePollWatcher: chain ${chainId} tick failed`, e);
                 }
             }
-            if (changed && this._saveSeen) {
+            if (changed && this._saveSeen) this._seenDirty = true;
+            if (this._seenDirty && this._saveSeen) {
                 try {
                     const out = {};
                     for (const [chainId, ids] of this._seen.entries()) out[chainId] = Array.from(ids);
                     await this._saveSeen(out);
+                    this._seenDirty = false;
                 } catch (e) {
                     this._log.warn('GovernancePollWatcher: saveSeen failed', e);
                 }
@@ -216,34 +226,41 @@ export class GovernancePollWatcher {
         }
 
         // Which open polls are news?
-        const fresh = open.filter((p) => !seen.has(String(p.action_index)));
-        for (const p of fresh) {
-            if (seen.size >= SEEN_CAP_PER_CHAIN) break;
-            seen.add(String(p.action_index));
-            changed = true;
-        }
-        this._seen.set(chainId, seen);
+        const fresh = open
+            .filter((p) => !seen.has(String(p.action_index)))
+            .slice(0, Math.max(0, SEEN_CAP_PER_CHAIN - seen.size));
 
         // Baseline tick: remember everything currently open, announce nothing.
-        if (firstSight || fresh.length === 0) return changed;
+        if (firstSight) {
+            for (const p of fresh) seen.add(String(p.action_index));
+            this._seen.set(chainId, seen);
+            return changed || fresh.length > 0;
+        }
+        this._seen.set(chainId, seen);
+        if (fresh.length === 0) return changed;
 
         // Held ticks: the wallet's own balances, fetched only when there is
         // something new to check against (fresh polls are rare; balances calls
         // shouldn't run on every idle tick).
         const held = await this._getHeldTicks(sdk, addrs);
-        if (held.size === 0) return changed;
+        if (held === null) return changed;
 
         for (const p of fresh) {
+            const id = String(p.action_index);
             const tick = typeof p.tick === 'string' ? p.tick.toUpperCase() : null;
-            if (!tick || !held.has(tick)) continue;
+            if (!tick || !held.has(tick)) {
+                seen.add(id);
+                changed = true;
+                continue;
+            }
             const binding = p.callback_contract_index !== null && p.callback_contract_index !== undefined;
             try {
-                await this._notify({
+                const delivered = await this._notify({
                     kind: 'governance-poll',
                     title: binding ? 'Binding governance poll' : 'Governance poll',
                     body: binding
-                        ? `A binding poll (its result triggers a contract) is open for ${tick} on ${chainLabel}. Review it before it closes.`
-                        : `A new poll is open for ${tick} on ${chainLabel}.`,
+                        ? `A binding ${tick} poll is open on ${chainLabel}. Its result triggers a contract.`
+                        : `A ${tick} poll is open on ${chainLabel}.`,
                     data: {
                         chainId,
                         tick,
@@ -252,6 +269,10 @@ export class GovernancePollWatcher {
                         endBlock: p.end_block ?? null,
                     },
                 });
+                if (delivered !== false) {
+                    seen.add(id);
+                    changed = true;
+                }
             } catch (e) {
                 this._log.error('GovernancePollWatcher: notify failed', e);
             }
@@ -263,12 +284,14 @@ export class GovernancePollWatcher {
     async _getHeldTicks(sdk, addrs) {
         const held = new Set();
         if (typeof sdk.getBalances !== 'function') return held;
+        let failed = false;
         for (const address of addrs) {
             let raw;
             try {
                 raw = await sdk.getBalances(address, { noRetry: true });
             } catch (e) {
                 this._log.warn('GovernancePollWatcher: getBalances failed', e);
+                failed = true;
                 continue;
             }
             // Accept the explorer's flat array (real SDK) or the wallet's
@@ -279,7 +302,7 @@ export class GovernancePollWatcher {
                 if (tick && qty != null && String(qty) !== '0' && Number(qty) > 0) held.add(tick);
             }
         }
-        return held;
+        return failed ? null : held;
     }
 }
 

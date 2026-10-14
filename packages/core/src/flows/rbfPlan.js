@@ -34,6 +34,7 @@ function txShape(value, label) {
     if (!Array.isArray(value.outputs) || value.outputs.length === 0) {
         throw new RbfPlanError(`planRbfReplacement: ${label}.outputs must be a non-empty array`);
     }
+    const seenOutpoints = new Set();
     const inputs = value.inputs.map((input, index) => {
         const txid = String(input?.prevTxHash || input?.txid || '').toLowerCase();
         const vout = Number(input?.prevTxIndex ?? input?.vout);
@@ -47,6 +48,12 @@ function txShape(value, label) {
         if (!/^(?:[0-9a-fA-F]{2})+$/.test(scriptPubKey)) {
             throw new RbfPlanError(`planRbfReplacement: ${label}.inputs[${index}] has no usable scriptPubKey`);
         }
+        // Reject a transaction shape that counts the same coin more than once.
+        const outpoint = `${txid}:${vout}`;
+        if (seenOutpoints.has(outpoint)) {
+            throw new RbfPlanError(`planRbfReplacement: ${label}.inputs[${index}] duplicates an earlier outpoint`);
+        }
+        seenOutpoints.add(outpoint);
         return {
             txid,
             vout,

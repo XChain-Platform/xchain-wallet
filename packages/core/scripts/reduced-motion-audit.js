@@ -1,0 +1,257 @@
+// Copyright © 2025-2026 Dankest, LLC
+// Based on XChain Platform by Dankest, LLC - https://dankest.llc
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { readFileSync, readdirSync } from 'node:fs';
+import { dirname, join, relative, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const repoRoot = join(here, '..', '..', '..');
+const coreSourceRoot = join(here, '..', 'src');
+const tokensPath = join(coreSourceRoot, 'ui', 'tokens.css');
+
+/**
+ * CSS motion that must remain active under reduced motion. Each entry needs a
+ * repo-relative path and a reason explaining why the motion is essential.
+ */
+export const ESSENTIAL_MOTION_ALLOWLIST = new Map();
+
+function stripComments(source) {
+    return source.replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, ' '));
+}
+
+function mediaBodies(source, feature) {
+    const css = stripComments(source);
+    const bodies = [];
+    const media = /@media\s*\(([^)]*)\)\s*\{/gi;
+    let match;
+    while ((match = media.exec(css)) !== null) {
+        if (!feature.test(match[1])) continue;
+        let depth = 1;
+        let end = media.lastIndex;
+        while (end < css.length && depth > 0) {
+            if (css[end] === '{') depth += 1;
+            else if (css[end] === '}') depth -= 1;
+            end += 1;
+        }
+        bodies.push(css.slice(media.lastIndex, end - 1));
+        media.lastIndex = end;
+    }
+    return bodies;
+}
+
+function motionDeclarations(source) {
+    const declarations = [];
+    const css = stripComments(source);
+    const declaration = /(?:^|[;{])\s*((?:animation|transition)(?:-[a-z-]+)?)\s*:\s*([^;}]+)/gim;
+    let match;
+    while ((match = declaration.exec(css)) !== null) {
+        declarations.push({
+            kind: match[1].startsWith('animation') ? 'animation' : 'transition',
+            value: match[2].trim(),
+        });
+    }
+    return declarations;
+}
+
+function hasPositiveRawDuration(value) {
+    const durations = value.matchAll(/(?:^|[\s,(])(\d*\.?\d+)(ms|s)\b/gi);
+    return Array.from(durations).some(([, amount]) => Number(amount) > 0);
+}
+
+/**
+ * Return transition declarations that embed a positive duration instead of a
+ * motion token. tokens.css owns the raw values and is excluded by path.
+ *
+ * @param {{file: string, source: string}[]} stylesheets
+ * @param {string} tokenFile
+ */
+export function findRawTransitionDurations(
+    stylesheets,
+    tokenFile = 'packages/core/src/ui/tokens.css',
+) {
+    const violations = [];
+    for (const { file, source } of stylesheets) {
+        if (file === tokenFile) continue;
+        for (const declaration of motionDeclarations(source)) {
+            if (declaration.kind !== 'transition' || !hasPositiveRawDuration(declaration.value)) continue;
+            violations.push({ file, value: declaration.value });
+        }
+    }
+    return violations;
+}
+
+export function hasReducedMotionMediaOverride(source, kind) {
+    const cancellation = kind === 'animation'
+        ? /\banimation(?:-duration)?\s*:\s*(?:none|0(?:\.0+1)?ms)\b/i
+        : /\btransition(?:-duration)?\s*:\s*(?:none|0(?:\.0+1)?ms)\b/i;
+    return mediaBodies(source, /prefers-reduced-motion\s*:\s*reduce/i)
+        .some((body) => cancellation.test(body));
+}
+
+function hasLocalOverride(source, kind) {
+    const cancellation = kind === 'animation'
+        ? /\banimation(?:-duration)?\s*:\s*(?:none|0(?:\.0+1)?ms)\b/i
+        : /\btransition(?:-duration)?\s*:\s*(?:none|0(?:\.0+1)?ms)\b/i;
+    const hasOsOverride = hasReducedMotionMediaOverride(source, kind);
+    const hasAppOverride = Array.from(stripComments(source).matchAll(/([^{}]+)\{([^{}]*)\}/g))
+        .some(([, selectorText, body]) => (
+            selectorText.includes(':root[data-xc-reduced-motion="reduce"]')
+            && cancellation.test(body)
+        ));
+    return hasOsOverride && hasAppOverride;
+}
+
+function hasGlobalSelectorGuard(source, root) {
+    const rules = stripComments(source).matchAll(/([^{}]+)\{([^{}]*)\}/g);
+    for (const [, selectorText, body] of rules) {
+        const selectors = selectorText.split(',').map((selector) => selector.trim());
+        if (!selectors.includes(root)
+            || !selectors.includes(`${root} *`)
+            || !selectors.includes(`${root} *::before`)
+            || !selectors.includes(`${root} *::after`)) continue;
+        if (/animation-duration\s*:\s*0(?:\.0+1)?ms\s*!important/i.test(body)
+            && /animation-iteration-count\s*:\s*1\s*!important/i.test(body)
+            && /transition-duration\s*:\s*0(?:\.0+1)?ms\s*!important/i.test(body)
+            && /scroll-behavior\s*:\s*auto\s*!important/i.test(body)) return true;
+    }
+    return false;
+}
+
+export function hasGlobalReducedMotionGuard(source) {
+    const osRoot = ':root:not([data-xc-reduced-motion="no-preference"])';
+    const appRoot = ':root[data-xc-reduced-motion="reduce"]';
+    const hasOsGuard = mediaBodies(source, /prefers-reduced-motion\s*:\s*reduce/i)
+        .some((body) => hasGlobalSelectorGuard(body, osRoot));
+    return hasOsGuard && hasGlobalSelectorGuard(source, appRoot);
+}
+
+function reducesTransitionToken(source) {
+    const hasOsToken = mediaBodies(source, /prefers-reduced-motion\s*:\s*reduce/i)
+        .some((body) => /--xc-transition\s*:\s*0ms\b/i.test(body));
+    const hasAppToken = Array.from(stripComments(source).matchAll(/([^{}]+)\{([^{}]*)\}/g))
+        .some(([, selectorText, body]) => (
+            selectorText.includes(':root[data-xc-reduced-motion="reduce"]')
+            && /--xc-transition\s*:\s*0ms\b/i.test(body)
+        ));
+    return hasOsToken && hasAppToken;
+}
+
+/**
+ * Return each stylesheet whose motion is not covered by a global guard, a
+ * local override, the reduced transition token, or the essential allowlist.
+ *
+ * @param {{file: string, source: string}[]} stylesheets
+ * @param {string} globalCss
+ * @param {Map<string, string>} allowlist
+ */
+export function findUncoveredMotionCss(
+    stylesheets,
+    globalCss,
+    allowlist = ESSENTIAL_MOTION_ALLOWLIST,
+) {
+    const globalGuard = hasGlobalReducedMotionGuard(globalCss);
+    const tokenReduced = reducesTransitionToken(globalCss);
+    const uncovered = [];
+
+    for (const { file, source } of stylesheets) {
+        const declarations = motionDeclarations(source);
+        if (declarations.length === 0 || allowlist.has(file) || globalGuard) continue;
+
+        const kinds = [];
+        const animations = declarations.filter(({ kind }) => kind === 'animation');
+        if (animations.length > 0 && !hasLocalOverride(source, 'animation')) {
+            kinds.push('animation');
+        }
+
+        const transitions = declarations.filter(({ kind }) => kind === 'transition');
+        const usesReducedToken = transitions.length > 0
+            && transitions.every(({ value }) => value.includes('var(--xc-transition)'))
+            && tokenReduced;
+        if (transitions.length > 0 && !usesReducedToken && !hasLocalOverride(source, 'transition')) {
+            kinds.push('transition');
+        }
+
+        if (kinds.length > 0) uncovered.push({ file, kinds });
+    }
+    return uncovered;
+}
+
+const JS_MOTION_CHECKS = [
+    {
+        kind: 'auto-advance',
+        detect: /\bsetInterval\s*\([\s\S]*?\bset(?:Index|Frame|Slide)\s*\(/,
+        guarded: /\bif\s*\([^)]*\breducedMotion\b[^)]*\)\s*return(?:\s+undefined)?\s*;[\s\S]{0,800}\bsetInterval\s*\(/,
+    },
+    {
+        kind: 'smooth-scroll',
+        detect: /\bbehavior\s*:\s*[^,}\n]*['"]smooth['"]/,
+        guarded: /\bbehavior\s*:\s*reducedMotion\s*\?\s*['"]auto['"]\s*:\s*['"]smooth['"]/,
+    },
+    {
+        kind: 'web-animation',
+        detect: /\.animate\s*\(/,
+        guarded: /(?:\bif\s*\([^)]*\breducedMotion\b[^)]*\)\s*return(?:\s+undefined)?\s*;[\s\S]{0,800}\.animate\s*\(|\bduration\s*:\s*reducedMotion\s*\?\s*0\s*:)/,
+    },
+];
+
+/**
+ * Return JavaScript motion drivers that do not resolve and honor the shared
+ * reduced-motion preference.
+ *
+ * @param {{file: string, source: string}[]} scripts
+ */
+export function findUncoveredMotionJs(scripts) {
+    const uncovered = [];
+    for (const { file, source } of scripts) {
+        const checks = JS_MOTION_CHECKS.filter(({ detect }) => detect.test(source));
+        if (checks.length === 0) continue;
+        const hasResolver = /\b(?:const|let)\s+reducedMotion\s*=\s*useReducedMotion\s*\(\s*\)/.test(source);
+        const kinds = checks
+            .filter(({ guarded }) => !hasResolver || !guarded.test(source))
+            .map(({ kind }) => kind);
+        if (kinds.length > 0) uncovered.push({ file, kinds });
+    }
+    return uncovered;
+}
+
+function listCss(dir, files = []) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) listCss(path, files);
+        else if (entry.name.endsWith('.css')) files.push(path);
+    }
+    return files;
+}
+
+function listScripts(dir, files = []) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) listScripts(path, files);
+        else if (/\.jsx?$/.test(entry.name)) files.push(path);
+    }
+    return files;
+}
+
+export function runReducedMotionAudit() {
+    const stylesheets = listCss(coreSourceRoot).map((path) => ({
+        file: relative(repoRoot, path).split(sep).join('/'),
+        source: readFileSync(path, 'utf8'),
+    }));
+    const globalCss = readFileSync(tokensPath, 'utf8');
+    const scripts = listScripts(coreSourceRoot).map((path) => ({
+        file: relative(repoRoot, path).split(sep).join('/'),
+        source: readFileSync(path, 'utf8'),
+    }));
+    const motionScripts = scripts.filter(({ source }) => (
+        JS_MOTION_CHECKS.some(({ detect }) => detect.test(source))
+    ));
+    return {
+        motionStylesheetCount: stylesheets.filter(({ source }) => motionDeclarations(source).length > 0).length,
+        uncovered: findUncoveredMotionCss(stylesheets, globalCss),
+        motionScriptCount: motionScripts.length,
+        uncoveredJs: findUncoveredMotionJs(scripts),
+    };
+}

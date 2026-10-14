@@ -64,6 +64,7 @@ export function useContractManifest({ chainId, contractActionIndex, skip = false
             setManifest(cache.get(key));
             return undefined;
         }
+        setManifest(NULL_MANIFEST);
         if (typeof messaging?.getContractManifest !== 'function') return undefined;
         let cancelled = false;
         messaging.getContractManifest({ chainId, contractActionIndex })

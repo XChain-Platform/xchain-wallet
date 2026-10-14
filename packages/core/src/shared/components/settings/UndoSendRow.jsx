@@ -28,12 +28,9 @@ import {
 } from '../../../schemas/settings.js';
 import { useSettings } from '../../hooks/useSettings.js';
 import { useMessaging } from '../../useMessaging.js';
-import { INPUT, ROW, ROW_LABEL, ToggleRow } from './_settingsPrimitives.jsx';
-
-const HINT_UNAVAILABLE =
-    'Not available yet: sends are not held on this build. Your choice here is saved and will apply once they are.';
-const HINT_AVAILABLE =
-    'Holds each signed send for the seconds below so you can cancel it before it is broadcast.';
+import { INPUT, ROW, ROW_TITLE, ToggleRow } from './_settingsPrimitives.jsx';
+import { t } from '../../../i18n/index.js';
+import { blurNumberInputOnWheel } from '../../utils/formInput.js';
 
 export function UndoSendRow() {
     const { settings, update } = useSettings();
@@ -48,8 +45,10 @@ export function UndoSendRow() {
     return (
         <>
             <ToggleRow
-                label="Give me time to cancel sends"
-                hint={held ? HINT_AVAILABLE : HINT_UNAVAILABLE}
+                label={t('settings.undoSend.label')}
+                hint={held
+                    ? t('settings.undoSend.hintAvailable')
+                    : t('settings.undoSend.hintUnavailable')}
                 checked={enabled}
                 onChange={(v) => {
                     update({ grace: { undoSendEnabled: v } }).catch((err) => {
@@ -59,11 +58,13 @@ export function UndoSendRow() {
                 }}
             />
             <div style={ROW}>
-                <span style={ROW_LABEL}>Seconds to cancel a send</span>
+                <span style={ROW_TITLE}>{t('settings.undoSend.durationLabel')}</span>
                 <input
                     key={seconds}
                     type="number"
                     inputMode="numeric"
+                    enterKeyHint="done"
+                    autoComplete="off"
                     min={UNDO_SEND_SECONDS_MIN}
                     max={UNDO_SEND_SECONDS_MAX}
                     step={1}
@@ -80,7 +81,8 @@ export function UndoSendRow() {
                         });
                     }}
                     onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-                    aria-label="Seconds to cancel a send"
+                    onWheel={blurNumberInputOnWheel}
+                    aria-label={t('settings.undoSend.durationAriaLabel')}
                     style={{ ...INPUT, width: 100, textAlign: 'right' }}
                 />
             </div>

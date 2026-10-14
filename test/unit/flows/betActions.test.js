@@ -18,9 +18,12 @@ import { describe, it, expect, vi } from 'vitest';
 // The builder-selection tests below never reach submitAction (they stop at the
 // missing signing source), so stubbing it here only affects the block,
 // which is the one that needs to read the encoderOpts the flow builds.
-const { submitCalls } = vi.hoisted(() => ({ submitCalls: [] }));
+const { submitCalls, buildCalls } = vi.hoisted(() => ({ submitCalls: [], buildCalls: [] }));
 vi.mock('../../../packages/core/src/flows/submitAction.js', () => ({
     submitAction: async (opts) => { submitCalls.push(opts); return { txid: 'tx' }; },
+}));
+vi.mock('../../../packages/core/src/flows/buildActionPsbt.js', () => ({
+    buildActionPsbt: async (opts) => { buildCalls.push(opts); return { psbtHex: '70736274ff00' }; },
 }));
 
 import {
@@ -28,6 +31,7 @@ import {
     placeBetAction,
     resolveMarketAction,
     cancelMarketAction,
+    buildBetActionPsbt,
 } from '../../../packages/core/src/flows/betActions.js';
 
 function harness() {
@@ -41,7 +45,7 @@ function harness() {
     return {
         calls,
         betting,
-        sdkRegistry: { get: vi.fn(() => ({ betting })) },
+        sdkRegistry: { get: vi.fn(() => ({ betting, actions: { createAction: vi.fn() } })) },
     };
 }
 
@@ -82,6 +86,51 @@ describe('flows/betActions builder selection', () => {
             sdkRegistry: h.sdkRegistry, chainId: 'c', params: { feedActionIndex: '5' },
         })).rejects.toThrow(FROM_MISSING);
         expect(h.calls).toEqual(['cancelMarketParams']);
+    });
+});
+
+describe('flows/buildBetActionPsbt builder selection', () => {
+    it.each([
+        ['createMarketParams', { label: 'L', tick: 'T' }, 0],
+        ['placeBetParams', { feedActionIndex: '5', outcome: 0, amount: '1' }, 2],
+        ['resolveMarketParams', { feedActionIndex: '5', outcome: 1 }, 3],
+        ['cancelMarketParams', { feedActionIndex: '5' }, 1],
+    ])('uses %s before the unsigned encoder', async (builder, params, version) => {
+        buildCalls.length = 0;
+        const h = harness();
+        await buildBetActionPsbt({
+            chainRegistry: {},
+            sdkRegistry: h.sdkRegistry,
+            chainId: 'c',
+            from: { address: 'source', publicKey: '02aabbcc' },
+            builder,
+            params,
+        });
+
+        expect(h.calls).toEqual([builder]);
+        expect(buildCalls).toHaveLength(1);
+        expect(buildCalls[0].actionData).toEqual({
+            action: 'BET',
+            params: { version, ...params },
+        });
+    });
+
+    it('validates a v4 list edit without changing its wire params', async () => {
+        buildCalls.length = 0;
+        const h = harness();
+        await buildBetActionPsbt({
+            chainRegistry: {},
+            sdkRegistry: h.sdkRegistry,
+            chainId: 'c',
+            from: { address: 'source', publicKey: '02aabbcc' },
+            builder: 'editFeedListsParams',
+            params: { feedActionIndex: 5, allowList: '', blockList: 0 },
+        });
+
+        expect(buildCalls[0].actionData).toEqual({
+            action: 'BET',
+            params: { version: 4, feedActionIndex: '5', allowList: '', blockList: '0' },
+        });
     });
 });
 

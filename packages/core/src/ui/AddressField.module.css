@@ -6,13 +6,37 @@
 
 /* AddressField: Input + one trailing icon action inside the field.
  * The icon button is anchored over the input box only, never the
- * hint/error lines below it, using the pinned label metrics (20px
- * label line + space-1 gap) and the Input size contract (36px md /
- * 48px lg). Adapted from Send's .inlineContactsButton, which this
- * component supersedes. */
+ * hint/error lines below it, using the pinned label metrics and the
+ * selected shared Button/Input size contract. Adapted from Send's
+ * .inlineContactsButton, which this component supersedes. */
 
 .wrap {
+    --address-control-height: var(--xc-control-h-md);
+    --xc-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
+    --address-control-padding-x: var(--xc-control-pad-x-md, var(--xc-control-pad-x));
+    --address-control-font-size: var(--xc-control-font-md, var(--xc-control-font));
     position: relative;
+}
+
+.sm {
+    --address-control-height: var(--xc-control-h-sm);
+    --xc-icon-size: var(--xc-control-icon-sm, var(--xc-icon-sm));
+    --address-control-padding-x: var(--xc-control-pad-x-sm, var(--xc-control-pad-x));
+    --address-control-font-size: var(--xc-control-font-sm, var(--xc-control-font));
+}
+
+.md {
+    --address-control-height: var(--xc-control-h-md);
+    --xc-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
+    --address-control-padding-x: var(--xc-control-pad-x-md, var(--xc-control-pad-x));
+    --address-control-font-size: var(--xc-control-font-md, var(--xc-control-font));
+}
+
+.lg {
+    --address-control-height: var(--xc-control-h-lg);
+    --xc-icon-size: var(--xc-control-icon-lg, var(--xc-icon-lg));
+    --address-control-padding-x: var(--xc-control-pad-x-lg, var(--xc-control-pad-x));
+    --address-control-font-size: var(--xc-control-font-lg, var(--xc-control-font));
 }
 
 .wrap label {
@@ -21,34 +45,90 @@
 
 .iconButton {
     position: absolute;
-    inset-inline-end: 4px;
+    z-index: calc(var(--xc-z-base) + 1);
+    inset-inline-end: 0;
     top: calc(20px + var(--xc-space-1));
-    height: 36px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 44px;
-    padding: 0;
-    border: none;
-    border-radius: var(--xc-radius-sm);
-    background: transparent;
-    color: var(--xc-text-muted);
-    cursor: pointer;
 }
 
-.lg .iconButton {
-    height: 48px;
+.iconButton > button {
+    background: transparent;
+    border-color: transparent;
+    color: var(--xc-text-muted);
 }
 
 .noLabel .iconButton {
     top: 0;
 }
 
-.iconButton:hover:not(:disabled) {
+.readOnly input {
+    color: transparent;
+}
+
+.readOnlyValue {
+    position: absolute;
+    z-index: calc(var(--xc-z-base) + 1);
+    inset-inline-start: var(--address-control-padding-x);
+    inset-inline-end: calc(var(--address-control-height) + var(--xc-space-2));
+    top: calc(20px + var(--xc-space-1));
+    min-height: var(--address-control-height);
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    white-space: nowrap;
+    font-size: var(--address-control-font-size);
+    pointer-events: none;
+}
+
+.readOnlyValue > span {
+    max-width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    font-size: inherit;
+}
+
+/* Receive keeps the complete address visible. The taller field gives common
+ * Bech32 and Base58 addresses room to wrap without colliding with the picker. */
+.wrappedReadOnly input,
+.wrappedReadOnly .readOnlyValue,
+.wrappedReadOnly .iconButton {
+    min-height: 4rem;
+}
+
+.wrappedReadOnly .readOnlyValue {
+    align-items: center;
+    white-space: normal;
+}
+
+.wrappedReadOnly .readOnlyValue > span {
+    overflow: visible;
+    overflow-wrap: anywhere;
+    white-space: normal;
+    line-height: 1.35;
+}
+
+.noLabel .readOnlyValue {
+    top: 0;
+}
+
+.readOnly input:focus {
     color: var(--xc-text);
 }
 
-.iconButton:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+.readOnly > :first-child:focus-within + .readOnlyValue {
+    visibility: hidden;
+}
+
+.iconButton > button:hover:not(:disabled),
+.iconButton > button:focus-visible {
+    background: transparent;
+    border-color: transparent;
+    color: var(--xc-text);
+}
+
+.iconButton > button:disabled {
+    background: transparent;
+    border-color: transparent;
 }

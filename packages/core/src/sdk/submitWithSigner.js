@@ -28,6 +28,7 @@
 // or skip the wait and poll separately.
 
 import { assertSigningAllowed } from '../flows/panicMode.js';
+import { assertMainnetActionAllowed } from '../flows/mainnetPrelaunch.js';
 import { nativeFeeOutputOf, isChunkEncoding } from '../flows/nativeFeeLane.js';
 import { signerSupportsChunkReveal } from '../flows/signerCapability.js';
 import { capRbfToDescriptor } from '../flows/rbfCap.js';
@@ -42,6 +43,7 @@ import { isAlreadyOnNetworkRejection } from '../flows/broadcastPermanence.js';
 import { assertRevealSpendsCommitLegs } from './p2shRevealInputs.js';
 import { compiledPayloadByteLen, envelopeEncoderOpts } from '../flows/envelopeSelection.js';
 import { chunkLaneOpener, signerSubject } from '../shared/utils/chunkLaneCopy.js';
+import { assertBuiltActionMatchesIntent } from '../flows/verifyBuiltAction.js';
 
 export { RevealInputsRefusedError } from './p2shRevealInputs.js';
 
@@ -247,6 +249,9 @@ export function assertCompleteEnvelope(built, action) {
  * @property {{ timeout?: number, pollInterval?: number, requireValid?: boolean }} [waitOpts]
  * @property {(phase: SubmitPhase, data: object) => void} [onProgress]
  * @property {(transactions: { signed: { signedPsbtHex: string, txHex: string, txid: string }, revealSigned: { signedPsbtHex: string, txHex: string, txid: string } | null }) => void | Promise<void>} [beforeBroadcast] called after every currently signable transaction is signed and before anything is broadcast
+ * @property {boolean} [verifyBuiltTx]   atomic path only: run the confirm pipeline's tamper checks on the
+ *                                       PSBT the encoder returns before the signer sees it (flows/verifyBuiltAction.js).
+ *                                       Set by callers whose approval came before the build, such as a dApp signAction.
  */
 
 /**
@@ -282,6 +287,7 @@ export async function submitWithSigner({
     waitOpts,
     onProgress = () => {},
     beforeBroadcast,
+    verifyBuiltTx = false,
 }) {
     if (!sdkRegistry) throw new Error('submitWithSigner: sdkRegistry is required');
     if (!actionData?.action) throw new Error('submitWithSigner: actionData.action is required');
@@ -296,6 +302,8 @@ export async function submitWithSigner({
     // §26.5 / G068: refuse to drive any signer while panic mode is on.
     // Cleared automatically once the timer expires.
     assertSigningAllowed();
+    // XChain actions on *-mainnet are refused before launch; bare native payments pass.
+    assertMainnetActionAllowed({ chainId, actionData, descriptor: chainRegistry?.get(chainId) });
 
     const sdk = sdkRegistry.get(chainId);
     const encoder = sdk.encoder;
@@ -513,6 +521,23 @@ export async function submitWithSigner({
                 ? effectiveEncoderOpts.customOutputs.slice()
                 : [];
         }
+
+        // An approval given before this build (a dApp signAction) has not seen
+        // these bytes, so they are held to the confirm pipeline's checks before
+        // any signer is asked. Read after createTx: the ADS fold appends its
+        // donation to this same array on the way in. Throws, unsigned, on a
+        // mismatch; never changes the bytes of a build that passes.
+        if (verifyBuiltTx) {
+            assertBuiltActionMatchesIntent({
+                sdk,
+                encoded,
+                actionString: bareNativePayment ? null : createResult.actionString,
+                bareNativePayment,
+                customOutputs: effectiveEncoderOpts.customOutputs,
+                ownAddresses: [effectiveEncoderOpts.sourceAddress, effectiveEncoderOpts.change],
+                rawData: effectiveEncoderOpts.rawData,
+            });
+        }
     }
 
     // P2SH/P2WSH two-phase: the encoder paid to a script and phase 2 spends it
@@ -623,16 +648,11 @@ export async function submitWithSigner({
     // (and ultimately the §49.5 queued-broadcast surface) can recover
     // the signed hex instead of losing it on a network blip.
     //
-    // AWAITED, unlike every other progress call in this file. This is
-    // the one phase whose handler writes the DURABLE PendingTx row that says a
-    // transaction may be on the network (submitAction's composedOnProgress puts
-    // status 'broadcasting'). Fired and forgotten, that write races the broadcast,
-    // so a crash in between leaves a durable record claiming nothing was ever sent
-    // while the network already holds the tx. Awaiting it restores the same rule
-    // recordPendingCommit states above: the record precedes the effect, and a
-    // record that cannot be written stops the effect (the rejection propagates to
-    // submitAction, which marks the row 'failed' - no money has moved yet).
-    await onProgress('broadcasting', { txid: signed.txid });
+    // This awaited event writes the durable PendingTx checkpoint, including the
+    // exact signed bytes, before the relay can observe them. A restart can then
+    // re-offer those bytes without signing a replacement transaction, and a
+    // failed checkpoint stops the network effect.
+    await onProgress('broadcasting', { txid: signed.txid, txHex: signed.txHex });
     try {
         await broadcastSigned(encoder, signed.txHex);
     } catch (err) {

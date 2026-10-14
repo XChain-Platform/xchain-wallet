@@ -66,11 +66,11 @@ assert.ok(/arrayBufferToHex\(/.test(psbtSrc),
 assert.ok(/Browse for \.psbt file/.test(psbtSrc),
     'PsbtSignForm exposes a Browse-for-file button');
 
-// 6. ContactsSection wires the hook for JSON drop on the Import row.
+// 6. ContactsSection wires the hook for JSON and CSV drop on the Import row.
 assert.ok(/from '\.\.\/\.\.\/hooks\/useDropZone\.js'/.test(contactsSrc),
     'ContactsSection imports useDropZone');
-assert.ok(/accept:\s*\['\.json',\s*'application\/json'\]/.test(contactsSrc),
-    'ContactsSection restricts drop to JSON files');
+assert.ok(/accept:\s*\['\.json',\s*'\.csv',\s*'application\/json',\s*'text\/csv'\]/.test(contactsSrc),
+    'ContactsSection restricts drop to JSON and CSV files');
 assert.ok(/importFromText\(/.test(contactsSrc),
     'ContactsSection routes drop content through the same import-from-text path the picker uses');
 assert.ok(/drop one here/.test(contactsSrc),

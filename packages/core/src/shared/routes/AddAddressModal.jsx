@@ -30,11 +30,15 @@
 // session signer (no password); for hardware wallets each derivation is a
 // device round-trip.
 
-import { useEffect, useMemo, useState } from 'react';
-import { Button, ChainPicker, Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+    Button, ChainPicker, EmptyState, FormPage, Icon, PageHeader, Screen, StatusMessage,
+} from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { blurNumberInputOnWheel } from '../utils/formInput.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './AddAddressModal.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -46,7 +50,7 @@ const MAX_ADDRESSES = 25;
  * @param {string} [props.accountId]              active account; new addresses are scoped to it
  * @param {string[]} props.chainIds the chains the account is already on; the coin options are these UNION the chains active on the current network
  * @param {() => void} props.onClose
- * @param {(count: number) => void} [props.onGenerated]   called after a successful batch
+ * @param {(count: number) => void} [props.onGenerated]   called with the number persisted, including a partial batch
  */
 // Users recognize address formats by their leading characters, not by
 // script-type names, so each Type option carries a "starts with ..."
@@ -59,8 +63,8 @@ const ADDRESS_TYPE_HINT = {
     },
     litecoin: {
         mainnet: { p2pkh: 'L...', 'p2sh-p2wpkh': 'M...', p2wpkh: 'ltc1...' },
-        testnet: { p2pkh: 'm.../n...', 'p2sh-p2wpkh': 'Q...', p2wpkh: 'tltc1...' },
-        regtest: { p2pkh: 'm.../n...', 'p2sh-p2wpkh': 'Q...', p2wpkh: 'rltc1...' },
+        testnet: { p2pkh: 'm.../n...', 'p2sh-p2wpkh': '2...', p2wpkh: 'tltc1...' },
+        regtest: { p2pkh: 'm.../n...', 'p2sh-p2wpkh': '2...', p2wpkh: 'rltc1...' },
     },
     dogecoin: {
         mainnet: { p2pkh: 'D...' },
@@ -113,7 +117,6 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
         .filter(Boolean)
         .map((d) => ({
             chainId: d.id,
-            displayName: d.displayName,
             addressTypes: d.addressTypes,
             defaultAddressType: flowsLib.defaultAddressTypeForFormat(d, walletFormat),
             coin: d.coin,
@@ -138,6 +141,7 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
     const [busy, setBusy] = useState(false);
     const [done, setDone] = useState(0);
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    const generateLockRef = useRef(false);
 
     // Changing the coin resets the type to that chain's default, since
     // each chain supports a different address-type set.
@@ -150,16 +154,18 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
 
     async function handleGenerate(event) {
         event.preventDefault();
-        if (busy) return;
-        const n = Math.floor(Number(count));
+        if (generateLockRef.current) return;
+        const n = Number(count);
         if (!effectiveChainId) { setError('Pick a coin.'); return; }
         if (!Number.isInteger(n) || n < 1 || n > MAX_ADDRESSES) {
             setError(`Enter a number between 1 and ${MAX_ADDRESSES}.`);
             return;
         }
+        generateLockRef.current = true;
         setBusy(true);
         setError(null);
         setDone(0);
+        let generated = 0;
         try {
             const generate = purpose === 'dispenser'
                 ? messaging.generateDispenserAddress
@@ -172,20 +178,26 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
                     accountId,
                     addressType: effectiveAddressType,
                 });
-                setDone(i + 1);
+                generated = i + 1;
+                setDone(generated);
             }
-            onGenerated?.(n);
+            onGenerated?.(generated);
             onClose();
         } catch (err) {
-            setError(
-                err?.message
-                || 'Could not generate addresses. Make sure the wallet is unlocked (or your hardware device is connected).',
-            );
+            // A completed iteration is already in the vault, so refresh the
+            // parent list even though the modal stays open for the error.
+            if (generated > 0) onGenerated?.(generated);
+            setError(userFacingMessage(
+                err,
+                'Could not generate addresses. Make sure the wallet is unlocked or your hardware device is connected.',
+            ));
+        } finally {
+            generateLockRef.current = false;
             setBusy(false);
         }
     }
 
-    const countNum = Math.floor(Number(count));
+    const countNum = Number(count);
     const generateLabel = Number.isInteger(countNum) && countNum > 1 ? `Generate ${countNum}` : 'Generate';
 
     const header = (
@@ -195,27 +207,46 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
             titleIcon={<Icon.PlusIcon />}
         />
     );
+    const footer = coinOptions.length > 0 ? (
+        <form aria-label="Generate addresses" onSubmit={handleGenerate}>
+            <Button
+                type="submit"
+                variant="primary"
+                size="md"
+                block
+                loading={busy}
+                disabled={busy || !effectiveChainId}
+                data-testid="add-address-generate"
+            >
+                {generateLabel}
+            </Button>
+        </form>
+    ) : null;
     return (
-        <Screen variant={variant} header={header}>
-            <>
-                {coinOptions.length === 0 ? (
-                    <>
-                        <p className={styles.empty}>
-                            No coins are available yet. Unlock the wallet, or turn on a network
-                            under Settings.
-                        </p>
-                        <div className={styles.actions}>
-                            <Button type="button" variant="primary" size="md" onClick={onClose}>Close</Button>
-                        </div>
-                    </>
-                ) : (
-                    <form onSubmit={handleGenerate} noValidate>
+        <Screen variant={variant} header={header} footer={footer}>
+            {coinOptions.length === 0 ? (
+                <EmptyState
+                    title="No coins available"
+                    body="Coins become available when the wallet is unlocked and a supported network is enabled."
+                />
+            ) : (
+                <FormPage
+                    label="Add addresses"
+                    onSubmit={handleGenerate}
+                    status={(error || busy) ? (
+                        <>
+                            {error ? <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage> : null}
+                            {busy ? <p className={styles.progress}>Generating {done}/{countNum}…</p> : null}
+                        </>
+                    ) : null}
+                >
                         <ChainPicker
                             label="Coin"
                             value={effectiveChainId}
                             onChange={changeCoin}
                             chainIds={coinOptions.map((c) => c.chainId)}
                             chainRegistry={chainRegistry}
+                            hideNetworkKind
                             disabled={busy}
                         />
                         <label className={styles.field}>
@@ -265,28 +296,19 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
                                 className={styles.select}
                                 type="number"
                                 inputMode="numeric"
+                                enterKeyHint="go"
+                                autoComplete="off"
                                 aria-label="Number of addresses"
                                 min={1}
                                 max={MAX_ADDRESSES}
                                 value={count}
                                 onChange={(e) => { setCount(e.target.value); setError(null); }}
+                                onWheel={blurNumberInputOnWheel}
                                 disabled={busy}
                             />
                         </label>
-                        {error ? <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage> : null}
-                        {busy ? <p className={styles.progress}>Generating {done}/{countNum}…</p> : null}
-                        <div className={styles.actions}>
-                            {/* The label carries a count ("Generate 3"), so matching it by
-                                text needs a regex that quietly also matches the wrong
-                                button the day another Generate appears. */}
-                            <Button type="submit" variant="primary" size="md" loading={busy} disabled={busy || !effectiveChainId}
-                                data-testid="add-address-generate">
-                                {generateLabel}
-                            </Button>
-                        </div>
-                    </form>
-                )}
-            </>
+                </FormPage>
+            )}
         </Screen>
     );
 }

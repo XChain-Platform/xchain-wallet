@@ -228,7 +228,7 @@ test.describe('BET across two wallets', () => {
 
         await test.step('wallet B: a SECOND wallet, created inside the same session', async () => {
             await gotoPalette(page, 'Switch wallet');
-            await page.getByRole('button', { name: 'Add Wallet' }).click();
+            await page.getByRole('button', { name: 'Add wallet' }).click();
             // navigate:false, because this add-wallet flow starts at the
             // onboarding welcome INSIDE the unlocked shell; a goto('/') would
             // throw away the session and land back on wallet A.

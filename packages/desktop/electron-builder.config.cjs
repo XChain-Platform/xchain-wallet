@@ -535,14 +535,40 @@ const config = {
     // that forgets it would publish a non-reproducible AppImage and say
     // nothing, and a lane added later would have to remember. Here it
     // cannot be left out of anything that builds Linux.
+    //
+    // IT ALSO PINS THE MODES OF THE BUILD RESOURCES, for both Linux
+    // packages. The v0.341.3 reproduce check failed on both AppImages AND
+    // both .deb files because build/icon.png, which fpm and the AppImage
+    // stage copy verbatim (mode included) as the 1024x1024 icon, was 0644
+    // in the CI checkout and 0664 in a checkout made under umask 002. A
+    // checkout's modes are the host's umask, not the commit's, and the bind
+    // mount carries them into the container. Normalized here, before
+    // anything reads the icons; scripts/deterministic-modes.cjs has the rule.
     beforePack: async (context) => {
         if (context.electronPlatformName !== 'linux') {
             return;
         }
+        const { normalizeTreeModes } = require('./scripts/deterministic-modes.cjs');
+        normalizeTreeModes(context.packager?.buildResourcesDir ?? join(here, 'build'));
         const {
             prepareDeterministicAppImageToolset,
         } = require('./scripts/appimage-toolset.cjs');
         await prepareDeterministicAppImageToolset(context.arch);
+    },
+
+    // The same mode rule over the packed app, which is the tree both Linux
+    // targets build from. Inside the reproduce container it is already
+    // canonical (the container creates it under umask 022), so there it
+    // changes nothing; it is here so a build outside that container, under
+    // any umask, still hands fpm and mksquashfs the same modes. The
+    // mksquashfs wrapper applies the rule once more to the AppImage stage,
+    // which also holds files this hook never sees (AppRun, the .desktop).
+    afterPack: async (context) => {
+        if (context.electronPlatformName !== 'linux') {
+            return;
+        }
+        const { normalizeTreeModes } = require('./scripts/deterministic-modes.cjs');
+        normalizeTreeModes(context.appOutDir);
     },
 
     // --- The store package lands where nothing looks ---------
@@ -613,6 +639,17 @@ const config = {
     // rejects it outright ("configuration has an unknown property
     // 'homepage'"), which is the good failure mode. It is app METADATA,
     // so it lives in packages/desktop/package.json; see the comment there.
+
+    // Disable packaged-runtime switches that can expose Node execution or debugging.
+    // Encrypt Chromium cookies with the operating system's cryptography keys.
+    // Validate the embedded ASAR on Electron 44's supported macOS and Windows builds.
+    electronFuses: {
+        runAsNode: false,
+        enableNodeOptionsEnvironmentVariable: false,
+        enableNodeCliInspectArguments: false,
+        enableCookieEncryption: true,
+        enableEmbeddedAsarIntegrityValidation: true,
+    },
 
     // Explicit asar: reduces startup I/O + lets electron-builder
     // write deterministic archive entries. THERE IS ONE NATIVE MODULE,
@@ -701,6 +738,11 @@ const config = {
         // `darkModeSupport` uses the system theme; we do this already
         // via tokens.css so the native window chrome matches.
         darkModeSupport: true,
+        // QrScanner opens the camera through getUserMedia. macOS requires
+        // this text in Info.plist before it presents the consent prompt.
+        extendInfo: {
+            NSCameraUsageDescription: 'Scan QR codes for wallet addresses and transactions.',
+        },
         // Hardened runtime is required for notarization. Entitlements
         // live alongside the config in build/entitlements.mac.plist.
         hardenedRuntime: true,
@@ -1098,7 +1140,12 @@ const config = {
         artifactName: 'xchain-wallet_${version}_${arch}.${ext}',
         // Pin compression + omit non-deterministic build fields.
         // fpm (which electron-builder invokes) respects SOURCE_DATE_EPOCH
-        // for ar-archive mtimes.
+        // for ar-archive mtimes and the data/control tar mtimes, and writes
+        // every entry as 0/0. It does NOT normalize file modes: it copies
+        // each source file's mode as it finds it. That is what broke the
+        // v0.341.3 reproduce check (the icon's 0644 vs 0664, from the
+        // checkout's umask), and why the beforePack/afterPack hooks above
+        // pin modes before fpm reads anything.
         compression: 'xz',
     },
 

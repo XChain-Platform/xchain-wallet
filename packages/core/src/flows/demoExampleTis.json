@@ -8,7 +8,7 @@
         "https://docs.xchain.io",
         "https://explorer.xchain.io/asset/EXAMPLE"
     ],
-    "html": "<iframe src=\"https://www.xchain.io/embed/example\" style=\"width:100%;height:600px\" frameborder=\"0\" allowfullscreen></iframe>",
+    "html": "<iframe src=\"https://www.xchain.io/embed/example\" sandbox=\"\" referrerpolicy=\"no-referrer\" style=\"width:100%;height:600px\" frameborder=\"0\" allowfullscreen></iframe>",
     "pgpsig": "-----BEGIN PGP SIGNATURE-----\nVersion: GnuPG v2\n\niQEcBAEBCgAGBQJabcDEFGAAoJEHbpb1f0F0EXAMPLE/SIGNATURE/BLOCK/HERE\nVjW8a3pVjNqYxqq4u8z2/EXAMPLE/SIGNATURE/BLOCK/HERE+1KZ5GzkXxRz3o5\n7y0qD5xOq5+1KZ5GzkXxRz3o57y0qD5xOq5+EXAMPLE+SIGNATURE+BLOCK+abc/\nlzqzqp4VjW8a3pVjNqYxqq4u8z2EXAMPLE-SIGNATURE-BLOCK-1234567890abcd\n=AbCd\n-----END PGP SIGNATURE-----",
     "owner": {
         "name": "Jane Doe",

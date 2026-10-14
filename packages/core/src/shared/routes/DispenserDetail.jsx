@@ -9,7 +9,11 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, FeeSelector, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import {
+    AddressText, Button, ChainBadge, CopyButton, EmptyState, FeeSelector, FormPage,
+    FormSection, Icon, Input, ListPage, ListRow, PageHeader, Screen, SectionHeader, Select,
+    StatusMessage,
+} from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -19,7 +23,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { isHwSource } from '../components/SignCredentials.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { PreflightPanel } from '../components/PreflightPanel.jsx';
-import { formatWithThousands } from '../utils/amountFormat.js';
+import { formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
@@ -30,11 +34,13 @@ import {
     customFeeEstimate,
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
-import { coinToFiat } from '../../flows/priceLookup.js';
+import { coinToFiatExact } from '../../flows/priceLookup.js';
+import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
 import { useFiatRate } from '../hooks/useFiatRate.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { useHapticFeedback } from '../hooks/useHaptic.js';
 import * as branding from '../../branding/branding.js';
-import { explorerCoinCode } from '../../registry/coinTicker.js';
+import { explorerPageUrl } from '../utils/explorerLinks.js';
 import styles from './IssueTokenForm.module.css';
 import local from './DispenserDetail.module.css';
 import { externalIndexOf, preferredSourceId } from '../addressSelection.js';
@@ -63,23 +69,27 @@ import {
     isDispenserPriceStale,
 } from '../utils/dispenserPricing.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { useToast } from '../components/ToastHost.jsx';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { isUserRejection, useActionConfirmFlow, useConfirmSubmit } from '../hooks/useActionConfirmFlow.js';
 import { dispenserDestinationNotice, useDispenserDestination } from '../hooks/useDispenserDestination.js';
+import { copyText } from '../clipboard.js';
+import { formatLocalDateTime, formatRelativeTime } from '../utils/dateTime.js';
+import { exceedsBalance } from '../utils/dividendPerUnit.js';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+// Error name for the access-list refusal raised at approval, whose message is house copy.
+const BUYER_ACCESS_REFUSED = 'BuyerAccessRefusedError';
 
 // The buy pre-flight is generated locally and has nothing overridable in it,
 // so PreflightPanel's acknowledgment set is a constant rather than state.
 const NO_ACKNOWLEDGMENTS = new Set();
 
-// Address rows in the stats hero: one line, full address shown when it
-// fits, CSS-ellipsized only when the cell actually runs out of width
-// (never the fixed first6…last6 truncation, never a second line).
+// Address rows in the stats hero keep every character visible and wrap
+// within the value column on narrow screens.
 const ADDRESS_CELL_STYLE = {
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
+    overflowWrap: 'anywhere',
     minWidth: 0,
 };
 
@@ -122,10 +132,17 @@ const ADDRESS_CELL_STYLE = {
  *   terms; a shell that does not pass it gets no Open again button
  */
 export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanceled, onOpenAgain }) {
+    const haptic = useHapticFeedback();
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
+    // A demo wallet's dispensers are fixtures; no explorer or chain read applies.
+    const isDemoWallet = flowsLib.isDemoWallet(walletId);
+    const detailIdentity = `${walletId}\u0000${chainId}\u0000${actionIndex}`;
+    const detailIdentityRef = useRef(detailIdentity);
+    detailIdentityRef.current = detailIdentity;
+    const buyInFlightRef = useRef(false);
+    const ownerActionInFlightRef = useRef(false);
 
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
@@ -148,6 +165,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     // PC-21 trade lifecycle: non-dispense events (refills/edits, closes,
     // expirations) merged with dispenses into one timeline under a tab.
     const [lifecycle, setLifecycle] = useState(/** @type {any[]} */ ([]));
+    const [lifecycleLoaded, setLifecycleLoaded] = useState(false);
     const [tab, setTab] = useState(/** @type {'dispenses' | 'lifecycle'} */ ('dispenses'));
     // The wallet address that signs close / refill / edit: the creator when
     // this wallet holds it, otherwise the dispenser's own address.
@@ -176,6 +194,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     // backing the refill AmountField's Max button + "available" footer.
     const [refillBalance, setRefillBalance] = useState(
         /** @type {string | null} */ (null),
+    );
+    const [refillDivisibility, setRefillDivisibility] = useState(
+        /** @type {number | string | null} */ (null),
     );
     // D-147: how many of the five refills are gone, derived from the lifecycle
     // events this page already loads. The refill now reaches the confirm page's
@@ -221,6 +242,8 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         const tick = String(dispenser?.give_tick || '').toUpperCase();
         if (refillStage === 'idle' || refillStage === 'done' || !ownerAddress || !tick) return undefined;
         if (typeof messaging.getWalletBalances !== 'function') return undefined;
+        setRefillBalance(null);
+        setRefillDivisibility(null);
         let cancelled = false;
         messaging.getWalletBalances(walletId)
             .then((byChain) => {
@@ -230,6 +253,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 const rows = entry ? decoderLib.balancesFromSdk(entry.balances) || [] : [];
                 const match = rows.find((b) => String(b.tick).toUpperCase() === tick);
                 setRefillBalance(match ? String(match.amount) : '0');
+                const rawMatch = (entry?.balances?.tokens || [])
+                    .find((b) => String(b?.tick || '').toUpperCase() === tick);
+                setRefillDivisibility(rawMatch?.divisibility ?? null);
             })
             .catch(() => { /* footer just stays empty on failure */ });
         return () => { cancelled = true; };
@@ -252,6 +278,8 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const buyPasswordRef = useRef('');
     buyPasswordRef.current = buyPassword;
     const [copied, setCopied] = useState(/** @type {string | null} */ (null));
+    const [copyError, setCopyError] = useState(/** @type {string | null} */ (null));
+    const { announce } = useToast();
 
     const descriptor = chainRegistry.get(chainId);
 
@@ -280,16 +308,24 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         ? displayRateToSettingsCustom(selectedFeeEstimate.unit, selectedFeeEstimate.rateValue)
         : null;
     const { settings } = useSettings();
+    const dispenserExplorerUrl = explorerPageUrl({
+        chainId,
+        kind: 'dispenser',
+        value: actionIndex,
+        settings,
+    });
+    const fiatCurrency = settings?.fiatCurrency || 'USD';
     const feeFiatRate = useFiatRate({
         chainCoin: descriptor?.coin,
-        fiatCurrency: 'USD',
+        fiatCurrency,
         allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
+        enabled: descriptor?.networkKind === 'mainnet',
     });
     const fiatForFee = useMemo(() => (coinAmount) => {
-        const v = coinToFiat(coinAmount, feeFiatRate);
-        if (v == null || !Number.isFinite(v) || v <= 0) return null;
-        return v < 0.01 ? '< $0.01' : `$${v.toFixed(2)}`;
-    }, [feeFiatRate]);
+        const value = coinToFiatExact(coinAmount, feeFiatRate);
+        if (value == null || !(Number(value) > 0)) return null;
+        return formatFiatAmount(value, feeFiatRate?.fiatCurrency || fiatCurrency);
+    }, [feeFiatRate, fiatCurrency]);
     const NATIVE_TICKER_BY_CHAIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
     const feeCoinTicker = descriptor?.coin
         ? (NATIVE_TICKER_BY_CHAIN[descriptor.coin] || descriptor.coin.toUpperCase())
@@ -310,6 +346,11 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     // so threading it everywhere is correct on a free action and correct when
     // consensus starts pricing one; enumerating would be wrong the day it does.
     const nativeFee = useNativeFee(chainId);
+    const clearOwnerActionErrors = useCallback(() => {
+        setCancelError(null);
+        setRefillError(null);
+        setEditError(null);
+    }, []);
     const feeSelector = feeTiers ? (
         <FeeSelector
             label="Network fee"
@@ -317,7 +358,10 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             formatFiat={fiatForFee}
             tiers={feeTiers}
             value={feePick}
-            onChange={setFeePick}
+            onChange={(next) => {
+                setFeePick(next);
+                clearOwnerActionErrors();
+            }}
             customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
         />
     ) : null;
@@ -329,11 +373,25 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         let cancelled = false;
         setLoading(true);
         setLoadError(null);
+        setAction(null);
+        setDispenser(null);
         setDispenses([]);
         setDispensesLoaded(false);
+        setLifecycle([]);
+        setLifecycleLoaded(false);
+        setOwnerAddress(null);
+        setCreatorHeld(false);
+        setHeldAddresses([]);
+        setBuyerAddresses([]);
+        setBuyerAddressId(null);
+        if (!/^\d+$/.test(String(actionIndex || ''))) {
+            setLoadError('Dispenser ID must be a whole number.');
+            setLoading(false);
+            return () => { cancelled = true; };
+        }
         // Demo wallet: resolve the fixture row (owned by the first address
         // on this chain) instead of querying an explorer.
-        const isDemo = flowsLib.isDemoWallet(walletId);
+        const isDemo = isDemoWallet;
         Promise.all([
             isDemo
                 ? Promise.resolve(null)
@@ -357,7 +415,6 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             const act = pickAction(resp);
             const disp = pickDispenser(resp);
             if (!act) {
-                setLoadError('Action not found.');
                 setLoading(false);
                 return;
             }
@@ -395,6 +452,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             if (isDemo) {
                 setDispenses(flowsLib.synthesizeDemoDispenses(actionIndex));
                 setDispensesLoaded(true);
+                setLifecycleLoaded(true);
             } else if (source) {
                 // Fills of THIS dispenser, keyed by its action index. The source
                 // lane answers "fills on this address", which over-reports as soon
@@ -414,7 +472,8 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                             setDispenses(extractRows(d));
                             setDispensesLoaded(true);
                         }))
-                    .catch(() => { /* best-effort; detail still usable without dispenses */ });
+                    .catch(() => { /* best-effort; detail still usable without dispenses */ })
+                    .finally(() => { if (!cancelled) setDispensesLoaded(true); });
                 // PC-21: the rest of the lifecycle (refills/edits, closes,
                 // expirations). Best-effort; scoped to this dispenser by its
                 // action index when the event rows carry it.
@@ -449,9 +508,15 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                                 }
                             }
                             setLifecycle(evs);
+                            setLifecycleLoaded(true);
                         })
-                        .catch(() => { /* best-effort */ });
+                        .catch(() => { if (!cancelled) setLifecycleLoaded(true); });
+                } else {
+                    setLifecycleLoaded(true);
                 }
+            } else {
+                setDispensesLoaded(true);
+                setLifecycleLoaded(true);
             }
         }).catch((err) => {
             if (!cancelled) {
@@ -460,7 +525,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             }
         });
         return () => { cancelled = true; };
-    }, [walletId, chainId, actionIndex, messaging, reloadKey]);
+    }, [walletId, chainId, actionIndex, messaging, reloadKey, isDemoWallet]);
 
     const cancelParams = useMemo(() => ({
         VERSION: '1',
@@ -527,6 +592,8 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     // price match after the payment has already moved), pay too much and the
     // remainder is floored away and kept as a tip.
     useEffect(() => {
+        setOracleQuote(null);
+        setOracleQuoteChecked(false);
         if (!oracleAddress || fiatAmount != null) { setOracleQuoteChecked(true); return undefined; }
         if (typeof messaging?.oracleFeeds !== 'function') { setOracleQuoteChecked(true); return undefined; }
         let cancelled = false;
@@ -538,6 +605,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 // fiat). Picking any other would quote a different asset's
                 // price with total confidence.
                 const match = (Array.isArray(feeds) ? feeds : []).find((f) => f
+                    && String(f.coin || '').toUpperCase() === String(getCoin || '').toUpperCase()
                     && String(f.tick || '').toUpperCase() === String(giveTick || '').toUpperCase()
                     && String(f.fiat || '').toUpperCase() === String(fiatCode || '').toUpperCase());
                 // `live`, never `pending`: a published quote is inert for 24
@@ -548,7 +616,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             })
             .catch(() => { if (!cancelled) setOracleQuoteChecked(true); });
         return () => { cancelled = true; };
-    }, [oracleAddress, fiatAmount, fiatCode, giveTick, chainId, messaging]);
+    }, [oracleAddress, fiatAmount, fiatCode, getCoin, giveTick, chainId, messaging]);
 
     // Live status: everything that can change after the create - the 1-hour
     // "cancelling" close window, expiry, sold-out - plus the post-edit
@@ -586,7 +654,8 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             const now = Date.now();
             setNowMs(now);
             if (now - lastReadMs < CHAIN_TIME_REFRESH_MS) return;
-            if (typeof messaging?.getChainTipBlockTime !== 'function') return;
+            // Demo dispensers are fixtures with no chain to read.
+            if (isDemoWallet || typeof messaging?.getChainTipBlockTime !== 'function') return;
             lastReadMs = now;
             // A failed read keeps the last chain time, which the countdown
             // keeps advancing by local elapsed time.
@@ -597,7 +666,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         tick();
         const timer = setInterval(tick, 60000);
         return () => { stopped = true; clearInterval(timer); };
-    }, [cancelTimestamp, chainId, messaging]);
+    }, [cancelTimestamp, chainId, messaging, isDemoWallet]);
     const closeEta = cancelTimestamp != null
         ? dispenserCloseEta(cancelTimestamp, { nowMs, ...(chainClock || {}) })
         : null;
@@ -626,6 +695,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         () => remainingFillsFrom(escrowRemaining, dispenser?.give_amount),
         [escrowRemaining, dispenser],
     );
+    const hasCompleteFill = remainingFills == null || remainingFills > 0n;
     const isTokenPaid = Boolean(getTick) && !!getAmount;
     const isCoinPaid = !getTick && Boolean(getCoin) && !!getAmount;
     // What a buyer pays with: the payment token, or the chain's native coin.
@@ -635,8 +705,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const coinBuyable = isCoinPaid && !isFiatPriced && Boolean(feeCoinTicker)
         && String(getCoin).toUpperCase() === feeCoinTicker;
     const payTick = isTokenPaid ? getTick : (coinBuyable ? feeCoinTicker : '');
-    const canBuyWithSend = (isTokenPaid || coinBuyable) && buyerAddresses.length > 0 && !ownerAddress;
-    const showPayHere = isCoinPaid && !ownerAddress;
+    const canBuyWithSend = (isTokenPaid || coinBuyable) && buyerAddresses.length > 0
+        && !ownerAddress && isOpen && hasCompleteFill;
+    const showPayHere = isCoinPaid && !ownerAddress && isOpen && hasCompleteFill;
 
     // A coin-paid dispenser can be priced below the chain's dust floor (one
     // opened before the create form refused that, or by another client), and the
@@ -657,6 +728,12 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         const count = BigInt(value);
         return count > 0n ? count : null;
     }, [fills]);
+    const fillsError = fillsCount == null
+        ? 'Enter a whole number of fills, at least 1.'
+        : null;
+    const inventoryError = fillsCount != null && remainingFills != null && fillsCount > remainingFills
+        ? `Only ${remainingFills} complete fill${remainingFills === 1n ? '' : 's'} remain. Reduce the number of fills.`
+        : null;
 
     // Default Fills to the floor the first time a dispenser needing one loads,
     // so a buyer who never learns dispensers can be priced under dust does not
@@ -756,13 +833,18 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     }, [oracleQuote, giveAmount]);
 
     async function handleCopy(text, label) {
-        try {
-            await navigator.clipboard?.writeText(text);
+        const { ok } = await copyText(text);
+        if (ok) {
+            setCopyError(null);
             setCopied(label);
             setTimeout(() => setCopied(null), 1500);
-        } catch {
-            /* swallow; older browsers or locked-down contexts */
+            haptic.tap();
+            announce(label === 'address' ? 'Dispenser address copied.' : 'Action index copied.');
+            return;
         }
+        setCopied(null);
+        haptic.error();
+        setCopyError('Copy failed: clipboard unavailable');
     }
 
     const buyerAddress = useMemo(() => {
@@ -782,7 +864,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     // refusal verdict.
     const readBuyerPolicies = useCallback(async () => {
         const readToken = async (tick) => {
-            if (!tick || typeof messaging.getTokenInfo !== 'function') return null;
+            if (isDemoWallet || !tick || typeof messaging.getTokenInfo !== 'function') return null;
             try {
                 return await messaging.getTokenInfo({ chainId, tick });
             } catch {
@@ -803,7 +885,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             .filter((index) => index != null && String(index) !== '')
             .map(String))];
         const members = new Map();
-        if (typeof messaging.getListByActionIndex === 'function') {
+        if (!isDemoWallet && typeof messaging.getListByActionIndex === 'function') {
             await Promise.all(indexes.map(async (index) => {
                 try {
                     const detail = await messaging.getListByActionIndex({ chainId, actionIndex: index });
@@ -820,7 +902,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             blockMembers: policy.blockList != null
                 ? members.get(String(policy.blockList)) ?? null : null,
         }));
-    }, [chainId, currentAllowList, currentBlockList, getTick, giveTick, messaging]);
+    }, [chainId, currentAllowList, currentBlockList, getTick, giveTick, messaging, isDemoWallet]);
 
     const [buyerPolicies, setBuyerPolicies] = useState(/** @type {any[]} */ ([]));
     const [eligibilityChecking, setEligibilityChecking] = useState(true);
@@ -863,9 +945,11 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         return descriptions;
     });
 
-    const refreshBuyerEligibility = useCallback(async () => {
+    const refreshBuyerEligibility = useCallback(async (expectedIdentity = detailIdentityRef.current) => {
+        if (expectedIdentity !== detailIdentityRef.current) return true;
         setEligibilityChecking(true);
         const policies = await readBuyerPolicies();
+        if (expectedIdentity !== detailIdentityRef.current) return true;
         setBuyerPolicies(policies);
         setEligibilityChecking(false);
         const payerVerdict = buyerListVerdict({
@@ -1018,6 +1102,17 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     }), [dispensersAtBuyDestination, buyerAddress?.address, totalPayAmount]);
     const buyConfirmNotes = (
         <>
+            <p className={styles.successLabel}>Review purchase</p>
+            <dl className={styles.detailsList} data-testid="buy-review-summary">
+                <dt className={styles.detailsLabel}>Price per fill</dt>
+                <dd className={styles.detailsValue}>{formatWithThousands(String(getAmount))} {payTick}</dd>
+                <dt className={styles.detailsLabel}>Fills</dt>
+                <dd className={styles.detailsValue}>{String(fillsCount)}</dd>
+                <dt className={styles.detailsLabel}>You pay</dt>
+                <dd className={styles.detailsValue}>{formatWithThousands(String(totalPayAmount))} {payTick}</dd>
+                <dt className={styles.detailsLabel}>You receive</dt>
+                <dd className={styles.detailsValue}>{formatWithThousands(String(totalReceive))} {giveTick}</dd>
+            </dl>
             {buyDestinationNotice ? (
                 <div data-testid="buy-dispenser-notice">
                     <StatusMessage variant="status">{buyDestinationNotice.summary}</StatusMessage>
@@ -1055,6 +1150,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const closeEscrowNote = ownerAddress ? (
         <p className={styles.hint} data-testid="close-escrow-destination">
             Escrow returns to <AddressText address={ownerAddress.address} /> (this wallet).
+            {escrowRemaining != null && giveTick
+                ? ` Remaining escrow: ${formatWithThousands(String(escrowRemaining))} ${giveTick}.`
+                : null}
             {ownsOnlyDispenserAddress && creatorSource && creatorSource !== ownerAddress.address
                 ? ' Another address opened this dispenser; closing it from the dispenser address'
                     + ' returns the remaining escrow to this wallet, not to the creator.'
@@ -1071,7 +1169,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         /** @type {{ idx: string, members: string[] | null } | null} */ (null),
     );
     useEffect(() => {
-        if (!editAllowIdx || !chainId || typeof messaging.getListByActionIndex !== 'function') return undefined;
+        if (isDemoWallet || !editAllowIdx || !chainId || typeof messaging.getListByActionIndex !== 'function') return undefined;
         let live = true;
         const timer = setTimeout(() => {
             messaging.getListByActionIndex({ chainId, actionIndex: editAllowIdx })
@@ -1079,7 +1177,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 .catch(() => { /* best-effort: no warning beats a wrong one */ });
         }, 400);
         return () => { live = false; clearTimeout(timer); };
-    }, [editAllowIdx, chainId, messaging]);
+    }, [editAllowIdx, chainId, messaging, isDemoWallet]);
     const editAllowSelfWarning = editAllowIdx && editAllowRead?.idx === editAllowIdx
         && ownerOffAllowList({ members: editAllowRead.members, getAddress: dispAddr })
         ? ownerOffAllowListMessage(dispAddr)
@@ -1094,25 +1192,31 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     });
 
     // Turn a failed sign into house copy; the thrown text survives only as the fallback.
+    // A refusal this screen raised itself is already house copy, so it is shown as written.
     const submitFailureText = (err, fallback) => (err?.name === 'InvalidPasswordError'
         ? 'Incorrect password.'
-        : submitFailureMessage(err, {
-            chainId, coinTicker: feeCoinTicker, mandatory: nativeFee.mandatory,
-            fallback: err?.message || fallback,
-        }));
+        : err?.name === BUYER_ACCESS_REFUSED
+            ? err.message
+            : submitFailureMessage(err, {
+                chainId, coinTicker: feeCoinTicker, mandatory: nativeFee.mandatory,
+                fallback: err?.message || fallback,
+            }));
 
     const beginBuy = useCallback(async () => {
-        if (buyStage === 'submitting' || !buyRequest) return;
+        if (buyInFlightRef.current || buyStage === 'submitting' || !buyRequest) return;
         if (priceStale) {
             setBuyError(DISPENSER_PRICE_STALE_MESSAGE);
             return;
         }
-        // Resolve every buyer and pay-to list before any transaction reaches Confirm.
-        if (await refreshBuyerEligibility()) return;
-        if (buyUnderfunded || buyDustBlock) return;
-        setBuyStage('submitting');
-        setBuyError(null);
+        buyInFlightRef.current = true;
+        const expectedIdentity = detailIdentityRef.current;
         try {
+            // Resolve every buyer and pay-to list before any transaction reaches Confirm.
+            if (await refreshBuyerEligibility(expectedIdentity)) return;
+            if (expectedIdentity !== detailIdentityRef.current
+                || buyUnderfunded || buyDustBlock || fillsError || inventoryError) return;
+            setBuyStage('submitting');
+            setBuyError(null);
             const res = ownerLane.isWatcherMode
                 ? await messaging.buildSendPsbtRequest(buyRequest)
                 : await buyConfirm.run({
@@ -1121,23 +1225,29 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     compose: () => messaging.composeForConfirm(buyRequest),
                     onApprove: async (prebuiltPsbt) => {
                         // Recheck at approval because list edits can land while Confirm is open.
-                        if (await refreshBuyerEligibility()) {
-                            throw new Error(
+                        if (await refreshBuyerEligibility(expectedIdentity)) {
+                            const refused = new Error(
                                 'The selected paying address or dispenser address is refused by a current access list.',
                             );
+                            refused.name = BUYER_ACCESS_REFUSED;
+                            throw refused;
                         }
                         return submitConfirmedBuy({ ...buyRequest, prebuiltPsbt });
                     },
                 });
+            if (expectedIdentity !== detailIdentityRef.current) return;
             setBuyResult(res);
             setBuyStage('done');
         } catch (err) {
+            if (expectedIdentity !== detailIdentityRef.current) return;
             setBuyStage('idle');
             if (!isUserRejection(err)) setBuyError(submitFailureText(err, 'Buy failed.'));
         } finally {
-            setBuyPassword('');
+            buyInFlightRef.current = false;
+            if (expectedIdentity === detailIdentityRef.current) setBuyPassword('');
         }
     }, [buyStage, buyRequest, priceStale, refreshBuyerEligibility, buyUnderfunded, buyDustBlock,
+        fillsError, inventoryError,
         ownerLane.isWatcherMode, buyConfirm, chainId, messaging, submitConfirmedBuy]);
 
     /**
@@ -1147,17 +1257,21 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
      * the form quietly. Watcher mode builds an unsigned transaction instead.
      */
     async function runOwnerAction({ params, setStage, setError, setResult, fallback, onSigned }) {
+        if (ownerActionInFlightRef.current) return;
+        ownerActionInFlightRef.current = true;
+        const expectedIdentity = detailIdentityRef.current;
         setStage('submitting');
         setError(null);
-        // Demo wallet: fabricated dispensers can't broadcast; simulate.
-        if (flowsLib.isDemoWallet(walletId)) {
-            await new Promise((resolve) => setTimeout(resolve, 600));
-            setResult({ txid: null });
-            setStage('done');
-            onSigned?.({ txid: null });
-            return;
-        }
         try {
+            // Demo wallet: fabricated dispensers can't broadcast; simulate.
+            if (flowsLib.isDemoWallet(walletId)) {
+                await new Promise((resolve) => setTimeout(resolve, 600));
+                if (expectedIdentity !== detailIdentityRef.current) return;
+                setResult({ txid: null });
+                setStage('done');
+                onSigned?.({ txid: null });
+                return;
+            }
             const res = await ownerLane.run({
                 actionData: { action: 'DISPENSER', params },
                 encoderOpts: {
@@ -1168,22 +1282,71 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 },
                 submitExtra: { params },
             });
+            if (expectedIdentity !== detailIdentityRef.current) return;
             setResult(res || {});
             setStage('done');
             onSigned?.(res || {});
         } catch (err) {
+            if (expectedIdentity !== detailIdentityRef.current) return;
             setStage('confirm');
             if (!isUserRejection(err)) setError(submitFailureText(err, fallback));
+        } finally {
+            ownerActionInFlightRef.current = false;
         }
+    }
+
+    async function verifyOwnerActionOpen(setError, action) {
+        if (!isOpen) {
+            setError(`This dispenser is ${liveStatus || 'not open'} and cannot accept another ${action}.`);
+            return false;
+        }
+        if (isDemoWallet) return true;
+        try {
+            const fresh = pickDispenser(await messaging.getDispenserByActionIndex({ chainId, actionIndex }));
+            const freshStatus = flowsLib.dispenserLiveState(fresh).status;
+            if (freshStatus === 'open') return true;
+            if (fresh) setDispenser(fresh);
+            setError(`This dispenser is ${freshStatus || 'not open'} and cannot accept another ${action}.`);
+        } catch {
+            setError(`Could not verify that this dispenser is still open. Try the ${action} again.`);
+        }
+        return false;
     }
 
     async function handleRefill(event) {
         event.preventDefault();
         if (refillStage === 'submitting' || !ownerAddress) return;
         const amt = refillAmount.trim();
-        if (!amt || !(Number(amt) > 0)) { setRefillError('Enter a refill amount.'); return; }
+        if (!/^\d+(?:\.\d+)?$/.test(amt) || compareAmounts(amt, '0') !== 1) {
+            setRefillError('Refill amount must be a positive number.');
+            return;
+        }
+        const precisionError = tokenAmountPrecisionError(amt, {
+            divisibility: refillDivisibility,
+            tick: giveTick,
+            noun: 'Refill amount',
+        });
+        if (precisionError) { setRefillError(precisionError); return; }
+        if (compareAmounts(amt, giveAmount) === -1) {
+            setRefillError(
+                `Refill amount must be at least one fill (${formatWithThousands(String(giveAmount))} ${giveTick}).`,
+            );
+            return;
+        }
+        if (refillBalance == null) {
+            setRefillError('Wait for the available balance before refilling.');
+            return;
+        }
+        if (exceedsBalance(amt, refillBalance)) {
+            setRefillError(
+                `This address holds only ${formatWithThousands(refillBalance)} ${giveTick}. `
+                + 'Enter a refill amount at or below that balance.',
+            );
+            return;
+        }
         // D-147: a spent ceiling is refused here as well as on the button.
         if (refillCount.remaining <= 0 && refillCount.exact) return;
+        if (!await verifyOwnerActionOpen(setRefillError, 'refill')) return;
         await runOwnerAction({
             params: {
                 VERSION: '2',
@@ -1250,6 +1413,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     async function handleCancel(event) {
         event.preventDefault();
         if (cancelStage === 'submitting' || !ownerAddress) return;
+        if (!await verifyOwnerActionOpen(setCancelError, 'close')) return;
         await runOwnerAction({
             params: cancelParams,
             setStage: setCancelStage,
@@ -1276,14 +1440,15 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                                 : 'Dispenser detail'}
         />
     );
-    const wrap = (children) => (
+    const wrap = (children, template = 'list') => (
         <Screen variant={variant} header={header}>
-            {isFull ? <div className={styles.card}>{children}</div> : children}
+            {template === 'list' ? <ListPage>{children}</ListPage> : children}
         </Screen>
     );
 
-    if (loading) return wrap(<p className={styles.hint}>Loading…</p>);
+    if (loading) return wrap(<StatusMessage variant="status">Loading dispenser…</StatusMessage>);
     if (loadError) return wrap(<StatusMessage variant="error" className={styles.error}>{loadError}</StatusMessage>);
+    if (!action) return wrap(<EmptyState title="Dispenser not found" body="It may have been closed or not indexed yet." />);
 
     // The confirm page stands in for whichever owner form opened it; that
     // form's state stays intact behind it, so Reject lands back on it.
@@ -1292,7 +1457,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             <ActionConfirmScreen
                 {...ownerLane.confirmProps}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
                 coinTicker={feeCoinTicker}
                 signerReady={signerReady}
                 hintClassName={styles.hint}
@@ -1303,6 +1468,12 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         listsChanged={Boolean(editAllowList.trim() || editBlockList.trim())}
                         refillNote={refillCeilingMessage(refillCount)}
                         closeNote={closeEscrowNote}
+                        actionIndex={actionIndex}
+                        refillAmount={refillAmount.trim()}
+                        giveTick={giveTick}
+                        editExpiration={editExpiration.trim()}
+                        editAllowList={editAllowList.trim()}
+                        editBlockList={editBlockList.trim()}
                     />
                 )}
             />
@@ -1314,7 +1485,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
             <ActionConfirmScreen
                 confirmAction={buyConfirm.confirmAction}
                 screenVariant={variant}
-                chainLabel={descriptor?.displayName || chainId}
+                chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
                 coinTicker={feeCoinTicker}
                 signerReady={signerReady}
                 password={buyPassword}
@@ -1395,10 +1566,21 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
 
     if (refillStage === 'confirm' || refillStage === 'submitting') {
         return wrap(
-            <form onSubmit={handleRefill} noValidate>
-                <p className={styles.summary}>
-                    Refill dispenser #{actionIndex}: add {giveTick} to escrow.
-                </p>
+            <FormPage
+                label="Refill dispenser"
+                onSubmit={handleRefill}
+                status={refillError ? <StatusMessage variant="error" className={styles.error}>{refillError}</StatusMessage> : null}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={refillStage === 'submitting'}
+                        disabled={refillBalance == null || (refillCount.remaining <= 0 && refillCount.exact)}
+                    >
+                        {ownerLane.isWatcherMode ? 'Create unsigned transaction' : 'Refill dispenser'}
+                    </Button>
+                )}
+            >
                 {/*
                   * D-147: this used to be policy copy alone ("a dispenser allows
                   * up to 5 refills … a 6th is rejected") with no count, on a
@@ -1416,8 +1598,10 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 )}
                 <AmountField
                     label="Refill amount"
+                    hint={`Amount of ${giveTick} to add to escrow.`}
                     amount={refillAmount}
                     tick={giveTick || ''}
+                    divisibility={refillDivisibility}
                     onAmountFieldChange={(rawValue) => {
                         const stripped = String(rawValue).replace(/,/g, '');
                         if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
@@ -1439,15 +1623,22 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 {/* Off Bitcoin this is mandatory, so the toggle renders
                     as a disclosure rather than a choice - the same treatment the
                     other DISPENSER authoring surfaces give it. */}
-                <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={feeCoinTicker} />
-                <OwnerLaneFooter
-                    isWatcherMode={ownerLane.isWatcherMode}
-                    error={refillError}
-                    submitting={refillStage === 'submitting'}
-                    disabled={refillCount.remaining <= 0 && refillCount.exact}
-                    label="Refill dispenser"
+                <NativeFeeToggle
+                    {...nativeFee.toggleProps}
+                    onChange={(next) => {
+                        nativeFee.toggleProps.onChange(next);
+                        clearOwnerActionErrors();
+                    }}
+                    coinTicker={feeCoinTicker}
                 />
-            </form>,
+                {ownerLane.isWatcherMode ? (
+                    <p className={styles.hint}>
+                        Watcher mode: this wallet will build an unsigned transaction. Sign it on your
+                        Signer-mode wallet, then broadcast from a Full-mode wallet.
+                    </p>
+                ) : null}
+            </FormPage>,
+            'form',
         );
     }
 
@@ -1495,17 +1686,27 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     if (editStage === 'confirm' || editStage === 'submitting') {
         const anyListFilled = Boolean(editAllowList.trim() || editBlockList.trim());
         return wrap(
-            <form onSubmit={handleEdit} noValidate>
-                <p className={styles.summary}>
-                    Edit dispenser #{actionIndex}: reschedule its close time or update its
-                    allow/block lists. Leave a field blank to keep it unchanged.
-                </p>
+            <FormPage
+                label="Edit dispenser"
+                onSubmit={handleEdit}
+                status={editError ? <StatusMessage variant="error" className={styles.error}>{editError}</StatusMessage> : null}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant="primary"
+                        loading={editStage === 'submitting'}
+                        disabled={Boolean(editListConflictText)}
+                    >
+                        {ownerLane.isWatcherMode ? 'Create unsigned transaction' : 'Edit dispenser'}
+                    </Button>
+                )}
+            >
                 <Input
                     type="datetime-local"
                     label="New expiration"
                     hint={currentExpiration
-                        ? `Current: ${formatUnixDate(currentExpiration)}. Enter a new date to reschedule the automatic close.`
-                        : 'No expiration set. Enter a date to schedule an automatic close.'}
+                        ? `Current: ${formatUnixDate(currentExpiration)}. Enter a new date to reschedule the automatic close, or leave blank to keep it.`
+                        : 'No expiration set. Enter a date to schedule an automatic close, or leave blank to keep none.'}
                     value={editExpiration}
                     onChange={(e) => { setEditExpiration(e.target.value); if (editError) setEditError(null); }}
                     autoComplete="off"
@@ -1513,7 +1714,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 <Input
                     label="Allow list"
                     inputMode="numeric"
-                    hint={`Current: ${currentAllowList ? `#${currentAllowList}` : 'none'}. Enter a list number to limit who can trigger this dispenser.`}
+                    hint={`Current: ${currentAllowList ? `#${currentAllowList}` : 'none'}. Enter a list number to limit who can trigger this dispenser, or leave blank to keep it.`}
                     value={editAllowList}
                     onChange={(e) => { setEditAllowList(e.target.value); if (editError) setEditError(null); }}
                     autoComplete="off"
@@ -1526,7 +1727,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 <Input
                     label="Block list"
                     inputMode="numeric"
-                    hint={`Current: ${currentBlockList ? `#${currentBlockList}` : 'none'}. Enter a list number to bar addresses from triggering it.`}
+                    hint={`Current: ${currentBlockList ? `#${currentBlockList}` : 'none'}. Enter a list number to bar addresses from triggering it, or leave blank to keep it.`}
                     value={editBlockList}
                     onChange={(e) => { setEditBlockList(e.target.value); if (editError) setEditError(null); }}
                     autoComplete="off"
@@ -1557,15 +1758,22 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 {/* Off Bitcoin this is mandatory, so the toggle renders
                     as a disclosure rather than a choice - the same treatment the
                     other DISPENSER authoring surfaces give it. */}
-                <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={feeCoinTicker} />
-                <OwnerLaneFooter
-                    isWatcherMode={ownerLane.isWatcherMode}
-                    error={editError}
-                    submitting={editStage === 'submitting'}
-                    disabled={Boolean(editListConflictText)}
-                    label="Edit dispenser"
+                <NativeFeeToggle
+                    {...nativeFee.toggleProps}
+                    onChange={(next) => {
+                        nativeFee.toggleProps.onChange(next);
+                        clearOwnerActionErrors();
+                    }}
+                    coinTicker={feeCoinTicker}
                 />
-            </form>,
+                {ownerLane.isWatcherMode ? (
+                    <p className={styles.hint}>
+                        Watcher mode: this wallet will build an unsigned transaction. Sign it on your
+                        Signer-mode wallet, then broadcast from a Full-mode wallet.
+                    </p>
+                ) : null}
+            </FormPage>,
+            'form',
         );
     }
 
@@ -1596,13 +1804,29 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
 
     if (cancelStage === 'confirm' || cancelStage === 'submitting') {
         return wrap(
-            <form onSubmit={handleCancel} noValidate>
-                <p className={styles.summary}>{decodedCancel?.summary}</p>
+            <FormPage
+                label="Close dispenser"
+                onSubmit={handleCancel}
+                intro={decodedCancel?.summary}
+                status={cancelError ? <StatusMessage variant="error" className={styles.error}>{cancelError}</StatusMessage> : null}
+                actions={(
+                    <Button
+                        type="submit"
+                        variant="danger"
+                        loading={cancelStage === 'submitting'}
+                        disabled={cancelStage === 'submitting'}
+                    >
+                        {ownerLane.isWatcherMode ? 'Create unsigned transaction' : 'Close dispenser'}
+                    </Button>
+                )}
+            >
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={ownerAddress?.address || ''} />
@@ -1623,15 +1847,22 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 {/* Off Bitcoin this is mandatory, so the toggle renders
                     as a disclosure rather than a choice - the same treatment the
                     other DISPENSER authoring surfaces give it. */}
-                <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={feeCoinTicker} />
-                <OwnerLaneFooter
-                    isWatcherMode={ownerLane.isWatcherMode}
-                    error={cancelError}
-                    submitting={cancelStage === 'submitting'}
-                    label="Close dispenser"
-                    danger
+                <NativeFeeToggle
+                    {...nativeFee.toggleProps}
+                    onChange={(next) => {
+                        nativeFee.toggleProps.onChange(next);
+                        clearOwnerActionErrors();
+                    }}
+                    coinTicker={feeCoinTicker}
                 />
-            </form>,
+                {ownerLane.isWatcherMode ? (
+                    <p className={styles.hint}>
+                        Watcher mode: this wallet will build an unsigned transaction. Sign it on your
+                        Signer-mode wallet, then broadcast from a Full-mode wallet.
+                    </p>
+                ) : null}
+            </FormPage>,
+            'form',
         );
     }
 
@@ -1745,13 +1976,20 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     <span>. A payment made now would be refused and kept.</span>
                 </p>
             ) : null}
+            {!ownerAddress && isOpen && !hasCompleteFill ? (
+                <p role="status" className={local.closeWindowNote}>
+                    This dispenser has no complete fills left to buy.
+                </p>
+            ) : null}
             {/* Stats hero: what's dispensed at what rate, how it's paid,
                 where it lives, how it's doing. Block height / action index
                 are secondary (action index lives in the More menu). */}
             <dl className={styles.detailsList}>
                 <dt className={styles.detailsLabel}>Dispensing</dt>
                 <dd className={styles.detailsValue}>
-                    {formatNum(giveAmount)} {giveTick || '?'} per fill
+                    {giveAmount == null && !giveTick
+                        ? '-'
+                        : `${formatNum(giveAmount)} ${detailText(giveTick)} per fill`}
                 </dd>
                 <dt className={styles.detailsLabel}>Payment</dt>
                 <dd className={styles.detailsValue}>
@@ -1766,13 +2004,15 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                                     ? `${fiatCode} via oracle ${oracleAddress}: no current price (stale)`
                                     : `${fiatCode} via oracle ${oracleAddress}…`))
                             : `${fiatAmount} ${fiatCode}`)
-                        : `${formatNum(getAmount)} ${getTick || getCoin || '?'}${getTick ? ' (token)' : getCoin ? ' (native coin)' : ''}`}
+                        : getAmount == null && !getTick && !getCoin
+                            ? '-'
+                            : `${formatNum(getAmount)} ${detailText(getTick || getCoin)}${getTick ? ' (token)' : getCoin ? ' (native coin)' : ''}`}
                 </dd>
                 {escrowRemaining != null ? (
                     <>
                         <dt className={styles.detailsLabel}>Balance</dt>
                         <dd className={styles.detailsValue}>
-                            {formatNum(escrowRemaining)} {giveTick || ''} in escrow
+                            {formatNum(escrowRemaining)} {detailText(giveTick)} in escrow
                         </dd>
                     </>
                 ) : null}
@@ -1820,7 +2060,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 ) : null}
                 <dt className={styles.detailsLabel}>Status</dt>
                 <dd className={styles.detailsValue}>
-                    {isClosing ? 'closing (1-hour window)' : (liveStatus || 'unknown')}
+                    {isClosing ? 'closing (1-hour window)' : detailText(liveStatus)}
                 </dd>
                 {currentExpiration ? (
                     <>
@@ -1840,112 +2080,117 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 ) : null}
             </dl>
 
+            <SectionHeader title="Actions" />
             <div className={local.quickActions} role="group" aria-label="Dispenser actions">
                 {/* Terminal statuses drop Close / Refill / Edit outright: the
                     chain refuses all three unless the status is open, and a
                     disabled button's tooltip never shows on a phone. */}
                 {isTerminal ? (canOpenAgain ? (
-                    <button
-                        type="button"
-                        className={local.quickAction}
+                    <Button
+                        variant="secondary"
+                        block
+                        icon={<span className={local.quickActionIcon}><Icon.RefreshIcon /></span>}
                         onClick={() => onOpenAgain(reopenTermsFrom(dispenser, liveState, { chainId }))}
                         title="Open a new dispenser on this address with the same terms"
                     >
-                        <span className={local.quickActionIcon} aria-hidden="true"><Icon.RefreshIcon /></span>
-                        <span>Open again</span>
-                    </button>
+                        Open again
+                    </Button>
                 ) : null) : (
                     <>
-                        <button
-                            type="button"
-                            className={local.quickAction}
+                        <Button
+                            variant="secondary"
+                            block
+                            icon={<span className={local.quickActionIcon}><Icon.XIcon /></span>}
                             onClick={() => setCancelStage('confirm')}
                             disabled={!ownerAddress || !isOpen}
                             title={!ownerAddress ? 'Only the owner can close'
                                 : !isOpen ? 'Dispenser is not open'
                                 : 'Close this dispenser'}
                         >
-                            <span className={local.quickActionIcon} aria-hidden="true"><Icon.XIcon /></span>
-                            <span>Close</span>
-                        </button>
-                        <button
-                            type="button"
-                            className={local.quickAction}
+                            Close
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            block
+                            icon={<span className={local.quickActionIcon}><Icon.PlusIcon /></span>}
                             onClick={() => setRefillStage('confirm')}
                             disabled={!ownerAddress || !isOpen}
                             title={!ownerAddress ? 'Only the owner can refill'
                                 : !isOpen ? 'Dispenser is not open'
                                 : 'Add escrow to this dispenser'}
                         >
-                            <span className={local.quickActionIcon} aria-hidden="true"><Icon.PlusIcon /></span>
-                            <span>Refill</span>
-                        </button>
-                        <button
-                            type="button"
-                            className={local.quickAction}
+                            Refill
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            block
+                            icon={<span className={local.quickActionIcon}><Icon.PencilIcon /></span>}
                             onClick={() => setEditStage('confirm')}
                             disabled={!ownerAddress || !isOpen}
                             title={!ownerAddress ? 'Only the owner can edit'
                                 : !isOpen ? 'Dispenser is not open'
                                 : 'Change expiration or allow/block lists'}
                         >
-                            <span className={local.quickActionIcon} aria-hidden="true"><Icon.PencilIcon /></span>
-                            <span>Edit</span>
-                        </button>
+                            Edit
+                        </Button>
                     </>
                 )}
-                <button
-                    type="button"
-                    className={local.quickAction}
-                    onClick={() => {
-                        const base = descriptor?.explorer?.defaultUrl || branding.DEFAULT_EXPLORER_BASE;
-                        // The explorer base is bare; append the coin path segment.
-                        const code = explorerCoinCode(descriptor);
-                        const path = code ? `/${code}/action/${actionIndex}` : `/action/${actionIndex}`;
-                        try { window.open(`${base.replace(/\/$/, '')}${path}`, '_blank', 'noopener'); } catch { /* no-op */ }
-                    }}
-                    title="View on the XChain explorer"
-                >
-                    <img src={branding.logoUrl()} alt="" aria-hidden="true" className={local.quickActionLogo} />
-                    <span>XChain</span>
-                </button>
+                {dispenserExplorerUrl ? (
+                    /* The kit has no link-button primitive for an external explorer destination. */
+                    <a
+                        className={local.quickActionLink}
+                        href={dispenserExplorerUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="View on the XChain explorer"
+                    >
+                        <img src={branding.logoUrl()} alt="" aria-hidden="true" className={local.quickActionLogo} />
+                        <span>XChain <span aria-hidden="true">↗</span></span>
+                    </a>
+                ) : null}
                 <div className={local.quickActionMoreWrap} ref={moreWrapRef}>
-                    <button
-                        type="button"
-                        className={local.quickAction}
+                    <Button
+                        variant="secondary"
+                        block
+                        icon={<span className={local.quickActionIcon}><Icon.MoreIcon /></span>}
                         aria-haspopup="menu"
                         aria-expanded={moreOpen}
                         onClick={() => setMoreOpen((o) => !o)}
                     >
-                        <span className={local.quickActionIcon} aria-hidden="true"><Icon.MoreIcon /></span>
-                        <span>More</span>
-                    </button>
+                        More
+                    </Button>
                     {moreOpen ? (
                         <div className={local.quickActionMoreMenu} role="menu">
-                            <button
-                                type="button"
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                block
+                                icon={<Icon.CopyIcon />}
                                 role="menuitem"
-                                className={local.quickActionMoreItem}
                                 onClick={() => { setMoreOpen(false); handleCopy(dispAddress || source || '', 'address'); }}
                             >
-                                <span aria-hidden="true"><Icon.CopyIcon /></span>
-                                <span>{copied === 'address' ? 'Copied' : 'Copy dispenser address'}</span>
-                            </button>
-                            <button
-                                type="button"
+                                {copied === 'address' ? 'Dispenser address copied' : 'Copy dispenser address'}
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                block
+                                icon={<Icon.CopyIcon />}
                                 role="menuitem"
-                                className={local.quickActionMoreItem}
                                 onClick={() => { setMoreOpen(false); handleCopy(String(actionIndex), 'index'); }}
                             >
-                                <span aria-hidden="true"><Icon.CopyIcon /></span>
-                                <span>{copied === 'index' ? 'Copied' : 'Copy action index'}</span>
-                            </button>
+                                {copied === 'index' ? 'Action index copied' : 'Copy action index'}
+                            </Button>
                         </div>
                     ) : null}
                 </div>
             </div>
 
-            <div className={local.tabBar} role="tablist">
+            {copyError ? <StatusMessage variant="error">{copyError}</StatusMessage> : null}
+
+            <SectionHeader title="Activity" />
+            <div className={local.tabBar} role="tablist" aria-label="Dispenser activity">
+                {/* Native buttons carry tab semantics because the kit has no tab primitive. */}
                 <button
                     type="button"
                     role="tab"
@@ -1966,151 +2211,177 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 </button>
             </div>
             {tab === 'lifecycle' ? (
-                <ul className={local.dispenseList}>
-                    {lifecycleTimeline.length === 0 ? (
-                        <li><div className={local.dispenseEmpty}>No lifecycle events yet.</div></li>
-                    ) : lifecycleTimeline.slice(0, 40).map((e) => {
-                        const refused = e.kind === 'dispense' && !e.row.valid;
+                !lifecycleLoaded ? (
+                    <StatusMessage variant="status">Loading lifecycle…</StatusMessage>
+                ) : (
+                    <ul className={local.dispenseList} aria-label="Dispenser lifecycle">
+                        {lifecycleTimeline.length === 0 ? (
+                            <li><EmptyState title="No lifecycle events yet" body="Dispenser lifecycle changes appear here." titleAs="p" /></li>
+                        ) : lifecycleTimeline.slice(0, 40).map((e) => {
+                            const refused = e.kind === 'dispense' && !e.row.valid;
+                            return (
+                                <li key={`${e.kind}-${e.row.action_index}`}>
+                                    <ListRow
+                                        className={refused ? local.dispenseInvalid : undefined}
+                                        title={<span className={local.dispenseAmount}>
+                                            {refused ? 'Dispense refused' : (LIFECYCLE_LABEL[e.kind] || e.kind)}
+                                        </span>}
+                                        subtitle={<span className={local.dispensePaid}>
+                                            {e.kind === 'dispense'
+                                                ? `${formatNum(e.row.give_amount)} ${e.row.give_tick || giveTick || ''}`
+                                                : (e.row.expiration ? `expires ${formatUnixDate(e.row.expiration)}` : `#${e.row.action_index}`)}
+                                            {refused ? <InvalidMarker row={e.row} /> : null}
+                                        </span>}
+                                        trailing={<span className={local.dispenseWhen}>
+                                            {e.row.block_index ? `block ${e.row.block_index}` : ''}
+                                        </span>}
+                                    />
+                                </li>
+                            );
+                        })}
+                    </ul>
+                )
+            ) : !dispensesLoaded ? (
+                <StatusMessage variant="status">Loading dispenses…</StatusMessage>
+            ) : (
+                <ul className={local.dispenseList} aria-label="Dispenses">
+                    {matchingDispenses.length === 0 ? (
+                        <li><EmptyState title="No dispenses yet" body="Completed dispenses appear here." titleAs="p" /></li>
+                    ) : matchingDispenses.slice(0, 25).map((d) => {
+                        const paidAmount = d.get_amount ?? getAmount;
+                        const paidUnit = d.get_tick || d.get_coin || getTick || getCoin || '';
                         return (
-                            <li key={`${e.kind}-${e.row.action_index}`}>
-                                <div className={`${local.dispenseRow} ${refused ? local.dispenseInvalid : ''}`}>
-                                    <span className={local.dispenseAmount}>
-                                        {refused ? 'Dispense refused' : (LIFECYCLE_LABEL[e.kind] || e.kind)}
-                                    </span>
-                                    <span className={local.dispensePaid}>
-                                        {e.kind === 'dispense'
-                                            ? `${formatNum(e.row.give_amount)} ${e.row.give_tick || giveTick || ''}`
-                                            : (e.row.expiration ? `expires ${e.row.expiration}` : `#${e.row.action_index}`)}
-                                        {refused ? <InvalidMarker row={e.row} /> : null}
-                                    </span>
-                                    <span className={local.dispenseWhen}>
-                                        {e.row.block_index ? `block ${e.row.block_index}` : ''}
-                                    </span>
-                                </div>
+                            <li key={String(d.action_index)}>
+                                <ListRow
+                                    className={d.valid ? undefined : local.dispenseInvalid}
+                                    title={<span className={local.dispenseAmount}>
+                                        {formatNum(d.give_amount)} {d.give_tick || giveTick || ''}
+                                    </span>}
+                                    subtitle={<span className={local.dispensePaid}>
+                                        {paidAmount != null ? `for ${formatNum(paidAmount)} ${paidUnit}`.trim() : ''}
+                                        {d.valid ? null : <InvalidMarker row={d} />}
+                                    </span>}
+                                    trailing={<span className={local.dispenseWhen}>
+                                        {formatRelativeTime(d.timestamp || d.block_time)}
+                                    </span>}
+                                />
                             </li>
                         );
                     })}
                 </ul>
-            ) : (
-            <ul className={local.dispenseList}>
-                {matchingDispenses.length === 0 ? (
-                    <li><div className={local.dispenseEmpty}>No dispenses yet.</div></li>
-                ) : matchingDispenses.slice(0, 25).map((d) => {
-                    const paidAmount = d.get_amount ?? getAmount;
-                    const paidUnit = d.get_tick || d.get_coin || getTick || getCoin || '';
-                    return (
-                        <li key={String(d.action_index)}>
-                            <div className={`${local.dispenseRow} ${d.valid ? '' : local.dispenseInvalid}`}>
-                                <span className={local.dispenseAmount}>
-                                    {formatNum(d.give_amount)} {d.give_tick || giveTick || ''}
-                                </span>
-                                <span className={local.dispensePaid}>
-                                    {paidAmount != null ? `for ${formatNum(paidAmount)} ${paidUnit}`.trim() : ''}
-                                    {d.valid ? null : <InvalidMarker row={d} />}
-                                </span>
-                                <span className={local.dispenseWhen}>
-                                    {relativeTime(d.timestamp || d.block_time)}
-                                </span>
-                            </div>
-                        </li>
-                    );
-                })}
-            </ul>
             )}
 
             {canBuyWithSend ? (
-                <section style={{ marginTop: '1rem', padding: '0.75rem', border: '1px solid var(--xc-border)', borderRadius: '4px' }}>
-                    <p className={styles.successLabel}>Buy from this dispenser</p>
-                    <p className={styles.hint}>
-                        {isTokenPaid
-                            ? `Send ${getAmount} ${getTick} per fill. Tokens dispense when the SEND`
-                            : `Pay ${getAmount} ${payTick} per fill from this wallet. Tokens dispense when the payment`}
-                        {' '}confirms and the dispenser is still open.
-                    </p>
-                    {listWarnings}
-                    {buyerAddresses.length > 1 ? (
-                        <label style={{ display: 'block', marginBottom: '0.5rem' }}>
-                            <span className={styles.detailsLabel}>Pay from</span>
-                            <select
+                <div data-testid="dispenser-buy-form">
+                    <FormSection title="Buy from this dispenser" className={local.buySection}>
+                        <p className={styles.hint}>
+                            {isTokenPaid
+                                ? `Send ${getAmount} ${getTick} per fill. Tokens dispense when the SEND`
+                                : `Pay ${getAmount} ${payTick} per fill from this wallet. Tokens dispense when the payment`}
+                            {' '}confirms and the dispenser is still open.
+                        </p>
+                        {listWarnings}
+                        {buyerAddresses.length > 1 ? (
+                            <Select
+                                label="Pay from"
                                 value={buyerAddressId || ''}
                                 onChange={(e) => setBuyerAddressId(e.target.value)}
-                                style={{ marginLeft: '0.5rem' }}
+                                className={local.buyerAddressSelect}
                             >
+                                {/* Native options remain because Select accepts option children. */}
                                 {buyerAddresses.map((a) => (
                                     <option key={a.id} value={a.id}>{a.address}</option>
                                 ))}
-                            </select>
-                        </label>
-                    ) : buyerAddress ? (
-                        <p className={styles.entryDescription}>
-                            Paying from <AddressText address={buyerAddress.address} />
+                            </Select>
+                        ) : buyerAddress ? (
+                            <p className={styles.entryDescription}>
+                                Paying from <AddressText address={buyerAddress.address} />
+                            </p>
+                        ) : null}
+                        <div className={local.buyFillsRow}>
+                            <Input
+                                label="Fills"
+                                hint={`Whole fills only. Your payment must be a multiple of ${formatWithThousands(String(getAmount))} ${payTick}.`}
+                                inputMode="numeric"
+                                value={fills}
+                                onChange={(e) => setFills(e.target.value)}
+                                autoComplete="off"
+                            />
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                onClick={onMaxFills}
+                                disabled={maxBuyFills == null || maxBuyFills <= 0n}
+                            >
+                                Max
+                            </Button>
+                        </div>
+                        {totalPayAmount && totalReceive ? (
+                            <dl className={styles.detailsList} data-testid="buy-totals">
+                                <dt className={styles.detailsLabel}>Price per fill</dt>
+                                <dd className={styles.detailsValue}>{formatWithThousands(String(getAmount))} {payTick}</dd>
+                                <dt className={styles.detailsLabel}>You receive per fill</dt>
+                                <dd className={styles.detailsValue}>{formatWithThousands(String(giveAmount))} {giveTick}</dd>
+                                <dt className={styles.detailsLabel}>You pay</dt>
+                                <dd className={styles.detailsValue}>{formatWithThousands(totalPayAmount)} {payTick}</dd>
+                                <dt className={styles.detailsLabel}>You receive</dt>
+                                <dd className={styles.detailsValue}>{formatWithThousands(totalReceive)} {giveTick}</dd>
+                            </dl>
+                        ) : null}
+                        {fillsError ? (
+                            <p role="alert" className={styles.warning}>{fillsError}</p>
+                        ) : null}
+                        {inventoryError ? (
+                            <p role="alert" className={styles.warning}>{inventoryError}</p>
+                        ) : null}
+                        {minFillsNotice ? (
+                            <p className={styles.hint} data-testid="min-fills-notice">{minFillsNotice}</p>
+                        ) : null}
+                        {buyDustBlock ? (
+                            <p role="alert" className={styles.warning} data-testid="buy-dust-block">{buyDustBlock}</p>
+                        ) : null}
+                        <p className={styles.hint} data-testid="buy-balance">
+                            {buyBalance == null
+                                ? `Checking your ${String(payTick).toUpperCase()} balance…`
+                                : `${formatWithThousands(buyBalance)} ${String(payTick).toUpperCase()} available`}
                         </p>
-                    ) : null}
-                    <div className={local.buyFillsRow}>
-                        <Input
-                            label="Fills"
-                            hint="Multiply per-fill amounts by this number (integer ≥ 1)."
-                            inputMode="numeric"
-                            value={fills}
-                            onChange={(e) => setFills(e.target.value)}
-                            autoComplete="off"
-                        />
+                        {buyPreflight ? (
+                            <PreflightPanel
+                                report={buyPreflight}
+                                acknowledged={NO_ACKNOWLEDGMENTS}
+                                onAcknowledge={() => {}}
+                            />
+                        ) : null}
+                        {buyError ? (
+                            <StatusMessage variant="error" className={styles.error}>{buyError}</StatusMessage>
+                        ) : null}
+                        {ownerLane.isWatcherMode ? (
+                            <p className={styles.hint}>
+                                Watcher mode: this wallet will build an unsigned transaction. Sign it on your
+                                Signer-mode wallet, then broadcast from a Full-mode wallet.
+                            </p>
+                        ) : null}
                         <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            onClick={onMaxFills}
-                            disabled={maxBuyFills == null || maxBuyFills <= 0n}
+                            variant="primary"
+                            onClick={beginBuy}
+                            loading={buyStage === 'submitting' || buyConfirm.composing}
+                            disabled={fillsCount == null || !totalPayAmount || !buyerAddress || !dispAddr
+                                || buyUnderfunded || Boolean(buyDustBlock) || eligibilityChecking
+                                || buyerEligibilityBarred || dispenserSelfBarred || priceStale
+                                || Boolean(inventoryError)
+                                || buyStage === 'submitting' || buyConfirm.composing}
                         >
-                            Max
+                            {ownerLane.isWatcherMode
+                                ? 'Create unsigned transaction'
+                                : `Buy ${fillsCount != null ? `${fillsCount} ` : ''}fill${fillsCount === 1n ? '' : 's'}`}
                         </Button>
-                    </div>
-                    {minFillsNotice ? (
-                        <p className={styles.hint} data-testid="min-fills-notice">{minFillsNotice}</p>
-                    ) : null}
-                    {buyDustBlock ? (
-                        <p role="alert" className={styles.warning} data-testid="buy-dust-block">{buyDustBlock}</p>
-                    ) : null}
-                    <p className={styles.hint} data-testid="buy-balance">
-                        {buyBalance == null
-                            ? `Checking your ${String(payTick).toUpperCase()} balance…`
-                            : `${formatWithThousands(buyBalance)} ${String(payTick).toUpperCase()} available`}
-                    </p>
-                    {buyPreflight ? (
-                        <PreflightPanel
-                            report={buyPreflight}
-                            acknowledged={NO_ACKNOWLEDGMENTS}
-                            onAcknowledge={() => {}}
-                        />
-                    ) : null}
-                    {buyError ? (
-                        <StatusMessage variant="error" className={styles.error}>{buyError}</StatusMessage>
-                    ) : null}
-                    {ownerLane.isWatcherMode ? (
-                        <p className={styles.hint}>
-                            Watcher mode: this wallet will build an unsigned transaction. Sign it on your
-                            Signer-mode wallet, then broadcast from a Full-mode wallet.
-                        </p>
-                    ) : null}
-                    <Button
-                        variant="primary"
-                        onClick={beginBuy}
-                        loading={buyStage === 'submitting' || buyConfirm.composing}
-                        disabled={fillsCount == null || !totalPayAmount || !buyerAddress || !dispAddr
-                            || buyUnderfunded || Boolean(buyDustBlock) || eligibilityChecking
-                            || buyerEligibilityBarred || dispenserSelfBarred || priceStale
-                            || buyStage === 'submitting' || buyConfirm.composing}
-                    >
-                        {ownerLane.isWatcherMode
-                            ? 'Create unsigned transaction'
-                            : `Buy ${fillsCount != null ? `${fillsCount} ` : ''}fill${fillsCount === 1n ? '' : 's'}`}
-                    </Button>
-                </section>
+                    </FormSection>
+                </div>
             ) : null}
 
             {showPayHere ? (
-                <section style={{ marginTop: '1rem', padding: '0.75rem', border: '1px solid var(--xc-border)', borderRadius: '4px' }}>
-                    <p className={styles.successLabel}>Pay to buy</p>
+                <FormSection title="Pay to buy" className={local.buySection}>
                     {canBuyWithSend ? null : listWarnings}
                     <p className={styles.hint}>
                         This dispenser accepts bare {getCoin} payments.
@@ -2129,13 +2400,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         <dd className={styles.detailsValue}>
                             <code style={{ wordBreak: 'break-all' }}>{dispAddr}</code>
                             {' '}
-                            <button
-                                type="button"
-                                onClick={() => handleCopy(dispAddr, 'address')}
-                                style={{ marginLeft: '0.5rem' }}
-                            >
-                                {copied === 'address' ? 'Copied' : 'Copy'}
-                            </button>
+                            <CopyButton value={dispAddr} label="Copy dispenser payment address" />
                         </dd>
                         {isFiatPriced ? (
                             <>
@@ -2177,18 +2442,12 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                                 <dd className={styles.detailsValue}>
                                     <code>{getAmount} {getCoin}</code>
                                     {' '}
-                                    <button
-                                        type="button"
-                                        onClick={() => handleCopy(String(getAmount), 'amount')}
-                                        style={{ marginLeft: '0.5rem' }}
-                                    >
-                                        {copied === 'amount' ? 'Copied' : 'Copy amount'}
-                                    </button>
+                                    <CopyButton value={String(getAmount)} label="Copy amount" />
                                     {' per fill'}
                                 </dd>
                             </>
                         )}
-                        <dt className={styles.detailsLabel}>Per-fill give</dt>
+                        <dt className={styles.detailsLabel}>You receive per fill</dt>
                         <dd className={styles.detailsValue}>{giveAmount} {giveTick}</dd>
                     </dl>
                     <p className={styles.hint}>
@@ -2198,7 +2457,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                                 ? `This wallet cannot size a fiat-priced payment before it lands; use any ${getCoin} wallet to trigger the dispense.`
                                 : `No spendable ${getCoin} address in this wallet on this chain; use any ${getCoin} wallet to trigger the dispense.`}
                     </p>
-                </section>
+                </FormSection>
             ) : null}
 
         </>,
@@ -2234,50 +2493,26 @@ function remainingFillsFrom(escrowRemaining, giveAmount) {
 }
 
 function formatNum(v) {
-    if (v == null || v === '') return '?';
+    if (v == null || v === '' || (typeof v === 'number' && !Number.isFinite(v))) return '-';
     const s = String(v);
+    if (/^(?:undefined|null|nan)$/i.test(s.trim())) return '-';
     const [int, frac] = s.split('.');
     if (!/^\d+$/.test(int)) return s;
     const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
     return frac != null ? `${grouped}.${frac}` : grouped;
 }
 
-// Human-readable "X ago". Accepts unix seconds or ms; '' for invalid
-// input so the row just omits the time. (Same shape as TxStatusTimeline's.)
-function relativeTime(ts) {
-    const n = Number(ts);
-    if (!n || !Number.isFinite(n)) return '';
-    const ms = n < 1e12 ? n * 1000 : n;
-    const diffSec = Math.floor((Date.now() - ms) / 1000);
-    if (diffSec < 5) return 'just now';
-    if (diffSec < 60) return `${diffSec} seconds ago`;
-    const min = Math.floor(diffSec / 60);
-    if (min < 60) return `${min} minute${min === 1 ? '' : 's'} ago`;
-    const hr = Math.floor(diffSec / 3600);
-    if (hr < 24) return `${hr} hour${hr === 1 ? '' : 's'} ago`;
-    const day = Math.floor(diffSec / 86400);
-    if (day < 30) return `${day} day${day === 1 ? '' : 's'} ago`;
-    const month = Math.floor(day / 30);
-    if (month < 12) return `${month} month${month === 1 ? '' : 's'} ago`;
-    const year = Math.floor(day / 365);
-    return `${year} year${year === 1 ? '' : 's'} ago`;
+function detailText(value) {
+    if (value == null || value === '' || (typeof value === 'number' && !Number.isFinite(value))) return '-';
+    const text = String(value).trim();
+    return !text || /^(?:undefined|null|nan)$/i.test(text) ? '-' : text;
 }
 
 // Format a Unix timestamp (seconds; tolerates ms) as a short local
 // date-time with the zone named, so it reads against the edit field's
 // local-time entry. '' for unparseable input so callers can omit the row.
-function formatUnixDate(ts) {
-    const n = Number(ts);
-    if (!n || !Number.isFinite(n)) return '';
-    const ms = n < 1e12 ? n * 1000 : n;
-    try {
-        return new Date(ms).toLocaleString(undefined, {
-            year: 'numeric', month: 'short', day: 'numeric',
-            hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
-        });
-    } catch {
-        return new Date(ms).toISOString();
-    }
+export function formatUnixDate(ts) {
+    return formatLocalDateTime(ts) || '';
 }
 
 // The close-window banner copy. Escrow returns to whichever address closed
@@ -2313,11 +2548,14 @@ function capitalize(s) {
 }
 
 // Hour and minute in the viewer's own zone and clock style.
-function formatLocalClock(ms) {
+export function formatLocalClock(ms) {
     try {
         return new Date(ms).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
     } catch {
-        return new Date(ms).toISOString().slice(11, 16);
+        const date = new Date(ms);
+        const hours = String(date.getUTCHours()).padStart(2, '0');
+        const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+        return `${hours}:${minutes} UTC`;
     }
 }
 
@@ -2330,40 +2568,36 @@ function localInputToUnix(localStr) {
 }
 
 /**
- * The bottom of an owner form: the watcher-mode note, the error, and the one
- * button. Credentials live on the confirm page, not here, because nothing is
- * signed until the dry run has been seen there.
- */
-function OwnerLaneFooter({ isWatcherMode, error, submitting, disabled = false, label, danger = false }) {
-    return (
-        <>
-            {isWatcherMode ? (
-                <p className={styles.hint}>
-                    Watcher mode: this wallet will build an unsigned transaction. Sign it on your
-                    Signer-mode wallet, then broadcast from a Full-mode wallet.
-                </p>
-            ) : null}
-            {error ? <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage> : null}
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant={danger ? 'danger' : 'primary'}
-                    loading={submitting}
-                    disabled={submitting || disabled}
-                >
-                    {isWatcherMode ? 'Create unsigned transaction' : label}
-                </Button>
-            </div>
-        </>
-    );
-}
-
-/**
  * The dispenser-only facts that must still sit in front of Approve on the
  * confirm page, which shows the decoded action but knows nothing of these.
  */
-function OwnerConfirmNotes({ kind, allowListWarning, listsChanged, refillNote, closeNote }) {
-    if (kind === 'refill') return <p className={styles.hint}>{refillNote}</p>;
+function OwnerConfirmNotes({
+    kind,
+    allowListWarning,
+    listsChanged,
+    refillNote,
+    closeNote,
+    actionIndex,
+    refillAmount,
+    giveTick,
+    editExpiration,
+    editAllowList,
+    editBlockList,
+}) {
+    if (kind === 'refill') {
+        return (
+            <>
+                <p className={styles.successLabel}>Review refill</p>
+                <dl className={styles.detailsList} data-testid="refill-review-summary">
+                    <dt className={styles.detailsLabel}>Dispenser</dt>
+                    <dd className={styles.detailsValue}>#{actionIndex}</dd>
+                    <dt className={styles.detailsLabel}>Add to escrow</dt>
+                    <dd className={styles.detailsValue}>{formatWithThousands(refillAmount)} {giveTick}</dd>
+                </dl>
+                <p className={styles.hint}>{refillNote}</p>
+            </>
+        );
+    }
     if (kind === 'close') {
         return (
             <>
@@ -2376,6 +2610,32 @@ function OwnerConfirmNotes({ kind, allowListWarning, listsChanged, refillNote, c
     }
     return (
         <>
+            <p className={styles.successLabel}>Review edit</p>
+            <dl className={styles.detailsList} data-testid="edit-review-summary">
+                <dt className={styles.detailsLabel}>Dispenser</dt>
+                <dd className={styles.detailsValue}>#{actionIndex}</dd>
+                {editExpiration ? (
+                    <>
+                        <dt className={styles.detailsLabel}>New expiration</dt>
+                        <dd className={styles.detailsValue}>
+                            {formatUnixDate(localInputToUnix(editExpiration))}
+                            {' '}(Unix {localInputToUnix(editExpiration)})
+                        </dd>
+                    </>
+                ) : null}
+                {editAllowList ? (
+                    <>
+                        <dt className={styles.detailsLabel}>Allow list</dt>
+                        <dd className={styles.detailsValue}>#{editAllowList}</dd>
+                    </>
+                ) : null}
+                {editBlockList ? (
+                    <>
+                        <dt className={styles.detailsLabel}>Block list</dt>
+                        <dd className={styles.detailsValue}>#{editBlockList}</dd>
+                    </>
+                ) : null}
+            </dl>
             {allowListWarning ? (
                 <div role="alert" className={styles.warnings}>
                     <p className={styles.warning}>{allowListWarning}</p>

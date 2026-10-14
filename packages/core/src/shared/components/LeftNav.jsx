@@ -8,16 +8,19 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { Icon } from '@xchain-wallet/core/ui';
+import { useEffect, useRef } from 'react';
+import { Button, Icon } from '@xchain-wallet/core/ui';
 import { showsBottomBar, showsSidebar } from '../styles/breakpoints.js';
 import { useLayoutTier } from '../styles/useLayoutTier.js';
+import { ROUTE_NAV_GROUPS, ROUTE_NAV_SECTIONS } from '../routeRegistry.js';
+import { NoticesRouteContext } from './noticesRoute.js';
 import styles from './LeftNav.module.css';
 
 /**
  * §24.2 / G053: full-layout left navigation. Renders a fixed-width
  * sidebar listing primary surfaces (Home, History, Send, Receive,
- * Scan, DEX, Dispensers, Contracts, Messaging) plus a contacts row,
- * a wallet switcher, Settings, and Lock. Active row gets
+ * Scan, DEX, Marketplace, Dispensers, Contracts, Messaging) plus a contacts row,
+ * Settings, and Lock. Active row gets
  * `aria-current="page"`.
  *
  * Two of those rows are conditional on the wallet, not the build:
@@ -32,39 +35,20 @@ import styles from './LeftNav.module.css';
  * rows to icons with their labels clipped but still in the accessibility
  * tree. See shared/styles/breakpoints.js for the tier definitions.
  *
- * `currentView` is matched against each item's `id`, with two soft
- * mappings so the active highlight survives drilldowns:
- *   - 'token-detail' / 'addresses' / 'wallet-picker' / 'account-picker'
- *     / 'wallet-details' / 'wallet-rename' / 'add-account' / 'add-wallet'
- *     all highlight Home (they're entered from there).
- *   - 'compose-message' highlights Messaging.
- *   - 'dispenser-explorer' / 'dispenser-detail' / 'dispenser' highlight
- *     Dispensers.
- *   - 'contract-*' / 'staking-*' / 'operator-dashboard' / 'stake-form'
- *     highlight Contracts.
- *   - 'market' highlights DEX.
- *   - 'list-detail' / 'list-create' / 'list-fork' highlight Lists.
+ * `currentView` resolves through `ROUTE_NAV_SECTIONS`, so drilldowns keep
+ * their parent surface highlighted. Utility sections without a sidebar row
+ * leave the sidebar unselected instead of attributing the page to Home.
  */
 
-const VIEW_GROUPS = {
-    home: ['home', 'token-detail', 'addresses', 'wallet-picker', 'account-picker', 'wallet-details', 'wallet-rename', 'account-rename', 'add-account', 'add-wallet'],
-    history: ['history'],
-    send: ['send'],
-    receive: ['receive'],
-    scan: ['scan'],
-    markets: ['markets', 'market'],
-    'dispensers-list': ['dispensers-list', 'dispenser-detail', 'dispenser-explorer', 'dispenser'],
-    'contracts-list': ['contracts-list', 'contract-detail', 'contract-deploy', 'contract-execute', 'contract-deposit', 'contract-withdraw', 'staking-dashboard', 'stake-detail', 'stake-new', 'stake-form', 'staking-unstake', 'staking-claim', 'staking-delegate', 'staking-revoke', 'operator-dashboard'],
-    messaging: ['messaging', 'compose-message'],
-    contacts: ['contacts'],
-    lists: ['lists', 'list-detail', 'list-create', 'list-fork'],
-    obligations: ['obligations'],
-    settings: ['settings', 'connected-sites'],
-};
+export const LEFT_NAV_VIEW_GROUPS = ROUTE_NAV_GROUPS;
 
-function isActive(itemId, currentView) {
-    const group = VIEW_GROUPS[itemId];
-    return group ? group.includes(currentView) : itemId === currentView;
+export function activeLeftNavItem(currentView) {
+    return ROUTE_NAV_SECTIONS[currentView] || 'home';
+}
+
+// Sheet rows use the same section match as the desktop sidebar.
+export function isNavItemActive(itemId, currentView) {
+    return itemId === activeLeftNavItem(currentView);
 }
 
 // Compact nav badge label: a count capped at "99+" so a large unread total
@@ -79,9 +63,7 @@ export function formatBadgeCount(n) {
  * @param {(view: string) => void} props.onSelect
  * @param {() => void} [props.onLock]
  * @param {() => void} [props.onOpenSettings]
- * @param {() => void} [props.onOpenWalletPicker]
  * @param {() => void} [props.onCommandPalette]   when provided, renders a search row at the top that opens the §33 command palette (Cmd/Ctrl+K); shells with their own header search (web) leave it unset
- * @param {string} [props.walletName]
  * @param {boolean} [props.hasVmAddress] gates the Contracts row (the registry carries DEPLOY in COMMON_ACTIONS, so LTC and DOGE qualify too)
  * @param {boolean} [props.hasDexSurface] false only in a build that compiled the DEX surface out; the tab is then absent, not disabled
  * @param {boolean} [props.isSignerMode] §20 air-gapped signer mode; drops Send + Receive from the nav
@@ -92,14 +74,13 @@ export function LeftNav({
     onSelect,
     onLock,
     onOpenSettings,
-    onOpenWalletPicker,
     onCommandPalette,
-    walletName,
     hasVmAddress = false,
     hasDexSurface = true,
     isSignerMode = false,
     badges = {},
 }) {
+    const activeItem = activeLeftNavItem(currentView);
     const primary = [
         { id: 'home', label: 'Home', Icon: Icon.HomeIcon },
         { id: 'history', label: 'History', Icon: Icon.HistoryIcon },
@@ -118,7 +99,10 @@ export function LeftNav({
         // not exist, and a visibly disabled exchange tab asks an app reviewer
         // the same question a working one does.
         ...(hasDexSurface
-            ? [{ id: 'markets', label: 'DEX', Icon: Icon.MarketIcon }]
+            ? [
+                { id: 'markets', label: 'DEX', Icon: Icon.MarketIcon },
+                { id: 'market-activity', label: 'Marketplace', Icon: Icon.LineChartIcon },
+            ]
             : []),
         { id: 'dispensers-list', label: 'Dispensers', Icon: Icon.DollarIcon },
         // Gate Contracts on a VM address, matching Home and the command
@@ -136,33 +120,63 @@ export function LeftNav({
         { id: 'obligations', label: 'Payments due', Icon: Icon.ClockIcon },
     ];
 
+    const handleKeyDown = (event) => {
+        const direction = {
+            ArrowDown: 1,
+            ArrowRight: 1,
+            ArrowUp: -1,
+            ArrowLeft: -1,
+        }[event.key];
+        if (!direction && event.key !== 'Home' && event.key !== 'End') return;
+
+        const buttons = [...event.currentTarget.querySelectorAll('button:not(:disabled)')];
+        const currentButton = event.target.closest?.('button');
+        const currentIndex = buttons.indexOf(currentButton);
+        if (currentIndex < 0 || buttons.length === 0) return;
+
+        event.preventDefault();
+        let nextIndex;
+        if (event.key === 'Home') nextIndex = 0;
+        else if (event.key === 'End') nextIndex = buttons.length - 1;
+        else nextIndex = (currentIndex + direction + buttons.length) % buttons.length;
+        buttons[nextIndex].focus();
+        buttons[nextIndex].scrollIntoView?.({ block: 'nearest' });
+    };
+
     return (
-        <nav className={styles.nav} aria-label="Primary navigation">
+        <nav
+            className={styles.nav}
+            aria-label="Primary navigation"
+            onKeyDown={handleKeyDown}
+        >
             <div className={styles.brand}>XChain Wallet</div>
             {onCommandPalette ? (
-                <button
-                    type="button"
-                    className={`${styles.item} ${styles.search}`}
-                    onClick={onCommandPalette}
-                    aria-label="Open command palette"
-                    aria-keyshortcuts="Meta+K Control+K"
-                    title="Search (Cmd/Ctrl+K)"
-                >
-                    <span className={styles.icon} aria-hidden="true">
-                        <Icon.SearchIcon />
-                    </span>
-                    <span className={styles.label}>Search</span>
-                </button>
+                <div className={styles.search}>
+                    <Button
+                        variant="secondary"
+                        block
+                        icon={<Icon.SearchIcon />}
+                        onClick={onCommandPalette}
+                        aria-label="Open command palette"
+                        aria-keyshortcuts="Meta+K Control+K"
+                        title="Search (Cmd/Ctrl+K)"
+                    >
+                        <span className={styles.label}>Search</span>
+                    </Button>
+                </div>
             ) : null}
+            {/* Destination rows stay native buttons to preserve full-row navigation semantics. */}
+            {/* Safari needs an explicit list role because this class removes list styling. */}
             <ul className={styles.list} role="list">
                 {primary.map((item) => {
-                    const active = isActive(item.id, currentView);
+                    const active = activeItem === item.id;
                     return (
                         <li key={item.id}>
                             <button
                                 type="button"
                                 className={`${styles.item} ${active ? styles.itemActive : ''}`}
                                 aria-current={active ? 'page' : undefined}
+                                title={item.label}
                                 onClick={() => onSelect(item.id)}
                             >
                                 <span className={styles.icon} aria-hidden="true">
@@ -180,15 +194,17 @@ export function LeftNav({
                 })}
             </ul>
             <hr className={styles.divider} />
+            {/* Safari needs an explicit list role because this class removes list styling. */}
             <ul className={styles.list} role="list">
                 {secondary.map((item) => {
-                    const active = isActive(item.id, currentView);
+                    const active = activeItem === item.id;
                     return (
                         <li key={item.id}>
                             <button
                                 type="button"
                                 className={`${styles.item} ${active ? styles.itemActive : ''}`}
                                 aria-current={active ? 'page' : undefined}
+                                title={item.label}
                                 onClick={() => onSelect(item.id)}
                             >
                                 <span className={styles.icon} aria-hidden="true">
@@ -207,22 +223,12 @@ export function LeftNav({
             </ul>
             <div className={styles.spacer} />
             <div className={styles.footer}>
-                {walletName && onOpenWalletPicker ? (
-                    <button
-                        type="button"
-                        className={styles.walletSwitcher}
-                        onClick={onOpenWalletPicker}
-                        title={walletName}
-                    >
-                        <span className={styles.walletName}>{walletName}</span>
-                        <span aria-hidden="true">▾</span>
-                    </button>
-                ) : null}
                 {onOpenSettings ? (
                     <button
                         type="button"
-                        className={`${styles.item} ${isActive('settings', currentView) ? styles.itemActive : ''}`}
-                        aria-current={isActive('settings', currentView) ? 'page' : undefined}
+                        className={`${styles.item} ${activeItem === 'settings' ? styles.itemActive : ''}`}
+                        aria-current={activeItem === 'settings' ? 'page' : undefined}
+                        title="Settings"
                         onClick={onOpenSettings}
                     >
                         <span className={styles.icon} aria-hidden="true">
@@ -232,20 +238,31 @@ export function LeftNav({
                     </button>
                 ) : null}
                 {onLock ? (
-                    <button
-                        type="button"
-                        className={styles.item}
-                        onClick={onLock}
-                    >
-                        <span className={styles.icon} aria-hidden="true">
-                            <Icon.LockIcon />
-                        </span>
-                        <span className={styles.label}>Lock</span>
-                    </button>
+                    <div className={styles.action}>
+                        <Button
+                            variant="secondary"
+                            block
+                            icon={<Icon.LockIcon />}
+                            title="Lock"
+                            onClick={onLock}
+                        >
+                            <span className={styles.label}>Lock</span>
+                        </Button>
+                    </div>
                 ) : null}
             </div>
         </nav>
     );
+}
+
+// Moves focus to the page's main region (Screen renders it as #xc-main). A
+// plain href="#xc-main" would also work, but the app can run under a hash
+// router where an in-page anchor navigates, so focus is moved by hand.
+function skipToMain(e) {
+    const main = typeof document !== 'undefined' ? document.getElementById('xc-main') : null;
+    if (!main) return;
+    e.preventDefault();
+    main.focus();
 }
 
 /**
@@ -272,28 +289,82 @@ export function LeftNav({
  * of overflowing the document.
  *
  * The `header` slot (§49 / Cluster G FOLLOWUP 4) renders persistent
- * banners (queued broadcasts, …) above the route content so they
- * survive route changes, so Home no longer has to mount them itself.
+ * chrome above the route content so it survives route changes, so Home
+ * no longer has to mount it itself. The `notices` slot below it holds
+ * the stacked banners (queued broadcasts, reachability, …). Only the
+ * notices scroll when the stack grows past its compact-tier cap: the
+ * header row hosts anchored popovers (the settings gear, the scan menu),
+ * and a scroll box around it would clip them to its own height.
  *
  * @param {object} props
  * @param {import('react').ReactNode} props.nav
  * @param {import('react').ReactNode} [props.bottomBar]
  * @param {import('react').ReactNode} [props.header]
+ * @param {import('react').ReactNode} [props.notices]
+ * @param {string} [props.routeKey]
  * @param {import('react').ReactNode} props.children
  */
-export function FullLayoutWithNav({ nav, bottomBar, header, children }) {
+export function FullLayoutWithNav({ nav, bottomBar, header, notices, children }) {
+    const { routeKey } = arguments[0];
     const [layoutRef, tier] = useLayoutTier();
+    const previousRouteKeyRef = useRef(routeKey);
     const sidebar = showsSidebar(tier) ? nav : null;
     const bar = showsBottomBar(tier) ? bottomBar : null;
+
+    // Route bodies reserve a scrollbar lane on both inline edges; notices
+    // above them sit outside that scroller, so they read the lane width here
+    // to keep the same inset as route content.
+    useEffect(() => {
+        const root = document.documentElement;
+        if (!globalThis.CSS?.supports?.('scrollbar-gutter: stable')) return;
+        const probe = document.createElement('div');
+        probe.style.cssText = 'position:absolute;top:-9999px;width:100px;height:100px;overflow:scroll;visibility:hidden';
+        document.body.appendChild(probe);
+        const lane = probe.offsetWidth - probe.clientWidth;
+        probe.remove();
+        root.style.setProperty('--xc-scrollbar-lane', `${Math.max(0, lane)}px`);
+    }, []);
+
+    useEffect(() => {
+        if (previousRouteKeyRef.current === routeKey) return;
+        previousRouteKeyRef.current = routeKey;
+        const routeBody = document.querySelector(`.${styles.mainBody}`);
+        if (!routeBody) return undefined;
+        const focusHeading = () => {
+            const heading = routeBody.querySelector('h1');
+            if (!heading) return false;
+            heading.tabIndex = -1;
+            heading.classList.add(styles.routeFocusTarget);
+            heading.focus({ preventScroll: true });
+            return true;
+        };
+        if (focusHeading()) return undefined;
+        const observer = new MutationObserver(() => {
+            if (focusHeading()) observer.disconnect();
+        });
+        observer.observe(routeBody, { childList: true, subtree: true });
+        return () => observer.disconnect();
+    }, [routeKey]);
+
     return (
         <div
             ref={layoutRef}
             data-xc-tier={tier}
+            // Marks a visible rail, whose Search makes a search-only header menu redundant.
+            data-xc-rail={sidebar ? 'shown' : undefined}
             className={`${styles.layout} ${bar ? styles.layoutWithBottomBar : ''}`}
         >
+            <a href="#xc-main" className={styles.skipLink} onClick={skipToMain}>Skip to main content</a>
             {sidebar ? <aside className={styles.sidebar}>{sidebar}</aside> : null}
             <div className={styles.main}>
                 {header ? <div className={styles.header}>{header}</div> : null}
+                {notices ? (
+                    <div className={styles.notices}>
+                        <NoticesRouteContext.Provider value={routeKey ?? null}>
+                            {notices}
+                        </NoticesRouteContext.Provider>
+                    </div>
+                ) : null}
                 <div className={styles.mainBody}>{children}</div>
             </div>
             {bar ? <div className={styles.bottomBarSlot}>{bar}</div> : null}

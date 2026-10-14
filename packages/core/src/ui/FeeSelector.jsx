@@ -10,18 +10,23 @@
 
 import { useId, useMemo, useState } from 'react';
 import { isPerKbUnit } from '../flows/feeEstimate.js';
+import {
+    formatWithThousands,
+    normalizeLocalizedDecimal,
+} from '../shared/utils/amountFormat.js';
 import styles from './FeeSelector.module.css';
 import { InfoTip } from './InfoTip.jsx';
 
 const TIER_SPEEDS = ['low', 'normal', 'fast'];
 const SPEEDS_WITH_CUSTOM = [...TIER_SPEEDS, 'custom'];
-const SPEED_LABELS = { low: 'Low', normal: 'Normal', fast: 'Fast', custom: 'Custom' };
+const SPEED_LABELS = { low: 'Slow', normal: 'Normal', fast: 'Fast', custom: 'Custom' };
+const HIGH_FEE_MULTIPLIER = 10;
 // ETA-pill tint per priority: slower = warmer/riskier. Maps to the
 // per-tone classes in the stylesheet (red / orange / green / white).
 const ETA_TONE = { low: 'etaLow', normal: 'etaNormal', fast: 'etaFast', custom: 'etaCustom' };
 
 /**
- * FeeSelector (§44.2): Low / Normal / Fast / Custom slider. Rendering
+ * FeeSelector (§44.2): Slow / Normal / Fast / Custom slider. Rendering
  * is driven by `tiers` from
  * `flows/feeEstimate.estimateNativeSendFeeTiers`; selection writes
  * back via `onChange`.
@@ -54,6 +59,7 @@ const ETA_TONE = { low: 'etaLow', normal: 'etaNormal', fast: 'etaFast', custom: 
  *                     in the same readout slot the tier modes use, so the live
  *                     fee stays visible as the user edits the rate.
  *   - disabled   `boolean`
+ *   - showEstimateNotice  whether fee-source availability notices render
  *   - coinTicker native coin symbol (BTC / LTC / DOGE) shown after the fee
  *               amount so it's unambiguous which coin the fee is paid in
  *
@@ -71,15 +77,18 @@ export function FeeSelector({
     allowCustom = true,
     label = null,
     coinTicker = '',
+    showEstimateNotice = true,
 }) {
     const customInputId = useId();
     const feeInputId = useId();
+    const customFeedbackId = useId();
     // Exact-fee edit buffer. While non-null the fee readout renders as a
     // text input echoing exactly what the user typed (so "0.0" doesn't
     // get reformatted mid-keystroke); the derived rate flows out through
     // onChange on every change. Cleared on blur/Enter or when the user
     // moves the slider back to a preset tier.
     const [feeDraft, setFeeDraft] = useState(null);
+    const [customRateDraft, setCustomRateDraft] = useState(null);
     const SPEEDS = allowCustom ? SPEEDS_WITH_CUSTOM : TIER_SPEEDS;
     const MAX_INDEX = SPEEDS.length - 1;
 
@@ -114,12 +123,17 @@ export function FeeSelector({
             .map((speed) => ({ speed, estimate: tiers[speed] }))
             .filter((t) => t.estimate);
     }, [tiers]);
+    const usesFallbackRates = tierList.some(
+        ({ estimate }) => estimate?.source === 'static-placeholder',
+    );
 
     if (!tiers || tierList.length === 0) {
         return (
             <div className={styles.wrap}>
                 {headerRow()}
-                <p className={styles.placeholder}>Fee estimate unavailable for this chain.</p>
+                {showEstimateNotice ? (
+                    <p className={styles.placeholder}>Fee estimate unavailable for this chain.</p>
+                ) : null}
             </div>
         );
     }
@@ -139,6 +153,7 @@ export function FeeSelector({
     );
 
     const pickSpeed = (speed) => {
+        setCustomRateDraft(null);
         if (speed === 'custom') {
             onChange({ mode: 'custom', customRate: seedCustomRate() });
         } else {
@@ -169,12 +184,15 @@ export function FeeSelector({
 
     const beginFeeEdit = () => {
         if (disabled || !allowCustom) return;
-        setFeeDraft(activeEstimate?.coinAmount ?? '');
+        setFeeDraft(formatWithThousands(activeEstimate?.coinAmount ?? ''));
     };
 
     const onFeeDraftChange = (raw) => {
         setFeeDraft(raw);
-        const n = parseFloat(raw);
+        const canonical = normalizeLocalizedDecimal(raw);
+        const n = canonical !== null && canonical !== '' && canonical !== '.'
+            ? Number(canonical)
+            : Number.NaN;
         onChange({
             mode: 'custom',
             customRate: Number.isFinite(n) && n >= 0 ? feeToDisplayRate(n) : 0,
@@ -185,6 +203,7 @@ export function FeeSelector({
     // with the tier's own rate so the input opens ready to tweak.
     const beginRateEdit = () => {
         if (disabled || !allowCustom) return;
+        setCustomRateDraft(null);
         onChange({
             mode: 'custom',
             customRate: activeEstimate?.rateValue ?? seedCustomRate(),
@@ -196,10 +215,68 @@ export function FeeSelector({
         pickSpeed(SPEEDS[i] || 'normal');
     };
 
+    const onSliderKeyDown = (event) => {
+        let nextIndex = sliderIndex;
+        if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') nextIndex -= 1;
+        else if (event.key === 'ArrowRight' || event.key === 'ArrowUp') nextIndex += 1;
+        else if (event.key === 'Home') nextIndex = 0;
+        else if (event.key === 'End') nextIndex = MAX_INDEX;
+        else return;
+
+        event.preventDefault();
+        pickSpeed(SPEEDS[Math.max(0, Math.min(MAX_INDEX, nextIndex))] || 'normal');
+    };
+
     const onCustomRateChange = (raw) => {
-        const n = parseFloat(raw);
+        setCustomRateDraft(raw);
+        const canonical = normalizeLocalizedDecimal(raw);
+        const parsed = canonical !== null && canonical !== '' && canonical !== '.'
+            ? Number(canonical)
+            : Number.NaN;
+        const n = parsed > 0 ? parsed : Number.NaN;
         onChange({ mode: 'custom', customRate: Number.isFinite(n) ? n : 0 });
     };
+
+    const customRateRaw = customRateDraft
+        ?? (Number.isFinite(value?.customRate) ? formatWithThousands(String(value.customRate)) : '');
+    const customRateCanonical = normalizeLocalizedDecimal(customRateRaw);
+    const customRateNumber = customRateCanonical !== null
+        && customRateCanonical !== ''
+        && customRateCanonical !== '.'
+        ? Number(customRateCanonical)
+        : Number.NaN;
+    const feeDraftCanonical = feeDraft === null ? null : normalizeLocalizedDecimal(feeDraft);
+    const feeDraftNumber = feeDraftCanonical !== null
+        && feeDraftCanonical !== ''
+        && feeDraftCanonical !== '.'
+        ? Number(feeDraftCanonical)
+        : Number.NaN;
+    const fastPresetRate = Number.isFinite(tiers.fast?.rateValue) && tiers.fast.rateValue > 0
+        ? tiers.fast.rateValue
+        : null;
+    const minimumRate = Number.isFinite(tiers.minimumRate) && tiers.minimumRate > 0
+        ? tiers.minimumRate
+        : null;
+    let customFeedback = null;
+    let customFeedbackTone = null;
+    if (feeDraft !== null && (!Number.isFinite(feeDraftNumber) || feeDraftNumber < 0)) {
+        customFeedback = 'Enter a valid non-negative network fee amount.';
+        customFeedbackTone = 'error';
+    } else if (isCustom && customRateRaw.trim() === '') {
+        customFeedback = 'Enter a custom fee rate.';
+        customFeedbackTone = 'error';
+    } else if (isCustom && (!Number.isFinite(customRateNumber) || customRateNumber <= 0)) {
+        customFeedback = 'Custom fee rate must be greater than zero.';
+        customFeedbackTone = 'error';
+    } else if (isCustom && minimumRate !== null && customRateNumber < minimumRate) {
+        customFeedback = `This rate is below the network minimum of ${formatWithThousands(minimumRate)} ${tiers.unit}. `
+            + 'It may not relay.';
+        customFeedbackTone = 'warning';
+    } else if (isCustom && fastPresetRate !== null
+        && customRateNumber > fastPresetRate * HIGH_FEE_MULTIPLIER) {
+        customFeedback = 'This rate is more than 10 times the Fast rate. Check it carefully before sending.';
+        customFeedbackTone = 'warning';
+    }
 
     return (
         <div className={styles.wrap}>
@@ -212,11 +289,12 @@ export function FeeSelector({
                     step={1}
                     value={sliderIndex}
                     onChange={(e) => onSliderChange(e.target.value)}
+                    onKeyDown={onSliderKeyDown}
                     disabled={disabled}
                     aria-label="Network fee"
                     aria-valuetext={isCustom
-                        ? `Custom: ${Number.isFinite(value?.customRate) ? value.customRate : ''} ${tiers.unit}`.trim()
-                        : `${SPEED_LABELS[sliderSpeed]}: ${activeEstimate?.coinAmount ?? ''}${activeEstimate?.etaMinutes ? ` · ~${activeEstimate.etaMinutes} min` : ''}`}
+                        ? `Custom: ${Number.isFinite(value?.customRate) ? formatWithThousands(value.customRate) : ''} ${tiers.unit}`.trim()
+                        : `${SPEED_LABELS[sliderSpeed]}: ${formatWithThousands(activeEstimate?.coinAmount ?? '')}${activeEstimate?.etaMinutes ? ` · ~${activeEstimate.etaMinutes} min` : ''}`}
                     className={styles.slider}
                 />
                 <div className={styles.sliderTicks} aria-hidden="true">
@@ -231,7 +309,10 @@ export function FeeSelector({
                             tabIndex={-1}
                             aria-label={SPEED_LABELS[s]}
                         >
-                            {SPEED_LABELS[s]}
+                            <span>{SPEED_LABELS[s]}</span>
+                            {Number.isFinite(tiers[s]?.etaMinutes) ? (
+                                <span className={styles.sliderTickEta}>~{tiers[s].etaMinutes} min</span>
+                            ) : null}
                         </button>
                     ))}
                 </div>
@@ -241,14 +322,17 @@ export function FeeSelector({
                         : null;
                     const editingFee = feeDraft !== null;
                     return (
-                        <div className={styles.sliderReadout} role="status" aria-live="polite">
+                        <>
+                            <div className={styles.sliderReadout} role="status" aria-live="polite">
                             <span className={styles.sliderReadoutPrimary}>
                                 {editingFee ? (
                                     <span className={styles.customRow}>
                                         <input
                                             id={feeInputId}
-                                            type="number"
+                                            type="text"
                                             inputMode="decimal"
+                                            enterKeyHint="done"
+                                            autoComplete="off"
                                             min={0}
                                             step="any"
                                             className={`${styles.customInput} ${styles.feeInput}`}
@@ -256,6 +340,8 @@ export function FeeSelector({
                                             onChange={(e) => onFeeDraftChange(e.target.value)}
                                             onBlur={() => setFeeDraft(null)}
                                             onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                                            aria-invalid={customFeedbackTone === 'error' ? 'true' : undefined}
+                                            aria-describedby={customFeedback ? customFeedbackId : undefined}
                                             aria-label={`Network fee amount${coinTicker ? ` (${coinTicker})` : ''}`}
                                             disabled={disabled}
                                             autoFocus
@@ -273,11 +359,11 @@ export function FeeSelector({
                                                 onClick={beginFeeEdit}
                                                 disabled={disabled}
                                                 aria-label="Edit exact fee amount"
-                                                title="Click to edit the exact fee"
+                                                title="Select to edit the exact fee"
                                             >
-                                                {activeEstimate.coinAmount}
+                                                {formatWithThousands(activeEstimate.coinAmount)}
                                             </button>
-                                        ) : activeEstimate.coinAmount}
+                                    ) : formatWithThousands(activeEstimate.coinAmount)}
                                         {coinTicker ? (
                                             <span className={styles.sliderReadoutCoin}> {coinTicker}</span>
                                         ) : null}
@@ -291,13 +377,20 @@ export function FeeSelector({
                                 <span className={styles.customRow}>
                                     <input
                                         id={customInputId}
-                                        type="number"
+                                        type="text"
                                         inputMode="decimal"
-                                        min={0}
-                                        step={isPerKbUnit(tiers.unit) ? 1 : 0.1}
+                                        enterKeyHint="done"
+                                        autoComplete="off"
+                                        min={0.00000001}
+                                        step="any"
                                         className={styles.customInput}
-                                        value={Number.isFinite(value?.customRate) ? value.customRate : ''}
+                                        value={customRateRaw}
                                         onChange={(e) => onCustomRateChange(e.target.value)}
+                                        onBlur={() => {
+                                            if (customFeedbackTone !== 'error') setCustomRateDraft(null);
+                                        }}
+                                        aria-invalid={customFeedbackTone === 'error' ? 'true' : undefined}
+                                        aria-describedby={customFeedback ? customFeedbackId : undefined}
                                         aria-label={`Custom fee rate (${tiers.unit})`}
                                         disabled={disabled}
                                         autoFocus={!editingFee}
@@ -311,17 +404,34 @@ export function FeeSelector({
                                     onClick={beginRateEdit}
                                     disabled={disabled}
                                     aria-label={`Edit fee rate (${tiers.unit})`}
-                                    title="Click to edit the fee rate"
+                                    title="Select to edit the fee rate"
                                 >
-                                    {activeEstimate.rate}
+                                    {formatWithThousands(activeEstimate.rateValue)} {tiers.unit}
                                 </button>
                             ) : (
-                                <span className={styles.sliderReadoutRate}>{activeEstimate.rate}</span>
+                                <span className={styles.sliderReadoutRate}>
+                                    {formatWithThousands(activeEstimate.rateValue)} {tiers.unit}
+                                </span>
                             )}
-                        </div>
+                            </div>
+                            {customFeedback ? (
+                                <div
+                                    id={customFeedbackId}
+                                    className={`${styles.customFeedback} ${styles[customFeedbackTone]}`.trim()}
+                                    role="alert"
+                                >
+                                    {customFeedback}
+                                </div>
+                            ) : null}
+                        </>
                     );
                 })() : null}
             </div>
+            {showEstimateNotice && usesFallbackRates ? (
+                <p className={styles.placeholder} aria-live="polite">
+                    Live fee estimate unavailable. Using safe default rates. Custom fees remain available.
+                </p>
+            ) : null}
         </div>
     );
 }

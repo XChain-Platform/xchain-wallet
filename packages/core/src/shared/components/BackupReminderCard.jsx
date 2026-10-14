@@ -11,50 +11,62 @@
 import { useEffect, useState } from 'react';
 import { flows as flowsLib } from '@xchain-wallet/core';
 import { Button, Icon } from '@xchain-wallet/core/ui';
-import { useMessaging } from '../useMessaging.js';
 import styles from './BackupReminderCard.module.css';
+import { t } from '../../i18n/index.js';
 
 /**
  * §19.7 / G034 + G062: progressive backup reminder card on Home.
  *
- * Loads settings via messaging on mount, then evaluates
- * `flowsLib.computeBackupReminderState({ walletId, walletCreatedAt,
- * settings })`. Renders nothing for the 'hidden' state. 'gentle' renders a
- * quiet card with a Dismiss button; 'firm' renders a more prominent card
+ * Evaluates `flowsLib.computeBackupReminderState({ walletId, hasFunds })`.
+ * Renders nothing for the 'hidden' state. 'gentle' renders a
+ * quiet card with a snooze button; 'firm' renders a more prominent card
  * without a dismiss.
  *
  * The card itself does not navigate. Callers wire `onAction` to take the
- * user to a backup ceremony (Settings → Backup, or a verify lane for
- * never-verified wallets).
+ * user to the Settings > Backup flow.
  *
  * @param {object} props
  * @param {string} props.walletId
- * @param {string | null | undefined} [props.walletCreatedAt]
+ * @param {boolean} props.hasFunds
+ * @param {boolean} [props.isDemo]
+ * @param {string | null} [props.walletMode]
  * @param {() => void} [props.onAction]      "Back up now" CTA
  */
-export function BackupReminderCard({ walletId, walletCreatedAt, onAction }) {
-    const { messaging } = useMessaging();
+export function BackupReminderCard({
+    walletId,
+    hasFunds,
+    isDemo = false,
+    walletMode = 'full',
+    onAction,
+}) {
     const [state, setState] = useState({ kind: 'hidden' });
 
     useEffect(() => {
-        let cancelled = false;
         if (!walletId) {
             setState({ kind: 'hidden' });
-            return () => { cancelled = true; };
+            return undefined;
         }
-        const settingsPromise = typeof messaging?.getSettings === 'function'
-            ? messaging.getSettings().catch(() => null)
-            : Promise.resolve(null);
-        settingsPromise.then((settings) => {
-            if (cancelled) return;
+        const refresh = (event) => {
+            if (event?.type === 'storage' && event.key !== 'xc:backupVerifiedAt') return;
             setState(flowsLib.computeBackupReminderState({
-                walletId,
-                walletCreatedAt: walletCreatedAt || null,
-                settings: settings || null,
+                walletId, hasFunds, isDemo, walletMode,
             }));
-        });
-        return () => { cancelled = true; };
-    }, [walletId, walletCreatedAt, messaging]);
+        };
+        refresh();
+        globalThis.addEventListener?.('storage', refresh);
+        return () => globalThis.removeEventListener?.('storage', refresh);
+    }, [walletId, hasFunds, isDemo, walletMode]);
+
+    useEffect(() => {
+        if (typeof state.recheckAt !== 'number') return undefined;
+        const delay = Math.max(0, state.recheckAt - Date.now());
+        const timer = setTimeout(() => {
+            setState(flowsLib.computeBackupReminderState({
+                walletId, hasFunds, isDemo, walletMode,
+            }));
+        }, delay);
+        return () => clearTimeout(timer);
+    }, [state.recheckAt, walletId, hasFunds, isDemo, walletMode]);
 
     if (state.kind === 'hidden') return null;
 
@@ -74,19 +86,22 @@ export function BackupReminderCard({ walletId, walletCreatedAt, onAction }) {
                     disabled={!onAction}
                     icon={<Icon.CheckIcon />}
                 >
-                    Back up now
+                    {t('backupReminder.backupNow')}
                 </Button>
                 {state.dismissable ? (
-                    <button
-                        type="button"
-                        className={styles.dismissBtn}
+                    <Button
+                        size="sm"
+                        variant="secondary"
+                        icon={null}
                         onClick={() => {
                             flowsLib.dismissBackupReminder(walletId);
-                            setState({ kind: 'hidden' });
+                            setState(flowsLib.computeBackupReminderState({
+                                walletId, hasFunds, isDemo, walletMode,
+                            }));
                         }}
                     >
-                        Not now
-                    </button>
+                        {t('backupReminder.remindTomorrow')}
+                    </Button>
                 ) : null}
             </div>
         </div>

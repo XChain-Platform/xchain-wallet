@@ -1,13 +1,36 @@
-/* Match TokenDetail's body sizing. Screen.body provides the outer
-   space-4 padding; we just cap the inner column at 1080px and stack. */
+/* Match TokenDetail's body sizing: the timeline fills the content area
+   (operator ruling 2026-10-12: lists run the full width, forms keep a
+   narrow column), and Screen.body provides the gutter. */
 .body {
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-1);
-    max-width: 1080px;
-    margin: 0 auto;
     width: 100%;
     box-sizing: border-box;
+}
+
+.refreshing svg {
+    animation: history-refresh-spin 0.8s linear infinite;
+}
+
+.visuallyHidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+@keyframes history-refresh-spin {
+    to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .refreshing svg { animation: none; }
 }
 
 /* Unified filter card containing search, chain picker, and the collapsible
@@ -17,10 +40,28 @@
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-3);
+    width: 100%;
+    box-sizing: border-box;
     padding: var(--xc-space-3);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-md);
     background: var(--xc-surface);
+}
+
+.toolbarTop {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--xc-space-2);
+}
+
+.exportButton {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+.phoneFilterToggle {
+    display: none;
 }
 
 .searchRow {
@@ -29,11 +70,18 @@
     align-items: stretch;
 }
 
+.searchRow > :first-child {
+    flex: 1 1 auto;
+    margin-bottom: 0;
+}
+
 .searchInput {
+    flex: 1 1 auto;
+    min-width: 0;
     width: 100%;
     box-sizing: border-box;
     appearance: none;
-    height: 36px;
+    min-height: 36px;
     line-height: 1;
     padding: 0 var(--xc-space-3);
     border-radius: var(--xc-radius-sm);
@@ -48,48 +96,6 @@
 .searchInput:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: 2px;
-}
-
-.filterToggle {
-    appearance: none;
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    gap: var(--xc-space-1);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: var(--xc-radius-sm);
-    border: 1px solid var(--xc-border-strong);
-    background: var(--xc-bg);
-    color: var(--xc-text);
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-    cursor: pointer;
-    font-family: inherit;
-}
-
-.filterToggle:hover { background: var(--xc-bg-muted); }
-.filterToggle:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-
-.filterToggleActive {
-    background: var(--xc-bg-muted);
-    border-color: var(--xc-accent-primary);
-}
-
-.filterBadge {
-    color: var(--xc-accent-primary);
-    font-size: var(--xc-text-md);
-    line-height: 1;
-}
-
-.fieldLabel {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    font-weight: 600;
 }
 
 /* Chain picker: full-width button + popover listbox so each option
@@ -156,11 +162,11 @@
     z-index: 20;
     list-style: none;
     margin: 0;
-    padding: 4px;
+    padding: var(--xc-space-1);
     background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
+    border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-sm);
-    box-shadow: var(--xc-shadow-md, 0 4px 12px rgba(0, 0, 0, 0.15));
+    box-shadow: var(--xc-shadow-md);
 }
 
 .chainPickerOption {
@@ -182,7 +188,7 @@
 .chainPickerOption:hover { background: var(--xc-bg-muted); }
 .chainPickerOptionActive {
     background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     font-weight: 600;
 }
 
@@ -204,53 +210,30 @@
     font-weight: 600;
     padding: var(--xc-space-2) var(--xc-space-2) var(--xc-space-1);
     border-bottom: 1px solid var(--xc-border);
-    margin-bottom: 4px;
+    margin-bottom: var(--xc-space-1);
     list-style: none;
 }
 
 .chainPickerOptionActive .checkboxOptionIcon {
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
 }
 
-/* Bottom row of the filter card. Additional details disclosure on
-   the left, Grouped / Flat seg group anchored to the right. */
+/* The toolbar keeps every control intact as the row wraps. */
 .filterFooter {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--xc-space-2);
 }
 
-.filterFooter > .filterDisclosure {
-    flex: 1 1 auto;
-    width: auto;
+.toolbarControl {
+    flex: 0 0 auto;
+    height: var(--xc-control-h-md);
+    min-height: var(--xc-control-h-md);
 }
 
-/* Filters disclosure: clickable row at the bottom of the form that
-   expands the advanced filters panel. */
-.filterDisclosure {
-    appearance: none;
-    width: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    background: transparent;
-    border: none;
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-    cursor: pointer;
-    font-family: inherit;
-}
-
-.filterDisclosure:hover { color: var(--xc-text); }
-.filterDisclosure:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: -2px;
-}
-
-.filterDisclosureActive {
-    color: var(--xc-text);
+.toolbarControl svg {
+    flex: 0 0 auto;
 }
 
 /* Advanced filter panel: fieldsets stacked, each with a small label
@@ -261,192 +244,68 @@
     gap: var(--xc-space-3);
 }
 
-.field {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-1);
+.dateRow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: start;
+    gap: var(--xc-space-2);
 }
 
-.chipWrap {
+.dateRow > div {
+    margin-bottom: 0;
+}
+
+.dateSep {
+    display: inline-block;
+    color: var(--xc-text-muted);
+    line-height: 36px;
+}
+
+:global([dir='rtl']) .dateSep {
+    transform: scaleX(-1);
+}
+
+.dateTools,
+.activeDateRange {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+}
+
+.datePresets {
     display: flex;
     flex-wrap: wrap;
     gap: var(--xc-space-1);
 }
 
-.viewRow {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--xc-space-2);
-}
-
-.viewRowLabel {
+.dateZone,
+.activeDateRange {
+    color: var(--xc-text-muted);
     font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    font-weight: 600;
 }
 
-.segGroup {
-    display: inline-flex;
-    border-radius: var(--xc-radius-sm);
-    border: 1px solid var(--xc-border);
-    overflow: hidden;
-    align-self: flex-start;
-}
-
-.segBtn {
+.activeDateRange button {
     appearance: none;
-    background: var(--xc-bg);
     border: none;
-    color: var(--xc-text);
-    padding: var(--xc-space-1) var(--xc-space-3);
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-    cursor: pointer;
-    font-family: inherit;
-    /*
-     * The 24px pointer-target floor (WCAG 2.2 AA 2.5.8), stated
-     * rather than arrived at. Height here used to be 4px + 4px of padding
-     * plus whatever line box the platform font produced for 13px text: 24px
-     * on macOS with -apple-system, 23px on the CI runner's fallback font.
-     * So these two buttons met an accessibility floor on one operating
-     * system and missed it by a pixel on another, and the e2e walk caught it
-     * only once it ran somewhere other than a Mac.
-     *
-     * min-height makes the floor a property instead of a coincidence, and
-     * the flex centring keeps the label centred when it applies.
-     */
-    min-height: var(--xc-tap-min);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.segBtn:not(:first-child) {
-    border-inline-start: 1px solid var(--xc-border);
-}
-
-.segBtnActive {
-    background: var(--xc-accent-primary);
-    color: var(--xc-on-accent, #fff);
-}
-
-.dateRow {
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-}
-
-.dateInput {
-    flex: 1 1 0;
-    min-width: 0;
-    /* Keep the native calendar picker indicator; appearance:none
-       would strip it. The indicator naturally renders on the right
-       in LTR; we just give it a hover hint and a normalized color. */
-    height: 36px;
-    line-height: 1;
-    padding: 0 var(--xc-space-2);
-    border-radius: var(--xc-radius-sm);
-    border: 1px solid var(--xc-border);
-    background: var(--xc-bg);
-    color: var(--xc-text);
-    font-size: var(--xc-text-sm);
-    font-family: inherit;
-}
-
-.dateInput::-webkit-calendar-picker-indicator {
-    cursor: pointer;
-    opacity: 0.6;
-    margin-inline-start: var(--xc-space-1);
-    /* In dark mode the default indicator can render near-invisible;
-       this filter inverts it so the glyph stays legible against
-       --xc-bg in both palettes. */
-    filter: invert(var(--xc-icon-invert, 0));
-}
-
-.dateInput::-webkit-calendar-picker-indicator:hover {
-    opacity: 1;
-}
-
-@media (prefers-color-scheme: dark) {
-    .dateInput::-webkit-calendar-picker-indicator {
-        --xc-icon-invert: 1;
-    }
-}
-
-.dateSep {
-    color: var(--xc-text-muted);
-    flex: 0 0 auto;
-}
-
-.footerRow {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: var(--xc-space-2);
-    padding-top: var(--xc-space-2);
-    border-top: 1px solid var(--xc-border);
-}
-
-.clearLink {
-    appearance: none;
     background: transparent;
-    border: none;
-    color: var(--xc-accent-primary);
-    font-size: var(--xc-text-sm);
+    color: var(--xc-accent-text);
+    font: inherit;
     font-weight: 600;
     cursor: pointer;
-    padding: 0;
-    font-family: inherit;
-    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
-       inheriting it from whichever line box the platform font produces. */
-    min-height: var(--xc-tap-min);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-}
-.clearLink:hover { text-decoration: underline; }
-
-.chip {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--xc-space-1);
-    padding: var(--xc-space-1) var(--xc-space-2);
-    border-radius: var(--xc-radius-pill, 999px);
-    border: 1px solid var(--xc-border);
-    background: var(--xc-bg);
-    color: var(--xc-text);
-    font-size: var(--xc-text-xs);
-    cursor: pointer;
-    font-family: inherit;
-    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
-       inheriting it from whichever line box the platform font produces. */
+    padding: var(--xc-space-1);
     min-height: var(--xc-tap-min);
 }
 
-.chipActive {
-    background: var(--xc-accent-primary);
-    color: var(--xc-on-accent, #fff);
-    border-color: var(--xc-accent-primary);
+.activeDateRange button:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
 }
 
-.chipCrossChain {
-    border-color: var(--xc-accent-secondary, var(--xc-accent-primary));
-}
-
-.divider {
-    width: 1px;
-    align-self: stretch;
-    background: var(--xc-border);
-    margin: 0 var(--xc-space-1);
-}
-
-.stalenessRow {
-    display: flex;
-    justify-content: flex-end;
-    padding: 0 var(--xc-space-1) var(--xc-space-1);
+.dateError {
+    color: var(--xc-danger-text, #b42318);
+    font-size: var(--xc-text-sm);
 }
 
 .timeline {
@@ -458,82 +317,50 @@
     padding: 0;
 }
 
-.row {
-    position: relative;
+.pagination {
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-1);
-    padding: var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
+    align-items: center;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-4) 0;
+}
+
+.paginationCount {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+}
+
+.row {
+    position: relative;
+    border: 1px solid var(--xc-control-border);
     background: var(--xc-surface-raised);
-    cursor: pointer;
-    color: var(--xc-text);
-    font-family: inherit;
-    width: 100%;
-    text-align: start;
     margin: var(--xc-space-1) 0;
 }
 
 .row:hover {
-    background: var(--xc-bg-muted);
-    border-color: var(--xc-accent-primary);
+    background: var(--xc-control-bg-hover);
+    border-color: var(--xc-control-selected);
 }
 
 .row:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
+    outline: 2px solid var(--xc-control-focus-ring);
     outline-offset: 2px;
 }
 
 .rowSelected {
-    border-color: var(--xc-accent-primary);
-    background: var(--xc-bg-muted);
-}
-
-.rowHeader {
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-}
-
-/* Plain chain icon for row headers: no pill, no tinted background.
-   Just the raw 16px logo so the row reads as icon + action label. */
-.rowChainIcon {
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    object-fit: cover;
-    flex-shrink: 0;
-    display: block;
-}
-
-.actionBadge {
-    font-weight: 600;
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-}
-
-.crosschainBadge {
-    font-size: var(--xc-text-xs);
-    padding: 0 var(--xc-space-1);
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-accent-secondary, var(--xc-accent-primary));
-    color: var(--xc-on-accent, #fff);
+    border-color: var(--xc-control-selected);
+    background: var(--xc-control-bg-hover);
 }
 
 .rowMeta {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--xc-space-2);
+    min-width: 0;
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
-}
-
-.rowSummary {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
+    font-variant-numeric: tabular-nums;
 }
 
 /* Relative timestamp now lives on the meta line (line 3), pushed to
@@ -570,7 +397,7 @@
 
 .statusPillError {
     background: color-mix(in srgb, var(--xc-danger, #d93838) 20%, transparent);
-    color: var(--xc-danger, #d93838);
+    color: var(--xc-danger-fg, #d93838);
 }
 
 .statusPillPending {
@@ -580,22 +407,11 @@
 
 /* Source-address line (line 2). Monospace + muted so it visually
    subordinates to the action label above. */
-.rowSourceAddress {
-    font-family: var(--xc-font-mono, monospace);
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    word-break: break-all;
-}
 
 /* Which contract a DEPLOY / EXECUTE / DEPOSIT / WITHDRAW row touched, named
    the way every other surface names one: "Escrow v1.0.0 (C:BTC:12)". Not
    monospaced like the address line above, because the leading half is a
    human-written name and the address is short enough to read either way. */
-.rowContractLabel {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    word-break: break-word;
-}
 
 /* Confirmation count pill rendered next to the block number on line 3.
    Uses the accent color so it pops against the row's muted meta line;
@@ -607,7 +423,7 @@
     padding: 0 var(--xc-space-2);
     border-radius: var(--xc-radius-pill, 999px);
     background: color-mix(in srgb, var(--xc-accent-primary) 22%, transparent);
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     font-size: 11px;
     font-weight: 700;
     line-height: 1.7;
@@ -626,15 +442,6 @@
     width: 2px;
     height: 1rem;
     background: var(--xc-accent-secondary, var(--xc-accent-primary));
-}
-
-.detail {
-    margin: var(--xc-space-1) 0 var(--xc-space-3);
-    padding: var(--xc-space-3);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-bg);
-    display: grid;
-    gap: var(--xc-space-3);
 }
 
 /* ───── ActionDetail page layout ───── */
@@ -692,6 +499,14 @@
     text-transform: none;
 }
 
+.detailSectionHeading h2 {
+    font-size: var(--xc-text-md);
+    color: var(--xc-text);
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
 /* Key/value table used by the Action details section. Keys (th) are
    small + uppercase + muted; values (td) are monospace + wrap on any
    character so a long tx hash / address never breaks the layout. */
@@ -701,7 +516,7 @@
    column is sized to the widest label across ALL rows (so the value
    column lines up vertically) instead of recalculating per row. The
    `minmax(0, 1fr)` column lets values shrink below their intrinsic
-   width so `overflow: hidden / ellipsis` actually triggers. */
+   width so long identifiers wrap inside the card. */
 .detailsTable {
     width: 100%;
     display: block;
@@ -760,9 +575,9 @@
 .detailsTable td {
     color: var(--xc-text);
     font-family: var(--xc-font-mono, monospace);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    white-space: normal;
 }
 
 /* Colored bubble for the Action row in the details table. Tinted with
@@ -773,7 +588,7 @@
     padding: 2px var(--xc-space-2);
     border-radius: var(--xc-radius-pill, 999px);
     background: color-mix(in srgb, var(--xc-accent-primary) 22%, transparent);
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     font-family: inherit;
     font-size: 12px;
     font-weight: 700;
@@ -798,54 +613,18 @@
 /* Inline value + copy icon used in the details table for fields the
    user typically wants to paste (action_index / tx_hash / addresses). */
 .copyableValue {
-    display: inline-flex;
-    align-items: center;
+    display: flex;
+    align-items: flex-start;
     gap: var(--xc-space-1);
     max-width: 100%;
 }
 
 .copyableText {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    /* `min-width: 0` lets the flex item shrink past its intrinsic
-       content width; without it the text refuses to collapse and
-       pushes the parent past the cell boundary. */
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    white-space: normal;
     min-width: 0;
-    flex: 0 1 auto;
-}
-
-.copyIconButton {
-    appearance: none;
-    background: transparent;
-    border: none;
-    color: var(--xc-text-muted);
-    cursor: pointer;
-    padding: 2px;
-    border-radius: var(--xc-radius-sm);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    /* 22x22 was two pixels under the WCAG 2.2 AA 2.5.8 pointer-target
-       floor on every platform, not just the CI runner's font. */
-    width: var(--xc-tap-min);
-    height: var(--xc-tap-min);
-    flex-shrink: 0;
-}
-
-.copyIconButton:hover {
-    color: var(--xc-accent-primary);
-    background: var(--xc-bg-muted);
-}
-
-.copyIconButton:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 1px;
-}
-
-.copyIconButton svg {
-    width: 14px;
-    height: 14px;
+    flex: 1 1 auto;
 }
 
 /* Explorer button row: equal-width columns that span the full row.
@@ -888,7 +667,7 @@
     height: 32px;
     border-radius: 50%;
     background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -897,12 +676,6 @@
 }
 
 /* Branding logo image inside an explorer action button (XChain). */
-.detailActionLogo {
-    width: 22px;
-    height: 22px;
-    object-fit: contain;
-    display: block;
-}
 
 /* Naked favicon used by the explorer buttons: no circular icon-wrap
    background; sits at the same vertical position as the wrapped icons
@@ -952,7 +725,7 @@
     background: var(--xc-surface-raised);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-md);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    box-shadow: var(--xc-shadow-md);
     z-index: 20;
     display: flex;
     flex-direction: column;
@@ -984,13 +757,14 @@
     justify-content: center;
     width: 16px;
     height: 16px;
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
 }
 
 /* ───── Detail page tab strip ───── */
 
 .detailTabs {
     display: flex;
+    flex-wrap: wrap;
     gap: var(--xc-space-1);
     border-bottom: 1px solid var(--xc-border);
     padding-bottom: 1px;
@@ -1006,12 +780,16 @@
     font-weight: 600;
     color: var(--xc-text-muted);
     cursor: pointer;
-    white-space: nowrap;
+    white-space: normal;
+    overflow-wrap: anywhere;
     display: inline-flex;
     align-items: center;
+    justify-content: center;
+    text-align: center;
     gap: var(--xc-space-2);
     border-bottom: 2px solid transparent;
-    flex: 0 0 auto;
+    flex: 1 1 auto;
+    min-width: 0;
     font-family: inherit;
 }
 
@@ -1020,7 +798,7 @@
 }
 
 .detailTabActive {
-    color: var(--xc-accent-primary);
+    color: var(--xc-accent-text);
     border-bottom-color: var(--xc-accent-primary);
 }
 
@@ -1044,31 +822,6 @@
     object-fit: cover;
     margin-inline-end: var(--xc-space-2);
     vertical-align: -3px;
-}
-
-.detailDual {
-    grid-template-columns: 1fr 1fr;
-}
-
-@media (max-width: 700px) {
-    .detailDual { grid-template-columns: 1fr; }
-}
-
-.detailSide {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-2);
-    padding: var(--xc-space-2);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-surface-raised);
-    min-width: 0;
-}
-
-.detailSideTitle {
-    font-weight: 600;
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
 }
 
 .detailDecoded {
@@ -1097,14 +850,8 @@
     z-index: 1;
     background: color-mix(in srgb, var(--xc-surface-raised) 88%, transparent);
     border-radius: var(--xc-radius-sm);
-    backdrop-filter: blur(2px);
-}
-
-.empty {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-    text-align: center;
-    padding: var(--xc-space-4);
+    -webkit-backdrop-filter: var(--xc-backdrop-filter);
+    backdrop-filter: var(--xc-backdrop-filter);
 }
 
 .actions {
@@ -1112,67 +859,33 @@
     justify-content: flex-end;
     gap: var(--xc-space-2);
     margin-top: var(--xc-space-4);
-    max-width: 1080px;
-    margin-inline-start: auto;
-    margin-inline-end: auto;
-    padding: 0 var(--xc-space-4);
 }
 
 .resultsHeader {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: var(--xc-space-2);
     margin-bottom: var(--xc-space-2);
 }
 
-.exportTrigger {
-    font-size: var(--xc-text-sm);
-    font-weight: 500;
-    color: var(--xc-text);
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    padding: var(--xc-space-1) var(--xc-space-3);
-    cursor: pointer;
-    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
-       inheriting it from whichever line box the platform font produces. */
-    min-height: var(--xc-tap-min);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.exportTrigger:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.exportTrigger:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
+.resultsHeader > div {
+    min-width: 0;
+    flex-wrap: wrap;
+    justify-content: flex-end;
 }
 
 .error {
-    color: var(--xc-error, #b00);
+    color: var(--xc-danger-fg);
     font-size: var(--xc-text-sm);
     margin: 0;
-}
-
-.rbfActions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--xc-space-2);
-    margin-top: var(--xc-space-2);
-    padding-top: var(--xc-space-2);
-    border-top: 1px dashed var(--xc-border);
-    align-items: center;
 }
 
 .rbfError {
     flex-basis: 100%;
     margin: 0;
-    color: var(--xc-error, #b00);
+    color: var(--xc-danger-fg);
     font-size: var(--xc-text-xs);
     line-height: 1.3;
 }
@@ -1186,12 +899,6 @@
 }
 
 /* §31.4: Save-as-contact prompt inside the history detail card. */
-.saveContactRow {
-    display: flex;
-    margin-top: var(--xc-space-2);
-    padding-top: var(--xc-space-2);
-    border-top: 1px dashed var(--xc-border);
-}
 
 .saveContactForm {
     margin-top: var(--xc-space-2);
@@ -1202,36 +909,13 @@
     gap: var(--xc-space-2);
 }
 
-.saveContactLabel {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-1);
-    font-size: var(--xc-text-xs);
-    font-weight: 600;
-    color: var(--xc-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-}
-
-.saveContactInput {
-    font-family: inherit;
-    font-size: var(--xc-text-sm);
-    padding: var(--xc-space-2);
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-sm);
-    color: var(--xc-text);
-}
-
-.saveContactInput:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 1px;
-    border-color: var(--xc-accent-primary);
+.saveContactForm > :first-child {
+    margin-bottom: 0;
 }
 
 .saveContactError {
     margin: 0;
-    color: var(--xc-error, #b00);
+    color: var(--xc-danger-fg);
     font-size: var(--xc-text-xs);
     line-height: 1.3;
 }
@@ -1240,6 +924,18 @@
     display: flex;
     gap: var(--xc-space-2);
     justify-content: flex-end;
+}
+
+.recipientContactActions {
+    display: flex;
+    gap: var(--xc-space-1);
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.recipientContactActions > :first-child {
+    flex: 1 1 200px;
+    margin-bottom: 0;
 }
 
 /* §28.2 activity-feed grouping.
@@ -1258,24 +954,19 @@
     /* intentionally empty */
 }
 
-.groupCount {
-    display: none;
-}
-
-.linkPairConnector {
-    display: inline-flex;
-    align-items: center;
-    color: var(--xc-text-muted);
-    font-weight: 600;
-    padding: 0 0.125rem;
-}
-
 .groupMembers {
     display: flex;
     flex-direction: column;
     list-style: none;
     margin: 0;
     padding: 0;
+}
+
+.groupPagination {
+    display: flex;
+    justify-content: center;
+    padding: var(--xc-space-3);
+    border-top: 1px solid var(--xc-border);
 }
 
 .groupCardWrap {
@@ -1324,18 +1015,6 @@
     border-top: 1px solid var(--xc-border);
 }
 
-/* Chevron toggle on the group header. Uses the shared DoubleChevron
-   component (matching the Additional-details disclosure). Points down
-   when collapsed, up when expanded. Pushed to the far right edge of
-   the meta line. */
-.groupChevron {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    margin-inline-start: auto;
-    color: var(--xc-text-muted);
-}
-
 /* PC-50: SPV verdict badge above the action detail card. */
 .detailVerify {
     display: flex;
@@ -1360,7 +1039,7 @@
     padding: 0 var(--xc-space-2);
     border-radius: var(--xc-radius-pill, 999px);
     background: color-mix(in srgb, var(--xc-danger, #d93838) 18%, transparent);
-    color: var(--xc-danger, #d93838);
+    color: var(--xc-danger-fg, #d93838);
     font-weight: 700;
 }
 
@@ -1441,5 +1120,112 @@
 .pendingAmount {
     font-style: italic;
     color: var(--xc-text-muted);
-    overflow-wrap: anywhere;
+    max-width: 100%;
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+.dateRow input,
+.paginationCount,
+.confirmationsPill,
+.copyableText,
+.pendingSegments,
+.pendingAmount {
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
+/* Phone layouts keep the full filter form behind one compact disclosure.
+   Font-scaled phone layouts also wrap controls and row metadata, while detail
+   keys stack above their values. System text zoom does not reduce the CSS
+   viewport, so this reflow includes common 375px through 430px phone widths. */
+@media not all and (min-width: 480px) {
+    .phoneFilterToggle {
+        display: flex;
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .phoneFilterToggle svg {
+        width: 18px;
+        height: 18px;
+    }
+
+    .filterCard {
+        display: none;
+        min-width: 0;
+    }
+
+    .filterCard.filterCardOpen {
+        display: flex;
+    }
+
+    .dateRow {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .dateSep {
+        display: none;
+    }
+
+    .filterFooter {
+        align-items: stretch;
+    }
+
+    .filterFooter > :first-child {
+        flex: 1 1 100%;
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+    }
+
+    .rowMeta {
+        flex-wrap: wrap;
+        min-width: 0;
+    }
+
+    .pendingAmount {
+        flex: 1 1 100%;
+        min-width: 0;
+    }
+
+    .rowRelativeTime {
+        margin-inline-start: 0;
+    }
+
+    .detailsTable tbody {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .detailsTable th,
+    .detailSectionFlush .detailsTable th {
+        padding: var(--xc-space-2) var(--xc-space-3) var(--xc-space-1);
+        white-space: normal;
+    }
+
+    .detailsTable td,
+    .detailSectionFlush .detailsTable td {
+        padding: 0 var(--xc-space-3) var(--xc-space-2);
+    }
+
+    .detailsTable tr + tr > td {
+        border-top: 0;
+    }
+}
+
+/* Phone History content clears the bottom navigation and gives each footer
+   item its own row. The shell bar is 3.5rem tall and grows by the device's
+   bottom safe-area inset. */
+@media not all and (min-width: 480px) {
+    .body {
+        padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+    }
+
+    .resultsHeader {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
 }

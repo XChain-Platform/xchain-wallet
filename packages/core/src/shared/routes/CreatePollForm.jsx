@@ -9,7 +9,23 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, Input, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import {
+    AddressField,
+    AddressText,
+    Button,
+    ChainBadge,
+    FeeSelector,
+    FormPage,
+    FormSection,
+    Input,
+    ListPage,
+    NetworkField,
+    PageHeader,
+    Screen,
+    Select,
+    StatusMessage,
+    Textarea,
+} from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -24,6 +40,7 @@ import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { blockDateEstimateText } from '../utils/blockDateEstimate.js';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -37,6 +54,16 @@ import {
 import { bindingPollErrors, CALLBACK_ON_VALUES } from '../../flows/bindingPoll.js';
 import styles from './IssueTokenForm.module.css';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
+import { useTickBalance } from '../hooks/useTickBalance.js';
+import { useTokenInfo } from '../hooks/useTokenInfo.js';
+import {
+    compareDecimalStrings,
+    formatWithThousands,
+    sumDecimalStrings,
+    tokenAmountPrecisionError,
+    trimAmountTail,
+} from '../utils/amountFormat.js';
+import { tickerReferenceError } from '../utils/tickerGrammar.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -83,7 +110,12 @@ const WEIGHT_MODE_LABEL = {
  * @param {() => void} props.onBack
  * @param {() => void} [props.onCreated]
  */
-export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, onBack, onCreated }) {
+export function CreatePollForm(props) {
+    const { walletId, chainId, presetTick } = props;
+    return <CreatePollFormState key={JSON.stringify([walletId, chainId, presetTick])} {...props} />;
+}
+
+function CreatePollFormState({ walletId, chainId: initialChainId, presetTick, onBack, onCreated }) {
     // Seeded from the launching context; the Network field lets the user retarget.
     const [chainId, setChainId] = useState(initialChainId);
     const { messaging, shell } = useMessaging();
@@ -125,9 +157,11 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    const submitInFlightRef = useRef(false);
 
     useEffect(() => {
         let cancelled = false;
+        setLoadError(null);
         Promise.all([
             messaging.getAddressesByChain(walletId),
             typeof messaging.getActiveAddresses === 'function'
@@ -140,6 +174,7 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
                 const sourceId = preferredSourceId(byChain?.[chainId] || [], active?.[chainId]);
                 if (!sourceId) { setLoadError('No address on this chain. Use Receive to generate one first.'); return; }
                 setFromAddressId(sourceId);
+                setLoadError(null);
             })
             .catch((err) => { if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.'); });
         return () => { cancelled = true; };
@@ -161,6 +196,14 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
     const { isWatcherMode } = useWalletMode();
 
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
+    const governanceBalance = useTickBalance({
+        messaging, walletId, chainId, address: fromAddress?.address, tick,
+    });
+    const xchainBalance = useTickBalance({
+        messaging, walletId, chainId, address: fromAddress?.address, tick: 'XCHAIN',
+    });
+    const governanceTokenInfo = useTokenInfo({ chainId, tick, skip: !tick.trim() });
+    const xchainTokenInfo = useTokenInfo({ chainId, tick: 'XCHAIN' });
 
     // Network fee: Low / Normal / Fast / Custom via FeeSelector; feePerKb
     // prices the broadcast (mirrors DispenserForm / SwapForm).
@@ -186,6 +229,27 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
         : null;
 
     const cleanOptions = useMemo(() => options.map((o) => o.trim()).filter((o) => o.length > 0), [options]);
+
+    const [currentHeight, setCurrentHeight] = useState(/** @type {number | null} */ (null));
+    useEffect(() => {
+        if (typeof messaging?.getIndexerWatermark !== 'function') { setCurrentHeight(null); return undefined; }
+        let cancelled = false;
+        setCurrentHeight(null);
+        messaging.getIndexerWatermark({ chainId })
+            .then((res) => {
+                if (cancelled) return;
+                if (res?.watermark == null || res.watermark === '') { setCurrentHeight(null); return; }
+                const height = Number(res?.watermark);
+                setCurrentHeight(Number.isFinite(height) ? height : null);
+            })
+            .catch(() => { if (!cancelled) setCurrentHeight(null); });
+        return () => { cancelled = true; };
+    }, [chainId, messaging]);
+    const endBlockEstimate = blockDateEstimateText({
+        coin: descriptor?.coin,
+        currentHeight,
+        targetBlock: endBlock,
+    });
 
     // PC-42: a poll is binding the moment it names a callback contract. Every
     // other callback field only means something once it does.
@@ -239,13 +303,13 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
         if (minVoters.trim()) p.minVoters = minVoters.trim();
         if (minVoteBalance.trim()) p.minVoteBalance = minVoteBalance.trim();
         if (decideThreshold.trim()) p.decideThreshold = decideThreshold.trim();
-        if (deposit.trim()) p.deposit = deposit.trim();
+        if (deposit.trim()) p.deposit = trimAmountTail(deposit.trim());
         if (isBinding) {
             p.callbackContract = callbackContract.trim();
             p.callbackMethod = callbackMethod.trim();
             if (callbackParams.trim()) p.callbackParams = callbackParams.trim();
             p.callbackOn = callbackOn;
-            if (gasEscrow.trim()) p.gasEscrow = gasEscrow.trim();
+            if (gasEscrow.trim()) p.gasEscrow = trimAmountTail(gasEscrow.trim());
             // Emitted only when the network will actually honor it.
             if (timelockActive && callbackDelayBlocks.trim()) {
                 p.callbackDelayBlocks = callbackDelayBlocks.trim();
@@ -306,16 +370,18 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
     // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
     // byte-identical prebuilt PSBT via createPollAction.prebuiltPsbt.
     async function openConfirmScreen() {
-        const from = {
-            address: fromAddress.address,
-            publicKey: fromAddress.publicKey,
-            derivationPath: fromAddress.derivationPath,
-            addressId: fromAddress.id,
-            source: fromAddress.source,
-            signerId: fromAddress.signerId,
-        };
+        if (submitInFlightRef.current) return;
+        submitInFlightRef.current = true;
         setSubmitError(null);
         try {
+            const from = {
+                address: fromAddress.address,
+                publicKey: fromAddress.publicKey,
+                derivationPath: fromAddress.derivationPath,
+                addressId: fromAddress.id,
+                source: fromAddress.source,
+                signerId: fromAddress.signerId,
+            };
             const res = await actionConfirm.run({
                 chainId,
                 from,
@@ -346,6 +412,8 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
             setFormError(submitFailureMessage(err, {
                 chainId, coinTicker, fallback: err?.message || 'Create poll failed.',
             }));
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 
@@ -353,20 +421,84 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
         event.preventDefault();
         if (!fromAddress) { setFormError('No source address available.'); return; }
         if (!tick.trim()) { setFormError('Governance token is required.'); return; }
-        if (!endBlock.trim() || !/^\d+$/.test(endBlock.trim())) { setFormError('End block must be a block height (a future block).'); return; }
+        const tickError = tickerReferenceError(tick, { noun: 'Governance token' });
+        if (tickError) { setFormError(tickError); return; }
+        const governanceBalanceComparison = compareDecimalStrings(governanceBalance, '0');
+        if (governanceBalanceComparison !== null && governanceBalanceComparison !== 1) {
+            setFormError(`This address must hold some ${tick.trim().toUpperCase()} to create its poll.`);
+            return;
+        }
+        if (!/^[1-9]\d*$/.test(endBlock.trim())) { setFormError('End block must be a positive whole block height.'); return; }
+        if (currentHeight != null && Number(endBlock) <= currentHeight) { setFormError(`End block must be above the current indexed block (${currentHeight}).`); return; }
         if (cleanOptions.length < 2) { setFormError('Add at least two non-empty options.'); return; }
         if (cleanOptions.some((o) => o.includes(','))) { setFormError('Option labels cannot contain a comma.'); return; }
+        const selectionCount = Number(maxSelections);
+        if (!/^\d+$/.test(maxSelections.trim()) || !Number.isInteger(selectionCount) || selectionCount < 1 || selectionCount > cleanOptions.length) {
+            setFormError(`Max selections must be a whole number from 1 to ${cleanOptions.length}.`);
+            return;
+        }
+        const minBalanceText = minVoteBalance.trim();
+        if (minBalanceText && !/^\d+(?:\.\d+)?$/.test(minBalanceText)) {
+            setFormError('Minimum vote balance must be a non-negative amount.');
+            return;
+        }
+        const minBalancePrecisionError = tokenAmountPrecisionError(minBalanceText, {
+            divisibility: governanceTokenInfo?.divisibility,
+            tick,
+            noun: 'Minimum vote balance',
+        });
+        if (minBalancePrecisionError) { setFormError(minBalancePrecisionError); return; }
+        if (weightMode === 'quadratic' && compareDecimalStrings(minBalanceText, '0') !== 1) {
+            setFormError('Quadratic weighting requires a minimum vote balance greater than 0.');
+            return;
+        }
+        if (quorum.trim() && (!/^\d+(?:\.\d+)?$/.test(quorum.trim()) || !(Number(quorum) > 0) || Number(quorum) > 1)) {
+            setFormError('Quorum must be a fraction greater than 0 and no more than 1.');
+            return;
+        }
+        if (decideThreshold.trim() && (!/^\d+(?:\.\d+)?$/.test(decideThreshold.trim()) || !(Number(decideThreshold) > 0) || Number(decideThreshold) > 1)) {
+            setFormError('Early-decide threshold must be a fraction greater than 0 and no more than 1.');
+            return;
+        }
+        if (minVoters.trim() && (!/^\d+$/.test(minVoters.trim()) || !Number.isInteger(Number(minVoters)))) {
+            setFormError('Minimum voters must be a non-negative whole number.');
+            return;
+        }
+        const depositText = deposit.trim();
+        if (depositText && !/^\d+(?:\.\d+)?$/.test(depositText)) {
+            setFormError('Creation deposit must be a non-negative XCHAIN amount.');
+            return;
+        }
+        const depositPrecisionError = tokenAmountPrecisionError(depositText, {
+            divisibility: xchainTokenInfo?.divisibility,
+            tick: 'XCHAIN',
+            noun: 'Creation deposit',
+        });
+        if (depositPrecisionError) { setFormError(depositPrecisionError); return; }
         if (bindingErrors.length > 0) { setFormError(bindingErrors[0]); return; }
+        const gasEscrowText = isBinding ? gasEscrow.trim() : '';
+        const escrowPrecisionError = tokenAmountPrecisionError(gasEscrowText, {
+            divisibility: xchainTokenInfo?.divisibility,
+            tick: 'XCHAIN',
+            noun: 'Escrow for the call',
+        });
+        if (escrowPrecisionError) { setFormError(escrowPrecisionError); return; }
+        const totalEscrow = sumDecimalStrings([depositText || '0', gasEscrowText || '0']);
+        if (xchainBalance != null && compareDecimalStrings(totalEscrow, xchainBalance) === 1) {
+            setFormError(`This address holds only ${formatWithThousands(xchainBalance)} XCHAIN. The creation deposit and callback escrow together must stay within that balance.`);
+            return;
+        }
         setFormError(null);
-        if (singleEncode) { openConfirmScreen(); return; }
+        if (singleEncode) { void openConfirmScreen(); return; }
         setStage('review');
     }
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (stage === 'submitting') return;
+        if (submitInFlightRef.current) return;
         if (!isWatcherMode && !isHwSource && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && isHwSource && hwStatus !== 'available') return;
+        submitInFlightRef.current = true;
         setStage('submitting');
         setSubmitError(null);
         try {
@@ -409,6 +541,8 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
             }));
             setStage('review');
             if (!isWatcherMode && !isHwSource) { passwordRef.current?.focus(); passwordRef.current?.select(); }
+        } finally {
+            submitInFlightRef.current = false;
         }
     }
 
@@ -416,11 +550,14 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
 
     const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={stage === 'review'
+                ? () => { setSubmitError(null); setStage('form'); }
+                : onBack}
+            backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting' ? 'Review poll' : 'Create poll'}
         />
     );
-    const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
+    const wrap = (children) => <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>{children}</Screen>;
 
     if (loadError) {
         return wrap(
@@ -441,7 +578,7 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
             return wrap(<WatcherResultPanel result={result} onBuildAnother={handleBuildAnother} onDone={onBack} />);
         }
         return wrap(
-            <>
+            <ListPage>
                 <p className={styles.summary}>
                     Poll created. Holders of {tick} can vote once the network records the action;
                     it closes at block {endBlock}.
@@ -453,27 +590,54 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
                 <div className={styles.actions}>
                     <Button variant="primary" onClick={onCreated || onBack}>Done</Button>
                 </div>
-            </>,
+            </ListPage>,
         );
     }
 
     if (stage === 'review' || stage === 'submitting') {
         return wrap(
-            <form onSubmit={handleSubmit} noValidate>
+            <FormPage
+                label="Review poll"
+                onSubmit={handleSubmit}
+                status={(isWatcherMode || isHwSource) && submitError
+                    ? <StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>
+                    : null}
+                actions={(
+                    <>
+                        <Button type="button" variant="ghost" onClick={() => { setSubmitError(null); setStage('form'); }} disabled={stage === 'submitting'}>Back</Button>
+                        <Button type="submit" variant="primary" loading={stage === 'submitting'}
+                            disabled={isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)}>
+                            {isWatcherMode ? 'Create unsigned transaction: poll' : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: create poll` : 'Create poll'}
+                        </Button>
+                    </>
+                )}
+            >
                 <p className={styles.summary}>Create a {tick} governance poll closing at block {endBlock}.</p>
                 <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}</dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
                     <dt className={styles.detailsLabel}>Token</dt>
-                    <dd className={styles.detailsValue}>{tick}</dd>
+                    <dd className={styles.detailsValue}>{pollParams.tick}</dd>
                     {question.trim() ? (<><dt className={styles.detailsLabel}>Question</dt><dd className={styles.detailsValue}>{question.trim()}</dd></>) : null}
                     <dt className={styles.detailsLabel}>Options</dt>
                     <dd className={styles.detailsValue}>{cleanOptions.map((o, i) => `${i}: ${o}`).join(' · ')}</dd>
                     <dt className={styles.detailsLabel}>Mode</dt>
                     <dd className={styles.detailsValue}>{tallyMode} / {weightMode}</dd>
-                    {deposit.trim() ? (<><dt className={styles.detailsLabel}>Deposit</dt><dd className={styles.detailsValue}>{deposit.trim()} (GAS)</dd></>) : null}
+                    <dt className={styles.detailsLabel}>Closes at block</dt>
+                    <dd className={styles.detailsValue}>{pollParams.endBlock}</dd>
+                    <dt className={styles.detailsLabel}>Maximum selections</dt>
+                    <dd className={styles.detailsValue}>{pollParams.maxSelections}</dd>
+                    {pollParams.quorum ? (<><dt className={styles.detailsLabel}>Quorum</dt><dd className={styles.detailsValue}>{pollParams.quorum}</dd></>) : null}
+                    {pollParams.minVoters ? (<><dt className={styles.detailsLabel}>Minimum voters</dt><dd className={styles.detailsValue}>{pollParams.minVoters}</dd></>) : null}
+                    {pollParams.minVoteBalance ? (<><dt className={styles.detailsLabel}>Minimum vote balance</dt><dd className={styles.detailsValue}>{pollParams.minVoteBalance} {pollParams.tick}</dd></>) : null}
+                    {pollParams.decideThreshold ? (<><dt className={styles.detailsLabel}>Early-decide threshold</dt><dd className={styles.detailsValue}>{pollParams.decideThreshold}</dd></>) : null}
+                    {pollParams.deposit ? (<><dt className={styles.detailsLabel}>Creation deposit</dt><dd className={styles.detailsValue}>{trimAmountTail(pollParams.deposit)} XCHAIN</dd></>) : null}
                     {isBinding ? (
                         <>
                             <dt className={styles.detailsLabel}>When this poll ends</dt>
@@ -494,7 +658,7 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
                             {gasEscrow.trim() ? (
                                 <>
                                     <dt className={styles.detailsLabel}>Escrow for the call</dt>
-                                    <dd className={styles.detailsValue}>{gasEscrow.trim()} (GAS)</dd>
+                                    <dd className={styles.detailsValue}>{trimAmountTail(pollParams.gasEscrow)} XCHAIN</dd>
                                 </>
                             ) : null}
                             <dt className={styles.detailsLabel}>Turnout needed</dt>
@@ -526,14 +690,7 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
                         getSignerStatus={messaging.getSignerStatus}
                     />
                 )}
-                {(isWatcherMode || isHwSource) && submitError ? (<StatusMessage variant="error" className={styles.error}>{submitError}</StatusMessage>) : null}
-                <div className={styles.actions}>
-                    <Button type="submit" variant="primary" loading={stage === 'submitting'}
-                        disabled={isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)}>
-                        {isWatcherMode ? 'Create unsigned transaction' : isHwSource ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}` : 'Create poll'}
-                    </Button>
-                </div>
-            </form>,
+            </FormPage>,
         );
     }
 
@@ -590,7 +747,23 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
     }
 
     return wrap(
-        <form onSubmit={handleReview} noValidate>
+        <FormPage
+            label="Create poll"
+            onSubmit={handleReview}
+            sectioned
+            status={formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
+            actions={(
+                <Button
+                    type="submit"
+                    variant="primary"
+                    loading={actionConfirm.composing}
+                    disabled={actionConfirm.composing}
+                >
+                    {singleEncode ? 'Create poll' : 'Preview'}
+                </Button>
+            )}
+        >
+            <FormSection title="Poll details">
             <NetworkField value={chainId} onChange={(cid) => { setChainId(cid); setFromAddressId(null); }} chainIds={addressesByChain ? Object.keys(addressesByChain) : [chainId]} chainRegistry={chainRegistry} />
             {fromAddress ? (
                 <AddressField
@@ -613,6 +786,9 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
             <Textarea label="Question (optional)" hint="What the poll is asking holders to decide."
                 value={question} onChange={(e) => setQuestion(e.target.value)} rows={2} />
 
+            </FormSection>
+            <FormSection title="Options and rules">
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 <span className={styles.fromLabel}>Options</span>
                 {options.map((opt, i) => (
@@ -628,7 +804,9 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
                 <Button type="button" variant="ghost" onClick={addOption}>Add option</Button>
             </div>
 
-            <Input label="Closes at block" hint="A future block height. Voting is accepted up to and including this block."
+            <Input label="Closes at block" hint={endBlockEstimate
+                ? `A future block height. Estimated close: ${endBlockEstimate}.`
+                : 'A future block height. Voting is accepted up to and including this block.'}
                 value={endBlock} onChange={(e) => setEndBlock(e.target.value)} inputMode="numeric" autoComplete="off" />
 
             <Select label="Tally mode" value={tallyMode} onChange={(e) => setTallyMode(e.target.value)}
@@ -650,15 +828,15 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
             {showAdvanced ? (
                 <>
                     <Input label="Quorum (optional)" hint="Smallest share of the token supply that must vote for the result to count, e.g. 0.2 means 20%."
-                        value={quorum} onChange={(e) => setQuorum(e.target.value)} autoComplete="off" />
+                        value={quorum} onChange={(e) => setQuorum(e.target.value)} inputMode="decimal" autoComplete="off" />
                     <Input label="Minimum voters (optional)" hint="Minimum distinct qualifying voters."
                         value={minVoters} onChange={(e) => setMinVoters(e.target.value)} inputMode="numeric" autoComplete="off" />
                     <Input label="Minimum vote balance (optional)" hint="A voter counts toward the participation gate only if they hold at least this much. Required for quadratic weighting."
-                        value={minVoteBalance} onChange={(e) => setMinVoteBalance(e.target.value)} autoComplete="off" />
+                        value={minVoteBalance} onChange={(e) => setMinVoteBalance(e.target.value)} inputMode="decimal" autoComplete="off" />
                     <Input label="Early-decide threshold (optional)" hint="Fraction of supply an option must reach to close the poll early."
-                        value={decideThreshold} onChange={(e) => setDecideThreshold(e.target.value)} autoComplete="off" />
+                        value={decideThreshold} onChange={(e) => setDecideThreshold(e.target.value)} inputMode="decimal" autoComplete="off" />
                     <Input label="Creation deposit (optional)" hint="A GAS deposit held while the poll runs as anti-spam: returned when the poll closes, kept if too few people vote."
-                        value={deposit} onChange={(e) => setDeposit(e.target.value)} autoComplete="off" />
+                        value={deposit} onChange={(e) => setDeposit(e.target.value)} inputMode="decimal" autoComplete="off" />
                 </>
             ) : null}
 
@@ -690,7 +868,7 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
                             <Input label="Extra arguments (optional)" hint='A JSON list appended after the poll result, e.g. ["treasury", 1000].'
                                 value={callbackParams} onChange={(e) => setCallbackParams(e.target.value)} autoComplete="off" />
                             <Input label="Escrow to fund the call (optional)" hint="GAS locked at creation to pay for running the contract; released when the poll finishes."
-                                value={gasEscrow} onChange={(e) => setGasEscrow(e.target.value)} autoComplete="off" />
+                                value={gasEscrow} onChange={(e) => setGasEscrow(e.target.value)} inputMode="decimal" autoComplete="off" />
                             {timelockActive ? (
                                 <Input label="Delay before the call runs (optional)" hint="Blocks between the poll closing and the contract running. A delay gives holders time to react to a result before it takes effect."
                                     value={callbackDelayBlocks} onChange={(e) => setCallbackDelayBlocks(e.target.value)} inputMode="numeric" autoComplete="off" />
@@ -730,19 +908,7 @@ export function CreatePollForm({ walletId, chainId: initialChainId, presetTick, 
                     customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
                 />
             ) : null}
-
-            {formError ? <StatusMessage variant="error" className={styles.error}>{formError}</StatusMessage> : null}
-            <div className={styles.actions}>
-                <Button
-                    type="submit"
-                    variant="primary"
-                    block
-                    loading={actionConfirm.composing}
-                    disabled={actionConfirm.composing}
-                >
-                    {actionConfirm.composing ? 'Preparing review…' : singleEncode ? 'Create poll' : 'Preview'}
-                </Button>
-            </div>
-        </form>,
+            </FormSection>
+        </FormPage>,
     );
 }

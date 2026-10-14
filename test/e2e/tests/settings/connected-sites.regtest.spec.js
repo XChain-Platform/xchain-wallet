@@ -58,7 +58,7 @@
 //   1. The audit panel does not refresh after a mutation made on its own
 //      screen. `BlocklistAuditPanel` loads once on mount; the parent's
 //      `reload()` after a block/unblock does not reach it. The log therefore
-//      still reads "No mutations yet." immediately after the user blocks
+//      still reads "No blocklist changes" immediately after the user blocks
 //      something, and only catches up on a remount. Every audit assertion below
 //      is deliberately taken AFTER a reload for that reason.
 //   2. The panel's own caption says "Recent blocklist mutations (most recent
@@ -166,7 +166,7 @@ test.describe('Settings: connected sites', () => {
                 await expect(main.getByText(/not wired in this shell yet/),
                     'the connected-sites host route is missing in this shell')
                     .toHaveCount(0);
-                await expect(main.getByText(/^No sites connected yet/),
+                await expect(main.getByText('No sites connected yet', { exact: true }),
                     'the panel neither listed connections nor reported that there are none')
                     .toBeVisible({ timeout: 30_000 });
 
@@ -177,7 +177,7 @@ test.describe('Settings: connected sites', () => {
                     'the panel has no Blocked origins section, so this shell is missing at least one '
                     + 'of the three blocklist routes it is gated on')
                     .toBeVisible({ timeout: 30_000 });
-                await expect(main.getByText('No origins blocked.', { exact: true }),
+                await expect(main.getByText('No blocked origins', { exact: true }),
                     'the blocklist did not report its empty state')
                     .toBeVisible({ timeout: 30_000 });
             });
@@ -197,7 +197,7 @@ test.describe('Settings: connected sites', () => {
                     'a wildcard pattern was refused or silently dropped by the blocklist, while the '
                     + 'panel\'s own hint tells the user to use exactly this shape')
                     .toBeVisible({ timeout: 30_000 });
-                await expect(page.getByRole('main').getByText('No origins blocked.', { exact: true }),
+                await expect(page.getByRole('main').getByText('No blocked origins', { exact: true }),
                     'the blocklist still claims to be empty with two entries on it')
                     .toHaveCount(0);
             });

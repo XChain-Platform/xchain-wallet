@@ -25,7 +25,6 @@ const read = (f) => readFileSync(join(routes, f), 'utf8');
 // Forms that render an editable FeeSelector for the network fee.
 const FEE_FORMS = [
     'Send.jsx',
-    'Receive.jsx',
     'ComposeMessage.jsx',
     'DispenserDetail.jsx',
     'SwapForm.jsx',
@@ -39,9 +38,14 @@ for (const f of FEE_FORMS) {
     assert.match(src, /<FeeSelector/, `${f} renders the shared FeeSelector`);
 }
 
+assert.doesNotMatch(
+    read('Receive.jsx'),
+    /<FeeSelector/,
+    'Receive does not render a fee selector',
+);
+
 // Forms that broadcast and must thread the picked rate as feePerKb so the
-// choice actually prices the transaction. (Receive encodes a QR preference,
-// not a broadcast, so it is intentionally excluded here.)
+// choice actually prices the transaction.
 const THREADING_FORMS = [
     'Send.jsx',
     'ComposeMessage.jsx',

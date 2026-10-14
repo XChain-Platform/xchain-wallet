@@ -17,6 +17,7 @@
 // `window.xchainWalletBridge.sendMessage` → main-process
 // `ipcMain.handle(IPC_CHANNEL, …)` → MessageHost.
 
+import { getRecentShellErrors } from './errorCapture.js';
 import { sendMessage } from './bridgeMessaging.js';
 
 export { sendMessage };
@@ -68,6 +69,11 @@ export function importMnemonic(opts) {
     return /** @type {any} */ (sendMessage('wallet.import', opts));
 }
 
+/** @param {{ token: string }} opts */
+export function labelSyncRestoreResult(opts) {
+    return /** @type {any} */ (sendMessage('wallet.labelSyncRestoreResult', opts));
+}
+
 /**
  * Restore an encrypted backup onto a FRESH install (no vault yet).
  * Pre-host, and named apart from `importBackupRequest` because that one adds
@@ -82,6 +88,11 @@ export function importBackupFresh(opts) {
 
 export function listWallets() {
     return /** @type {any} */ (sendMessage('wallet.list'));
+}
+
+/** @param {{ walletId: string, currentPassword: string, newPassword: string }} opts */
+export function changePassword(opts) {
+    return /** @type {any} */ (sendMessage('wallet.changePassword', opts));
 }
 
 /** @param {object} opts */
@@ -125,7 +136,7 @@ export function removeWallet(req) {
 
 /** §50 / G156: diagnostic dump for support copy-paste. */
 export function getDiagnosticDump() {
-    return /** @type {any} */ (sendMessage('diagnostic.dump'));
+    return /** @type {any} */ (sendMessage('diagnostic.dump', { recentErrors: getRecentShellErrors() }));
 }
 
 /**
@@ -189,6 +200,11 @@ export function setAddressLabel(id, label) {
     return /** @type {any} */ (sendMessage('addresses.setLabel', { id, label }));
 }
 
+/** Hide or unhide an address. @param {string} id @param {boolean} hidden */
+export function setAddressHidden(id, hidden) {
+    return /** @type {any} */ (sendMessage('addresses.setHidden', { id, hidden }));
+}
+
 /** Delete an address record by id. @param {string} id */
 export function deleteAddress(id) {
     return /** @type {any} */ (sendMessage('addresses.delete', { id }));
@@ -232,7 +248,7 @@ export function generateDispenserAddress(opts) {
     return /** @type {any} */ (sendMessage('dispenser.getAddress', opts));
 }
 
-/** @param {object} opts */
+/** @param {object & { holdId?: string, undoSeconds?: number }} opts */
 export function sendToken(opts) {
     return /** @type {any} */ (sendMessage('action.send', opts));
 }
@@ -1047,6 +1063,10 @@ export function editBetFeedListsActionHw(opts) {
  */
 export function composeBetForConfirm(opts) {
     return /** @type {any} */ (sendMessage('action.bet.composeForConfirm', opts));
+}
+
+export function buildBetActionPsbtRequest(opts) {
+    return /** @type {any} */ (sendMessage('action.bet.psbt', opts));
 }
 
 // BET reads (no signing): market list / one market with pools + timeline / placed
@@ -1874,6 +1894,11 @@ export function verifyMessageRequest(opts) {
  */
 export function getAddressBalances(chainId, address) {
     return /** @type {any} */ (sendMessage('balances.address', { chainId, address }));
+}
+
+/** Fetch spendable outputs for Send coin control. */
+export function getAddressUtxos(chainId, address) {
+    return /** @type {any} */ (sendMessage('utxos.address', { chainId, address }));
 }
 
 /**

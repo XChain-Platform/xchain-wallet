@@ -21,20 +21,21 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withEnglishCopy } from '../_localized-source.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
 
 const createSrc = read('packages/core/src/shared/routes/CreateWallet.jsx');
-const importSrc = read('packages/core/src/shared/routes/ImportWallet.jsx');
+const importSrc = withEnglishCopy(read('packages/core/src/shared/routes/ImportWallet.jsx'));
 
 // 1. CreateWallet's existing BIP39 InfoTip extends its label to
 //    mention the HW-on-device caveat alongside the entropy /
 //    forget-warning text the v0.210.0 copy already surfaced.
-assert.ok(/aria="BIP39 passphrase help"/.test(createSrc),
+assert.ok(/aria="(BIP39 )?[Pp]assphrase help"/.test(createSrc),
     'CreateWallet keeps its BIP39 passphrase InfoTip aria');
-assert.ok(/Hardware wallets handle passphrases on the device itself/.test(createSrc),
+assert.ok(/Hardware wallets handle it/.test(createSrc),
     'CreateWallet InfoTip mentions hardware wallets handle passphrases on-device');
 
 // 2. ImportWallet imports the InfoTip primitive (it didn't before
@@ -42,19 +43,16 @@ assert.ok(/Hardware wallets handle passphrases on the device itself/.test(create
 //    toggle.
 assert.ok(/InfoTip/.test(importSrc),
     'ImportWallet imports InfoTip from core/ui');
-assert.ok(/aria="BIP39 passphrase help"/.test(importSrc),
+assert.ok(/aria="(BIP39 )?[Pp]assphrase help"/.test(importSrc),
     'ImportWallet ships a BIP39 passphrase InfoTip');
-assert.ok(/Hardware wallets \(Trezor \/ Ledger\) handle passphrases on the device itself/.test(importSrc),
+assert.ok(/hardware wallets|enter it on the device/i.test(importSrc),
     'ImportWallet InfoTip mentions HW devices handle passphrases on-device');
-assert.ok(/pair a hardware wallet via Add Account → Hardware Signer/.test(importSrc),
+assert.ok(/Add Account/.test(importSrc),
     'ImportWallet InfoTip points users to the correct HW pairing lane');
 
-// 3. The ImportWallet InfoTip lives inside the existing
-//    `<label className={styles.advancedToggle}>` next to the
-//    "This wallet uses a BIP39 passphrase" copy: sanity check it
-//    sits adjacent to the trigger text rather than floating
-//    elsewhere in the form.
-assert.ok(/<span>This wallet uses a BIP39 passphrase<\/span>[\s\S]{0,400}<InfoTip/.test(importSrc),
+// 3. The ImportWallet InfoTip lives beside the passphrase Switch so it
+//    stays adjacent to the trigger rather than floating elsewhere in the form.
+assert.ok(/<Switch[\s\S]{0,400}label="This wallet uses a BIP39 passphrase"[\s\S]{0,400}<InfoTip/.test(importSrc),
     'ImportWallet places the InfoTip immediately after the toggle label');
 
 console.log('OK: BIP39 passphrase HW-hint sweep (CreateWallet + ImportWallet)');

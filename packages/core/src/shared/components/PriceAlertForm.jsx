@@ -19,28 +19,11 @@
 // already met given `currentPrice` (the alert is still valid, it'll just
 // fire on the next check.
 
-import { useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { Button, Input, Select } from '../../ui/index.js';
 import { COINGECKO_SUPPORTED_CHAINS } from '../../flows/priceOracle.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 
-const FIELD = {
-    background: 'var(--xc-bg)',
-    color: 'var(--xc-text)',
-    border: '1px solid var(--xc-border)',
-    borderRadius: 'var(--xc-radius-sm)',
-    padding: 'var(--xc-space-1) var(--xc-space-2)',
-    fontSize: 'var(--xc-text-sm)',
-    fontFamily: 'inherit',
-};
-const PRIMARY_BTN = {
-    background: 'var(--xc-accent, #3a7afe)',
-    color: '#fff',
-    border: 'none',
-    borderRadius: 'var(--xc-radius-sm)',
-    padding: 'var(--xc-space-1) var(--xc-space-3)',
-    fontSize: 'var(--xc-text-sm)',
-    fontFamily: 'inherit',
-    cursor: 'pointer',
-};
 const HINT = {
     color: 'var(--xc-text-muted)',
     fontSize: 'var(--xc-text-xs)',
@@ -63,37 +46,76 @@ export function coinLabelForChain(chainId) {
  * @param {string} [props.fiatCurrency]      display currency for the threshold (default 'usd')
  * @param {string} [props.lockedChainId]     when set, hides the coin selector and pins this coin
  * @param {number|null} [props.currentPrice] current spot price, drives the "already met" hint + prefill
+ * @param {{ chainId: string, direction: 'above'|'below', targetFiat: number }} [props.initialAlert]
  * @param {() => void} [props.onCancel]
  */
-export function PriceAlertForm({ onCreate, fiatCurrency = 'usd', lockedChainId, currentPrice = null, onCancel }) {
+export function PriceAlertForm({
+    onCreate,
+    fiatCurrency = 'usd',
+    lockedChainId,
+    currentPrice = null,
+    initialAlert,
+    onCancel,
+}) {
+    const disabledReasonId = `${useId()}-disabled-reason`;
     const cur = String(fiatCurrency || 'usd').toLowerCase();
-    const [chainId, setChainId] = useState(lockedChainId || MAINNET_PRICE_CHAINS[0] || '');
-    const [direction, setDirection] = useState('above');
+    const editing = Boolean(initialAlert);
+    const [chainId, setChainId] = useState(initialAlert?.chainId || lockedChainId || MAINNET_PRICE_CHAINS[0] || '');
+    const [direction, setDirection] = useState(initialAlert?.direction || 'above');
     const [targetStr, setTargetStr] = useState(
-        currentPrice != null && Number.isFinite(currentPrice) ? String(roundForInput(currentPrice)) : '',
+        initialAlert?.targetFiat != null
+            ? String(initialAlert.targetFiat)
+            : currentPrice != null && Number.isFinite(currentPrice) ? String(roundForInput(currentPrice)) : '',
     );
     const [busy, setBusy] = useState(false);
     const [err, setErr] = useState(/** @type {string|null} */ (null));
+    const mountedRef = useRef(false);
+    const inputVersionRef = useRef(0);
+
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => { mountedRef.current = false; };
+    }, []);
 
     const targetFiat = Number(targetStr);
     const valid = Boolean(chainId) && Number.isFinite(targetFiat) && targetFiat > 0;
+    const invalidTarget = targetStr !== '' && !valid;
+    const disabledReason = !chainId
+        ? 'Choose a coin to continue.'
+        : targetStr === ''
+            ? 'Enter a target price to continue.'
+            : invalidTarget
+                ? 'Enter a price greater than zero.'
+                : null;
 
     const alreadyMet = useMemo(() => {
         if (currentPrice == null || !Number.isFinite(currentPrice) || !valid) return false;
         return direction === 'above' ? currentPrice >= targetFiat : currentPrice <= targetFiat;
     }, [currentPrice, valid, direction, targetFiat]);
 
+    const updateInput = (setter, value, currentValue) => {
+        if (value === currentValue) return;
+        inputVersionRef.current += 1;
+        setErr(null);
+        setter(value);
+    };
+
     const submit = async () => {
         if (!valid || busy) return;
+        const inputVersion = inputVersionRef.current;
         setBusy(true);
         setErr(null);
         try {
             await onCreate({ chainId, direction, targetFiat, fiatCurrency: cur });
-            setTargetStr('');
+            if (mountedRef.current && inputVersionRef.current === inputVersion && !editing) {
+                setTargetStr('');
+            }
         } catch (e) {
-            setErr(e?.message || 'Could not save the alert');
+            if (mountedRef.current && inputVersionRef.current === inputVersion) {
+                setErr(userFacingMessage(e, 'Could not save the alert. Try again.'));
+            }
         } finally {
-            setBusy(false);
+            if (mountedRef.current) setBusy(false);
         }
     };
 
@@ -105,62 +127,90 @@ export function PriceAlertForm({ onCreate, fiatCurrency = 'usd', lockedChainId, 
                 {lockedChainId ? (
                     <span style={{ fontWeight: 500 }}>{coinLabelForChain(lockedChainId)}</span>
                 ) : (
-                    <select
+                    <Select
                         aria-label="Coin"
                         value={chainId}
-                        onChange={(e) => setChainId(e.target.value)}
-                        style={FIELD}
+                        onChange={(e) => updateInput(setChainId, e.target.value, chainId)}
                     >
+                        {/* Native options remain because Select owns the listbox control, not its choices. */}
                         {MAINNET_PRICE_CHAINS.map((c) => (
                             <option key={c} value={c}>{coinLabelForChain(c)}</option>
                         ))}
-                    </select>
+                    </Select>
                 )}
-                <select
+                <Select
                     aria-label="Direction"
                     value={direction}
-                    onChange={(e) => setDirection(e.target.value)}
-                    style={FIELD}
+                    onChange={(e) => updateInput(setDirection, e.target.value, direction)}
                 >
+                    {/* Native options remain because Select owns the listbox control, not its choices. */}
                     <option value="above">rises above</option>
                     <option value="below">falls below</option>
-                </select>
+                </Select>
                 <span aria-hidden="true">{symbol}</span>
-                <input
-                    type="number"
+                <Input
+                    size="md"
+                    type="text"
                     inputMode="decimal"
-                    min="0"
-                    step="any"
+                    enterKeyHint="go"
                     aria-label="Target price"
                     placeholder="Price"
                     value={targetStr}
-                    onChange={(e) => setTargetStr(e.target.value)}
+                    aria-invalid={invalidTarget}
+                    aria-describedby={disabledReason ? disabledReasonId : undefined}
+                    onChange={(e) => updateInput(
+                        setTargetStr,
+                        normalizeDecimalEntry(e.target.value, targetStr),
+                        targetStr,
+                    )}
                     onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
-                    style={{ ...FIELD, width: 110 }}
+                    style={{ width: 110 }}
                 />
                 {!cur || cur === 'usd' ? null : <span aria-hidden="true">{cur.toUpperCase()}</span>}
-                <button type="button" onClick={submit} disabled={!valid || busy} style={{ ...PRIMARY_BTN, opacity: !valid || busy ? 0.5 : 1 }}>
-                    {busy ? 'Adding…' : 'Add alert'}
-                </button>
+                <Button
+                    type="button"
+                    onClick={submit}
+                    disabled={!valid || busy}
+                    aria-describedby={disabledReason ? disabledReasonId : undefined}
+                    size="md"
+                    variant="primary"
+                >
+                    {busy ? 'Saving…' : editing ? 'Save changes' : 'Add alert'}
+                </Button>
                 {onCancel ? (
-                    <button
+                    <Button
                         type="button"
                         onClick={onCancel}
-                        style={{ ...FIELD, cursor: 'pointer', background: 'transparent' }}
+                        size="md"
+                        variant="secondary"
                     >
                         Cancel
-                    </button>
+                    </Button>
                 ) : null}
             </div>
+            {disabledReason ? (
+                <span
+                    id={disabledReasonId}
+                    role={invalidTarget ? 'alert' : 'status'}
+                    style={invalidTarget ? { ...HINT, color: 'var(--xc-danger)' } : HINT}
+                >
+                    {disabledReason}
+                </span>
+            ) : null}
             {alreadyMet ? (
                 <span style={HINT}>
                     {coinLabelForChain(chainId)} is already {direction === 'above' ? 'above' : 'below'} that price.
                     This alert will fire on the next check.
                 </span>
             ) : null}
-            {err ? <span style={{ ...HINT, color: 'var(--xc-error, #c33)' }}>{err}</span> : null}
+            {err ? <span role="alert" style={{ ...HINT, color: 'var(--xc-danger-fg)' }}>{err}</span> : null}
         </div>
     );
+}
+
+function normalizeDecimalEntry(value, previous) {
+    const stripped = String(value).replace(/,/g, '');
+    return stripped === '' || /^\d*\.?\d*$/.test(stripped) ? stripped : previous;
 }
 
 /** Keep prefilled targets readable: whole dollars for big prices, 2dp for small. */

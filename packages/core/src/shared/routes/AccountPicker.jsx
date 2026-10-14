@@ -9,15 +9,23 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, ListRow, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { t } from '../../i18n/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
 
+function runRouteAction(action, ...args) {
+    const result = action?.(...args);
+    if (result && typeof result.catch === 'function') result.catch(() => {});
+}
+
 /**
  * AccountPicker: full-screen list of BIP44 accounts under the active
- * wallet, with an "Add Account" affordance. Reached from the gear
- * popover's Account summary row. Picking an account calls `onSwitch`
+ * wallet, with thumb-reachable add and current-account management
+ * actions. Reached from the gear popover's Account summary row. Picking
+ * an account calls `onSwitch`
  * and returns to home.
  *
  * @param {object} props
@@ -25,21 +33,24 @@ import pickerStyles from './WalletPicker.module.css';
  * @param {string | null} props.activeAccountId
  * @param {(accountId: string) => void} props.onSwitch
  * @param {() => void} props.onAddAccount
- * @param {(accountId: string) => void} [props.onRenameAccount]
+ * @param {(account: any) => void} [props.onRenameAccount]
  * @param {() => void} props.onBack
+ * @param {string} [props.backLabel]
  */
-export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccount, onRenameAccount, onBack }) {
+export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccount, onRenameAccount, onBack, backLabel }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
 
     const [accounts, setAccounts] = useState(/** @type {any[] | null} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    const [reload, setReload] = useState(0);
 
     useEffect(() => {
         let cancelled = false;
+        setAccounts(null);
+        setError(null);
         if (typeof messaging.listAccounts !== 'function') {
-            setError('messaging.listAccounts is not available in this shell.');
+            setError(t('accountPicker.error.load'));
             return undefined;
         }
         messaging.listAccounts(walletId)
@@ -50,79 +61,113 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                     : [];
                 setAccounts(sorted);
             })
-            .catch((err) => { if (!cancelled) setError(err?.message || 'Failed to load accounts.'); });
+            .catch((err) => {
+                if (!cancelled) setError(userFacingMessage(err, t('accountPicker.error.load')));
+            });
         return () => { cancelled = true; };
-    }, [walletId, messaging]);
+    }, [walletId, messaging, reload]);
 
     const header = (
         <PageHeader
-            onBack={onBack}
-            title="Accounts"
-            trailing={(
-                <button
-                    type="button"
-                    onClick={onAddAccount}
-                    aria-label="Add Account"
-                    title="Add Account"
-                >
-                    <Icon.PlusIcon />
-                </button>
-            )}
+            onBack={() => runRouteAction(onBack)}
+            backLabel={backLabel}
+            title={t('accountPicker.title')}
         />
+    );
+    const activeAccount = accounts?.find((account) => account.id === activeAccountId) || null;
+    const actions = (
+        <div className={pickerStyles.footerActions}>
+            <Button variant="primary" onClick={() => runRouteAction(onAddAccount)} icon={<Icon.PlusIcon />}>
+                {t('accountPicker.add')}
+            </Button>
+            {onRenameAccount && activeAccount ? (
+                <Button
+                    variant="ghost"
+                    onClick={() => runRouteAction(onRenameAccount, activeAccount)}
+                    icon={<Icon.PencilIcon />}
+                >
+                    {t('accountPicker.manage')}
+                </Button>
+            ) : null}
+        </div>
     );
 
     return (
         <Screen variant={variant} header={header}>
-            <div className={isFull ? styles.listFull : styles.listPopup}>
+            <ListPage>
                 {error ? (
-                    <StatusMessage variant="error" className={styles.entryDescription}>{error}</StatusMessage>
+                    <StatusMessage
+                        variant="error"
+                        className={styles.entryDescription}
+                        recovery={{ label: t('common.tryAgain'), onAction: () => setReload((value) => value + 1) }}
+                    >
+                        {error}
+                    </StatusMessage>
                 ) : accounts === null ? (
-                    <div className={styles.entryDescription}>Loading…</div>
+                    <div
+                        role="status"
+                        aria-label={t('accountPicker.loadingLabel')}
+                        aria-busy="true"
+                        className={styles.entryDescription}
+                    >
+                        {t('accountPicker.loading')}
+                    </div>
                 ) : accounts.length === 0 ? (
-                    <div className={styles.entryDescription}>No accounts yet.</div>
+                    <EmptyState
+                        title={t('accountPicker.empty.title')}
+                        body={t('accountPicker.empty.body')}
+                        titleAs="p"
+                    />
                 ) : accounts.map((a) => {
                     const active = a.id === activeAccountId;
-                    const defaultName = `Account ${a.index + 1}`;
+                    const defaultName = t('accountPicker.defaultName', { number: a.index + 1 });
                     const label = a.name || defaultName;
                     // Keep the numbered name visible under a custom one, so a renamed account stays findable.
                     const customName = typeof a.name === 'string' ? a.name.trim() : '';
                     const subtitle = customName && customName !== defaultName ? defaultName : null;
                     return (
                         <div key={a.id} className={pickerStyles.rowWrap}>
-                            <button
-                                type="button"
-                                className={styles.entry}
+                            <ListRow
+                                className={`${styles.entry} ${active ? pickerStyles.rowCurrent : ''}`}
                                 style={{ width: '100%', paddingRight: '56px' }}
                                 onClick={() => {
-                                    if (!active) onSwitch(a.id);
-                                    onBack();
+                                    if (!active) runRouteAction(onSwitch, a.id);
+                                    runRouteAction(onBack);
                                 }}
-                            >
-                                <span className={styles.entryLabel}>
-                                    {active ? '● ' : '○ '}{label}
-                                </span>
-                                {subtitle ? (
+                                aria-current={active ? 'true' : undefined}
+                                title={(
+                                    <span className={`${styles.entryLabel} ${pickerStyles.rowLabel}`}>
+                                        {active ? (
+                                            <span className={pickerStyles.currentMark} aria-hidden="true">
+                                                <Icon.CheckIcon />
+                                            </span>
+                                        ) : null}
+                                        <span className={pickerStyles.rowName} title={label}>{label}</span>
+                                    </span>
+                                )}
+                                subtitle={subtitle ? (
                                     <span className={styles.entryDescription}>{subtitle}</span>
                                 ) : null}
-                            </button>
+                            />
                             {onRenameAccount ? (
-                                <button
+                                <Button
                                     type="button"
+                                    icon={<Icon.PencilIcon />}
+                                    variant="secondary"
                                     className={pickerStyles.rowMenuBtn}
-                                    aria-label={`Rename ${label}`}
-                                    title="Rename account"
+                                    aria-label={t('accountPicker.renameLabel', { label })}
+                                    title={t('accountPicker.renameTitle')}
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        onRenameAccount(a.id);
+                                        runRouteAction(onRenameAccount, a);
                                     }}
-                                >
-                                    <Icon.PencilIcon />
-                                </button>
+                                />
                             ) : null}
                         </div>
                     );
                 })}
-            </div>
+                {actions}
+            </ListPage>
         </Screen>
     );
 }

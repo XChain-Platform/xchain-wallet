@@ -16,10 +16,10 @@
 // `enabled` gates the listener: shells pass `false` while the wallet is
 // locked or onboarding, so Cmd/Ctrl+K is inert until there's an unlocked
 // surface to navigate. The palette itself owns Esc; this hook only handles
-// the open toggle so it can live at the app root without stealing keys from
-// focused inputs (Cmd/Ctrl+K is not something a text field wants).
+// the open toggle and leaves every focused editable field alone.
 
 import { useCallback, useEffect, useState } from 'react';
+import { canHandleGlobalShortcut } from '../keyboard/useKeyboardShortcuts.js';
 
 /**
  * @param {object} [opts]
@@ -27,10 +27,12 @@ import { useCallback, useEffect, useState } from 'react';
  * @param {string} [opts.binding='mod+k']  §34.1: the (rebindable) combo that
  *        toggles the palette; only 'mod+<key>' shapes are honored.
  * @param {(view: string) => void} [opts.navigate]  shell route setter
+ * @param {string} [opts.currentView]  the view the shell shows now; when it
+ *        changes the palette closes
  * @returns {{ open: boolean, openPalette: () => void, closePalette: () => void, togglePalette: () => void, navigate: (view: string) => void, navigationKey: number }}
  */
 export function useCommandPalette(opts = {}) {
-    const { enabled = true, binding = 'mod+k', navigate: setRoute } = opts;
+    const { enabled = true, binding = 'mod+k', navigate: setRoute, currentView } = opts;
     const comboKey = binding.startsWith('mod+') ? binding.slice(4).toLowerCase() : 'k';
     const [open, setOpen] = useState(false);
     const [navigationKey, setNavigationKey] = useState(0);
@@ -52,12 +54,21 @@ export function useCommandPalette(opts = {}) {
         if (!enabled) setOpen(false);
     }, [enabled]);
 
+    // The palette covers the content but not the navigation, so the bottom
+    // bar and the More sheet stay live under it. Any navigation closes it;
+    // otherwise it stayed open over the screen the user moved to, with the
+    // More sheet stacked on top (iPhone, 2026-10-12).
+    useEffect(() => {
+        setOpen(false);
+    }, [currentView]);
+
     useEffect(() => {
         if (!enabled || typeof window === 'undefined') return undefined;
         const onKey = (e) => {
-            // Cmd+key (mac) / Ctrl+key (win/linux). We accept either
-            // modifier so both platforms get the same binding.
-            if ((e.key || '').toLowerCase() === comboKey && (e.metaKey || e.ctrlKey) && !e.altKey) {
+            if (!canHandleGlobalShortcut(e)) return;
+            // Cmd+key (mac) / Ctrl+key (win/linux).
+            if ((e.key || '').toLowerCase() === comboKey
+                && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey) {
                 e.preventDefault();
                 setOpen((v) => !v);
             }

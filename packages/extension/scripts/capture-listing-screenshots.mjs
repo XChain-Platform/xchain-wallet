@@ -546,7 +546,7 @@ async function composePromoTile(outPath) {
                   font-size="20" font-weight="700" fill="#FFFFFF">The wallet for the XChain Platform</text>
             <text x="${TILE_W / 2}" y="${logoTop + logoTargetH + 64}" text-anchor="middle"
                   font-family="-apple-system,Helvetica,Arial,sans-serif"
-                  font-size="14" fill="#EAF3FA">Currently supports BTC, DOGE &amp; LTC</text>
+                  font-size="14" fill="#EAF3FA">Current chains: Bitcoin, Litecoin &amp; Dogecoin</text>
         </svg>
     `);
 

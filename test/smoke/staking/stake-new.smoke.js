@@ -32,15 +32,15 @@ const src = readFileSync(newPath, 'utf8');
 
 // 1. Component export + the two option cards.
 assert.ok(/export function StakeNew\b/.test(src), 'StakeNew is a named export');
-assert.ok(/Validator staking/.test(src), 'StakeNew offers the validator arm');
-assert.ok(/Contract staking/.test(src), 'StakeNew offers the contract arm');
+assert.ok(/t\('stakeNew\.validatorTitle'\)/.test(src), 'StakeNew offers the validator arm');
+assert.ok(/t\('stakeNew\.contractTitle'\)/.test(src), 'StakeNew offers the contract arm');
 assert.ok(/onPickValidator/.test(src) && /onPickContract/.test(src),
     'StakeNew exposes both arm callbacks');
 
 // 2. BTC-only gate + inline chain step when several BTC chains qualify.
 assert.ok(/STAKING_COIN\s*=\s*['"]bitcoin['"]/.test(src),
     'StakeNew pins STAKING_COIN=bitcoin');
-assert.ok(/Staking is available on Bitcoin only/.test(src),
+assert.ok(/t\('stakeNew\.bitcoinOnly'\)/.test(src),
     'StakeNew explains the BTC-only gate when no address qualifies');
 assert.ok(/stakingChains\.length === 1\s*\)\s*onPickValidator\(stakingChains\[0\]\)/.test(src),
     'StakeNew skips the chain step when exactly one BTC chain qualifies');

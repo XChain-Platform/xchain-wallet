@@ -10,11 +10,16 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
+    Button,
     Screen,
     PageHeader,
     Input,
     Skeleton,
     Icon,
+    ListPage,
+    EmptyState,
+    StatusMessage,
+    ListRow,
 } from '@xchain-wallet/core/ui';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { coinFromChainId } from '../components/BalanceList.jsx';
@@ -54,6 +59,9 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
         /** @type {Array<{ chainId: string, tick: string, totalSupply: string | null, maxSupply: string | null, description: string | null, locked: boolean, divisibility: number | null, ownerAddress: string }> | null} */ (null),
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const [tokensError, setTokensError] = useState(/** @type {string | null} */ (null));
+    const [addressesReload, setAddressesReload] = useState(0);
+    const [tokensReload, setTokensReload] = useState(0);
     const [query, setQuery] = useState('');
     // 'all' shows every tick this wallet owns; 'owned' narrows to the ones
     // it also still holds supply of (row.youOwn is a balance check, not an
@@ -62,6 +70,10 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
 
     useEffect(() => {
         let cancelled = false;
+        setAddressesByChain(null);
+        setTokens(null);
+        setLoadError(null);
+        setTokensError(null);
         if (typeof messaging?.getAddressesByChain !== 'function') {
             setLoadError('Address listing is not available in this shell.');
             return undefined;
@@ -71,15 +83,18 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                 if (cancelled) return;
                 setAddressesByChain(byChain || {});
             })
-            .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load addresses.');
+            .catch(() => {
+                if (!cancelled) setLoadError('Could not load addresses. Try again.');
             });
         return () => { cancelled = true; };
-    }, [walletId, accountId, messaging]);
+    }, [walletId, accountId, messaging, addressesReload]);
 
     useEffect(() => {
         if (!addressesByChain) return undefined;
+        setTokens(null);
+        setTokensError(null);
         if (typeof messaging?.getOwnedTokens !== 'function') {
+            setTokensError('Token ownership lookup is not available in this shell.');
             setTokens([]);
             return undefined;
         }
@@ -92,12 +107,15 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                 if (!address) continue;
                 calls.push(
                     messaging.getOwnedTokens({ chainId, address })
-                        .then((rows) => (Array.isArray(rows) ? rows : []).map((r) => ({
-                            ...r,
-                            chainId,
-                            ownerAddress: address,
-                        })))
-                        .catch(() => []),
+                        .then((rows) => ({
+                            failed: false,
+                            rows: (Array.isArray(rows) ? rows : []).map((r) => ({
+                                ...r,
+                                chainId,
+                                ownerAddress: address,
+                            })),
+                        }))
+                        .catch(() => ({ failed: true, rows: [] })),
                 );
             }
         }
@@ -109,8 +127,9 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
             if (cancelled) return;
             const seen = new Set();
             const merged = [];
+            const failedCount = batches.filter((batch) => batch.failed).length;
             for (const batch of batches) {
-                for (const row of batch) {
+                for (const row of batch.rows) {
                     const key = `${row.chainId}:${row.tick}`;
                     if (seen.has(key)) continue;
                     seen.add(key);
@@ -122,10 +141,15 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                 const bx = coinFromChainId(b.chainId);
                 return ax.localeCompare(bx) || a.tick.localeCompare(b.tick);
             });
+            if (failedCount > 0) {
+                setTokensError(failedCount === batches.length
+                    ? 'Could not load your owned tokens. Try again.'
+                    : 'Some owned token lists could not be loaded. Results may be incomplete.');
+            }
             setTokens(merged);
         });
         return () => { cancelled = true; };
-    }, [addressesByChain, messaging]);
+    }, [addressesByChain, messaging, tokensReload]);
 
     const filteredTokens = useMemo(() => {
         if (!tokens) return null;
@@ -141,7 +165,7 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
     }, [tokens, query, mode]);
 
     const isLoading = tokens === null && loadError === null;
-    const isEmpty = tokens !== null && tokens.length === 0;
+    const isEmpty = tokens !== null && tokens.length === 0 && tokensError === null;
     const isFilteredEmpty = tokens !== null && tokens.length > 0
         && filteredTokens !== null && filteredTokens.length === 0;
 
@@ -149,98 +173,127 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
         <PageHeader
             onBack={onBack}
             backLabel="Back to home"
-            title="My Tokens"
+            title="My tokens"
             titleIcon={<Icon.TokenIcon />}
             trailing={
-                <button
+                <Button
                     type="button"
+                    variant="ghost"
+                    size="sm"
+                    icon={null}
                     className={styles.issueButton}
                     onClick={onIssue}
                     aria-label="Issue new token"
                     title="Issue new token"
                 >
                     <Icon.PlusIcon />
-                </button>
+                </Button>
             }
         />
     );
 
     return (
         <Screen variant={variant} header={header}>
-            <div className={styles.body}>
-                <div className={styles.toolbar}>
-                    <div className={styles.filters}>
-                        <div className={styles.search}>
-                            <Input
-                                type="search"
-                                value={query}
-                                onChange={(e) => setQuery(e.target.value)}
-                                placeholder="Search tokens"
-                                aria-label="Search your tokens by ticker or description"
-                            />
-                        </div>
-                        <div className={styles.chipGroup} role="radiogroup" aria-label="Filter by balance held">
-                            <button
-                                type="button"
-                                role="radio"
-                                aria-checked={mode === 'all'}
-                                className={`${styles.chip} ${mode === 'all' ? styles.chipActive : ''}`}
-                                onClick={() => setMode('all')}
-                            >
-                                All
-                            </button>
-                            <button
-                                type="button"
-                                role="radio"
-                                aria-checked={mode === 'owned'}
-                                className={`${styles.chip} ${mode === 'owned' ? styles.chipActive : ''}`}
-                                onClick={() => setMode('owned')}
-                            >
-                                Holding
-                            </button>
-                        </div>
+            <ListPage toolbar={(
+                <>
+                    <div className={styles.search}>
+                        <Input
+                            type="search"
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                            placeholder="Search tokens"
+                            aria-label="Search your tokens by ticker or description"
+                        />
                     </div>
-                </div>
+                    <div className={styles.chipGroup} role="radiogroup" aria-label="Filter by balance held">
+                        {/* Raw buttons preserve the segmented radio control semantics. */}
+                        <button
+                            type="button"
+                            role="radio"
+                            aria-checked={mode === 'all'}
+                            className={`${styles.chip} ${mode === 'all' ? styles.chipActive : ''}`}
+                            onClick={() => setMode('all')}
+                        >
+                            All
+                        </button>
+                        {/* Raw buttons preserve the segmented radio control semantics. */}
+                        <button
+                            type="button"
+                            role="radio"
+                            aria-checked={mode === 'owned'}
+                            className={`${styles.chip} ${mode === 'owned' ? styles.chipActive : ''}`}
+                            onClick={() => setMode('owned')}
+                        >
+                            Holding
+                        </button>
+                    </div>
+                </>
+            )}>
 
                 {loadError ? (
-                    <p className={styles.error}>{loadError}</p>
+                    <StatusMessage
+                        variant="error"
+                        recovery={{
+                            label: 'Try again',
+                            onAction: () => setAddressesReload((value) => value + 1),
+                        }}
+                    >
+                        {loadError}
+                    </StatusMessage>
+                ) : null}
+
+                {tokensError ? (
+                    <StatusMessage
+                        variant="error"
+                        recovery={{
+                            label: 'Try again',
+                            onAction: () => setTokensReload((value) => value + 1),
+                        }}
+                    >
+                        {tokensError}
+                    </StatusMessage>
                 ) : null}
 
                 {isLoading ? (
-                    <div className={styles.list}>
-                        <Skeleton height={64} />
-                        <Skeleton height={64} />
-                        <Skeleton height={64} />
+                    <div className={styles.list} role="status" aria-label="Loading owned tokens">
+                        <Skeleton.List rows={3} />
                     </div>
                 ) : null}
 
                 {isEmpty ? (
-                    <p className={styles.empty}>
-                        You don&apos;t own any tokens yet. Tap
-                        &ldquo;Issue new token&rdquo; to create one, or have
-                        someone transfer one to you.
-                    </p>
+                    <EmptyState
+                        title="No owned tokens yet"
+                        body="Tokens this wallet owns appear here."
+                        actionLabel="Issue token"
+                        onAction={onIssue}
+                    />
                 ) : null}
 
                 {isFilteredEmpty ? (
-                    <p className={styles.empty}>
-                        No tokens match your filter.
-                    </p>
+                    <EmptyState
+                        title="No results for these filters"
+                        body="Reset the filters to see all tokens."
+                        actionLabel="Reset filters"
+                        onAction={() => {
+                            setQuery('');
+                            setMode('all');
+                        }}
+                    />
                 ) : null}
 
                 {filteredTokens && filteredTokens.length > 0 ? (
+                    /* Safari needs an explicit list role because this class removes list styling. */
                     <ul className={styles.list} role="list">
                         {filteredTokens.map((row) => (
                             <li key={`${row.chainId}:${row.tick}`}>
-                                <button
-                                    type="button"
+                                <ListRow
                                     className={styles.row}
                                     onClick={() => onSelectTick(row.tick, row.chainId, row)}
-                                >
-                                    <span className={styles.rowChain} aria-hidden="true">
+                                    aria-label={`Open ${row.tick} token details`}
+                                    leading={<span className={styles.rowChain} aria-hidden="true">
                                         <TickerIcon chainId={row.chainId} tick={row.tick} size={40} />
-                                    </span>
-                                    <span className={styles.rowText}>
+                                    </span>}
+                                    title={(
                                         <span className={styles.rowTick}>
                                             {/* A bridged copy reads as its bare
                                                 name plus an origin badge; the
@@ -255,22 +308,19 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick })
                                                 </span>
                                             ) : null}
                                         </span>
-                                        {row.description ? (
-                                            <span className={styles.rowDescription}>
-                                                {row.description}
-                                            </span>
-                                        ) : null}
-                                    </span>
-                                    <span className={styles.rowChevron} aria-hidden="true">
-                                        <Icon.ForwardIcon />
-                                    </span>
-                                </button>
+                                    )}
+                                    subtitle={row.description ? (
+                                        <span className={styles.rowDescription}>
+                                            {row.description}
+                                        </span>
+                                    ) : undefined}
+                                    chevron={<Icon.ForwardIcon />}
+                                />
                             </li>
                         ))}
                     </ul>
                 ) : null}
-            </div>
+            </ListPage>
         </Screen>
     );
 }
-

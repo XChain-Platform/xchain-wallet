@@ -50,7 +50,7 @@ assert.match(src, /\.xchain-wallet/, 'download filename has .xchain-wallet exten
 // v0.151.0 (seed reveal), v0.152.0 (dry-run restore), v0.154.0 (publish
 // labels). The smoke keeps the row-presence assertion on the new copy.
 for (const label of [
-    'Back up seed phrase',
+    'Back up recovery phrase',
     'Test backup',
     'Publish labels on-chain',
 ]) {
@@ -77,7 +77,7 @@ const idx = settingsSrc.indexOf("id: 'backup'");
 const block = settingsSrc.slice(idx, idx + 600);
 assert.match(block, /kind:\s*'internal-drill'/);
 assert.match(block, /Component:\s*BackupSection/);
-assert.match(block, /props:\s*\{\s*activeWallet\s*\}/, 'BackupSection receives activeWallet via section.props');
+assert.match(block, /props:\s*\{\s*activeWallet\s*(?:,\s*reload\s*)?\}/, 'BackupSection receives activeWallet via section.props');
 assert.match(settingsSrc, /<Component \{\.\.\.panelProps\} \/>/, 'render switch spreads panel props');
 
 console.log('settings-backup smoke OK');

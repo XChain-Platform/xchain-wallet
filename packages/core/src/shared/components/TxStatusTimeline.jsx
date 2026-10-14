@@ -8,8 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { useEffect, useState } from 'react';
 import styles from './TxStatusTimeline.module.css';
+import { t } from '../../i18n/index.js';
 import { pendingDisplayState } from '../utils/pendingHistory.js';
+import { formatRelativeTime } from '../utils/dateTime.js';
+
+const TICK_MS = 30_000;
 
 // Copy for the mempool stage, one entry per state `pendingDisplayState` can
 // return. Written so each line is a claim the wallet can defend from what it
@@ -38,10 +43,10 @@ const MEMPOOL_STAGE_COPY = {
         sub: 'No node has reported holding this transaction. It may not have reached the network',
     },
     dropped: {
-        label: 'Dropped or replaced?',
+        label: 'Failed',
         done: false,
         warn: true,
-        sub: 'A node was holding this transaction and no longer is, and no block has included it',
+        sub: 'The network stopped reporting this transaction and it did not confirm',
     },
     replaced: {
         label: 'Replaced',
@@ -53,8 +58,8 @@ const MEMPOOL_STAGE_COPY = {
     failed: {
         label: 'Failed',
         done: false,
-        warn: true,
-        sub: 'This send did not reach the network',
+        error: true,
+        sub: "This send did not reach the network. Review the failure reason in this transaction's details, correct the problem, and try again",
     },
 };
 
@@ -110,6 +115,14 @@ const MEMPOOL_STAGE_COPY = {
 export function TxStatusTimeline({
     entry, chainTip, indexerWatermark, seenWindowMs, droppedGraceMs,
 }) {
+    const [, setTick] = useState(0);
+    const nowMs = Date.now();
+
+    useEffect(() => {
+        const id = setInterval(() => setTick((tick) => tick + 1), TICK_MS);
+        return () => clearInterval(id);
+    }, []);
+
     const txHash = typeof entry?.txHash === 'string' ? entry.txHash : '';
     // A record the wallet proved into a block itself stays blockless in
     // shape (so the pending detail branch renders it) and carries the proof
@@ -132,7 +145,7 @@ export function TxStatusTimeline({
     // `pendingDisplayState` would answer 'awaiting-network' for it, which is
     // true of nothing that is in a block.
     const pendingState = !confirmed && (txHash.length > 0 || failed)
-        ? pendingDisplayState(entry, Date.now(), { seenWindowMs, droppedGraceMs })
+        ? pendingDisplayState(entry, nowMs, { seenWindowMs, droppedGraceMs })
         : null;
     const tip = Number.isFinite(Number(chainTip)) ? Number(chainTip) : 0;
     const watermark = Number.isFinite(Number(indexerWatermark)) ? Number(indexerWatermark) : 0;
@@ -144,7 +157,7 @@ export function TxStatusTimeline({
     // with no hash never got that far, and "waiting for you" would be a lie.
     const signed = signedAt > 0 || txHash.length > 0;
     const signedSub = signedAt > 0
-        ? (relativeTime(signedAt) || 'Approved and signed')
+        ? (formatRelativeTime(signedAt, nowMs) || 'Approved and signed')
         : (signed
             ? 'Approved and signed'
             : (failed ? 'Not reached: the send failed first' : 'Waiting for you to approve and sign'));
@@ -169,12 +182,12 @@ export function TxStatusTimeline({
                 ? 'The service is still catching up to this block'
                 : 'Waiting to confirm before it can be processed');
     const confirmedSubBase = confirmed && timestamp > 0
-        ? relativeTime(timestamp)
+        ? formatRelativeTime(timestamp, nowMs)
         : '';
     const confirmedSub = confirmations > 0
         ? (confirmedSubBase === ''
-            ? `${confirmations.toLocaleString()} confirmation${confirmations === 1 ? '' : 's'}`
-            : `${confirmedSubBase} · ${confirmations.toLocaleString()} confirmation${confirmations === 1 ? '' : 's'}`)
+            ? t('transactionStatus.confirmations', { count: confirmations })
+            : `${confirmedSubBase} · ${t('transactionStatus.confirmations', { count: confirmations })}`)
         : confirmedSubBase;
 
     // The mempool stage in three situations: an in-flight transaction (the
@@ -215,56 +228,48 @@ export function TxStatusTimeline({
             sub: indexedSub,
         },
     ];
+    const currentStageIndex = failed
+        ? stages.findIndex((stage) => stage.key === 'mempool')
+        : stages.findIndex((stage) => !stage.done);
 
     return (
-        <ol className={styles.timeline} aria-label="Transaction status">
-            {stages.map((s, i) => (
-                <li
-                    key={s.key}
-                    className={`${styles.row} ${s.done ? styles.rowDone : styles.rowPending}`
-                        + (s.warn ? ` ${styles.rowWarn}` : '')}
-                >
-                    {/* The dot is decorative for a normal stage, but a warning
-                        must not be carried by color alone; the marker changes
-                        shape too, and the label itself states the problem. */}
-                    <span className={styles.dot} aria-hidden="true">
-                        {s.warn ? '!' : (s.done ? '●' : '○')}
-                    </span>
-                    {i < stages.length - 1 ? (
-                        <span className={`${styles.spine} ${s.done ? styles.spineDone : ''}`} aria-hidden="true" />
-                    ) : null}
-                    <div className={styles.body}>
-                        <div className={styles.label}>{s.label}</div>
-                        <div className={styles.sub}>{s.sub}</div>
-                    </div>
-                </li>
-            ))}
-        </ol>
+        <>
+            <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+                {confirmed ? 'Transaction confirmed.' : ''}
+            </span>
+            <ol className={styles.timeline} aria-label="Transaction status">
+                {stages.map((s, i) => {
+                    const current = i === currentStageIndex;
+                    const stateLabel = s.done
+                        ? 'Complete'
+                        : current
+                            ? (pendingState === 'failed' ? 'Current stage: Failed' : 'Current stage')
+                            : 'Not started';
+                    return (
+                        <li
+                            key={s.key}
+                            className={`${styles.row} ${s.done ? styles.rowDone : styles.rowPending}`
+                                + (s.warn ? ` ${styles.rowWarn}` : '')
+                                + (s.error ? ` ${styles.rowError}` : '')}
+                            aria-current={current ? 'step' : undefined}
+                        >
+                            <span className={styles.dot} aria-hidden="true">
+                                {s.error ? '✕' : (s.warn ? '!' : (s.done ? '●' : '○'))}
+                            </span>
+                            {i < stages.length - 1 ? (
+                                <span className={`${styles.spine} ${s.done ? styles.spineDone : ''}`} aria-hidden="true" />
+                            ) : null}
+                            <div className={styles.body}>
+                                <div className={styles.heading}>
+                                    <div className={styles.label}>{s.label}</div>
+                                    <span className={styles.state}>{stateLabel}</span>
+                                </div>
+                                <div className={styles.sub}>{s.sub}</div>
+                            </div>
+                        </li>
+                    );
+                })}
+            </ol>
+        </>
     );
-}
-
-function short(s) {
-    if (typeof s !== 'string' || s.length <= 14) return s;
-    return `${s.slice(0, 8)}…${s.slice(-6)}`;
-}
-
-// Human-readable "X ago" for the confirmed-stage sub label. Accepts
-// unix seconds or ms; returns '' for invalid input so the caller can
-// fall back to a static placeholder.
-function relativeTime(ts) {
-    if (!ts) return '';
-    const ms = ts < 1e12 ? ts * 1000 : ts;
-    const diffSec = Math.floor((Date.now() - ms) / 1000);
-    if (diffSec < 5) return 'just now';
-    if (diffSec < 60) return `${diffSec} seconds ago`;
-    const min = Math.floor(diffSec / 60);
-    if (min < 60) return `${min} minute${min === 1 ? '' : 's'} ago`;
-    const hr = Math.floor(diffSec / 3600);
-    if (hr < 24) return `${hr} hour${hr === 1 ? '' : 's'} ago`;
-    const day = Math.floor(diffSec / 86400);
-    if (day < 30) return `${day} day${day === 1 ? '' : 's'} ago`;
-    const month = Math.floor(day / 30);
-    if (month < 12) return `${month} month${month === 1 ? '' : 's'} ago`;
-    const year = Math.floor(day / 365);
-    return `${year} year${year === 1 ? '' : 's'} ago`;
 }

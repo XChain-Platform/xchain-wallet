@@ -23,6 +23,18 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
 
+vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
+    TokenPicker: ({ title, onSelect, onBack }) => (
+        <section aria-label={title}>
+            <h2>{title}</h2>
+            <button type="button" onClick={() => onSelect({ chainId: CHAIN, tick: 'DANK' })}>
+                Pick DANK
+            </button>
+            <button type="button" onClick={onBack}>Back</button>
+        </section>
+    ),
+}));
+
 const CHAIN = 'bitcoin-mainnet';
 const FROM = 'bc1qsendersendersendersendersendersendersa';
 // Valid mainnet bech32 destinations: the form decodes these for real, so a
@@ -40,7 +52,7 @@ const ADDRESSES = {
     }],
 };
 
-function mount({ gated = false } = {}) {
+function mount({ gated = false, watcher = false } = {}) {
     const base = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
         getAddressBalances: vi.fn().mockResolvedValue({
@@ -48,6 +60,7 @@ function mount({ gated = false } = {}) {
             tokens: [{ tick: 'PEPE', quantity: '1000', divisibility: 0 }],
         }),
         getSignerStatus: vi.fn().mockResolvedValue({ unlocked: false }),
+        getSettings: vi.fn().mockResolvedValue({ walletMode: watcher ? 'watcher' : 'full' }),
         listContacts: vi.fn().mockResolvedValue([]),
         getRecentDestinations: vi.fn().mockResolvedValue([]),
         gatedSendReadiness: vi.fn().mockResolvedValue(
@@ -82,30 +95,37 @@ function mount({ gated = false } = {}) {
     return messaging;
 }
 
-const addRecipient = () => screen.findByRole('button', { name: /Add recipient/ });
+const addRecipient = () => screen.getByRole('button', { name: /Add recipient/ });
 
 /** Fill the first recipient (the ordinary single-send fields). */
 async function fillFirst({ tick = 'PEPE', amount = '7', to = ALICE } = {}) {
     fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: to } });
-    fireEvent.change(await screen.findByLabelText(/^Token$/), { target: { value: tick } });
+    fireEvent.change(screen.getByLabelText(/^Token$/), { target: { value: tick } });
     // The primary amount label carries its unit ("Amount (PEPE)").
-    fireEvent.change(await screen.findByLabelText(/^Amount \(/), { target: { value: amount } });
+    fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: amount } });
 }
 
 /** Fill one added recipient row (1-based on the extra rows: row 1 = Recipient 2). */
 async function fillRow(n, { to, amount, tick } = {}) {
     if (to !== undefined) {
-        fireEvent.change(await screen.findByLabelText(`Recipient ${n + 1} address`), { target: { value: to } });
+        fireEvent.change(screen.getByLabelText(`Recipient ${n + 1} address`), { target: { value: to } });
     }
     if (tick !== undefined) {
-        fireEvent.change(await screen.findByLabelText(`Recipient ${n + 1} token`), { target: { value: tick } });
+        fireEvent.click(screen.getByRole('button', { name: new RegExp(`Recipient ${n + 1} token`) }));
+        fireEvent.click(screen.getByRole('button', { name: `Pick ${tick}` }));
     }
     if (amount !== undefined) {
-        fireEvent.change(await screen.findByLabelText(`Recipient ${n + 1} amount`), { target: { value: amount } });
+        fireEvent.change(screen.getByLabelText(`Recipient ${n + 1} amount`), { target: { value: amount } });
     }
 }
 
 afterEach(() => cleanup());
+
+// The form's error summary repeats each field message as a link, so a field
+// assertion reads the error node attached to its own input.
+function fieldError(text) {
+    return screen.queryAllByText(text).find((node) => /-error$/.test(node.id || '')) ?? null;
+}
 
 describe('Send: multi-recipient (PC-52)', () => {
     it('offers a second recipient for a token send', async () => {
@@ -136,6 +156,8 @@ describe('Send: multi-recipient (PC-52)', () => {
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalled());
         const payload = messaging.composeForConfirm.mock.calls[0][0];
         expect(payload.legs).toBeUndefined();
+        expect(payload.change).toBeUndefined();
+        expect(payload.utxos).toBeUndefined();
         expect(payload).toMatchObject({ to: ALICE, tick: 'PEPE', amount: '7' });
     });
 
@@ -143,7 +165,7 @@ describe('Send: multi-recipient (PC-52)', () => {
         const messaging = mount();
         await fillFirst();
         fireEvent.click(await addRecipient());
-        fireEvent.click(await screen.findByRole('button', { name: /Remove recipient 2/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Remove recipient 2/ }));
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalled());
         expect(messaging.composeForConfirm.mock.calls[0][0].legs).toBeUndefined();
@@ -154,8 +176,33 @@ describe('Send: multi-recipient (PC-52)', () => {
         await fillFirst();
         fireEvent.click(await addRecipient());
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
-        expect(await screen.findByText(/Recipient 2: address is required/)).toBeInTheDocument();
+        expect(fieldError(/Recipient 2: address is required/)).toBeInTheDocument();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('puts validation on each added-row field and clears each message as it is fixed', async () => {
+        const messaging = mount();
+        await fillFirst();
+        fireEvent.click(await addRecipient());
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+
+        expect(fieldError('Recipient 2: address is required.')).toBeInTheDocument();
+        expect(fieldError('Recipient 2: amount must be a positive number.')).toBeInTheDocument();
+
+        await fillRow(1, { to: BOB });
+        expect(screen.queryAllByText('Recipient 2: address is required.')).toHaveLength(0);
+        expect(fieldError('Recipient 2: amount must be a positive number.')).toBeInTheDocument();
+
+        // Editing hides the current error while the user corrects the field.
+        // Submitting the same invalid value presents that error again.
+        await fillRow(1, { amount: '.' });
+        expect(fieldError('Recipient 2: amount must be a positive number.')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+        await waitFor(() => expect(fieldError('Recipient 2: amount must be a positive number.')).toBeInTheDocument());
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+
+        await fillRow(1, { amount: '3' });
+        expect(screen.queryAllByText(/Recipient 2:/)).toHaveLength(0);
     });
 
     it('validates the added recipient address like the first one', async () => {
@@ -164,7 +211,27 @@ describe('Send: multi-recipient (PC-52)', () => {
         fireEvent.click(await addRecipient());
         await fillRow(1, { to: 'bc1qnotarealaddressatall', amount: '3' });
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
-        await screen.findByText(/Recipient 2:/);
+        expect(fieldError(/Recipient 2:/)).toBeInTheDocument();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('rejects an incomplete primary decimal instead of composing it', async () => {
+        const messaging = mount();
+        await fillFirst({ amount: '.' });
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+
+        expect(screen.getByText('Amount must be a positive number.')).toBeInTheDocument();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('rejects an incomplete added-recipient decimal', async () => {
+        const messaging = mount();
+        await fillFirst();
+        fireEvent.click(await addRecipient());
+        await fillRow(1, { to: BOB, amount: '.' });
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+
+        expect(fieldError('Recipient 2: amount must be a positive number.')).toBeInTheDocument();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -182,10 +249,38 @@ describe('Send: multi-recipient (PC-52)', () => {
         ]);
     });
 
+    it('shows exact per-token totals and opens the token picker for an added row', async () => {
+        mount();
+        await fillFirst();
+        fireEvent.click(await addRecipient());
+        await fillRow(1, { to: BOB, amount: '3' });
+        expect(screen.getByText(/Total: 10 PEPE across 2 recipients, in one transaction and one network fee/))
+            .toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('switch', { name: /Different token per recipient/ }));
+        const pickerButton = screen.getByRole('button', { name: /Recipient 2 token: PEPE/ });
+        fireEvent.click(pickerButton);
+        expect(screen.getByRole('heading', { name: 'Select token for recipient 2' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Pick DANK' }));
+        expect(screen.getByText(/Total: 7 PEPE \+ 3 DANK across 2 recipients/)).toBeInTheDocument();
+    });
+
+    it('lists every recipient on the watcher review and shows one network fee', async () => {
+        mount({ watcher: true });
+        await fillFirst();
+        fireEvent.click(await addRecipient());
+        await fillRow(1, { to: BOB, amount: '3' });
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+
+        expect(await screen.findByText(`7 PEPE to ${ALICE}`)).toBeInTheDocument();
+        expect(screen.getByText(`3 PEPE to ${BOB}`)).toBeInTheDocument();
+        expect(screen.getAllByText('Network fee')).toHaveLength(1);
+    });
+
     it('does not offer a second recipient for the native coin', async () => {
         mount();
         await fillFirst({ tick: 'BTC', amount: '0.5' });
-        await waitFor(() => expect(screen.queryByRole('button', { name: /Add recipient/ })).toBeNull());
+        expect(screen.queryByRole('button', { name: /Add recipient/ })).toBeNull();
     });
 
     it('refuses to submit when the token is switched to the coin after rows were added', async () => {
@@ -196,20 +291,20 @@ describe('Send: multi-recipient (PC-52)', () => {
         // The rows are KEPT (the typed addresses are not thrown away) and the
         // send is blocked with the reason.
         fireEvent.change(screen.getByLabelText(/^Token$/), { target: { value: 'BTC' } });
-        expect(await screen.findByText(/BTC can only be sent to one recipient/)).toBeInTheDocument();
-        expect(await screen.findByLabelText('Recipient 2 address')).toHaveValue(BOB);
+        expect(screen.getByText(/BTC can be sent to only one recipient/)).toBeInTheDocument();
+        expect(screen.getByLabelText('Recipient 2 address')).toHaveValue(BOB);
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
-        await waitFor(() => expect(messaging.composeForConfirm).not.toHaveBeenCalled());
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
     it('refuses a multi-recipient send of a gated token (each recipient needs a key handoff)', async () => {
         const messaging = mount({ gated: true });
         await fillFirst({ tick: 'GATED' });
-        await screen.findByText(/This token has gated content/);
+        expect(await screen.findByText(/includes protected content/)).toBeInTheDocument();
         fireEvent.click(await addRecipient());
         await fillRow(1, { to: BOB, amount: '3' });
-        expect(await screen.findByText(/each recipient needs their own/)).toBeInTheDocument();
+        expect(screen.getByText(/Each recipient needs a separate unlock key/)).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
-        await waitFor(() => expect(messaging.composeForConfirm).not.toHaveBeenCalled());
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 });

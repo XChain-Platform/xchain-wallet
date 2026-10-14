@@ -10,54 +10,55 @@
 .row {
     display: flex;
     align-items: center;
-    gap: var(--xc-space-3);
-    padding: var(--xc-space-3);
+    gap: var(--xc-space-1);
+    padding: var(--xc-list-row-padding);
     border-top: 1px solid var(--xc-border);
     width: 100%;
-    text-align: start;
-    color: inherit;
-    font: inherit;
+}
+
+.rowContent {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: var(--xc-control-h-lg);
+}
+
+/* The outer row carries the shared list-row inset, so the ListRow inside it
+   drops its own padding instead of doubling the inset. */
+.row > .rowContent {
+    padding: 0;
 }
 
 .row:first-of-type {
     border-top: none;
 }
 
-/* Clickable variant - applied when an `onSelectToken` handler is wired
- * through, which turns the row tag into a <button> for the §27.6 token
- * detail page (G071). */
+/* The primary content becomes the details button while pin and hide remain
+ * separate native controls in the same row. */
 .rowClickable {
-    background: transparent;
-    border-inline-start: none;
-    border-inline-end: none;
-    border-bottom: none;
     cursor: pointer;
 }
-.rowClickable:hover {
-    background: var(--xc-bg-muted);
-}
 .rowClickable:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
     outline-offset: -2px;
 }
 
 .iconWrap {
     position: relative;
     flex: 0 0 auto;
-    width: 48px;
-    height: 48px;
+    width: 40px;
+    height: 40px;
     display: flex;
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    background: var(--xc-bg-muted);
+    background: transparent;
 }
 
 .iconImg {
-    width: 48px;
-    height: 48px;
+    width: 40px;
+    height: 40px;
     display: block;
     border-radius: 50%;
+    object-fit: contain;
 }
 
 .iconLetter {
@@ -66,9 +67,19 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    border-radius: 50%;
+    background: var(--xc-bg-muted);
     font-family: var(--xc-font-sans);
     font-weight: 700;
     font-size: var(--xc-text-md);
+    color: var(--xc-text);
+}
+
+/* Forced-colors mode pairs the neutral monogram with the platform canvas. */
+@media (forced-colors: active) {
+    .iconLetter {
+        color: CanvasText;
+    }
 }
 
 .chainOverlay {
@@ -78,25 +89,21 @@
     width: 20px;
     height: 20px;
     border-radius: 50%;
-    background: #FFFFFF;
-    box-shadow: 0 0 0 1.5px var(--xc-surface);
+    background: var(--xc-surface);
+    box-shadow: var(--xc-shadow-surface-ring);
     object-fit: cover;
     display: block;
 }
 
-.body {
-    flex: 1 1 auto;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
 .title {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: var(--xc-space-2);
     min-width: 0;
+}
+
+.title > :not(.name) {
+    flex-shrink: 0;
 }
 
 .name {
@@ -117,19 +124,26 @@
 }
 
 .amounts {
-    flex: 0 0 auto;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     align-items: flex-end;
     gap: 2px;
+    -webkit-user-select: text;
+    user-select: text;
 }
 
 .qty {
     font-family: var(--xc-font-mono);
     font-size: var(--xc-text-md);
     font-weight: 700;
+    font-variant-numeric: tabular-nums;
     color: var(--xc-text);
     line-height: 1.1;
+    max-width: 100%;
+    text-align: end;
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .fiat {
@@ -137,6 +151,19 @@
     color: var(--xc-text-muted);
     font-weight: 600;
     font-family: var(--xc-font-mono);
+    font-variant-numeric: tabular-nums;
+    max-width: 100%;
+    text-align: end;
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
+.amountFit {
+    display: block;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* Q-1 residual: a balance the wallet could not read. Muted and lighter than a
@@ -155,29 +182,10 @@
     padding: var(--xc-space-5) var(--xc-space-3);
 }
 
+/* Row spacing for the kit pin and hide Buttons; the kit owns their look. */
 .pinBtn {
     flex: 0 0 auto;
     margin-inline-start: var(--xc-space-2);
-    width: 24px;
-    height: 24px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 18px;
-    color: var(--xc-text-muted);
-    cursor: pointer;
-    user-select: none;
-    border-radius: var(--xc-radius-sm);
-    line-height: 1;
-}
-
-.pinBtn:hover {
-    background: var(--xc-bg-muted);
-    color: var(--xc-text);
-}
-
-.pinBtnActive {
-    color: var(--xc-accent-primary, #f5b400);
 }
 
 .rowPinned {
@@ -187,32 +195,12 @@
 .hideBtn {
     flex: 0 0 auto;
     margin-inline-start: var(--xc-space-1);
-    width: 24px;
-    height: 24px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 16px;
-    color: var(--xc-text-muted);
-    cursor: pointer;
-    user-select: none;
-    border-radius: var(--xc-radius-sm);
-    line-height: 1;
-}
-
-.hideBtn:hover {
-    background: var(--xc-bg-muted);
-    color: var(--xc-text);
-}
-
-.hideBtnActive {
-    color: var(--xc-text);
 }
 
 .hiddenToggle {
     border: 0;
     background: transparent;
-    padding: var(--xc-space-3);
+    padding: var(--xc-list-row-padding);
     border-top: 1px dashed var(--xc-border);
     text-align: center;
     font-size: var(--xc-text-xs);

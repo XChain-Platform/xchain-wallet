@@ -109,7 +109,7 @@ assert.ok(surfacesEntry(extApp, 'sign-psbt', 'Sign transaction'),
     'extension action menu has a sign-psbt entry');
 
 const webApp = readFileSync(join(web, 'src', 'App.jsx'), 'utf8');
-assert.ok(/from ['"]@xchain-wallet\/core\/shared\/routes\/PsbtSignForm\.jsx['"]/.test(webApp),
+assert.ok(/(from |const\s+PsbtSignForm\s*=\s*lazyRoute\(\s*\(\)\s*=>\s*import\()['"]@xchain-wallet\/core\/shared\/routes\/PsbtSignForm\.jsx['"]/.test(webApp),
     'web App imports PsbtSignForm');
 assert.ok(/unlockedView === ['"]sign-psbt['"]/.test(webApp),
     'web App routes unlockedView "sign-psbt" to PsbtSignForm');

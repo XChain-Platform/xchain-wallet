@@ -29,11 +29,13 @@ describe.each(SHELLS)('%s list sharing routes', (_name, source) => {
     });
 
     it('passes the list navigation handlers', () => {
-        expect(source).toContain('onShare={(ref)');
-        expect(source).toContain('onTransfer={(ref)');
+        expect(source).toContain("onShare={listRef.origin === 'shared' ? undefined");
+        expect(source).toContain("onTransfer={listRef.origin === 'shared' ? undefined");
         expect(source).toContain('onCreateUnionList={()');
         expect(source).toContain('onOpenSharedLists={()');
         expect(source).toContain('mode="browse"');
+        expect(source).toContain('onOpenList={(chainId, actionIndex)');
+        expect(source).toContain("listRef.origin === 'shared' ? 'shared-lists' : 'lists'");
     });
 
     it('opens the access-list form at the shared block picker', () => {

@@ -11,7 +11,7 @@
 // a cancel row with no status (older reader) is read as valid.
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { render, cleanup, act as domAct, within } from '@testing-library/react';
+import { render, cleanup, act as domAct, fireEvent, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MySwapsView, collectCancelledKeys } from '../../../packages/core/src/shared/routes/MySwapsView.jsx';
@@ -38,11 +38,15 @@ function cancelRow(swapActionIndex, extra = {}) {
     return { action_index: '9000', swap_action_index: String(swapActionIndex), source: OWN, ...extra };
 }
 
-async function open(swaps, cancels) {
+async function open(swaps, cancels, { swapsError = null, cancelsError = null } = {}) {
     const target = {
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: [HD_ADDRESS] }),
-        getSwapsForAddress: () => Promise.resolve({ data: swaps }),
-        getSwapCancelsForAddress: () => Promise.resolve({ data: cancels }),
+        getSwapsForAddress: () => swapsError
+            ? Promise.reject(swapsError)
+            : Promise.resolve({ data: swaps }),
+        getSwapCancelsForAddress: () => cancelsError
+            ? Promise.reject(cancelsError)
+            : Promise.resolve({ data: cancels }),
         getSignerStatus: () => Promise.resolve({ status: 'locked' }),
     };
     const messaging = new Proxy(target, {
@@ -60,6 +64,26 @@ async function open(swaps, cancels) {
 afterEach(() => cleanup());
 
 describe('MySwapsView: cancel row status', () => {
+    it('shows a load error instead of a false empty state when the swap feed fails', async () => {
+        const utils = await open([], [], { swapsError: new Error('Swap explorer unavailable') });
+
+        expect(utils.getByText('Could not load your swaps. Try again.')).toBeTruthy();
+        expect(utils.queryByText('Swap explorer unavailable')).toBeNull();
+        expect(utils.queryByText('No swaps yet')).toBeNull();
+    });
+
+    it('does not offer cancel when the cancellation status feed fails', async () => {
+        const utils = await open(
+            [swapRow(702)],
+            [],
+            { cancelsError: new Error('Cancel status unavailable') },
+        );
+
+        expect(utils.getByText('Could not load your swaps. Try again.')).toBeTruthy();
+        expect(utils.queryByText('Cancel status unavailable')).toBeNull();
+        expect(utils.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    });
+
     it('an invalid cancel row does not cancel the swap; it stays Open with Cancel offered', async () => {
         const utils = await open([swapRow(700)], [cancelRow(700, { status: 'invalid' })]);
         const list = utils.queryByRole('list', { name: 'Open swaps' });
@@ -68,6 +92,7 @@ describe('MySwapsView: cancel row status', () => {
         const row = within(list).getByText('#700', { exact: false }).closest('li');
         expect(within(row).getByText('Open')).toBeTruthy();
         expect(within(row).getByRole('button', { name: 'Cancel' })).toBeTruthy();
+        expect(row).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
 
     it('a valid cancel row files the swap under Closed as Cancelled', async () => {
@@ -89,5 +114,16 @@ describe('MySwapsView: cancel row status', () => {
             ],
         }];
         expect([...collectCancelledKeys(results)].sort()).toEqual([`${CHAIN}:2`, `${CHAIN}:3`]);
+    });
+
+    it('shows plain copy and blocks a non-canonical swap action ID before compose', async () => {
+        const utils = await open([swapRow('007')], []);
+        const row = within(utils.getByRole('list', { name: 'Open swaps' }))
+            .getByText('#007', { exact: false }).closest('li');
+
+        fireEvent.click(within(row).getByRole('button', { name: 'Cancel' }));
+
+        expect(utils.getByText('This swap has an invalid action ID and cannot be changed.')).toBeTruthy();
+        expect(utils.getByRole('button', { name: 'Cancel swap' }).disabled).toBe(true);
     });
 });

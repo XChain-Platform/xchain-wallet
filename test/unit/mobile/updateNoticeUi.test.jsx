@@ -23,9 +23,10 @@ import { UpdateNoticeBanner } from '../../../packages/core/src/shared/components
 import { AboutSection } from '../../../packages/core/src/shared/components/settings/AboutSection.jsx';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { setDirectUpdateProvider } from '../../../packages/core/src/flows/directUpdate.js';
+import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 
-function lane({ notice = null, enabled = true, onEnable = () => {} } = {}) {
-    const check = vi.fn(async () => (notice ? { version: '9.9.9', notice } : null));
+function lane({ notice = null, version = '9.9.9', enabled = true, onEnable = () => {} } = {}) {
+    const check = vi.fn(async () => (notice ? { version, notice } : null));
     setDirectUpdateProvider({
         check,
         isEnabled: () => enabled,
@@ -35,8 +36,15 @@ function lane({ notice = null, enabled = true, onEnable = () => {} } = {}) {
     return check;
 }
 
-beforeEach(() => setDirectUpdateProvider(null));
-afterEach(() => { cleanup(); setDirectUpdateProvider(null); });
+beforeEach(() => {
+    setDirectUpdateProvider(null);
+    sessionStorage.clear();
+});
+afterEach(() => {
+    cleanup();
+    setDirectUpdateProvider(null);
+    sessionStorage.clear();
+});
 
 describe('UpdateNoticeBanner', () => {
     it('renders nothing, and asks nothing, with no lane installed', async () => {
@@ -62,11 +70,65 @@ describe('UpdateNoticeBanner', () => {
         expect(buttons).toEqual(['Dismiss']);
     });
 
-    it('stays dismissed for the session', async () => {
+    it('uses the shared notice tokens and small kit dismiss control', async () => {
         lane({ notice: 'XChain Wallet 9.9.9 is available.' });
-        const { container } = render(<UpdateNoticeBanner />);
+        render(<UpdateNoticeBanner />);
+
+        const notice = await screen.findByRole('status');
+        expect(notice).toHaveStyle({
+            padding: 'var(--xc-card-pad)',
+            borderRadius: 'var(--xc-card-radius)',
+            fontSize: 'var(--xc-text-sm)',
+            lineHeight: '1.4',
+        });
+        expect(notice.querySelector('[aria-hidden="true"]')).toHaveStyle({
+            width: 'var(--xc-icon-md)',
+            height: 'var(--xc-icon-md)',
+            fontSize: 'var(--xc-icon-md)',
+        });
+        expect(screen.getByRole('button', { name: 'Dismiss update notice' }))
+            .toHaveClass(buttonStyles.btn, buttonStyles.sm);
+    });
+
+    it('stays dismissed across remounts for the same session and version', async () => {
+        const check = lane({ notice: 'XChain Wallet 9.9.9 is available.' });
+        const view = render(<UpdateNoticeBanner />);
         (await screen.findByLabelText('Dismiss update notice')).click();
-        await waitFor(() => expect(container.firstChild).toBeNull());
+        await waitFor(() => expect(view.container.firstChild).toBeNull());
+        expect(sessionStorage.getItem('xc:update-notice:dismissed-version')).toBe('9.9.9');
+
+        view.unmount();
+        const remount = render(<UpdateNoticeBanner />);
+        await waitFor(() => expect(check).toHaveBeenCalledTimes(2));
+        expect(remount.container.firstChild).toBeNull();
+    });
+
+    it('shows a later version after an earlier version was dismissed', async () => {
+        sessionStorage.setItem('xc:update-notice:dismissed-version', '9.9.9');
+        lane({
+            version: '10.0.0',
+            notice: 'XChain Wallet 10.0.0 is available.',
+        });
+
+        render(<UpdateNoticeBanner />);
+
+        expect(await screen.findByText(/10\.0\.0/)).toBeTruthy();
+    });
+
+    it('does not move focus when an asynchronous notice appears', async () => {
+        lane({ notice: 'XChain Wallet 9.9.9 is available.' });
+        render(
+            <>
+                <button type="button">Primary action</button>
+                <UpdateNoticeBanner />
+            </>,
+        );
+        const primary = screen.getByRole('button', { name: 'Primary action' });
+        primary.focus();
+
+        await screen.findByText(/9\.9\.9/);
+
+        expect(primary).toHaveFocus();
     });
 
     it('says nothing when the lane has nothing to say', async () => {
@@ -105,8 +167,8 @@ describe('AboutSection: the switch exists only where the lane does', () => {
     it('explains the request in plain language, naming no API and no vendor', () => {
         lane();
         about();
-        const hint = screen.getByText(/nothing updates it for you/i).textContent;
-        expect(hint).toMatch(/never downloads or installs anything/i);
+        const hint = screen.getByText(/Checks our download site once a day/i).textContent;
+        expect(hint).toMatch(/does not download or install them or send wallet data/i);
         expect(hint).not.toMatch(/Play|Google|API|endpoint|JSON|semver/i);
     });
 });

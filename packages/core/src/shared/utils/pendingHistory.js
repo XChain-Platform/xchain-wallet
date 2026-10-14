@@ -34,7 +34,7 @@
 
 /**
  * @typedef {Object} PendingMeta
- * @property {'mempool' | 'local' | 'both'} origin  which sources described this tx
+ * @property {'mempool' | 'local' | 'both' | 'remembered'} origin  which sources described this tx
  * @property {number | null} firstSeenMs   when the NETWORK first saw it, ms; null
  *                                          while the transaction is broadcast but
  *                                          not yet observed in any mempool
@@ -399,6 +399,7 @@ function foldLocalIntoNetwork(networkEntry, localEntry) {
             localStatus: localEntry.pending.localStatus,
             pendingTxId: localEntry.pending.pendingTxId,
             replaced: localEntry.pending.replaced,
+            rbf: localEntry.pending.rbf,
             replacementTxHash: localEntry.pending.replacementTxHash,
             // A block is the one thing a mempool row cannot know about; only
             // our record can carry the proof, and it carries it across.
@@ -424,9 +425,20 @@ function foldLocalIntoNetwork(networkEntry, localEntry) {
  * @returns {{ entries: object[], pending: PendingEntry[] }}
  */
 export function mergePendingEntries({ confirmed, pending }) {
-    const confirmedList = Array.isArray(confirmed) ? confirmed : [];
+    const confirmedSource = Array.isArray(confirmed) ? confirmed : [];
+    const confirmedList = [];
+    const confirmedIdentities = new Set();
+    for (const entry of confirmedSource) {
+        const actionIndex = String(entry?.actionIndex ?? '').trim();
+        const identity = actionIndex ? `${entry?.chainId || ''}:${actionIndex}` : null;
+        // One action can be returned by the history query for several wallet
+        // addresses. It remains one confirmed action in the combined feed.
+        if (identity && confirmedIdentities.has(identity)) continue;
+        if (identity) confirmedIdentities.add(identity);
+        confirmedList.push(entry);
+    }
     const confirmedHashes = new Set();
-    for (const e of confirmedList) {
+    for (const e of confirmedSource) {
         const h = normalizeHash(e?.txHash);
         if (h) confirmedHashes.add(`${e.chainId}:${h}`);
     }
@@ -517,7 +529,8 @@ export function pendingDisplayState(entry, nowMs, windows) {
     // Present in a mempool as of the latest read: unambiguously healthy.
     if (meta.origin === 'mempool' || meta.origin === 'both') return 'seen';
 
-    // Local-only from here down, so no mempool is reporting it right now.
+    // No mempool is reporting it right now. This includes a local record and
+    // an incoming row remembered from the previous successful mempool read.
     if (meta.lastMempoolSeenMs != null) {
         // It WAS reported and is not any more. Confirmation is the usual
         // reason and it arrives on its own feed, so wait out the grace before
@@ -534,6 +547,27 @@ export function pendingDisplayState(entry, nowMs, windows) {
     // when this wallet session happened to start looking.
     const since = meta.broadcastAtMs ?? meta.observedAtMs;
     return nowMs - since > seenWindowMs ? 'not-seen' : 'awaiting-network';
+}
+
+/**
+ * Merge newly observed per-chain heights without lowering a height already
+ * shown to the user. An indexer replica can briefly answer from an older
+ * snapshot, but that lag is not evidence that confirmations disappeared.
+ * Missing and invalid readings leave the last reliable height in place.
+ *
+ * @param {Record<string, number>} previous
+ * @param {Record<string, number>} observed
+ * @returns {Record<string, number>}
+ */
+export function mergeMonotonicChainHeights(previous, observed) {
+    const next = { ...(previous || {}) };
+    for (const [chainId, value] of Object.entries(observed || {})) {
+        const height = Number(value);
+        if (!Number.isFinite(height) || height <= 0) continue;
+        const prior = Number(next[chainId]);
+        next[chainId] = Number.isFinite(prior) && prior > height ? prior : height;
+    }
+    return next;
 }
 
 /**

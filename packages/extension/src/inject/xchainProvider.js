@@ -54,12 +54,29 @@
 
 (function installXChainProvider() {
     if (typeof window === 'undefined') return;
+    // The provider belongs to the top document. The manifest follows this
+    // policy, and this guard keeps an accidentally injected subframe inert.
+    if (window.top !== window) return;
+    try {
+        const protocol = window.location.protocol;
+        const hostname = window.location.hostname.toLowerCase();
+        const pathname = window.location.pathname;
+        if ((protocol !== 'https:' && protocol !== 'http:')
+            || window.location.origin === 'null'
+            || window.document?.contentType === 'application/pdf'
+            || hostname === 'chromewebstore.google.com'
+            || (hostname === 'chrome.google.com' && pathname.startsWith('/webstore'))) return;
+    } catch {
+        return;
+    }
     if (window.xchain && window.xchain.isXChainWallet) return;
 
     const VERSION = '0.1.0';
     const SOURCE = 'xchain-inject';
     const RESPONSE_SOURCE = 'xchain-inject-response';
     const READY_EVENT = 'xchain#initialized';
+    const EVENT_SOURCE = 'xchain-inject-event';
+    const EVENT_NAMES = new Set(['accountsChanged', 'chainChanged', 'disconnect']);
 
     /** @type {Map<string, { resolve: Function, reject: Function }>} */
     const pending = new Map();
@@ -69,6 +86,32 @@
 
     function genId() {
         return Math.random().toString(36).slice(2) + Date.now().toString(36);
+    }
+
+    function isRecord(value) {
+        if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+        const prototype = Object.getPrototypeOf(value);
+        return prototype === Object.prototype || prototype === null;
+    }
+
+    function isBridgeError(value) {
+        return isRecord(value)
+            && typeof value.name === 'string'
+            && typeof value.message === 'string'
+            && typeof value.code === 'string';
+    }
+
+    function isEventPayload(event, payload) {
+        if (event === 'accountsChanged') {
+            return Array.isArray(payload) && payload.every((account) => (
+                isRecord(account)
+                && typeof account.id === 'string'
+                && account.id.length > 0
+                && (account.name === undefined || typeof account.name === 'string')
+            ));
+        }
+        if (event === 'chainChanged') return typeof payload === 'string' && payload.length > 0;
+        return event === 'disconnect' && typeof payload === 'string';
     }
 
     // The THROTTLED hints bridge-spec's BridgeErrorResult declares. Carried
@@ -130,14 +173,19 @@
 
     window.addEventListener('message', (event) => {
         if (event.source !== window) return;
+        if (event.origin !== window.location.origin) return;
         const data = event.data;
-        if (!data || typeof data !== 'object') return;
+        if (!isRecord(data)) return;
         if (data.source === RESPONSE_SOURCE && typeof data.id === 'string') {
             const handle = pending.get(data.id);
             if (!handle) return;
             pending.delete(data.id);
-            if (data.ok) handle.resolve(data.result);
-            else {
+            if (
+                data.ok === true
+                && Object.prototype.hasOwnProperty.call(data, 'result')
+            ) {
+                handle.resolve(data.result);
+            } else if (data.ok === false && isBridgeError(data.error)) {
                 const err = new Error(data.error?.message ?? 'bridge error');
                 err.name = data.error?.name ?? 'Error';
                 if (data.error?.code) err.code = data.error.code;
@@ -145,12 +193,29 @@
                     if (typeof data.error?.[field] === 'number') err[field] = data.error[field];
                 }
                 handle.reject(err);
+            } else {
+                const err = new Error('bridge returned an invalid response envelope');
+                err.name = 'BridgeError';
+                err.code = 'INTERNAL_ERROR';
+                handle.reject(err);
             }
-        } else if (data.source === 'xchain-inject-event' && typeof data.event === 'string') {
+        } else if (
+            data.source === EVENT_SOURCE
+            && EVENT_NAMES.has(data.event)
+            && isEventPayload(data.event, data.payload)
+        ) {
             const handlers = listeners.get(data.event);
             if (!handlers) return;
             for (const fn of handlers) {
-                try { fn(data.payload); } catch { /* isolate listener errors */ }
+                try {
+                    const result = fn(data.payload);
+                    // Event callbacks are user code. Isolate rejected async
+                    // handlers as well as synchronous throws so one listener
+                    // cannot create a page-level unhandled rejection.
+                    if (result && typeof result.catch === 'function') {
+                        result.catch(() => {});
+                    }
+                } catch { /* isolate listener errors */ }
             }
         }
     });
@@ -184,7 +249,7 @@
         },
 
         on(event, handler) {
-            if (typeof handler !== 'function') return;
+            if (!EVENT_NAMES.has(event) || typeof handler !== 'function') return;
             let set = listeners.get(event);
             if (!set) {
                 set = new Set();
@@ -194,6 +259,7 @@
         },
 
         off(event, handler) {
+            if (!EVENT_NAMES.has(event) || typeof handler !== 'function') return;
             const set = listeners.get(event);
             if (!set) return;
             set.delete(handler);

@@ -50,11 +50,12 @@ const DEFAULT_TOLERANCE_MIN = 0.95;
 const DEFAULT_TOLERANCE_MAX = 1.10;
 
 /**
- * @typedef {'none'|'ok'|'short'|'excess'|'unavailable'} NativeFeeRequoteVerdict
- *   - `none`        the composed action attaches no native-coin fee; nothing to check
+ * @typedef {'none'|'ok'|'short'|'excess'|'invalid'|'unavailable'} NativeFeeRequoteVerdict
+ *   - `none`        the composed action has no native-fee quote to refresh
  *   - `ok`          the attached amount is still inside the current band
  *   - `short`       below `minAcceptable`: the chain WILL reject and keep the fee
  *   - `excess`      above `maxAcceptable`: accepted, but materially overpaid
+ *   - `invalid`     the fresh quote says the action is no longer priceable
  *   - `unavailable` the fee could not be re-quoted (offline, busy, unsupported)
  */
 
@@ -66,7 +67,7 @@ const DEFAULT_TOLERANCE_MAX = 1.10;
  * @property {number|null} minSats     lowest amount consensus would accept now
  * @property {number|null} maxSats     highest amount worth paying now
  * @property {string|null} coin        the quote's own ticker, when it carries one
- * @property {string|null} reason      why an `unavailable` verdict could not judge
+ * @property {string|null} reason      why an `unavailable` or `invalid` verdict could not proceed
  */
 
 /**
@@ -83,21 +84,34 @@ const DEFAULT_TOLERANCE_MAX = 1.10;
  * @returns {NativeFeeRequoteComparison}
  */
 export function compareNativeFeeQuote({ composed, fresh } = {}) {
-    const paidSats = intOrNull(composed && composed.requiredFeeSats);
+    const rawPaidSats = composed && composed.requiredFeeSats;
+    const paidSats = intOrNull(rawPaidSats);
     const base = { paidSats: paidSats || 0, expectedSats: null, minSats: null, maxSats: null, coin: null, reason: null };
-    if (!paidSats || paidSats <= 0) return { ...base, verdict: 'none' };
+    if (rawPaidSats === null || rawPaidSats === undefined) {
+        return { ...base, verdict: 'none' };
+    }
+    if (paidSats === null) {
+        return { ...base, verdict: 'unavailable', reason: 'composed quote carries an invalid amount' };
+    }
 
     const coin = fresh && typeof fresh.coin === 'string' ? fresh.coin : null;
     if (!fresh || typeof fresh !== 'object') return { ...base, verdict: 'unavailable', reason: 'no quote' };
-    // `supported:false` and `valid:false` both mean the indexer did not price
-    // the action THIS time. That is not evidence the composed amount is wrong,
-    // and a busy quote (its admission cap) lands here too, so it cannot be
-    // allowed to refuse an otherwise good transaction.
+    // A missing endpoint or an admission-cap response cannot judge the
+    // transaction. A non-retryable `valid:false` response can: the venue
+    // freshly evaluated these exact bytes and says the action is no longer
+    // priceable, so signing would forfeit any attached fee.
     if (fresh.supported === false) {
         return { ...base, coin, verdict: 'unavailable', reason: fresh.error || 'not quotable' };
     }
     if (fresh.valid === false) {
-        return { ...base, coin, verdict: 'unavailable', reason: fresh.error || 'not priceable' };
+        if (fresh.busy === true || fresh.retryable === true) {
+            return { ...base, coin, verdict: 'unavailable', reason: fresh.error || 'quote service is busy' };
+        }
+        return { ...base, coin, verdict: 'invalid', reason: fresh.error || 'the action is no longer priceable' };
+    }
+    const identityMismatch = quoteIdentityMismatch(composed, fresh);
+    if (identityMismatch) {
+        return { ...base, coin, verdict: 'unavailable', reason: identityMismatch };
     }
 
     const quotedExpectedSats = intOrNull(fresh.requiredFeeSats);
@@ -114,11 +128,19 @@ export function compareNativeFeeQuote({ composed, fresh } = {}) {
     const quotedMaxSats = boundSats(
         fresh.maxAcceptable, quotedExpectedSats, fresh.toleranceMax, DEFAULT_TOLERANCE_MAX, Math.floor,
     );
+    if (!Number.isSafeInteger(quotedMinSats)
+        || !Number.isSafeInteger(quotedMaxSats)
+        || quotedMinSats < 0
+        || quotedMaxSats < quotedMinSats) {
+        return { ...base, coin, verdict: 'unavailable', reason: 'quote carries an invalid acceptance band' };
+    }
     // A composed quote records the relay floor only when its fee was rounded up to dust.
     // Keep that floor on the fresh band while the action still carries a positive fee.
-    const dustThresholdSats = quotedExpectedSats > 0
-        ? intOrNull(composed && composed.dustThresholdSats)
-        : null;
+    const rawDustThreshold = composed && composed.dustThresholdSats;
+    const dustThresholdSats = quotedExpectedSats > 0 ? intOrNull(rawDustThreshold) : null;
+    if (quotedExpectedSats > 0 && rawDustThreshold != null && dustThresholdSats === null) {
+        return { ...base, coin, verdict: 'unavailable', reason: 'composed quote carries an invalid dust threshold' };
+    }
     const expectedSats = dustThresholdSats
         ? Math.max(quotedExpectedSats, dustThresholdSats)
         : quotedExpectedSats;
@@ -133,7 +155,7 @@ export function compareNativeFeeQuote({ composed, fresh } = {}) {
 
 /** True when a comparison means "do not broadcast this". */
 export function isNativeFeeRefusal(cmp) {
-    return !!cmp && (cmp.verdict === 'short' || cmp.verdict === 'excess');
+    return !!cmp && (cmp.verdict === 'short' || cmp.verdict === 'excess' || cmp.verdict === 'invalid');
 }
 
 /**
@@ -153,6 +175,10 @@ export function nativeFeeRequoteMessage(cmp, { coinTicker } = {}) {
     const unit = coin ? ` ${coin}` : '';
     const paid = satsToCoinDecimal(Number(cmp && cmp.paidSats) || 0);
     const now = satsToCoinDecimal(Number(cmp && cmp.expectedSats) || 0);
+    if (cmp && cmp.verdict === 'invalid') {
+        return `The protocol fee quote expired while this was on screen. The network no longer accepts this action at the quoted fee. `
+            + `Nothing was signed or sent. Go back and start the action again to get a current quote.`;
+    }
     if (cmp && cmp.verdict === 'excess') {
         return `The protocol fee changed while this was on screen: it now costs ${now}${unit}, `
             + `but this transaction pays ${paid}${unit}. Nothing was signed or sent. `
@@ -197,8 +223,8 @@ export function satsFromNativeDecimal(value) {
     const [whole, frac = ''] = s.split('.');
     // Refuse sub-satoshi precision; truncating it would lower a band floor.
     if (/[1-9]/.test(frac.slice(8))) return null;
-    const sats = Number(whole) * 1e8 + Number((frac + '00000000').slice(0, 8));
-    return Number.isSafeInteger(sats) ? sats : null;
+    const sats = BigInt(whole) * 100000000n + BigInt((frac + '00000000').slice(0, 8));
+    return sats <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(sats) : null;
 }
 
 // One end of the acceptance band in satoshis: the quote's own figure when it
@@ -213,6 +239,33 @@ function boundSats(quoted, expectedSats, tolerance, fallbackTolerance, round) {
 }
 
 function intOrNull(value) {
-    const n = Number(value);
-    return Number.isFinite(n) ? Math.round(n) : null;
+    let n;
+    if (typeof value === 'bigint') {
+        n = value;
+    } else if (typeof value === 'number') {
+        if (!Number.isSafeInteger(value)) return null;
+        n = BigInt(value);
+    } else if (typeof value === 'string' && /^\d+$/.test(value.trim())) {
+        n = BigInt(value.trim());
+    } else {
+        return null;
+    }
+    return n >= 0n && n <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(n) : null;
+}
+
+function quoteIdentityMismatch(composed, fresh) {
+    for (const field of ['chainId', 'feeDestination']) {
+        const before = composed?.[field];
+        const after = fresh?.[field];
+        if (typeof before === 'string' && before
+            && typeof after === 'string' && after
+            && before !== after) {
+            return `quote ${field} does not match the composed transaction`;
+        }
+    }
+    const beforeCoin = typeof composed?.coin === 'string' ? composed.coin.trim().toUpperCase() : '';
+    const afterCoin = typeof fresh?.coin === 'string' ? fresh.coin.trim().toUpperCase() : '';
+    return beforeCoin && afterCoin && beforeCoin !== afterCoin
+        ? 'quote coin does not match the composed transaction'
+        : null;
 }
