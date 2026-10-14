@@ -26,4 +26,4 @@ export {
     decodeDocument,
 } from './codec.js';
 
-export { Vault, VaultStateError, VaultValidationError } from './Vault.js';
+export { Vault, VaultConflictError, VaultStateError, VaultValidationError } from './Vault.js';

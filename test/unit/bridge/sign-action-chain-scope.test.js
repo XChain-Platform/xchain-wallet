@@ -88,6 +88,22 @@ describe('bridge.signAction: dApp params cannot suppress the pre-spend audit rec
     }
 });
 
+// Regression: the approval precedes the build on this path, so the built PSBT
+// must be held to the confirm pipeline's tamper checks before signing
+// (submitWithSigner verifyBuiltTx). Like trackPendingTx it is a trusted key a
+// page must not be able to turn off, so it is set after the spread.
+describe('bridge.signAction: the built transaction is checked against the approval', () => {
+    for (const flow of ['sendToken', 'sweepToken']) {
+        it(`${flow} forces verifyBuiltTx:true after the dApp params spread`, () => {
+            const body = flowCallBody(flow);
+            const spreadAt = paramSpreadIndex(body);
+            const verifyAt = body.indexOf('verifyBuiltTx: true');
+            expect(verifyAt, `${flow} sets verifyBuiltTx: true`).toBeGreaterThan(-1);
+            expect(verifyAt).toBeGreaterThan(spreadAt);
+        });
+    }
+});
+
 // Regression: bridge.signAction confirm-what-you-sign integrity.
 //
 // Key order alone is not enough. The trusted keys re-applied after the spread
@@ -120,7 +136,7 @@ describe('bridge.signAction: page params cannot diverge the signature from the a
         // `chainId` or `trackPendingTx` would hand the page back what the
         // ordering guard above takes away.
         for (const key of ['legs', 'prebuiltPsbt', 'fee', 'feePerKb', 'rbf', 'signer',
-            'chainId', 'vault', 'walletId', 'password', 'trackPendingTx',
+            'chainId', 'vault', 'walletId', 'password', 'trackPendingTx', 'verifyBuiltTx',
             'from', 'to', 'tick', 'amount', 'reservationLedger']) {
             expect(allowlist[1], `allowlist must not carry ${key}`)
                 .not.toMatch(new RegExp(`['"\`]${key}['"\`]`));
