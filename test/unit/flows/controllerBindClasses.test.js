@@ -93,7 +93,7 @@ describe('controller-bind value validation', () => {
         ['exponent notation', '1e3', /positive whole action number/],
         ['a hexadecimal id', '0x10', /positive whole action number/],
         ['an id above the unsigned 64-bit range', '18446744073709551616', /no greater than 18446744073709551615/],
-    ])('refuses %s before build', (_name, controller, message) => {
+    ])('refuses %s as the guard id before build', (_name, controller, message) => {
         expect(controllerBindValidationError({ ...valid, controller })).toMatch(message);
     });
 
@@ -102,7 +102,7 @@ describe('controller-bind value validation', () => {
         ['a decimal cooldown', '1.5', /non-negative whole number/],
         ['an exponent cooldown', '1e3', /non-negative whole number/],
         ['a cooldown above the unsigned 32-bit range', '4294967296', /cannot be greater than 4294967295/],
-    ])('refuses %s before build', (_name, cooldownBlocks, message) => {
+    ])('refuses %s as the cooldown before build', (_name, cooldownBlocks, message) => {
         expect(controllerBindValidationError({ ...valid, cooldownBlocks })).toMatch(message);
     });
 

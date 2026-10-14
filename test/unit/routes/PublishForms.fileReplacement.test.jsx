@@ -14,7 +14,7 @@ import { PublishFileForm } from '../../../packages/core/src/shared/routes/Publis
 const CHAIN = 'bitcoin-mainnet';
 const SOURCE = {
     id: 'addr-1',
-    address: 'bc1qexampleexampleexampleexampleexampleex',
+    address: 'bc1qdevmock02aa',
     publicKey: '02aa',
     derivationPath: "m/84'/0'/0'/0/0",
     source: 'hd',

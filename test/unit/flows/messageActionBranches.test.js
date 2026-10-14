@@ -189,7 +189,7 @@ describe('message submission branches', () => {
         const { opts } = setup({
             opts: {
                 from: { ...SOURCE, derivationPath: null },
-                prebuiltParams: { VERSION: '3', COIN: 'BTC' },
+                prebuiltParams: { VERSION: '3', COIN: 'BTC', PLAINTEXT_MESSAGE: 'hello' },
                 trackPendingTx: false,
                 fee: 1,
                 feePerKb: 2,
@@ -208,7 +208,7 @@ describe('message submission branches', () => {
 
     it('describes encrypted pending sends and defaults to a derivation path', async () => {
         const { opts } = setup({
-            opts: { prebuiltParams: { VERSION: '2', COIN: 'BTC' } },
+            opts: { prebuiltParams: { VERSION: '2', COIN: 'BTC', ENCRYPTED_MESSAGE: 'abcd' } },
         });
         const submitted = await messageAction(opts);
         expect(submitted.pendingTxMeta.actionSummary).toContain('encrypted');

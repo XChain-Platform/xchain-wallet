@@ -205,7 +205,7 @@ describe('ParallelComposer confirmation', () => {
         mount();
 
         fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
-        expect(screen.getByRole('form', { name: 'Review parallel actions' })).toBeTruthy();
+        expect(await screen.findByRole('form', { name: 'Review parallel actions' })).toBeTruthy();
 
         const clickAllowed = fireEvent.click(screen.getByRole('button', { name: 'Back to composer' }));
 
