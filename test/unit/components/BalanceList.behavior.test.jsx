@@ -10,6 +10,7 @@ import {
     buildBalanceRows,
     isSmallBalanceRow,
 } from '../../../packages/core/src/shared/components/BalanceList.jsx';
+import balanceStyles from '../../../packages/core/src/shared/components/BalanceList.module.css';
 
 afterEach(() => cleanup());
 
@@ -182,6 +183,42 @@ describe('BalanceList ordering and visibility', () => {
         expect(screen.getByText('XCHAIN · Bitcoin')).toBeInTheDocument();
         expect(screen.getByText('XCHAIN · Litecoin')).toBeInTheDocument();
         expect(screen.queryByText(/regtest/i)).toBeNull();
+    });
+
+    it('does not repeat a native coin name its row title already shows', () => {
+        render(
+            <BalanceList rows={[
+                row('BTC', { kind: 'native', displayName: 'Bitcoin', chainDisplayName: 'Bitcoin' }),
+                row('LTC', {
+                    kind: 'native',
+                    chainId: 'litecoin-mainnet',
+                    coin: 'litecoin',
+                    displayName: 'Litecoin',
+                    chainDisplayName: 'Litecoin',
+                }),
+                row('XCHAIN', { chainDisplayName: 'Bitcoin' }),
+            ]} />,
+        );
+
+        expect(screen.queryByText('BTC · Bitcoin')).toBeNull();
+        expect(screen.queryByText('LTC · Litecoin')).toBeNull();
+        expect(screen.getByText('BTC', { selector: '[title="BTC"]' })).toBeInTheDocument();
+        expect(screen.getByText('XCHAIN · Bitcoin')).toBeInTheDocument();
+    });
+
+    it('keeps a long balance whole and lets the name give way', () => {
+        render(
+            <BalanceList rows={[
+                row('BIG', { displayName: 'A token with a long display name', quantity: '100000000000000000', divisibility: 8 }),
+                row('SMALL', { quantity: '100000000', divisibility: 8 }),
+            ]} />,
+        );
+
+        const big = screen.getByText('1,000,000,000.00000000', { exact: false }).closest(`.${balanceStyles.qty}`);
+        expect(big).toHaveClass(balanceStyles.qtyLong);
+        expect(big.closest(`.${balanceStyles.amountsSlot}`)).not.toBeNull();
+        const small = screen.getByText('1.00000000', { exact: false }).closest(`.${balanceStyles.qty}`);
+        expect(small).not.toHaveClass(balanceStyles.qtyLong);
     });
 
     it('keeps identical tickers keyed and selectable by chain', () => {

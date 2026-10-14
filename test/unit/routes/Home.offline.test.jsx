@@ -75,7 +75,7 @@ describe('Home offline behavior', () => {
         };
         mountHome(messaging, onSend, { onSwap, onCreateToken });
 
-        await waitFor(() => expect(screen.getByText('BTC · Bitcoin')).toBeTruthy());
+        await waitFor(() => expect(screen.getByText('Bitcoin', { selector: '[title="Bitcoin"]' })).toBeTruthy());
         expect(screen.getByText(/^Updated /)).toBeTruthy();
 
         // A failed background read leaves the last successful rows and sync
@@ -84,7 +84,7 @@ describe('Home offline behavior', () => {
         vi.setSystemTime(Date.now() + flows.BALANCE_POLL_INTERVAL_MS);
         act(() => { window.dispatchEvent(new Event('focus')); });
         await waitFor(() => expect(messaging.getWalletBalances).toHaveBeenCalledTimes(2));
-        expect(screen.getByText('BTC · Bitcoin')).toBeTruthy();
+        expect(screen.getByText('Bitcoin', { selector: '[title="Bitcoin"]' })).toBeTruthy();
         expect(screen.queryByLabelText('Loading balances')).toBeNull();
 
         setNavigatorOnline(false);
@@ -135,7 +135,7 @@ describe('Home offline behavior', () => {
 
         const view = mountHome(messaging, vi.fn());
 
-        expect(await screen.findByText('BTC · Bitcoin')).toBeTruthy();
+        expect(await screen.findByText('Bitcoin', { selector: '[title="Bitcoin"]' })).toBeTruthy();
         expect(screen.getByText(/Showing cached balances/)).toBeTruthy();
         expect(screen.queryByText(/Updating balances/)).toBeNull();
         expect(screen.queryByLabelText('Loading balances')).toBeNull();

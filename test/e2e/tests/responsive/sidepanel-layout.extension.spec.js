@@ -37,7 +37,8 @@ async function expectRoute(page, route) {
         await expect(unlockedShell(page)).toBeVisible();
         return;
     }
-    await expect(page.getByRole('main').getByRole('heading', { name: route, exact: true }).first())
+    // The title lives in the app header, not in the main region.
+    await expect(page.getByRole('heading', { name: route, exact: true }).first())
         .toBeVisible();
 }
 
@@ -151,6 +152,12 @@ test('side panel fits primary routes at narrow extension sizes', async () => {
         if (!worker) worker = await context.waitForEvent('serviceworker', { timeout: 30_000 });
         const origin = `chrome-extension://${new URL(worker.url()).host}`;
         const page = await context.newPage();
+        // The panel renders only when its active tab answers the content
+        // probe, and here that tab is the panel itself.
+        await page.addInitScript(() => {
+            const tabs = globalThis.chrome?.tabs;
+            if (tabs) tabs.sendMessage = (_id, _msg, cb) => { if (typeof cb === 'function') cb({ available: true }); };
+        });
         await page.goto(`${origin}/sidepanel.html`);
 
         const accept = page.getByRole('button', { name: 'Accept and continue' });
