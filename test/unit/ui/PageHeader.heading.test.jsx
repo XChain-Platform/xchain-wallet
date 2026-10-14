@@ -122,6 +122,7 @@ describe('Screen layout', () => {
         expect(scrollBody).toMatch(/min-height:\s*0/);
         expect(scrollBody).toMatch(/overflow-y:\s*auto/);
         expect(scrollBody).toMatch(/overflow-x:\s*hidden/);
-        expect(scrollBody).toMatch(/scrollbar-gutter:\s*stable/);
+        // Safari 16 lacks scrollbar-gutter, so the reservation sits behind @supports.
+        expect(screenCss).toMatch(/@supports \(scrollbar-gutter: stable\)\s*\{\s*\.body\s*\{[^}]*scrollbar-gutter:\s*stable/s);
     });
 });

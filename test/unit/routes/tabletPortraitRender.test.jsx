@@ -214,7 +214,8 @@ describe('primary routes at 768x1024', () => {
         expect(formCss).toMatch(/@media \(min-width: 600px\)[\s\S]*?\.form\s*\{[^}]*max-width:\s*560px[^}]*margin:[^;]*auto/s);
         expect(formCss).toMatch(/@media \(min-width: 600px\)[\s\S]*?\.form:not\(\.sectioned\)\s*\{[^}]*background:\s*var\(--xc-surface-raised\)[^}]*border:/s);
         expect(listCss).toMatch(/\.page\s*\{[^}]*width:\s*100%[^}]*max-width:\s*48rem[^}]*margin-inline:\s*auto/s);
-        expect(screenCss).toMatch(/\.body\s*\{[^}]*overflow-y:\s*auto[^}]*scrollbar-gutter:\s*stable/s);
+        expect(screenCss).toMatch(/\.body\s*\{[^}]*overflow-y:\s*auto/s);
+        expect(screenCss).toMatch(/@supports \(scrollbar-gutter: stable\)\s*\{\s*\.body\s*\{[^}]*scrollbar-gutter:\s*stable/s);
         expect(navCss).toMatch(/\.layout\[data-xc-tier='rail'\] \.sidebar\s*\{[^}]*flex:\s*0 0 64px/s);
         expect(homeCss).toMatch(/@media \(min-width: 48rem\)[\s\S]*?\.quickActionsSingle\s*\{[^}]*grid-template-columns:\s*minmax\(76px, 10rem\)/s);
         expect(collectibleCss).toMatch(/@media \(min-width: 48rem\)[\s\S]*?\.grid\s*\{[^}]*minmax\(10rem, 12rem\)/s);

@@ -105,10 +105,14 @@ const ltrIslands = [
     'packages/web/src/style-guide/sections/TokenSelectorSection.module.css|.amounts',
 ];
 
+// Build output repeats the sources with hashed class names, so only the
+// authored trees are audited.
+const SKIPPED_DIRECTORIES = new Set(['dist', 'node_modules']);
+
 function cssFiles(directory) {
     return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
         const path = join(directory, entry.name);
-        if (entry.isDirectory()) return cssFiles(path);
+        if (entry.isDirectory()) return SKIPPED_DIRECTORIES.has(entry.name) ? [] : cssFiles(path);
         return entry.name.endsWith('.css') ? [path] : [];
     });
 }
@@ -116,7 +120,7 @@ function cssFiles(directory) {
 function scriptFiles(directory) {
     return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
         const path = join(directory, entry.name);
-        if (entry.isDirectory()) return scriptFiles(path);
+        if (entry.isDirectory()) return SKIPPED_DIRECTORIES.has(entry.name) ? [] : scriptFiles(path);
         return /\.[jt]sx?$/.test(entry.name) ? [path] : [];
     });
 }

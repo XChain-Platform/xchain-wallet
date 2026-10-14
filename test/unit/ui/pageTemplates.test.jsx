@@ -462,7 +462,11 @@ describe('page gutter ownership', () => {
             .filter((node) => node.type === 'decl')
             .map((node) => [node.prop, node.value]));
         expect(declarations.padding).toBe('var(--xc-page-top) var(--xc-page-gutter)');
-        expect(declarations['scrollbar-gutter']).toBe('stable');
+        // Safari 16 lacks scrollbar-gutter, so the reservation sits behind @supports.
+        const guarded = screenRoot.nodes.find((node) => node.type === 'atrule'
+            && node.name === 'supports' && node.params === '(scrollbar-gutter: stable)');
+        const guardedBody = guarded?.nodes.find((node) => node.type === 'rule' && node.selector === '.body');
+        expect(guardedBody?.nodes.find((node) => node.prop === 'scrollbar-gutter')?.value).toBe('stable');
         expect(declarations).not.toHaveProperty('scrollbar-width');
         expect(declarations).not.toHaveProperty('scrollbar-color');
     });
