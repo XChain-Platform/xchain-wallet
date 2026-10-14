@@ -32,7 +32,7 @@
 // delivery seam to actually play a sound (ruling I-34b); it dispatches
 // SOUND_PREVIEW_EVENT for the shell's notify adapter to pick up.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button, EmptyState, Input, Select } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { usePriceAlerts } from '../../hooks/usePriceAlerts.js';
@@ -64,6 +64,7 @@ function PermissionRow() {
         : (webSupported ? Notification.permission : 'unsupported'));
     const [requestError, setRequestError] = useState(/** @type {string | null} */ (null));
     const [requesting, setRequesting] = useState(false);
+    const requestInFlight = useRef(false);
 
     useEffect(() => {
         if (!extensionSupported) return undefined;
@@ -81,7 +82,8 @@ function PermissionRow() {
     if (!extensionSupported && !webSupported) return null;
 
     const request = async () => {
-        if (requesting) return;
+        if (requestInFlight.current) return;
+        requestInFlight.current = true;
         setRequesting(true);
         setRequestError(null);
         try {
@@ -95,12 +97,14 @@ function PermissionRow() {
         } catch {
             setRequestError('Could not request notification permission. Check this app in your browser or system settings.');
         } finally {
+            requestInFlight.current = false;
             setRequesting(false);
         }
     };
 
     const revoke = async () => {
-        if (requesting || !extensionSupported) return;
+        if (requestInFlight.current || !extensionSupported) return;
+        requestInFlight.current = true;
         setRequesting(true);
         setRequestError(null);
         try {
@@ -110,6 +114,7 @@ function PermissionRow() {
         } catch {
             setRequestError('Could not revoke notification permission. Try again.');
         } finally {
+            requestInFlight.current = false;
             setRequesting(false);
         }
     };
