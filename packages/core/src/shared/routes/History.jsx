@@ -113,6 +113,47 @@ const HISTORY_PAGE_SIZE = 100;
 const EMPTY_PEER_CACHE = Object.freeze({});
 const OFFLINE_ACTION_REASON = 'This action needs a network connection.';
 
+function historyEntryPageAliases(entry) {
+    const aliases = [entry?.key].filter(Boolean);
+    const chainId = String(entry?.chainId || '');
+    const actionIndex = String(entry?.actionIndex || '');
+    const txHash = String(entry?.txHash || '').trim().toLowerCase();
+    if (chainId && actionIndex) aliases.push(`action:${chainId}:${actionIndex}`);
+    if (chainId && txHash) aliases.push(`tx:${chainId}:${txHash}`);
+    return aliases;
+}
+
+function historyItemPageAliases(item) {
+    if (item?.kind === 'entry') return historyEntryPageAliases(item.entry);
+    if (item?.kind === 'group') {
+        return [`group:${item.key}`, ...historyEntryPageAliases(item.leader)];
+    }
+    return [];
+}
+
+/**
+ * Keep every previously rendered item inside the window when a refresh adds
+ * rows ahead of it. Transaction aliases let a pending row become confirmed
+ * without being counted as a second item.
+ */
+export function retainedHistoryItemCount(previousItems, nextItems, visibleCount, pageSize = HISTORY_PAGE_SIZE) {
+    const next = Array.isArray(nextItems) ? nextItems : [];
+    if (next.length === 0) return 0;
+    const count = Math.max(0, Number(visibleCount) || 0);
+    const retainedAliases = new Set(
+        (Array.isArray(previousItems) ? previousItems : [])
+            .slice(0, count)
+            .flatMap(historyItemPageAliases),
+    );
+    let lastRetainedIndex = -1;
+    next.forEach((item, index) => {
+        if (historyItemPageAliases(item).some((alias) => retainedAliases.has(alias))) {
+            lastRetainedIndex = index;
+        }
+    });
+    return Math.min(next.length, Math.max(pageSize, count, lastRetainedIndex + 1));
+}
+
 function historyChainFilterKey(walletId) {
     return `${HISTORY_CHAIN_FILTER_KEY}:${walletId || 'none'}`;
 }
@@ -1416,6 +1457,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     // DOM grows in bounded steps. This keeps exports and group membership exact
     // without making the browser lay out thousands of row buttons at once.
     const listScope = useMemo(() => [
+        walletId,
+        accountId || '',
         groupingMode,
         searchQuery,
         dateFrom,
@@ -1426,13 +1469,14 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         [...actionTypeFilter].sort().join(','),
         [...statusFilter].sort().join(','),
     ].join('\u0000'), [
-        groupingMode, searchQuery, dateFrom, dateTo, crossChainOnly, multisigOnly,
+        walletId, accountId, groupingMode, searchQuery, dateFrom, dateTo, crossChainOnly, multisigOnly,
         enabledChains, actionTypeFilter, statusFilter,
     ]);
     const [listWindow, setListWindow] = useState(() => ({
         scope: '',
         count: HISTORY_PAGE_SIZE,
     }));
+    const pagedItemsRef = useRef({ scope: '', items: [] });
     const [groupMemberLimits, setGroupMemberLimits] = useState(
         /** @type {Record<string, number>} */ ({}),
     );
@@ -1445,6 +1489,22 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         setListWindow({ scope: listScope, count: HISTORY_PAGE_SIZE });
         setGroupMemberLimits({});
     }, [listScope]);
+
+    useEffect(() => {
+        const previous = pagedItemsRef.current;
+        if (previous.scope === listScope) {
+            setListWindow((window) => {
+                if (window.scope !== listScope) return window;
+                const count = retainedHistoryItemCount(
+                    previous.items,
+                    groupedItems,
+                    window.count,
+                );
+                return count === window.count ? window : { ...window, count };
+            });
+        }
+        pagedItemsRef.current = { scope: listScope, items: groupedItems };
+    }, [groupedItems, listScope]);
 
     const showMoreItems = () => {
         setListWindow((prev) => {
