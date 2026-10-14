@@ -6,7 +6,6 @@
 import {
     dismissIntroCarousel,
     expect,
-    gotoSection,
     test,
     unlockedShell,
 } from '../../fixtures/wallet.js';
@@ -35,9 +34,24 @@ const POLL = Object.freeze({
     winning_option: 0,
 });
 
-const DELEGATE_ADDRESS = 'bc1qgovernancedelegate00000000000000000000';
+// The demo wallet runs on Bitcoin regtest, so the delegate is a regtest address.
+const DELEGATE_ADDRESS = 'bcrt1qmr46t4ca5wh35k6mczdzrkepqw2d8ne956f48f';
 const DEPOSIT = '125.5';
 const NORMAL_FEE = '0.000015 BTC (6 sat/vB)';
+
+// Governance is not a nav destination; it opens from the command palette.
+async function gotoPalette(page, title) {
+    await page.keyboard.press('ControlOrMeta+k');
+    const dialog = page.getByRole('dialog', { name: 'Command palette' });
+    await expect(dialog, 'the command palette did not open').toBeVisible({ timeout: 15_000 });
+    const combobox = dialog.getByRole('combobox').first();
+    await expect(combobox).toBeEditable({ timeout: 15_000 });
+    await combobox.fill(title);
+    const row = page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first();
+    await expect(row, `no palette command matching "${title}"`).toBeVisible();
+    await row.click();
+    await expect(dialog).toBeHidden({ timeout: 15_000 });
+}
 
 async function settle(page) {
     await page.evaluate(() => new Promise((resolve) => {
@@ -58,12 +72,13 @@ async function installGovernanceFixture(page) {
             messaging.getActiveAddresses(walletId),
             messaging.getSettings(),
         ]);
-        const bitcoinAddresses = addressesByChain['bitcoin-mainnet'];
+        // The demo wallet runs on Bitcoin regtest.
+        const bitcoinAddresses = addressesByChain['bitcoin-regtest'];
         if (!Array.isArray(bitcoinAddresses) || bitcoinAddresses.length === 0) {
             throw new Error('demo wallet fixture did not create a Bitcoin address');
         }
-        const fixtureAddresses = { 'bitcoin-mainnet': bitcoinAddresses };
-        const fixtureActive = { 'bitcoin-mainnet': activeAddresses['bitcoin-mainnet'] };
+        const fixtureAddresses = { 'bitcoin-regtest': bitcoinAddresses };
+        const fixtureActive = { 'bitcoin-regtest': activeAddresses['bitcoin-regtest'] };
         const settings = { ...currentSettings, walletMode: 'watcher' };
 
         const results = {
@@ -71,7 +86,7 @@ async function installGovernanceFixture(page) {
             'addresses.active': fixtureActive,
             'settings.get': settings,
             'contacts.list': [],
-            'indexer.watermark': { chainId: 'bitcoin-mainnet', watermark: 699900 },
+            'indexer.watermark': { chainId: 'bitcoin-regtest', watermark: 699900 },
             'chain.tipBlockTime': { blockTime: 0 },
             'governance.polls': { data: [poll] },
             'governance.poll': { data: [poll] },
@@ -96,7 +111,8 @@ async function installGovernanceFixture(page) {
 async function expectMatchingControlRows(page, label) {
     const mismatches = await page.getByRole('main').evaluate((main) => {
         const selector = 'button, input:not([type="hidden"]), select, textarea';
-        const controls = [...main.querySelectorAll(selector)].map((element) => {
+        // Skip aria-hidden subtrees: decoration such as the fee slider tick labels, not controls.
+        const controls = [...Array.from(main.querySelectorAll(selector)).filter((el) => !el.closest('[aria-hidden="true"]'))].map((element) => {
             const box = element.getBoundingClientRect();
             const style = getComputedStyle(element);
             return {
@@ -153,8 +169,8 @@ async function chooseGovernanceToken(page) {
     await page.getByRole('main').getByRole('button', { name: /^Governance token:/ }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Select token' })).toBeVisible();
     await page.getByLabel('Search coins or tokens').fill('XCP');
-    await page.getByRole('button', { name: /^Select Counterparty on Bitcoin$/ }).click();
-    await expect(page.getByRole('button', { name: /^Governance token: XCP on Bitcoin$/ }))
+    await page.getByRole('button', { name: /^Select Counterparty on Bitcoin\b/ }).click();
+    await expect(page.getByRole('button', { name: /^Governance token: XCP on Bitcoin\b/ }))
         .toBeVisible();
 }
 
@@ -180,7 +196,7 @@ for (const viewport of VIEWPORTS) {
         await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
         await installGovernanceFixture(page);
 
-        await gotoSection(page, 'Governance');
+        await gotoPalette(page, 'Governance');
         await expect(page.getByRole('button', { name: /Fund the community governance portal/ }))
             .toBeVisible();
         await expectScreen(page, `${viewport.name} poll list`, 'Governance');
