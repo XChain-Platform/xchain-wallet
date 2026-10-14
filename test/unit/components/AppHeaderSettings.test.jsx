@@ -104,6 +104,31 @@ describe('AppHeader settings gear', () => {
         expect(screen.queryByRole('dialog', { name: 'Wallet settings' })).toBeNull();
     });
 
+    it('renders the settings panel outside the scrolling action menu', () => {
+        render(
+            <AppHeader
+                activeWallet={{ id: 'w1', name: 'Savings' }}
+                onOpenWalletPicker={() => {}}
+            />,
+        );
+        openAppSettings();
+
+        const menu = screen.getByRole('menu', { name: 'Header actions' });
+        const dialog = screen.getByRole('dialog', { name: 'Wallet settings' });
+        const settingsTrigger = screen.getByRole('menuitem', { name: 'Settings' });
+        expect(menu).not.toContainElement(dialog);
+        expect(dialog.parentElement).toBe(document.body);
+
+        fireEvent.mouseDown(screen.getByRole('button', { name: 'Savings' }));
+        expect(screen.getByRole('menu', { name: 'Header actions' })).toBeInTheDocument();
+        expect(dialog).toBeInTheDocument();
+
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(screen.queryByRole('dialog', { name: 'Wallet settings' })).toBeNull();
+        expect(screen.getByRole('menu', { name: 'Header actions' })).toBeInTheDocument();
+        expect(settingsTrigger).toHaveFocus();
+    });
+
     it('keeps the watch-only badge in the persistent header', () => {
         render(<AppHeader isWatcherMode />);
         expect(screen.getByRole('status', { name: 'Watch-only wallet' })).toBeTruthy();
