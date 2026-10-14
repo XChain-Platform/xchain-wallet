@@ -51,7 +51,45 @@ function Opener({ kind }) {
     );
 }
 
+// The common delete flow: the opener is marked busy (disabled) before the
+// confirm opens, and only re-enabled when the awaited confirm settles, in
+// a render after the one that removed the dialog.
+function BusyOpener() {
+    const [open, setOpen] = useState(false);
+    const [busy, setBusy] = useState(false);
+    const settle = () => {
+        setOpen(false);
+        Promise.resolve().then(() => setBusy(false));
+    };
+    return (
+        <div>
+            <button type="button" disabled={busy} onClick={() => { setBusy(true); setOpen(true); }}>Delete</button>
+            {open ? <ConfirmModal title="Delete?" danger onConfirm={settle} onCancel={settle} /> : null}
+        </div>
+    );
+}
+
 describe('modal focus return', () => {
+    it('returns focus to an opener that was disabled while the confirm was open', async () => {
+        const nativeDisabledFocus = HTMLElement.prototype.focus;
+        HTMLElement.prototype.focus = function focusUnlessDisabled(...args) {
+            if (this.disabled) return;
+            nativeDisabledFocus.apply(this, args);
+        };
+        render(<BusyOpener />);
+        const opener = screen.getByRole('button', { name: 'Delete' });
+        opener.focus();
+        fireEvent.click(opener);
+        await flush();
+        expect(opener).toBeDisabled();
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        await flush();
+        expect(opener).not.toBeDisabled();
+        // The hand-back waits a frame or more for the opener to re-enable.
+        await flush();
+        expect(document.activeElement).toBe(opener);
+    });
+
     it.each([
         ['confirm', 'Cancel'],
         ['notice', 'OK'],
