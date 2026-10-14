@@ -98,6 +98,8 @@ function priceAlertFormControls(page) {
 for (const viewport of VIEWPORTS) {
     test(`alerts and price alerts render and update at ${viewport.width}x${viewport.height}`, async ({ page }) => {
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
+        // Notification toggles stay disabled until the browser grants delivery.
+        await page.context().grantPermissions(['notifications']);
         await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
 
         await test.step('publish a wallet alert from the seeded demo inbox', async () => {

@@ -52,7 +52,15 @@ async function showHomeFilters(page) {
     await gotoSection(page, 'Home');
     const search = page.getByRole('main').getByRole('searchbox', { name: 'Search tokens by name' });
     if (await search.count() === 0) {
-        await page.getByRole('main').getByRole('button', { name: 'Show filters' }).click();
+        // Phone widths fold the hero actions into the Balance actions menu.
+        const main = page.getByRole('main');
+        const direct = main.getByRole('button', { name: 'Show filters' });
+        if (await direct.count() > 0) {
+            await direct.click();
+        } else {
+            await main.getByRole('button', { name: 'Balance actions' }).click();
+            await page.getByRole('menuitemcheckbox', { name: 'Show filters' }).click();
+        }
     }
     return search;
 }

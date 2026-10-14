@@ -226,10 +226,11 @@ for (const viewport of VIEWPORTS) {
                 summary: `Create token ${issueTick} with max supply 1000 on Bitcoin`,
                 details: {
                     Token: issueTick,
-                    'Max supply': '1000',
-                    'Max mint per tx': '50',
+                    // Review amounts carry their unit.
+                    'Max supply': `1000 ${issueTick}`,
+                    'Max mint per tx': `50 ${issueTick}`,
                     Description: 'Responsive token admin fixture',
-                    'Initial mint': '250',
+                    'Initial mint': `250 ${issueTick}`,
                 },
                 label: `${viewport.name} Issue review`,
             });

@@ -34,6 +34,11 @@ const KDF_STEP_MS = kdfStepTimeout();
 
 const PASSWORD = 'add-wallet-activation';
 
+// The condensed header names the active wallet as text, not as a button.
+function activeWallet(page, name) {
+    return page.getByRole('region', { name: 'App header' }).getByText(`Wallet: ${name}`);
+}
+
 async function gotoPalette(page, title) {
     await page.keyboard.press('ControlOrMeta+k');
     const dialog = page.getByRole('dialog', { name: 'Command palette' });
@@ -60,7 +65,7 @@ test.describe('adding a second wallet', () => {
         await expect(unlockedShell(page)).toBeVisible({ timeout: KDF_STEP_MS });
 
         // THE FACT: the app is now on the wallet it just added.
-        await expect(page.getByRole('button', { name: /Second Wallet/ }).first(),
+        await expect(activeWallet(page, 'Second Wallet'),
             'after adding a wallet the app should show the new one as active')
             .toBeVisible({ timeout: 30_000 });
 
@@ -70,7 +75,7 @@ test.describe('adding a second wallet', () => {
             'the original wallet is missing from the picker')
             .toBeVisible({ timeout: 30_000 });
         await page.getByRole('button', { name: /First Wallet/ }).first().click();
-        await expect(page.getByRole('button', { name: /First Wallet/ }).first(),
+        await expect(activeWallet(page, 'First Wallet'),
             'switching back to the first wallet did not take')
             .toBeVisible({ timeout: 30_000 });
     });
@@ -97,7 +102,7 @@ test.describe('adding a second wallet', () => {
 
         await gotoPalette(page, 'Switch wallet');
         await page.getByRole('button', { name: /Second Wallet/ }).first().click();
-        await expect(page.getByRole('button', { name: /Second Wallet/ }).first())
+        await expect(activeWallet(page, 'Second Wallet'))
             .toBeVisible({ timeout: 30_000 });
 
         await page.reload();
@@ -111,7 +116,7 @@ test.describe('adding a second wallet', () => {
             await expect(unlockedShell(page)).toBeVisible({ timeout: KDF_STEP_MS });
         }
 
-        await expect(page.getByRole('button', { name: /Second Wallet/ }).first(),
+        await expect(activeWallet(page, 'Second Wallet'),
             'after a reload the app is no longer on the wallet the user switched to')
             .toBeVisible({ timeout: 30_000 });
     });

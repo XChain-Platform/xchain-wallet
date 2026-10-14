@@ -86,11 +86,12 @@ for (const viewport of VIEWPORTS) {
         await expectTimelineCount(page, 27);
         await expectNoHorizontalOverflow(page, `${viewport.name} History list`);
 
+        // Demo history rows carry whole-token units, so 1e8 base units read as 1.
         for (const amount of SIGNED_AMOUNTS) {
             await expect(historyRow(page, amount.chainId, 100011))
-                .toContainText(`+100,000,000 ${amount.incomingTick}`);
+                .toContainText(`+1 ${amount.incomingTick}`);
             await expect(historyRow(page, amount.chainId, 100002))
-                .toContainText(`-5,000,000 ${amount.outgoingTick}`);
+                .toContainText(`-0.05 ${amount.outgoingTick}`);
         }
 
         await openPhoneFilters(page);
@@ -116,7 +117,7 @@ for (const viewport of VIEWPORTS) {
         await expectTimelineCount(page, 3);
         for (const amount of SIGNED_AMOUNTS) {
             await expect(historyRow(page, amount.chainId, 100002))
-                .toContainText(`-5,000,000 ${amount.outgoingTick}`);
+                .toContainText(`-0.05 ${amount.outgoingTick}`);
         }
         await expectNoHorizontalOverflow(page, `${viewport.name} searched History list`);
         await page.getByRole('button', { name: 'Clear history search' }).click();
@@ -153,7 +154,7 @@ for (const viewport of VIEWPORTS) {
             .getByRole('tab', { name: 'Details', exact: true }).click();
         const amountCell = page.getByRole('rowheader', { name: 'Amount' }).first()
             .locator('xpath=following-sibling::td');
-        await expect(amountCell).toContainText('-5,000,000');
+        await expect(amountCell).toContainText('-0.05');
         await expectNoHorizontalOverflow(page, `${viewport.name} transaction detail`);
 
         await page.getByRole('button', { name: 'Back to history' }).click();
