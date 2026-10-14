@@ -81,10 +81,10 @@ describe('RTL-safe machine-readable fields', () => {
         expect(max.style.right).toBe('');
         expect(input).toHaveAttribute('dir', 'ltr');
         expect(amountFieldStyles).toMatch(
-            /\.pasteAction button,\s*\.maxAction\s*\{[^}]*flex:\s*none[^}]*min-width:\s*max-content[^}]*white-space:\s*nowrap/s,
+            /\.amountFieldWrap \.pasteAction button,\s*\.amountFieldWrap \.maxAction\s*\{[^}]*flex:\s*none[^}]*min-width:\s*max-content[^}]*white-space:\s*nowrap/s,
         );
         expect(addressComboboxStyles).toMatch(
-            /\.pasteAction button\s*\{[^}]*inset-inline-end:\s*0[^}]*flex:\s*none[^}]*min-width:\s*max-content[^}]*white-space:\s*nowrap/s,
+            /\.pasteAction button\s*\{[^}]*inset-inline-end:\s*var\(--xc-space-1\)[^}]*flex:\s*none[^}]*min-width:\s*max-content[^}]*white-space:\s*nowrap/s,
         );
     });
 });

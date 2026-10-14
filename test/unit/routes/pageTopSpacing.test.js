@@ -49,7 +49,9 @@ describe('route page-top ownership', () => {
         const screen = read('packages/core/src/ui/Screen.module.css');
         // The shell owns the tier values, so the notice reads its inset.
         const shell = read('packages/core/src/shared/components/LeftNav.module.css');
-        expect(shell).toMatch(/\.notices\s*\{[^}]*padding-inline:\s*var\(--xc-notice-inset,\s*var\(--xc-space-3\)\)/);
+        // The notice inset adds the route body's scrollbar lane, so notices
+        // line up with route content beside a classic scrollbar.
+        expect(shell).toMatch(/\.notices\s*\{[^}]*padding-inline:\s*calc\(var\(--xc-notice-inset,\s*var\(--xc-space-3\)\) \+ var\(--xc-scrollbar-lane,\s*0px\)\)/);
         // A phone-width query may compact the banner, but never sets its inset.
         for (const [, block] of banner.matchAll(/@media \([^)]*width[^)]*\)\s*\{([\s\S]*?)\n\}/g)) {
             expect(block).not.toMatch(/margin/);
