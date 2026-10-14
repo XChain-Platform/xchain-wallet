@@ -343,6 +343,14 @@ describe('trade form style guide primitives', () => {
         }
     });
 
+    it('draws Swap\'s ownership and expiration choices with the kit controls Create order uses', () => {
+        const source = readFileSync(resolve(process.cwd(), 'packages/core/src/shared/routes/SwapForm.jsx'), 'utf8');
+
+        expect(source.match(/<input\b[^>]*>/g) || []).toEqual([]);
+        expect(source).toMatch(/<RadioGroup\s+legend="Expiration"/);
+        expect((source.match(/<Checkbox\b/g) || []).length).toBe(2);
+    });
+
     it('uses kit choice controls throughout the shared order panels', () => {
         const componentControls = {
             DerivationPathCrossCheck: ['Checkbox'],

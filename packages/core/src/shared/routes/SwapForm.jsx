@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, FormSection, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, Checkbox, FeeSelector, FormPage, FormSection, Icon, Input, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -961,17 +961,13 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                             : null}
                     />
                 )}
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', margin: '0.25rem 0 0.5rem' }}>
-                    {/* Native checkboxes preserve toggle keyboard behavior because the kit has no checkbox primitive. */}
-                    <input
-                        type="checkbox"
-                        checked={giveOwnership}
-                        onChange={(e) => setGiveOwnership(e.target.checked)}
-                    />
-                    Give this token&apos;s ownership instead of an amount
-                </label>
+                <Checkbox
+                    label="Give this token's ownership instead of an amount"
+                    checked={giveOwnership}
+                    onChange={(e) => setGiveOwnership(e.target.checked)}
+                />
                 {giveOwnership ? (
-                    <p className={styles.hintLeft} style={{ margin: '0 0 0.5rem' }}>
+                    <p className={styles.hintLeft}>
                         Transfers the entire ownership of {giveTick.trim() ? giveTick.trim().toUpperCase() : 'this token'} (single-fill, no partial matches).
                     </p>
                 ) : null}
@@ -995,17 +991,13 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                         }}
                     />
                 )}
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', margin: '0.25rem 0 0.5rem' }}>
-                    {/* Native checkboxes preserve toggle keyboard behavior because the kit has no checkbox primitive. */}
-                    <input
-                        type="checkbox"
-                        checked={getOwnership}
-                        onChange={(e) => setGetOwnership(e.target.checked)}
-                    />
-                    Require the matcher to give that token&apos;s ownership instead of an amount
-                </label>
+                <Checkbox
+                    label="Require the matcher to give that token's ownership instead of an amount"
+                    checked={getOwnership}
+                    onChange={(e) => setGetOwnership(e.target.checked)}
+                />
                 {getOwnership ? (
-                    <p className={styles.hintLeft} style={{ margin: '0 0 0.5rem' }}>
+                    <p className={styles.hintLeft}>
                         The matcher must currently own {getTick.trim() ? getTick.trim().toUpperCase() : 'this token'}; on match its ownership transfers to you.
                     </p>
                 ) : null}
@@ -1015,17 +1007,16 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
                 title="Timing and fees"
                 description="The give side stays escrowed until a match, cancellation, or expiration."
             >
-            <p className={styles.successLabel}>Expiration</p>
-            <label className={styles.checkRow}>
-                {/* Native radios preserve single-choice keyboard behavior because the kit has no radio primitive. */}
-                <input type="radio" name="swap-exp" checked={expMode === 'default'} onChange={() => setExpMode('default')} />
-                {' '}Default window
-            </label>
-            <label className={styles.checkRow}>
-                {/* Native radios preserve single-choice keyboard behavior because the kit has no radio primitive. */}
-                <input type="radio" name="swap-exp" checked={expMode === 'custom'} onChange={() => setExpMode('custom')} />
-                {' '}Expire at a specific time
-            </label>
+            <RadioGroup
+                legend="Expiration"
+                name="swap-exp"
+                value={expMode}
+                onChange={setExpMode}
+                options={[
+                    { value: 'default', label: 'Default window' },
+                    { value: 'custom', label: 'Expire at a specific time' },
+                ]}
+            />
             {expMode === 'custom' ? (
                 <Input
                     label="Expires"
