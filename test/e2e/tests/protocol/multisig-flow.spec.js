@@ -66,7 +66,8 @@ async function expectNoHorizontalOverflow(page, label) {
 
 async function expectInlineControlHeights(page, label, { requireRow = false } = {}) {
     const rows = await page.getByRole('main').evaluate((main) => {
-        const visibleButtons = [...main.querySelectorAll('button')]
+        // Skip aria-hidden subtrees: decoration such as the fee slider tick labels, not controls.
+        const visibleButtons = [...Array.from(main.querySelectorAll('button')).filter((el) => !el.closest('[aria-hidden="true"]'))]
             .filter((button) => {
                 const rect = button.getBoundingClientRect();
                 const style = getComputedStyle(button);
@@ -151,7 +152,9 @@ async function createSigningSession(page) {
         const config = wallet.multisigs[0];
         return messaging.startMultisigSigningSession({
             walletId: wallet.id,
-            chainId: config.chainId,
+            // A stored multisig config carries no chain; the demo wallet's Bitcoin
+            // chain is regtest.
+            chainId: 'bitcoin-regtest',
             multisigConfigId: config.id,
             msgHash: '11'.repeat(32),
             psbtHex: '',
@@ -172,7 +175,7 @@ test.describe('multisig flow', () => {
         const share = page.getByRole('region', { name: 'Share this wallet as a cosigner' });
         await share.locator('summary').click();
         await share.getByLabel('Address to share').selectOption({ index: 1 });
-        await expect(share.getByLabel('Cosigner share payload')).toHaveValue(/xchain-multisig-cosigner/);
+        await expect(share.getByLabel('Cosigner share payload', { exact: true })).toHaveValue(/xchain-multisig-cosigner/);
 
         for (const viewport of VIEWPORTS) {
             await test.step(`${viewport.name}: create and cosigner share`, async () => {
