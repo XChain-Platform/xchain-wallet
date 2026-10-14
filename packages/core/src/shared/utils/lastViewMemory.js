@@ -26,6 +26,13 @@ import { clearHistoryCacheForWallet } from './historyCache.js';
 
 const NS = 'xc:lastView:';
 
+const INTERRUPTED_VIEW_KIND = Object.freeze({
+    send: 'send',
+    'resume-confirm': 'send',
+    swap: 'swap',
+    'cross-chain-swap': 'swap',
+});
+
 // View identifiers safe to resume without re-priming context state.
 // Keep in lockstep with the per-shell App.jsx switch. Adding a new
 // view to this set is the only call site to touch when extending
@@ -149,18 +156,25 @@ export function readLastView(walletId, includeParams = false) {
 }
 
 /**
- * Persist the current view for a wallet. No-ops for non-resumable
- * views. Only the safe set lands in storage so a future read can
- * trust the value.
+ * Persist the current view for a wallet. Non-resumable views no-op unless the
+ * shell requests interruption handling. Only safe routes or a one-shot
+ * interruption marker land in storage.
  *
  * @param {string | null | undefined} walletId
  * @param {string | null | undefined} view
  * @param {unknown} [params]
+ * @param {{ markInterrupted?: boolean }} [options]
  */
-export function writeLastView(walletId, view, params = null) {
+export function writeLastView(walletId, view, params = null, options = {}) {
     if (typeof walletId !== 'string' || !walletId) return;
     if (typeof view !== 'string' || !view) return;
-    if (!RESUMABLE_SET.has(view)) return;
+    if (!RESUMABLE_SET.has(view)) {
+        if (!options.markInterrupted) return;
+        safeRemove(walletId);
+        const interrupted = INTERRUPTED_VIEW_KIND[view];
+        if (interrupted) safeSet(walletId, JSON.stringify({ interrupted }));
+        return;
+    }
     if (view === 'home') {
         // Home is the implicit default; storing it just creates noise
         // and a future "go home" navigation reads the same answer.
@@ -174,6 +188,28 @@ export function writeLastView(walletId, view, params = null) {
         return;
     }
     safeSet(walletId, view);
+}
+
+/**
+ * Consume the one-shot note left when a restart abandons a transaction route.
+ * The marker shares the last-view key so a safe route and an interrupted route
+ * cannot both claim the next launch.
+ *
+ * @param {string | null | undefined} walletId
+ * @returns {'send' | 'swap' | null}
+ */
+export function takeInterruptedView(walletId) {
+    if (typeof walletId !== 'string' || !walletId) return null;
+    const raw = safeGet(walletId);
+    if (typeof raw !== 'string' || !raw) return null;
+    try {
+        const interrupted = JSON.parse(raw)?.interrupted;
+        if (interrupted !== 'send' && interrupted !== 'swap') return null;
+        safeRemove(walletId);
+        return interrupted;
+    } catch {
+        return null;
+    }
 }
 
 /**

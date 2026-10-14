@@ -263,6 +263,8 @@ export const en = {
         'You are offline. Showing cached balances and their last synced time. Network actions will be available when your connection returns.',
     'home.offline.empty': 'You are offline. Connect to load balances and use network actions.',
     'home.updatingBalances': 'Updating balances…',
+    'home.interruptedAction':
+        'A {action} was interrupted. Nothing was submitted automatically. Check Activity before trying again.',
     'home.loadingBalances': 'Loading balances',
     'home.pendingAirdrops': 'Pending airdrops',
     'home.resumeAirdrop': 'Resume airdrop: {amount} {token} × {count}',
@@ -938,6 +940,8 @@ export const en = {
 
     // --- browser extension ---------------------------------------
     'extension.approval.loading': 'Loading approval request…',
+    'extension.approval.interrupted':
+        'This approval was interrupted. Return to the site and try again.',
     'extension.approval.unsupported': 'Unsupported approval request type.',
     'extension.approval.reject': 'Reject',
     'extension.approval.requestingSite': 'Requesting site',

@@ -40,6 +40,7 @@ import {
 } from '../../schemas/settings.js';
 import { humanizeError } from '../utils/humanizeError.js';
 import { writeActiveWallet } from '../utils/activeWalletMemory.js';
+import { takeInterruptedView } from '../utils/lastViewMemory.js';
 import { loadDisplayBalances } from '../utils/displayBalances.js';
 import { readBalanceCache, writeBalanceCache } from '../utils/balanceCache.js';
 import { explorerReadFailure, rateLimitedMessage } from '../../sdk/explorerErrors.js';
@@ -212,6 +213,20 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
         /** @type {string | null} */ (null),
     );
     const activeWalletId = activeWalletIdProp ?? activeWalletIdLocal;
+    const [interruptedAction, setInterruptedAction] = useState(
+        /** @type {'send' | 'swap' | null} */ (null),
+    );
+    useEffect(() => {
+        setInterruptedAction(null);
+        if (!activeWalletId) return undefined;
+        // Normal navigation back to Home clears the marker in the parent
+        // route effect first. A restart does not, so only that marker survives
+        // until this next task and becomes a visible note.
+        const timer = setTimeout(() => {
+            setInterruptedAction(takeInterruptedView(activeWalletId));
+        }, 0);
+        return () => clearTimeout(timer);
+    }, [activeWalletId]);
     const settings = useSettings();
     const walletMode = settings.settings?.walletMode || WALLET_MODE_DEFAULT;
     const isSignerMode = walletMode === 'signer';
@@ -1236,6 +1251,11 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             <ListPage className={isFull ? styles.bodyFull : undefined}>
                 {/* Home has no PageHeader, so its one h1 is visually hidden. */}
                 <h1 className="sr-only">{t('home.title')}</h1>
+                {interruptedAction ? (
+                    <StatusMessage variant="warning">
+                        {t('home.interruptedAction', { action: interruptedAction })}
+                    </StatusMessage>
+                ) : null}
                 {offline ? (
                     <StatusMessage variant="warning">
                         {balances
