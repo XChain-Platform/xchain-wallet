@@ -12,9 +12,8 @@
 //
 // Live:
 //   - Developer Mode master toggle (`settings.developerMode`). Gates
-//     regtest visibility in chain pickers (currently applied in
-//     NetworkEndpointsSection; broader picker application lands in a
-//     follow-up step).
+//     non-Mainnet choices, endpoint overrides, local controls, and
+//     diagnostics. Turning it off also returns the wallet to Mainnet.
 //   - Learn Mode toggle (`settings.learnMode`). Drives explanatory
 // copy on confirmation screens. a later change gave it its first reader:
 //     DisplayPrefsGate stamps it on <html> and <LearnNote> renders the
@@ -86,7 +85,7 @@ const AUTO_SIGN_LABELS = {
     [schemas.settings.AUTO_SIGN_LOCALHOST_1H]: '1 hour',
 };
 
-export function DeveloperModeSection({ onNavigateToMint } = {}) {
+export function DeveloperModeSection({ onNavigateToMint, reload = reloadPage } = {}) {
     const { settings, loading, error, update } = useSettings();
     if (loading) return <Status text="Loading…" />;
     if (error) return <SettingsLoadError error={error} />;
@@ -101,13 +100,30 @@ export function DeveloperModeSection({ onNavigateToMint } = {}) {
         }
     };
 
+    const onDeveloperModeToggle = async (next) => {
+        const returnToMainnet = !next && settings.activeNetwork !== 'mainnet';
+        if (!returnToMainnet) {
+            await onToggle('developerMode', next);
+            return;
+        }
+        try {
+            await update({ developerMode: false, activeNetwork: 'mainnet' });
+            reload();
+        } catch (err) {
+            // eslint-disable-next-line no-console
+            console.error('developerMode update failed:', err);
+        }
+    };
+
+    const developerMode = Boolean(settings.developerMode);
+
     return (
         <div style={STACK}>
             <ToggleRow
                 label="Developer Mode"
-                hint="Unlocks test networks, custom chains, preview tools, local app controls, and diagnostics."
-                checked={Boolean(settings.developerMode)}
-                onChange={(v) => onToggle('developerMode', v)}
+                hint="Unlocks test networks, endpoint overrides, custom chains, preview tools, local app controls, and diagnostics. Turning it off returns the wallet to Mainnet."
+                checked={developerMode}
+                onChange={onDeveloperModeToggle}
             />
             <ToggleRow
                 label="Learn Mode"
@@ -115,35 +131,42 @@ export function DeveloperModeSection({ onNavigateToMint } = {}) {
                 checked={Boolean(settings.learnMode)}
                 onChange={(v) => onToggle('learnMode', v)}
             />
-            <ToggleRow
-                label="Show variant popover"
-                hint="In the web app, display a floating switcher for previewing each wallet layout when Developer Mode is enabled."
-                checked={Boolean(settings.showVariantBadge)}
-                disabled={!settings.developerMode}
-                onChange={(v) => onToggle('showVariantBadge', v)}
-            />
-            <RegtestNetworksRow developerMode={Boolean(settings.developerMode)} fees={settings.fees} />
-            <RegtestFaucetRow
-                developerMode={Boolean(settings.developerMode)}
-                fees={settings.fees}
-                onNavigateToMint={onNavigateToMint}
-            />
-            <CustomChainsRow developerMode={Boolean(settings.developerMode)} />
-            <ToggleRow
-                label="Auto-approve localhost dApps"
-                hint="Let local development apps connect without asking while continuing to require the signing setting below."
-                checked={Boolean(settings.autoApproveLocalhost)}
-                disabled={!settings.developerMode}
-                onChange={(v) => onToggle('autoApproveLocalhost', v)}
-            />
-            <AutoSignLocalhostRow
-                developerMode={Boolean(settings.developerMode)}
-                value={settings.autoSignLocalhostMs}
-                onChange={(v) => onToggle('autoSignLocalhostMs', v)}
-            />
-            <LogConsoleRow developerMode={Boolean(settings.developerMode)} />
+            {developerMode ? (
+                <>
+                    <ToggleRow
+                        label="Show variant popover"
+                        hint="In the web app, display a floating switcher for previewing each wallet layout when Developer Mode is enabled."
+                        checked={Boolean(settings.showVariantBadge)}
+                        onChange={(v) => onToggle('showVariantBadge', v)}
+                    />
+                    <RegtestNetworksRow developerMode fees={settings.fees} />
+                    <RegtestFaucetRow
+                        developerMode
+                        fees={settings.fees}
+                        onNavigateToMint={onNavigateToMint}
+                    />
+                    <CustomChainsRow developerMode />
+                    <ToggleRow
+                        label="Auto-approve localhost dApps"
+                        hint="Let local development apps connect without asking while continuing to require the signing setting below."
+                        checked={Boolean(settings.autoApproveLocalhost)}
+                        disabled={!settings.developerMode}
+                        onChange={(v) => onToggle('autoApproveLocalhost', v)}
+                    />
+                    <AutoSignLocalhostRow
+                        developerMode
+                        value={settings.autoSignLocalhostMs}
+                        onChange={(v) => onToggle('autoSignLocalhostMs', v)}
+                    />
+                    <LogConsoleRow developerMode />
+                </>
+            ) : null}
         </div>
     );
+}
+
+function reloadPage() {
+    if (typeof globalThis.location?.reload === 'function') globalThis.location.reload();
 }
 
 // The timeout options come from the schema so the control cannot persist an unsupported value.

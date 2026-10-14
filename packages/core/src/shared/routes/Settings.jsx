@@ -264,12 +264,16 @@ export function Settings({
             title: 'Network',
             // Optional-chained: settings is null until the async read lands,
             // and the section list renders during that window.
-            description: settings?.developerMode
+            description: settings?.developerMode === true
                 ? 'Choose Mainnet, Testnet, or Regtest to control which chains the wallet queries and displays; changing the network reloads the page.'
-                : 'Choose Mainnet or Testnet to control which chains the wallet queries and displays; changing the network reloads the page.',
-            keywords: settings?.developerMode
+                : settings?.developerMode === false
+                    ? 'Mainnet is active. Turn on Developer mode to choose a test network.'
+                    : 'Choose Mainnet or Testnet to control which chains the wallet queries and displays; changing the network reloads the page.',
+            keywords: settings?.developerMode === true
                 ? 'network active mainnet testnet regtest filter chain switch mode dev'
-                : 'network active mainnet testnet filter chain switch mode',
+                : settings?.developerMode === false
+                    ? 'network active mainnet developer mode'
+                    : 'network active mainnet testnet filter chain switch mode',
             kind: 'panel',
             Component: NetworkSection,
             // The section needs the wallet so the switch can derive
@@ -283,6 +287,7 @@ export function Settings({
             keywords: 'network endpoints explorer encoder hub url chain registry reset default save',
             kind: 'internal-drill',
             Component: NetworkEndpointsSection,
+            visible: settings?.developerMode !== false,
             summary: endpointsSummary(settings),
         },
         {
@@ -327,7 +332,7 @@ export function Settings({
             keywords: 'developer mode learn variant popover regtest networks faucet mint custom chains endpoints diagnostics logs console localhost dapps auto approve auto sign cache password miner url',
             kind: 'internal-drill',
             Component: DeveloperModeSection,
-            props: { onNavigateToMint },
+            props: { onNavigateToMint, reload },
             summary: developerSummary(settings),
         },
         ...(desktopUpdaterBridge() ? [{
@@ -356,7 +361,7 @@ export function Settings({
     // "Rendered fewer hooks than expected" guard.
     const filtered = useMemo(() => {
         const q = normalizeSearchText(query);
-        if (!q) return sections;
+        if (!q) return sections.filter((s) => s.visible !== false);
         return sections.filter((s) => {
             if (s.visible === false) return false;
             const searchable = normalizeSearchText([
@@ -373,7 +378,7 @@ export function Settings({
     // ─── Subpage view ─────────────────────────────────────────────
 
     if (subpageId) {
-        const section = sections.find((s) => s.id === subpageId);
+        const section = sections.find((s) => s.id === subpageId && s.visible !== false);
         if (section && section.kind === 'internal-drill' && section.Component) {
             const SectionComponent = section.Component;
             const subpageHeader = (
