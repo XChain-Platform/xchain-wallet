@@ -341,33 +341,7 @@
     min-width: 0;
 }
 
-/* About-section tab strip on the address detail view. */
-.tabsRow {
-    display: flex;
-    gap: 0;
-    border-bottom: 1px solid var(--xc-border);
-    margin: var(--xc-space-3) 0 0;
-}
-
-.tab {
-    appearance: none;
-    background: transparent;
-    border: none;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
-    padding: var(--xc-space-3) var(--xc-space-3);
-    color: var(--xc-text-muted);
-    font: inherit;
-    font-size: var(--xc-text-sm);
-    font-weight: 700;
-    cursor: pointer;
-}
-
-.tabActive {
-    color: var(--xc-accent-text);
-    border-bottom-color: var(--xc-accent-primary);
-}
-
+/* Detail cards under the quick actions on the address detail view. */
 .tabPanel {
     padding: var(--xc-space-3) 0;
 }
