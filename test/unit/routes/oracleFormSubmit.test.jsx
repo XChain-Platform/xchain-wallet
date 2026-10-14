@@ -110,7 +110,7 @@ function recordingMessaging({ feeds = [], feedsError = null, consumers = { suppo
     return { messaging, calls };
 }
 
-async function mountForm(opts = {}) {
+async function mountForm({ formProps = {}, ...opts } = {}) {
     const { messaging, calls } = recordingMessaging(opts);
     let utils;
     await domAct(async () => {
@@ -122,6 +122,7 @@ async function mountForm(opts = {}) {
                     walletId: 'w',
                     onBack() {},
                     initialChainId: 'bitcoin-mainnet',
+                    ...formProps,
                 }),
             ),
         );
@@ -211,6 +212,20 @@ describe('OracleForm submit payload', () => {
         });
     });
 
+    it('ignores a requested publishing address the wallet does not own', async () => {
+        const { utils, calls } = await mountForm({
+            formProps: { initialFromAddress: 'bc1qnotinthiswallet' },
+        });
+        await fill(utils, { tick: 'PEPECASH', value: '0.05' });
+        await preview(utils);
+        await clickSubmit(utils);
+
+        const publish = calls.find((call) => call.method === 'oraclePriceAction');
+        expect(publish.args.from.address).toBe(HD_ADDRESS.address);
+        expect(calls.find((call) => call.method === 'oracleFeeds').args.address)
+            .toBe(HD_ADDRESS.address);
+    });
+
     it('offers a published price as an action and prefills its values', async () => {
         const { utils } = await mountForm({ feeds: liveFeed('0.05') });
 
@@ -242,7 +257,9 @@ describe('OracleForm pre-review validation', () => {
         ['', /Enter a positive price with at most 8 decimal places/i],
         ['0', /Enter a positive price with at most 8 decimal places/i],
         ['-0.1', /Enter a positive price with at most 8 decimal places/i],
+        ['1e-8', /Enter a positive price with at most 8 decimal places/i],
         ['0.123456789', /Enter a positive price with at most 8 decimal places/i],
+        ['10000000000', /Enter a price below 10,000,000,000 with at most 8 decimal places/i],
     ])('stops the invalid price %j before compose', async (value, message) => {
         const { utils, calls } = await mountForm();
         await fill(utils, { value });
