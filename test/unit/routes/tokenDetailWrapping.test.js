@@ -27,4 +27,10 @@ describe('token detail long labels', () => {
         expect(hero).toMatch(/overflow-wrap:\s*anywhere/);
         expect(subasset).toMatch(/overflow-wrap:\s*anywhere/);
     });
+
+    it('lets the price stats wrap instead of cutting a value to an ellipsis', () => {
+        const stats = tokenCss.match(/\.stats\s*\{[^}]*\}/s)?.[0] || '';
+        expect(stats).toMatch(/flex-wrap:\s*wrap/);
+        expect(stats).not.toMatch(/grid-template-columns:\s*1fr 1fr 1fr/);
+    });
 });
