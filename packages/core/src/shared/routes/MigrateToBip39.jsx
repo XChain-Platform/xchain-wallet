@@ -373,7 +373,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                             if (error) setError(null);
                         }}
                         autoComplete="off"
-                        autoCapitalize="none"
+                        autoCapitalize="off"
                         autoCorrect="off"
                         spellCheck={false}
                     />

@@ -102,9 +102,13 @@ describe('Automatic Donation System settings', () => {
         const amount = screen.getByLabelText('Bitcoin per-transaction amount');
         const threshold = screen.getByLabelText('Bitcoin trigger threshold');
         expect(amount.type).toBe('text');
-        expect(amount.inputMode).toBe('decimal');
+        expect(amount.inputMode).toBe('numeric');
+        expect(amount).toHaveAttribute('enterkeyhint', 'done');
+        expect(amount).toHaveAttribute('autocomplete', 'off');
         expect(threshold.type).toBe('text');
-        expect(threshold.inputMode).toBe('decimal');
+        expect(threshold.inputMode).toBe('numeric');
+        expect(threshold).toHaveAttribute('enterkeyhint', 'done');
+        expect(threshold).toHaveAttribute('autocomplete', 'off');
 
         fireEvent.wheel(amount, { deltaY: -100 });
         expect(amount.value).toBe('1000');

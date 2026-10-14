@@ -331,6 +331,8 @@ export function FeeSelector({
                                             id={feeInputId}
                                             type="text"
                                             inputMode="decimal"
+                                            enterKeyHint="done"
+                                            autoComplete="off"
                                             min={0}
                                             step="any"
                                             className={`${styles.customInput} ${styles.feeInput}`}
@@ -377,6 +379,8 @@ export function FeeSelector({
                                         id={customInputId}
                                         type="text"
                                         inputMode="decimal"
+                                        enterKeyHint="done"
+                                        autoComplete="off"
                                         min={0.00000001}
                                         step="any"
                                         className={styles.customInput}

@@ -125,13 +125,41 @@ describe('browser autocomplete policy', () => {
                     failures.push(description(path, entry));
                     continue;
                 }
-                if (/(mnemonic|recovery phrase|private key|\bwif\b)/i.test(text)
-                    && entry.attributes.spellCheck !== 'false') {
-                    failures.push(`${description(path, entry)} enables spellcheck`);
+                if (/(mnemonic|recovery phrase)/i.test(text)) {
+                    if (entry.attributes.autoCapitalize !== 'off') {
+                        failures.push(`${description(path, entry)} enables capitalization`);
+                    }
+                    if (entry.attributes.autoCorrect !== 'off') {
+                        failures.push(`${description(path, entry)} enables autocorrect`);
+                    }
+                }
+                if (/(mnemonic|recovery phrase|private key|\bwif\b)/i.test(text)) {
+                    if (entry.attributes.spellCheck !== 'false') {
+                        failures.push(`${description(path, entry)} enables spellcheck`);
+                    }
                 }
             }
         }
         expect(failures).toEqual([]);
+    });
+
+    it('keeps recovery-word verification fields free of text transformations', () => {
+        const recoveryWordFields = [
+            ...fileEnding('CreateWallet.jsx').controls.filter(
+                (entry) => /^`Word \$\{p\}`$/.test(entry.attributes.label),
+            ),
+            ...fileEnding('MigrateToBip39.jsx').controls.filter(
+                (entry) => /^`Word \$\{position\}`$/.test(entry.attributes.label),
+            ),
+        ];
+
+        expect(recoveryWordFields).toHaveLength(2);
+        for (const entry of recoveryWordFields) {
+            expect(entry.attributes.autoComplete).toBe('off');
+            expect(entry.attributes.autoCapitalize).toBe('off');
+            expect(entry.attributes.autoCorrect).toBe('off');
+            expect(entry.attributes.spellCheck).toBe('false');
+        }
     });
 
     it('turns browser autocomplete off for address entry fields', () => {
