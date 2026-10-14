@@ -364,7 +364,7 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
     return wrap(
         <ListPage
             toolbar={(
-                <>
+                <div className={local.toolbar} style={{ flexWrap: 'wrap' }}>
                     <div className={local.searchField}>
                         <Input
                             type="search"
@@ -380,8 +380,14 @@ export function DispensersList({ walletId, activeAccountId, onOpenDispenser, onC
                             aria-label="Search dispensers"
                         />
                     </div>
-                    <NetworkFilterDropdown value={network} onChange={setNetwork} />
-                </>
+                    <div className={local.searchField}>
+                        <NetworkFilterDropdown
+                            value={network}
+                            onChange={setNetwork}
+                            announceNetworkCount
+                        />
+                    </div>
+                </div>
             )}
         >
             {loadErrors.length > 0 ? (

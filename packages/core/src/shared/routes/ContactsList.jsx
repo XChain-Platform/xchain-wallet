@@ -913,39 +913,43 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     return wrap(
         <ListPage
             toolbar={(
-                <>
-                <div className={picker.search}>
-                    <Input
-                        type="search"
-                        enterKeyHint="search"
-                        autoCapitalize="off"
-                        placeholder="Search"
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                        autoComplete="off"
-                        autoCorrect="off"
-                        spellCheck={false}
-                        aria-label="Search contacts"
+                <div className={picker.toolbar}>
+                    <div className={picker.search}>
+                        <Input
+                            type="search"
+                            enterKeyHint="search"
+                            autoCapitalize="off"
+                            placeholder="Search"
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                            autoComplete="off"
+                            autoCorrect="off"
+                            spellCheck={false}
+                            aria-label="Search contacts"
+                        />
+                    </div>
+                    <NetworkFilterDropdown
+                        value={networkFilter}
+                        onChange={setNetworkFilter}
+                        announceNetworkCount
                     />
+                    <div className={picker.sort}>
+                        <Select
+                            value={sortBy}
+                            onChange={(e) => {
+                                const value = /** @type {'name' | 'newest'} */ (e.target.value);
+                                setSortBy(value);
+                                persistContactsSort(walletId, value);
+                            }}
+                            aria-label="Sort contacts"
+                        >
+                            {/* Native options remain because Select renders a native listbox. */}
+                            <option value="name">A to Z</option>
+                            {/* Native options remain because Select renders a native listbox. */}
+                            <option value="newest">Newest</option>
+                        </Select>
+                    </div>
                 </div>
-                <NetworkFilterDropdown value={networkFilter} onChange={setNetworkFilter} />
-                <div className={picker.sort}>
-                    <Select
-                        value={sortBy}
-                        onChange={(e) => {
-                            const value = /** @type {'name' | 'newest'} */ (e.target.value);
-                            setSortBy(value);
-                            persistContactsSort(walletId, value);
-                        }}
-                        aria-label="Sort contacts"
-                    >
-                        {/* Native options remain because Select renders a native listbox. */}
-                        <option value="name">A to Z</option>
-                        {/* Native options remain because Select renders a native listbox. */}
-                        <option value="newest">Newest</option>
-                    </Select>
-                </div>
-                </>
             )}
         >
             {duplicateGroups.length > 0 ? (
