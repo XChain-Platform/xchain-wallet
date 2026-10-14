@@ -704,17 +704,20 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         setLabelSave({ request, addressId });
         setLabelError(null);
         try {
-            await messaging.setAddressLabel(addressId, next);
+            const result = await messaging.setAddressLabel(addressId, next);
             if (labelRequestRef.current !== request || receiveContextRef.current !== contextKey) return;
+            const savedLabel = typeof result?.label === 'string'
+                ? result.label
+                : (next || 'Address');
             setAddress((current) => (
-                current?.id === addressId ? { ...current, label: next } : current
+                current?.id === addressId ? { ...current, label: savedLabel } : current
             ));
             setChainsByWallet((current) => Object.fromEntries(
                 Object.entries(current || {}).map(([chainId, records]) => [
                     chainId,
                     Array.isArray(records)
                         ? records.map((record) => record?.id === addressId
-                            ? { ...record, label: next }
+                            ? { ...record, label: savedLabel }
                             : record)
                         : records,
                 ]),

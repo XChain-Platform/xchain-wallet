@@ -2363,16 +2363,17 @@ export function createBackgroundHost(deps) {
     host.register('addresses.setLabel', async (req, { vault }) => {
         const id = req?.id;
         if (!id) throw new Error('addresses.setLabel: id is required');
-        const label = typeof req?.label === 'string' ? req.label : '';
         const rec = await vault.addresses.get(id);
         if (!rec) throw new Error('addresses.setLabel: address not found');
+        const requestedLabel = typeof req?.label === 'string' ? req.label.trim() : '';
+        const label = requestedLabel || schemas.address.defaultAddressLabel(rec);
         await vault.addresses.put({ ...rec, label });
         // §19.5.2 auto-sync: the label just changed on disk, so the
         // on-chain copy is stale. The scheduler batches this with every
         // other rename in the burst.
         const account = rec.accountId ? await vault.accounts.get(rec.accountId) : null;
         noteLabelChange({ vault }, account?.walletId ?? null);
-        return { ok: true };
+        return { ok: true, label };
     });
 
     // Keep hidden addresses in the vault and off the main list. The list's
