@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
     installWipeHook: vi.fn(),
     defaultRegistry: vi.fn(),
     syncRegistry: vi.fn(),
+    setLocale: vi.fn(),
     flows: { marker: 'flows' },
 }));
 
@@ -22,7 +23,7 @@ vi.mock('@xchain-wallet/core', () => ({
     flows: mocks.flows,
     i18n: {
         availableLocales: vi.fn(() => ['en']),
-        setLocale: vi.fn(),
+        setLocale: mocks.setLocale,
     },
     registry: {
         defaultRegistry: mocks.defaultRegistry,
@@ -51,6 +52,8 @@ beforeEach(() => {
     mocks.syncRegistry.mockResolvedValue({ ok: true });
     mocks.getSettings.mockResolvedValue({});
     mocks.initPanicModePersistence.mockResolvedValue(undefined);
+    mocks.setLocale.mockResolvedValue('en');
+    mocks.hydrateCustomChains.mockReset();
 });
 
 describe('approval entrypoint fallbacks', () => {
@@ -82,5 +85,14 @@ describe('approval entrypoint fallbacks', () => {
             'offline',
         );
         expect(mocks.render).toHaveBeenCalledOnce();
+    });
+
+    it('re-renders after restoring the saved approval locale', async () => {
+        mocks.getSettings.mockResolvedValue({ language: 'en' });
+
+        await import('../../../packages/extension/src/approval/main.jsx');
+        await vi.waitFor(() => expect(mocks.setLocale).toHaveBeenCalledWith('en'));
+
+        expect(mocks.render).toHaveBeenCalledTimes(2);
     });
 });

@@ -120,6 +120,17 @@ describe('settings form validation', () => {
         expect(screen.getByRole('option', { name: 'pseudo-rtl' })).toHaveValue('pseudo-rtl');
     });
 
+    it('applies and persists a selected language', async () => {
+        settings = { ...settings, developerMode: true };
+        render(<LanguageRegionSection />);
+
+        fireEvent.change(screen.getByLabelText('Language'), { target: { value: 'pseudo-rtl' } });
+
+        await waitFor(() => expect(update).toHaveBeenCalledWith({ language: 'pseudo-rtl' }));
+        expect(document.documentElement.lang).toBe('en');
+        expect(document.documentElement.dir).toBe('rtl');
+    });
+
     it('confirms contact imports through a danger action', async () => {
         render(<ContactsSection />);
         await screen.findByText('0 contacts stored');

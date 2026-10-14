@@ -4,13 +4,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { useState } from 'react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import {
     getLocale,
     registerLocale,
     setLocale,
     t,
 } from '../../../packages/core/src/i18n/index.js';
+import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 
 let settings;
 
@@ -45,5 +47,32 @@ describe('LocaleSync', () => {
         await waitFor(() => expect(getLocale()).toBe('restart-test'));
         expect(t('common.back')).toBe('Retour');
         expect(t('common.cancel')).toBe('Cancel');
+    });
+
+    it('re-renders translated shell content without resetting screen state', async () => {
+        registerLocale('live-test', { 'common.back': 'Retour en direct' });
+        settings = { language: 'en' };
+
+        function LiveScreen() {
+            const [count, setCount] = useState(0);
+            return (
+                <button type="button" onClick={() => setCount((value) => value + 1)}>
+                    {t('common.back')} {count}
+                </button>
+            );
+        }
+
+        render(
+            <MessagingProvider shell="web" messaging={{}}>
+                <LiveScreen />
+            </MessagingProvider>,
+        );
+        fireEvent.click(screen.getByRole('button', { name: 'Back 0' }));
+
+        await act(() => setLocale('live-test'));
+
+        expect(screen.getByRole('button', { name: 'Retour en direct 1' })).toBeTruthy();
+        expect(document.documentElement.lang).toBe('live-test');
+        expect(document.documentElement.dir).toBe('ltr');
     });
 });
