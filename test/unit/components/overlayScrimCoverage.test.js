@@ -35,3 +35,19 @@ describe('modal scrims cover the whole viewport', () => {
         expect(overlay).toMatch(/background:\s*var\(--xc-overlay,\s*rgba\(15, 23, 42, 0\.55\)\)/);
     });
 });
+
+describe('popover header', () => {
+    it('start-aligns the title in the first cell with no centring spacer before it', () => {
+        const css = readFileSync('packages/core/src/shared/components/OverlaySurface.module.css', 'utf8');
+        const header = /\.popover \.header\s*\{([^}]*)\}/.exec(css)?.[1] || '';
+        const title = /\.popover \.title\s*\{([^}]*)\}/.exec(css)?.[1] || '';
+        const close = /\.popover \.close\s*\{([^}]*)\}/.exec(css)?.[1] || '';
+        expect(header).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\) var\(--xc-control-h-md\)/);
+        expect(header).toMatch(/padding-inline:\s*var\(--xc-space-2\)/);
+        expect(title).toMatch(/grid-column:\s*1/);
+        expect(title).toMatch(/text-align:\s*start/);
+        expect(close).toMatch(/grid-column:\s*2/);
+        // The override must come after the base close cell or it loses the cascade.
+        expect(css.indexOf('.popover .close')).toBeGreaterThan(css.indexOf('\n.close {'));
+    });
+});

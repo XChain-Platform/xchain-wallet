@@ -93,6 +93,7 @@
 }
 
 .popover .title {
+    grid-column: 1;
     text-align: start;
 }
 
@@ -127,6 +128,18 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+}
+
+/* A popover's title is start-aligned, so it needs no centring spacer cell;
+   with one it sat indented a control's width past the rows below it. The
+   inline inset matches the one popover sections carry inside the surface. */
+.popover .header {
+    grid-template-columns: minmax(0, 1fr) var(--xc-control-h-md);
+    padding-inline: var(--xc-space-2);
+}
+
+.popover .close {
+    grid-column: 2;
 }
 
 .body {
