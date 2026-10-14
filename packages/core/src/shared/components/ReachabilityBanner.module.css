@@ -1,20 +1,17 @@
-/* §49.1 / §49.2 - Offline / degraded reachability banner. Sits above
-   the unlocked route surface. Two variants: degraded (yellow) and
-   offline (red). Layout-light so it works in both popup and web shells.
-*/
+/* §49.1 / §49.2 - Compact reachability notice below the app header. */
 
 .banner {
     display: flex;
     align-items: center;
-    gap: var(--xc-space-2);
-    padding: var(--xc-card-pad);
-    border-radius: var(--xc-card-radius);
-    border: 1px solid;
-    font-size: var(--xc-text-sm);
-    margin-block: var(--xc-space-2);
-    /* The shell publishes a per-tier notice inset beside its page gutter, so
-       the notice lines up with route content; the popup has no tiers and
-       keeps the compact inset. */
+    flex-wrap: nowrap;
+    gap: 6px;
+    min-width: 0;
+    min-height: var(--xc-tap-min);
+    padding-inline: var(--xc-space-2);
+    border-block: 1px solid;
+    font-size: var(--xc-text-xs);
+    line-height: 1.2;
+    white-space: nowrap;
     margin-inline: var(--xc-notice-inset, var(--xc-space-3));
 }
 
@@ -30,57 +27,32 @@
     color: var(--xc-danger-text, #5c1216);
 }
 
-.icon {
-    font-size: 1.25em;
-    flex-shrink: 0;
-}
-
-.body {
-    flex: 1;
+.message {
+    flex: 1 1 auto;
     min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-.title {
-    font-weight: 600;
-}
-
-.detail {
-    color: inherit;
-    opacity: 0.9;
-    font-size: var(--xc-text-xs);
-    line-height: 1.4;
-    max-height: 5.6em;
-    overflow-y: auto;
-}
-
-.staleness {
-    font-style: italic;
-    margin-inline-start: var(--xc-space-1);
-}
-
-.retry {
-    padding: var(--xc-space-1) 10px;
-    border-radius: var(--xc-radius-sm);
-    border: 1px solid currentColor;
+.retry,
+.detailsToggle {
+    min-height: var(--xc-tap-min);
+    padding: 0 2px;
+    border: 0;
     background: transparent;
     color: inherit;
     cursor: pointer;
     font: inherit;
-    font-size: var(--xc-text-xs);
-    flex-shrink: 0;
-    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
-       inheriting it from whichever line box the platform font produces. */
-    min-height: var(--xc-tap-min);
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 2px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
 }
 
-.retry:hover {
-    background: rgba(0, 0, 0, 0.05);
+.retry {
+    flex: 0 0 auto;
 }
 
 .retry:disabled {
@@ -88,14 +60,64 @@
     opacity: 0.7;
 }
 
-/* §53 / Cluster K FOLLOWUP 2 - explicit focus ring. */
-.retry:focus-visible {
+.details {
+    position: relative;
+    flex: 0 0 auto;
+}
+
+.detailsToggle {
+    list-style: none;
+}
+
+.detailsToggle::-webkit-details-marker {
+    display: none;
+}
+
+.coinList {
+    position: absolute;
+    z-index: 20;
+    inset-block-start: calc(100% + var(--xc-space-1));
+    inset-inline-end: 0;
+    min-width: 9rem;
+    margin: 0;
+    padding: var(--xc-space-2);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-sm);
+    background: var(--xc-surface-raised, var(--xc-surface));
+    color: var(--xc-text);
+    box-shadow: var(--xc-shadow-md, 0 4px 14px rgba(0, 0, 0, 0.18));
+    list-style: none;
+}
+
+.coin {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-height: 28px;
+}
+
+.coin img,
+.coinFallback {
+    width: 20px;
+    height: 20px;
+    flex: 0 0 20px;
+    border-radius: 50%;
+}
+
+.coinFallback {
+    background: currentColor;
+    opacity: 0.3;
+}
+
+.retry:focus-visible,
+.detailsToggle:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
+    outline-offset: -2px;
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .retry {
+    .retry,
+    .detailsToggle {
         transition: none;
     }
 }

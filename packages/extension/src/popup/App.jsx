@@ -230,7 +230,6 @@ export function App() {
     return (
         <MessagingProvider shell={shell} messaging={messaging}>
             <ToastHost>
-                <ReachabilityBanner />
                 <RouteErrorBoundary>
                     <AppInner canOpenInTab={canOpenInTab} titleEnabled={shell === 'web'} />
                 </RouteErrorBoundary>
@@ -2806,6 +2805,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
                             activeNetwork={settings?.activeNetwork}
                         />
                     )}
+                    notices={<ReachabilityBanner />}
                     bottomBar={(
                         <BottomTabBar
                             currentView={unlockedView}
