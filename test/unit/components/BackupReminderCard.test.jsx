@@ -7,6 +7,8 @@
 // General Public License v3.0 or later; see LICENSE.md.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 
@@ -14,6 +16,11 @@ import { markBackupVerified } from '../../../packages/core/src/flows/backupRemin
 import { BackupReminderCard } from '../../../packages/core/src/shared/components/BackupReminderCard.jsx';
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
 import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
+
+const cardStyles = readFileSync(join(
+    process.cwd(),
+    'packages/core/src/shared/components/BackupReminderCard.module.css',
+), 'utf8');
 
 const NOW = Date.parse('2026-10-13T12:00:00.000Z');
 function mount(props = {}) {
@@ -72,6 +79,18 @@ describe('BackupReminderCard', () => {
         const remind = screen.getByRole('button', { name: 'Remind me tomorrow' });
         expect(backup).toHaveClass(buttonStyles.btn, buttonStyles.sm);
         expect(remind).toHaveClass(buttonStyles.btn, buttonStyles.sm);
+    });
+
+    it.each([360, 844, 1280])('wraps whole action buttons inside the card at %ipx', async (viewportWidth) => {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: viewportWidth });
+        mount();
+
+        const backup = await screen.findByRole('button', { name: 'Back up now' });
+        const remind = screen.getByRole('button', { name: 'Remind me tomorrow' });
+        expect(backup.parentElement).toBe(remind.parentElement);
+        expect(cardStyles).toMatch(
+            /\.actions\s*\{[^}]*display:\s*flex;[^}]*flex-wrap:\s*wrap;[^}]*max-width:\s*100%;[^}]*min-width:\s*0;/,
+        );
     });
 
     it('runs the backup action and snoozes the gentle reminder for 24 hours', async () => {
