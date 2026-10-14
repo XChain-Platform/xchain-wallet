@@ -30,10 +30,24 @@ const INTERACTIVE_SELECTOR = [
 
 async function expectVisualTabOrderAndFocusRings(page, form, label) {
     const controls = await form.locator(INTERACTIVE_SELECTOR).evaluateAll((elements) => {
+        // A native radio group is one Tab stop: the checked radio, or the
+        // first one while none is checked. Arrow keys move within the group.
+        const radioStop = (element) => {
+            if (element.type !== 'radio' || !element.name) return true;
+            const group = [...(element.form || document).querySelectorAll('input[type="radio"]')]
+                .filter((radio) => radio.name === element.name);
+            const checked = group.find((radio) => radio.checked);
+            return checked ? checked === element : group[0] === element;
+        };
         const visible = elements.filter((element) => {
             const style = getComputedStyle(element);
             const rect = element.getBoundingClientRect();
+            // Content of a closed disclosure is not focusable until it opens.
+            const closedDisclosure = element.closest('details:not([open])');
+            const insideClosed = closedDisclosure && !element.closest('summary');
             return element.tabIndex >= 0
+                && !insideClosed
+                && radioStop(element)
                 && style.visibility !== 'hidden'
                 && style.display !== 'none'
                 && rect.width > 0
@@ -67,7 +81,11 @@ async function expectVisualTabOrderAndFocusRings(page, form, label) {
     ));
     const reached = [];
     const missingRings = [];
-    for (let index = 0; index <= pageStops; index += 1) {
+    // Chromium also stops on elements this count leaves out (disclosure
+    // summaries such as the reachability notice's Details, and keyboard-
+    // focusable scroll containers), so the walk allows a margin past the
+    // count; it still ends as soon as every form control has been reached.
+    for (let index = 0; index <= pageStops * 2 + 10; index += 1) {
         await page.keyboard.press('Tab');
         const stop = await page.evaluate(() => {
             const element = document.activeElement;

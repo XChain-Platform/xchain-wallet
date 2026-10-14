@@ -92,6 +92,9 @@ async function geometry(page) {
             firstRight: firstBox.right,
             firstWidth: firstBox.width,
             pageHeaderLeft: pageHeader?.getBoundingClientRect().left ?? null,
+            // Balanced scrollbar lanes reserve a start-edge gutter inside the
+            // scroller; the fixed header above it has no scrollbar to balance.
+            startGutter: main.clientLeft,
             scrollbarGutter: borderWidth - main.clientLeft,
             directForms: Array.from(main.children)
                 .filter((element) => element.matches('form, [role="group"]')).length,
@@ -123,7 +126,7 @@ test('page templates keep one responsive gutter and the intended wide-screen sha
 
                 if (measured.pageHeaderLeft !== null) {
                     expect(measured.pageHeaderLeft, 'PageHeader starts on the Screen content edge')
-                        .toBeCloseTo(measured.contentLeft, 5);
+                        .toBeCloseTo(measured.contentLeft - measured.startGutter, 5);
                 }
 
                 if (route.template === 'list') {

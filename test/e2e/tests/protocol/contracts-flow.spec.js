@@ -234,7 +234,7 @@ async function walkExecute(page, viewport) {
     await expect(definitionValue(main, 'Contract')).toHaveText(`#${CONTRACT_INDEX}`);
     await expect(definitionValue(main, 'Deposit')).toHaveText(`${DEPOSIT_AMOUNT} ${DEPOSIT_TICK}`);
     await expect(definitionValue(main, 'Method')).toHaveText('release');
-    await expect(definitionValue(main, 'Params')).toContainText(CALL_AMOUNT);
+    await expect(definitionValue(main, 'Arguments')).toContainText(CALL_AMOUNT);
 
     await page.getByRole('button', { name: 'Back to previous screen' }).click();
     await expect(page.getByRole('heading', { name: `Call contract #${CONTRACT_INDEX}`, exact: true })).toBeVisible();
@@ -246,7 +246,7 @@ async function walkDeploy(page, viewport) {
     await page.getByRole('button', { name: 'Back to contracts list' }).click();
     const main = page.getByRole('main');
     await main.getByRole('button', { name: '+ Publish contract', exact: true }).click();
-    await expectScreen(page, viewport, 'Publish contract on Bitcoin');
+    await expectScreen(page, viewport, 'Publish contract');
 
     await main.getByLabel('Code source', { exact: true }).fill(DEPLOY_SOURCE);
     await main.getByLabel('Gas limit', { exact: true }).fill(DEPLOY_GAS);
@@ -260,7 +260,7 @@ async function walkDeploy(page, viewport) {
     await expect(definitionValue(main, 'Constructor')).toHaveText(CALL_AMOUNT);
 
     await page.getByRole('button', { name: 'Back to previous screen' }).click();
-    await expect(page.getByRole('heading', { name: 'Publish contract on Bitcoin', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Publish contract', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Back to previous screen' }).click();
     await expect(page.getByRole('heading', { name: 'Contracts', exact: true })).toBeVisible();
 }

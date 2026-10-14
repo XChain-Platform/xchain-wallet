@@ -168,11 +168,14 @@ function navDestination(scope, name) {
 
 async function clickDestination(scope, name) {
     const { exact, prefixed } = navDestination(scope, name);
-    if (await exact.count() > 0) {
+    // A destination can sit in the DOM of a collapsed nav without being shown
+    // (the phone bar keeps overflow rows for its More sheet); only a visible
+    // one is a click target, otherwise the caller falls through to More.
+    if (await exact.count() > 0 && await exact.first().isVisible()) {
         await exact.first().click();
         return true;
     }
-    if (await prefixed.count() > 0) {
+    if (await prefixed.count() > 0 && await prefixed.first().isVisible()) {
         await prefixed.first().click();
         return true;
     }
