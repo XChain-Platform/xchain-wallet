@@ -36,8 +36,9 @@ describe('regression/network-banner-copy', () => {
     it('[REGRESSION P1] aligns the banner inset with the compact page gutter', () => {
         render(<NetworkBanner activeNetwork="testnet" />);
 
+        // 21b draws the banner as a shared card, so its inset is the card padding.
         expect(screen.getByRole('status')).toHaveStyle({
-            padding: '3px var(--xc-space-3, 12px)',
+            padding: 'var(--xc-card-pad)',
         });
 
         const tokens = readFileSync(join(

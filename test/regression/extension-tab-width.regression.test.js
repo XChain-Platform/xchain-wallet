@@ -40,15 +40,17 @@ describe('regression/extension-tab-width', () => {
     });
 
     it('[REGRESSION P1] leaves full-tab and side-panel documents at the window width', () => {
+        // Develop pins the toolbar popup to fixed lengths: a viewport-relative
+        // width collapses the popup to Chrome's 25px minimum.
         const cappedRules = [...popupCss.matchAll(
-            /([^{}]+)\{([^{}]*\bwidth:\s*min\(360px,\s*100vw\);[^{}]*)\}/g,
+            /([^{}]+)\{([^{}]*\bwidth:\s*360px;[^{}]*)\}/g,
         )];
         const sharedSurfaceRule = popupCss.match(
             /body,\s*#xchain-popup-root\s*\{([^}]*)\}/,
         )?.[1] ?? '';
 
         expect(cappedRules).toHaveLength(1);
-        expect(cappedRules[0][1].trim()).toBe('html.xchain-toolbar-popup');
+        expect(cappedRules[0][1].replace(/\/\*[\s\S]*?\*\//g, '').trim()).toBe('html.xchain-toolbar-popup');
         expect(sharedSurfaceRule).toMatch(/\bwidth:\s*100%\s*;/);
         expect(sharedSurfaceRule).toMatch(/\bmax-width:\s*100%\s*;/);
         expect(sharedSurfaceRule).toMatch(/\bmin-width:\s*0\s*;/);

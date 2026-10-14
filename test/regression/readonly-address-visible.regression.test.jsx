@@ -71,7 +71,8 @@ describe('regression/read-only-address-visible', () => {
         const icon = screen.getByRole('button', { name: 'Choose address' });
         expect(input).toHaveClass(inputStyles.input);
         expect(overlay).toHaveClass(addressFieldStyles.readOnlyValue);
-        expect(icon).toHaveClass(addressFieldStyles.iconButton);
+        // The icon is the kit Button inside the positioned iconButton slot.
+        expect(icon.closest(`.${addressFieldStyles.iconButton}`)).not.toBeNull();
 
         const inputRule = ruleBody(inputCss, '.controlHitArea > .input');
         expect(inputRule).toMatch(/position:\s*relative/);

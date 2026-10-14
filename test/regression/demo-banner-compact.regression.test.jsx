@@ -91,7 +91,7 @@ describe('regression/demo-banner-compact', () => {
         expect(banner.textContent).toContain('Demo mode');
         expect(screen.getByRole('button', { name: 'Exit demo and wipe' })).toBeInTheDocument();
 
-        const phoneCss = bannerCss.slice(bannerCss.indexOf('@media (max-width: 599px)'));
+        const phoneCss = bannerCss.slice(bannerCss.indexOf('@media not all and (min-width: 600px)'));
         const compactBanner = ruleBody(phoneCss, '.banner');
         const collapsedBanner = ruleBody(phoneCss, '.banner:not(.expanded)');
         const summary = ruleBody(phoneCss, '.summary');
@@ -112,16 +112,15 @@ describe('regression/demo-banner-compact', () => {
         expect(bannerHeight).toBeLessThanOrEqual(controlHeight + bannerPaddingBlock);
         expect(bannerMaxHeight).toBeLessThanOrEqual(controlHeight + bannerPaddingBlock);
 
-        const compactHeader = ruleBody(headerCss, ":global([data-xc-tier='compact']) .bar");
+        // Operator ruling: the app header is one row at every width.
         const headerBar = ruleBody(headerCss, '.bar');
         const notices = ruleBody(layoutCss, '.notices');
         const screenBody = ruleBody(screenCss, '.body');
-        const headerRows = 2;
+        const headerRows = 1;
         const headerHeight = headerRows * pixels('var(--xc-control-h-md)')
-            + pixels(declaration(compactHeader, 'gap') || 'var(--xc-space-3)')
-            + 2 * pixels(declaration(headerBar, 'padding-block'))
+            + 2 * pixels(declaration(headerBar, 'padding').split(' ')[0])
             + 1;
-        const noticePadding = 2 * pixels(declaration(notices, 'padding'));
+        const noticePadding = 2 * pixels(declaration(notices, 'padding-block'));
         const homeTopPadding = pixels(declaration(screenBody, 'padding').split(' ')[0]);
         const firstHomeContentTop = headerHeight + noticePadding + bannerHeight + homeTopPadding;
 

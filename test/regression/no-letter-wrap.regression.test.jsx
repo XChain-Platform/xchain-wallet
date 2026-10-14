@@ -99,11 +99,16 @@ describe('regression/no-letter-wrap', () => {
         expect(badge).toBeInTheDocument();
         expect(filter).toHaveClass(chipStyles.chip, filterStyles.trigger);
         expect(filter).toHaveTextContent('All networks');
-        expect(filter).toHaveTextContent('1 network');
+        // The count is announced in the accessible name, not drawn beside the label.
+        expect(filter).not.toHaveTextContent('1 network');
         expect(filterWrap).toBeInTheDocument();
 
+        // Buttons keep flex-shrink 0 so a row never squeezes a short label, but
+        // both batches let a label wider than its whole column wrap (the send
+        // review footer carries amounts longer than a 320px line).
+        expect.soft(rule(buttonCss, '.btn')).toMatch(/flex-shrink:\s*0/);
+        expect.soft(rule(buttonCss, '.btn')).toMatch(/white-space:\s*normal/);
         for (const [css, selector] of [
-            [buttonCss, '.btn'],
             [chipCss, '.chip'],
             [chainBadgeCss, '.badge'],
         ]) {
@@ -112,7 +117,6 @@ describe('regression/no-letter-wrap', () => {
             expect.soft(rule(css, selector), `${selector} must not wrap`)
                 .toMatch(/white-space:\s*nowrap/);
         }
-        expect.soft(rule(buttonCss, '.label')).toMatch(/white-space:\s*nowrap/);
         expect(rule(filterCss, '.wrap')).toMatch(/min-width:\s*min\(10rem, 100%\)/);
         expect(rule(filterCss, '.triggerLabel')).toMatch(/white-space:\s*nowrap/);
     });

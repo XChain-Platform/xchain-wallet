@@ -55,11 +55,12 @@ describe('regression/page-header-controls', () => {
         const back = screen.getByRole('button', { name: 'Back to home' });
         const refresh = screen.getByRole('button', { name: 'Refresh history' });
 
-        expect(back).toHaveClass(pageHeaderStyles.back);
+        // 21b makes the back control the kit small secondary Button; the
+        // trailing slot keeps the medium header side footprint.
+        expect(back).toHaveClass(buttonStyles.btn, buttonStyles.sm, buttonStyles.iconOnly);
         expect(refresh.closest(`.${pageHeaderStyles.trailing}`)).not.toBeNull();
         expect(refresh).toHaveClass(buttonStyles.btn, buttonStyles.md, buttonStyles.iconOnly);
-        // Both slots size from the same header side token and centre their icon.
-        for (const body of [ruleBody('.back'), ruleBody('.trailing button:not([role="menuitem"])')]) {
+        for (const body of [ruleBody('.trailing button:not([role="menuitem"])')]) {
             expect(body).toMatch(/width:\s*var\(--xc-page-header-side\)/);
             expect(body).toMatch(/height:\s*var\(--xc-page-header-side\)/);
             expect(body).toMatch(/justify-content:\s*center/);

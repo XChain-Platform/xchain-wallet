@@ -108,6 +108,16 @@
     background: var(--xc-border);
 }
 
+/* A sheet's drag handle takes its own strip above the title row, so on short
+   phones it never meets the centred title or the close control. */
+.sheet .header {
+    padding-top: calc(var(--xc-space-1) + var(--xc-space-2));
+}
+
+.sheet .title {
+    text-align: center;
+}
+
 /* The close control is the shared secondary icon Button inside a fixed grid cell. */
 .close {
     grid-column: 3;

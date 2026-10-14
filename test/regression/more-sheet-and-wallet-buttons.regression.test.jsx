@@ -15,12 +15,12 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MessagingProvider } from '../../packages/core/src/shared/MessagingProvider.jsx';
 import { BottomTabBar } from '../../packages/core/src/shared/components/BottomTabBar.jsx';
-import bottomBarStyles from '../../packages/core/src/shared/components/BottomTabBar.module.css';
+import overlayStyles from '../../packages/core/src/shared/components/OverlaySurface.module.css';
 import { WalletPicker } from '../../packages/core/src/shared/routes/WalletPicker.jsx';
 import walletPickerStyles from '../../packages/core/src/shared/routes/WalletPicker.module.css';
 
 const read = (relativePath) => readFileSync(join(process.cwd(), relativePath), 'utf8');
-const bottomBarCss = read('packages/core/src/shared/components/BottomTabBar.module.css');
+const overlayCss = read('packages/core/src/shared/components/OverlaySurface.module.css');
 const walletPickerCss = read('packages/core/src/shared/routes/WalletPicker.module.css');
 
 function rule(css, selector) {
@@ -37,30 +37,32 @@ describe('regression/More sheet and wallet button sizing', () => {
         render(<BottomTabBar currentView="home" onSelect={() => {}} />);
         fireEvent.click(screen.getByRole('button', { name: 'More' }));
 
+        // The More sheet is the shared OverlaySurface sheet: the handle sits in
+        // the header's top strip and the title row below it is a three-column
+        // grid with the close control in its own cell.
         const dialog = screen.getByRole('dialog', { name: 'More' });
-        const header = dialog.querySelector(`.${bottomBarStyles.sheetHeader}`);
-        const handle = dialog.querySelector(`.${bottomBarStyles.handle}`);
-        const titleRow = dialog.querySelector(`.${bottomBarStyles.sheetTitleRow}`);
+        const header = dialog.querySelector(`.${overlayStyles.header}`);
+        const handle = dialog.querySelector(`.${overlayStyles.handle}`);
         const title = screen.getByRole('heading', { name: 'More', level: 2 });
         const close = screen.getByRole('button', { name: 'Close more navigation' });
 
         expect(header).not.toBeNull();
         expect(handle?.parentElement).toBe(header);
-        expect(titleRow?.parentElement).toBe(header);
-        expect(handle.compareDocumentPosition(titleRow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-        expect(titleRow).toContainElement(title);
-        expect(titleRow).toContainElement(close);
+        expect(handle.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(header).toContainElement(title);
+        expect(header).toContainElement(close);
 
-        expect(rule(bottomBarCss, '.sheetHeader')).toMatch(/flex-direction:\s*column/);
-        expect(rule(bottomBarCss, '.sheetHeader')).toMatch(/align-items:\s*center/);
-        expect(rule(bottomBarCss, '.sheetTitleRow')).toMatch(
-            /grid-template-columns:\s*var\(--xc-control-h-md,\s*40px\)\s+1fr\s+var\(--xc-control-h-md,\s*40px\)/,
+        expect(rule(overlayCss, '.handle')).toMatch(/position:\s*absolute/);
+        expect(rule(overlayCss, '.handle')).toMatch(/inset-inline:\s*0/);
+        expect(rule(overlayCss, '.handle')).toMatch(/margin-inline:\s*auto/);
+        expect(rule(overlayCss, '.sheet .header')).toMatch(/padding-top:\s*calc\(var\(--xc-space-1\) \+ var\(--xc-space-2\)\)/);
+        expect(rule(overlayCss, '.header')).toMatch(
+            /grid-template-columns:\s*var\(--xc-control-h-md\)\s+minmax\(0,\s*1fr\)\s+var\(--xc-control-h-md\)/,
         );
-        expect(rule(bottomBarCss, '.sheetTitleRow')).toMatch(/width:\s*100%/);
-        expect(rule(bottomBarCss, '.sheetTitle')).toMatch(/grid-column:\s*2/);
-        expect(rule(bottomBarCss, '.sheetTitle')).toMatch(/text-align:\s*center/);
-        expect(rule(bottomBarCss, '.sheetClose')).toMatch(/grid-column:\s*3/);
-        expect(rule(bottomBarCss, '.sheetClose')).not.toMatch(/position:\s*absolute/);
+        expect(rule(overlayCss, '.title')).toMatch(/grid-column:\s*2/);
+        expect(rule(overlayCss, '.sheet .title')).toMatch(/text-align:\s*center/);
+        expect(rule(overlayCss, '.close')).toMatch(/grid-column:\s*3/);
+        expect(rule(overlayCss, '.close')).not.toMatch(/position:\s*absolute/);
     });
 
     it('[REGRESSION P1] keeps Add wallet and Manage wallet at the medium control height', async () => {

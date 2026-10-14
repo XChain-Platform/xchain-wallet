@@ -86,10 +86,10 @@ describe('regression/popover-viewport-clamp', () => {
         ['left', { left: 1 }],
         ['right', { left: VIEWPORT_WIDTH - 39 }],
     ])('[REGRESSION P1] keeps the network status popover inside the %s gutter', (edge, trigger) => {
-        mockLayout({ triggerName: 'Network connected', trigger, popoverWidth: 280 });
+        mockLayout({ triggerName: 'Mainnet. Network connected', trigger, popoverWidth: 280 });
         render(<NetworkStatusIndicator onOpenNetworkSettings={() => {}} />);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Network connected' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Mainnet. Network connected' }));
 
         expectInsidePageGutter(screen.getByRole('dialog', { name: 'Network status' }), edge);
     });

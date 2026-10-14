@@ -150,18 +150,19 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
     const filterLabel = networkFilter === 'all' ? null : networkFilter.toUpperCase();
     const hasUnpriced = unpriced > 0;
     const stalePriceAsOf = oldestStalePriceTimestamp(rows);
-    const portfolioUpdatedAt = oldestFreshnessTimestamp(
-        lastSyncedAt,
-        pricesFetchedAt,
-        stalePriceAsOf,
-    );
+    // Test networks show no fiat, but a saved balance still says how old it is.
+    const portfolioUpdatedAt = testCoinsOnly
+        ? oldestFreshnessTimestamp(lastSyncedAt)
+        : oldestFreshnessTimestamp(lastSyncedAt, pricesFetchedAt, stalePriceAsOf);
     const hasUpdate = portfolioUpdatedAt !== null;
     const hasChange = !hidden
         && change24h
         && Number.isFinite(change24h.delta)
         && Number.isFinite(change24h.pct);
     const changeDisplay = hasChange ? percentChangeDisplay(change24h.pct) : null;
-    const showMeta = !testCoinsOnly && !hidden && (hasChange || hasUnpriced || hasUpdate);
+    const showMeta = !hidden && (testCoinsOnly
+        ? hasUpdate
+        : (hasChange || hasUnpriced || hasUpdate));
     const balanceDisplay = testCoinsOnly
         ? 'Test coins have no value'
         : priceUnavailable
@@ -299,7 +300,7 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
             {showMeta ? (
                 <div className={styles.meta} aria-label="Balance summary">
                     <span className={styles.metaLeft}>
-                        {hasChange ? (
+                        {hasChange && !testCoinsOnly ? (
                             <span
                                 className={
                                     changeDisplay.direction === 'positive' ? styles.changePositive
@@ -313,7 +314,7 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                                 ({changeDisplay.text}) · 24h
                             </span>
                         ) : null}
-                        {hasUnpriced ? (
+                        {hasUnpriced && !testCoinsOnly ? (
                             <span className={styles.metaUnpriced}>
                                 {unpricedLabel(rows)}
                             </span>
