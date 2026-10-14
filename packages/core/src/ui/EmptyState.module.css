@@ -1,5 +1,6 @@
-/* Empty state: a centred block across the full content width, outlined
-   with a dashed border so it reads as "a list would go here". */
+/* Empty state: a centred block across the full content width with no box
+   around it. The wallet draws no dashed or boxed placeholders; the icon,
+   title and body carry the state on their own. */
 
 .wrap {
     display: flex;
@@ -10,18 +11,7 @@
     min-width: 0;
     padding: var(--xc-space-6) var(--xc-space-4);
     text-align: center;
-    background: var(--xc-surface-raised);
-    border: 1px dashed var(--xc-border);
-    border-radius: var(--xc-radius-md);
     color: var(--xc-text);
-}
-
-/* Plain form: when the empty state is the screen's whole content it sits
-   directly in the page at full content width, with no box around it. */
-.plain {
-    background: transparent;
-    border: 0;
-    border-radius: 0;
 }
 
 .icon {

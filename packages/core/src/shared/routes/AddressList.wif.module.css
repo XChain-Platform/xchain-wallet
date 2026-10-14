@@ -8,7 +8,7 @@
     align-self: flex-start;
     background: transparent;
     /* 1px keeps the toggle boundary as a crisp hairline. */
-    border: 1px dashed var(--xc-border-strong);
+    border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-radius-sm);
     padding: var(--xc-space-1) var(--xc-space-2);
     font-size: var(--xc-text-xs);
