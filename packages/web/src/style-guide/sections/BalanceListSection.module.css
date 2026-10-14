@@ -1,9 +1,7 @@
 .list {
+    composes: flush from '../../../../core/src/ui/Card.module.css';
     display: flex;
     flex-direction: column;
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
     overflow: hidden;
 }
 .row {

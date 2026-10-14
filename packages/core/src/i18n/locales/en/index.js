@@ -72,6 +72,11 @@ export const en = {
         '{count, plural, one {Show # small balance} other {Show # small balances}}',
     'balanceList.smallBalances.hide':
         '{count, plural, one {Hide # small balance} other {Hide # small balances}}',
+    'balanceList.rowChainSpeech': 'on {chain}',
+    'createOrder.side.assetType': 'Asset type',
+    'common.allNetworks': 'All networks',
+    'dispenserExplorer.searchHint.token': 'Ticker name, such as MYTOKEN, or a token reference from the explorer.',
+    'dispenserExplorer.searchHint.address': 'Dispenser address or source address.',
     'addressList.hidden.show':
         '{count, plural, one {Show # hidden address} other {Show # hidden addresses}}',
     'addressList.hidden.hide':
@@ -103,6 +108,9 @@ export const en = {
     'backupReminder.remindTomorrow': 'Remind me tomorrow',
 
     // --- settings ------------------------------------------------
+    'settings.toggle.turnOn': 'Turn on',
+    'settings.developerMode.switchAccessibleLabel': 'Turn on developer mode',
+    'settings.ads.switchAccessibleLabel': 'Turn on Automatic Donation System',
     'settings.network.label': 'Network',
     'settings.network.activeLabel': 'Active network',
     'settings.network.switchTitle': 'Switch to {network}?',
@@ -954,6 +962,10 @@ export const en = {
         "This wallet doesn't read {action} data. The fields below are shown exactly as the network carries them.",
     'pending.detail.localRecordNote':
         "Taken from this wallet's own record of the send. The network hasn't reported the transaction data yet.",
+    'pending.detail.localRecordNoteIn':
+        "Taken from this wallet's own record of the incoming transfer. The network hasn't reported the transaction data yet.",
+    'pending.detail.localRecordNoteSelf':
+        "Taken from this wallet's own record of the transfer. The network hasn't reported the transaction data yet.",
     'pending.detail.noData': 'No action data has been reported for this transaction yet.',
 
     // M2.5: the amount annotation on a pending row. Verbs still in

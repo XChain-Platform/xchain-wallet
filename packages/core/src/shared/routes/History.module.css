@@ -37,15 +37,12 @@
    advanced-filters panel in one bordered container so the mobile view reads
    as one block instead of three stacked widgets. */
 .filterCard {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-3);
     width: 100%;
     box-sizing: border-box;
-    padding: var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-surface);
 }
 
 .toolbarTop {
@@ -471,10 +468,7 @@
    table / panel; horizontal padding stays at space-3 for breathing
    room against the card edge. */
 .detailSection {
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    padding: var(--xc-space-1) var(--xc-space-3);
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
@@ -912,7 +906,7 @@
 .saveContactForm {
     margin-top: var(--xc-space-2);
     padding-top: var(--xc-space-2);
-    border-top: 1px dashed var(--xc-border);
+    border-top: 1px solid var(--xc-border);
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
@@ -979,10 +973,8 @@
 }
 
 .groupCardWrap {
+    composes: flush from '../../ui/Card.module.css';
     margin: var(--xc-space-1) 0;
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-surface-raised);
     overflow: hidden;
 }
 
@@ -1056,14 +1048,11 @@
    table, banded on its leading edge so it reads as a state notice
    rather than as another field group. */
 .pendingPanel {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
-    padding: var(--xc-space-3);
-    border: 1px solid var(--xc-border);
     border-inline-start: 3px solid var(--xc-warning, #d99000);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-surface);
 }
 
 .pendingPanelWarning {

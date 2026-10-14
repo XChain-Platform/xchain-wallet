@@ -21,7 +21,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import { History } from '../../../packages/core/src/shared/routes/History.jsx';
+import { History, detailActionLabel } from '../../../packages/core/src/shared/routes/History.jsx';
 import { BALANCE_POLL_INTERVAL_MS } from '../../../packages/core/src/flows/balances.js';
 
 const CHAIN = 'litecoin-regtest';
@@ -232,6 +232,31 @@ describe('History pending detail branch', () => {
         expect(outputLine(panel, `-100 XCHAIN`, THEIRS)).toBeTruthy();
         expect(within(outputLine(panel, `-100 XCHAIN`, THEIRS)).getByRole('button', { name: 'Copy address' }))
             .toHaveTextContent(/^Copy$/);
+    });
+
+    it('names an incoming transfer Receive in the action chip', async () => {
+        const { view } = mountHistory({ mempool: [mempoolRow()] });
+        const region = await openRow(view, 'seen');
+        const chip = within(region).getByText('Receive', { selector: 'span[class*="actionTag"]' });
+        expect(chip).toBeTruthy();
+        expect(within(region).queryByText('Send', { selector: 'span[class*="actionTag"]' })).toBeNull();
+    });
+
+    it('names an outgoing transfer Send in the action chip', async () => {
+        const { view } = mountHistory({ pendingTxs: [staleLocalSend()] });
+        const region = await openRow(view, 'not-seen');
+        expect(within(region).getByText('Send', { selector: 'span[class*="actionTag"]' })).toBeTruthy();
+        expect(within(panelIn(region)).getByText(/record of the send\./)).toBeTruthy();
+    });
+
+    it('labels the action by direction only for plain transfers', () => {
+        expect(detailActionLabel({ action: 'SEND' }, 'in')).toBe('Receive');
+        expect(detailActionLabel({ action: 'SEND' }, 'out')).toBe('Send');
+        expect(detailActionLabel({ action: 'SEND' }, 'self')).toBe('Send');
+        expect(detailActionLabel({ action: 'SEND' }, null)).toBe('Send');
+        // A non-transfer keeps its protocol name whichever way it points.
+        expect(detailActionLabel({ action: 'ISSUE' }, 'in')).toBe('Issue');
+        expect(detailActionLabel({ action: 'DISPENSER' }, 'out')).toBe('Dispenser');
     });
 
     it('upgrades the open detail in place when the transaction confirms', async () => {

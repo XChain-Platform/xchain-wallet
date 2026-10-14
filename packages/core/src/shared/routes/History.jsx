@@ -2445,6 +2445,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
         nativeFiatValue,
         balancesHidden,
         fiatCurrency,
+        detailTransferDirection(entry, walletAddresses),
     );
     const explorerButtons = explorerLinksFor(entry, settings);
 
@@ -2641,6 +2642,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
             {isPending ? (
                 <PendingDetailPanel
                     entry={entry}
+                    transferDirection={detailTransferDirection(entry, walletAddresses)}
                     balancesHidden={balancesHidden}
                     onDismissFailed={onDismissFailed}
                 />
@@ -2981,19 +2983,6 @@ function failedReasonOf(stored) {
     return { reason: h.message, details: raw };
 }
 
-/**
- * M2.3 pending branch of the detail card. Everything a user can be told
- * honestly about a transaction that has been sent and not yet indexed:
- * which of the five states it is in, when the network first reported it,
- * what it is about to do, and the one sentence that has to survive every
- * rewrite of this panel, that nothing has validated it yet.
- *
- * Deliberately absent: any SPV or LINK section. Both need an indexed
- * action, and rendering them empty reads as a fetch that failed rather
- * than as a stage that has not happened.
- *
- * @param {{ entry: any, balancesHidden?: boolean }} props
- */
 const DESTINATION_SLOT = '\u0000';
 
 /**
@@ -3020,7 +3009,20 @@ function PendingOutputLine({ text, destination }) {
     );
 }
 
-function PendingDetailPanel({ entry, balancesHidden = false, onDismissFailed }) {
+/**
+ * M2.3 pending branch of the detail card. Everything a user can be told
+ * honestly about a transaction that has been sent and not yet indexed:
+ * which of the five states it is in, when the network first reported it,
+ * what it is about to do, and the one sentence that has to survive every
+ * rewrite of this panel, that nothing has validated it yet.
+ *
+ * Deliberately absent: any SPV or LINK section. Both need an indexed
+ * action, and rendering them empty reads as a fetch that failed rather
+ * than as a stage that has not happened.
+ *
+ * @param {{ entry: any, balancesHidden?: boolean }} props
+ */
+function PendingDetailPanel({ entry, balancesHidden = false, onDismissFailed, transferDirection = null }) {
     const state = pendingStateOf(entry);
     const copy = state ? pendingCopyFor(state, entry) : null;
     const warning = state != null && PENDING_WARNING_STATES.has(state);
@@ -3139,7 +3141,11 @@ function PendingDetailPanel({ entry, balancesHidden = false, onDismissFailed }) 
                 for a settled transaction nothing more is coming, so the
                 outputs stand on their own. */}
             {desc.kind === 'local' && !settled ? (
-                <p className={styles.pendingHelp}>{t('pending.detail.localRecordNote')}</p>
+                <p className={styles.pendingHelp}>{transferDirection === 'in'
+                    ? t('pending.detail.localRecordNoteIn')
+                    : transferDirection === 'self'
+                        ? t('pending.detail.localRecordNoteSelf')
+                        : t('pending.detail.localRecordNote')}</p>
             ) : null}
             {desc.kind === 'segments' ? (
                 <>
@@ -3170,14 +3176,14 @@ function capitalize(s) {
  * ActionDetail. Each tuple is `[label, value]`. Empty / missing fields
  * are skipped so the table only shows what's actually populated.
  */
-function basicDetailRows(entry, chainTip, nativeAmount, nativeFiatValue, balancesHidden, fiatCurrency) {
+function basicDetailRows(entry, chainTip, nativeAmount, nativeFiatValue, balancesHidden, fiatCurrency, transferDirection = null) {
     if (!entry) return [];
     const rows = [];
 
     // Action: just the colored bubble. The action number now lives
     // on its own "Index" row below Block.
     rows.push(['Action', (
-        <span className={styles.actionTag}>{entry.action ? actionDisplayLabel(entry.action) : '-'}</span>
+        <span className={styles.actionTag}>{entry.action ? detailActionLabel(entry, transferDirection) : '-'}</span>
     )]);
 
     // Fiat-display toggle. Only rendered when the caller resolved a
@@ -3366,7 +3372,7 @@ function fullDetailRows(entry, balancesHidden = false, chainTip = null, walletAd
     const entrySource = firstPopulatedValue(entry, ['source']);
     const walletAddress = firstPopulatedValue(entry, ['address']);
 
-    if (entry.action) rows.push(['Action', actionDisplayLabel(entry.action)]);
+    if (entry.action) rows.push(['Action', detailActionLabel(entry, transfer.amountDirection)]);
     if (actionIndex) {
         rows.push(['Action number', (
             <CopyableValue
@@ -3589,6 +3595,25 @@ export function detailTransferDirection(entry, walletAddresses) {
     return detailTransfer(entry, walletAddresses).amountDirection;
 }
 
+/**
+ * The name the detail page gives the action: a plain transfer is named by
+ * the way value moved (the protocol calls both sides SEND, so an incoming
+ * one would read as money leaving), and every other action keeps its
+ * protocol name.
+ *
+ * @param {any} entry
+ * @param {'in' | 'out' | 'self' | null} direction  from detailTransferDirection
+ * @returns {string}
+ */
+export function detailActionLabel(entry, direction) {
+    const action = String(entry?.action || '').toUpperCase();
+    if (action === 'SEND' || action === 'RECEIVE') {
+        if (direction === 'in') return actionDisplayLabel('RECEIVE');
+        if (direction === 'out' || direction === 'self') return actionDisplayLabel('SEND');
+    }
+    return actionDisplayLabel(entry?.action);
+}
+
 function isEmptyDetailValue(value) {
     if (value == null || value === '' || (typeof value === 'number' && !Number.isFinite(value))) return true;
     return typeof value === 'string' && /^(?:|undefined|null|nan|[+-]?infinity)$/i.test(value.trim());
@@ -3806,9 +3831,6 @@ function RecipientsBlock({ entry }) {
             {snapshotNote ? <span style={headingStyle}>{snapshotNote}</span> : null}
             {recipients.length > 0 ? (
                 <div style={{
-                    border: '1px solid var(--xc-border)',
-                    borderRadius: 'var(--xc-radius-sm)',
-                    padding: 'var(--xc-space-1)',
                     fontFamily: 'monospace',
                     fontSize: 'var(--xc-text-xs)',
                     color: 'var(--xc-text)',

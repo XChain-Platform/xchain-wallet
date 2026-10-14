@@ -6,6 +6,7 @@ import React from 'react';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { BalanceList } from '../../../packages/core/src/shared/components/BalanceList.jsx';
+import balanceStyles from '../../../packages/core/src/shared/components/BalanceList.module.css';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { EntryRow } from '../../../packages/core/src/shared/routes/History.jsx';
 import { TokenDetail } from '../../../packages/core/src/shared/routes/TokenDetail.jsx';
@@ -78,8 +79,21 @@ describe('long content layout', () => {
         expect(listRowCss).toMatch(/\.trailing,[^{]*\{[^}]*flex:\s*0 0 auto/);
         expect(rule(balanceCss, '.amounts')).toMatch(/min-width:\s*0/);
         expect(rule(balanceCss, '.qty')).toMatch(/font-variant-numeric:\s*tabular-nums/);
-        expect(rule(balanceCss, '.amountFit')).toMatch(/text-overflow:\s*ellipsis/);
-        expect(rule(balanceCss, '.qty')).not.toMatch(/text-overflow:\s*ellipsis/);
+        // A figure is never cut: no ellipsis and no clipping on the figure or
+        // its column. When it does not fit beside the name (large text on a
+        // phone) the row wraps and the figures take their own line, ending at
+        // the row's end, while the name column keeps a rem floor and truncates.
+        for (const selector of ['.amountFit', '.qty', '.fiat', '.amounts', '.amountsSlot.amountsSlot']) {
+            expect(rule(balanceCss, selector)).not.toMatch(/text-overflow:\s*ellipsis/);
+            expect(rule(balanceCss, selector)).not.toMatch(/overflow(-x)?:\s*(hidden|clip)/);
+        }
+        expect(rule(balanceCss, '.amountFit')).not.toMatch(/white-space:\s*nowrap/);
+        expect(rule(balanceCss, '.row > .rowContent')).toMatch(/flex-wrap:\s*wrap/);
+        expect(rule(balanceCss, '.rowBody.rowBody')).toMatch(/min-width:\s*\d+(\.\d+)?rem/);
+        expect(rule(balanceCss, '.amountsSlot.amountsSlot')).toMatch(/max-width:\s*100%/);
+        expect(rule(balanceCss, '.amountsSlot.amountsSlot')).toMatch(/margin-inline-start:\s*auto/);
+        const quantityText = screen.getByTitle(formattedQuantity);
+        expect(quantityText.closest(`.${balanceStyles.rowContent}`).querySelector(`.${balanceStyles.rowBody}`)).not.toBeNull();
     });
 
     it('keeps a full history address and pending amount available without digit ellipsis', () => {
