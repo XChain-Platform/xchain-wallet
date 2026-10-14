@@ -164,6 +164,8 @@ describe('Locked biometric unlock', () => {
             status: 'LOCKED',
             detail: RETRY_EXHAUSTED_DETAIL,
         });
+        const password = screen.getByLabelText('Password');
+        password.blur();
 
         fireEvent.click(await screen.findByRole('button', { name: 'Use biometrics' }));
 
@@ -173,6 +175,7 @@ describe('Locked biometric unlock', () => {
         expect(document.body.textContent).not.toMatch(/not supported|failed repeatedly/i);
         expect(messaging.unlockWallet).not.toHaveBeenCalled();
         expect(getLockoutState().failedAttempts).toBe(0);
+        expect(password).toHaveFocus();
     });
 
     it('hides a stale button and advises password re-enrolment', async () => {
@@ -180,11 +183,30 @@ describe('Locked biometric unlock', () => {
             unlock: vi.fn(async () => { throw new BiometricNotRegisteredError(); }),
         });
         const { messaging } = mount(activeProvider);
+        const password = screen.getByLabelText('Password');
+        password.blur();
         fireEvent.click(await screen.findByRole('button', { name: 'Use biometrics' }));
 
         expect(await screen.findByText(/unlock with your password, then re-enrol it in Settings/i))
             .toBeTruthy();
         expect(screen.queryByRole('button', { name: 'Use biometrics' })).toBeNull();
+        expect(messaging.unlockWallet).not.toHaveBeenCalled();
+        expect(getLockoutState().failedAttempts).toBe(0);
+        expect(password).toHaveFocus();
+    });
+
+    it('returns to the password field after an unexpected biometric failure', async () => {
+        const activeProvider = provider({
+            unlock: vi.fn(async () => { throw new Error('sensor unavailable'); }),
+        });
+        const { messaging } = mount(activeProvider);
+        const password = screen.getByLabelText('Password');
+        password.blur();
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Use biometrics' }));
+
+        expect(await screen.findByText(/biometric unlock failed/i)).toBeTruthy();
+        expect(password).toHaveFocus();
         expect(messaging.unlockWallet).not.toHaveBeenCalled();
         expect(getLockoutState().failedAttempts).toBe(0);
     });
