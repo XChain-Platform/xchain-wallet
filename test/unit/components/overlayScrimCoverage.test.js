@@ -51,3 +51,16 @@ describe('popover header', () => {
         expect(css.indexOf('.popover .close')).toBeGreaterThan(css.indexOf('\n.close {'));
     });
 });
+
+describe('contact add-address dialog', () => {
+    it('uses the shared dialog scrim, padding, centred title and an outlined Cancel', () => {
+        const css = readFileSync('packages/core/src/shared/routes/ContactsList.module.css', 'utf8');
+        const block = (selector) => new RegExp(`\\n${selector.replace('.', '\\.')}\\s*\\{([^}]*)\\}`).exec(css)?.[1] || '';
+        expect(block('.modalOverlay')).toMatch(/z-index:\s*var\(--xc-z-modal\)/);
+        expect(block('.modalOverlay')).toMatch(/background:\s*var\(--xc-overlay,/);
+        expect(block('.modalCard')).toMatch(/padding:\s*var\(--xc-space-4\)/);
+        expect(block('.modalTitle')).toMatch(/text-align:\s*center/);
+        const jsx = readFileSync('packages/core/src/shared/routes/ContactsList.jsx', 'utf8');
+        expect(jsx).toMatch(/variant="secondary" onClick=\{\(\) => setAddAddrOpen\(false\)\}>Cancel</);
+    });
+});

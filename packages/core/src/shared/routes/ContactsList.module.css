@@ -385,8 +385,8 @@
     position: fixed;
     box-sizing: border-box;
     inset: 0;
-    z-index: 1000;
-    background: rgba(15, 23, 42, 0.55);
+    z-index: var(--xc-z-modal);
+    background: var(--xc-overlay, rgba(15, 23, 42, 0.55));
     display: flex;
     align-items: center;
     justify-content: center;
@@ -409,14 +409,18 @@
     background: var(--xc-surface-raised);
     border: 1px solid var(--xc-border);
     border-radius: var(--xc-radius-lg);
-    box-shadow: var(--xc-shadow-md);
-    padding: var(--xc-space-5);
+    box-shadow: var(--xc-shadow-modal);
+    /* The shared dialog geometry (OverlaySurface): space-4 padding, a
+       centred title and equal-width footer buttons. */
+    padding: var(--xc-space-4);
 }
 
 .modalTitle {
-    font-size: var(--xc-text-md);
+    font-size: var(--xc-text-lg);
     font-weight: 700;
+    line-height: 1.25;
     color: var(--xc-text);
+    text-align: center;
     margin-bottom: var(--xc-space-3);
 }
 
@@ -425,5 +429,10 @@
     justify-content: flex-end;
     gap: var(--xc-space-2);
     margin-top: var(--xc-space-3);
+}
+
+.modalActions > * {
+    flex: 1 1 0;
+    min-width: 0;
 }
 
