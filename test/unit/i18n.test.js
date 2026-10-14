@@ -481,6 +481,8 @@ describe('translations', () => {
             // The Send form's network field and the Settings network row.
             ['send.fields.chain', 'settings.network.label'],
             ['send.title', 'uri.intent.send'],
+            // Leads the blocked-site pattern hint and the biometric unlock sentence.
+            ['settings.biometric.use', 'settings.connectedSites.blockPatternLead'],
         ]);
     });
 

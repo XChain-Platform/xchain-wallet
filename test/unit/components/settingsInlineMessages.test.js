@@ -48,9 +48,9 @@ describe('settings inline messages', () => {
     it('puts a row result under the row at full width, not in its label column', () => {
         const display = withEnglishCopy(readFileSync(join(settingsDir, 'DisplaySection.jsx'), 'utf8'));
         expect(display).toMatch(/Saved network filters<\/span>\s*<\/div>/);
-        expect(display).toMatch(/saved list preferences\.<\/span>\s*<\/div>/);
+        expect(display).toMatch(/saved filters too\.<\/span>\s*<\/div>/);
         const region = withEnglishCopy(readFileSync(join(settingsDir, 'LanguageRegionSection.jsx'), 'utf8'));
-        expect(region).toMatch(/Asset balances are unchanged\.<\/span>\s*<\/div>/);
+        expect(region).toMatch(/not asset balances\.<\/span>\s*<\/div>/);
     });
 
     it('shows a settings load failure as the shared load error, not a bare paragraph', () => {
