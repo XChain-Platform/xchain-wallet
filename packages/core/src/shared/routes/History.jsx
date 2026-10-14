@@ -2994,6 +2994,32 @@ function failedReasonOf(stored) {
  *
  * @param {{ entry: any, balancesHidden?: boolean }} props
  */
+const DESTINATION_SLOT = '\u0000';
+
+/**
+ * One decoded output, "+100 BTC to <address>". The address keeps both ends
+ * on one line with a copy button after it; printed whole, it wrapped across
+ * two lines on a phone with no way to copy it.
+ */
+function PendingOutputLine({ text, destination }) {
+    const [before, after = ''] = String(text).split(DESTINATION_SLOT);
+    if (!destination) return <>{before}{after}</>;
+    return (
+        <span className={styles.copyableValue}>
+            <span className={styles.copyableText}>
+                {before}
+                <AddressText address={destination} size="sm" />
+                {after}
+            </span>
+            <HistoryCopyButton
+                value={destination}
+                label={t('history.copy.walletAddress')}
+                visibleLabel={t('history.copy.short')}
+            />
+        </span>
+    );
+}
+
 function PendingDetailPanel({ entry, balancesHidden = false, onDismissFailed }) {
     const state = pendingStateOf(entry);
     const copy = state ? pendingCopyFor(state, entry) : null;
@@ -3092,11 +3118,14 @@ function PendingDetailPanel({ entry, balancesHidden = false, onDismissFailed }) 
                 <ul className={styles.pendingOutputs}>
                     {desc.outputs.map((o, i) => (
                         <li key={`${o.destination}:${i}`}>
-                            {t('pending.detail.sendOutput', {
-                                amount: amountOf(o.amount),
-                                tick: o.tick,
-                                destination: o.destination,
-                            })}
+                            <PendingOutputLine
+                                text={t('pending.detail.sendOutput', {
+                                    amount: amountOf(o.amount),
+                                    tick: o.tick,
+                                    destination: DESTINATION_SLOT,
+                                })}
+                                destination={o.destination}
+                            />
                             {o.memo ? (
                                 <span className={styles.pendingMemo}>
                                     {' '}{t('pending.detail.memo', { memo: o.memo })}
