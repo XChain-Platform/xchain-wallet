@@ -157,7 +157,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: var(--xc-control-h-md);
+    min-height: var(--xc-tap-min);
     cursor: pointer;
 }
 
