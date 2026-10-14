@@ -27,4 +27,8 @@
     text-decoration: underline;
     cursor: pointer;
     font: inherit;
+    /* The WCAG 2.2 AA 2.5.8 pointer-target floor. */
+    min-height: var(--xc-tap-min);
+    display: inline-flex;
+    align-items: center;
 }
