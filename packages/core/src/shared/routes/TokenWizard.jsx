@@ -563,7 +563,7 @@ export function TokenWizard({ walletId, onBack }) {
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen variant={variant} header={header} restoreScroll={stage !== 'preview'}>
             {children}
         </Screen>
     );

@@ -487,7 +487,15 @@ export function StakeForm({ walletId, chainId: initialChainId, onBack }) {
             title={stage === 'review' || stage === 'submitting' ? 'Review stake' : 'Stake XCHAIN'}
         />
     );
-    const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
+    const wrap = (children) => (
+        <Screen
+            variant={variant}
+            header={header}
+            restoreScroll={!(stage === 'review' || stage === 'submitting')}
+        >
+            {children}
+        </Screen>
+    );
 
     if (loadError) {
         return wrap(

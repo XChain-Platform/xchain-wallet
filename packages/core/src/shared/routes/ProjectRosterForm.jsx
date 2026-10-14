@@ -480,7 +480,11 @@ export function ProjectRosterForm({ walletId, chainId, tick, issuerAddress = nul
         />
     );
     const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+        <Screen
+            variant={variant}
+            header={header}
+            restoreScroll={stage !== 'review-list' && stage !== 'review-link'}
+        >
             {children}
         </Screen>
     );
