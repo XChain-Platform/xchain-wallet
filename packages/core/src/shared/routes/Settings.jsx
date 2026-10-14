@@ -47,6 +47,152 @@ import { wipeWalletStorage } from '../utils/wipeWalletStorage.js';
 import actionStyles from './ActionsMenu.module.css';
 import settingsStyles from './Settings.module.css';
 
+const row = (title, terms = '', target = title) => ({ title, terms, target });
+
+export const SETTINGS_SEARCH_ROWS = Object.freeze({
+    'accounts-addresses': [row('Accounts & addresses', 'account address signer change pairing')],
+    'this-wallet': [
+        row('Wallet', 'switch rename name vault'),
+        row('Upgrade recovery phrase', 'migrate legacy seed mnemonic'),
+        row('Extended public keys', 'xpub export watch only'),
+        row('Change wallet password', 'password security'),
+        row('Remove wallet', 'delete destroy'),
+    ],
+    appearance: [row('Theme', 'dark light system'), row('Reduced motion', 'animation accessibility')],
+    display: [
+        row('Hide small balances', 'dust threshold'),
+        row('Small-balance threshold', 'dust balance minimum'),
+        row('Balance number format', 'decimal digits grouping'),
+        row('Show pin button on rows', 'star favorite affordance'),
+        row('Show hide button on rows', 'conceal affordance'),
+        row('Watched tokens', 'watch token ticker'),
+        row('Pinned tokens', 'pin star favorite reorder'),
+        row('Hidden tokens', 'hide unhide concealed'),
+        row('Saved chain filters', 'list preferences reset'),
+        row('Reset display settings', 'defaults clear'),
+    ],
+    keyboard: [
+        ...resolveBindings({}).map((shortcut) => row(shortcut.label, `${shortcut.group} shortcut hotkey keys`)),
+        row('Reset all shortcuts', 'restore defaults bindings'),
+    ],
+    'language-region': [row('Language', 'locale translation'), row('Fiat currency', 'money usd eur local currency')],
+    privacy: [
+        row('Tor routing', 'proxy onion network privacy'),
+        row('Change-address rotation', 'change address privacy'),
+        row('Blur sensitive data on blur', 'hide conceal window focus'),
+        row('Labels survive restore', 'backup recovery metadata'),
+        row('Haptic feedback', 'vibration touch'),
+        row('Native coin price data', 'prices market third party'),
+        row('Fetch token metadata', 'token information third party'),
+        row('Always require hardware cross-check confirm', 'hardware wallet verify address path'),
+        row('Clipboard auto-clear', 'copy clear timeout seconds'),
+        row('Form draft retention', 'saved forms persistence timeout'),
+    ],
+    safety: [
+        row('Auto-lock timeout', 'lock idle minutes'),
+        row('New-recipient test-send warning (sats)', 'test send threshold new address'),
+        row('Lookalike address warnings', 'similar address scam'),
+        row('Hold signed sends before broadcast', 'undo cancel delay transaction'),
+        row('Hold duration in seconds (0 disables)', 'undo send delay timeout'),
+        row('Biometric unlock', 'fingerprint face id touch id'),
+        row('Panic mode', 'freeze signing emergency'),
+        row('Duress passphrase', 'decoy emergency password'),
+        row('Backup reminders', 'recovery reminder'),
+    ],
+    'wallet-mode': [
+        row('Normal', 'full sign broadcast'),
+        row('Watcher (watch-only)', 'unsigned psbt cold storage'),
+        row('Signer (air-gapped)', 'offline psbt cold storage'),
+    ],
+    backup: [
+        row('Export encrypted backup', 'backup file password'),
+        row('Back up recovery phrase', 'seed mnemonic words reveal'),
+        row('Test backup (dry-run restore)', 'verify seed recovery phrase'),
+        row('Publish labels on-chain', 'backup metadata contacts blockchain'),
+        row('Check chain for backed-up contacts', 'restore labels address book'),
+    ],
+    fees: [
+        row('Fee strategy', 'fee fees network fee rate priority'),
+        row('Custom fee rate', 'fee fees network fee sats per byte', 'Fee strategy'),
+        row('Allow fee bump (Replace-by-Fee)', 'fee fees rbf speed up transaction'),
+    ],
+    network: [row('Active network', 'mainnet testnet regtest switch chain')],
+    'network-endpoints': [
+        row('Chain registry refresh', 'networks update registry'),
+        row('Explorer URL', 'endpoint block explorer'),
+        row('Encoder URL', 'endpoint transaction encoder'),
+        row('Hub URL', 'endpoint node api'),
+    ],
+    notifications: [
+        row('Desktop notifications', 'browser os permission alerts'),
+        row('Transaction confirmations', 'confirmed sent transaction alert'),
+        row('Incoming receipts', 'received payment alert'),
+        row('Incoming pending payments', 'mempool unconfirmed payment alert'),
+        row('Incoming messages', 'message alert'),
+        row('Governance polls', 'vote proposal alert'),
+        row('Deadlines', 'expiry expiration alert'),
+        row('Dispenser running low', 'escrow stock alert'),
+        row('Dispenser fills', 'sale purchase alert'),
+        row('Order fills', 'dex trade matched alert'),
+        row('Price alerts', 'market price target'),
+        row('Quiet hours', 'do not disturb dnd schedule'),
+        row('Notification sounds', 'audio noise alert'),
+    ],
+    'connected-sites': [
+        row('Sign-request throttle', 'dapp request rate limit abuse'),
+        row('Burst', 'sign throttle maximum requests'),
+        row('Window (seconds)', 'sign throttle duration rate limit'),
+        row('Blocked sites', 'dapp website origin denylist'),
+        row('Site block history', 'blocked unblocked audit log'),
+        row('Chains', 'dapp permission networks'),
+        row('Accounts', 'dapp permission addresses'),
+        row('Sign messages', 'dapp permission signature'),
+        row('Sign actions', 'dapp permission transaction'),
+    ],
+    contacts: [
+        row('Contacts in this wallet', 'address book count'),
+        row('Export', 'contacts address book json csv download'),
+        row('Import', 'contacts address book json csv upload'),
+    ],
+    ads: [
+        row('Automatic Donation System', 'ads donations enable disable'),
+        row('Set aside per outgoing transaction (sats)', 'per transaction donation amount network fee'),
+        row('Send donation when pending reaches (sats)', 'trigger threshold accumulated donation'),
+        row('Pending donation', 'accumulated donation'),
+        row('Lifetime donations', 'donation total history'),
+    ],
+    developer: [
+        row('Developer Mode', 'development advanced regtest'),
+        row('Learn Mode', 'education explain'),
+        row('Show variant popover', 'layout preview'),
+        row('Auto-approve localhost dApps', 'local dapp connect permission'),
+        row('Cache password for localhost auto-sign', 'local dapp signing timeout'),
+        row('Logs and diagnostics console', 'debug log console'),
+        row('Regtest networks', 'local network development'),
+        row('Regtest faucet', 'mint test coins miner'),
+        row('Miner URL', 'faucet endpoint'),
+        row('Amount', 'faucet mint test coins'),
+        row('Custom chains', 'add network descriptor'),
+        row('Custom chain descriptor JSON', 'add network paste'),
+    ],
+    updates: [row('Check for updates', 'new version upgrade latest release')],
+    about: [
+        row('Version', 'app release'),
+        row('Build identifier', 'build commit revision'),
+        row('Platform', 'shell operating system'),
+        row('Update channel', 'release channel'),
+        row('Check for new versions', 'updates upgrade latest release'),
+        row('License', 'agpl legal'),
+        row('Notice', 'legal attribution'),
+        row('Reproducible build', 'verify build'),
+        row('Verify a release', 'signature verification'),
+        row('Release signatures', 'gpg fingerprint'),
+        row('Disclosure policy', 'security vulnerability'),
+        row('Diagnostics', 'debug report copy'),
+        row('Feedback', 'contact report issue'),
+    ],
+});
+
 /**
  * Settings page (§35).
  *
@@ -91,7 +237,9 @@ export function Settings({
     const variant = screenVariantFor(shell);
     const [query, setQuery] = useState('');
     const [subpageId, setSubpageId] = useState(/** @type {string | null} */ (initialSubpageId || null));
+    const [searchTarget, setSearchTarget] = useState(/** @type {string | null} */ (null));
     const [siteCount, setSiteCount] = useState(/** @type {number | null} */ (null));
+    const [siteSearchTerms, setSiteSearchTerms] = useState('');
     const [walletManagementBusy, setWalletManagementBusy] = useState(false);
     const sectionOpenerRefs = useRef(new Map());
     const pendingFocusRestore = useRef(/** @type {string | null} */ (null));
@@ -101,6 +249,7 @@ export function Settings({
     const closeSubpage = useCallback(() => {
         pendingFocusRestore.current = subpageId;
         setSubpageId(null);
+        setSearchTarget(null);
     }, [subpageId]);
 
     // A Settings drilldown is nested UI, so Escape and the system Back action
@@ -118,8 +267,18 @@ export function Settings({
         let alive = true;
         if (typeof messaging?.listConnectedSites !== 'function') return undefined;
         messaging.listConnectedSites()
-            .then((list) => { if (alive) setSiteCount(Array.isArray(list) ? list.length : 0); })
-            .catch(() => { if (alive) setSiteCount(0); });
+            .then((list) => {
+                if (!alive) return;
+                const sites = Array.isArray(list) ? list : [];
+                setSiteCount(sites.length);
+                setSiteSearchTerms(sites.flatMap((site) => [site?.appName, site?.origin]).filter(Boolean).join(' '));
+            })
+            .catch(() => {
+                if (alive) {
+                    setSiteCount(0);
+                    setSiteSearchTerms('');
+                }
+            });
         return () => { alive = false; };
     }, [messaging]);
 
@@ -299,6 +458,7 @@ export function Settings({
             title: 'Connected sites',
             description: 'Review dApp connections and control each site\'s permissions.',
             keywords: 'connected sites website dapp connections permissions chains accounts sign messages actions origin disconnect block unblock blocked mutations throttle burst window',
+            searchTerms: siteSearchTerms,
             kind: 'internal-drill',
             Component: ConnectedSitesSection,
             summary: connectedSitesSummary(siteCount),
@@ -347,7 +507,7 @@ export function Settings({
             Component: AboutSection,
             summary: WALLET_VERSION,
         },
-    ]), [walletLabel, accountLabel, onOpenWalletPicker, onOpenAccountPicker, activeWallet, settings, siteCount, onNavigateToMint, handleWalletRemoved, reload]);
+    ]), [walletLabel, accountLabel, onOpenWalletPicker, onOpenAccountPicker, activeWallet, settings, siteCount, siteSearchTerms, onNavigateToMint, handleWalletRemoved, reload]);
 
     // List-view filter. Hoisted ABOVE the subpage early-return so that
     // both render paths call the same number of hooks; flipping
@@ -366,7 +526,10 @@ export function Settings({
                 s.searchTerms,
                 s.summary,
             ].filter(Boolean).join(' '));
-            return q.split(' ').every((term) => searchable.includes(term));
+            const terms = q.split(' ');
+            const sectionWords = searchable.split(' ');
+            return terms.every((term) => sectionWords.some((word) => searchWordMatches(word, term)))
+                || SETTINGS_SEARCH_ROWS[s.id]?.some((item) => searchItemMatches(item, terms));
         });
     }, [sections, query]);
 
@@ -395,10 +558,12 @@ export function Settings({
                     restoreScroll={false}
                 >
                     <ListPage className={settingsStyles.page} data-settings-layout="responsive">
-                        <SectionComponent
-                            key={section.id === 'this-wallet' ? activeWallet?.id || 'none' : section.id}
-                            {...(section.props || {})}
-                        />
+                        <SettingsSearchHighlight target={searchTarget}>
+                            <SectionComponent
+                                key={section.id === 'this-wallet' ? activeWallet?.id || 'none' : section.id}
+                                {...(section.props || {})}
+                            />
+                        </SettingsSearchHighlight>
                     </ListPage>
                 </Screen>
             );
@@ -436,13 +601,14 @@ export function Settings({
                     <EmptyState title="No matching settings" body={`No settings match "${query}".`} />
                 ) : null}
                 {filtered.map((section) => {
+                    const matchedRow = findMatchingSearchRow(section.id, query);
                     if (section.kind === 'external-drill') {
                         if (section.visible === false) return null;
                         return (
                             <DrillRow
                                 key={section.id}
                                 title={section.title}
-                                summary={section.summary}
+                                summary={matchedRow?.title || section.summary}
                                 onClick={section.onOpen}
                             />
                         );
@@ -452,8 +618,11 @@ export function Settings({
                             <DrillRow
                                 key={section.id}
                                 title={section.title}
-                                summary={section.summary}
-                                onClick={() => setSubpageId(section.id)}
+                                summary={matchedRow?.title || section.summary}
+                                onClick={() => {
+                                    setSearchTarget(matchedRow?.target || query.trim() || null);
+                                    setSubpageId(section.id);
+                                }}
                                 buttonRef={(node) => {
                                     if (node) sectionOpenerRefs.current.set(section.id, node);
                                     else sectionOpenerRefs.current.delete(section.id);
@@ -470,7 +639,9 @@ export function Settings({
                                 title={section.title}
                                 description={section.description}
                             >
-                                <Component {...panelProps} />
+                                <SettingsSearchHighlight target={matchedRow?.target || null}>
+                                    <Component {...panelProps} />
+                                </SettingsSearchHighlight>
                             </PanelBlock>
                         );
                     }
@@ -500,6 +671,74 @@ function normalizeSearchText(value) {
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, ' ')
         .trim();
+}
+
+function searchItemMatches(item, terms) {
+    const words = normalizeSearchText(`${item.title} ${item.terms}`).split(' ');
+    return terms.every((term) => words.some((word) => searchWordMatches(word, term)));
+}
+
+function searchWordMatches(word, term) {
+    return word === term || word === `${term}s` || `${word}s` === term;
+}
+
+export function findMatchingSearchRow(sectionId, query) {
+    const terms = normalizeSearchText(query).split(' ').filter(Boolean);
+    if (terms.length === 0) return null;
+    const rows = SETTINGS_SEARCH_ROWS[sectionId] || [];
+    const normalizedQuery = terms.join(' ');
+    return rows.find((item) => normalizeSearchText(item.title) === normalizedQuery)
+        || rows.find((item) => searchItemMatches(item, terms))
+        || null;
+}
+
+function SettingsSearchHighlight({ target, children }) {
+    const scopeRef = useRef(null);
+
+    useEffect(() => {
+        const scope = scopeRef.current;
+        if (!scope || !target) return undefined;
+        let highlighted = null;
+        let matchedLabel = null;
+        const markMatch = () => {
+            const needle = normalizeSearchText(target);
+            const candidates = scope.querySelectorAll('label, legend, h2, h3, h4, span, button');
+            const match = [...candidates].find((element) => {
+                const text = normalizeSearchText(element.textContent);
+                return text === needle || text.startsWith(`${needle} `);
+            });
+            if (!match) return false;
+            let container = match;
+            for (let node = match.parentElement; node && node !== scope; node = node.parentElement) {
+                const style = globalThis.getComputedStyle?.(node);
+                if (node.matches('section, form') || (style && style.borderTopStyle !== 'none')) {
+                    container = node;
+                    break;
+                }
+            }
+            highlighted = container;
+            matchedLabel = match;
+            highlighted.setAttribute('data-settings-search-highlight', 'true');
+            matchedLabel.setAttribute('data-settings-search-match', 'true');
+            highlighted.scrollIntoView?.({ block: 'center' });
+            return true;
+        };
+        const clear = () => {
+            highlighted?.removeAttribute('data-settings-search-highlight');
+            matchedLabel?.removeAttribute('data-settings-search-match');
+        };
+        if (markMatch()) return clear;
+        const observer = new MutationObserver(() => {
+            if (markMatch()) observer.disconnect();
+        });
+        observer.observe(scope, { childList: true, subtree: true });
+        return () => {
+            observer.disconnect();
+            clear();
+        };
+    }, [target]);
+
+    return <div ref={scopeRef} className={settingsStyles.searchHighlightScope}>{children}</div>;
 }
 
 /**

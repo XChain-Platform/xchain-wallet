@@ -10,14 +10,20 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { Settings } from '../../../packages/core/src/shared/routes/Settings.jsx';
+import {
+    Settings,
+    SETTINGS_SEARCH_ROWS,
+    findMatchingSearchRow,
+} from '../../../packages/core/src/shared/routes/Settings.jsx';
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
 import { en } from '../../../packages/core/src/i18n/locales/en/index.js';
 import { ScrollRestoration } from '../../../packages/core/src/ui/Screen.jsx';
+import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
 
-function mount(props = {}) {
+function mount(props = {}, loadedSettings = null) {
     const messaging = {
-        getSettings: () => new Promise(() => {}),
+        getSettings: () => loadedSettings ? Promise.resolve(loadedSettings) : new Promise(() => {}),
+        updateSettings: vi.fn().mockImplementation(async () => loadedSettings),
         listConnectedSites: vi.fn().mockResolvedValue([]),
     };
     return render(
@@ -37,7 +43,10 @@ function searchFor(value) {
     });
 }
 
-afterEach(cleanup);
+afterEach(() => {
+    cleanup();
+    delete window.xchainWalletUpdater;
+});
 
 describe('Settings search', () => {
     it('uses action-oriented, one-sentence descriptions for inline sections', () => {
@@ -62,6 +71,9 @@ describe('Settings search', () => {
         ['currency', 'Language & region'],
         ['language', 'Language & region'],
         ['theme', 'Appearance'],
+        ['fee', 'Fees'],
+        ['fees', 'Fees'],
+        ['network fee', 'Fees'],
         ['biometric unlock', 'Safety'],
         ['lock wallet', 'Keyboard'],
         ['wallet mode', 'Wallet mode'],
@@ -78,6 +90,14 @@ describe('Settings search', () => {
 
         expect(screen.getByText(sectionTitle)).toBeTruthy();
         expect(screen.queryByText('About')).toBeNull();
+    });
+
+    it('finds every cataloged settings row by its title', () => {
+        for (const [sectionId, rows] of Object.entries(SETTINGS_SEARCH_ROWS)) {
+            for (const { title } of rows) {
+                expect(findMatchingSearchRow(sectionId, title), title).toMatchObject({ title });
+            }
+        }
     });
 
     it.each([
@@ -104,6 +124,21 @@ describe('Settings search', () => {
 
         expect(screen.getByRole('heading', { name: 'Backup' })).toBeTruthy();
         expect(screen.getByText('Export encrypted backup')).toBeTruthy();
+    });
+
+    it('opens the matching subpage and highlights its row', async () => {
+        const settings = createDefaultSettings();
+        settings.fees['bitcoin-mainnet'] = { strategy: 'normal', customRate: null, rbfByDefault: false };
+        mount({}, settings);
+        searchFor('network fee');
+
+        fireEvent.click(screen.getByRole('button', { name: /Fees/ }));
+
+        expect(await screen.findByRole('heading', { name: 'Fees' })).toBeTruthy();
+        const match = await screen.findByText('Fee strategy', {
+            selector: '[data-settings-search-match="true"]',
+        });
+        expect(match.closest('[data-settings-search-highlight="true"]')).toBeTruthy();
     });
 
     it('describes only the controls available in Appearance', () => {
