@@ -2862,7 +2862,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                                     label={t('history.detail.copyRawJson')}
                                 />
                             </span>
-                            <pre className={styles.detailDecoded}>
+                            <pre className={styles.detailDecoded} tabIndex={0}>
                                 {decodeActionToText(rawForDisplay)}
                             </pre>
                         </div>
@@ -2889,7 +2889,7 @@ export function DetailCard({ entry, peerCache, chainTip, indexerWatermark, walle
                                                 label={t('history.detail.copyPeerRawJson')}
                                             />
                                         </span>
-                                        <pre className={styles.detailDecoded}>
+                                        <pre className={styles.detailDecoded} tabIndex={0}>
                                             {decodeActionToText(balancesHidden ? redactAmountFields(peer.action) : peer.action)}
                                         </pre>
                                     </div>
@@ -4921,11 +4921,11 @@ function ExportModal({
                         </p>
                     ) : null}
                     {operationTime.timedOut ? (
-                        <p role="alert" style={{ margin: 0, color: 'var(--xc-danger)' }}>
+                        <p role="alert" style={{ margin: 0, color: 'var(--xc-danger-fg)' }}>
                             {t('history.export.slow')}
                         </p>
                     ) : null}
-                    {error ? <p role="alert" style={{ margin: 0, color: 'var(--xc-danger)' }}>{error}</p> : null}
+                    {error ? <p role="alert" style={{ margin: 0, color: 'var(--xc-danger-fg)' }}>{error}</p> : null}
                 </div>
 
                 <div style={MODAL_ACTIONS}>

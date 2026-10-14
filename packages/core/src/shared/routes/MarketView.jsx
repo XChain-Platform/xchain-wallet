@@ -139,7 +139,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap }) 
     const changeDisplay = percentChangeDisplay(changePct);
     const changeColor = changeDisplay?.direction === 'positive'
         ? 'var(--xc-success)'
-        : changeDisplay?.direction === 'negative' ? 'var(--xc-danger)' : 'var(--xc-text-muted)';
+        : changeDisplay?.direction === 'negative' ? 'var(--xc-danger-fg)' : 'var(--xc-text-muted)';
     const marketKey = `${chainId}:${tick1}:${tick2}`;
 
     const header = (

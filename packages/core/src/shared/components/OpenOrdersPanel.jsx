@@ -332,7 +332,7 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                                 }}
                             >
                                 <span style={{
-                                    color: r.side === 'buy' ? 'var(--xc-success)' : 'var(--xc-danger)',
+                                    color: r.side === 'buy' ? 'var(--xc-success)' : 'var(--xc-danger-fg)',
                                     fontWeight: 600,
                                 }}>
                                     {r.side === 'buy' ? 'Buy' : 'Sell'}
