@@ -91,7 +91,7 @@ describe('message signing inputs', () => {
             }),
         }));
 
-        await screen.findByRole('button', { name: 'Chain: Bitcoin' });
+        await screen.findByRole('button', { name: 'Network: Bitcoin' });
         expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
 });
