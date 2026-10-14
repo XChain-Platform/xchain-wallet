@@ -762,6 +762,23 @@ function restoreWindowAfterIdleCheck() {
 }
 
 /**
+ * Reload only the focused renderer so the main-process vault, signer pool, and
+ * cached session keep the same unlocked state across Cmd/Ctrl+R.
+ *
+ * @param {BrowserWindow | undefined} menuWindow
+ * @param {boolean} [ignoreCache]
+ * @returns {boolean}
+ */
+export function reloadRendererWindow(menuWindow, ignoreCache = false) {
+    const target = menuWindow ?? BrowserWindow.getFocusedWindow();
+    const contents = target?.webContents;
+    if (!contents || contents.isDestroyed?.()) return false;
+    if (ignoreCache) contents.reloadIgnoringCache();
+    else contents.reload();
+    return true;
+}
+
+/**
  * Wire the application menu. File > New Window runs the idle-lock gate;
  * direct-download builds also expose a visible update check, and every
  * platform can open the version-pinned native About panel.
@@ -822,8 +839,16 @@ export function installApplicationMenu({
         {
             label: '&View',
             submenu: [
-                { role: 'reload' },
-                { role: 'forceReload' },
+                {
+                    label: 'Reload',
+                    accelerator: 'CmdOrCtrl+R',
+                    click: (_item, win) => { reloadRendererWindow(win); },
+                },
+                {
+                    label: 'Force Reload',
+                    accelerator: 'CmdOrCtrl+Shift+R',
+                    click: (_item, win) => { reloadRendererWindow(win, true); },
+                },
                 ...(app.isPackaged ? [] : [{ role: 'toggleDevTools' }]),
                 { type: 'separator' },
                 { role: 'resetZoom' },
@@ -837,8 +862,8 @@ export function installApplicationMenu({
             label: '&Window',
             submenu: [
                 { role: 'minimize' },
-                { role: 'zoom' },
                 ...(isMac ? [
+                    { role: 'zoom' },
                     { type: 'separator' },
                     { role: 'front' },
                 ] : [

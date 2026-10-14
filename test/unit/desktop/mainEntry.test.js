@@ -36,7 +36,12 @@ const electron = vi.hoisted(() => {
         constructor(options) {
             browserWindowOptions.push(options);
             this.options = options;
-            this.webContents = { send: vi.fn() };
+            this.webContents = {
+                send: vi.fn(),
+                isDestroyed: vi.fn(() => false),
+                reload: vi.fn(),
+                reloadIgnoringCache: vi.fn(),
+            };
             this.loadFile = vi.fn(() => state.loadFileError
                 ? Promise.reject(state.loadFileError)
                 : undefined);
@@ -689,6 +694,7 @@ describe('desktop main entry point', () => {
             sandbox: true,
             nodeIntegration: false,
             webSecurity: true,
+            devTools: false,
         });
     });
 
@@ -873,8 +879,60 @@ describe('desktop application menu', () => {
         const file = submenu(template, fileLabel);
 
         expect(file.at(-1)).toEqual({ role: finalRole });
-        expect(submenu(template, '&View').map((item) => item.role).filter(Boolean)).toContain('reload');
+        expect(submenu(template, '&View').find((item) => item.label === 'Reload')).toMatchObject({
+            accelerator: 'CmdOrCtrl+R',
+            click: expect.any(Function),
+        });
         expect(actionableLeaves(template).every((item) => item.role || item.click)).toBe(true);
+    });
+
+    it('provides native editing commands and only platform-valid window commands', async () => {
+        const { installApplicationMenu } = await import('../../../packages/desktop/main/index.js');
+
+        installApplicationMenu({ isMac: false });
+        let template = electron.Menu.buildFromTemplate.mock.calls.at(-1)[0];
+        expect(submenu(template, '&Edit').map((item) => item.role).filter(Boolean)).toEqual([
+            'undo',
+            'redo',
+            'cut',
+            'copy',
+            'paste',
+            'selectAll',
+        ]);
+        expect(submenu(template, '&Window').map((item) => item.role).filter(Boolean)).toEqual([
+            'minimize',
+            'close',
+        ]);
+
+        installApplicationMenu({ isMac: true });
+        template = electron.Menu.buildFromTemplate.mock.calls.at(-1)[0];
+        expect(submenu(template, '&Window').map((item) => item.role).filter(Boolean)).toEqual([
+            'minimize',
+            'zoom',
+            'front',
+        ]);
+    });
+
+    it('reloads renderer contents without clearing the unlocked main-process session', async () => {
+        const { createWindow, installApplicationMenu } = await import(
+            '../../../packages/desktop/main/index.js'
+        );
+        const win = createWindow();
+        installApplicationMenu({ isMac: false });
+        const template = electron.Menu.buildFromTemplate.mock.calls.at(-1)[0];
+        const view = submenu(template, '&View');
+        const reload = view.find((item) => item.label === 'Reload');
+        const forceReload = view.find((item) => item.label === 'Force Reload');
+
+        reload.click({}, win);
+        forceReload.click({}, win);
+
+        expect(reload.accelerator).toBe('CmdOrCtrl+R');
+        expect(forceReload.accelerator).toBe('CmdOrCtrl+Shift+R');
+        expect(win.webContents.reload).toHaveBeenCalledOnce();
+        expect(win.webContents.reloadIgnoringCache).toHaveBeenCalledOnce();
+        expect(runtime.tearDownHost).not.toHaveBeenCalled();
+        expect(runtime.instance.sessionBackend.clear).not.toHaveBeenCalled();
     });
 
     it('places About in the native macOS app menu and invokes it from Help elsewhere', async () => {
@@ -912,7 +970,11 @@ describe('desktop application menu', () => {
             .filter(Boolean)
             .map((accelerator) => accelerator.toLowerCase());
         expect(new Set(accelerators).size).toBe(accelerators.length);
-        expect(accelerators).toEqual(['cmdorctrl+shift+n']);
+        expect(accelerators).toEqual([
+            'cmdorctrl+shift+n',
+            'cmdorctrl+r',
+            'cmdorctrl+shift+r',
+        ]);
     });
 });
 
