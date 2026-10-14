@@ -16,7 +16,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, waitFor } from '@testing-library/react';
 import { KeyboardSection } from '../../../packages/core/src/shared/components/settings/KeyboardSection.jsx';
-import { ROW, SettingsActionRow } from '../../../packages/core/src/shared/components/settings/_settingsPrimitives.jsx';
+import { ROW, SettingsActionRow, SettingsFieldRow } from '../../../packages/core/src/shared/components/settings/_settingsPrimitives.jsx';
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
 
 const SETTINGS_DIR = join(process.cwd(), 'packages/core/src/shared');
@@ -93,5 +93,26 @@ describe('Settings action rows', () => {
         const section = css.match(/\.formSection\s*\{([^}]*)\}/)[1];
         expect(section).toMatch(/border:\s*1px solid var\(--xc-border\)/);
         expect(section).toMatch(/padding:\s*var\(--xc-space-3\)/);
+    });
+});
+
+describe('Settings field rows', () => {
+    it('keeps a field row control in an end slot that fills the line on a phone', () => {
+        const { getByLabelText } = render(
+            <SettingsFieldRow label="Format" hint="How numbers show.">
+                <select><option>Full</option></select>
+            </SettingsFieldRow>,
+        );
+        const slot = getByLabelText('Format').parentElement;
+        expect(slot.hasAttribute('data-settings-control')).toBe(true);
+        expect(slot.style.marginInlineStart).toBe('auto');
+        const css = readFileSync(join(SETTINGS_DIR, 'routes/Settings.module.css'), 'utf8');
+        const phone = css.slice(css.indexOf('@media (max-width: 480px)'));
+        expect(phone).toMatch(/\.page \[data-settings-control\]\s*\{\s*flex:\s*1 1 100%/);
+    });
+
+    it('draws Developer mode rows as bordered rows, like every other subpage', () => {
+        const src = readFileSync(join(SETTINGS_DIR, 'components/settings/DeveloperModeSection.jsx'), 'utf8');
+        expect(src).not.toMatch(/^\s*embedded\s*$/m);
     });
 });

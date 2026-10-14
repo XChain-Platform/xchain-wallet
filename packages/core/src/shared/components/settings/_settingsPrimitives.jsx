@@ -70,6 +70,17 @@ export const ROW_COPY = {
     flex: '1 1 280px',
     minWidth: 'min(100%, 280px)',
 };
+// The control keeps to the row end beside the copy. On a phone the Settings
+// page stylesheet widens this slot to the full row once it wraps under the
+// copy, so a kit Select, whose own wrapper would otherwise shrink-wrap, fills
+// the line like a native select does.
+const CONTROL_SLOT = {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    marginInlineStart: 'auto',
+    minWidth: 0,
+    maxWidth: '100%',
+};
 export const EMBEDDED_ROW = {
     ...ROW,
     padding: 'var(--xc-space-1) 0',
@@ -103,7 +114,7 @@ export function SettingsFieldRow({ label, hint, children, embedded = false }) {
                 <label htmlFor={controlId} style={ROW_VALUE}>{label}</label>
                 {hint ? <span id={hintId} style={ROW_HINT}>{hint}</span> : null}
             </div>
-            {control}
+            <div data-settings-control="" style={CONTROL_SLOT}>{control}</div>
         </div>
     );
 }
