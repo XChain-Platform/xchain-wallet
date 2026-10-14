@@ -51,7 +51,7 @@ describe('RTL-safe machine-readable fields', () => {
         expect(screen.getByLabelText(address)).toHaveAttribute('dir', 'ltr');
     });
 
-    it('uses logical padding for the trailing Max control', () => {
+    it('keeps the trailing Max control in flow instead of overlaying the input', () => {
         render(
             <AmountField
                 amount="1"
@@ -61,9 +61,14 @@ describe('RTL-safe machine-readable fields', () => {
             />,
         );
 
+        // Max sits beside the input in the flex row, so neither writing
+        // direction needs a physical inset or reserved input padding.
         const input = screen.getByRole('textbox', { name: 'Amount (BTC)' });
-        expect(input.style.paddingInlineEnd).toBe('64px');
+        const max = screen.getByRole('button', { name: 'Use max available amount' });
         expect(input.style.paddingRight).toBe('');
+        expect(input.style.paddingInlineEnd).toBe('');
+        expect(max.style.position).toBe('');
+        expect(max.style.right).toBe('');
         expect(input).toHaveAttribute('dir', 'ltr');
     });
 });
