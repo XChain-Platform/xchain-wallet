@@ -1101,5 +1101,7 @@ for (const order of [['desktop', 'android'], ['android', 'desktop']]) {
         + 'downstream symptom the operator would misread');
 }
 
+// Stop the gpg-agent the throwaway GNUPGHOME spawned before removing it.
+spawnSync('gpgconf', ['--kill', 'gpg-agent'], { env: { ...process.env, GNUPGHOME: gnupg } });
 rmSync(work, { recursive: true, force: true });
 console.log('publish-feed.smoke.js: ok');
