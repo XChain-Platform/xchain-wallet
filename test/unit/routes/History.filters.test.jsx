@@ -80,7 +80,7 @@ function historyRow({ actionIndex, action = 'SEND', blockIndex = 100, timestamp,
 function mountHistory(rowsByChain, addressesByChain = {
     [LTC]: [{ address: LTC_ADDRESS }],
     [DOGE]: [{ address: DOGE_ADDRESS }],
-}, contacts = []) {
+}, contacts = [], watermark = null) {
     let settings = { fiatCurrency: 'USD', showFiatInHistory: false };
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue(addressesByChain),
@@ -88,7 +88,7 @@ function mountHistory(rowsByChain, addressesByChain = {
         getLinksForAddress: vi.fn().mockResolvedValue([]),
         getAddressMempool: vi.fn().mockResolvedValue([]),
         getPendingTxsForAddress: vi.fn().mockResolvedValue([]),
-        getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: null }),
+        getIndexerWatermark: vi.fn().mockResolvedValue({ watermark }),
         getMultisigReceiveAddress: vi.fn().mockRejectedValue(new Error('none')),
         listContacts: vi.fn().mockResolvedValue(contacts),
         getSettings: vi.fn(() => Promise.resolve(settings)),
@@ -460,7 +460,7 @@ describe('History filters', () => {
         expect(await screen.findByText('No results for these filters')).toBeInTheDocument();
     });
 
-    it('collapses filters behind an active-count button with concise accessible fields in the 360px layout', async () => {
+    it('fits filters and complete row metadata in the 360px layout', async () => {
         const widthDescriptor = Object.getOwnPropertyDescriptor(window, 'innerWidth');
         Object.defineProperty(window, 'innerWidth', { configurable: true, value: 360 });
 
@@ -468,13 +468,17 @@ describe('History filters', () => {
             const { view } = mountHistory({
                 [LTC]: [historyRow({
                     actionIndex: 30,
+                    blockIndex: 100,
                     timestamp: secondsAt(0),
-                    tick: 'LTC',
+                    tick: 'LITECRED',
                     source: LTC_ADDRESS,
-                    amount: '123456789.12345678',
+                    amount: '100000000',
                 })],
-            });
+            }, undefined, [], 175);
             await waitFor(() => expect(rowKeys(view)).toHaveLength(1));
+
+            const amount = view.container.querySelector('[data-history-amount]');
+            expect(amount).toHaveTextContent(/100,000,000 LITECRED/);
 
             const filterToggle = screen.getByRole('button', { name: 'Filters (1)' });
             expect(filterToggle).toHaveAttribute('aria-expanded', 'false');
