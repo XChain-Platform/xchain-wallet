@@ -13,8 +13,10 @@ import { GovernancePolls } from '../../../packages/core/src/shared/routes/Govern
 import { PollDetail } from '../../../packages/core/src/shared/routes/PollDetail.jsx';
 import { resetBackStackForTests } from '../../../packages/core/src/ui/backStack.js';
 import { userEvent } from '../../helpers/userEvent.js';
+import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
 const CHAIN = 'bitcoin-mainnet';
+const DELEGATE = 'bc1qdevmock03aabbcc';
 const ADDRESS = Object.freeze({
     id: 'address-1',
     address: 'bc1qexampleexampleexampleexampleexampleex',
@@ -64,6 +66,10 @@ function mount(Component, props, messaging = messagingWith()) {
         React.createElement(Component, props),
     ));
 }
+
+beforeEach(() => {
+    __clearTokenInfoCache();
+});
 
 describe('governance route audit', () => {
     it('reaches the poll browser actions in order and dismisses the network picker with Escape', async () => {
@@ -131,6 +137,10 @@ describe('governance route audit', () => {
 
         fireEvent.change(screen.getByLabelText('Option 0'), { target: { value: 'Yes' } });
         fireEvent.change(screen.getByLabelText('Option 1'), { target: { value: 'No' } });
+        fireEvent.change(screen.getByLabelText('Closes at block'), { target: { value: '0' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Create poll' }));
+        expect(await screen.findByText('End block must be a positive whole block height.')).toBeTruthy();
+
         fireEvent.change(screen.getByLabelText('Closes at block'), { target: { value: '100' } });
         fireEvent.click(screen.getByRole('button', { name: 'Create poll' }));
         expect(await screen.findByText('End block must be above the current indexed block (100).')).toBeTruthy();
@@ -141,6 +151,118 @@ describe('governance route audit', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Create poll' }));
         expect(await screen.findByText('Max selections must be a whole number from 1 to 2.')).toBeTruthy();
         expect(messaging.composeVoteForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('validates a malformed governance ticker before compose', async () => {
+        const messaging = messagingWith();
+        mount(CreatePollForm, {
+            walletId: 'wallet-1', chainId: CHAIN, presetTick: 'BAD|TICK', onBack() {},
+        }, messaging);
+        await screen.findByDisplayValue(ADDRESS.address);
+        fireEvent.change(screen.getByLabelText('Option 0'), { target: { value: 'Yes' } });
+        fireEvent.change(screen.getByLabelText('Option 1'), { target: { value: 'No' } });
+        fireEvent.change(screen.getByLabelText('Closes at block'), { target: { value: '244' } });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Create poll' }));
+
+        expect(await screen.findByText(/Governance token can only use letters/)).toBeTruthy();
+        expect(messaging.composeVoteForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('refuses poll creation from an address with no governance-token balance', async () => {
+        const messaging = messagingWith({
+            getWalletBalances: vi.fn().mockResolvedValue({
+                [CHAIN]: [{
+                    address: ADDRESS.address,
+                    balances: { tokens: [{ tick: 'XCHAIN', quantity: '10', divisibility: 0 }] },
+                }],
+            }),
+        });
+        mount(CreatePollForm, {
+            walletId: 'wallet-1', chainId: CHAIN, presetTick: 'VOTE', onBack() {},
+        }, messaging);
+        await screen.findByDisplayValue(ADDRESS.address);
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 450)); });
+        fireEvent.change(screen.getByLabelText('Option 0'), { target: { value: 'Yes' } });
+        fireEvent.change(screen.getByLabelText('Option 1'), { target: { value: 'No' } });
+        fireEvent.change(screen.getByLabelText('Closes at block'), { target: { value: '244' } });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Create poll' }));
+
+        expect(await screen.findByText('This address must hold some VOTE to create its poll.')).toBeTruthy();
+        expect(messaging.composeVoteForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('fixes the review/build mismatch by labeling and canonicalizing XCHAIN escrow amounts', async () => {
+        const buildActionPsbtRequest = vi.fn().mockResolvedValue({ psbtHex: '00' });
+        const messaging = messagingWith({
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher', activeNetwork: 'mainnet' }),
+            getTokenInfo: vi.fn().mockImplementation(({ tick }) => Promise.resolve({
+                tick, divisibility: tick === 'XCHAIN' ? 2 : 1,
+            })),
+            getWalletBalances: vi.fn().mockResolvedValue({
+                [CHAIN]: [{
+                    address: ADDRESS.address,
+                    balances: {
+                        tokens: [
+                            { tick: 'VOTE', quantity: '100', divisibility: 1 },
+                            { tick: 'XCHAIN', quantity: '500', divisibility: 2 },
+                        ],
+                    },
+                }],
+            }),
+            buildActionPsbtRequest,
+        });
+        mount(CreatePollForm, {
+            walletId: 'wallet-1', chainId: CHAIN, presetTick: 'VOTE', onBack() {},
+        }, messaging);
+        await screen.findByDisplayValue(ADDRESS.address);
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 450)); });
+        fireEvent.change(screen.getByLabelText('Option 0'), { target: { value: 'Yes' } });
+        fireEvent.change(screen.getByLabelText('Option 1'), { target: { value: 'No' } });
+        fireEvent.change(screen.getByLabelText('Closes at block'), { target: { value: '244' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Advanced (gates + deposit)' }));
+        fireEvent.change(screen.getByLabelText('Minimum vote balance (optional)'), { target: { value: '1.23' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        expect(await screen.findByText('Minimum vote balance can have at most 1 decimal place for VOTE.')).toBeTruthy();
+
+        fireEvent.change(screen.getByLabelText('Minimum vote balance (optional)'), { target: { value: '' } });
+        fireEvent.change(screen.getByLabelText('Creation deposit (optional)'), { target: { value: '-1' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        expect(await screen.findByText('Creation deposit must be a non-negative XCHAIN amount.')).toBeTruthy();
+
+        fireEvent.change(screen.getByLabelText('Creation deposit (optional)'), { target: { value: '3.001' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        expect(await screen.findByText('Creation deposit can have at most 2 decimal places for XCHAIN.')).toBeTruthy();
+
+        fireEvent.change(screen.getByLabelText('Creation deposit (optional)'), { target: { value: '3.00' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Binding poll (run a contract on the result)' }));
+        fireEvent.change(screen.getByLabelText('Contract to call (optional)'), { target: { value: '42' } });
+        fireEvent.change(screen.getByLabelText('Method to run'), { target: { value: 'release' } });
+        fireEvent.change(screen.getByLabelText('Quorum (optional)'), { target: { value: '0.2' } });
+        fireEvent.change(screen.getByLabelText('Minimum voters (optional)'), { target: { value: '1' } });
+        fireEvent.change(screen.getByLabelText('Escrow to fund the call (optional)'), { target: { value: '2.01' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        expect(await screen.findByText(/creation deposit and callback escrow together must stay within that balance/)).toBeTruthy();
+
+        fireEvent.change(screen.getByLabelText('Escrow to fund the call (optional)'), { target: { value: '2.00' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        expect(await screen.findByText('3 XCHAIN')).toBeTruthy();
+        expect(screen.getByText('2 XCHAIN')).toBeTruthy();
+        expect(screen.getByText('244')).toBeTruthy();
+        expect(screen.getByText('Maximum selections').nextElementSibling).toHaveTextContent('1');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+        expect(screen.getByLabelText('Creation deposit (optional)')).toHaveValue('3.00');
+        expect(screen.getByLabelText('Escrow to fund the call (optional)')).toHaveValue('2.00');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create unsigned transaction: poll' }));
+        expect(buildActionPsbtRequest).toHaveBeenCalledWith(expect.objectContaining({
+            actionData: expect.objectContaining({
+                params: expect.objectContaining({ DEPOSIT: '3', GAS_ESCROW: '2' }),
+            }),
+        }));
     });
 
     it('starts a new poll with fresh fields when the wallet context changes', async () => {
@@ -198,6 +320,32 @@ describe('governance route audit', () => {
         expect(await screen.findByText('Governance token is required.')).toBeTruthy();
     });
 
+    it('validates delegation addresses and memo text before compose', async () => {
+        const source = { ...ADDRESS, address: 'bc1qdevmock02aabbcc' };
+        const messaging = messagingWith({
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [source] }),
+            getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: source.id } }),
+        });
+        mount(DelegateVoteForm, {
+            walletId: 'wallet-1', chainId: CHAIN, presetTick: 'VOTE', onBack() {},
+        }, messaging);
+        await screen.findByDisplayValue(source.address);
+
+        fireEvent.change(screen.getByLabelText('Delegate to address'), { target: { value: 'not-an-address' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
+        expect(await screen.findByText(/Delegate-to address is not valid/)).toBeTruthy();
+
+        fireEvent.change(screen.getByLabelText('Delegate to address'), { target: { value: source.address } });
+        fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
+        expect(await screen.findByText('Delegate-to address must be different from the source address.')).toBeTruthy();
+
+        fireEvent.change(screen.getByLabelText('Delegate to address'), { target: { value: DELEGATE } });
+        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'x'.repeat(251) } });
+        fireEvent.click(screen.getByRole('button', { name: 'Delegate votes' }));
+        expect(await screen.findByText('Memo is 251 bytes; the network accepts at most 250 bytes.')).toBeTruthy();
+        expect(messaging.composeVoteForConfirm).not.toHaveBeenCalled();
+    });
+
     it('starts a new delegation with fresh fields when the wallet context changes', async () => {
         const messaging = messagingWith();
         const renderForm = (walletId) => React.createElement(
@@ -209,7 +357,7 @@ describe('governance route audit', () => {
         );
         const mounted = render(renderForm('wallet-1'));
         await screen.findByDisplayValue(ADDRESS.address);
-        fireEvent.change(screen.getByLabelText('Delegate to address'), { target: { value: 'bc1qolddelegate' } });
+        fireEvent.change(screen.getByLabelText('Delegate to address'), { target: { value: DELEGATE } });
         fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'Old memo' } });
 
         mounted.rerender(renderForm('wallet-2'));
@@ -229,7 +377,7 @@ describe('governance route audit', () => {
             walletId: 'wallet-1', chainId: CHAIN, presetTick: 'VOTE', onBack() {},
         }, messaging);
         await screen.findByDisplayValue(ADDRESS.address);
-        fireEvent.change(screen.getByLabelText('Delegate to address'), { target: { value: 'bc1qdelegate' } });
+        fireEvent.change(screen.getByLabelText('Delegate to address'), { target: { value: DELEGATE } });
         fireEvent.click(await screen.findByRole('button', { name: 'Preview' }));
         const submit = await screen.findByRole('button', { name: 'Create unsigned transaction: delegate votes' });
         const form = submit.closest('form');
@@ -341,6 +489,30 @@ describe('governance route audit', () => {
         expect(screen.queryByText('Loading poll…')).toBeNull();
     });
 
+    it('rejects a malformed poll id without querying the indexer', async () => {
+        const messaging = messagingWith();
+        mount(PollDetail, {
+            walletId: 'wallet-1', chainId: CHAIN, pollIndex: '7x', onBack() {},
+        }, messaging);
+
+        expect(await screen.findByText('Poll number must be a positive whole number.')).toBeTruthy();
+        expect(messaging.governancePoll).not.toHaveBeenCalled();
+        expect(messaging.governanceVotes).not.toHaveBeenCalled();
+    });
+
+    it('renders indexer failures as plain copy without exposing the request URL', async () => {
+        const failure = Object.assign(
+            new Error('Explorer returned HTTP 502 for https://service.invalid/api/polls/7'),
+            { name: 'SDKExplorerError' },
+        );
+        mount(PollDetail, {
+            walletId: 'wallet-1', chainId: CHAIN, pollIndex: 7, onBack() {},
+        }, messagingWith({ governancePoll: vi.fn().mockRejectedValue(failure) }));
+
+        expect(await screen.findByText(/Couldn.t load this poll.*temporarily unavailable/)).toBeTruthy();
+        expect(screen.queryByText(/service\.invalid/)).toBeNull();
+    });
+
     it('rejects invalid split shares before composing a ballot', async () => {
         const messaging = messagingWith({
             governancePoll: vi.fn().mockResolvedValue({
@@ -358,10 +530,68 @@ describe('governance route audit', () => {
 
         const share = await screen.findByLabelText('0: Yes');
         await waitFor(() => expect(messaging.governanceVotes).toHaveBeenCalled());
+        fireEvent.change(share, { target: { value: '0' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Vote' }));
+        expect(await screen.findByText('Each split share must be a positive plain number.')).toBeTruthy();
+
         fireEvent.change(share, { target: { value: 'not-a-number' } });
         fireEvent.click(screen.getByRole('button', { name: 'Vote' }));
-        expect(await screen.findByText('Each split share must be a positive number.')).toBeTruthy();
+        expect(await screen.findByText('Each split share must be a positive plain number.')).toBeTruthy();
         expect(messaging.composeVoteForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('refuses a ballot from an address with no governance-token balance', async () => {
+        const messaging = messagingWith({
+            governancePoll: vi.fn().mockResolvedValue({
+                action_index: 8,
+                tick: 'VOTE',
+                poll_status: 'open',
+                options: ['Yes', 'No'],
+                tally_mode: 'approval',
+                max_selections: 1,
+            }),
+            getWalletBalances: vi.fn().mockResolvedValue({
+                [CHAIN]: [{ address: ADDRESS.address, balances: { tokens: [] } }],
+            }),
+        });
+        mount(PollDetail, {
+            walletId: 'wallet-1', chainId: CHAIN, pollIndex: 8, onBack() {},
+        }, messaging);
+        fireEvent.click(await screen.findByLabelText('0: Yes'));
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 450)); });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Vote' }));
+
+        expect(await screen.findByText('This address must hold some VOTE to vote.')).toBeTruthy();
+        expect(messaging.composeVoteForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('shows the built ballot memo on watcher review and keeps it after Back', async () => {
+        const messaging = messagingWith({
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher', activeNetwork: 'mainnet' }),
+            governancePoll: vi.fn().mockResolvedValue({
+                action_index: 8,
+                tick: 'VOTE',
+                poll_status: 'open',
+                options: ['Yes', 'No'],
+                tally_mode: 'approval',
+                max_selections: 1,
+            }),
+        });
+        mount(PollDetail, {
+            walletId: 'wallet-1', chainId: CHAIN, pollIndex: 8, onBack() {},
+        }, messaging);
+
+        fireEvent.click(await screen.findByLabelText('0: Yes'));
+        fireEvent.change(screen.getByLabelText('Memo (optional)'), { target: { value: 'Fund it' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Vote' }));
+
+        expect(await screen.findByText('Vote on poll #8 (VOTE).')).toBeTruthy();
+        expect(screen.getByText('Fund it')).toBeTruthy();
+        expect(screen.getByText('Network fee').nextElementSibling).toHaveTextContent('BTC');
+        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+        expect(screen.getByLabelText('0: Yes')).toBeChecked();
+        expect(screen.getByLabelText('Memo (optional)')).toHaveValue('Fund it');
     });
 
     it('shows the poll-list empty state after a successful empty read', async () => {
