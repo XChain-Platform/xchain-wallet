@@ -191,7 +191,10 @@ export const Input = forwardRef(function Input(
     const canReveal = isPassword && revealable;
     const [revealed, setRevealed] = useState(false);
     const renderedType = canReveal && revealed ? 'text' : type;
-    const revealName = (fieldName || 'password').toLowerCase();
+    // The button is tied to its field by aria-controls, so its own name stays
+    // short: repeating the field label would make a lookup by that label find
+    // the button as well as the field.
+    const revealName = /passphrase/i.test(fieldName || '') ? 'passphrase' : 'password';
     const [capsLockOn, setCapsLockOn] = useState(false);
     const [focused, setFocused] = useState(false);
     const showCapsLock = isPassword && focused && capsLockOn;

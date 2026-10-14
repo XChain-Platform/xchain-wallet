@@ -27,7 +27,7 @@ describe('<Input revealable>', () => {
     it('puts a named show and hide button inside the field that switches the input type', () => {
         render(<Input type="password" revealable label="Current wallet password" defaultValue="secret-1" />);
         const field = screen.getByLabelText('Current wallet password');
-        const show = screen.getByRole('button', { name: 'Show current wallet password' });
+        const show = screen.getByRole('button', { name: 'Show password' });
 
         expect(field).toHaveAttribute('type', 'password');
         expect(show.parentElement).toBe(field.parentElement);
@@ -37,11 +37,24 @@ describe('<Input revealable>', () => {
         fireEvent.click(show);
         expect(field).toHaveAttribute('type', 'text');
         expect(field).toHaveValue('secret-1');
-        const hide = screen.getByRole('button', { name: 'Hide current wallet password' });
+        const hide = screen.getByRole('button', { name: 'Hide password' });
         expect(hide).toHaveAttribute('aria-pressed', 'true');
 
         fireEvent.click(hide);
         expect(field).toHaveAttribute('type', 'password');
+    });
+
+    it('names the button without the field label, so a label lookup finds only the field', () => {
+        render(
+            <>
+                <Input type="password" revealable label="Current wallet password" />
+                <Input type="password" revealable aria-label="BIP39 passphrase" />
+            </>,
+        );
+        expect(screen.getAllByLabelText(/current wallet password/i)).toHaveLength(1);
+        expect(screen.getAllByLabelText(/BIP39 passphrase/i)).toHaveLength(1);
+        expect(screen.getByRole('button', { name: 'Show passphrase' }))
+            .toHaveAttribute('aria-controls', screen.getByLabelText('BIP39 passphrase').id);
     });
 
     it('keeps the input first in its hit area so a tap beside it still focuses the field', () => {
