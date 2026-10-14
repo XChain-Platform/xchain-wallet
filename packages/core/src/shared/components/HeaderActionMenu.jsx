@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useRef, useState } from 'react';
+import { cloneElement, isValidElement, useEffect, useRef, useState } from 'react';
 import { Button, Icon } from '@xchain-wallet/core/ui';
 import { useBackHandler } from '../../ui/backStack.js';
 import { isNativeShell } from '../nativeShell.js';
@@ -81,11 +81,16 @@ export function HeaderActionMenu({
             event.preventDefault();
             close(true);
         };
+        const onFocusIn = (event) => {
+            if (event.target.closest?.('#xc-main')) close();
+        };
         window.addEventListener('mousedown', onPointerDown);
         window.addEventListener('keydown', onKeyDown);
+        window.addEventListener('focusin', onFocusIn);
         return () => {
             window.removeEventListener('mousedown', onPointerDown);
             window.removeEventListener('keydown', onKeyDown);
+            window.removeEventListener('focusin', onFocusIn);
         };
     }, [open]);
 
@@ -106,6 +111,9 @@ export function HeaderActionMenu({
     const popOut = supportsPopOut()
         ? (typeof onPopOut === 'function' ? onPopOut : automaticPopOut())
         : null;
+    const settings = isValidElement(settingsControl)
+        ? cloneElement(settingsControl, { onNavigate: close })
+        : settingsControl;
     const rows = [
         { id: 'search', label: 'Search', Icon: Icon.SearchIcon, handler: onCommandPalette, shortcut: 'Cmd/Ctrl+K' },
         { id: 'scan', label: 'Scan', Icon: Icon.ScanIcon, handler: onScan },
@@ -158,7 +166,7 @@ export function HeaderActionMenu({
                         items[nextIndex]?.focus();
                     }}
                 >
-                    {settingsControl}
+                    {settings}
                     {rows.map(({ id, label, Icon: RowIcon, handler, shortcut }) => (
                         <button
                             key={id}

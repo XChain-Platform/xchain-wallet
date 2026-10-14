@@ -64,6 +64,7 @@ import { useBackHandler } from '../../ui/backStack.js';
  * @param {boolean} [props.developerMode]
  * @param {(network: 'mainnet'|'testnet'|'regtest') => Promise<void>} [props.onActiveNetworkChange]
  * @param {boolean} [props.menuRow] renders the trigger as a labelled overflow-menu row
+ * @param {() => void} [props.onNavigate] closes an owning menu before destination navigation
  */
 export function HeaderSettingsButton({
     activeWallet,
@@ -81,6 +82,7 @@ export function HeaderSettingsButton({
     developerMode = false,
     onActiveNetworkChange,
     menuRow = false,
+    onNavigate,
 }) {
     const [open, setOpen] = useState(false);
     const [switchingNetwork, setSwitchingNetwork] = useState(false);
@@ -106,11 +108,16 @@ export function HeaderSettingsButton({
             setOpen(false);
             focusTrigger();
         };
+        const onFocusIn = (event) => {
+            if (event.target.closest?.('#xc-main')) setOpen(false);
+        };
         window.addEventListener('mousedown', onClick);
         window.addEventListener('keydown', onKey);
+        window.addEventListener('focusin', onFocusIn);
         return () => {
             window.removeEventListener('mousedown', onClick);
             window.removeEventListener('keydown', onKey);
+            window.removeEventListener('focusin', onFocusIn);
         };
     }, [open]);
 
@@ -138,6 +145,11 @@ export function HeaderSettingsButton({
     const walletLabel = activeWallet?.name || null;
     const accountLabel = activeAccount?.name
         || (Number.isInteger(activeAccount?.index) ? `Account ${activeAccount.index + 1}` : null);
+    const navigate = (handler) => {
+        setOpen(false);
+        onNavigate?.();
+        handler();
+    };
 
     const switchNetwork = async (next) => {
         if (next === currentNetwork) return;
@@ -212,7 +224,7 @@ export function HeaderSettingsButton({
                             <button
                                 type="button"
                                 className={styles.summaryRow}
-                                onClick={() => { setOpen(false); onOpenWalletPicker(); }}
+                                onClick={() => navigate(onOpenWalletPicker)}
                                 title={walletLabel || 'Choose wallet'}
                             >
                                 <span className={`${styles.summaryName} ${walletLabel ? '' : styles.summaryEmpty}`}>
@@ -228,7 +240,7 @@ export function HeaderSettingsButton({
                             <button
                                 type="button"
                                 className={styles.summaryRow}
-                                onClick={() => { setOpen(false); onOpenAccountPicker(); }}
+                                onClick={() => navigate(onOpenAccountPicker)}
                                 title={accountLabel || 'Choose account'}
                             >
                                 <span className={`${styles.summaryName} ${accountLabel ? '' : styles.summaryEmpty}`}>
@@ -271,7 +283,7 @@ export function HeaderSettingsButton({
                             <button
                                 type="button"
                                 className={styles.summaryRow}
-                                onClick={() => { setOpen(false); onOpenSettings(); }}
+                                onClick={() => navigate(onOpenSettings)}
                                 title="All settings"
                             >
                                 <span className={styles.summaryName}>All settings</span>
