@@ -39,6 +39,9 @@ const packageKeySources = import.meta.glob(
     [
         '../../packages/**/*.{js,jsx}',
         '!../../packages/core/src/i18n/locales/**',
+        // Build output is not source and makes the scan slow after a local build.
+        '!../../packages/**/dist/**',
+        '!../../packages/mobile/www/**',
     ],
     { query: '?raw', import: 'default', eager: true },
 );

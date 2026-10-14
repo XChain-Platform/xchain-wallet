@@ -126,13 +126,13 @@ describe('Home quick-action policy', () => {
         const row = await screen.findByRole('group', { name: 'Quick actions' });
         expect(within(row).getAllByRole('button').map((button) => button.textContent.trim()))
             .toEqual(['Send', 'Exchange']);
-        expect(screen.queryByText('Demo wallets cannot send. Create a real wallet to send.'))
+        expect(screen.queryByText("Demo wallets can't send. Create a real wallet to send."))
             .toBeNull();
 
         fireEvent.click(within(row).getByRole('button', { name: 'Send' }));
 
         expect(handlers.onSend).not.toHaveBeenCalled();
-        expect(screen.getByText('Demo wallets cannot send. Create a real wallet to send.'))
+        expect(screen.getByText("Demo wallets can't send. Create a real wallet to send."))
             .toBeVisible();
         fireEvent.click(screen.getByRole('button', { name: 'Exit demo & wipe' }));
         expect(screen.getByRole('dialog', { name: 'Exit demo and delete its data?' }))
