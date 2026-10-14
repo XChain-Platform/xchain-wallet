@@ -3116,6 +3116,11 @@ function AppInner() {
                             aria-modal="true"
                             aria-labelledby="xc-global-scanner-title"
                             tabIndex={-1}
+                            onKeyDown={(event) => {
+                                if (event.key !== 'Escape') return;
+                                event.stopPropagation();
+                                setGlobalScannerOpen(false);
+                            }}
                             style={{
                                 position: 'absolute',
                                 inset: 0,
