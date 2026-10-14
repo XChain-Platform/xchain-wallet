@@ -64,7 +64,14 @@ export class IndexedDBStorageBackend extends StorageBackend {
     /** @returns {Promise<KeyValStore>} */
     async _getStore() {
         if (this._store) return this._store;
-        if (!this._opening) this._opening = this._openStore();
+        if (!this._opening) {
+            const pending = this._openStore();
+            const retryable = pending.catch((error) => {
+                if (this._opening === retryable) this._opening = null;
+                throw error;
+            });
+            this._opening = retryable;
+        }
         return this._opening;
     }
 
