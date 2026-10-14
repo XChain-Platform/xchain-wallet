@@ -132,6 +132,11 @@ function isInboundFor(address, data) {
     return Boolean(data.destination) && data.destination === address;
 }
 
+function addressLabel(addr) {
+    const walletName = typeof addr.walletName === 'string' ? addr.walletName.trim() : '';
+    return walletName ? `${walletName} wallet's ${addr.label}` : addr.label;
+}
+
 export class NotificationService {
     /**
      * @param {Object} deps
@@ -336,6 +341,7 @@ export class NotificationService {
             return;
         }
         const flags = (settings && settings.notifications) || {};
+        const destinationLabel = addressLabel(addr);
 
         /** @type {{ kind: string, title: string, body: string } | null} */
         let plan = null;
@@ -351,8 +357,8 @@ export class NotificationService {
                 if (flags.incomingPending === false) break;
                 const incoming = transferText(data, addr.address);
                 plan = incoming
-                    ? { kind: 'incoming-pending', title: `${incoming} pending`, body: `Payment to your ${addr.label} address is waiting for confirmation.` }
-                    : { kind: 'incoming-pending', title: 'Payment pending', body: `A payment to your ${addr.label} address is waiting for confirmation.` };
+                    ? { kind: 'incoming-pending', title: `${incoming} pending`, body: `Payment to your ${destinationLabel} address is waiting for confirmation.` }
+                    : { kind: 'incoming-pending', title: 'Payment pending', body: `A payment to your ${destinationLabel} address is waiting for confirmation.` };
                 break;
             }
             case 'NEW_ACTION': {
@@ -367,8 +373,8 @@ export class NotificationService {
                     if (!flags.txConfirmations) break;
                     const sent = transferText(data);
                     plan = sent
-                        ? { kind: 'tx-confirmed', title: `${sent} confirmed`, body: `Your ${addr.label} transaction is confirmed.` }
-                        : { kind: 'tx-confirmed', title: 'Transaction confirmed', body: `Your ${addr.label} transaction is confirmed.` };
+                        ? { kind: 'tx-confirmed', title: `${sent} confirmed`, body: `Your ${destinationLabel} transaction is confirmed.` }
+                        : { kind: 'tx-confirmed', title: 'Transaction confirmed', body: `Your ${destinationLabel} transaction is confirmed.` };
                 } else if (isInboundFor(addr.address, data)) {
                     // An inbound action landed at our address. A MESSAGE is its
                     // own notification kind (gated by its own flag); everything
@@ -384,8 +390,8 @@ export class NotificationService {
                         if (!flags.incomingReceipts) break;
                         const received = transferText(data, addr.address);
                         plan = received
-                            ? { kind: 'incoming-receipt', title: `${received} received`, body: `Payment arrived at your ${addr.label} address.` }
-                            : { kind: 'incoming-receipt', title: 'Payment received', body: `A payment arrived at your ${addr.label} address.` };
+                            ? { kind: 'incoming-receipt', title: `${received} received`, body: `Payment arrived at your ${destinationLabel} address.` }
+                            : { kind: 'incoming-receipt', title: 'Payment received', body: `A payment arrived at your ${destinationLabel} address.` };
                     }
                 }
                 break;
@@ -438,6 +444,11 @@ export class NotificationService {
         const transactionKey = TX_DEDUP_KINDS.has(plan.kind) && txHash ? `${addr.chainId}:${txHash}` : null;
         if (transactionKey && this._wasAnnounced(transactionKey)) return;
 
+        // Reserve before awaiting the adapter. Address subscriptions can fan
+        // out sibling rows concurrently, and every sibling must observe the
+        // first delivery as claimed even while its UI/OS surface is pending.
+        if (transactionKey) this._markAnnounced(transactionKey);
+
         let delivered = true;
         try {
             delivered = await this._notify({
@@ -458,7 +469,7 @@ export class NotificationService {
         }
         // A false return lets an adapter report that permission or host state
         // refused every visible delivery surface.
-        if (transactionKey && delivered !== false) this._markAnnounced(transactionKey);
+        if (transactionKey && delivered === false) this._announced.delete(transactionKey);
     }
 
     /** Whether this (chain, tx_hash) pair was already announced as received within the TTL. */
