@@ -24,8 +24,7 @@ const sameTick = (a, b) => String(a || '').trim().toUpperCase() === String(b || 
  * @param {{ chainId: string | null, tick: string, address: string, amount: string, feeSelection?: object }} carry
  */
 export function beginSendAssetSwitch(prev, carry) {
-    const { assetSwitchNotice: _notice, ...rest } = prev || {};
-    return { ...rest, assetSwitchDraft: carry };
+    return { ...prev, assetSwitchNotice: undefined, assetSwitchDraft: carry };
 }
 
 /**
@@ -35,17 +34,10 @@ export function beginSendAssetSwitch(prev, carry) {
  * @param {object | null} prev
  */
 export function cancelSendAssetSwitch(prev) {
-    const draft = prev?.assetSwitchDraft;
-    if (!draft) return prev || null;
-    const { assetSwitchDraft: _draft, assetSwitchNotice: _notice, ...rest } = prev;
-    return {
-        ...rest,
-        chainId: draft.chainId || undefined,
-        tick: draft.tick || undefined,
-        address: draft.address || undefined,
-        amount: draft.amount || undefined,
-        feeSelection: draft.feeSelection,
-    };
+    // The draft carries chainId, tick, address, amount and feeSelection.
+    return prev?.assetSwitchDraft
+        ? { ...prev, ...prev.assetSwitchDraft, assetSwitchDraft: undefined, assetSwitchNotice: undefined }
+        : prev || null;
 }
 
 /**

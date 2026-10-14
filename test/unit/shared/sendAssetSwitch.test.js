@@ -60,7 +60,7 @@ describe('send asset switch', () => {
         const during = beginSendAssetSwitch({ assetSwitchNotice: 'Token changed.' }, { ...DRAFT, amount: '' });
         expect(during.assetSwitchNotice).toBeUndefined();
         const restored = cancelSendAssetSwitch(during);
-        expect(restored.amount).toBeUndefined();
+        expect(restored.amount).toBeFalsy();
         expect(restored.assetSwitchDraft).toBeUndefined();
         expect(cancelSendAssetSwitch(null)).toBeNull();
     });

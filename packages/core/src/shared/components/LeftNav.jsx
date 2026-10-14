@@ -48,9 +48,10 @@ import styles from './LeftNav.module.css';
 
 export const LEFT_NAV_VIEW_GROUPS = ROUTE_NAV_GROUPS;
 
-// Labels and icons for the sidebar rows. Which rows exist, and in what order,
-// comes from the destination lists in routeRegistry.js, which PageHeader also
-// reads to decide where Back is redundant.
+// Labels and icons for the nav rows, shared with BottomTabBar's thumb row.
+// Which rows exist, and in what order, comes from the destination lists in
+// routeRegistry.js, which PageHeader also reads to decide where Back is
+// redundant.
 const LEFT_NAV_ITEMS = [
     { id: 'home', label: 'Home', Icon: Icon.HomeIcon },
     { id: 'history', label: 'History', Icon: Icon.HistoryIcon },
@@ -67,6 +68,9 @@ const LEFT_NAV_ITEMS = [
     // PC-15: COINPAY obligations queue; badge = payable pending count.
     { id: 'obligations', label: 'Payments due', Icon: Icon.ClockIcon },
 ];
+
+/** The label and icon row for a nav destination id. */
+export const navItem = (id) => LEFT_NAV_ITEMS.find((row) => row.id === id);
 
 export function activeLeftNavItem(currentView) {
     return ROUTE_NAV_SECTIONS[currentView] || 'home';
@@ -119,13 +123,13 @@ export function LeftNav({
     // Contracts is gated on a VM address, matching Home and the command
     // palette (DEPLOY sits in COMMON_ACTIONS, so LTC/DOGE carry it).
     const shown = (id) => {
-        const item = LEFT_NAV_ITEMS.find((row) => row.id === id);
+        const item = navItem(id);
         if (item.spendable && isSignerMode) return false;
         if (item.requiresDex && !hasDexSurface) return false;
         if (item.requiresVm && !hasVmAddress) return false;
         return true;
     };
-    const toRows = (ids) => ids.filter(shown).map((id) => LEFT_NAV_ITEMS.find((row) => row.id === id));
+    const toRows = (ids) => ids.filter(shown).map(navItem);
     const primary = toRows(SIDEBAR_PRIMARY_DESTINATIONS);
     const secondary = toRows(SIDEBAR_SECONDARY_DESTINATIONS);
 

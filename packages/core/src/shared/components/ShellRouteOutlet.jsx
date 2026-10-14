@@ -19,7 +19,7 @@ export function ShellRouteOutlet({
     // routeKey is the shell's routed view id; PageHeader compares it with
     // the visible nav surface's destinations.
     return (
-        <CurrentRouteContext.Provider value={routeKey ?? null}>
+        <CurrentRouteContext.Provider value={routeKey}>
             <ScrollRestoration routeKey={routeKey}>
                 <RouteErrorBoundary resetKey={resetKey} onHome={onHome}>
                     <Suspense fallback={fallback}>

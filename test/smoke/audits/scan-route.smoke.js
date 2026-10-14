@@ -127,15 +127,14 @@ function arrayBody(name) {
     const end = tabBarSrc.indexOf('];', start);
     return tabBarSrc.slice(start, end + 2);
 }
-// The thumb-row tabs are TAB_BAR_DESTINATIONS in order; PRIMARY_TAB_ITEMS
-// holds their labels and icons.
-const primaryBody = arrayBody('PRIMARY_TAB_ITEMS');
+// The thumb-row tabs are TAB_BAR_DESTINATIONS in order, drawn with the
+// sidebar's own label and icon rows (navItem in LeftNav.jsx).
 const sheetBody = arrayBody('SHEET_PRIMARY');
-assert.ok(/id: 'scan',[\s\S]*?Icon\.ScanIcon/.test(primaryBody),
-    'PRIMARY_TABS now contains Scan with ScanIcon');
-assert.ok(!/id: 'receive'/.test(primaryBody) && !TAB_BAR_DESTINATIONS.includes('receive'),
+assert.ok(/const PRIMARY_TABS = TAB_BAR_DESTINATIONS\.map\(navItem\)/.test(tabBarSrc),
+    'PRIMARY_TABS is built from the tab bar destination list');
+assert.ok(TAB_BAR_DESTINATIONS.includes('scan'), 'PRIMARY_TABS now contains Scan');
+assert.ok(!TAB_BAR_DESTINATIONS.includes('receive'),
     'PRIMARY_TABS no longer carries Receive (moved to More sheet)');
-assert.ok(TAB_BAR_DESTINATIONS.includes('scan'), 'the tab bar destinations include Scan');
 assert.ok(/id: 'receive',[\s\S]*?Icon\.ReceiveIcon/.test(sheetBody),
     'SHEET_PRIMARY (More drawer) now lists Receive so the surface stays reachable');
 assert.ok(/Cluster Y FOLLOWUP 1/.test(tabBarSrc),

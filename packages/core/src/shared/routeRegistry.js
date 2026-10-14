@@ -243,7 +243,7 @@ export const ROUTE_REGISTRY = Object.freeze(Object.fromEntries(
 // not listed, including every drilldown a new screen adds, keeps Back.
 // Rows a wallet cannot use (Send in signer mode, Contracts without a VM
 // address) stay listed: those routes are unreachable while the row is gone.
-export const SIDEBAR_PRIMARY_DESTINATIONS = Object.freeze([
+export const SIDEBAR_PRIMARY_DESTINATIONS = [
     'home',
     'history',
     'send',
@@ -254,27 +254,27 @@ export const SIDEBAR_PRIMARY_DESTINATIONS = Object.freeze([
     'dispensers-list',
     'contracts-list',
     'messaging',
-]);
+];
 
-export const SIDEBAR_SECONDARY_DESTINATIONS = Object.freeze([
+export const SIDEBAR_SECONDARY_DESTINATIONS = [
     'contacts',
     'lists',
     'obligations',
-]);
+];
 
-export const SIDEBAR_FOOTER_DESTINATIONS = Object.freeze(['settings']);
+export const SIDEBAR_FOOTER_DESTINATIONS = ['settings'];
 
 // The More tab opens a sheet rather than a route, so it has no entry here.
-export const TAB_BAR_DESTINATIONS = Object.freeze(['home', 'history', 'send', 'scan']);
+export const TAB_BAR_DESTINATIONS = ['home', 'history', 'send', 'scan'];
 
-export const NAV_SURFACE_DESTINATIONS = Object.freeze({
-    sidebar: Object.freeze([
+export const NAV_SURFACE_DESTINATIONS = {
+    sidebar: [
         ...SIDEBAR_PRIMARY_DESTINATIONS,
         ...SIDEBAR_SECONDARY_DESTINATIONS,
         ...SIDEBAR_FOOTER_DESTINATIONS,
-    ]),
+    ],
     tabBar: TAB_BAR_DESTINATIONS,
-});
+};
 
 /**
  * Whether `routeId` is a destination the given navigation surface links to
@@ -285,6 +285,5 @@ export const NAV_SURFACE_DESTINATIONS = Object.freeze({
  * @param {'sidebar' | 'tabBar' | null | undefined} surface
  */
 export function isNavSurfaceDestination(routeId, surface) {
-    if (!routeId || !surface) return false;
-    return NAV_SURFACE_DESTINATIONS[surface]?.includes(routeId) ?? false;
+    return Boolean(NAV_SURFACE_DESTINATIONS[surface]?.includes(routeId));
 }
