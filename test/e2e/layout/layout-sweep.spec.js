@@ -127,6 +127,8 @@ test('overlap measurement reports controls drawn over each other, not overlays',
         <button style="left: 10px">Contacts</button>
         <button style="left: 60px">Paste</button>
         <button style="left: 200px">Apart</button>
+        <button style="left: 10px; top: 60px; width: 200px; height: 30px">Row</button>
+        <button style="left: 170px; top: 63px; width: 24px; height: 24px">Row action</button>
         <button style="left: 10px; top: 150px">Under the sheet</button>
         <div class="sheet"><button style="left: 20px; top: 40px">On the sheet</button></div>
         <div class="scroller"><div><button style="left: 10px; top: 240px">Row passing under the bar</button></div></div>

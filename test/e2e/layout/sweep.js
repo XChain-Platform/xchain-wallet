@@ -167,6 +167,13 @@ export function measureInPage(opts = {}) {
                 const rb = b.getBoundingClientRect();
                 const w = Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left);
                 const h = Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top);
+                // A control laid wholly inside another (a row's trailing Info
+                // or Rename button) is that row's own action, drawn there on
+                // purpose; two controls that only partly cover each other are
+                // the collision this looks for.
+                const inside = (inner, outer) => inner.left >= outer.left - 0.5 && inner.right <= outer.right + 0.5
+                    && inner.top >= outer.top - 0.5 && inner.bottom <= outer.bottom + 0.5;
+                if (inside(ra, rb) || inside(rb, ra)) continue;
                 if (w > 2 && h > 2) found.push({ el: desc(a), with: desc(b), w: Math.round(w), h: Math.round(h) });
             }
         }
