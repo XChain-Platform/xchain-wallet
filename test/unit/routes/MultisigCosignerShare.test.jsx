@@ -108,7 +108,7 @@ describe('MultisigCosignerShare address selection', () => {
         expect(options[3]).toHaveTextContent('hardware, export on device');
         expect(options[4]).toBeDisabled();
         expect(options[5]).toBeDisabled();
-        expect(screen.getByText(/Only software-seed addresses can be shared here/i)).toBeTruthy();
+        expect(screen.getByText(/Only addresses from a software wallet can be shared here/i)).toBeTruthy();
     });
 
     it('clears shared values when the placeholder is selected again', async () => {

@@ -399,7 +399,7 @@ describe('History filters', () => {
             expect(filterToggle).toHaveAttribute('aria-expanded', 'true');
             const search = screen.getByRole('searchbox', { name: 'Search history' });
             expect(search).toHaveAttribute('placeholder', 'Search history');
-            expect(search).toHaveAccessibleDescription('Search action, address, token, txid, memo…');
+            expect(search).toHaveAccessibleDescription('Search action, address, token, transaction ID, memo…');
             expect(screen.getByLabelText('From date')).toBeInTheDocument();
             expect(screen.getByLabelText('To date')).toBeInTheDocument();
 
