@@ -66,6 +66,16 @@ const localizedRoutes = [
     'WalletPicker.jsx',
 ];
 
+// Files that call t() only for ICU plural count copy and are not yet migrated
+// as screens. Their t() keys are still checked against the dictionary; their
+// remaining literals stay outside the literal guard until the screen migrates.
+const PLURAL_ONLY_FILES = [
+    '/components/BalanceList.jsx',
+    '/components/TxStatusTimeline.jsx',
+    '/routes/AddressList.jsx',
+    '/routes/ManageToken.jsx',
+];
+
 describe('shipping JSX localization', () => {
     test('localized shared components stay in the literal guard', () => {
         for (const component of localizedComponents) {
@@ -100,6 +110,7 @@ describe('shipping JSX localization', () => {
             for (const match of source.matchAll(/\bt\(\s*'([^']+)'/g)) {
                 if (!(match[1] in en)) missingKeys.push(`${file}: ${match[1]}`);
             }
+            if (PLURAL_ONLY_FILES.some((suffix) => file.endsWith(suffix))) continue;
             const ast = parse(source, {
                 sourceType: 'module',
                 plugins: ['jsx', 'estree'],
