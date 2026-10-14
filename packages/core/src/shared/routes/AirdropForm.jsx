@@ -24,6 +24,7 @@ import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import {
+    compareDecimalStrings,
     formatWithThousands,
     subtractDecimalStrings,
     tokenAmountPrecisionError,
@@ -62,6 +63,7 @@ import { classifyTickItems } from '../utils/listTickItems.js';
 import { currentListItems } from '../../flows/listMembership.js';
 import { MEMO_HINT } from '../utils/memoLimit.js';
 import { listLabel } from '../utils/listLabel.js';
+import { readFailureMessage } from '../utils/readFailureMessage.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
@@ -230,6 +232,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
     );
     const [airdropTxid, setAirdropTxid] = useState(/** @type {string | null} */ (null));
     const [waitElapsed, setWaitElapsed] = useState(0);
+    const [indexReadError, setIndexReadError] = useState(/** @type {string | null} */ (null));
     const [hydrated, setHydrated] = useState(false);
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const fileInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
@@ -389,7 +392,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 if (cancelled) return;
                 setExistingListDetail({
                     loading: false, kind: null, items: [], name: null,
-                    error: err?.message || 'Failed to load list.',
+                    error: readFailureMessage(err, 'load this list'),
                 });
             });
         return () => { cancelled = true; };
@@ -438,7 +441,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                 return {
                     tick: t,
                     count: null,
-                    error: lastErr?.message || 'The explorer returned no explanation.',
+                    error: readFailureMessage(lastErr, `count holders of ${t}`),
                 };
             };
             Promise.all(previewTicks.map(countHolders))
@@ -525,6 +528,7 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             try {
                 const resp = await messaging.getActionByTxid({ chainId, txid: listTxid });
                 if (cancelled) return;
+                setIndexReadError(null);
                 const idx = extractActionIndex(resp);
                 if (idx) {
                     setListActionIndex(idx);
@@ -540,7 +544,9 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     setStage('review-airdrop');
                 }
             } catch (err) {
-                // Keep polling through transient network errors.
+                if (!cancelled) {
+                    setIndexReadError(readFailureMessage(err, 'check whether the recipient list is indexed'));
+                }
             }
         };
         tick(); // fire once immediately
@@ -781,8 +787,15 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
             return;
         }
         const amt = String(amountPer).trim();
-        if (!amt || Number(amt) <= 0) {
-            setFormError('Per-recipient amount must be a positive number.');
+        if (!amt) {
+            setFormError('Per-recipient amount is required.');
+            return;
+        }
+        const amountComparison = compareDecimalStrings(amt, '0');
+        if (amountComparison !== 1) {
+            setFormError(amountComparison === null
+                ? 'Per-recipient amount must be a positive decimal number.'
+                : 'Per-recipient amount must be greater than zero.');
             return;
         }
         // Keep each payout within the dropped token's on-chain decimal scale.
@@ -815,6 +828,10 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         if (sourceMode === 'existing') {
             if (!listActionIndex) {
                 setFormError('Choose an existing list first.');
+                return;
+            }
+            if (!/^[1-9]\d*$/.test(listActionIndex)) {
+                setFormError('The selected list has an invalid action index. Choose the list again.');
                 return;
             }
             setFormError(null);
@@ -1178,9 +1195,14 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
         }
     }
 
-        const header = (
+    const headerBack = stage === 'review-list'
+        ? () => { setSubmitError(null); setStage('compose'); }
+        : stage === 'review-airdrop' && sourceMode === 'existing'
+            ? () => { setSubmitError(null); setStage('compose'); }
+            : onBack;
+    const header = (
         <PageHeader
-            onBack={onBack}
+            onBack={headerBack}
             title={stage === 'review-list' ? (sourceMode === 'holders' ? 'Review token list' : 'Review address list')
                     : stage === 'wait-index' ? 'Waiting for list to be indexed'
                         : stage === 'review-airdrop' ? 'Review airdrop'
@@ -1289,6 +1311,9 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                     airdrop step. Safe to close the wallet; we'll resume from
                     Home when you reopen it.
                 </p>
+                {indexReadError ? (
+                    <StatusMessage variant="error" className={styles.error}>{indexReadError}</StatusMessage>
+                ) : null}
                 {slow ? (
                     <p className={styles.hint}>
                         This is taking longer than usual. Typical wait is 1–2
@@ -1473,7 +1498,13 @@ export function AirdropForm({ walletId, resumeId = null, onBack, initialChainId,
                         <AddressText address={fromAddress.address} />
                     </dd>
                     {(airdropDecoded?.details || []).map((d) => (
-                        <DetailRow key={d.label} label={d.label} value={d.value} />
+                        <DetailRow
+                            key={d.label}
+                            label={d.label}
+                            value={d.label === 'Per-recipient amount'
+                                ? `${d.value} ${token.trim().toUpperCase()}`
+                                : d.value}
+                        />
                     ))}
                     <dt className={styles.detailsLabel}>
                         {recipientPreview.kind === 'tick' ? 'Holders (current, not final)' : 'Recipients'}
@@ -2069,7 +2100,7 @@ function ExistingListPickerScreen({ variant, messaging, chainId, addresses, onSe
                 setRows(uniq);
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || 'Failed to load lists.');
+                if (!cancelled) setLoadError(readFailureMessage(err, 'load your lists'));
             });
         return () => { cancelled = true; };
     }, [chainId, addresses, messaging]);

@@ -241,6 +241,33 @@ describe('DividendForm Max fills a rate, not the balance', () => {
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
+    it.each([
+        ['', 'Per-unit amount is required.'],
+        ['0', 'Per-unit amount must be greater than zero.'],
+        ['.', 'Per-unit amount must be a positive decimal number.'],
+    ])('keeps amount %j out of review with plain copy', async (value, message) => {
+        const messaging = mountDividend();
+        await pickDividendToken();
+        fireEvent.change(amountField(), { target: { value } });
+        fireEvent.submit(screen.getByRole('form', { name: 'Pay dividend' }));
+
+        expect(screen.getByRole('alert')).toHaveTextContent(message);
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('keeps excess payout-token precision out of review', async () => {
+        const messaging = mountDividend({ divisibility: 2 });
+        await pickDividendToken();
+        await flushTimers();
+        fireEvent.change(amountField(), { target: { value: '1.001' } });
+        fireEvent.click(submitButton());
+
+        expect(screen.getByRole('alert')).toHaveTextContent(
+            'Per-unit amount can have at most 2 decimal places for XCHAIN.',
+        );
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
     it('includes an XCHAIN protocol fee in total cost and the balance refusal', async () => {
         const messaging = mountDividend({
             feeQuote: {
@@ -315,6 +342,23 @@ describe('DividendForm Max fills a rate, not the balance', () => {
         });
     });
 
+    it('shows encoder failures as plain copy without developer wording', async () => {
+        const messaging = mountDividend();
+        const encoderError = Object.assign(
+            new Error('no spendable UTXOs found for the funding address'),
+            { name: 'SDKEncoderError', code: 'NO_UTXOS' },
+        );
+        messaging.composeForConfirm.mockRejectedValue(encoderError);
+        await pickDividendToken();
+        fireEvent.change(amountField(), { target: { value: '9' } });
+        fireEvent.click(submitButton());
+        await flushTimers();
+
+        const alert = screen.getByRole('alert');
+        expect(alert).toHaveTextContent(/address needs BTC/);
+        expect(alert.textContent).not.toContain('no spendable UTXOs');
+    });
+
     it('stays ungated when the holder list cannot be read', async () => {
         // An explorer hiccup must not block every dividend; the confirm
         // page's preflight is still behind it.
@@ -355,5 +399,31 @@ describe('DividendForm review hint', () => {
         expect(hint.textContent).toMatch(/holds enough XCHAIN\s+to cover the full payout/);
         expect(hint.textContent).toMatch(/grows with the number\s+of holders paid/);
         expect(hint.textContent).not.toMatch(/§|database hits|DIVIDEND ticker|DIVIDEND charges/);
+    });
+
+    it('review display matches the built precision, asset, holder count, and fees, and Back keeps values', async () => {
+        mountDividend({
+            walletMode: 'watcher',
+            feeQuote: {
+                supported: true,
+                valid: true,
+                xchainFee: '1.00000000',
+                requiredFeeNative: '0.00002',
+            },
+        });
+        await pickDividendToken();
+        fireEvent.change(amountField(), { target: { value: '9.00' } });
+        await flushTimers();
+        fireEvent.click(submitButton());
+
+        expect(screen.getByText('9.00 XCHAIN')).toBeTruthy();
+        expect(screen.getByText('Eligible holders').nextElementSibling).toHaveTextContent('1');
+        expect(screen.getByText('Dividend protocol fee')).toBeTruthy();
+        expect(screen.getByText('1 XCHAIN')).toBeTruthy();
+        expect(screen.getByText('Network fee')).toBeTruthy();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+        expect(await amountField()).toHaveValue('9.00');
+        expect(screen.getByRole('button', { name: /Dividend token: XCHAIN/ })).toBeTruthy();
     });
 });
