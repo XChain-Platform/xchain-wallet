@@ -17,7 +17,7 @@ const host = vi.hoisted(() => {
     return {
         first,
         second,
-        reset() { wallets = [first]; },
+        reset(nextWallets = [first]) { wallets = nextWallets; },
         getSessionStatus: vi.fn(async () => ({ state: 'unlocked' })),
         listWallets: vi.fn(async () => wallets),
         listAccounts: vi.fn(async (walletId) => [{
@@ -76,10 +76,12 @@ function answerRecoveryQuiz() {
 
 async function openWalletPicker() {
     // The condensed header keeps Settings inside its action menu.
-    fireEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
+    if (!screen.queryByRole('menuitem', { name: 'Settings' })) {
+        fireEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
+    }
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Settings' }));
     const settings = await screen.findByRole('dialog', { name: 'Wallet settings' });
-    fireEvent.click(within(settings).getByRole('button', { name: /First Wallet|Second Wallet/ }));
+    fireEvent.click(within(settings).getByRole('button', { name: /First Wallet|Second Wallet|Wallet 2/ }));
     return screen.findByRole('heading', { name: 'Wallets' });
 }
 
@@ -88,7 +90,7 @@ async function createSecondWallet() {
     fireEvent.click(screen.getByRole('button', { name: 'Add wallet' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Create new wallet' }));
 
-    fireEvent.change(await screen.findByLabelText('Wallet name'), { target: { value: 'Second Wallet' } });
+    expect(await screen.findByLabelText('Wallet name')).toHaveValue('Wallet 2');
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: PASSWORD } });
     fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: PASSWORD } });
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));
@@ -138,29 +140,50 @@ afterEach(() => {
 });
 
 describe('web add-wallet activation flow', () => {
-    it('activates a created wallet, confirms its name, and restores it after remount', async () => {
+    it('defaults a second wallet to Wallet 2 and keeps the header reactive while switching', async () => {
         const firstMount = render(<App />);
         await screen.findAllByRole('button', { name: 'Settings' });
 
         await createSecondWallet();
 
         expect(host.addImportedWallet).toHaveBeenCalledWith(expect.objectContaining({
-            name: 'Second Wallet',
+            name: 'Wallet 2',
             mnemonic: PHRASE,
             password: PASSWORD,
             origin: 'created',
         }));
-        expect(await screen.findByText('Second Wallet is now active.')).toBeTruthy();
+        expect(await screen.findByText('Wallet 2 is now active.')).toBeTruthy();
         await waitFor(() => expect(readActiveWallet()).toBe(host.second.id));
+        expect(await screen.findByText('Wallet: Wallet 2')).toBeInTheDocument();
 
         await openWalletPicker();
         expect(walletRow('First Wallet')).not.toHaveAttribute('aria-current');
-        expect(walletRow('Second Wallet')).toHaveAttribute('aria-current', 'true');
+        expect(walletRow('Wallet 2')).toHaveAttribute('aria-current', 'true');
+        fireEvent.click(walletRow('First Wallet'));
+        await waitFor(() => expect(screen.queryByRole('heading', { name: 'Wallets' })).toBeNull());
+        expect(await screen.findByText('Wallet: First Wallet')).toBeInTheDocument();
+
+        await openWalletPicker();
+        fireEvent.click(walletRow('Wallet 2'));
+        await waitFor(() => expect(screen.queryByRole('heading', { name: 'Wallets' })).toBeNull());
+        expect(await screen.findByText('Wallet: Wallet 2')).toBeInTheDocument();
 
         firstMount.unmount();
         render(<App />);
         await openWalletPicker();
-        expect(walletRow('Second Wallet')).toHaveAttribute('aria-current', 'true');
+        expect(walletRow('Wallet 2')).toHaveAttribute('aria-current', 'true');
+    });
+
+    it('skips a numbered name that is already in use', async () => {
+        host.reset([host.first, { id: 'wallet-existing-2', name: 'Wallet 2', format: 'bip39' }]);
+        render(<App />);
+        await screen.findAllByRole('button', { name: 'Settings' });
+
+        await openWalletPicker();
+        fireEvent.click(screen.getByRole('button', { name: 'Add wallet' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Create new wallet' }));
+
+        await waitFor(() => expect(screen.getByLabelText('Wallet name')).toHaveValue('Wallet 3'));
     });
 
     it('activates an imported wallet and confirms its name', async () => {

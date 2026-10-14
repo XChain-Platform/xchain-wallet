@@ -924,6 +924,11 @@ function AppInner() {
 
     const handleWalletAdded = (wallet) => {
         if (wallet?.id) {
+            setWalletList((list) => (
+                list.some((entry) => entry.id === wallet.id)
+                    ? list.map((entry) => (entry.id === wallet.id ? { ...entry, ...wallet } : entry))
+                    : [...list, wallet]
+            ));
             handleSwitchWallet(wallet.id, wallet.name);
             showToast({ message: `${wallet.name || 'New wallet'} is now active.`, variant: 'success' });
         }
