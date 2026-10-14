@@ -93,11 +93,6 @@
     white-space: nowrap;
 }
 
-.triggerSub {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-}
-
 .triggerCaret {
     flex: 0 0 auto;
     color: var(--xc-text-muted);

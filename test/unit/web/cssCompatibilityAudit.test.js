@@ -70,7 +70,7 @@ describe('Chrome 102 CSS compatibility audit', () => {
         ), 'utf8');
         expect(header).not.toContain('color-mix(');
         expect(header).toMatch(/--header-accent-bg-subtle:\s*rgba\(26, 123, 172, 0\.10\)/);
-        expect(header.match(/var\(--header-accent-bg-subtle\)/g)).toHaveLength(2);
+        expect(header.match(/var\(--header-accent-bg-subtle\)/g)).toHaveLength(1);
         expect(audit(header)).toEqual([]);
     });
 

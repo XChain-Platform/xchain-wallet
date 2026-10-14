@@ -23,7 +23,7 @@
 }
 
 .amountFieldWrap input,
-.amountUnitSwap > span,
+.amountSwapValue,
 .amountFooterRight > span {
     direction: ltr;
     unicode-bidi: isolate;
@@ -43,33 +43,6 @@
     display: inline-flex;
     align-items: center;
     gap: var(--xc-space-2);
-}
-
-.amountUnitSwap {
-    --xc-icon-size: var(--xc-icon-xs);
-    display: inline-flex;
-    align-items: center;
-    gap: var(--xc-space-1);
-    background: transparent;
-    border: none;
-    /* slice 2: the fiat/coin swap is a daily control that measured
-       14px tall. Padding (not a fixed height) so the text stays where it
-       sits and only the target grows to the 24px floor. */
-    padding: var(--xc-space-1) 0;
-    min-height: var(--xc-tap-min);
-    font: inherit;
-    color: var(--xc-text-muted);
-    cursor: pointer;
-    font-size: var(--xc-text-xs);
-}
-
-.amountUnitSwap:hover,
-.amountUnitSwap:focus-visible {
-    color: var(--xc-text);
-}
-
-.amountUnitSwap svg {
-    flex-shrink: 0;
 }
 
 @media not all and (min-width: 400px) {

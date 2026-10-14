@@ -179,7 +179,7 @@ export function AmountField({
                             ? `Switch input to ${tickUpper || 'coin'}`
                             : `Switch input to ${fiatCcy}`}
                     >
-                        {derivedText}
+                        <span className={styles.amountSwapValue}>{derivedText}</span>
                     </Button>
                 ) : (
                     <span />
