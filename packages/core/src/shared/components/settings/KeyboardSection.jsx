@@ -44,7 +44,17 @@ const GROUP_HEADER = {
     marginBottom: 'var(--xc-space-1)',
 };
 const INTRO = { ...ROW_LABEL, color: 'var(--xc-text-muted)', margin: 0 };
+const SHORTCUT_ROW = {
+    ...ROW,
+    boxSizing: 'border-box',
+    minHeight: 'var(--xc-control-h-lg)',
+    paddingBlock: 'var(--xc-space-1)',
+};
 const KBD = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: '7rem',
     fontFamily: 'var(--xc-font-sans)',
     fontSize: 'var(--xc-text-xs)',
     color: 'var(--xc-text)',
@@ -61,7 +71,13 @@ const CAPTURING = {
     borderColor: 'var(--xc-accent)',
     color: 'var(--xc-accent)',
 };
-const ACTIONS = { display: 'flex', alignItems: 'center', gap: 'var(--xc-space-2)', flexShrink: 0 };
+const ACTIONS = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 'var(--xc-space-2)',
+    flexShrink: 0,
+};
 
 function isMac() {
     if (typeof navigator === 'undefined') return false;
@@ -184,12 +200,17 @@ export function KeyboardSection() {
                                 ? 'Requires “Show hide button on rows” in Display.'
                                 : null;
                         return (
-                            <div key={s.id} style={ROW}>
+                            <div key={s.id} style={SHORTCUT_ROW}>
                                 <span style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                                     <span style={ROW_LABEL}>{s.label}</span>
                                     {availability ? <span style={{ ...ROW_LABEL, fontSize: 'var(--xc-text-xs)' }}>{availability}</span> : null}
                                 </span>
                                 <span style={ACTIONS}>
+                                    {s.overridden ? (
+                                        <Button size="sm" variant="ghost" onClick={() => resetOne(s.id)}>
+                                            Reset
+                                        </Button>
+                                    ) : null}
                                     <kbd style={capturing ? CAPTURING : KBD} aria-live={capturing ? 'polite' : undefined}>
                                         {capturing
                                             ? (leaderLead ? `${leaderLead.toUpperCase()} then …` : 'Press keys…')
@@ -211,11 +232,6 @@ export function KeyboardSection() {
                                             >
                                                 {capturing ? 'Cancel' : 'Rebind'}
                                             </Button>
-                                            {s.overridden ? (
-                                                <Button size="sm" variant="ghost" onClick={() => resetOne(s.id)}>
-                                                    Reset
-                                                </Button>
-                                            ) : null}
                                         </>
                                     ) : null}
                                 </span>
