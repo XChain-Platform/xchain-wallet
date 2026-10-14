@@ -186,6 +186,7 @@ export class NotificationService {
         this._log = taggedLogger(logger, 'notify');
 
         this._started = false;
+        this._syncGeneration = 0;
         /** @type {Map<string, { unsub: () => void, chainId: string }>} subKey -> entry */
         this._subs = new Map();
         /** @type {Map<string, import('../sdk/SDKRegistry.js').XChainSDKLike>} chainId -> connected sdk */
@@ -200,19 +201,22 @@ export class NotificationService {
     async start() {
         if (this._started) return this;
         this._started = true;
-        await this._sync();
+        const generation = ++this._syncGeneration;
+        await this._sync(generation);
         return this;
     }
 
     /** Reconcile subscriptions against the current active-address set. */
     async refresh() {
         if (!this._started) return this;
-        await this._sync();
+        const generation = ++this._syncGeneration;
+        await this._sync(generation);
         return this;
     }
 
     /** Tear everything down. */
     stop() {
+        this._syncGeneration += 1;
         for (const { unsub } of this._subs.values()) {
             try { unsub(); } catch (e) { this._log.warn('NotificationService: unsubscribe failed', e); }
         }
@@ -227,7 +231,7 @@ export class NotificationService {
     }
 
     /** Reconcile live subscriptions to match the desired active-address set. */
-    async _sync() {
+    async _sync(generation) {
         let active;
         try {
             active = await this._getActiveAddresses();
@@ -235,6 +239,7 @@ export class NotificationService {
             this._log.error('NotificationService: getActiveAddresses failed', e);
             return;
         }
+        if (!this._started || generation !== this._syncGeneration) return;
 
         /** @type {Map<string, import('./getActiveAddresses.js').ActiveAddress>} */
         const desired = new Map();
@@ -259,6 +264,10 @@ export class NotificationService {
                 try {
                     sdk = this._getSdkForChain(a.chainId);
                     await sdk.connectWs();
+                    if (!this._started || generation !== this._syncGeneration) {
+                        try { if (sdk.disconnectWs) sdk.disconnectWs(); } catch { /* best-effort */ }
+                        return;
+                    }
                     this._conns.set(a.chainId, sdk);
                 } catch (e) {
                     this._log.error(`NotificationService: connectWs failed for ${a.chainId}`, e);
@@ -301,6 +310,17 @@ export class NotificationService {
     async _handle(addr, msg) {
         if (!msg || !msg.type) return;
 
+        let settings = null;
+        let settingsReadable = true;
+        try {
+            settings = await this._getSettings();
+        } catch (e) {
+            this._log.error('NotificationService: getSettings failed', e);
+            settingsReadable = false;
+        }
+        if (settings?.activeNetwork && addr.network
+            && settings.activeNetwork !== addr.network) return;
+
         // Recording that the network holds one of our transactions is an
         // OBSERVATION, not a notification, so it runs ahead of both gates
         // below. A replayed frame is still evidence a node had it, and the
@@ -326,15 +346,9 @@ export class NotificationService {
         // catch_up events are historical replays sent on (re)connect, not a
         // live occurrence, so never notify on them.
         if (msg.catch_up) return;
+        if (!settingsReadable) return;
         const data = msg.data || {};
 
-        let settings;
-        try {
-            settings = await this._getSettings();
-        } catch (e) {
-            this._log.error('NotificationService: getSettings failed', e);
-            return;
-        }
         const flags = (settings && settings.notifications) || {};
 
         /** @type {{ kind: string, title: string, body: string } | null} */
