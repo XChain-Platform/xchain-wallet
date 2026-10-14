@@ -149,6 +149,7 @@ export function PriceAlertForm({
                 </Select>
                 <span aria-hidden="true">{symbol}</span>
                 <Input
+                    size="md"
                     type="text"
                     inputMode="decimal"
                     enterKeyHint="go"
@@ -171,7 +172,7 @@ export function PriceAlertForm({
                     onClick={submit}
                     disabled={!valid || busy}
                     aria-describedby={disabledReason ? disabledReasonId : undefined}
-                    size="sm"
+                    size="md"
                     variant="primary"
                 >
                     {busy ? 'Saving…' : editing ? 'Save changes' : 'Add alert'}
@@ -180,7 +181,7 @@ export function PriceAlertForm({
                     <Button
                         type="button"
                         onClick={onCancel}
-                        size="sm"
+                        size="md"
                         variant="secondary"
                     >
                         Cancel
