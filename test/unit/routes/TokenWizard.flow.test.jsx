@@ -15,7 +15,7 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { TokenWizard } from '../../../packages/core/src/shared/routes/TokenWizard.jsx';
 
 const ADDRESSES = {
-    'bitcoin-mainnet': [{
+    'bitcoin-regtest': [{
         id: 'addr-1',
         address: 'bc1qexampleexampleexampleexampleexampleex',
         publicKey: '02ab',
@@ -60,6 +60,7 @@ describe('TokenWizard guided flow', () => {
         fireEvent.click(screen.getByText('Utility token'));
         expect(await screen.findByText('Step 2 of 4: Network')).toBeTruthy();
         await screen.findByLabelText('Fee paid by');
+        expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
 
         fireEvent.submit(screen.getByRole('form', { name: 'Choose token chain' }));
         expect(await screen.findByText('Step 3 of 4: Details')).toBeTruthy();

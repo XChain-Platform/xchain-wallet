@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, CopyButton, FormPage, FormSection, Input, ListPage, NetworkField, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, CopyButton, FormPage, FormSection, Input, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -711,7 +711,6 @@ export function TokenWizard({ walletId, onBack }) {
                 }),
                 callbackTickDecimals,
                 currentHeight,
-                chainLabel: descriptor?.displayName || chainId,
                 allowListIdx, blockListIdx, allowListCount, blockListCount,
                 allowListName, blockListName,
                 onPickList: setListPickerFor,
@@ -802,10 +801,12 @@ export function TokenWizard({ walletId, onBack }) {
                     {displayName.trim() ? (
                         <DetailRow label="Display name (not in transaction)" value={displayName.trim()} />
                     ) : null}
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                     {fromAddress ? (
                         <>
                             <dt className={styles.detailsLabel}>From</dt>
@@ -1178,7 +1179,7 @@ function renderChainStage({
                 </Button>
             )}
         >
-            <NetworkField value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
+            <ChainPicker label="Network" value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} hideNetworkKind />
 
             {fromAddress ? (
                 <AddressField
@@ -1460,7 +1461,6 @@ function AdvancedIssuePanel({
     callbackBlockEstimate,
     callbackTickDecimals,
     currentHeight,
-    chainLabel,
     allowListIdx, blockListIdx, allowListCount, blockListCount,
     allowListName, blockListName,
     onPickList, onClearList,
@@ -1565,7 +1565,7 @@ function AdvancedIssuePanel({
                         />
                         {currentHeight != null ? (
                             <p className={styles.hint}>
-                                Current block on {chainLabel}: {currentHeight.toLocaleString('en-US')}.
+                                Current block: {currentHeight.toLocaleString('en-US')}.
                                 Date above is a rough estimate; real block times vary.
                             </p>
                         ) : null}

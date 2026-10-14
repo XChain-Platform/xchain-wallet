@@ -50,8 +50,10 @@ describe('<TokenPicker> selection hand-off', () => {
         const { onSelect } = mountPicker();
         const token = await screen.findByRole('button', {
             // The row label leads with the action and then speaks the balance.
-            name: (name) => name.startsWith(`Select ${LONG_TICKER} on Bitcoin · regtest, `),
+            name: (name) => name.startsWith(`Select ${LONG_TICKER}, `),
         });
+
+        expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
 
         fireEvent.click(token);
 
@@ -65,14 +67,14 @@ describe('<TokenPicker> selection hand-off', () => {
 
     it('restores the rows when the search is cleared', async () => {
         mountPicker();
-        await screen.findByText(LONG_TICKER);
+        await screen.findAllByText(LONG_TICKER);
         const search = screen.getByRole('searchbox', { name: 'Search coins or tokens' });
 
         fireEvent.change(search, { target: { value: 'missing' } });
         expect(await screen.findByText('No matching balances')).toBeInTheDocument();
 
         fireEvent.change(search, { target: { value: '' } });
-        await waitFor(() => expect(screen.getByText(LONG_TICKER)).toBeInTheDocument());
+        await waitFor(() => expect(screen.getAllByText(LONG_TICKER).length).toBeGreaterThan(0));
         expect(screen.queryByText('No matching balances')).toBeNull();
     });
 

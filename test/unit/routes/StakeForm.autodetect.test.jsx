@@ -48,7 +48,7 @@ const PUBKEY = 'a'.repeat(64);
  * Mount StakeForm with a messaging mock. `getStakesForAddress` is the
  * unit under test; callers pass its resolved/rejected value.
  */
-function mountForm(getStakesForAddress, extra = {}) {
+function mountForm(getStakesForAddress, extra = {}, chainId = 'bitcoin-mainnet') {
     const messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
         getStakesForAddress,
@@ -61,7 +61,7 @@ function mountForm(getStakesForAddress, extra = {}) {
             { shell: 'web', messaging },
             React.createElement(StakeForm, {
                 walletId: 'w',
-                chainId: 'bitcoin-mainnet',
+                chainId,
                 onBack() {},
             }),
         ),
@@ -197,6 +197,18 @@ describe('StakeForm new-vs-top-up auto-detect (getStakesForAddress)', () => {
 });
 
 describe('StakeForm network picker', () => {
+    it('does not render the selected network kind', async () => {
+        const chainId = 'bitcoin-regtest';
+        mountForm(vi.fn().mockResolvedValue([]), {
+            getAddressesByChain: vi.fn().mockResolvedValue({
+                [chainId]: ADDRESSES['bitcoin-mainnet'],
+            }),
+        }, chainId);
+
+        await screen.findByRole('button', { name: 'Network: Bitcoin' });
+        expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
+    });
+
     it('offers only Bitcoin chains even when the wallet holds Litecoin and Dogecoin addresses', async () => {
         const held = { ...ADDRESSES, 'litecoin-mainnet': ADDRESSES['bitcoin-mainnet'], 'dogecoin-mainnet': ADDRESSES['bitcoin-mainnet'] };
         mountForm(vi.fn().mockResolvedValue([]), { getAddressesByChain: vi.fn().mockResolvedValue(held) });

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Button, CopyButton, EmptyState, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
+import { Button, ChainBadge, CopyButton, EmptyState, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -467,7 +467,6 @@ function TokenDetailContent({
                                     src={branding.chainIconSmallUrl(chainId)}
                                     alt=""
                                     aria-hidden="true"
-                                    title={descriptor?.displayName || chainId}
                                     className={styles.balanceHeroChainOverlay}
                                 />
                             ) : null}
@@ -1171,10 +1170,12 @@ function DetailsPanel({
                         <th scope="row">Type</th>
                         <td>{kindLabel(kind)}</td>
                     </tr>
-                    <tr className={styles.metaRow}>
-                        <th scope="row">Chain</th>
-                        <td>{descriptor?.displayName || chainId}</td>
-                    </tr>
+                    {descriptor ? (
+                        <tr className={styles.metaRow}>
+                            <th scope="row">Chain</th>
+                            <td><ChainBadge descriptor={descriptor} size="sm" /></td>
+                        </tr>
+                    ) : null}
                     {!isNative ? (
                         <tr className={styles.metaRow}>
                             <th scope="row">Divisibility</th>

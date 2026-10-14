@@ -214,6 +214,21 @@ function labelledInput(container, labelText) {
 afterEach(() => cleanup());
 
 describe('SweepForm form-level errors (D-58)', () => {
+    it('keeps network-kind text out of a regtest validation error', async () => {
+        const chainId = 'bitcoin-regtest';
+        const source = { ...SOURCE, id: 'regtest-source', address: 'mkHS9ne12qx9pS9VojpwU5xtRd4T7X7ZUt' };
+        const q = await mountSweep({
+            addressesByChain: { [chainId]: [source] },
+            activeByChain: { [chainId]: { id: source.id } },
+            props: { initialChainId: chainId },
+        });
+
+        fireEvent.change(q.destination(), { target: { value: 'not-an-address' } });
+        fireEvent.click(q.submit());
+        await waitFor(() => expect(q.alerts()).toMatch(/not a valid Bitcoin address/i));
+        expect(q.container).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
+    });
+
     it('an empty destination errors with the reason instead of a dead button', async () => {
         const q = await mountSweep();
 

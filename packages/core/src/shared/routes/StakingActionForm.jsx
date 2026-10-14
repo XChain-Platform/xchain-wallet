@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Icon, Input, ListPage, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { validatorLaneChainIds } from '../../registry/actions.js';
 import { isDemoWallet, synthesizeDemoStaking } from '@xchain-wallet/core/flows';
@@ -724,10 +724,12 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                             ? `${formatWithThousands(reviewed.params?.AMOUNT)} XCHAIN`
                             : `${formatWithThousands(reviewed.availableAmt)} XCHAIN (full ${isUnstake ? 'balance' : 'pending rewards'})`}
                     </dd>
-                    <dt className={styles.detailsLabel}>Chain</dt>
-                    <dd className={styles.detailsValue}>
-                        {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : chainId}
-                    </dd>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>Chain</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
+                        </>
+                    ) : null}
                     <dt className={styles.detailsLabel}>From</dt>
                     <dd className={styles.detailsValue}>
                         <AddressText address={fromAddress.address} />
@@ -835,11 +837,13 @@ export function StakingActionForm({ mode, walletId, chainId: initialChainId, onB
                 </Button>
             )}
         >
-            <NetworkField
+            <ChainPicker
+                label="Network"
                 value={chainId}
                 onChange={(cid) => { setChainId(cid); setFromAddressId(null); setFormError(null); }}
                 chainIds={addressesByChain ? validatorLaneChainIds(Object.keys(addressesByChain), chainRegistry) : [chainId]}
                 chainRegistry={chainRegistry}
+                hideNetworkKind
             />
             {fromAddress ? (
                 <AddressField

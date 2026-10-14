@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, ChainBadge, EmptyState, Icon, Input, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, Input, ListPage, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import {
     isDemoWallet,
@@ -19,8 +19,7 @@ import {
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSupportedChains } from '../hooks/useSupportedChains.js';
-import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
-import { coinFromChainId, tickerColor } from '../components/BalanceList.jsx';
+import { tickerColor } from '../components/BalanceList.jsx';
 import { formatWithThousands } from '../utils/amountFormat.js';
 import {
     unclaimedRewards,
@@ -66,8 +65,7 @@ const VALIDATOR_COIN = 'bitcoin';
  *     positions still releasing (cooldown) after an unstake.
  *
  * Toolbar offers free-text search (token, amount, contract, address,
- * pubkey, capability) plus the standard network filter. The header's
- * "+" opens the new-stake flow. Clicking a row opens StakeDetail via
+ * pubkey, capability). The header's "+" opens the new-stake flow. Clicking a row opens StakeDetail via
  * `onOpenStake` with a ref describing the position.
  *
  * Contract-stake explorer/SDK queries are a Phase 7 follow-up and
@@ -117,10 +115,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
     const [addressesReload, setAddressesReload] = useState(0);
     const [stakingReload, setStakingReload] = useState(0);
 
-    // In-page filters: free-text search + network dropdown, mirroring
-    // the dispensers / contacts toolbars.
     const [query, setQuery] = useState('');
-    const [network, setNetwork] = useState('all');
 
     useEffect(() => {
         let cancelled = false;
@@ -360,11 +355,10 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
     const visibleRows = useMemo(() => {
         const q = query.trim().toLowerCase();
         return allRows.filter((row) => {
-            if (network !== 'all' && coinFromChainId(row.chainId) !== network) return false;
             if (!q) return true;
             return row.searchHaystack.includes(q);
         });
-    }, [allRows, query, network]);
+    }, [allRows, query]);
 
     const header = (
         <PageHeader
@@ -429,24 +423,21 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
     }
 
     const toolbar = (
-        <>
-            <div className={local.searchField}>
-                <Input
-                    type="search"
-                    enterKeyHint="search"
-                    autoCapitalize="off"
-                    className={local.search}
-                    placeholder="Search"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    aria-label="Search staking positions"
-                />
-            </div>
-            <NetworkFilterDropdown value={network} onChange={setNetwork} />
-        </>
+        <div className={local.searchField}>
+            <Input
+                type="search"
+                enterKeyHint="search"
+                autoCapitalize="off"
+                className={local.search}
+                placeholder="Search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+                aria-label="Search staking positions"
+            />
+        </div>
     );
 
     return wrap(
@@ -501,7 +492,7 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
                         ? (loadErrors.length > 0
                             ? "No staking positions could be loaded, so try again later."
                             : "Staking positions created by this wallet appear here.")
-                        : "Try a different search or network filter."}
+                        : "Try a different search."}
                     actionLabel={allRows.length === 0 && loadErrors.length === 0 && onNewStake ? "New stake" : undefined}
                     onAction={allRows.length === 0 && loadErrors.length === 0 ? onNewStake : undefined}
                     titleAs="p"
@@ -529,7 +520,6 @@ export function StakingList({ walletId, activeAccountId, onOpenStake, onNewStake
 
 function StakeRow({ row, cooldown, onSelect }) {
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
-    const descriptor = chainRegistry.get(row.chainId);
     return (
         /* Stake entries stay native buttons because each control is the complete clickable row. */
         <button
@@ -559,9 +549,6 @@ function StakeRow({ row, cooldown, onSelect }) {
             </div>
             <div className={local.body}>
                 <div className={local.name}>{row.name}</div>
-                <div className={local.subtitle}>
-                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : row.chainId}
-                </div>
                 <div className={local.subtitle}>{row.subtitle}</div>
                 {row.subtitle2 ? <div className={local.subtitle}>{row.subtitle2}</div> : null}
             </div>
