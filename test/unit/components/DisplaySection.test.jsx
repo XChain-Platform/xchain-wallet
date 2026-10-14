@@ -12,6 +12,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DisplaySection } from '../../../packages/core/src/shared/components/settings/DisplaySection.jsx';
+import { unknownTokenKeys } from '../../../packages/core/src/shared/components/HomeTabs.jsx';
+import { TokenPicker } from '../../../packages/core/src/shared/routes/TokenPicker.jsx';
 
 afterEach(() => cleanup());
 
@@ -21,6 +23,7 @@ function setup(overrides = {}, messagingOverrides = {}) {
         pinnedTokens: [],
         watchedTokens: [],
         hiddenTokens: [],
+        hideUnknownTokens: false,
         showPinAffordance: false,
         showHideAffordance: false,
         smallBalanceThreshold: 'dust',
@@ -52,8 +55,10 @@ describe('DisplaySection', () => {
     it('persists every balance display control through settings updates', async () => {
         const messaging = setup();
         const hide = await screen.findByRole('switch', { name: 'Hide small balances' });
+        const hideUnknown = screen.getByRole('switch', { name: 'Hide unknown tokens' });
 
         fireEvent.click(hide);
+        fireEvent.click(hideUnknown);
         const threshold = screen.getByRole('combobox', { name: 'Small-balance threshold' });
         const numberFormat = screen.getByRole('combobox', { name: 'Balance number format' });
         expect(threshold.className).toMatch(/input/);
@@ -63,6 +68,7 @@ describe('DisplaySection', () => {
 
         await waitFor(() => {
             expect(messaging.updateSettings).toHaveBeenCalledWith({ privacy: { hideSmallBalances: true } });
+            expect(messaging.updateSettings).toHaveBeenCalledWith({ hideUnknownTokens: true });
             expect(messaging.updateSettings).toHaveBeenCalledWith({ smallBalanceThreshold: '0.01' });
             expect(messaging.updateSettings).toHaveBeenCalledWith({ numberFormat: 'trim' });
         });
@@ -78,6 +84,7 @@ describe('DisplaySection', () => {
             },
             watchedTokens: ['dogecoin-mainnet:DOGE'],
             hiddenTokens: ['bitcoin-mainnet:XCP'],
+            hideUnknownTokens: true,
             showPinAffordance: true,
             showHideAffordance: true,
             smallBalanceThreshold: '1',
@@ -95,6 +102,7 @@ describe('DisplaySection', () => {
             pinnedTokensByWallet: {},
             watchedTokens: [],
             hiddenTokens: [],
+            hideUnknownTokens: false,
             showPinAffordance: false,
             showHideAffordance: false,
             smallBalanceThreshold: 'dust',
@@ -106,6 +114,83 @@ describe('DisplaySection', () => {
             pinnedTokens: [],
             pinnedTokensByWallet: {},
         });
+    });
+
+    it('classifies only unfamiliar metadata-free tokens as unknown', () => {
+        const token = (tick, overrides = {}) => ({
+            chainId: 'bitcoin-mainnet',
+            tick,
+            kind: 'token',
+            displayName: tick,
+            imageUrl: null,
+            fiatRate: null,
+            ...overrides,
+        });
+        const unknown = unknownTokenKeys([
+            token('UNKNOWN'),
+            token('NAMED', { displayName: 'Named token' }),
+            token('IMAGED', { imageUrl: 'data:image/png;base64,AA==' }),
+            token('PRICED', { fiatRate: 0.25 }),
+            token('ORDERED', { escrowed: '1' }),
+            token('PINNED'),
+            token('WATCHED'),
+            token('ISSUED'),
+            token('BTC', { kind: 'native' }),
+        ], {
+            pinnedKeys: new Set(['bitcoin-mainnet:PINNED']),
+            watchedTokens: ['bitcoin-mainnet:WATCHED'],
+            ownedTokens: [{ chainId: 'bitcoin-mainnet', tick: 'ISSUED' }],
+        });
+
+        expect([...unknown]).toEqual(['bitcoin-mainnet:UNKNOWN']);
+    });
+
+    it('keeps a hidden token balance keyboard-reachable in the Send picker', async () => {
+        const onSelect = vi.fn();
+        const messaging = {
+            getSettings: vi.fn().mockResolvedValue({
+                hiddenTokens: ['bitcoin-mainnet:HIDDEN'],
+                hideUnknownTokens: true,
+            }),
+            getWalletBalances: vi.fn().mockResolvedValue({
+                'bitcoin-mainnet': [{
+                    address: 'bc1qsender',
+                    balances: {
+                        native: { tick: 'BTC', quantity: '1000', divisibility: 8 },
+                        tokens: [
+                            { tick: 'HIDDEN', quantity: '25', divisibility: 0 },
+                            { tick: 'UNKNOWN', quantity: '50', divisibility: 0 },
+                        ],
+                    },
+                }],
+            }),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <TokenPicker
+                    purpose="send"
+                    walletId="wallet-1"
+                    onBack={() => {}}
+                    onSelect={onSelect}
+                />
+            </MessagingProvider>,
+        );
+
+        expect(await screen.findByRole('button', { name: /^Select UNKNOWN\b/ }))
+            .toBeInTheDocument();
+        fireEvent.click(await screen.findByRole('button', { name: 'Show 1 hidden token' }));
+        const firstOption = screen.getByRole('button', { name: /^Select Bitcoin\b/ });
+        const hiddenOption = screen.getByRole('button', { name: /^Select HIDDEN\b/ });
+        firstOption.focus();
+        fireEvent.keyDown(firstOption, { key: 'ArrowUp' });
+
+        expect(hiddenOption).toHaveFocus();
+        expect(hiddenOption.closest('[role="listitem"]')).toHaveTextContent('25');
+        fireEvent.click(hiddenOption);
+        expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({
+            chainId: 'bitcoin-mainnet',
+            tick: 'HIDDEN',
+        }));
     });
 
     it('looks up a watched ticker on its selected chain, refuses missing and duplicate tokens, and removes it', async () => {

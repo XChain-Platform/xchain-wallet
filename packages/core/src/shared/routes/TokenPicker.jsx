@@ -419,6 +419,7 @@ export function TokenPicker({
         || (!kindLocked && kindFilter !== 'all');
 
     const visibleOptionRows = rows.filter((row) => !hiddenSet.has(`${row.chainId}:${row.tick}`));
+    const hiddenOptionRows = rows.filter((row) => hiddenSet.has(`${row.chainId}:${row.tick}`));
     const sortedOptionRows = pinnedSet.size > 0
         ? [
             ...visibleOptionRows.filter((row) => pinnedSet.has(`${row.chainId}:${row.tick}`)),
@@ -427,6 +428,7 @@ export function TokenPicker({
         : visibleOptionRows;
     const optionRows = [
         ...sortedOptionRows,
+        ...hiddenOptionRows,
         ...platformResults,
     ];
     const optionKeys = optionRows.map((row) => `${row.chainId}:${row.tick}`);
