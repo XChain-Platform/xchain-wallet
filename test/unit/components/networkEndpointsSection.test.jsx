@@ -67,6 +67,14 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('NetworkEndpointsSection', () => {
+    it('renders each endpoint group as a card', () => {
+        render(<NetworkEndpointsSection />);
+
+        const groups = screen.getAllByRole('region');
+        expect(groups.length).toBeGreaterThan(1);
+        expect(groups.every((group) => group.className.includes('endpointCard'))).toBe(true);
+    });
+
     it('seeds every field with the port the wallet actually uses', () => {
         render(<NetworkEndpointsSection />);
         const block = ltcRegtestBlock();

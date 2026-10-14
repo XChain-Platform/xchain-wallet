@@ -37,6 +37,7 @@ import { useSettings } from '../../hooks/useSettings.js';
 import { useMessaging } from '../../useMessaging.js';
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
 import { ROW_HINT, STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
+import styles from './NetworkEndpointsSection.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -123,6 +124,7 @@ function ChainRegistryRefreshRow() {
             headingLevel="h3"
             title="Chain registry refresh"
             description={registryStatusText(status, manualResult)}
+            className={styles.endpointCard}
         >
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <Button
@@ -326,6 +328,7 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
             headingLevel="h3"
             title={`${descriptor.displayName}${networkSuffix}`}
             description={isCustom ? 'Custom' : 'Default'}
+            className={styles.endpointCard}
         >
             <UrlField
                 label="Explorer URL"
