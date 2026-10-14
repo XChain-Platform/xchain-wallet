@@ -101,6 +101,64 @@ describe('<CopyButton>', () => {
         expect(haptic.tap).not.toHaveBeenCalled();
     });
 
+    it('uses the shared legacy fallback when clipboard.writeText rejects', async () => {
+        clipboard.writeText = vi.fn().mockRejectedValue(new Error('permission denied'));
+        const execCommand = vi.fn().mockReturnValue(true);
+        Object.defineProperty(document, 'execCommand', {
+            configurable: true,
+            value: execCommand,
+        });
+
+        try {
+            render(<CopyButton value="txid-abc" label="Copy transaction ID" />);
+            fireEvent.click(screen.getByRole('button', { name: 'Copy transaction ID' }));
+
+            await waitFor(() => expect(screen.getByRole('button')).toHaveTextContent('Copied'));
+            expect(clipboard.writeText).toHaveBeenCalledWith('txid-abc');
+            expect(execCommand).toHaveBeenCalledWith('copy');
+            expect(haptic.tap).toHaveBeenCalledOnce();
+            expect(haptic.error).not.toHaveBeenCalled();
+        } finally {
+            delete document.execCommand;
+        }
+    });
+
+    it('uses the shared legacy fallback when the Clipboard API is missing', async () => {
+        delete globalThis.navigator.clipboard;
+        const execCommand = vi.fn().mockReturnValue(true);
+        Object.defineProperty(document, 'execCommand', {
+            configurable: true,
+            value: execCommand,
+        });
+
+        try {
+            render(<CopyButton value="bc1qaddress" label="Copy address" />);
+            fireEvent.click(screen.getByRole('button', { name: 'Copy address' }));
+
+            await waitFor(() => expect(screen.getByRole('button')).toHaveTextContent('Copied'));
+            expect(execCommand).toHaveBeenCalledWith('copy');
+            expect(haptic.tap).toHaveBeenCalledOnce();
+            expect(haptic.error).not.toHaveBeenCalled();
+        } finally {
+            delete document.execCommand;
+        }
+    });
+
+    it('reports failure without rejecting when clipboard access itself throws', async () => {
+        Object.defineProperty(globalThis.navigator, 'clipboard', {
+            configurable: true,
+            get() { throw new Error('clipboard unavailable'); },
+        });
+        render(<CopyButton value="bc1qaddress" label="Copy address" />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Copy address' }));
+
+        await waitFor(() => {
+            expect(screen.getByRole('button')).toHaveTextContent('Copy failed: the clipboard is unavailable.');
+        });
+        expect(haptic.error).toHaveBeenCalledOnce();
+    });
+
     it('uses ariaLabel when provided, otherwise falls back to the visible label', () => {
         const { rerender } = render(<CopyButton value="x" ariaLabel="Copy wallet address" />);
         expect(screen.getByRole('button')).toHaveAttribute('aria-label', 'Copy wallet address');
