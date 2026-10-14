@@ -61,8 +61,7 @@ test('demo Send uses an inline guard without contacting an encoder', async ({ pa
     expect(encoderRequests, 'demo actions must not request an encoder').toEqual([]);
 });
 
-test.fixme('demo Swap and Create token use an inline guard without contacting an encoder', async ({ page }) => {
-    // Never built: demo wallets hide the trade and create commands instead of showing an inline note.
+test('demo Swap and Create token use an inline guard without contacting an encoder', async ({ page }) => {
     test.slow();
     const encoderRequests = await trackEncoderRequests(page);
 

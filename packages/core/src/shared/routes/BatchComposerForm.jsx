@@ -39,6 +39,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressText, Button, ChainPicker, FeeSelector, FormPage, FormSection, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib, decoder as decoderLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -170,6 +171,7 @@ function sendTotalsFor(parsedRows) {
  */
 export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const { isWatcherMode } = useWalletMode();
     const variant = screenVariantFor(shell);
@@ -616,6 +618,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         const hw = isHwSource(fromAddress);
         return wrap(
             <FormPage
+                demoGuard={demoGuard}
                 label="Review batch"
                 onSubmit={handleSign}
                 status={buildError || (submitError && (hw || isWatcherMode)) ? (
@@ -724,6 +727,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     // stage === 'compose'
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Batch composer"
             sectioned
             status={preReviewError || constraintError ? (

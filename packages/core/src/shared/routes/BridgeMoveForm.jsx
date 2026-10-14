@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressField, AddressText, Button, ChainBadge, ChainPicker, FeeSelector, FormPage, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
@@ -105,6 +106,7 @@ const FEE_QUOTE_DEBOUNCE_MS = 400;
  */
 export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTick, onBack }) {
     const { messaging, shell } = useMessaging();
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
     const { isWatcherMode } = useWalletMode();
@@ -666,6 +668,7 @@ export function BridgeMoveForm({ walletId, accountId, initialChainId, initialTic
 
     return wrap(
         <FormPage
+            demoGuard={demoGuard}
             label="Move across chains"
             onSubmit={handleSubmit}
             status={(feeWarning || blockingError || formError || submitError) ? (

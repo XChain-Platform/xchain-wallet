@@ -8,9 +8,24 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { forwardRef } from 'react';
+import { Children, cloneElement, forwardRef, isValidElement } from 'react';
 import { submitOnlyFromLastField } from './formEnter.js';
 import styles from './FormPage.module.css';
+
+/**
+ * Disable every submit button in an action row. Used by the demo guard so a
+ * demo wallet can browse the form but never reach a compose.
+ */
+function disableSubmits(node) {
+    return Children.map(node, (child) => {
+        if (!isValidElement(child)) return child;
+        if (child.props?.type === 'submit') return cloneElement(child, { disabled: true });
+        if (child.props?.children != null && typeof child.type === 'symbol') {
+            return cloneElement(child, undefined, disableSubmits(child.props.children));
+        }
+        return child;
+    });
+}
 
 /**
  * Page template for every screen whose job is a form the user fills in and
@@ -47,6 +62,7 @@ import styles from './FormPage.module.css';
  * @param {boolean} [props.sectioned]                   children are divider-separated FormSections
  * @param {boolean} [props.fill]                        the form fills the screen height so a scrolling panel can take the free space and the actions sit at the bottom
  * @param {boolean} [props.fullWidth]                   wide screens use the whole content width with no card, for reading pages such as the license terms
+ * @param {{ blocked: boolean, note: import('react').ReactNode, dialog: import('react').ReactNode }} [props.demoGuard] from useDemoGuard: in a demo wallet the note replaces `status`, submit buttons are disabled and submission is ignored
  * @param {string} [props.label]                        accessible name, which makes the form a landmark
  * @param {boolean} [props.noValidate]                  default true: the route validates and reports through `status`
  * @param {'form' | 'div'} [props.as]                   use div for a reusable form fragment already inside a parent form
@@ -71,6 +87,7 @@ export const FormPage = forwardRef(function FormPage(
         fill = false,
         fullWidth = false,
         label,
+        demoGuard,
         noValidate = true,
         as: Root = 'form',
         className,
@@ -87,8 +104,12 @@ export const FormPage = forwardRef(function FormPage(
         fullWidth ? styles.fullWidth : null,
         className,
     ].filter(Boolean).join(' ');
+    const demoBlocked = !!demoGuard?.blocked;
+    const guardedSubmit = demoBlocked
+        ? (event) => { event?.preventDefault?.(); }
+        : onSubmit;
     const semanticProps = Root === 'form'
-        ? { onSubmit, noValidate, 'aria-label': label }
+        ? { onSubmit: guardedSubmit, noValidate, 'aria-label': label }
         : { role: 'group', 'aria-label': label };
     const handleKeyDown = (event) => {
         onKeyDown?.(event);
@@ -127,8 +148,9 @@ export const FormPage = forwardRef(function FormPage(
                 </header>
             ) : null}
             {children != null ? <div className={styles.body}>{children}</div> : null}
-            {status ? <div className={styles.status}>{status}</div> : null}
-            {actions ? <div className={actionClassName}>{actions}</div> : null}
+            {demoBlocked || status ? <div className={styles.status}>{demoBlocked ? demoGuard.note : status}</div> : null}
+            {actions ? <div className={actionClassName}>{demoBlocked ? disableSubmits(actions) : actions}</div> : null}
+            {demoBlocked ? demoGuard.dialog : null}
         </Root>
     );
 });
