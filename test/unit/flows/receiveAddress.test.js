@@ -42,12 +42,14 @@ const BTC_DESCRIPTOR = {
     coin: 'bitcoin',
     networkKind: 'regtest',
     defaultAddressType: 'p2wpkh',
-    addressTypes: ['p2wpkh', 'p2pkh'],
+    addressTypes: ['p2pkh', 'p2wpkh', 'p2tr'],
 };
 const chainRegistry = {
     get: (id) => (id === 'bitcoin' ? BTC_DESCRIPTOR : null),
 };
-const sdkRegistry = { get: () => ({}) };
+const sdkRegistry = {
+    get: () => ({ explorer: { getHistory: async () => [] } }),
+};
 
 // Fake signer: derives a deterministic address per path and records the
 // `kind` so a test can assert software vs hardware provenance. The flow
@@ -169,13 +171,21 @@ describe('receiveAddress (§29.7)', () => {
         const rec = await receiveAddress(base(vault, signer));
         expect(rec.derivationPath).toBe("m/84'/0'/0'/0/0");
     });
+
+    it('refuses to rotate an imported-key-only wallet', async () => {
+        const vault = makeVault({ accounts: [] });
+        vault.wallets = memCollection([{ id: 'w1', format: 'wif-only' }]);
+
+        await expect(receiveAddress(base(vault, signer)))
+            .rejects.toThrow('imported-key wallets cannot rotate receive addresses');
+        expect(signer.calls).toHaveLength(0);
+    });
 });
 
 // Gap filling. A deleted HD record leaves a hole below the highest held
-// index; Generate must re-derive that hole (lowest unheld index) rather
-// than highest+1, or the deleted address and whatever it holds stay
-// unreachable until every higher address is deleted too.
-describe('receiveAddress fills the lowest unheld external index', () => {
+// index. Generate recovers the lowest unfunded hole, but never re-offers
+// an address whose deleted record received funds.
+describe('receiveAddress fills the lowest unfunded external index', () => {
     function hdAt(indices, { accountId = 'acct-a', account = 0, change = 0 } = {}) {
         return indices.map((i) => createAddress({
             accountId,
@@ -218,6 +228,27 @@ describe('receiveAddress fills the lowest unheld external index', () => {
             "m/84'/0'/0'/0/5",
         ]);
         expect(signer.calls.map((c) => c.startIndex)).toEqual([2, 4, 5]);
+    });
+
+    it.each([
+        { held: [0, 2], expected: 3, edge: 'interior' },
+        { held: [0], expected: 2, edge: 'frontier' },
+    ])('skips a funded deleted $edge receive index', async ({ held, expected }) => {
+        const vault = makeVault({ accounts: [ACCOUNT_A], addresses: hdAt(held) });
+        const fundedSdkRegistry = {
+            get: () => ({
+                explorer: {
+                    getHistory: async (address) => (
+                        address === 'addr_0_0_1' ? [{ tx_hash: 'funded' }] : []
+                    ),
+                },
+            }),
+        };
+
+        const rec = await receiveAddress(base(vault, makeSigner('software'), {
+            sdkRegistry: fundedSdkRegistry,
+        }));
+        expect(rec.derivationPath).toBe(`m/84'/0'/0'/0/${expected}`);
     });
 
     it('ignores the change branch: an internal index 0 does not fill external 0', async () => {
@@ -346,6 +377,26 @@ describe('receiveAddress index space by wallet format', () => {
         );
         // p2wpkh lives on its own BIP44 branch, so index 0 is unused there.
         expect(rec.derivationPath.endsWith('/0')).toBe(true);
+    });
+
+    it('advances legacy, SegWit, and Taproot indexes independently for a BIP39 wallet', async () => {
+        const vault = makeVault({ accounts: [ACCOUNT_A] });
+        vault.wallets = memCollection([{ id: 'w1', format: 'bip39' }]);
+        const signer = makeSigner('software');
+
+        for (const addressType of ['p2pkh', 'p2wpkh', 'p2tr']) {
+            // eslint-disable-next-line no-await-in-loop -- type switches are the assertion
+            await receiveAddress(base(vault, signer, { addressType }));
+        }
+        await receiveAddress(base(vault, signer, { addressType: 'p2wpkh' }));
+
+        expect(signer.calls.map(({ addressType, startIndex }) => ({ addressType, startIndex })))
+            .toEqual([
+                { addressType: 'p2pkh', startIndex: 0 },
+                { addressType: 'p2wpkh', startIndex: 0 },
+                { addressType: 'p2tr', startIndex: 0 },
+                { addressType: 'p2wpkh', startIndex: 1 },
+            ]);
     });
 
     it('falls back to per-type spaces when the wallet record is unreadable', async () => {
