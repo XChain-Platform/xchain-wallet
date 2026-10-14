@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, ChainBadge, ChainPicker, FormPage, FormSection, Input, ListPage, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, ChainBadge, ChainPicker, FormPage, FormSection, Input, ListPage, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
@@ -50,6 +50,46 @@ const SCHEMES = [
 
 let _idCounter = 0;
 const newRowId = () => `cosigner-${++_idCounter}`;
+
+export function parseCosignerSharePayload(value, networkKind) {
+    let payload;
+    try {
+        payload = JSON.parse(value);
+    } catch {
+        throw new Error('Shared cosigner setup is not valid JSON.');
+    }
+    if (!payload || payload.type !== 'xchain-multisig-cosigner' || payload.version !== 1) {
+        throw new Error('Shared cosigner setup has an unsupported type or version.');
+    }
+    if (payload.network !== networkKind) {
+        throw new Error(`Shared cosigner setup is for ${payload.network || 'an unknown network'}, not ${networkKind}.`);
+    }
+    if (!isCompressedPublicKey(payload.pubkey)) {
+        throw new Error('Shared cosigner setup contains an invalid public key.');
+    }
+    if (!/^[0-9a-fA-F]{8}$/.test(payload.fingerprint || '')) {
+        throw new Error('Shared cosigner setup contains an invalid master fingerprint.');
+    }
+    if (!/^m(?:\/\d+'?)*$/.test(payload.derivationPath || '')) {
+        throw new Error('Shared cosigner setup contains an invalid derivation path.');
+    }
+    if (typeof payload.xpub !== 'string' || payload.xpub.length === 0) {
+        throw new Error('Shared cosigner setup does not contain an extended public key.');
+    }
+    const xpubError = validateCosignerXpub(
+        payload.xpub,
+        networkKind,
+        payload.derivationPath,
+        payload.pubkey,
+    );
+    if (xpubError) throw new Error(`Shared cosigner setup: ${xpubError}`);
+    return {
+        xpub: payload.xpub,
+        pubkey: payload.pubkey.toLowerCase(),
+        fingerprint: payload.fingerprint.toLowerCase(),
+        derivationPath: payload.derivationPath,
+    };
+}
 
 /**
  * §22 + §42.9 multisig wallet creation coordinator (Step 17).
@@ -454,6 +494,7 @@ export function MultisigCreate({ walletId, onBack }) {
                         index={i}
                         row={row}
                         addresses={localAddresses}
+                        networkKind={descriptor?.networkKind}
                         onChange={(patch) => updateRow(row.id, patch)}
                         onRemove={() => removeRow(row.id)}
                         canRemove={rows.length > 2}
@@ -546,7 +587,7 @@ function ReviewCosigner({ index, row }) {
     );
 }
 
-function CosignerRow({ index, row, addresses, onChange, onRemove, canRemove, onLocalAddressPick }) {
+function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, canRemove, onLocalAddressPick }) {
     return (
         <fieldset style={{ ...fieldsetStyle, background: 'var(--xc-surface-raised)', marginBottom: 'var(--xc-space-2)' }}>
             <legend style={legendStyle}>Cosigner {index + 1}</legend>
@@ -597,12 +638,37 @@ function CosignerRow({ index, row, addresses, onChange, onRemove, canRemove, onL
             ) : null}
 
             {row.origin === 'external-xpub' ? (
-                <Input
-                    label="xpub"
-                    value={row.xpub}
-                    onChange={(e) => onChange({ xpub: e.target.value.trim() })}
-                    placeholder="xpub6CUGRUonZSQ4..."
-                />
+                <>
+                    <Textarea
+                        label="Shared cosigner setup (optional)"
+                        value={row.sharePayload || ''}
+                        onChange={(e) => onChange({ sharePayload: e.target.value, shareError: null })}
+                        rows={3}
+                    />
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => {
+                            try {
+                                onChange({
+                                    ...parseCosignerSharePayload(row.sharePayload || '', networkKind),
+                                    shareError: null,
+                                });
+                            } catch (err) {
+                                onChange({ shareError: err.message });
+                            }
+                        }}
+                    >
+                        Import shared setup
+                    </Button>
+                    {row.shareError ? <StatusMessage variant="error">{row.shareError}</StatusMessage> : null}
+                    <Input
+                        label="xpub"
+                        value={row.xpub}
+                        onChange={(e) => onChange({ xpub: e.target.value.trim() })}
+                        placeholder="xpub6CUGRUonZSQ4..."
+                    />
+                </>
             ) : null}
 
             <Input
