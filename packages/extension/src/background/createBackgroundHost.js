@@ -2064,7 +2064,11 @@ export function createBackgroundHost(deps) {
         if (typeof id !== 'string' || !id) {
             throw new Error('sites.delete: id is required');
         }
+        const site = await vault.connectedSites.get(id);
         await vault.connectedSites.delete(id);
+        if (site?.origin && typeof bridgeEvents?.disconnect === 'function') {
+            await bridgeEvents.disconnect(site.origin, 'user-revoked');
+        }
         return { ok: true };
     });
 
@@ -2102,7 +2106,17 @@ export function createBackgroundHost(deps) {
         if (typeof origin !== 'string' || !origin) {
             throw new Error('sites.block: origin is required');
         }
-        return addBlockedOrigin({ vault, origin });
+        const sites = await vault.connectedSites.list();
+        const result = await addBlockedOrigin({ vault, origin });
+        if (typeof bridgeEvents?.disconnect === 'function') {
+            const evicted = new Set(result.evictedSiteIds);
+            for (const site of sites) {
+                if (evicted.has(site.id) && site.origin) {
+                    await bridgeEvents.disconnect(site.origin, 'blocked-by-user');
+                }
+            }
+        }
+        return result;
     });
     host.register('sites.unblock', async (req, { vault }) => {
         const origin = req?.origin;

@@ -145,15 +145,25 @@ describe('extension popup and side-panel state synchronization', () => {
     });
 });
 
-function makeHost(surfaceStateEvents) {
+function makeHost(surfaceStateEvents, options = {}) {
     const settings = createDefaultSettings();
     const wallet = { id: 'wallet-two' };
+    const initialSites = options.sites ?? [];
+    const sites = new Map(initialSites.map((site) => [site.id, site]));
     const vault = {
         wallets: {
             get: async (id) => (id === wallet.id ? wallet : null),
         },
         accounts: { findBy: async () => [] },
-        connectedSites: { list: async () => [] },
+        connectedSites: {
+            list: async () => [...sites.values()],
+            get: async (id) => sites.get(id) ?? null,
+            findBy: async (field, value) => (
+                [...sites.values()].filter((site) => site[field] === value)
+            ),
+            put: async (site) => { sites.set(site.id, site); },
+            delete: async (id) => { sites.delete(id); },
+        },
         settings: {
             async get() { return structuredClone(settings); },
             async put(next) { Object.assign(settings, structuredClone(next)); },
@@ -163,13 +173,13 @@ function makeHost(surfaceStateEvents) {
         vault,
         chainRegistry: {},
         sdkRegistry: {},
-        bridgeEvents: { walletSwitched: vi.fn() },
+        bridgeEvents: options.bridgeEvents ?? { walletSwitched: vi.fn() },
         surfaceStateEvents,
         broadcastQueueStorage: null,
         signThrottleStorage: null,
         logConsoleStorage: null,
     });
-    return { host };
+    return { host, sites };
 }
 
 describe('background mutation notifications', () => {
@@ -209,6 +219,47 @@ describe('background mutation notifications', () => {
         expect(surfaceStateEvents.publish).toHaveBeenCalledWith(
             'network',
             { settings: expect.objectContaining({ activeNetwork: 'testnet' }) },
+        );
+    });
+
+    it('notifies every tab for an origin when the user revokes its site', async () => {
+        const bridgeEvents = { walletSwitched: vi.fn(), disconnect: vi.fn(async () => {}) };
+        const site = { id: 'site-1', origin: 'https://dapp.example' };
+        const { host, sites } = makeHost(null, { bridgeEvents, sites: [site] });
+
+        const response = await host.handle({
+            type: 'sites.delete',
+            request: { id: site.id },
+        });
+
+        expect(response.ok).toBe(true);
+        expect(sites.size).toBe(0);
+        expect(bridgeEvents.disconnect).toHaveBeenCalledWith(site.origin, 'user-revoked');
+    });
+
+    it('notifies each evicted origin when a block rule revokes matching sites', async () => {
+        const bridgeEvents = { walletSwitched: vi.fn(), disconnect: vi.fn(async () => {}) };
+        const sites = [
+            { id: 'site-a', origin: 'https://a.example.com' },
+            { id: 'site-b', origin: 'https://b.example.com' },
+        ];
+        const { host, sites: stored } = makeHost(null, { bridgeEvents, sites });
+
+        const response = await host.handle({
+            type: 'sites.block',
+            request: { origin: '*.example.com' },
+        });
+
+        expect(response.ok).toBe(true);
+        expect(stored.size).toBe(0);
+        expect(bridgeEvents.disconnect).toHaveBeenCalledTimes(2);
+        expect(bridgeEvents.disconnect).toHaveBeenCalledWith(
+            'https://a.example.com',
+            'blocked-by-user',
+        );
+        expect(bridgeEvents.disconnect).toHaveBeenCalledWith(
+            'https://b.example.com',
+            'blocked-by-user',
         );
     });
 });

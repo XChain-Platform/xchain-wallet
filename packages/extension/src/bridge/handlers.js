@@ -364,18 +364,24 @@ export function registerBridgeHandlers(host, opts = {}) {
     // rejected promise, which is why the page shim can NOT blanket-wrap every
     // method in the result envelope.
     register('bridge.getAccounts', async (req, deps) => {
-        const site = await requireSite(deps.vault, req);
-        return accountRecordsFor(deps.vault, site.permissions.accounts);
+        const site = await requireReadSite(deps, req);
+        const accounts = await deps.vault.accounts.list();
+        const current = await requireCurrentReadSite(deps, req, site.id);
+        return accountRecordsFrom(accounts, current.permissions.accounts);
     });
 
     register('bridge.getAddresses', async (req, deps) => {
-        const site = await requireSite(deps.vault, req);
+        const site = await requireReadSite(deps, req);
         assertChainPermitted(site, req.chainId);
         const descriptor = deps.chainRegistry.get(req.chainId);
         if (!descriptor) throw bridgeError('UNKNOWN_CHAIN', req.chainId);
+        await assertChainOnActiveNetwork(deps, req.chainId);
 
         const all = await deps.vault.addresses.list();
-        const accountIds = new Set(site.permissions.accounts);
+        const current = await requireCurrentReadSite(deps, req, site.id);
+        assertChainPermitted(current, req.chainId);
+        await assertChainOnActiveNetwork(deps, req.chainId);
+        const accountIds = new Set(current.permissions.accounts);
         const filtered = all.filter(
             (a) =>
                 a.chain === descriptor.coin &&
@@ -394,8 +400,9 @@ export function registerBridgeHandlers(host, opts = {}) {
     });
 
     register('bridge.getBalances', async (req, deps) => {
-        const site = await requireSite(deps.vault, req);
+        const site = await requireReadSite(deps, req);
         assertChainPermitted(site, req.chainId);
+        await assertChainOnActiveNetwork(deps, req.chainId);
         // Ensure the requested address is one the site is permitted to see.
         const ok = await siteHasAddress(deps.vault, site, req.chainId, req.address, deps.chainRegistry);
         if (!ok) throw bridgeError('ADDRESS_NOT_PERMITTED', req.address);
@@ -404,12 +411,25 @@ export function registerBridgeHandlers(host, opts = {}) {
         // Passing that straight through handed dApps an object where the
         // published type says array, with none of the seven Balance fields
         // under the names the type gives them.
-        return balanceRecordsFrom(await addressBalances({
+        const balances = await addressBalances({
             sdkRegistry: deps.sdkRegistry,
             chainRegistry: deps.chainRegistry,
             chainId: req.chainId,
             address: req.address,
-        }));
+        });
+        const current = await requireCurrentReadSite(deps, req, site.id);
+        assertChainPermitted(current, req.chainId);
+        await assertChainOnActiveNetwork(deps, req.chainId);
+        if (!await siteHasAddress(
+            deps.vault,
+            current,
+            req.chainId,
+            req.address,
+            deps.chainRegistry,
+        )) {
+            throw bridgeError('ADDRESS_NOT_PERMITTED', req.address);
+        }
+        return balanceRecordsFrom(balances);
     });
 
     register('bridge.getSupportedChains', async (req, deps) => {
@@ -440,8 +460,9 @@ export function registerBridgeHandlers(host, opts = {}) {
     });
 
     register('bridge.getActiveChains', async (req, deps) => {
-        await requireSite(deps.vault, req);
+        const site = await requireReadSite(deps, req);
         const settings = await deps.vault.settings.get();
+        await requireCurrentReadSite(deps, req, site.id);
         if (!settings) return [];
         // "Active" = any chain that has seeded per-chain state (feeStrategy,
         // ADS, etc). Matches what seedSettings populates at createWallet.
@@ -1388,6 +1409,10 @@ function balanceRecordsFrom(shape) {
  */
 async function accountRecordsFor(vault, accountIds) {
     const all = await vault.accounts.list();
+    return accountRecordsFrom(all, accountIds);
+}
+
+function accountRecordsFrom(all, accountIds) {
     const ids = new Set(Array.isArray(accountIds) ? accountIds : []);
     return (ids.size > 0 ? all.filter((a) => ids.has(a.id)) : all)
         .map((a) => ({ id: a.id, name: a.name }));
@@ -1413,6 +1438,23 @@ async function requireSite(vault, req) {
     return site;
 }
 
+// Reads do not update the site record. A read-side put can race a revocation
+// delete and recreate the grant, so each read instead verifies the same site
+// still exists after its asynchronous vault or network work completes.
+async function requireReadSite(deps, req) {
+    assertOrigin(req);
+    await assertNotBlocked(req, deps);
+    const site = await findConnectedSite(deps.vault, req.origin);
+    if (!site) throw bridgeError('NOT_CONNECTED', req.origin);
+    return site;
+}
+
+async function requireCurrentReadSite(deps, req, siteId) {
+    const site = await requireReadSite(deps, req);
+    if (site.id !== siteId) throw bridgeError('NOT_CONNECTED', req.origin);
+    return site;
+}
+
 async function touchLastUsed(vault, site) {
     await vault.connectedSites.put({
         ...site,
@@ -1425,6 +1467,15 @@ function assertChainPermitted(site, chainId) {
     const chains = site.permissions?.chains ?? [];
     if (chains.length === 0) return;  // empty list = all permitted (per §43.3)
     if (!chains.includes(chainId)) {
+        throw bridgeError('CHAIN_NOT_PERMITTED', chainId);
+    }
+}
+
+async function assertChainOnActiveNetwork(deps, chainId) {
+    const settings = await deps.vault.settings.get().catch(() => null);
+    if (!settings) throw bridgeError('CHAIN_NOT_PERMITTED', chainId);
+    const active = filterChainIdsByActiveNetwork([chainId], settings, deps.chainRegistry);
+    if (!active.includes(chainId)) {
         throw bridgeError('CHAIN_NOT_PERMITTED', chainId);
     }
 }
