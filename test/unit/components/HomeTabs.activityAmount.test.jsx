@@ -11,7 +11,9 @@
 // Home's Activity tab prints the same synthesized rows History prints, and
 // those rows carry whole-unit decimal amounts. Home used to read an integer
 // amount as base units, so the demo's 100 BTC receive read 0.000001 BTC on
-// Home and 100 BTC on History and its detail page.
+// Home and 100 BTC on History and its detail page. Only SEND rows carry
+// whole units; the other synthesized actions (a sweep, an issue) carry base
+// units and keep their conversion.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -88,5 +90,8 @@ describe('Home Activity amounts', () => {
         const texts = [...rows].map((row) => row.textContent);
         expect(texts.some((text) => text.includes('+100 BTC'))).toBe(true);
         expect(texts.some((text) => text.includes('0.000001 BTC'))).toBe(false);
+        // Other actions carry base units: the demo sweep of 2500000 is 0.025 BTC.
+        expect(texts.some((text) => text.includes('0.025 BTC'))).toBe(true);
+        expect(texts.some((text) => text.includes('2,500,000 BTC'))).toBe(false);
     });
 });

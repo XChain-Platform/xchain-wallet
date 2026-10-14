@@ -928,6 +928,20 @@ function buildTokenLookup(balances) {
     return m;
 }
 
+// Format a base-unit amount string using the tick's divisibility. Plain
+// string math, no BigInt; these are demo values and stay small.
+function formatBaseUnits(raw, divisibility) {
+    const s = String(raw ?? '').trim();
+    if (!s) return '';
+    const div = Number.isFinite(divisibility) ? divisibility : 8;
+    if (div === 0) return s;
+    if (!/^\d+$/.test(s)) return s;
+    const padded = s.padStart(div + 1, '0');
+    const whole = padded.slice(0, -div);
+    const frac = padded.slice(-div).replace(/0+$/, '');
+    return frac ? `${whole}.${frac}` : whole;
+}
+
 const ACTION_ICON = {
     send:       (k) => <Icon.SendIcon key={k} />,
     receive:    (k) => <Icon.ReceiveIcon key={k} />,
@@ -965,10 +979,12 @@ const ActivityEntryRow = memo(function ActivityEntryRow({ entry, walletAddresses
     const rawAmount = entry.raw?.amount ?? entry.raw?.AMOUNT ?? entry.raw?.quantity ?? entry.raw?.QUANTITY ?? '';
     const label = actionDisplayLabel(kind) || actionDisplayLabel(entry.action) || 'Event';
     const direction = kind === 'send' ? 'out' : kind === 'receive' ? 'in' : null;
-    // History rows carry whole-unit decimal amounts (the same shape the
-    // History route prints), so the figure is formatted as-is; reading it as
-    // base units showed a 100 BTC receive as 0.000001 BTC.
-    const amount = rawAmount ? String(rawAmount) : '';
+    // A SEND row carries a whole-unit decimal amount, the figure History
+    // prints, so it is shown as-is; reading it as base units showed a 100 BTC
+    // receive as 0.000001 BTC. Other actions carry base units.
+    const isSend = String(entry.action || '').toUpperCase() === 'SEND';
+    const amount = !rawAmount ? ''
+        : isSend ? String(rawAmount) : formatBaseUnits(rawAmount, tokenInfo?.divisibility ?? 8);
     const primary = amount
         ? `${formatHistoryAmount(amount, direction)}${tick ? ` ${tick}` : ''}`
         : (tick || nativeTicker);
