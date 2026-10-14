@@ -23,7 +23,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { isHwSource } from '../components/SignCredentials.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { PreflightPanel } from '../components/PreflightPanel.jsx';
-import { formatWithThousands } from '../utils/amountFormat.js';
+import { formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
@@ -75,6 +75,7 @@ import { isUserRejection, useActionConfirmFlow, useConfirmSubmit } from '../hook
 import { dispenserDestinationNotice, useDispenserDestination } from '../hooks/useDispenserDestination.js';
 import { copyText } from '../clipboard.js';
 import { formatLocalDateTime, formatRelativeTime } from '../utils/dateTime.js';
+import { exceedsBalance } from '../utils/dividendPerUnit.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -194,6 +195,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
     const [refillBalance, setRefillBalance] = useState(
         /** @type {string | null} */ (null),
     );
+    const [refillDivisibility, setRefillDivisibility] = useState(
+        /** @type {number | string | null} */ (null),
+    );
     // D-147: how many of the five refills are gone, derived from the lifecycle
     // events this page already loads. The refill now reaches the confirm page's
     // network dry run too, but this count is what says so on the form itself,
@@ -238,6 +242,8 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         const tick = String(dispenser?.give_tick || '').toUpperCase();
         if (refillStage === 'idle' || refillStage === 'done' || !ownerAddress || !tick) return undefined;
         if (typeof messaging.getWalletBalances !== 'function') return undefined;
+        setRefillBalance(null);
+        setRefillDivisibility(null);
         let cancelled = false;
         messaging.getWalletBalances(walletId)
             .then((byChain) => {
@@ -247,6 +253,9 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                 const rows = entry ? decoderLib.balancesFromSdk(entry.balances) || [] : [];
                 const match = rows.find((b) => String(b.tick).toUpperCase() === tick);
                 setRefillBalance(match ? String(match.amount) : '0');
+                const rawMatch = (entry?.balances?.tokens || [])
+                    .find((b) => String(b?.tick || '').toUpperCase() === tick);
+                setRefillDivisibility(rawMatch?.divisibility ?? null);
             })
             .catch(() => { /* footer just stays empty on failure */ });
         return () => { cancelled = true; };
@@ -374,6 +383,11 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         setHeldAddresses([]);
         setBuyerAddresses([]);
         setBuyerAddressId(null);
+        if (!/^\d+$/.test(String(actionIndex || ''))) {
+            setLoadError('Dispenser ID must be a whole number.');
+            setLoading(false);
+            return () => { cancelled = true; };
+        }
         // Demo wallet: resolve the fixture row (owned by the first address
         // on this chain) instead of querying an explorer.
         const isDemo = isDemoWallet;
@@ -1284,7 +1298,23 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
         event.preventDefault();
         if (refillStage === 'submitting' || !ownerAddress) return;
         const amt = refillAmount.trim();
-        if (!amt || !(Number(amt) > 0)) { setRefillError('Enter a refill amount.'); return; }
+        if (!/^\d+(?:\.\d+)?$/.test(amt) || compareAmounts(amt, '0') !== 1) {
+            setRefillError('Refill amount must be a positive number.');
+            return;
+        }
+        const precisionError = tokenAmountPrecisionError(amt, {
+            divisibility: refillDivisibility,
+            tick: giveTick,
+            noun: 'Refill amount',
+        });
+        if (precisionError) { setRefillError(precisionError); return; }
+        if (exceedsBalance(amt, refillBalance)) {
+            setRefillError(
+                `This address holds only ${formatWithThousands(refillBalance)} ${giveTick}. `
+                + 'Enter a refill amount at or below that balance.',
+            );
+            return;
+        }
         // D-147: a spent ceiling is refused here as well as on the button.
         if (refillCount.remaining <= 0 && refillCount.exact) return;
         await runOwnerAction({
@@ -1407,6 +1437,12 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                         listsChanged={Boolean(editAllowList.trim() || editBlockList.trim())}
                         refillNote={refillCeilingMessage(refillCount)}
                         closeNote={closeEscrowNote}
+                        actionIndex={actionIndex}
+                        refillAmount={refillAmount.trim()}
+                        giveTick={giveTick}
+                        editExpiration={editExpiration.trim()}
+                        editAllowList={editAllowList.trim()}
+                        editBlockList={editBlockList.trim()}
                     />
                 )}
             />
@@ -1538,6 +1574,7 @@ export function DispenserDetail({ walletId, chainId, actionIndex, onBack, onCanc
                     label="Refill amount"
                     amount={refillAmount}
                     tick={giveTick || ''}
+                    divisibility={refillDivisibility}
                     onAmountFieldChange={(rawValue) => {
                         const stripped = String(rawValue).replace(/,/g, '');
                         if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
@@ -2512,8 +2549,33 @@ function localInputToUnix(localStr) {
  * The dispenser-only facts that must still sit in front of Approve on the
  * confirm page, which shows the decoded action but knows nothing of these.
  */
-function OwnerConfirmNotes({ kind, allowListWarning, listsChanged, refillNote, closeNote }) {
-    if (kind === 'refill') return <p className={styles.hint}>{refillNote}</p>;
+function OwnerConfirmNotes({
+    kind,
+    allowListWarning,
+    listsChanged,
+    refillNote,
+    closeNote,
+    actionIndex,
+    refillAmount,
+    giveTick,
+    editExpiration,
+    editAllowList,
+    editBlockList,
+}) {
+    if (kind === 'refill') {
+        return (
+            <>
+                <p className={styles.successLabel}>Review refill</p>
+                <dl className={styles.detailsList} data-testid="refill-review-summary">
+                    <dt className={styles.detailsLabel}>Dispenser</dt>
+                    <dd className={styles.detailsValue}>#{actionIndex}</dd>
+                    <dt className={styles.detailsLabel}>Add to escrow</dt>
+                    <dd className={styles.detailsValue}>{formatWithThousands(refillAmount)} {giveTick}</dd>
+                </dl>
+                <p className={styles.hint}>{refillNote}</p>
+            </>
+        );
+    }
     if (kind === 'close') {
         return (
             <>
@@ -2526,6 +2588,32 @@ function OwnerConfirmNotes({ kind, allowListWarning, listsChanged, refillNote, c
     }
     return (
         <>
+            <p className={styles.successLabel}>Review edit</p>
+            <dl className={styles.detailsList} data-testid="edit-review-summary">
+                <dt className={styles.detailsLabel}>Dispenser</dt>
+                <dd className={styles.detailsValue}>#{actionIndex}</dd>
+                {editExpiration ? (
+                    <>
+                        <dt className={styles.detailsLabel}>New expiration</dt>
+                        <dd className={styles.detailsValue}>
+                            {formatUnixDate(localInputToUnix(editExpiration))}
+                            {' '}(Unix {localInputToUnix(editExpiration)})
+                        </dd>
+                    </>
+                ) : null}
+                {editAllowList ? (
+                    <>
+                        <dt className={styles.detailsLabel}>Allow list</dt>
+                        <dd className={styles.detailsValue}>#{editAllowList}</dd>
+                    </>
+                ) : null}
+                {editBlockList ? (
+                    <>
+                        <dt className={styles.detailsLabel}>Block list</dt>
+                        <dd className={styles.detailsValue}>#{editBlockList}</dd>
+                    </>
+                ) : null}
+            </dl>
             {allowListWarning ? (
                 <div role="alert" className={styles.warnings}>
                     <p className={styles.warning}>{allowListWarning}</p>

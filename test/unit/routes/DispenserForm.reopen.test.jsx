@@ -81,7 +81,12 @@ function recordingMessaging() {
         signerReady: () => Promise.resolve({ ready: true }),
         getSettings: () => Promise.resolve({ walletMode: 'full' }),
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
-        getWalletBalances: () => Promise.resolve({ [CHAIN]: [] }),
+        getWalletBalances: () => Promise.resolve({
+            [CHAIN]: [{
+                address: CREATOR.address,
+                balances: { tokens: [{ tick: 'ALM0NDJ0Y', quantity: '10000000000', divisibility: 8 }] },
+            }],
+        }),
         getListByActionIndex: () => Promise.resolve(null),
         generateDispenserAddress: (args) => {
             calls.push({ method: 'generateDispenserAddress', args });
