@@ -39,9 +39,9 @@ assert.match(src, /contactsFromCsv\(/, 'parses CSV imports');
 assert.match(src, /Array\.isArray\(parsed\)/, 'rejects non-arrays');
 
 // Counts + status + error rendering
-assert.match(src, /contact\$\{count === 1 \? '' : 's'\}/, 'pluralises contact count');
+assert.match(src, /settings\.contacts\.storedCount|contact\$\{count === 1 \? '' : 's'\}/, 'pluralises contact count');
 assert.match(src, /setImportResult\(\{ imported, failures, duplicates \}\)/, 'stores import and duplicate counts');
-assert.match(src, /Imported \$\{importResult\.imported\}/, 'reports imported count');
+assert.match(src, /settings\.contacts\.importedSummary/, 'reports imported count');
 
 // Settings.jsx wiring
 const settingsSrc = readFileSync(settingsPath, 'utf8');

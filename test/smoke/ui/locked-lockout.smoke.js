@@ -102,7 +102,7 @@ assert.match(
 );
 assert.match(
     lockedSrc,
-    /Locked \(\$\{formatCountdown\(remainingMs\)\}\)/,
+    /locked\.locked'?, \{ formatCountdownValue: formatCountdown\(remainingMs\) \}|Locked \(\$\{formatCountdown\(remainingMs\)\}\)/,
     'button label flips to Locked + countdown',
 );
 
@@ -124,7 +124,7 @@ assert.match(
 );
 assert.match(
     lockedSrc,
-    /totalSec === 1 \? 'second' : 'seconds'/,
+    /locked\.countdown\.seconds', \{ count: totalSec \}/,
     'countdown uses plain-language time units',
 );
 

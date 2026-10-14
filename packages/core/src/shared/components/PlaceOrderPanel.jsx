@@ -599,7 +599,8 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                 ) : result?.autopayArmed === false ? (
                     <p role="alert" style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: 'var(--xc-danger-fg)' }}>
                         {t('components.placeOrderPanel.theOrderWasPlacedBut')}
-                        {result?.autopayConsentError ? ` (${result.autopayConsentError})` : ''}{t('components.placeOrderPanel.matchesWillNeedManualPayment')}
+                        {result?.autopayConsentError ? ` (${result.autopayConsentError})` : ''}
+                        {t('components.placeOrderPanel.matchesWillNeedManualPayment')}
                     </p>
                 ) : null}
             </>
@@ -928,7 +929,8 @@ export function PlaceOrderPanel({ walletId, chainId, tick1, tick2, prefillPrice,
                                         <p style={{ margin: 'var(--xc-space-2) 0 0', color: 'var(--xc-text-muted)' }}>
                                             {t('components.placeOrderPanel.outstandingAutoPayExposureOn')}{' '}
                                             {baseUnitsToCoinText(exposure[chainId]) ?? exposure[chainId]} {coinTicker}
-                                            {thisOrderGive ? t('components.placeOrderPanel.fromThisOrder', { thisOrderGive, coinTicker }) : ''}{t('components.placeOrderPanel.evenIfTheServiceThat')}
+                                            {thisOrderGive ? t('components.placeOrderPanel.fromThisOrder', { thisOrderGive, coinTicker }) : ''}
+                                            {t('components.placeOrderPanel.evenIfTheServiceThat')}
                                         </p>
                                     );
                                 }

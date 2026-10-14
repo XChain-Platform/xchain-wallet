@@ -48,8 +48,8 @@ assert.match(
 assert.match(cmp, /type="range"/, 'fee control is a range slider');
 assert.match(cmp, /aria-label="Network fee"/, 'slider is labelled "Network fee"');
 assert.match(cmp, /aria-valuetext=/, 'slider announces the active tier via aria-valuetext');
-assert.match(cmp, /aria-label=\{SPEED_LABELS\[s\]\}/, 'each discrete tick is labelled by speed');
-assert.match(cmp, /aria-label=\{`Custom fee rate/, 'custom rate input labelled');
+assert.match(cmp, /aria-label=\{speedLabel\(s\)\}/, 'each discrete tick is labelled by speed');
+assert.match(cmp, /aria-label=\{t\('ui\.feeSelector\.customFeeRate'/, 'custom rate input labelled');
 
 // --- presets render from `tiers` prop ----------------------------------
 
@@ -92,7 +92,7 @@ assert.match(
     'rate click enters Custom seeded with the active tier rate',
 );
 assert.match(cmp, /aria-label="Edit exact fee amount"/, 'fee figure is an accessible edit button');
-assert.match(cmp, /aria-label=\{`Edit fee rate/, 'rate figure is an accessible edit button');
+assert.match(cmp, /aria-label=\{t\('ui\.feeSelector\.editFeeRate'/, 'rate figure is an accessible edit button');
 assert.match(
     cmp,
     /if \(disabled \|\| !allowCustom\) return;/,
@@ -100,7 +100,7 @@ assert.match(
 );
 assert.match(
     cmp,
-    /aria-label=\{`Network fee amount/,
+    /aria-label=\{\(coinTicker \? t\('ui\.feeSelector\.networkFeeAmountTicker'/,
     'exact-fee input is labelled',
 );
 

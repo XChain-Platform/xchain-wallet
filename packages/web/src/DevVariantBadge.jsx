@@ -12,8 +12,8 @@ import { useEffect, useRef, useState } from 'react';
 import { setActiveVariant, clearVariantOverride, THRESHOLD_PX } from './devVariant.js';
 import styles from './DevVariantBadge.module.css';
 import { t } from '../../core/src/i18n/index.js';
+import { POS_KEY } from './devVariantBadgeKey.js';
 
-const POS_KEY = 'xc.devVariantBadge.pos';
 
 function readPos() {
     if (typeof window === 'undefined') return null;
