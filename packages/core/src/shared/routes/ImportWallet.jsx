@@ -60,7 +60,7 @@ import {
     restorePasswordRequiredMessage,
 } from '../../flows/restorePasswordCopy.js';
 import styles from './ImportWallet.module.css';
-import { t } from '../../i18n/index.js';
+import { formatOrList, t } from '../../i18n/index.js';
 
 const MIN_PASSWORD_LENGTH = 8;
 const ACCEPTED_WORD_COUNTS = [12, 15, 18, 21, 24];
@@ -574,8 +574,10 @@ export function ImportWallet({
         }
         const wordCount = trimmed.split(' ').length;
         if (!acceptedWordCounts.includes(wordCount)) {
-            const expected = acceptedWordCounts.join(', ');
-            setError(`Expected ${expected} words, got ${wordCount}.`);
+            setError(t('importWallet.phrase.wrongWordCount', {
+                expected: formatOrList(acceptedWordCounts),
+                count: wordCount,
+            }));
             return;
         }
         if (!phraseFormat(trimmed)) {

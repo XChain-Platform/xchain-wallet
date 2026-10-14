@@ -471,6 +471,8 @@ export const en = {
     'importWallet.phrase.freeWalletCount': '{count} / 12 words',
     'importWallet.phrase.wordCount':
         '{count, plural, one {# word entered} other {# words entered}}',
+    // {expected} is the accepted counts already joined as an "or" list.
+    'importWallet.phrase.wrongWordCount': 'Expected {expected} words, got {count}.',
     'importWallet.phrase.bip39Detected': 'BIP39 recovery phrase detected',
     'importWallet.phrase.counterwalletDetected': 'Counterwallet/FreeWallet recovery phrase detected',
     'importWallet.phrase.suggestions': 'BIP39 word suggestions',
