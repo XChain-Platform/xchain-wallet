@@ -1698,7 +1698,7 @@ export async function switchToRegtest(page, password) {
     // network it switches to. Before that fix it only moved a filter,
     // stranding the wallet with no addresses and no UI path to make one -
     // so if this ever regresses, the funding step below is where it shows.
-    await page.getByLabel('Active network').selectOption('regtest');
+    await page.getByLabel('Active network', { exact: true }).selectOption('regtest');
 
     await unlockAfterReload(page, password);
 }
