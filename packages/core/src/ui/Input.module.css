@@ -53,7 +53,7 @@
 }
 
 .input:not(textarea) {
-    height: var(--xc-control-height, 36px);
+    height: var(--xc-control-height);
     padding-block: 0;
     padding-inline: var(--xc-control-padding-x, 12px);
 }

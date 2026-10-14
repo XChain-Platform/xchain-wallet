@@ -88,7 +88,7 @@ describe('<Input>', () => {
         }
         expect(tokensCss).toMatch(/--xc-radius-control:\s*var\(--xc-control-radius\)/);
         expect(tokensCss).toMatch(/@media \(pointer: coarse\), \(hover: none\)\s*\{\s*:root\s*\{[^}]*--xc-control-h-sm:\s*36px[^}]*--xc-control-h-md:\s*44px[^}]*--xc-control-h-lg:\s*48px[^}]*--xc-control-font-sm:\s*1rem[^}]*--xc-control-font-md:\s*1rem[^}]*--xc-control-font-lg:\s*1\.0625rem[^}]*--xc-control-hit-min:\s*44px/s);
-        expect(inputCss).toMatch(/\.input:not\(textarea\)\s*\{[^}]*height:\s*var\(--xc-control-height,\s*36px\)[^}]*padding-block:\s*0/s);
+        expect(inputCss).toMatch(/\.input:not\(textarea\)\s*\{[^}]*height:\s*var\(--xc-control-height\)[^}]*padding-block:\s*0/s);
         expect(inputCss).toMatch(/calendar-picker-indicator\s*\{[^}]*width:\s*var\(--xc-tap-min,\s*24px\)[^}]*background-size:\s*var\(--xc-control-icon-size,\s*20px\) var\(--xc-control-icon-size,\s*20px\)[^}]*padding:\s*0/s);
     });
 
