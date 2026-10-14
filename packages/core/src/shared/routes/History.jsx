@@ -1690,6 +1690,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         setRefreshTick((n) => n + 1);
     }, [messaging]);
 
+    // Every shell routes a row to the standalone detail page; only a host
+    // that wires no handler falls back to the inline expand.
+    const opensDetail = typeof onSelectEntry === 'function';
     const onRowClick = useCallback((entry) => {
         // When the parent shell wired the navigation callback, send the
         // selected entry up so it can route to the standalone ActionDetail
@@ -2234,6 +2237,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                                                     key={entry.key}
                                                     entry={entry}
                                                     selected={selectedKey === entry.key}
+                                                    opensDetail={opensDetail}
                                                     showConnector={
                                                         item.subkind === 'link-pair'
                                                             ? false
@@ -2284,6 +2288,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             key={entry.key}
                             entry={entry}
                             selected={selectedKey === entry.key}
+                            opensDetail={opensDetail}
                             showConnector={connectorByKey.has(entry.key)}
                             onClick={onRowClick}
                             peerCache={selectedKey === entry.key ? peerCache : EMPTY_PEER_CACHE}
@@ -4031,7 +4036,7 @@ export function isGeneratedAddressLabel(label, chainId) {
     return /^(Address|Change|Dispenser)( #\d+)?$/.test(text);
 }
 
-export const EntryRow = memo(function EntryRow({ entry, selected, showConnector, onClick, peerCache, isFull, chainTip, indexerWatermark, walletId, verify, showFiatInHistory, fiatCurrency, walletAddresses, onDismissFailed, networkAvailable = true }) {
+export const EntryRow = memo(function EntryRow({ entry, selected, opensDetail = false, showConnector, onClick, peerCache, isFull, chainTip, indexerWatermark, walletId, verify, showFiatInHistory, fiatCurrency, walletAddresses, onDismissFailed, networkAvailable = true }) {
     const d = chainRegistry.get(entry.chainId);
     const settledAmount = settledAmountAnnotation(entry);
     const actionKind = classifyEntryAction(entry, walletAddresses);
@@ -4083,7 +4088,9 @@ export const EntryRow = memo(function EntryRow({ entry, selected, showConnector,
                 onClick={() => onClick(entry)}
                 data-history-row
                 className={`${styles.row} ${selected ? styles.rowSelected : ''}`}
-                aria-expanded={selected}
+                // A row that opens the detail page is a link to it, not a
+                // disclosure: no expand chevron and no expanded state.
+                aria-expanded={opensDetail ? undefined : selected}
                 chainId={entry.chainId}
                 tick={tick}
                 isNative={tick === nativeTick}
@@ -4108,7 +4115,7 @@ export const EntryRow = memo(function EntryRow({ entry, selected, showConnector,
                 selected={selected}
                 aria-description={rowDescription || undefined}
                 decoration={showConnector ? <span className={styles.connector} aria-hidden="true" /> : null}
-                trailing={<DoubleChevron direction={selected ? 'up' : 'down'} />}
+                trailing={opensDetail ? null : <DoubleChevron direction={selected ? 'up' : 'down'} />}
             />
             {selected ? (
                 <DetailCard
