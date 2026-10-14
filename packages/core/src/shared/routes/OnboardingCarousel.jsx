@@ -185,7 +185,7 @@ export function OnboardingCarousel({
     if (reducedMotion) {
         return (
             <div
-                className={isFull ? styles.rootFull : styles.rootPopup}
+                className={isFull ? styles.centeredFull : styles.rootPopup}
                 data-testid="onboarding-carousel"
                 data-reduced-motion="true"
             >
@@ -214,7 +214,7 @@ export function OnboardingCarousel({
     // --- Default: one frame at a time with dots + prev/next + skip.
     return (
         <div
-            className={isFull ? styles.rootFull : styles.rootPopup}
+            className={isFull ? styles.centeredFull : styles.rootPopup}
             data-testid="onboarding-carousel"
             data-reduced-motion="false"
             onKeyDown={handleCarouselKeyDown}

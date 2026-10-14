@@ -24,7 +24,7 @@
     margin-bottom: 0;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 640px) {
     .fieldRow,
     .watchControls {
         grid-template-columns: minmax(0, 1fr);

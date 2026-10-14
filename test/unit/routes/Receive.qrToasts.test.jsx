@@ -231,7 +231,7 @@ describe('Receive QR copy and share toasts', () => {
         expect(screen.getByRole('form', { name: 'Receive payment' })).toBeInTheDocument();
         expect(showToast).not.toHaveBeenCalled();
         await user.tab();
-        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Switch input to USD' }));
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Paste from clipboard' }));
     });
 
     it('adds and edits the label of the receive address shown', async () => {

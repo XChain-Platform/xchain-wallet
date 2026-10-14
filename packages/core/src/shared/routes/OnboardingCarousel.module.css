@@ -7,14 +7,14 @@
     gap: var(--xc-space-3);
 }
 
-.rootFull {
+.centeredFull {
     display: flex;
     flex-direction: column;
     height: 100%;
     min-height: 0;
     width: 100%;
     max-width: 480px;
-    margin: 0 auto;
+    margin-inline: auto;
     gap: var(--xc-space-4);
 }
 
@@ -208,7 +208,7 @@
    taller than a short landscape screen. Navigation remains outside it. */
 @media (orientation: landscape) and (max-height: 480px) {
     .rootPopup,
-    .rootFull {
+    .centeredFull {
         gap: var(--xc-space-2);
     }
 

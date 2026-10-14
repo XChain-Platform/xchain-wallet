@@ -44,11 +44,11 @@ describe('PriceAlertForm', () => {
         expect(screen.getByRole('button', { name: 'Cancel' }).className).toMatch(/(?:^|\s)_?md_/);
     });
 
-    it('centres the Receive label action and removes field-wrapper spacing', () => {
+    it('bottom-aligns the Receive label action with its field and removes field-wrapper spacing', () => {
         const labelEditor = receiveCss.match(/\.labelEditor\s*\{([^}]+)\}/)?.[1] || '';
         const labelEditorChildren = receiveCss.match(/\.labelEditor\s*>\s*\*\s*\{([^}]+)\}/)?.[1] || '';
 
-        expect(labelEditor).toMatch(/align-items:\s*center/);
+        expect(labelEditor).toMatch(/align-items:\s*end/);
         expect(labelEditorChildren).toMatch(/margin-bottom:\s*0/);
     });
 

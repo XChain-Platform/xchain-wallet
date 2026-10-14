@@ -103,11 +103,11 @@ describe('extension bottom navigation', () => {
     });
 
     it.each(['contacts', 'account-picker'])(
-        'marks More as current for the %s destination',
+        'leaves the bar tabs unmarked for the %s destination, which has no primary tab',
         (initialView) => {
             render(<NavigationHarness initialView={initialView} />);
             expect(screen.getByRole('button', { name: 'More' }))
-                .toHaveAttribute('aria-current', 'page');
+                .not.toHaveAttribute('aria-current');
             expect(screen.getByRole('button', { name: 'Home' }))
                 .not.toHaveAttribute('aria-current');
         },

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import React from 'react';
+import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
@@ -72,7 +73,14 @@ describe('shared settings row semantics', () => {
         cleanup();
         render(<DisplaySection />);
         const thresholdCopy = screen.getByText('Small-balance threshold').parentElement;
-        expect(thresholdCopy.parentElement.style.flexWrap).toBe('wrap');
+        // The threshold row is a grid that collapses to one column on phones
+        // (Settings widths ruling), so the wrap guarantee lives in the CSS module.
+        expect(thresholdCopy.parentElement.style.flexWrap).toBe('');
+        const displayCss = readFileSync(
+            'packages/core/src/shared/components/settings/DisplaySection.module.css',
+            'utf8',
+        );
+        expect(displayCss).toMatch(/@media \(max-width: 640px\)\s*\{[^}]*\.fieldRow[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
         expect(thresholdCopy.style.flex).toBe('1 1 280px');
         expect(thresholdCopy.style.minWidth).toBe('min(100%, 280px)');
     });

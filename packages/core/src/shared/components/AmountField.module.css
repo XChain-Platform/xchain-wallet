@@ -40,7 +40,7 @@
 }
 
 .amountFieldWrap label {
-    line-height: 20px;
+    line-height: var(--xc-space-5);
 }
 
 .amountFieldWrap > div:first-child {
@@ -57,7 +57,7 @@
 .maxAction {
     position: absolute;
     z-index: calc(var(--xc-z-base) + 1);
-    top: calc(20px + var(--xc-space-1));
+    top: calc(var(--xc-space-5) + var(--xc-space-1));
     width: var(--amount-action-width);
     height: var(--amount-control-height);
     min-height: var(--amount-control-height);

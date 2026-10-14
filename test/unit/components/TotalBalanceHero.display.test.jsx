@@ -247,6 +247,6 @@ describe('TotalBalanceHero responsive layout', () => {
         fireEvent.click(within(menu).getByRole('menuitem', { name: 'Open settings' }));
         expect(onOpenSettings).toHaveBeenCalledOnce();
         expect(screen.queryByRole('menu', { name: 'Balance actions' })).toBeNull();
-        expect(STYLES).toMatch(/@media \(max-width: 479px\)[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\) var\(--xc-control-h-sm\)/);
+        expect(STYLES).toMatch(/@media not all and \(min-width: 480px\)[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\) var\(--xc-control-h-sm\)/);
     });
 });

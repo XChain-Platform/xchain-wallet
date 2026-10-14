@@ -257,7 +257,7 @@
     color: color-mix(in srgb, var(--xc-on-accent) 70%, transparent);
 }
 
-@media (max-width: 479px) {
+@media not all and (min-width: 480px) {
     .row {
         grid-template-columns: minmax(0, 1fr) var(--xc-control-h-sm);
     }

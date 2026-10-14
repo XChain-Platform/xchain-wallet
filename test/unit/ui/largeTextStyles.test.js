@@ -98,8 +98,9 @@ describe('large text layout styles', () => {
         expect(sendPhone).toMatch(/\.detailsList,[\s\S]*?\.advancedReviewList\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
         expect(sendPhone).toMatch(/\.successTxidRow,[\s\S]*?\.recipientRowHead\s*\{[^}]*flex-wrap:\s*wrap/);
 
-        const receivePhone = block(receive, '@media (max-width: 480px)');
-        expect(receivePhone).toMatch(/\.labelEditor\s*\{[^}]*grid-template-columns:\s*1fr/s);
+        // The Receive label editor keeps its field action attached in one row at
+        // every width (Receive.layout.test.js), so it has no phone reflow block.
+        expect(receive).not.toMatch(/@media \(max-width: 480px\)/);
 
         const historyPhone = block(history, '@media not all and (min-width: 480px)');
         expect(historyPhone).toMatch(/\.rowHeader,[\s\S]*?\.rowMeta\s*\{[^}]*flex-wrap:\s*wrap/);

@@ -224,8 +224,8 @@ describe('Receive keyboard operation', () => {
         expect(amount).toHaveValue('1.25');
 
         const expected = [
-            screen.getByRole('button', { name: 'Switch input to USD' }),
             screen.getByRole('button', { name: 'Paste from clipboard' }),
+            screen.getByRole('button', { name: 'Switch input to USD' }),
         ];
         for (const control of expected) {
             await user.tab();
