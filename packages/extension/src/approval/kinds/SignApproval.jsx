@@ -737,7 +737,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
             <ListPage>
                 {descriptor ? (
                     <div className={styles.chainLine}>
-                        <ChainBadge descriptor={descriptor} size="sm" />
+                        <ChainBadge descriptor={descriptor} size="sm" showName />
                     </div>
                 ) : null}
 
@@ -788,7 +788,7 @@ export function SignApproval({ id, kind, payload, onReject }) {
                                     onChange={() => setSignInChoice(i)}
                                     disabled={busy}
                                 />
-                                {d ? <ChainBadge descriptor={d} size="sm" /> : null}
+                                {d ? <ChainBadge descriptor={d} size="sm" showName /> : null}
                                 <span dir="ltr">{neutralizeControlText(c.address, { maxLength: 120 })}</span>
                             </label>
                         );

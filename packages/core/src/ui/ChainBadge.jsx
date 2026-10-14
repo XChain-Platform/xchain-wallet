@@ -12,24 +12,21 @@ import * as branding from '../branding/branding.js';
 import styles from './ChainBadge.module.css';
 
 /**
- * Renders a chain's icon + display name with a tinted pill using the
- * chain's own descriptor.color. For non-mainnet networks the network kind
- * is shown in muted text next to the name so users can tell regtest from
- * mainnet at a glance, unless `showNetworkKind` is false.
+ * Renders a chain icon with an optional display name. The wrapper keeps the
+ * display name as its accessible name when the visible label is omitted.
  *
  * @param {object} props
  * @param {import('../registry/validate.js').ChainDescriptor} props.descriptor
  * @param {'sm' | 'md'} [props.size]
  * @param {boolean} [props.showName]
- * @param {boolean} [props.showNetworkKind]
  */
-export function ChainBadge({ descriptor, size = 'sm', showName = true, showNetworkKind = true }) {
+export function ChainBadge({ descriptor, size = 'sm', showName = false }) {
     const iconUrl = branding.chainIconSmallUrl(descriptor.id);
     const iconPx = size === 'md' ? 24 : 16;
     const style = { '--chain-color': descriptor.color };
     const className = `${styles.badge} ${styles[size]}`;
     return (
-        <span className={className} style={style}>
+        <span className={className} style={style} aria-label={descriptor.displayName}>
             {iconUrl ? (
                 <img
                     src={iconUrl}
@@ -43,14 +40,7 @@ export function ChainBadge({ descriptor, size = 'sm', showName = true, showNetwo
                     {descriptor.coin.slice(0, 1).toUpperCase()}
                 </span>
             )}
-            {showName ? (
-                <span className={styles.name}>
-                    {descriptor.displayName}
-                    {showNetworkKind && descriptor.networkKind !== 'mainnet' ? (
-                        <span className={styles.network}> {descriptor.networkKind}</span>
-                    ) : null}
-                </span>
-            ) : null}
+            {showName ? <span className={styles.name}>{descriptor.displayName}</span> : null}
         </span>
     );
 }

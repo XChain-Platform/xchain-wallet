@@ -27,7 +27,7 @@ export function NetworkFieldSection() {
             kicker="THE way a form says which network the action runs on: a labeled ChainPicker, label “Network”, offering every chain the wallet holds addresses on. Every authoring form leads with it; it replaces the old fixed ChainBadge bubble at the top of forms."
         >
             <Guidance
-                what={<>A named wrapper over <code>ChainPicker</code> that pins the house conventions: label <code>Network</code>, the wallet's own chains as options, testnet/regtest cue on. One import, zero styling decisions per form.</>}
+                what={<>A named wrapper over <code>ChainPicker</code> that pins the house conventions: label <code>Network</code> and the wallet's own chains as options. Chain icons distinguish networks without repeating network-kind text.</>}
                 when={<>The top of every action-authoring form (Send, Claim rewards, Unstake, Delegate, Issue, Broadcast…). Forms opened from a specific context (a staking position's Claim, a contract's Stake) still render it, seeded to that chain, so the network is visible and retargetable like on any other form.</>}
                 whenNot={<>Pure display of a fixed chain inside a review/summary list (that's <code>ChainBadge</code>). Filtering a list by coin family (that's the list toolbar's network filter dropdown).</>}
                 sizing={<><code>md</code> matches standard form controls; <code>lg</code> matches hero fields on focused transaction screens.</>}
