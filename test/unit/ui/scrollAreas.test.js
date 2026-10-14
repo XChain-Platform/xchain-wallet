@@ -19,6 +19,13 @@ const AUDITED_SCROLL_STYLES = [
     'packages/core/src/shared/routes/Send.module.css',
 ];
 
+// On short landscape phones the whole Screen scrolls just far enough to move
+// its title row away (touch only, no pointer scrollbar to style), so that one
+// media-query override of .screen is not a nested scroll area.
+const SCROLL_EXCEPTIONS = new Set([
+    `${SCREEN}: .screen`,
+]);
+
 function source(relativePath) {
     return readFileSync(`${ROOT}/${relativePath}`, 'utf8');
 }
@@ -69,7 +76,7 @@ describe('shared scroll areas', () => {
         const missing = AUDITED_SCROLL_STYLES.flatMap((file) => {
             const css = source(file);
             return missingScrollClasses(css).map((selector) => `${file}: ${selector}`);
-        });
+        }).filter((entry) => !SCROLL_EXCEPTIONS.has(entry));
 
         expect(missing).toEqual([]);
     });

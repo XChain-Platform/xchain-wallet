@@ -90,11 +90,9 @@ describe('route CSS design tokens (pill radii and glyphs)', () => {
     });
 
     it('uses icon tokens for route glyphs covered by the icon scale', () => {
-        expect(rule(routeCss.Receive, '.assetChainOverlay').match(
-            /(?:width|height):\s*var\(--xc-icon-lg\)/g,
-        )).toHaveLength(2);
-        expect(rule(routeCss.Receive, '.assetChevron'))
-            .toMatch(/font-size:\s*var\(--xc-icon-lg\)/);
+        // The Receive asset button is icon-only now (AssetMark carries the
+        // chain overlay), so it keeps no glyph rules of its own.
+        expect(routeCss.Receive).not.toMatch(/\.assetChainOverlay|\.assetChevron/);
         // The amount unit swap moved into the shared kit control, so Send no
         // longer styles its glyph.
         expect(routeCss.Send).not.toMatch(/\.amountUnitSwap/);

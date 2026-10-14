@@ -169,7 +169,7 @@
     width: 100%;
 }
 
-@media (min-width: 64rem) {
+@media (min-width: 1024px) {
     .actionsFull {
         grid-template-columns: repeat(8, minmax(0, 1fr));
     }

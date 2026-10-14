@@ -31,7 +31,6 @@
 }
 
 .right > button,
-.actionSlot > button,
 .actionTrigger > button {
     width: var(--xc-control-h-md);
     height: var(--xc-control-h-md);

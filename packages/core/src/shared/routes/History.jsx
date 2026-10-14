@@ -12,7 +12,6 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Button,
     Checkbox,
-    ChainBadge,
     Chip,
     CopyButton,
     EmptyState,

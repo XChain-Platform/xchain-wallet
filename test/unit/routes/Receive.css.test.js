@@ -75,7 +75,7 @@ describe('Receive form spacing', () => {
             /qrStyles\.frame[\s\S]*?qrStyles\.caption[\s\S]*?qrStyles\.actions/,
         );
         expect(cosignerShare).toMatch(
-            /<KeyQR[\s\S]*?<textarea[\s\S]*?<CopyButton/,
+            /<KeyQR[\s\S]*?<CopyButton/,
         );
         expect(privateKey).toMatch(
             /renderQR\(\{ value: currentWif \}\)[\s\S]*?styles\.copyRow/,

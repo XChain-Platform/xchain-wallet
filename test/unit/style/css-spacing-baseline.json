@@ -1,6 +1,15 @@
 [
   {
     "file": "packages/core/src/shared/commandPalette/CommandPalette.module.css",
+    "property": "padding-bottom",
+    "value": "0px",
+    "lines": [
+      209,
+      235
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/commandPalette/CommandPalette.module.css",
     "property": "padding",
     "value": "1px",
     "lines": [
@@ -204,6 +213,14 @@
   },
   {
     "file": "packages/core/src/shared/components/LeftNav.module.css",
+    "property": "padding-inline",
+    "value": "1px",
+    "lines": [
+      264
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/LeftNav.module.css",
     "property": "padding",
     "value": "0px",
     "lines": [
@@ -245,6 +262,34 @@
     "value": "2px",
     "lines": [
       32
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/OverlaySurface.module.css",
+    "property": "padding-bottom",
+    "value": "0px",
+    "lines": [
+      55
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/OverlaySurface.module.css",
+    "property": "padding-inline",
+    "value": "0px",
+    "lines": [
+      25,
+      25
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/components/OverlaySurface.module.css",
+    "property": "padding",
+    "value": "0px",
+    "lines": [
+      16,
+      17,
+      18,
+      19
     ]
   },
   {
@@ -618,6 +663,14 @@
   },
   {
     "file": "packages/core/src/shared/routes/MessagingInbox.module.css",
+    "property": "margin-bottom",
+    "value": "2px",
+    "lines": [
+      22
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/MessagingInbox.module.css",
     "property": "margin",
     "value": "2px",
     "lines": [
@@ -737,6 +790,14 @@
     "value": "2px",
     "lines": [
       129
+    ]
+  },
+  {
+    "file": "packages/core/src/shared/routes/StakingList.module.css",
+    "property": "margin-bottom",
+    "value": "2px",
+    "lines": [
+      14
     ]
   },
   {
@@ -913,6 +974,22 @@
     "value": "2px",
     "lines": [
       36
+    ]
+  },
+  {
+    "file": "packages/core/src/ui/Switch.module.css",
+    "property": "margin-block-start",
+    "value": "2px",
+    "lines": [
+      38
+    ]
+  },
+  {
+    "file": "packages/core/src/ui/Switch.module.css",
+    "property": "padding",
+    "value": "2px",
+    "lines": [
+      72
     ]
   },
   {

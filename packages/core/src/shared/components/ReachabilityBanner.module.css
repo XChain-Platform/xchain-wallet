@@ -45,6 +45,7 @@
     font: inherit;
     font-weight: 600;
     text-decoration: underline;
+    /* The underline sits two pixels below the text; the spacing scale starts at four. */
     text-underline-offset: 2px;
     display: inline-flex;
     align-items: center;
@@ -85,7 +86,7 @@
     border-radius: var(--xc-radius-sm);
     background: var(--xc-surface-raised, var(--xc-surface));
     color: var(--xc-text);
-    box-shadow: var(--xc-shadow-md, 0 4px 14px rgba(0, 0, 0, 0.18));
+    box-shadow: var(--xc-shadow-popover);
     list-style: none;
 }
 
@@ -93,14 +94,14 @@
     display: flex;
     align-items: center;
     gap: var(--xc-space-2);
-    min-height: 28px;
+    min-height: var(--xc-control-h-sm);
 }
 
 .coin img,
 .coinFallback {
-    width: 20px;
-    height: 20px;
-    flex: 0 0 20px;
+    width: var(--xc-icon-lg);
+    height: var(--xc-icon-lg);
+    flex: 0 0 var(--xc-icon-lg);
     border-radius: 50%;
 }
 
@@ -112,6 +113,7 @@
 .retry:focus-visible,
 .detailsToggle:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
+    /* The ring sits two pixels inside the compact strip so it is never clipped; the spacing scale has no negative step. */
     outline-offset: -2px;
 }
 

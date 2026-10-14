@@ -97,10 +97,17 @@ const controls = [
 ];
 
 const reportOnly = [
-    { file: 'Button.module.css', selector: '.sm', property: 'min-height', pixels: '32px', reason: 'The compact fallback preserves Button geometry when an older shell omits the tokens.' },
-    { file: 'Button.module.css', selector: '.md', property: 'min-height', pixels: '40px', reason: 'The default fallback preserves Button geometry when an older shell omits the tokens.' },
-    { file: 'Button.module.css', selector: '.lg', property: 'min-height', pixels: '48px', reason: 'The large fallback preserves Button geometry when an older shell omits the tokens.' },
+    { file: 'Button.module.css', selector: '.btn', property: 'min-height', pixels: '36px', reason: 'The default fallback preserves Button geometry when an older shell omits the tokens.' },
+    { file: 'Button.module.css', selector: '.sm', property: 'min-height', pixels: '28px', reason: 'The compact fallback preserves Button geometry when an older shell omits the tokens.' },
+    { file: 'Button.module.css', selector: '.md', property: 'min-height', pixels: '36px', reason: 'The default fallback preserves Button geometry when an older shell omits the tokens.' },
+    { file: 'Button.module.css', selector: '.lg', property: 'min-height', pixels: '44px', reason: 'The large fallback preserves Button geometry when an older shell omits the tokens.' },
+    { file: 'Button.module.css', selector: '.sm::before', property: 'height', pixels: '24px', reason: 'The coarse-pointer hit area falls back to the 24px pointer-target floor when an older shell omits the tokens.' },
     { file: 'Button.module.css', selector: '.btn::after', property: 'min-height', pixels: '44px', reason: 'The transparent coarse-pointer target deliberately enforces a 44px hit area.' },
+    { file: 'Input.module.css', selector: ".input:is([type='date'], [type='datetime-local'], [type='time'])::-webkit-calendar-picker-indicator", property: 'height', pixels: '24px', reason: 'The picker glyph falls back to the 24px pointer-target floor when an older shell omits the tokens.' },
+    { file: 'Input.module.css', selector: ".input:is([type='date'], [type='datetime-local'], [type='time'])::-webkit-calendar-picker-indicator", property: 'min-height', pixels: '24px', reason: 'The picker glyph falls back to the 24px pointer-target floor when an older shell omits the tokens.' },
+    { file: 'Input.module.css', selector: '.controlHitArea::before', property: 'height', pixels: '24px', reason: 'The coarse-pointer hit area falls back to the 24px pointer-target floor when an older shell omits the tokens.' },
+    { file: 'Checkbox.module.css', selector: '.root', property: 'min-height', pixels: '44px', reason: 'The whole label row is the touch target, so it keeps 44px at every pointer type and the box never clips.' },
+    { file: 'RadioGroup.module.css', selector: '.option', property: 'min-height', pixels: '44px', reason: 'The whole option row is the touch target, so it keeps 44px at every pointer type.' },
     { file: 'ListRow.module.css', selector: '.row', property: 'min-height', pixels: '24px', reason: 'The fallback preserves the pointer-target floor when an older shell omits the tokens.' },
     { file: 'ListRow.module.css', selector: '.interactive', property: 'min-height', pixels: '24px', reason: 'The interactive fallback preserves the pointer-target floor when an older shell omits the tokens.' },
 ];

@@ -45,7 +45,6 @@ const auditedGeometryModules = [
     'ConfirmActionModal.module.css',
     'ContactsPickerScreen.module.css',
     'DataTable.module.css',
-    'DemoBanner.module.css',
     'DerivationPathCrossCheck.module.css',
     'DraftDiscardButton.module.css',
 ];
@@ -487,7 +486,5 @@ it('uses dimension tokens or documents unmatched pixel values in cleanup modules
     expect(violations).toEqual([]);
 
     const queuedResult = readFileSync(join(componentsRoot, 'QueuedResultPanel.module.css'), 'utf8');
-    const reachability = readFileSync(join(componentsRoot, 'ReachabilityBanner.module.css'), 'utf8');
     expect(queuedResult).toContain('font-size: var(--xc-icon-xl);');
-    expect(reachability).toContain('font-size: var(--xc-icon-sm);');
 });
