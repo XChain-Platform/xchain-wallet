@@ -307,6 +307,35 @@ describe('WalletPicker switching', () => {
     });
 });
 
+describe('WalletDetails layout', () => {
+    it('leaves the gaps between its actions to the list page', async () => {
+        const wallet = { id: 'wallet-1', name: 'Legacy', format: 'counterwallet-legacy' };
+        render(
+            <MessagingProvider
+                shell="popup"
+                messaging={{
+                    listWallets: () => Promise.resolve([wallet]),
+                    listAccounts: () => Promise.resolve([]),
+                }}
+            >
+                <WalletDetails
+                    walletId={wallet.id}
+                    onBack={() => {}}
+                    onRename={() => {}}
+                    onMigrateToBip39={() => {}}
+                />
+            </MessagingProvider>,
+        );
+        const rename = await screen.findByRole('button', { name: 'Rename wallet' });
+        const upgrade = screen.getByRole('button', { name: /Upgrade/ });
+        // Extra inline margins on top of the page gap spaced the buttons
+        // unevenly (8 px more above one, 12 px more above the next).
+        for (const button of [rename, upgrade]) {
+            expect(button.parentElement.getAttribute('style')).toBeNull();
+        }
+    });
+});
+
 describe('WalletDetails wallet changes', () => {
     it('hides the prior wallet until the requested wallet finishes loading', async () => {
         const firstWallet = { id: 'wallet-1', name: 'First', format: 'bip39' };
