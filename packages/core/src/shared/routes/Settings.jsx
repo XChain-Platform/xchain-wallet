@@ -58,6 +58,11 @@ import settingsStyles from './Settings.module.css';
 
 const row = (title, terms = '', target = title) => ({ title, terms, target });
 
+// Each time Settings opens it takes a fresh list scroll key, so the shell has
+// no saved offset for it and the list starts at its first row. Closing a
+// section keeps the key, so the list comes back where the user left it.
+let settingsVisits = 0;
+
 export const SETTINGS_SEARCH_ROWS = Object.freeze({
     'accounts-addresses': [row('Accounts & addresses', 'account address signer change pairing')],
     'this-wallet': [
@@ -247,6 +252,7 @@ export function Settings({
     const [query, setQuery] = useState('');
     const [subpageId, setSubpageId] = useState(/** @type {string | null} */ (initialSubpageId || null));
     const [searchTarget, setSearchTarget] = useState(/** @type {string | null} */ (null));
+    const [listScrollKey] = useState(() => `list-${(settingsVisits += 1)}`);
     const [siteCount, setSiteCount] = useState(/** @type {number | null} */ (null));
     const [siteSearchTerms, setSiteSearchTerms] = useState('');
     const [walletManagementBusy, setWalletManagementBusy] = useState(false);
@@ -610,7 +616,10 @@ export function Settings({
     const header = <PageHeader onBack={onBack} title="Settings" />;
 
     return (
-        <Screen variant={variant} header={header} scrollKey="list">
+        // A route-wide key restored the last visit's offset and reopened
+        // Settings part way down (clamped to whatever height had rendered by
+        // then, so not even where the user left it). See settingsVisits.
+        <Screen variant={variant} header={header} scrollKey={listScrollKey}>
             <SettingsPageTemplate
                 view="list"
                 toolbar={(
