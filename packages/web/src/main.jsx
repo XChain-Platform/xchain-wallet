@@ -23,6 +23,7 @@ import {
     floorStaleMessage,
 } from './platform/webviewFloor.js';
 import { BROKEN_SHELL_MESSAGE, nativeShellIsBroken } from './storage/nativeVault.js';
+import { installNativeKdfProvider } from './storage/nativeKdfProvider.js';
 import { installKeyboardViewport } from './platform/keyboardViewport.js';
 import { installShellErrorCapture } from './errorCapture.js';
 import { deferNonCriticalWork } from './deferNonCriticalWork.js';
@@ -30,6 +31,10 @@ import { hideNativeSplash, NativeShellReady } from './platform/nativeShellReady.
 
 // Register the crash hook before anything else can throw.
 installShellErrorCapture();
+
+// Install before React mounts so every mobile KDF entry uses the native
+// provider, including callers that do not request session status first.
+try { installNativeKdfProvider(); } catch { /* core retains its JS fallback */ }
 
 // §9.7 / G007: refresh chain descriptors from the hub's signed public
 // registry snapshot after the first screen paints. The signature must verify
