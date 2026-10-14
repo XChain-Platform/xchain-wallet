@@ -99,7 +99,9 @@
     color: var(--xc-text-muted);
 }
 
-@media not all and (min-width: 400px) {
+/* Match the confirm page's phone breakpoint so padded 412px viewports stack
+   rows without relying on container-query support. */
+@media (max-width: 480px) {
     .row,
     .delta {
         grid-template-columns: minmax(0, 1fr);
@@ -109,22 +111,5 @@
     .row dd,
     .deltaValues {
         text-align: start;
-    }
-}
-
-/* ConfirmActionModal contains this summary by usable inline size, which also
-   catches padded 412px screens whose content column is narrower than 400px. */
-@supports (container-type: inline-size) {
-    @container not (min-width: 400px) {
-        .row,
-        .delta {
-            grid-template-columns: minmax(0, 1fr);
-            gap: var(--xc-space-1);
-        }
-
-        .row dd,
-        .deltaValues {
-            text-align: start;
-        }
     }
 }
