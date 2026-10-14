@@ -151,10 +151,13 @@ describe('DispenserExplorer result paging', () => {
             address: address(index + 25),
             status: 'valid',
         }))];
-        const getDispensersForToken = vi.fn(({ opts }) => Promise.resolve({
+        // The search fans out over every chain on the active network; one chain
+        // holds the paged results so its section pages on its own.
+        const chainId = chainRegistry.supportedChains().find((d) => d.networkKind === 'regtest').id;
+        const getDispensersForToken = vi.fn(({ chainId: cid, opts }) => Promise.resolve(cid === chainId ? {
             total: 49,
             data: opts.page === 1 ? first : second,
-        }));
+        } : { total: 0, data: [] }));
         const messaging = {
             getSettings: vi.fn().mockResolvedValue({ schemaVersion: 2, activeNetwork: 'regtest' }),
             updateSettings: vi.fn(),
@@ -167,9 +170,7 @@ describe('DispenserExplorer result paging', () => {
             </MessagingProvider>,
         );
 
-        const chainId = chainRegistry.supportedChains().find((d) => d.networkKind === 'regtest').id;
-        const select = await screen.findByRole('combobox');
-        fireEvent.change(select, { target: { value: chainId } });
+        await waitFor(() => expect(messaging.getSettings).toHaveBeenCalled());
         fireEvent.change(screen.getByRole('textbox'), { target: { value: 'PAGED' } });
         fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 

@@ -188,8 +188,8 @@ describe('dispenser async safety', () => {
         await act(async () => window.dispatchEvent(new CustomEvent('xc:settings-changed', {
             detail: { activeNetwork: 'regtest', walletMode: 'full' },
         })));
-        await waitFor(() => expect(screen.getByText(/Search by token ticker to find open dispensers/)).toBeTruthy());
-        expect(screen.queryByText(/Searching dispensers/)).toBeNull();
+        // The idle help paragraph is gone, so the reset shows as the in-flight search clearing.
+        await waitFor(() => expect(screen.queryByText(/Searching dispensers/)).toBeNull());
 
         await act(async () => response.resolve({
             data: [{ action_index: 'old', give_tick: 'XCHAIN', source: OWNER, current_status: 'open' }],

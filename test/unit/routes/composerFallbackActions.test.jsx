@@ -123,7 +123,9 @@ describe('BatchComposerForm fallback action list', () => {
         await actionOptions();
         const pick = (name) => screen.getByRole('combobox', { name });
         fireEvent.change(pick('Action'), { target: { value: 'COLLECT' } });
-        fireEvent.change(pick('Chain'), { target: { value: LTC } });
+        // The chain is a ChainPicker: open it and choose Litecoin.
+        fireEvent.click(screen.getByRole('button', { name: /^Chain: / }));
+        fireEvent.click(screen.getByRole('option', { name: /Litecoin/ }));
         expect(await screen.findByText(/is not available on/)).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
     });
