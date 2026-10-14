@@ -187,7 +187,7 @@ export function SwapForm({ walletId, onBack, initialChainId, initialGiveTick, in
         ])
             .then(([byChain, active, settings]) => {
                 if (cancelled) return;
-                const signingByChain = signingAddressesByChain(byChain);
+                const signingByChain = signingAddressesByChain(byChain, settings);
                 setAddressesByChain(signingByChain);
                 setActiveByChain(active || {});
                 if (!Object.keys(signingByChain)[0]) {

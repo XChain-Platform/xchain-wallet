@@ -259,15 +259,15 @@ export function App() {
     if (activeTabSupport === 'checking') {
         return (
             <main role="status" aria-live="polite">
-                <p>Checking page availability...</p>
+                <p>{t('extension.popup.checkingPage')}</p>
             </main>
         );
     }
     if (activeTabSupport === 'unsupported') {
         return (
             <main role="status" aria-live="polite">
-                <p>XChain Wallet cannot connect to this page.</p>
-                <p>Open a regular website to use the wallet.</p>
+                <p>{t('extension.popup.unsupportedPage')}</p>
+                <p>{t('extension.popup.unsupportedPageHint')}</p>
             </main>
         );
     }

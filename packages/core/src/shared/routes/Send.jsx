@@ -593,7 +593,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         ])
             .then(([loadedByChain, loadedSettings]) => {
                 if (cancelled) return;
-                const byChain = signingAddressesByChain(loadedByChain);
+                const byChain = signingAddressesByChain(loadedByChain, loadedSettings);
                 setAddressesByChain(byChain);
                 if (!Object.keys(byChain)[0]) {
                     setLoadError(hasAnyAddress(loadedByChain)

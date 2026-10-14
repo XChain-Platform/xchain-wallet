@@ -38,6 +38,7 @@ import {
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
 import styles from './IssueTokenForm.module.css';
+import { humanizeError } from '../utils/humanizeError.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { QueuedResultPanel } from '../components/QueuedResultPanel.jsx';
 import { ActionIntentSummary } from '../components/ActionIntentSummary.jsx';
@@ -47,6 +48,14 @@ import { compareAmounts } from '../../market/orderMath.js';
 import { tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { addressValidationError } from '../utils/addressValidation.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
+
+// A classified failure (offline, rejected fee) keeps its own copy; an unclassified one gets plain order copy.
+function orderFailureFallback(err) {
+    const humanized = humanizeError(err, 'order');
+    return humanized.cause === 'unknown'
+        ? 'Could not create the order. Check the details and try again.'
+        : humanized.message;
+}
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -412,7 +421,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 chainId,
                 coinTicker,
                 mandatory: nativeFee.mandatory,
-                fallback: 'Could not create the order. Check the details and try again.',
+                fallback: orderFailureFallback(err),
             }));
         } finally {
             submitInFlightRef.current = false;
@@ -455,7 +464,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
             const isBadPassword = err?.name === 'InvalidPasswordError';
             setSubmitError(isBadPassword ? 'Incorrect password.' : submitFailureMessage(err, {
                 chainId, coinTicker, mandatory: nativeFee.mandatory,
-                fallback: 'Could not create the order. Check the details and try again.',
+                fallback: orderFailureFallback(err),
             }));
             setStage('review');
             if (!isWatcherMode && !isHwSource) { passwordRef.current?.focus(); passwordRef.current?.select(); }

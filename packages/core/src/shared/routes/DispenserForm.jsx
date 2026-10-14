@@ -89,7 +89,6 @@ import {
     readDispenserAddressStanding,
 } from '../../flows/dispenserAddressStanding.js';
 import { listInBothSlots, listInBothSlotsMessage } from '../../flows/accessListSlots.js';
-import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { exceedsBalance } from '../utils/dividendPerUnit.js';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -539,16 +538,6 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
-    const giveTokenInfo = useTokenInfo({
-        chainId,
-        tick: ticker,
-        skip: !ticker.trim(),
-    });
-    const paymentTokenInfo = useTokenInfo({
-        chainId,
-        tick: getTick,
-        skip: payWith !== 'token' || !getTick.trim(),
-    });
     const { formatNativeFee, formatProtocolFee } = useFeeFiat({
         chainCoin: descriptor?.coin,
         nativeTicker: coinTicker,

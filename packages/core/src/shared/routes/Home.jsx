@@ -872,6 +872,11 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
             if (portfolioRefreshIdRef.current === refreshId) setPortfolioRefreshing(false);
         }
     }, [activeWalletId, activeAccountId, offline, loadHomeData, portfolioRefreshing]);
+    // Stable across the rate-limit countdown so the memoised portfolio tabs skip those renders.
+    const refreshPortfolioOnline = useCallback(
+        () => runNetworkAction('Refreshing balances', refreshPortfolio),
+        [runNetworkAction, refreshPortfolio],
+    );
 
     // Reruns when the active wallet OR active BIP44 account changes.
     // Switching either flushes stale state and refetches. When
@@ -1414,7 +1419,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         onToggleHide={showHideAffordance ? handleToggleHide : undefined}
                         verifyMap={verifyMap}
                         hideSmallBalances={hideSmallBalances}
-                        onRefresh={() => runNetworkAction('Refreshing balances', refreshPortfolio)}
+                        onRefresh={refreshPortfolioOnline}
                         refreshing={portfolioRefreshing}
                         onCommandPalette={onCommandPalette}
                         // Only shells without a nav surface pass this;
@@ -1449,7 +1454,7 @@ export function Home({ onLocked, onResumeConfirm, onSend, onReceive, onSwap, onE
                         onClick={() => runNetworkAction('Creating a token', onCreateToken)}
                         disabled={!onCreateToken}
                         aria-disabled={!networkActionsAvailable ? 'true' : undefined}
-                        title={!networkActionsAvailable ? 'Creating a token needs a network connection' : undefined}
+                        title={!networkActionsAvailable ? t('home.createTokenOffline') : undefined}
                         icon={<Icon.TokenIcon />}
                     >
                         {t('home.createToken')}

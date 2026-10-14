@@ -1138,6 +1138,11 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         return tips;
     }, [entries, indexerWatermarkByChainId]);
 
+    // The row click reads these through a ref so the callback, and with it
+    // every memoised row, stays stable across the polling beat.
+    const detailSourceRef = useRef({ chainTipByChainId: {}, indexerWatermarkByChainId: {}, walletAddressSet: [] });
+    detailSourceRef.current = { chainTipByChainId, indexerWatermarkByChainId, walletAddressSet };
+
     // §28.3: fetch the indexer watermark (latest processed block)
     // per loaded chain so the TxStatusTimeline's Indexed stage reflects real
     // indexer progress rather than the confirmed-implies-indexed fallback.
@@ -1579,9 +1584,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             onSelectEntry({
                 ...entry,
                 detailContext: {
-                    chainTip: chainTipByChainId[entry.chainId] ?? null,
-                    indexerWatermark: indexerWatermarkByChainId[entry.chainId] ?? null,
-                    walletAddresses: [...walletAddressSet],
+                    chainTip: detailSourceRef.current.chainTipByChainId[entry.chainId] ?? null,
+                    indexerWatermark: detailSourceRef.current.indexerWatermarkByChainId[entry.chainId] ?? null,
+                    walletAddresses: [...detailSourceRef.current.walletAddressSet],
                 },
             });
             return;
@@ -1642,14 +1647,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     });
             }
         }
-    }, [
-        browserOnline,
-        chainTipByChainId,
-        indexerWatermarkByChainId,
-        messaging,
-        onSelectEntry,
-        walletAddressSet,
-    ]);
+    }, [browserOnline, messaging, onSelectEntry]);
 
     const onTimelineKeyDown = (event) => {
         if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
@@ -3274,7 +3272,7 @@ function fullDetailRows(entry, balancesHidden = false, chainTip = null, walletAd
         <CopyableValue
             display={transfer.counterparty}
             fullValue={transfer.counterparty === 'Self' ? entry.address : transfer.counterparty}
-            ariaLabel="Copy counterparty address"
+            ariaLabel={t('history.detail.copyCounterparty')}
         />
     ) : '-']);
     rows.push(['Confirmations', confirmations == null ? '-' : formatDecimalAmount(confirmations)]);
@@ -3282,7 +3280,7 @@ function fullDetailRows(entry, balancesHidden = false, chainTip = null, walletAd
     rows.push(['Time', formatTimestamp(timestamp)]);
     rows.push(['Memo', memo ?? '-']);
     rows.push(['Explorer', primaryExplorer?.url ? (
-        <a href={primaryExplorer.url} target="_blank" rel="noopener noreferrer">Open in explorer</a>
+        <a href={primaryExplorer.url} target="_blank" rel="noopener noreferrer">{t('history.detail.openInExplorer')} <span aria-hidden="true">↗</span></a>
     ) : '-']);
 
     // Every other raw key, sorted alphabetically. Skip the

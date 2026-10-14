@@ -277,6 +277,7 @@ export const en = {
     'home.exchange': 'Exchange',
     'home.exchangeOffline': 'Exchange needs a network connection',
     'home.createToken': 'Create token',
+    'home.createTokenOffline': 'Creating a token needs a network connection',
     'home.markets': 'Markets',
     'home.messaging': 'Messaging',
     'home.addresses': 'Addresses',
@@ -799,6 +800,8 @@ export const en = {
     'history.filters.anyDate': 'any date',
     'history.filters.clearDateRange': 'Clear date range',
     'history.detail.label': 'Action detail',
+    'history.detail.copyCounterparty': 'Copy counterparty address',
+    'history.detail.openInExplorer': 'Open in explorer',
     'history.detail.options': 'Action options',
     'history.detail.more': 'More',
     'history.detail.noAdditionalActions': 'No additional actions',
@@ -943,6 +946,9 @@ export const en = {
     'extension.approval.interrupted':
         'This approval was interrupted. Return to the site and try again.',
     'extension.approval.unsupported': 'Unsupported approval request type.',
+    'extension.popup.checkingPage': 'Checking page availability…',
+    'extension.popup.unsupportedPage': "XChain Wallet can't connect to this page.",
+    'extension.popup.unsupportedPageHint': 'Open a regular website to use the wallet.',
     'extension.approval.reject': 'Reject',
     'extension.approval.requestingSite': 'Requesting site',
 

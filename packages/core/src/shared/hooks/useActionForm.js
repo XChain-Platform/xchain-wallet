@@ -129,7 +129,7 @@ export function useActionForm({
         ])
             .then(([byChain, active, settings]) => {
                 if (cancelled) return;
-                const signingByChain = signingAddressesByChain(byChain);
+                const signingByChain = signingAddressesByChain(byChain, settings);
                 setAddressesByChain(signingByChain);
                 setActiveByChain(active || {});
                 if (!Object.keys(signingByChain)[0]) {
