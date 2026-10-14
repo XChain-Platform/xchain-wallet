@@ -486,6 +486,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const { overall: reachabilityOverall } = useReachability({});
     const networkOffline = reachabilityOverall === 'offline';
     const browserOnline = useOnlineStatus();
+    const proofSettings = useSettings();
+    const activeNetwork = proofSettings.loading
+        ? null
+        : (proofSettings.settings?.activeNetwork || 'mainnet');
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -608,7 +612,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
 
     // Step 1: resolve the wallet's addresses grouped by chainId.
     useEffect(() => {
-        const cached = readHistoryCache(walletId, accountId);
+        if (!activeNetwork) return undefined;
+        const cached = readHistoryCache(walletId, accountId, activeNetwork);
         setAddressesByChain(null);
         setEntries(cached?.entries || []);
         setHistoryFetchedAt(cached?.fetchedAt || null);
@@ -670,7 +675,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 setLoadError(err?.message || 'Failed to load addresses.');
             });
         return () => { cancelled = true; };
-    }, [walletId, accountId, messaging, initialChainCoin, addressesReload]);
+    }, [walletId, accountId, messaging, initialChainCoin, addressesReload, activeNetwork]);
 
     // §22 Multisig-only filter (Step 22). Resolve the wallet's
     // multisig receive address up-front so the chip can filter
@@ -680,7 +685,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     // isn't in the registry.
     useEffect(() => {
         let cancelled = false;
-        const btcChain = chainRegistry.byCoin('bitcoin')[0]?.id;
+        if (!activeNetwork) return undefined;
+        const btcChain = chainRegistry.byCoin('bitcoin')
+            .find((descriptor) => descriptor.networkKind === activeNetwork)?.id;
         if (!btcChain) return undefined;
         setMultisigAddress(null);
         messaging.getMultisigReceiveAddress({ walletId, chainId: btcChain })
@@ -690,7 +697,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             })
             .catch(() => { /* no multisig configured; chip stays disabled */ });
         return () => { cancelled = true; };
-    }, [walletId, messaging]);
+    }, [walletId, messaging, activeNetwork]);
 
     // M2.1: pending rows have to keep the same timestamp between polls or
     // they would jump around the list, so the moment WE first saw each one is
@@ -789,7 +796,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             return;
         }
         if (!browserOnline) {
-            const cached = readHistoryCache(walletId, accountId);
+            const cached = readHistoryCache(walletId, accountId, activeNetwork);
             if (cached) {
                 setEntries(cached.entries);
                 setHistoryFetchedAt(cached.fetchedAt);
@@ -1049,14 +1056,14 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 entries: merged.entries,
                 addressesByChain,
                 fetchedAt,
-            });
+            }, activeNetwork);
             setRefreshing(false);
         }).catch((err) => {
             if (cancelled) return;
             throttle.fail();
             setLoadingChains(new Set());
             setRefreshing(false);
-            const cached = readHistoryCache(walletId, accountId);
+            const cached = readHistoryCache(walletId, accountId, activeNetwork);
             if (historyLoadedRef.current) {
                 // Rows are already on screen (live or saved): keep them, say
                 // so, and name the saved copy when one exists.
@@ -1077,7 +1084,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         });
 
         return () => { cancelled = true; };
-    }, [addressesByChain, messaging, refreshTick, walletId, accountId, browserOnline]);
+    }, [addressesByChain, messaging, refreshTick, walletId, accountId, browserOnline, activeNetwork]);
 
     // Lowercase set of every wallet address across every chain. Used by
     // the action-type filter to discriminate Send (wallet is source)
@@ -1192,7 +1199,6 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     // no checkpointable block yet). Off for demo wallets and when the user
     // opts out via `verifyProofs` (default on). The map is keyed by
     // entry.key; EntryRow badges from it.
-    const proofSettings = useSettings();
     const [fiatToggleBusy, setFiatToggleBusy] = useState(false);
     const verifyProofsEnabled = proofSettings.settings?.verifyProofs !== false
         && !flowsLib.isDemoWallet(walletId);

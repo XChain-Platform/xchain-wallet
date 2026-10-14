@@ -8,44 +8,55 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-const HISTORY_CACHE_PREFIX = 'xc:historyCache:v1:';
+const HISTORY_CACHE_PREFIX = 'xc:historyCache:v2:';
 
 function walletPrefix(walletId) {
     return `${HISTORY_CACHE_PREFIX}${encodeURIComponent(String(walletId || ''))}:`;
 }
 
-function historyCacheKey(walletId, accountId) {
-    return `${walletPrefix(walletId)}${encodeURIComponent(String(accountId || 'all'))}`;
+function networkScope(activeNetwork) {
+    if (activeNetwork === undefined) return 'mainnet';
+    return typeof activeNetwork === 'string' && activeNetwork ? activeNetwork : null;
 }
 
-/** Return the last complete snapshot for this wallet and account. */
-export function readHistoryCache(walletId, accountId) {
+function historyCacheKey(walletId, accountId, activeNetwork) {
+    return `${walletPrefix(walletId)}${encodeURIComponent(String(accountId || 'all'))}:${encodeURIComponent(activeNetwork)}`;
+}
+
+/** Return the last complete snapshot for this wallet, account and network. */
+export function readHistoryCache(walletId, accountId, activeNetwork) {
     if (!walletId) return null;
+    const network = networkScope(activeNetwork);
+    if (!network) return null;
     try {
-        const raw = globalThis.localStorage?.getItem(historyCacheKey(walletId, accountId));
+        const raw = globalThis.localStorage?.getItem(historyCacheKey(walletId, accountId, network));
         if (!raw) return null;
         const parsed = JSON.parse(raw);
         if (!Array.isArray(parsed?.entries)
             || !parsed.addressesByChain
             || typeof parsed.addressesByChain !== 'object'
-            || !Number.isFinite(parsed.fetchedAt)) {
+            || !Number.isFinite(parsed.fetchedAt)
+            || parsed.activeNetwork !== network) {
             return null;
         }
-        return parsed;
+        const { activeNetwork: _activeNetwork, ...snapshot } = parsed;
+        return snapshot;
     } catch {
         return null;
     }
 }
 
 /** Save only a complete successful load so an interrupted refresh cannot replace good rows. */
-export function writeHistoryCache(walletId, accountId, snapshot) {
+export function writeHistoryCache(walletId, accountId, snapshot, activeNetwork) {
     if (!walletId) return false;
+    const network = networkScope(activeNetwork);
+    if (!network) return false;
     try {
         const storage = globalThis.localStorage;
         if (!storage) return false;
         storage.setItem(
-            historyCacheKey(walletId, accountId),
-            JSON.stringify(snapshot),
+            historyCacheKey(walletId, accountId, network),
+            JSON.stringify({ ...snapshot, activeNetwork: network }),
         );
         return true;
     } catch {

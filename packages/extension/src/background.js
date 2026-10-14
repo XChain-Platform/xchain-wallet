@@ -92,7 +92,13 @@ import { createChromeNotifier } from './background/chromeNotifications.js';
 });
 attachLayoutModeListener();
 
-const surfaceStateEvents = createSurfaceStateBroadcaster();
+const surfaceStateBroadcaster = createSurfaceStateBroadcaster();
+const surfaceStateEvents = {
+    async publish(kind, payload) {
+        if (kind === 'network') await restartNetworkWatchers();
+        return surfaceStateBroadcaster.publish(kind, payload);
+    },
+};
 
 // --- Lazy wiring --------------------------------------------------------
 // The service worker starts with no master key; it's in ChromeSessionBackend
@@ -217,6 +223,20 @@ let dispenserEscrowWatcher = null;
 const GOV_POLL_SEEN_KEY = 'governancePollsSeen';
 const DEADLINE_SEEN_KEY = 'deadlinesSeen';
 const DISPENSER_ESCROW_SEEN_KEY = 'dispenserEscrowSeen';
+
+async function restartNetworkWatchers() {
+    await notificationService?.refresh();
+    for (const watcher of [governancePollWatcher, deadlineWatcher, dispenserEscrowWatcher]) {
+        if (!watcher) continue;
+        watcher.stop();
+        watcher.start();
+    }
+    if (coinpayAutopayWatcher) {
+        coinpayAutopayWatcher.stop();
+        coinpayAutopayWatcher.start();
+        await coinpayAutopayWatcher.refresh();
+    }
+}
 
 // chrome.notifications works while every wallet surface is closed.
 const chromeNotify = createChromeNotifier(

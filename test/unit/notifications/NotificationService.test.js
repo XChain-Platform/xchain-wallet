@@ -15,6 +15,14 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { NotificationService } from '../../../packages/core/src/notifications/NotificationService.js';
+import {
+    readBalanceCache,
+    writeBalanceCache,
+} from '../../../packages/core/src/shared/utils/balanceCache.js';
+import {
+    readHistoryCache,
+    writeHistoryCache,
+} from '../../../packages/core/src/shared/utils/historyCache.js';
 
 /** Drain microtasks + the timer queue so async handlers settle. */
 const flush = () => new Promise((r) => setTimeout(r, 0));
@@ -42,6 +50,7 @@ function makeSdk() {
 
 function makeDeps(overrides = {}) {
     const settings = {
+        activeNetwork: 'mainnet',
         notifications: {
             txConfirmations: true,
             incomingReceipts: true,
@@ -85,6 +94,95 @@ function makeService(deps, extra = {}) {
 }
 
 describe('NotificationService', () => {
+    it('keeps persisted portfolio snapshots isolated by active network', () => {
+        localStorage.clear();
+        const mainBalances = { 'bitcoin-mainnet': [{ address: 'main-address' }] };
+        const regtestBalances = { 'bitcoin-regtest': [{ address: 'regtest-address' }] };
+        writeBalanceCache('network-wallet', 'account', {
+            balances: mainBalances, fetchedAt: 1,
+        }, 'mainnet');
+        writeBalanceCache('network-wallet', 'account', {
+            balances: regtestBalances, fetchedAt: 2,
+        }, 'regtest');
+
+        const mainHistory = {
+            entries: [{ chainId: 'bitcoin-mainnet' }],
+            addressesByChain: { 'bitcoin-mainnet': [{ address: 'main-address' }] },
+            fetchedAt: 3,
+        };
+        const regtestHistory = {
+            entries: [{ chainId: 'bitcoin-regtest' }],
+            addressesByChain: { 'bitcoin-regtest': [{ address: 'regtest-address' }] },
+            fetchedAt: 4,
+        };
+        writeHistoryCache('network-wallet', 'account', mainHistory, 'mainnet');
+        writeHistoryCache('network-wallet', 'account', regtestHistory, 'regtest');
+
+        expect(readBalanceCache('network-wallet', 'account', 'mainnet')?.balances)
+            .toEqual(mainBalances);
+        expect(readBalanceCache('network-wallet', 'account', 'regtest')?.balances)
+            .toEqual(regtestBalances);
+        expect(readHistoryCache('network-wallet', 'account', 'mainnet')).toEqual(mainHistory);
+        expect(readHistoryCache('network-wallet', 'account', 'regtest')).toEqual(regtestHistory);
+        expect(readBalanceCache('network-wallet', 'account', 'testnet')).toBeNull();
+        expect(readHistoryCache('network-wallet', 'account', 'testnet')).toBeNull();
+    });
+
+    it('ignores an older address lookup after a network refresh starts', async () => {
+        let resolveOld;
+        const oldLookup = new Promise((resolve) => { resolveOld = resolve; });
+        const mainSdk = makeSdk();
+        const regtestSdk = makeSdk();
+        const networkSdks = {
+            'bitcoin-mainnet': mainSdk,
+            'bitcoin-regtest': regtestSdk,
+        };
+        const deps = makeDeps({
+            sdks: networkSdks,
+            getSdkForChain: (chainId) => networkSdks[chainId],
+            getActiveAddresses: vi.fn()
+                .mockReturnValueOnce(oldLookup)
+                .mockResolvedValueOnce([{
+                    address: 'regtest-address',
+                    chainId: 'bitcoin-regtest',
+                    label: 'Bitcoin Regtest',
+                    network: 'regtest',
+                }]),
+        });
+        const service = makeService(deps);
+
+        const starting = service.start();
+        await service.refresh();
+        resolveOld([{
+            address: 'main-address',
+            chainId: 'bitcoin-mainnet',
+            label: 'Bitcoin',
+            network: 'mainnet',
+        }]);
+        await starting;
+
+        expect(mainSdk.onAddress).not.toHaveBeenCalled();
+        expect(regtestSdk.onAddress).toHaveBeenCalledWith(
+            'regtest-address',
+            expect.any(Function),
+        );
+    });
+
+    it('ignores events from a subscription on the previous network', async () => {
+        const deps = makeDeps();
+        const service = makeService(deps);
+        await service.start();
+        deps.settings.activeNetwork = 'regtest';
+
+        deps.sdks['bitcoin-mainnet'].emit('addrBTC', {
+            type: 'NEW_ACTION',
+            data: { action_index: 10, source: 'someoneElse', destination: 'addrBTC' },
+        });
+        await flush();
+
+        expect(deps.notify).not.toHaveBeenCalled();
+    });
+
     it('start() connects each chain once and subscribes per address', async () => {
         const deps = makeDeps({});
         deps.addresses.push({ address: 'addrBTC2', chainId: 'bitcoin-mainnet', label: 'Bitcoin', network: 'mainnet' });
