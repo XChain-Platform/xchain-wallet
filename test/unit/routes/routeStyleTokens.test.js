@@ -12,6 +12,9 @@ const routeRoot = join(process.cwd(), 'packages/core/src/shared/routes');
 const readRouteCss = (name) => readFileSync(join(routeRoot, `${name}.module.css`), 'utf8');
 
 const locked = readRouteCss('Locked');
+// The Locked screen's password show and hide button moved into the shared
+// Input, so its geometry is checked there.
+const input = readFileSync(join(process.cwd(), 'packages/core/src/ui/Input.module.css'), 'utf8');
 const manageToken = readRouteCss('ManageToken');
 const messagingInbox = readRouteCss('MessagingInbox');
 const mySwaps = readRouteCss('MySwapsView');
@@ -19,8 +22,8 @@ const obligations = readRouteCss('ObligationsView');
 
 describe('route style tokens', () => {
     it('uses control, icon, type, and radius tokens for matching dimensions', () => {
-        expect(locked).toContain('min-height: var(--xc-control-h-sm);');
-        expect(locked).toContain('width: calc(var(--xc-control-h-md) - var(--xc-space-1));');
+        expect(input).toContain('min-height: var(--xc-control-h-sm);');
+        expect(input).toContain('width: calc(var(--xc-control-h-md) - var(--xc-space-1));');
 
         expect(manageToken).toContain('width: var(--xc-icon-xs);');
         expect(manageToken).toContain('width: var(--xc-icon-md);');
@@ -44,7 +47,7 @@ describe('route style tokens', () => {
         expect(locked).toMatch(
             /\/\* The brand mark has no matching size token at its default presentation width\. \*\/\s*width: 96px;/,
         );
-        expect(locked).toMatch(
+        expect(input).toMatch(
             /\/\* This half-grid inset keeps the toggle centered inside the input border\. \*\/\s*inset-inline-end: 2px;/,
         );
         expect(manageToken).toMatch(
