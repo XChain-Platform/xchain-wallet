@@ -74,7 +74,13 @@ async function expectSafeInitialFocus(approval) {
 
 async function escapeApproval(approval) {
     const closed = approval.waitForEvent('close');
-    await approval.keyboard.press('Escape');
+    // The window closes on keydown, so the keyup half of press() can land
+    // on a closed page; that is the expected outcome, not a failure.
+    try {
+        await approval.keyboard.press('Escape');
+    } catch (error) {
+        if (!/closed/i.test(String(error?.message))) throw error;
+    }
     await closed;
 }
 
@@ -90,7 +96,7 @@ async function clickAndLetApprovalClose(locator, approval) {
 
 async function openConnectedSites(page) {
     await openSettings(page);
-    const row = page.getByRole('main').getByRole('button', { name: /^Connected Sites/ }).first();
+    const row = page.getByRole('main').getByRole('button', { name: /^Connected sites/ }).first();
     await expect(row).toBeVisible({ timeout: 30_000 });
     await row.click();
     await expect(page.getByLabel('Origin or wildcard to block')).toBeVisible({ timeout: 30_000 });
@@ -145,8 +151,9 @@ test.describe('Injected-provider approvals and connected sites', () => {
         await expect(main.getByText(DAPP_ORIGIN, { exact: true })).toBeVisible();
 
         await main.getByRole('button', { name: 'Disconnect', exact: true }).click();
-        await expect(page.getByRole('heading', { name: `Disconnect ${DAPP_NAME}?` })).toBeVisible();
-        await page.getByRole('button', { name: 'Disconnect site', exact: true }).click();
+        const confirm = page.getByRole('dialog', { name: `Disconnect ${DAPP_NAME}?` });
+        await expect(confirm).toBeVisible();
+        await confirm.getByRole('button', { name: 'Disconnect site', exact: true }).click();
         await expect(main.getByText(DAPP_ORIGIN, { exact: true })).toHaveCount(0);
         await expect(main.getByText('No sites connected yet', { exact: true })).toBeVisible();
 
