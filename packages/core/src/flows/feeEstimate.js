@@ -174,7 +174,7 @@ export function estimateNativeSendFee({ chainId, chainRegistry, speed = DEFAULT_
  * @param {object} opts
  * @param {string} opts.chainId
  * @param {{ get: (id: string) => any }} opts.chainRegistry
- * @returns {{ low: FeeEstimate, normal: FeeEstimate, fast: FeeEstimate, unit: string, minimumRate: number } | null}
+ * @returns {{ low: FeeEstimate, normal: FeeEstimate, fast: FeeEstimate, unit: string, minimumRate: number, maximumRate: number } | null}
  */
 export function estimateNativeSendFeeTiers({ chainId, chainRegistry } = {}) {
     if (typeof chainId !== 'string' || !chainRegistry) return null;
@@ -190,6 +190,7 @@ export function estimateNativeSendFeeTiers({ chainId, chainRegistry } = {}) {
         fast: estimateNativeSendFee({ chainId, chainRegistry, speed: 'fast' }),
         unit,
         minimumRate: perByteRateToDisplay(unit, table.minimumRate),
+        maximumRate: perByteRateToDisplay(unit, table.maximumRate),
     };
 }
 
